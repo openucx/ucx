@@ -154,8 +154,11 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                &mlx5_av.rgid, sizeof(mlx5_av.rgid));
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit, mlx5_av.hop_limit);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index, ah_attr->grh.sgid_index);
+        ucs_assert(ah_attr->dlid >= UCT_IB_ROCE_UDP_SRC_PORT_BASE);
+        ucs_assert(ah_attr->dlid  < UCT_IB_ROCE_UDP_SRC_PORT_BASE +
+                                    iface->super.super.num_paths);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
-                          uct_ib_mlx5_calc_av_sport(dest_qp_num, qp->qp_num));
+                          ah_attr->dlid);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio, iface->super.super.config.sl);
         if (uct_ib_iface_is_roce_v2(&iface->super.super, dev)) {
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,

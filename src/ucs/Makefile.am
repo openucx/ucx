@@ -156,6 +156,11 @@ libucs_la_SOURCES = \
 	type/status.c \
 	type/init_once.c
 
+if HAVE_AARCH64_THUNDERX2
+libucs_la_SOURCES += \
+        arch/aarch64/memcpy_thunderx2.S
+endif
+
 if HAVE_STATS
 libucs_la_SOURCES += \
 	stats/client_server.c \

@@ -54,27 +54,27 @@ struct uct_cm {
  * Connection manager base endpoint
  */
 typedef struct uct_cm_base_ep {
-    uct_base_ep_t                      super;
+    uct_base_ep_t                       super;
 
     /* User data associated with the endpoint */
-    void                               *user_data;
+    void                                *user_data;
 
     /* Callback to handle the disconnection of the remote peer */
-    uct_ep_disconnect_cb_t             disconnect_cb;
+    uct_ep_disconnect_cb_t              disconnect_cb;
 
     /* Callback to fill the user's private data */
-    uct_sockaddr_priv_pack_callback_t  priv_pack_cb;
+    uct_cm_ep_priv_data_pack_callback_t priv_pack_cb;
 
     union {
         struct {
             /* On the client side - callback to process an incoming
              * connection response from the server */
-            uct_ep_client_connect_cb_t connect_cb;
+            uct_cm_ep_client_connect_callback_t connect_cb;
         } client;
         struct {
             /* On the server side - callback to process an incoming connection
              * establishment acknowledgment from the client */
-            uct_ep_server_connect_cb_t connect_cb;
+            uct_cm_ep_server_connect_callback_t connect_cb;
         } server;
     };
 } uct_cm_base_ep_t;
@@ -91,6 +91,11 @@ UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
                   uct_component_h);
 
 ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params);
+
+ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
+                               const uct_cm_ep_priv_data_pack_args_t *pack_args,
+                               void *priv_data, size_t priv_data_max,
+                               size_t *priv_data_ret);
 
 void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,

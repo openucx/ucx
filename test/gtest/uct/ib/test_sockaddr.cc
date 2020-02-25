@@ -134,8 +134,9 @@ public:
                          << " Interface: " << GetParam()->dev_name;
     }
 
-    static ssize_t client_iface_priv_data_cb(void *arg, const char *dev_name,
-                                             void *priv_data)
+    static ssize_t client_iface_priv_data_cb(void *arg,
+                                             const uct_cm_ep_priv_data_pack_args_t
+                                             *pack_args, void *priv_data)
     {
         size_t *max_conn_priv = (size_t*)arg;
         size_t priv_data_len;
@@ -433,8 +434,9 @@ protected:
         m_connect_addr.set_port(m_listen_addr.get_port());
     }
 
-    static ssize_t client_cm_priv_data_cb(void *arg, const char *dev_name,
-                                          void *priv_data)
+    static ssize_t client_cm_priv_data_cb(void *arg,
+                                          const uct_cm_ep_priv_data_pack_args_t
+                                          *pack_args, void *priv_data)
     {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
         size_t priv_data_len;
@@ -455,7 +457,7 @@ protected:
     }
 
     virtual void server_accept(entity *server, uct_conn_request_h conn_request,
-                               uct_ep_server_connect_cb_t connect_cb,
+                               uct_cm_ep_server_connect_callback_t connect_cb,
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
     {
@@ -465,11 +467,19 @@ protected:
 
     static void
     cm_conn_request_cb(uct_listener_h listener, void *arg,
-                       const char *local_dev_name,
-                       uct_conn_request_h conn_request,
-                       const uct_cm_remote_data_t *remote_data) {
+                       const uct_cm_listener_conn_request_args_t
+                       *conn_req_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
+        uct_conn_request_h conn_request;
+        const uct_cm_remote_data_t *remote_data;
         ucs_status_t status;
+
+        EXPECT_TRUE(ucs_test_all_flags(conn_req_args->field_mask,
+                                       (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
+                                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA)));
+
+        conn_request = conn_req_args->conn_request;
+        remote_data  = conn_req_args->remote_data;
 
         EXPECT_EQ(entity::client_priv_data.length() + 1, remote_data->conn_priv_data_length);
         EXPECT_EQ(entity::client_priv_data,
@@ -493,10 +503,14 @@ protected:
     }
 
     static void
-    server_connect_cb(uct_ep_h ep, void *arg, ucs_status_t status) {
+    server_connect_cb(uct_ep_h ep, void *arg,
+                      const uct_cm_ep_server_connect_args_t *connect_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
-        EXPECT_EQ(UCS_OK, status);
+        if (connect_args->field_mask & UCT_CM_EP_SERVER_CONNECT_ARGS_FIELD_STATUS) {
+            EXPECT_EQ(UCS_OK, connect_args->status);
+        }
+
         self->m_cm_state |= TEST_CM_STATE_SERVER_CONNECTED;
         self->m_server_connect_cb_cnt++;
     }
@@ -514,9 +528,17 @@ protected:
 
     static void
     client_connect_cb(uct_ep_h ep, void *arg,
-                      const uct_cm_remote_data_t *remote_data,
-                      ucs_status_t status) {
+                      const uct_cm_ep_client_connect_args_t *connect_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
+        const uct_cm_remote_data_t *remote_data;
+        ucs_status_t status;
+
+        EXPECT_TRUE(ucs_test_all_flags(connect_args->field_mask,
+                                       (UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_REMOTE_DATA |
+                                        UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS)));
+
+        remote_data = connect_args->remote_data;
+        status      = connect_args->status;
 
         if (status == UCS_ERR_REJECTED) {
             self->m_cm_state |= TEST_CM_STATE_CLIENT_GOT_REJECT;
@@ -1046,7 +1068,7 @@ public:
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
-                       uct_ep_server_connect_cb_t connect_cb,
+                       uct_cm_ep_server_connect_callback_t connect_cb,
                        uct_ep_disconnect_cb_t disconnect_cb,
                        void *user_data)
     {

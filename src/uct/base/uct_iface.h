@@ -122,6 +122,10 @@ enum {
                     "UCT_EP_PARAM_FIELD_DEV_ADDR and UCT_EP_PARAM_FIELD_IFACE_ADDR are not defined")
 
 
+#define UCT_EP_PARAMS_GET_PATH_INDEX(_params) \
+    (((_params)->field_mask & UCT_EP_PARAM_FIELD_PATH_INDEX) ? \
+     (_params)->path_index : 0)
+
 /**
  * Check the condition and return status as a pointer if not true.
  */

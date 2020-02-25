@@ -106,8 +106,9 @@ ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep)
 {
     char ifname_str[UCT_DEVICE_NAME_MAX];
     uct_tcp_sockcm_priv_data_hdr_t *hdr;
-    ssize_t priv_data_ret;
+    size_t priv_data_ret;
     ucs_status_t status;
+    uct_cm_ep_priv_data_pack_args_t pack_args;
 
     /* get interface name associated with the connected client fd */
     status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, sizeof(ifname_str));
@@ -115,20 +116,15 @@ ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep)
         goto out;
     }
 
-    hdr           = (uct_tcp_sockcm_priv_data_hdr_t*)cep->comm_ctx.buf;
-    priv_data_ret = cep->super.priv_pack_cb(cep->super.user_data, ifname_str,
-                                            hdr + 1);
-    if (priv_data_ret < 0) {
-        ucs_assert(priv_data_ret > UCS_ERR_LAST);
-        status = (ucs_status_t)priv_data_ret;
-        ucs_error("tcp_sockcm private data pack function failed with error: %s",
-                  ucs_status_string(status));
-        goto out;
-    } else if (priv_data_ret > (uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len)) {
-        status = UCS_ERR_EXCEEDS_LIMIT;
-        ucs_error("tcp_sockcm private data pack function returned %zd "
-                  "(max: %zu)", priv_data_ret,
-                  uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len);
+    hdr                  = (uct_tcp_sockcm_priv_data_hdr_t*)cep->comm_ctx.buf;
+    pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME;
+    ucs_strncpy_safe(pack_args.dev_name, ifname_str, UCT_DEVICE_NAME_MAX);
+
+    status = uct_cm_ep_pack_cb(&cep->super, cep->super.user_data, &pack_args,
+                               hdr + 1,
+                               uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len,
+                               &priv_data_ret);
+    if (status != UCS_OK) {
         goto out;
     }
 
@@ -143,14 +139,15 @@ out:
 
 static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_ep_t *cep)
 {
-    uct_tcp_sockcm_priv_data_hdr_t *hdr = (uct_tcp_sockcm_priv_data_hdr_t *)
-                                          cep->comm_ctx.buf;
-    struct sockaddr_storage remote_dev_addr = {0};
-    socklen_t               remote_dev_addr_len;
-    char peer_str[UCS_SOCKADDR_STRING_LEN];
-    char                    ifname_str[UCT_DEVICE_NAME_MAX];
-    uct_cm_remote_data_t    remote_data;
-    ucs_status_t            status;
+    uct_tcp_sockcm_priv_data_hdr_t       *hdr = (uct_tcp_sockcm_priv_data_hdr_t *)
+                                                cep->comm_ctx.buf;
+    struct sockaddr_storage              remote_dev_addr = {0};
+    socklen_t                            remote_dev_addr_len;
+    char                                 peer_str[UCS_SOCKADDR_STRING_LEN];
+    char                                 ifname_str[UCT_DEVICE_NAME_MAX];
+    uct_cm_remote_data_t                 remote_data;
+    ucs_status_t                         status;
+    uct_cm_listener_conn_request_args_t  conn_req_args;
 
     /* get the local interface name associated with the connected fd */
     status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, UCT_DEVICE_NAME_MAX);
@@ -173,6 +170,13 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
     remote_data.conn_priv_data        = hdr + 1;
     remote_data.conn_priv_data_length = hdr->length;
 
+    conn_req_args.field_mask   = UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
+                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
+                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA;
+    conn_req_args.conn_request = cep;
+    conn_req_args.remote_data  = &remote_data;
+    ucs_strncpy_safe(conn_req_args.dev_name, ifname_str, UCT_DEVICE_NAME_MAX);
+
     ucs_debug("fd %d: remote_data: (field_mask=%zu) dev_addr: %s (length=%zu), "
               "conn_priv_data_length=%zu", cep->fd, remote_data.field_mask,
               ucs_sockaddr_str((const struct sockaddr*)remote_data.dev_addr,
@@ -184,7 +188,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
      * over to its responsibility. */
     ucs_list_del(&cep->list);
     cep->listener->conn_request_cb(&cep->listener->super, cep->listener->user_data,
-                                   ifname_str, cep, &remote_data);
+                                   &conn_req_args);
 
     return UCS_OK;
 }

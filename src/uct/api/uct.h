@@ -124,19 +124,19 @@ BEGIN_C_DECLS
  *      Open a connection manager.
  * @ref uct_listener_create
  *      Create a listener on the CM and start listening on a given IP,port / INADDR_ANY.
- * @ref uct_listener_conn_request_callback_t
+ * @ref uct_cm_listener_conn_request_callback_t
  *      This callback is invoked by the UCT transport to handle an incoming connection
  *      request from a client.
  *      Accept or reject the client's connection request.
  * @ref uct_ep_create
- *      Connect to the client by creating an endpoint in case of accepting its request.
- *      The server creates a new endpoint per every connection request that it accepts.
- * @ref uct_sockaddr_priv_pack_callback_t
+ *      Connect to the client by creating an endpoint if the request is accepted.
+ *      The server creates a new endpoint for every connection request that it accepts.
+ * @ref uct_cm_ep_priv_data_pack_callback_t
  *      This callback is invoked by the UCT transport to fill auxiliary data in
  *      the connection acknowledgement or reject notification back to the client.
  *      Send the client a connection acknowledgement or reject notification.
  *      Wait for an acknowledgment from the client, indicating that it is connected.
- * @ref uct_ep_server_connect_cb_t
+ * @ref uct_cm_ep_server_connect_callback_t
  *      This callback is invoked by the UCT transport to handle the connection
  *      acknowledgment from the client.
  *
@@ -166,13 +166,13 @@ BEGIN_C_DECLS
  *      Open a connection manager.
  * @ref uct_ep_create
  *      Create an endpoint for establishing a connection to the server.
- * @ref uct_sockaddr_priv_pack_callback_t
+ * @ref uct_cm_ep_priv_data_pack_callback_t
  *      This callback is invoked by the UCT transport to fill the user's private data
  *      in the connection request to be sent to the server. This connection request
  *      should be created by the transport.
  *      Send the connection request to the server.
  *      Wait for an acknowledgment from the server, indicating that it is connected.
- * @ref uct_ep_client_connect_cb_t
+ * @ref uct_cm_ep_client_connect_callback_t
  *      This callback is invoked by the UCT transport to handle a connection response
  *      from the server.
  *      After invoking this callback, the UCT transport will finalize the client's
@@ -1068,7 +1068,7 @@ struct uct_ep_params {
      * example, the endpoint goes into error state before issuing the connection
      * request, the callback will not be invoked.
      */
-    uct_sockaddr_priv_pack_callback_t sockaddr_pack_cb;
+    uct_cm_ep_priv_data_pack_callback_t sockaddr_pack_cb;
 
     /**
      * The connection manager object as created by @ref uct_cm_open.
@@ -1078,7 +1078,7 @@ struct uct_ep_params {
 
     /**
      * Connection request that was passed to
-     * @ref uct_listener_conn_request_callback_t .
+     * @ref uct_cm_listener_conn_request_args_t::conn_request .
      */
     uct_conn_request_h                conn_request;
 
@@ -1087,13 +1087,13 @@ struct uct_ep_params {
          * Callback that will be invoked when the endpoint on the client side
          * is being connected to the server by a connection manager @ref uct_cm_h .
          */
-        uct_ep_client_connect_cb_t      client;
+        uct_cm_ep_client_connect_callback_t   client;
 
         /**
          * Callback that will be invoked when the endpoint on the server side
          * is being connected to a client by a connection manager @ref uct_cm_h .
          */
-        uct_ep_server_connect_cb_t      server;
+        uct_cm_ep_server_connect_callback_t   server;
     } sockaddr_connect_cb;
 
     /**
@@ -1159,23 +1159,23 @@ struct uct_listener_params {
      * @ref uct_listener_params_field. Fields not specified by this mask
      * will be ignored.
      */
-    uint64_t                             field_mask;
+    uint64_t                                field_mask;
 
     /**
      * Backlog of incoming connection requests.
      * If not specified, SOMAXCONN, as defined in <sys/socket.h>, will be used.
      */
-    int                                  backlog;
+    int                                     backlog;
 
     /**
      * Callback function for handling incoming connection requests.
      */
-    uct_listener_conn_request_callback_t conn_request_cb;
+    uct_cm_listener_conn_request_callback_t conn_request_cb;
 
     /**
      * User data associated with the listener.
      */
-    void                                 *user_data;
+    void                                    *user_data;
 };
 
 
@@ -1892,8 +1892,8 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  *
  * @return UCS_OK                Operation has completed successfully.
  *         UCS_ERR_BUSY          The @a ep is not connected yet (either
- *                               @ref uct_ep_client_connect_cb_t or
- *                               @ref uct_ep_server_connect_cb_t was not
+ *                               @ref uct_cm_ep_client_connect_callback_t or
+ *                               @ref uct_cm_ep_server_connect_callback_t was not
  *                               invoked).
  *         UCS_INPROGRESS        The disconnect request has been initiated, but
  *                               the remote peer has not yet responded to this
@@ -3132,7 +3132,8 @@ void uct_listener_destroy(uct_listener_h listener);
  *
  * @param [in] listener     Listener which will reject the connection request.
  * @param [in] conn_request Connection establishment request passed as parameter
- *                          of @ref uct_listener_conn_request_callback_t.
+ *                          of @ref uct_cm_listener_conn_request_callback_t in
+ *                          @ref uct_cm_listener_conn_request_args_t::conn_request.
  *
  *
  * @return Error code as defined by @ref ucs_status_t

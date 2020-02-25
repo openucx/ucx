@@ -193,14 +193,15 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
 
 static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *event)
 {
-    uct_rdmacm_priv_data_hdr_t *hdr      = (uct_rdmacm_priv_data_hdr_t *)
-                                           event->param.conn.private_data;
-    uct_rdmacm_listener_t      *listener = event->listen_id->context;
-    char                       dev_name[UCT_DEVICE_NAME_MAX];
-    uct_device_addr_t          *dev_addr;
-    size_t                     addr_length;
-    uct_cm_remote_data_t       remote_data;
-    ucs_status_t               status;
+    uct_rdmacm_priv_data_hdr_t          *hdr      = (uct_rdmacm_priv_data_hdr_t *)
+                                                    event->param.conn.private_data;
+    uct_rdmacm_listener_t               *listener = event->listen_id->context;
+    char                                dev_name[UCT_DEVICE_NAME_MAX];
+    uct_device_addr_t                   *dev_addr;
+    size_t                              addr_length;
+    uct_cm_remote_data_t                remote_data;
+    ucs_status_t                        status;
+    uct_cm_listener_conn_request_args_t conn_req_args;
 
     ucs_assert(hdr->status == UCS_OK);
 
@@ -222,8 +223,15 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
     remote_data.conn_priv_data        = hdr + 1;
     remote_data.conn_priv_data_length = hdr->length;
 
+    conn_req_args.field_mask   = UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
+                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
+                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA;
+    conn_req_args.conn_request = event;
+    conn_req_args.remote_data  = &remote_data;
+    ucs_strncpy_safe(conn_req_args.dev_name, dev_name, UCT_DEVICE_NAME_MAX);
+
     listener->conn_request_cb(&listener->super, listener->user_data,
-                              dev_name, event, &remote_data);
+                              &conn_req_args);
     ucs_free(dev_addr);
 }
 
