@@ -10,6 +10,7 @@
 #include <ucs/profile/profile.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
+#include <ucs/arch/atomic.h>
 
 static ucs_pgt_dir_t *uct_cuda_ipc_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
 {
@@ -110,13 +111,14 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr,
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
 
-    pthread_rwlock_rdlock(&cache->lock);
+    /* use write lock because cache maybe modified */
+    pthread_rwlock_wrlock(&cache->lock);
     pgt_region = UCS_PROFILE_CALL(ucs_pgtable_lookup, &cache->pgtable, d_bptr);
     ucs_assert(pgt_region != NULL);
     region = ucs_derived_of(pgt_region, uct_cuda_ipc_cache_region_t);
 
     ucs_assert(region->refcount >= 1);
-    region->refcount--;
+    ucs_atomic_sub64(&(region->refcount), (uint64_t) 1);
 
     /*
      * check refcount to see if an in-flight transfer is using the same mapping
@@ -160,7 +162,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
 
             *mapped_addr = region->mapped_addr;
             ucs_assert(region->refcount < UINT_MAX);
-            region->refcount++;
+            ucs_atomic_add64(&(region->refcount), (uint64_t) 1);
             pthread_rwlock_unlock(&cache->lock);
             return UCS_OK;
         } else {
