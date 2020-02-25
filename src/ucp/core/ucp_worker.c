@@ -538,7 +538,7 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
         (ucp_ep->flags & UCP_EP_FLAG_USED)) {
         /* do not print error if connection reset by remote peer since it can
          * be part of user level close protocol  */
-        log_level = (status == UCS_ERR_CONNECTION_RESET) ? UCS_LOG_LEVEL_DEBUG :
+        log_level = (status == UCS_ERR_CONNECTION_RESET) ? UCS_LOG_LEVEL_DIAG :
                     UCS_LOG_LEVEL_ERROR;
 
         if (lane != UCP_NULL_LANE) {
