@@ -17,6 +17,7 @@ typedef enum {
     UCS_LOG_LEVEL_FATAL,        /* Immediate termination */
     UCS_LOG_LEVEL_ERROR,        /* Error is returned to the user */
     UCS_LOG_LEVEL_WARN,         /* Something's wrong, but we continue */
+    UCS_LOG_LEVEL_DIAG,         /* Diagnostics, silent adjustments or internal error handling */
     UCS_LOG_LEVEL_INFO,         /* Information */
     UCS_LOG_LEVEL_DEBUG,        /* Low-volume debugging */
     UCS_LOG_LEVEL_TRACE,        /* High-volume debugging */
