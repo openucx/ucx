@@ -124,6 +124,9 @@ typedef struct ucp_ep_config_key {
     /* Lanes for high-bw memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_bw_lanes[UCP_MAX_LANES];
 
+    /* Lane for obtaining remote memory pointer */
+    ucp_lane_index_t       rkey_ptr_lane;
+
     /* Lanes for atomic operations, sorted by priority, highest first */
     ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
 

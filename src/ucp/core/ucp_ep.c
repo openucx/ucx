@@ -69,6 +69,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_lane      = UCP_NULL_LANE;
     key->cm_lane          = UCP_NULL_LANE;
+    key->rkey_ptr_lane    = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
     key->reachable_md_map = 0;
@@ -984,6 +985,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->tag_lane         != key2->tag_lane)                                 ||
         (key1->wireup_lane      != key2->wireup_lane)                              ||
         (key1->cm_lane          != key2->cm_lane)                                  ||
+        (key1->rkey_ptr_lane    != key2->rkey_ptr_lane)                            ||
         (key1->err_mode         != key2->err_mode)                                 ||
         (key1->status           != key2->status))
     {
@@ -1327,8 +1329,9 @@ static ucs_status_t ucp_ep_config_key_copy(ucp_ep_config_key_t *dst,
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                 const ucp_ep_config_key_t *key)
 {
-    ucp_context_h context         = worker->context;
-    ucp_lane_index_t tag_lanes[2] = {UCP_NULL_LANE, UCP_NULL_LANE};
+    ucp_context_h context              = worker->context;
+    ucp_lane_index_t tag_lanes[2]      = {UCP_NULL_LANE, UCP_NULL_LANE};
+    ucp_lane_index_t rkey_ptr_lanes[2] = {UCP_NULL_LANE, UCP_NULL_LANE};
     ucp_lane_index_t get_zcopy_lane_count;
     ucp_lane_index_t put_zcopy_lane_count;
     ucp_ep_rma_config_t *rma_config;
@@ -1427,12 +1430,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
             md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
-            /* Rkey_ptr */
-            if (md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) {
-                config->tag.rndv.rkey_ptr_dst_mds |=
-                        UCS_BIT(config->key.lanes[lane].dst_md_index);
-            }
-
             /* GET Zcopy */
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
                 config->tag.rndv.min_get_zcopy = ucs_max(config->tag.rndv.min_get_zcopy,
@@ -1487,6 +1484,17 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                         rndv_max_bw;
             }
         }
+    }
+
+    /* Rkey ptr */
+    if (key->rkey_ptr_lane != UCP_NULL_LANE) {
+        lane      = key->rkey_ptr_lane;
+        rsc_index = config->key.lanes[lane].rsc_index;
+        md_attr   = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+        ucs_assert_always(md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR);
+
+        config->tag.rndv.rkey_ptr_dst_mds =
+                UCS_BIT(config->key.lanes[lane].dst_md_index);
     }
 
     /* Configuration for tag offload */
@@ -1564,10 +1572,18 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 min_rndv_thresh    = iface_attr->cap.get.min_zcopy;
                 min_am_rndv_thresh = iface_attr->cap.am.min_zcopy;
 
-                ucp_ep_config_set_rndv_thresh(worker, config,
-                                              config->key.rma_bw_lanes,
-                                              min_rndv_thresh,
-                                              max_rndv_thresh);
+                if (config->key.rkey_ptr_lane != UCP_NULL_LANE) {
+                    rkey_ptr_lanes[0] = config->key.rkey_ptr_lane;
+                    ucp_ep_config_set_rndv_thresh(worker, config,
+                                                  rkey_ptr_lanes,
+                                                  min_rndv_thresh,
+                                                  max_rndv_thresh);
+                } else {
+                    ucp_ep_config_set_rndv_thresh(worker, config,
+                                                  config->key.rma_bw_lanes,
+                                                  min_rndv_thresh,
+                                                  max_rndv_thresh);
+                }
 
                 /* Max Eager short has to be set after Zcopy and RNDV thresholds */
                 ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
@@ -1819,6 +1835,11 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 
     if (key->am_lane == lane) {
         snprintf(p, endp - p, " am");
+        p += strlen(p);
+    }
+
+    if (key->rkey_ptr_lane == lane) {
+        snprintf(p, endp - p, " rkey_ptr");
         p += strlen(p);
     }
 
