@@ -193,9 +193,10 @@ struct uct_rc_ep {
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
     uct_rc_fc_t         fc;
+    uint8_t             path_index;
 };
 
-UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t);
+UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*);
 
 
 typedef struct uct_rc_ep_address {

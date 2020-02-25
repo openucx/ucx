@@ -1646,7 +1646,7 @@ uct_component_t uct_ib_component = {
     .name               = "ib",
     .md_config          = {
         .name           = "IB memory domain",
-        .prefix         = "IB_",
+        .prefix         = UCT_IB_CONFIG_PREFIX,
         .table          = uct_ib_md_config_table,
         .size           = sizeof(uct_ib_md_config_t),
     },

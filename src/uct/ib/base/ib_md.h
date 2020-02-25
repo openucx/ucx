@@ -27,6 +27,8 @@
                                   IBV_ACCESS_REMOTE_ATOMIC)
 
 #define UCT_IB_MEM_DEREG          0
+#define UCT_IB_CONFIG_PREFIX      "IB_"
+
 
 /**
  * IB MD statistics counters

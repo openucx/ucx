@@ -817,7 +817,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         if (dc_req->sender.global.is_global) {
             uct_ib_iface_fill_ah_attr_from_gid_lid(ib_iface, dc_req->lid,
                                                    ucs_unaligned_ptr(&dc_req->sender.global.gid),
-                                                   &ah_attr);
+                                                   0, &ah_attr);
 
             status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);
             if (status != UCS_OK) {
@@ -832,10 +832,12 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         av.fl_mlid      = ib_iface->path_bits[0] & 0x7f;
 
         /* lid in dc_req is in BE already  */
-        av.rlid         = uct_ib_iface_is_roce(ib_iface) ? 0 :
-                          (dc_req->lid | htons(ib_iface->path_bits[0]));
+        if (uct_ib_iface_is_roce(ib_iface)) {
+            av.rlid     = htons(UCT_IB_ROCE_UDP_SRC_PORT_BASE);
+        } else {
+            av.rlid     = dc_req->lid | htons(ib_iface->path_bits[0]);
+        }
         av.dqp_dct      = htonl(dc_req->dct_num);
-        uct_dc_mlx5_iface_set_av_sport(iface, &av, dc_req->dct_num);
 
         if (!iface->ud_common.config.compact_av || ah_attr.is_global) {
             av.dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
@@ -884,8 +886,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface, const uct_dc_m
     remote_dctn            = uct_ib_unpack_uint24(if_addr->qp_num);
 
     memcpy(&self->av, av, sizeof(*av));
-    self->av.dqp_dct      |= htonl(remote_dctn);
-    uct_dc_mlx5_iface_set_av_sport(iface, &self->av, remote_dctn);
+    self->av.dqp_dct |= htonl(remote_dctn);
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
 }

@@ -115,6 +115,12 @@ struct uct_ib_iface_config {
     /* IB hop limit / TTL */
     unsigned                hop_limit;
 
+    /* Number of paths to expose for the interface  */
+    unsigned long           num_paths;
+
+    /* Multiplier for RoCE LAG UDP source port calculation */
+    unsigned                roce_path_factor;
+
     /* Ranges of path bits */
     UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
 
@@ -183,6 +189,7 @@ struct uct_ib_iface {
 
     uint8_t                   *path_bits;
     unsigned                  path_bits_count;
+    unsigned                  num_paths;
     uint16_t                  pkey_index;
     uint16_t                  pkey_value;
     uint8_t                   addr_size;
@@ -196,6 +203,7 @@ struct uct_ib_iface {
         unsigned              rx_max_poll;
         unsigned              tx_max_poll;
         unsigned              seg_size;
+        unsigned              roce_path_factor;
         uint8_t               max_inl_resp;
         uint8_t               port_num;
         uint8_t               sl;
@@ -460,10 +468,12 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,
+                                            unsigned path_index,
                                             struct ibv_ah_attr *ah_attr);
 
 void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          const uct_ib_address_t *ib_addr,
+                                         unsigned path_index,
                                          struct ibv_ah_attr *ah_attr);
 
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);

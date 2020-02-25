@@ -119,7 +119,7 @@ public:
         gid.global.subnet_prefix = subnet_prefix ?: iface->gid_info.gid.global.subnet_prefix;
         gid.global.interface_id  = 0xdeadbeef;
 
-        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, &ah_attr);
+        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, 0, &ah_attr);
 
         if (uct_ib_iface_is_roce(iface)) {
             /* in case of roce, should be global */

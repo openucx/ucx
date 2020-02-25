@@ -32,7 +32,7 @@ static ucs_config_field_t uct_ud_mlx5_iface_config_table[] = {
    ucs_offsetof(uct_ud_mlx5_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ud_iface_config_table)},
 
-  {"IB_", "", NULL,
+  {UCT_IB_CONFIG_PREFIX, "", NULL,
    ucs_offsetof(uct_ud_mlx5_iface_config_t, mlx5_common),
    UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
@@ -156,11 +156,12 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
     *iface->rx.wq.dbrec = htonl(pi);
 }
 
-static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_ep_t, uct_iface_h tl_iface)
+static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_ep_t, uct_iface_h tl_iface,
+                           const uct_ep_params_t *params)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_mlx5_iface_t);
     ucs_trace_func("");
-    UCS_CLASS_CALL_SUPER_INIT(uct_ud_ep_t, &iface->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_ud_ep_t, &iface->super, params);
     return UCS_OK;
 }
 
@@ -170,7 +171,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_ep_t)
 }
 
 UCS_CLASS_DEFINE(uct_ud_mlx5_ep_t, uct_ud_ep_t);
-static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_mlx5_ep_t, uct_ep_t, uct_iface_h);
+static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_mlx5_ep_t, uct_ep_t, uct_iface_h,
+                                 const uct_ep_params_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_mlx5_ep_t, uct_ep_t);
 
 
@@ -528,7 +530,7 @@ uct_ud_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 
 static ucs_status_t
 uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
-                         const uct_ib_address_t *ib_addr,
+                         const uct_ib_address_t *ib_addr, unsigned path_index,
                          const uct_ud_iface_addr_t *if_addr)
 {
     ucs_status_t status;
@@ -536,7 +538,8 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     int is_global;
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super, &iface->ud_mlx5_common,
-                                      ib_addr, &ep->av, &ep->grh_av, &is_global);
+                                      ib_addr, path_index, &ep->av, &ep->grh_av,
+                                      &is_global);
     if (status != UCS_OK) {
         return status;
     }
@@ -544,8 +547,6 @@ uct_ud_mlx5_ep_create_ah(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     remote_qpn      = uct_ib_unpack_uint24(if_addr->qp_num);
     ep->is_global   = is_global;
     ep->av.dqp_dct |= htonl(remote_qpn);
-    uct_ib_mlx5_iface_set_av_sport(&iface->super.super, &ep->av,
-                                   remote_qpn, iface->super.qp->qp_num);
     return UCS_OK;
 }
 
@@ -553,7 +554,7 @@ static ucs_status_t
 uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
                                 const uct_device_addr_t *dev_addr,
                                 const uct_iface_addr_t *iface_addr,
-                                uct_ep_h *new_ep_p)
+                                unsigned path_index, uct_ep_h *new_ep_p)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(iface_h, uct_ud_mlx5_iface_t);
     uct_ud_mlx5_ep_t *ep;
@@ -565,7 +566,7 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
 
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, ib_addr, if_addr,
-                                               &new_ud_ep, &skb);
+                                               path_index, &new_ud_ep, &skb);
     if (status != UCS_OK &&
         status != UCS_ERR_NO_RESOURCE &&
         status != UCS_ERR_ALREADY_EXISTS) {
@@ -581,7 +582,8 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
         return UCS_OK;
     }
 
-    status_ah = uct_ud_mlx5_ep_create_ah(iface, ep, ib_addr, if_addr);
+    status_ah = uct_ud_mlx5_ep_create_ah(iface, ep, ib_addr,
+                                         ep->super.path_index, if_addr);
     if (status_ah != UCS_OK) {
         uct_ud_ep_destroy_connected(&ep->super, ib_addr, if_addr);
         *new_ep_p = NULL;
@@ -605,10 +607,12 @@ uct_ud_mlx5_ep_create(const uct_ep_params_t* params, uct_ep_h *ep_p)
     if (ucs_test_all_flags(params->field_mask, UCT_EP_PARAM_FIELD_DEV_ADDR |
                                                UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
         return uct_ud_mlx5_ep_create_connected(params->iface, params->dev_addr,
-                                               params->iface_addr, ep_p);
+                                               params->iface_addr,
+                                               UCT_EP_PARAMS_GET_PATH_INDEX(params),
+                                               ep_p);
     }
 
-    return uct_ud_mlx5_ep_t_new(params->iface, ep_p);
+    return uct_ud_mlx5_ep_t_new(params->iface, params, ep_p);
 }
 
 
@@ -630,7 +634,8 @@ uct_ud_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
         return status;
     }
 
-    status = uct_ud_mlx5_ep_create_ah(iface, ep, ib_addr, (const uct_ud_iface_addr_t *)ep_addr);
+    status = uct_ud_mlx5_ep_create_ah(iface, ep, ib_addr, ep->super.path_index,
+                                      (const uct_ud_iface_addr_t *)ep_addr);
     if (status != UCS_OK) {
         return status;
     }
