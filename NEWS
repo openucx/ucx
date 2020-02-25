@@ -1,7 +1,7 @@
 #
-## Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-## Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
-## Copyright (C) ARM Ltd. 2017-2018.  ALL RIGHTS RESERVED.
+## Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
+## Copyright (C) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
+## Copyright (C) ARM Ltd. 2017-2020.  ALL RIGHTS RESERVED.
 ##
 ## See file LICENSE for terms.
 ##
@@ -10,6 +10,56 @@
 ## Current
 Features:
 - TBD
+
+## 1.7.0 (January 19, 2020)
+Features:
+- Added support for multiple listening transports
+- Added UCT socket-based connection manager transport
+- Updated API for UCT component management
+- Added API to retrieve the listening port
+- Added UCP active message API
+- Removed deprecated API for querying UCT memory domains
+- Refactored server/client examples
+- Added support for dlopen interception in UCM
+- Added support for PCIe atomics
+- Updated Java API: added support for most of UCP layer operations
+- Updated support for Mellanox DevX API
+- Added multiple UCT/TCP transport performance optimizations
+- Optimized memcpy() for Intel platforms
+- Added protection from non-UCX socket based app connections
+- Improved search time for PKEY object
+- Enable gtest over IPv6 interfaces
+- Updated Mellanox and Bull device IDs
+- Added support for CUDA_VISIBLE_DEVICES
+- Increased limits for CUDA IPC registration
+
+Bugfixes:
+- Multiple fixes in UCP, UCT, UCM libraries
+- Multiple fixes for BSD and Mac OS systems
+- Fixes for Clang compiler
+- Fixes for CUDA IPC
+- Fix CPU optimization configuration options
+- Fix JUCX build on GPU nodes
+- Fix in Azure release pipeline flow
+- Fix in CUDA memory hooks management
+- Fix in GPU memory peer direct gtest
+- Fix in TCP connection establishment flow
+- Fix in GPU IPC check
+- Fix in CUDA Jenkins test flow
+- Multiple fixes in CUDA IPC flow
+- Fix adding missing header files
+- Fix to prevent failures in presence VPN enabled Ethernet interfaces
+
+## 1.6.1 (September 23, 2019)
+Features:
+- Added Bull Atos HCA device IDs
+- Added Azure Pipelines testing
+
+Bugfixes:
+- Multiple static checker fixes
+- Remove pkg.m4 dependency
+- Multiple clang static checker fixes
+- Fix mem type support with generic datatype
 
 ## 1.6.0 (July 17, 2019)
 Features:
@@ -90,7 +140,7 @@ Tested configurations:
 Features:
 - Improved support for installation with latest ROCm
 - Improved support for latest rdma-core
-- Adding support for CUDA IPC for intra-node GPU
+- Added support for CUDA IPC for intra-node GPU
 - Added support for CUDA memory allocation cache for mem-type detection
 - Added support for latest Mellanox devices
 - Added support for Nvidia GPU managed memory
