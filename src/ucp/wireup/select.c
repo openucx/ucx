@@ -55,7 +55,7 @@ typedef struct {
     ucp_rsc_index_t   rsc_index;
     unsigned          addr_index;
     ucp_lane_index_t  proxy_lane;
-    ucp_rsc_index_t   dst_md_index;
+    ucp_md_index_t    dst_md_index;
     uint32_t          usage;
     double            am_bw_score;
     double            rma_score;
@@ -459,7 +459,7 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
 
 static UCS_F_NOINLINE void
 ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
-                         ucp_rsc_index_t dst_md_index,
+                         ucp_md_index_t dst_md_index,
                          uint32_t usage, int is_proxy,
                          ucp_wireup_select_context_t *select_ctx)
 {
@@ -550,7 +550,7 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
                     uint32_t usage, ucp_wireup_select_context_t *select_ctx)
 {
     int is_proxy = 0;
-    ucp_rsc_index_t dst_md_index;
+    ucp_md_index_t dst_md_index;
     uint64_t remote_cap_flags;
 
     if (usage & (UCP_WIREUP_LANE_USAGE_AM |
@@ -618,8 +618,8 @@ ucp_wireup_unset_tl_by_md(const ucp_wireup_select_params_t *sparams,
     ucp_context_h context         = sparams->ep->worker->context;
     const ucp_address_entry_t *ae = &sparams->address->
                                         address_list[sinfo->addr_index];
-    ucp_rsc_index_t md_index      = context->tl_rscs[sinfo->rsc_index].md_index;
-    ucp_rsc_index_t dst_md_index  = ae->md_index;
+    ucp_md_index_t md_index       = context->tl_rscs[sinfo->rsc_index].md_index;
+    ucp_md_index_t dst_md_index   = ae->md_index;
     ucp_rsc_index_t i;
 
     *remote_md_map &= ~UCS_BIT(dst_md_index);

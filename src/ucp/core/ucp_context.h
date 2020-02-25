@@ -117,12 +117,12 @@ struct ucp_config {
  * UCP communication resource descriptor
  */
 typedef struct ucp_tl_resource_desc {
-    uct_tl_resource_desc_t        tl_rsc;     /* UCT resource descriptor */
+    uct_tl_resource_desc_t        tl_rsc;       /* UCT resource descriptor */
     uint16_t                      tl_name_csum; /* Checksum of transport name */
-    ucp_rsc_index_t               md_index;   /* Memory domain index (within the context) */
-    ucp_rsc_index_t               dev_index;  /* Arbitrary device index. Resources
-                                                 with same index have same device name. */
-    uint8_t                       flags;      /* Flags that describe resource specifics */
+    ucp_md_index_t                md_index;     /* Memory domain index (within the context) */
+    ucp_rsc_index_t               dev_index;    /* Arbitrary device index. Resources
+                                                   with same index have same device name. */
+    uint8_t                       flags;        /* Flags that describe resource specifics */
 } ucp_tl_resource_desc_t;
 
 
@@ -164,11 +164,11 @@ typedef struct ucp_context {
     ucp_rsc_index_t               num_cmpts;  /* Number of UCT components */
 
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
-    ucp_rsc_index_t               num_mds;    /* Number of memory domains */
+    ucp_md_index_t                num_mds;    /* Number of memory domains */
 
     /* List of MDs which detect non host memory type */
-    ucp_rsc_index_t               mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
-    ucp_rsc_index_t               num_mem_type_detect_mds;  /* Number of mem type MDs */
+    ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
+    ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
     ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */

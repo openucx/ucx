@@ -535,7 +535,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     uint64_t md_flags_pack_mask = (UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC);
     const ucp_address_packed_device_t *dev;
     uct_iface_attr_t *iface_attr;
-    ucp_rsc_index_t md_index;
+    ucp_md_index_t md_index;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane, remote_lane;
@@ -823,7 +823,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     int last_dev, last_tl, last_ep_addr;
     const uct_device_addr_t *dev_addr;
     ucp_rsc_index_t dev_index;
-    ucp_rsc_index_t md_index;
+    ucp_md_index_t md_index;
     unsigned dev_num_paths;
     unsigned address_count;
     int empty_dev;

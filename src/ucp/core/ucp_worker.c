@@ -1333,7 +1333,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucp_rsc_index_t iface_id;
     uint64_t iface_cap_flags;
     double score, best_score;
-    ucp_rsc_index_t md_index;
+    ucp_md_index_t md_index;
     ucp_worker_iface_t *wiface;
     uct_md_attr_t *md_attr;
     uint64_t supp_tls;

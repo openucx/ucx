@@ -258,7 +258,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
     ucp_mem_desc_t *rdesc  = NULL;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
-    ucp_rsc_index_t mdi;
+    ucp_md_index_t mdi;
     uct_iov_t iov;
 
     wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
@@ -579,7 +579,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     size_t max_iov     = ucp_ep_config(ep)->tag.eager.max_iov;
     uct_iov_t *iov     = ucs_alloca(max_iov * sizeof(uct_iov_t));
     size_t iovcnt      = 0;
-    ucp_rsc_index_t md_index;
+    ucp_md_index_t md_index;
     ucp_dt_state_t dt_state;
     void *rndv_op;
 
