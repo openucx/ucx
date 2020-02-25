@@ -508,6 +508,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                   uct_completion_t *comp)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_md_t *md;
     ucs_status_t status;
     uint16_t sn;
 
@@ -517,7 +518,8 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
             ep->super.fc.fc_wnd = iface->super.config.fc_wnd_size;
         }
 
-        uct_ib_modify_qp(ep->tx.wq.super.verbs.qp, IBV_QPS_ERR);
+        md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
+        uct_ib_mlx5_modify_qp_state(md, &ep->tx.wq.super, IBV_QPS_ERR);
         /* NOTE: do not reset HW TM QP since it does not generate TX CQEs */
         return UCS_INPROGRESS;
     }
