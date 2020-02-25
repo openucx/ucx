@@ -161,7 +161,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
                       key->b_len, UCS_PGT_REGION_ARG(&region->super));
 
             *mapped_addr = region->mapped_addr;
-            ucs_assert(region->refcount < UINT_MAX);
+            ucs_assert(region->refcount < UINT64_MAX);
             ucs_atomic_add64(&(region->refcount), (uint64_t) 1);
             pthread_rwlock_unlock(&cache->lock);
             return UCS_OK;
