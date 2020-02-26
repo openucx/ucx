@@ -323,7 +323,9 @@ ucp_tag_request_process_recv_data(ucp_request_t *req, const void *data,
             req->status = ucp_request_recv_data_unpack(req, data, length,
                                                        offset, last);
         }
-        ucs_assert(req->recv.tag.remaining >= length);
+        ucs_assertv(req->recv.tag.remaining >= length,
+                    "req->recv.tag.remaining=%zu length=%zu",
+                    req->recv.tag.remaining, length);
     }
 
     req->recv.tag.remaining -= length;

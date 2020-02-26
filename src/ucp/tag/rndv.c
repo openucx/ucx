@@ -610,6 +610,8 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
     unsigned md_index;
     unsigned memh_index;
 
+    ucp_trace_req(rreq, "using rndv pipeline protocol rndv_req %p", rndv_req);
+
     offset    = 0;
     num_frags = ucs_div_round_up(rndv_rts_hdr->size, max_frag_size);
 
@@ -642,6 +644,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         freq->recv.state.dt.contig.md_map = 0;
         freq->recv.frag.rreq              = rreq;
         freq->recv.frag.offset            = offset;
+        freq->flags                      |= UCP_REQUEST_DEBUG_RNDV_FRAG;
 
         memh_index = 0;
         ucs_for_each_bit(md_index,
@@ -1097,7 +1100,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_frag_get_completion, (self, status),
     ucp_request_send(freq, 0);
 }
 
-static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *rndv_rtr_hdr)
+static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq,
+                                      ucp_rndv_rtr_hdr_t *rndv_rtr_hdr)
 {
     ucp_worker_h worker   = sreq->send.ep->worker;
     ucp_context_h context = worker->context;
@@ -1112,6 +1116,8 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq, ucp_rndv_rtr_hdr_t *r
     int i, num_frags;
     size_t max_frag_size, rndv_size, length;
     size_t offset, rndv_base_offset;
+
+    ucp_trace_req(sreq, "using rndv pipeline protocol");
 
     /* check if lane supports host memory, to stage sends through host memory */
     md_attr = ucp_ep_md_attr(sreq->send.ep, sreq->send.lane);
@@ -1364,6 +1370,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         }
     }
 
+    ucp_trace_req(sreq, "using rdnv_data protocol");
+
     /* switch to AM */
     sreq->send.tag.rreq_ptr = rndv_rtr_hdr->rreq_ptr;
 
@@ -1402,6 +1410,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     ucp_rndv_data_hdr_t *rndv_data_hdr = data;
     ucp_request_t *rreq = (ucp_request_t*) rndv_data_hdr->rreq_ptr;
     size_t recv_len;
+
+    ucs_assert(!(rreq->flags & UCP_REQUEST_DEBUG_RNDV_FRAG));
 
     recv_len = length - sizeof(*rndv_data_hdr);
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_recv", recv_len);
