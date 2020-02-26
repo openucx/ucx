@@ -37,7 +37,8 @@ SUBDIRS = \
 	src/tools/profile \
 	bindings/java \
 	test/apps \
-	test/examples
+	test/examples \
+	test/examples/emulate-distribute-storage
 
 if HAVE_GTEST
 SUBDIRS += test/gtest
