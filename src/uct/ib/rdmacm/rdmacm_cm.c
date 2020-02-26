@@ -211,9 +211,7 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
 
     status = uct_rdmacm_cm_id_to_dev_addr(event->id, &dev_addr, &addr_length);
     if (status != UCS_OK) {
-        uct_rdmacm_cm_reject(event->id);
-        uct_rdmacm_cm_destroy_id(event->id);
-        return;
+        goto err;
     }
 
     remote_data.field_mask            = UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
@@ -229,9 +227,7 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
 
     status = ucs_sockaddr_sizeof(client_saddr.addr, &size);
     if (status != UCS_OK) {
-        uct_rdmacm_cm_reject(event->id);
-        uct_rdmacm_cm_destroy_id(event->id);
-        return;
+        goto err_free_dev_addr;
     }
 
     client_saddr.addrlen = size;
@@ -248,6 +244,15 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
     listener->conn_request_cb(&listener->super, listener->user_data,
                               &conn_req_args);
     ucs_free(dev_addr);
+
+    return;
+
+err_free_dev_addr:
+    ucs_free(dev_addr);
+err:
+    uct_rdmacm_cm_reject(event->id);
+    uct_rdmacm_cm_destroy_id(event->id);
+    uct_rdmacm_cm_ack_event(event);
 }
 
 static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *event)

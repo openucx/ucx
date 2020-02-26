@@ -486,10 +486,10 @@ protected:
         remote_data  = conn_req_args->remote_data;
 
         /* check the address of the remote client */
-        EXPECT_EQ(memcmp(ucs_sockaddr_get_inet_addr(m_connect_addr_sock_addr.addr),
-                         ucs_sockaddr_get_inet_addr(conn_req_args->client_address.addr),
-                         (conn_req_args->client_address.addr->sa_family == AF_INET) ?
-                         sizeof(struct in_addr) : sizeof(struct in6_addr)), 0);
+        EXPECT_EQ(0, memcmp(ucs_sockaddr_get_inet_addr(m_connect_addr_sock_addr.addr),
+                            ucs_sockaddr_get_inet_addr(conn_req_args->client_address.addr),
+                            (conn_req_args->client_address.addr->sa_family == AF_INET) ?
+                            sizeof(struct in_addr) : sizeof(struct in6_addr)));
 
         status = ucs_sockaddr_get_port(conn_req_args->client_address.addr, &client_port);
         ASSERT_UCS_OK(status);
