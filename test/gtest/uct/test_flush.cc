@@ -37,7 +37,8 @@ public:
         if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
             m_sender->connect(0, *m_sender, 0);
         } else {
-            entity *m_receiver = uct_test::create_entity(0);
+            entity *m_receiver = uct_test::create_entity(0,
+                                                         receiver_err_handler);
             m_entities.push_back(m_receiver);
 
             m_sender->connect(0, *m_receiver, 0);
@@ -155,6 +156,11 @@ public:
         recvbuf.pattern_check(SEED3);
     }
 
+    void test_flush_put_bcopy_safe(flush_func_t flush) {
+        scoped_log_handler slh(wrap_errors_logger);
+        test_flush_put_bcopy(flush);
+    }
+
     void wait_am(unsigned count) {
         while (am_rx_count < count) {
             progress();
@@ -213,6 +219,11 @@ public:
         recvbuf.pattern_check(SEED3);
     }
 
+    void test_flush_am_zcopy_safe_destroy_ep(flush_func_t flush) {
+        scoped_log_handler slh(wrap_errors_logger);
+        test_flush_am_zcopy(flush, true);
+    }
+
     void test_flush_am_disconnect(flush_func_t flush, bool destroy_ep) {
         const size_t length = 8;
         if (is_flush_cancel()) {
@@ -240,6 +251,11 @@ public:
         uct_iface_set_am_handler(receiver().iface(), get_am_id(), NULL, NULL, 0);
 
         recvbuf.pattern_check(SEED3);
+    }
+
+    void test_flush_am_disconnect_safe_destroy_ep(flush_func_t flush) {
+        scoped_log_handler slh(wrap_errors_logger);
+        test_flush_am_disconnect(flush, true);
     }
 
     void flush_ep_no_comp() {
@@ -308,6 +324,16 @@ public:
     }
 
     void test_flush_am_pending(flush_func_t flush, bool destroy_ep);
+    void test_flush_am_pending_safe_destroy_ep(flush_func_t flush);
+
+private:
+    static ucs_status_t receiver_err_handler(void *, uct_ep_h,
+                                             ucs_status_t status) {
+        /* NOTE: suppress failure of flow control message on receiver when
+         *       sender is already in error state */
+        EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
+        return UCS_OK;
+    }
 
 protected:
     uct_test::entity& sender() {
@@ -452,6 +478,11 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
      recvbuf.pattern_check(SEED3);
 }
 
+void uct_flush_test::test_flush_am_pending_safe_destroy_ep(flush_func_t flush) {
+    scoped_log_handler slh(wrap_errors_logger);
+    test_flush_am_pending(flush, true);
+}
+
 UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_no_comp,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     am_rx_count   = 0;
@@ -462,7 +493,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_no_comp,
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_put_bcopy(&uct_flush_test::flush_ep_no_comp);
+        test_flush_put_bcopy_safe(&uct_flush_test::flush_ep_no_comp);
     }
 }
 
@@ -481,7 +512,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_nb,
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_put_bcopy(&uct_flush_test::flush_ep_nb);
+        test_flush_put_bcopy_safe(&uct_flush_test::flush_ep_nb);
     }
 }
 
@@ -495,7 +526,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_no_comp,
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_zcopy(&uct_flush_test::flush_ep_no_comp, true);
+        test_flush_am_zcopy_safe_destroy_ep(&uct_flush_test::flush_ep_no_comp);
     }
 }
 
@@ -514,7 +545,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_nb,
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_zcopy(&uct_flush_test::flush_ep_nb, true);
+        test_flush_am_zcopy_safe_destroy_ep(&uct_flush_test::flush_ep_nb);
     }
 }
 
@@ -528,7 +559,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_ep_no_comp,
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_disconnect(&uct_flush_test::flush_ep_no_comp, true);
+        test_flush_am_disconnect_safe_destroy_ep(&uct_flush_test::flush_ep_no_comp);
     }
 }
 
@@ -548,7 +579,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_flush_ep_nb,
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_disconnect(&uct_flush_test::flush_ep_nb, true);
+        test_flush_am_disconnect_safe_destroy_ep(&uct_flush_test::flush_ep_nb);
     }
 }
 
@@ -563,7 +594,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_pending_flush_nb,
     if (is_caps_supported(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
         am_rx_count    = 0;
         m_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
-        test_flush_am_pending(&uct_flush_test::flush_ep_nb, true);
+        test_flush_am_pending_safe_destroy_ep(&uct_flush_test::flush_ep_nb);
     }
 }
 
