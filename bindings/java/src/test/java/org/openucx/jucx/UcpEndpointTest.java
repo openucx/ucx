@@ -125,21 +125,13 @@ public class UcpEndpointTest extends UcxTest {
             worker1.newEndpoint(new UcpEndpointParams().setUcpAddress(worker2.getAddress()));
 
         UcpRemoteKey rkey = ep.unpackRemoteKey(memory.getRemoteKeyBuffer());
-        UcpRequest request = ep.putNonBlocking(src, memory.getAddress(), rkey,
-            new UcxCallback() {
-                @Override
-                public void onSuccess(UcpRequest request) {
-                    rkey.close();
-                    memory.deregister();
-                }
-            });
+        ep.putNonBlocking(src, memory.getAddress(), rkey, null);
 
-        worker1.progressRequest(request);
-        worker2.progressRequest(worker2.flushNonBlocking(null));
+        worker1.progressRequest(worker1.flushNonBlocking(null));
 
         assertEquals(UcpMemoryTest.RANDOM_TEXT, dst.asCharBuffer().toString().trim());
 
-        Collections.addAll(resources, context2, context1, worker2, worker1, ep);
+        Collections.addAll(resources, context2, context1, worker2, worker1, rkey, ep, memory);
         closeResources();
     }
 
