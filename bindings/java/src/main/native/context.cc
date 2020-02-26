@@ -13,8 +13,8 @@ extern "C" {
  * Iterates through entries of java's hash map and apply
  * ucp_config_modify and ucs_global_opts_set_value to each key value pair.
  */
-static inline void iterate_java_map(JNIEnv *env, ucp_config_t *config,
-                                    jobject *config_map)
+static void jucx_map_apply_config(JNIEnv *env, ucp_config_t *config,
+                                  jobject *config_map)
 {
     jclass c_map = env->GetObjectClass(*config_map);
     jmethodID id_entrySet =
@@ -41,8 +41,12 @@ static inline void iterate_java_map(JNIEnv *env, ucp_config_t *config,
         const char *strKey = env->GetStringUTFChars(jstrKey, 0);
         const char *strValue = env->GetStringUTFChars(jstrValue, 0);
 
-        ucp_config_modify(config, strKey, strValue);
-        ucs_global_opts_set_value(strKey, strValue);
+        ucs_status_t config_modify_status = ucp_config_modify(config, strKey, strValue);
+        ucs_status_t global_opts_status = ucs_global_opts_set_value(strKey, strValue);
+
+        if ((config_modify_status != UCS_OK) && (global_opts_status != UCS_OK)) {
+            ucs_warn("JUCX: no such key %s, ignoring", strKey);
+        }
 
         env->ReleaseStringUTFChars(jstrKey, strKey);
         env->ReleaseStringUTFChars(jstrValue, strValue);
@@ -104,7 +108,7 @@ Java_org_openucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls
             JNU_ThrowExceptionByStatus(env, status);
         }
 
-        iterate_java_map(env, config, &config_map);
+        jucx_map_apply_config(env, config, &config_map);
     }
 
     status = ucp_init(&ucp_params, config, &ucp_context);

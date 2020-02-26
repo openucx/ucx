@@ -44,14 +44,19 @@ public class UcpContextTest {
     @Test
     public void testConfigMap() {
         UcpParams contextParams = new UcpParams().requestTagFeature()
-            .setConfig("LOG_LEVEL", "info").setConfig("ZCOPY_THRESH", "1");
-        UcpContext context = createContext(contextParams);
-        closeContext(context);
+            .setConfig("TLS", "abcd").setConfig("NOT_EXISTING_", "234");
+        boolean catched = false;
+        try {
+            createContext(contextParams);
+        } catch (UcxException exception) {
+            assertEquals("No such device", exception.getMessage());
+            catched = true;
+        }
+        assertTrue(catched);
 
         // Return back original config
-        contextParams = new UcpParams().requestTagFeature()
-            .setConfig("LOG_LEVEL", "warn").setConfig("ZCOPY_THRESH", "auto");
-        context = createContext(contextParams);
+        contextParams = new UcpParams().requestTagFeature().setConfig("TLS", "all");
+        UcpContext context = createContext(contextParams);
         closeContext(context);
     }
     
