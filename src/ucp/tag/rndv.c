@@ -1111,7 +1111,7 @@ static ucs_status_t ucp_rndv_pipeline(ucp_request_t *sreq,
     ucp_mem_desc_t *mdesc;
     ucp_request_t *freq;
     ucp_request_t *fsreq;
-    ucp_rsc_index_t md_index;
+    ucp_md_index_t md_index;
     ucs_status_t status;
     int i, num_frags;
     size_t max_frag_size, rndv_size, length;
@@ -1244,7 +1244,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     ucp_worker_h worker;
     ucp_lane_index_t mem_type_rma_lane;
     ucp_mem_desc_t *mdesc;
-    ucp_rsc_index_t md_index;
+    ucp_md_index_t md_index;
     ucp_ep_h mem_type_ep;
     size_t frag_size, frag_offset;
 

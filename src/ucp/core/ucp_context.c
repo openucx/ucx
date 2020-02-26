@@ -525,7 +525,7 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
 }
 
 static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *md,
-                                           ucp_rsc_index_t md_index,
+                                           ucp_md_index_t md_index,
                                            const ucp_config_t *config,
                                            const uct_tl_resource_desc_t *resource,
                                            uint8_t rsc_flags, unsigned *num_resources_p,
@@ -559,7 +559,7 @@ static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *m
 }
 
 static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
-                                         ucp_rsc_index_t md_index,
+                                         ucp_md_index_t md_index,
                                          const ucp_config_t *config,
                                          unsigned *num_resources_p,
                                          ucs_string_set_t avail_devices[],

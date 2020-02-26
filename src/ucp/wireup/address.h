@@ -75,7 +75,7 @@ struct ucp_address_entry {
     uint64_t                    md_flags;       /* MD reg/alloc flags */
     unsigned                    dev_num_paths;  /* Number of paths on the device */
     uint16_t                    tl_name_csum;   /* Checksum of transport name */
-    ucp_rsc_index_t             md_index;       /* Memory domain index */
+    ucp_md_index_t              md_index;       /* Memory domain index */
     ucp_rsc_index_t             dev_index;      /* Device index */
 };
 
