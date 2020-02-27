@@ -37,6 +37,7 @@ BEGIN_C_DECLS
 
 #define ucs_error(_fmt, ...)        ucs_log(UCS_LOG_LEVEL_ERROR, _fmt, ## __VA_ARGS__)
 #define ucs_warn(_fmt, ...)         ucs_log(UCS_LOG_LEVEL_WARN, _fmt,  ## __VA_ARGS__)
+#define ucs_diag(_fmt, ...)         ucs_log(UCS_LOG_LEVEL_DIAG, _fmt,  ## __VA_ARGS__)
 #define ucs_info(_fmt, ...)         ucs_log(UCS_LOG_LEVEL_INFO, _fmt, ## __VA_ARGS__)
 #define ucs_debug(_fmt, ...)        ucs_log(UCS_LOG_LEVEL_DEBUG, _fmt, ##  __VA_ARGS__)
 #define ucs_trace(_fmt, ...)        ucs_log(UCS_LOG_LEVEL_TRACE, _fmt, ## __VA_ARGS__)

@@ -494,6 +494,7 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
     ucp_rsc_index_t             rsc_index;
     uct_tl_resource_desc_t      *tl_rsc;
     ucp_worker_err_handle_arg_t *err_handle_arg;
+    ucs_log_level_t             log_level;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         goto out_ok;
@@ -535,18 +536,23 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
 
     if ((ucp_ep_ext_gen(ucp_ep)->err_cb == NULL) &&
         (ucp_ep->flags & UCP_EP_FLAG_USED)) {
+        /* do not print error if connection reset by remote peer since it can
+         * be part of user level close protocol  */
+        log_level = (status == UCS_ERR_CONNECTION_RESET) ? UCS_LOG_LEVEL_DIAG :
+                    UCS_LOG_LEVEL_ERROR;
+
         if (lane != UCP_NULL_LANE) {
             rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
             tl_rsc    = &worker->context->tl_rscs[rsc_index].tl_rsc;
-            ucs_error("error '%s' will not be handled for ep %p - "
-                      UCT_TL_RESOURCE_DESC_FMT " since no error callback is installed",
-                      ucs_status_string(status), ucp_ep,
-                      UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+            ucs_log(log_level, "error '%s' will not be handled for ep %p - "
+                    UCT_TL_RESOURCE_DESC_FMT " since no error callback is installed",
+                    ucs_status_string(status), ucp_ep,
+                    UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
         } else {
             ucs_assert(uct_ep == NULL);
-            ucs_error("error '%s' occurred on wireup will not be handled for ep %p "
-                      "since no error callback is installed",
-                      ucs_status_string(status), ucp_ep);
+            ucs_log(log_level, "error '%s' occurred on wireup will not be "
+                    "handled for ep %p since no error callback is installed",
+                    ucs_status_string(status), ucp_ep);
         }
         ret_status = status;
         goto out;
