@@ -64,27 +64,66 @@ UCS_PROFILE_FUNC_VOID(ucp_am_data_release,
     ucp_recv_desc_release(rdesc);
 }
 
+static ucs_status_t ucp_am_extend_cb_array(ucp_worker_h worker, uint16_t id)
+{
+    size_t num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
+    if (num_entries > UCT_AM_ID_MAX) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    worker->am_cbs = ucs_realloc(worker->am_cbs, num_entries *
+                                 sizeof(ucp_worker_am_entry_t),
+                                 "UCP AM callback array");
+    memset(worker->am_cbs + worker->am_cb_array_len,
+           0, (num_entries - worker->am_cb_array_len)
+           * sizeof(ucp_worker_am_entry_t));
+
+    worker->am_cb_array_len = num_entries;
+    return UCS_OK;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_get_unused_am_id, (worker, id_p),
+                 ucp_worker_h worker, uint16_t *id_p)
+{
+    uint16_t id;
+    ucs_status_t status;
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
+                                    return UCS_ERR_INVALID_PARAM);
+
+    id = 0;
+    while ((id < worker->am_cb_array_len) &&
+           (worker->am_cbs[id].cb)) {
+        id++;
+    }
+
+    if (ucs_unlikely(id == worker->am_cb_array_len)) {
+        status = ucp_am_extend_cb_array(worker, id);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    *id_p = id;
+    return UCS_OK;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
                  (worker, id, cb, arg, flags),
                  ucp_worker_h worker, uint16_t id, 
                  ucp_am_callback_t cb, void *arg, 
                  uint32_t flags)
 {
-    size_t num_entries;
+    ucs_status_t status;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_ERR_INVALID_PARAM);
 
     if (id >= worker->am_cb_array_len) {
-        num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
-        worker->am_cbs = ucs_realloc(worker->am_cbs, num_entries * 
-                                     sizeof(ucp_worker_am_entry_t),
-                                     "UCP AM callback array");
-        memset(worker->am_cbs + worker->am_cb_array_len, 
-               0, (num_entries - worker->am_cb_array_len)
-               * sizeof(ucp_worker_am_entry_t));
-        
-        worker->am_cb_array_len = num_entries;
+        status = ucp_am_extend_cb_array(worker, id);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     worker->am_cbs[id].cb      = cb;

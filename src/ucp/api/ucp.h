@@ -2181,6 +2181,21 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
 
 /**
  * @ingroup UCP_WORKER
+ * @brief Get an unused Active Message id.
+ *
+ * This routine returns an unused id for calling @ref ucp_worker_set_am_handler .
+ *
+ * @param [in]  worker      UCP worker where to find the Active Message id.
+ * @param [out] id          Active Message id.
+ *
+ * @return error code if the worker does not support Active Messages or
+ *         is out of available ids.
+ */
+ucs_status_t ucp_worker_get_unused_am_id(ucp_worker_h worker, uint16_t *id_p);
+
+
+/**
+ * @ingroup UCP_WORKER
  * @brief Add user defined callback for Active Message.
  *
  * This routine installs a user defined callback to handle incoming Active
