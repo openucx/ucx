@@ -274,7 +274,13 @@ enum uct_cm_listener_conn_request_args_field {
      *  Indicates that remote_data field in uct_cm_listener_conn_request_args_t
      *  is valid.
      */
-    UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  = UCS_BIT(2)
+    UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  = UCS_BIT(2),
+
+    /** Enables @ref uct_cm_listener_conn_request_args::client_address
+     *  Indicates that client_address field in uct_cm_listener_conn_request_args_t
+     *  is valid.
+     */
+    UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR  = UCS_BIT(3)
 };
 
 
@@ -309,6 +315,11 @@ typedef struct uct_cm_listener_conn_request_args {
      * Remote data from the client.
      */
     const uct_cm_remote_data_t *remote_data;
+
+    /**
+     * Client's address.
+     */
+    ucs_sock_addr_t             client_address;
 } uct_cm_listener_conn_request_args_t;
 
 

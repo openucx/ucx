@@ -470,16 +470,30 @@ protected:
                        const uct_cm_listener_conn_request_args_t
                        *conn_req_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
+        ucs_sock_addr_t m_connect_addr_sock_addr =
+                        self->m_connect_addr.to_ucs_sock_addr();
         uct_conn_request_h conn_request;
         const uct_cm_remote_data_t *remote_data;
+        uint16_t client_port;
         ucs_status_t status;
 
         EXPECT_TRUE(ucs_test_all_flags(conn_req_args->field_mask,
                                        (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
-                                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA)));
+                                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
+                                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR)));
 
         conn_request = conn_req_args->conn_request;
         remote_data  = conn_req_args->remote_data;
+
+        /* check the address of the remote client */
+        EXPECT_EQ(0, memcmp(ucs_sockaddr_get_inet_addr(m_connect_addr_sock_addr.addr),
+                            ucs_sockaddr_get_inet_addr(conn_req_args->client_address.addr),
+                            (conn_req_args->client_address.addr->sa_family == AF_INET) ?
+                            sizeof(struct in_addr) : sizeof(struct in6_addr)));
+
+        status = ucs_sockaddr_get_port(conn_req_args->client_address.addr, &client_port);
+        ASSERT_UCS_OK(status);
+        EXPECT_GT(client_port, 0);
 
         EXPECT_EQ(entity::client_priv_data.length() + 1, remote_data->conn_priv_data_length);
         EXPECT_EQ(entity::client_priv_data,

@@ -139,15 +139,16 @@ out:
 
 static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_ep_t *cep)
 {
-    uct_tcp_sockcm_priv_data_hdr_t       *hdr = (uct_tcp_sockcm_priv_data_hdr_t *)
-                                                cep->comm_ctx.buf;
-    struct sockaddr_storage              remote_dev_addr = {0};
-    socklen_t                            remote_dev_addr_len;
-    char                                 peer_str[UCS_SOCKADDR_STRING_LEN];
-    char                                 ifname_str[UCT_DEVICE_NAME_MAX];
-    uct_cm_remote_data_t                 remote_data;
-    ucs_status_t                         status;
-    uct_cm_listener_conn_request_args_t  conn_req_args;
+    uct_tcp_sockcm_priv_data_hdr_t      *hdr = (uct_tcp_sockcm_priv_data_hdr_t *)
+                                               cep->comm_ctx.buf;
+    struct sockaddr_storage             remote_dev_addr = {0};
+    socklen_t                           remote_dev_addr_len;
+    char                                peer_str[UCS_SOCKADDR_STRING_LEN];
+    char                                ifname_str[UCT_DEVICE_NAME_MAX];
+    uct_cm_remote_data_t                remote_data;
+    ucs_status_t                        status;
+    uct_cm_listener_conn_request_args_t conn_req_args;
+    ucs_sock_addr_t                     client_saddr;
 
     /* get the local interface name associated with the connected fd */
     status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, UCT_DEVICE_NAME_MAX);
@@ -170,11 +171,16 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
     remote_data.conn_priv_data        = hdr + 1;
     remote_data.conn_priv_data_length = hdr->length;
 
-    conn_req_args.field_mask   = UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
-                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
-                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA;
-    conn_req_args.conn_request = cep;
-    conn_req_args.remote_data  = &remote_data;
+    client_saddr.addr    = (struct sockaddr*)&remote_dev_addr;
+    client_saddr.addrlen = remote_dev_addr_len;
+
+    conn_req_args.field_mask     = UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR;
+    conn_req_args.conn_request   = cep;
+    conn_req_args.remote_data    = &remote_data;
+    conn_req_args.client_address = client_saddr;
     ucs_strncpy_safe(conn_req_args.dev_name, ifname_str, UCT_DEVICE_NAME_MAX);
 
     ucs_debug("fd %d: remote_data: (field_mask=%zu) dev_addr: %s (length=%zu), "
