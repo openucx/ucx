@@ -94,8 +94,9 @@ size_t ucs_log_get_buffer_size()
 }
 
 static void ucs_log_print(size_t buffer_size, const char *short_file, int line,
-                          ucs_log_level_t level, const struct timeval *tv,
-                          const char *message)
+                          ucs_log_level_t level,
+                          const ucs_log_component_config_t *comp_conf,
+                          const struct timeval *tv, const char *message)
 {
     char *valg_buf;
 
@@ -103,26 +104,28 @@ static void ucs_log_print(size_t buffer_size, const char *short_file, int line,
         valg_buf = ucs_alloca(buffer_size + 1);
         snprintf(valg_buf, buffer_size,
                  "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n", tv->tv_sec, tv->tv_usec,
-                 short_file, line, "UCX", ucs_log_level_names[level],
-                 message);
+                 short_file, line, comp_conf->name,
+                 ucs_log_level_names[level], message);
         VALGRIND_PRINTF("%s", valg_buf);
     } else if (ucs_log_initialized) {
         fprintf(ucs_log_file,
                 "[%lu.%06lu] [%s:%-5d:%d] %16s:%-4u %-4s %-5s %s\n",
                 tv->tv_sec, tv->tv_usec, ucs_log_hostname, ucs_log_pid,
-                ucs_log_get_thread_num(), short_file, line, "UCX",
+                ucs_log_get_thread_num(), short_file, line, comp_conf->name,
                 ucs_log_level_names[level], message);
     } else {
         fprintf(stdout,
                 "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n",
                 tv->tv_sec, tv->tv_usec, short_file, line,
-                "UCX", ucs_log_level_names[level], message);
+                comp_conf->name, ucs_log_level_names[level], message);
     }
 }
 
 ucs_log_func_rc_t
 ucs_log_default_handler(const char *file, unsigned line, const char *function,
-                        ucs_log_level_t level, const char *format, va_list ap)
+                        ucs_log_level_t level,
+                        const ucs_log_component_config_t *comp_conf,
+                        const char *format, va_list ap)
 {
     size_t buffer_size = ucs_log_get_buffer_size();
     char *saveptr      = "";
@@ -130,8 +133,8 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     struct timeval tv;
     char *buf;
 
-    if (!ucs_log_is_enabled(level) && (level != UCS_LOG_LEVEL_PRINT)) {
-        return UCS_LOG_FUNC_RC_CONTINUE;
+    if (!ucs_log_component_is_enabled(level, comp_conf) && (level != UCS_LOG_LEVEL_PRINT)) {
+         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
     buf = ucs_alloca(buffer_size + 1);
@@ -145,7 +148,8 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
 
         log_line = strtok_r(buf, "\n", &saveptr);
         while (log_line != NULL) {
-            ucs_log_print(buffer_size, ucs_basename(file), line, level, &tv, log_line);
+            ucs_log_print(buffer_size, ucs_basename(file), line, level, comp_conf,
+                          &tv, log_line);
             log_line = strtok_r(NULL, "\n", &saveptr);
         }
     }
@@ -178,7 +182,8 @@ unsigned ucs_log_num_handlers()
 }
 
 void ucs_log_dispatch(const char *file, unsigned line, const char *function,
-                      ucs_log_level_t level, const char *format, ...)
+                      ucs_log_level_t level, ucs_log_component_config_t *comp_conf,
+                      const char *format, ...)
 {
     ucs_log_func_rc_t rc;
     unsigned index;
@@ -190,7 +195,8 @@ void ucs_log_dispatch(const char *file, unsigned line, const char *function,
     while ((index > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
         --index;
         va_start(ap, format);
-        rc = ucs_log_handlers[index](file, line, function, level, format, ap);
+        rc = ucs_log_handlers[index](file, line, function,
+                                     level, comp_conf, format, ap);
         va_end(ap);
     }
 }

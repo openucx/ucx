@@ -88,7 +88,7 @@ static void __ucs_rcache_region_log(const char *file, int line, const char *func
         strcpy(region_desc, "");
     }
 
-    ucs_log_dispatch(file, line, function, level,
+    ucs_log_dispatch(file, line, function, level, &ucs_global_opts.log_component,
                      "%s: %s region " UCS_PGT_REGION_FMT " %c%c "UCS_RCACHE_PROT_FMT" ref %u %s",
                      rcache->name, message,
                      UCS_PGT_REGION_ARG(&region->super),

@@ -33,6 +33,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/strided_alloc.h \
 	datastruct/string_buffer.h \
 	datastruct/string_set.h \
+	debug/log.h \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
@@ -83,7 +84,6 @@ noinst_HEADERS = \
 	datastruct/sglib_wrapper.h \
 	debug/assert.h \
 	debug/debug.h \
-	debug/log.h \
 	debug/memtrack.h \
 	memory/numa.h \
 	memory/rcache_int.h \

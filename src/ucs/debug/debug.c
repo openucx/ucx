@@ -1151,7 +1151,7 @@ int sigaction(int signum, const struct sigaction *act, struct sigaction *oact)
 static void ucs_debug_signal_handler(int signo)
 {
     ucs_log_flush();
-    ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
+    ucs_global_opts.log_component.log_level = UCS_LOG_LEVEL_TRACE_DATA;
     ucs_profile_dump();
 }
 

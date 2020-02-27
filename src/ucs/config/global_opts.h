@@ -27,96 +27,96 @@ BEGIN_C_DECLS
  */
 typedef struct {
 
-    /* Log level above which log messages will be printed */
-    ucs_log_level_t          log_level;
+    /* Log level above which log messages will be printed for default component*/
+    ucs_log_component_config_t log_component;
 
     /* Log file */
-    char                     *log_file;
+    char                       *log_file;
 
     /* Size of log buffer for one message */
-    size_t                   log_buffer_size;
+    size_t                     log_buffer_size;
 
     /* Maximal amount of packet data to print per packet */
-    size_t                   log_data_size;
+    size_t                     log_data_size;
 
     /* Enable ucs_print() output */
-    int                      log_print_enable;
+    int                        log_print_enable;
 
     /* Enable FIFO behavior for memory pool, instead of LIFO. Useful for
      * debugging because object pointers are not recycled. */
-    int                      mpool_fifo;
+    int                        mpool_fifo;
 
     /* Handle errors mode */
-    unsigned                 handle_errors;
+    unsigned                   handle_errors;
 
     /* Error signals */
     UCS_CONFIG_ARRAY_FIELD(int, signals) error_signals;
 
     /* If not empty, send mail notifications to that address in case of error */
-    char                     *error_mail_to;
+    char                       *error_mail_to;
 
     /* Footer for error report mail notification */
-    char                     *error_mail_footer;
+    char                       *error_mail_footer;
 
     /* If not NULL, attach gdb to the process in case of error */
-    char                     *gdb_command;
+    char                       *gdb_command;
 
     /* Signal number which causes to enter debug mode */
-    unsigned                 debug_signo;
+    unsigned                   debug_signo;
 
     /* Log level to trigger error handling */
-    ucs_log_level_t          log_level_trigger;
+    ucs_log_level_t            log_level_trigger;
 
     /* Issue warning about UCX_ env vars which were not used by config parser */
-    int                      warn_unused_env_vars;
+    int                        warn_unused_env_vars;
 
     /* Max. events per context, will be removed in the future */
-    unsigned                 async_max_events;
+    unsigned                   async_max_events;
 
     /* Destination for statistics: udp:host:port / file:path / stdout
      */
-    char                     *stats_dest;
+    char                       *stats_dest;
 
     /* Trigger to dump statistics */
-    char                     *stats_trigger;
+    char                       *stats_trigger;
 
     /* Named pipe file path for tuning.
      */
-    char                     *tuning_path;
+    char                       *tuning_path;
 
     /* Number of performance stall loops to perform */
-    size_t                   perf_stall_loops;
+    size_t                     perf_stall_loops;
 
     /* Signal number used by async handler (for signal mode) */
-    unsigned                 async_signo;
+    unsigned                   async_signo;
 
     /* Destination for detailed memory tracking results: none / stdout / stderr
      */
-    char                     *memtrack_dest;
+    char                       *memtrack_dest;
 
     /* Profiling mode */
-    unsigned                 profile_mode;
+    unsigned                   profile_mode;
 
     /* Profiling output file name */
-    char                     *profile_file;
+    char                       *profile_file;
 
     /* Limit for profiling log size */
-    size_t                   profile_log_size;
+    size_t                     profile_log_size;
 
     /* Counters to be included in statistics summary */
-    ucs_config_names_array_t stats_filter;
+    ucs_config_names_array_t   stats_filter;
 
     /* statistics format options */
-    ucs_stats_formats_t      stats_format;
+    ucs_stats_formats_t        stats_format;
 
     /* registration cache checks if physical page is not moved */
-    int                      rcache_check_pfn;
+    int                        rcache_check_pfn;
 
     /* directory for loadable modules */
-    char                     *module_dir;
+    char                       *module_dir;
 
     /* log level for module loader code */
-    ucs_log_level_t          module_log_level;
+    ucs_log_level_t            module_log_level;
 
     /* arch-specific global options */
     ucs_arch_global_opts_t arch;

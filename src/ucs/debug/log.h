@@ -12,6 +12,10 @@
 #  include "config.h" /* Defines UCS_MAX_LOG_LEVEL */
 #endif
 
+#ifndef UCS_MAX_LOG_LEVEL
+#error “Please define UCS_MAX_LOG_LEVEL before including this file”
+#endif
+
 #include <ucs/sys/compiler_def.h>
 #include <ucs/config/global_opts.h>
 #include <stdarg.h>
@@ -22,18 +26,25 @@ BEGIN_C_DECLS
 
 /** @file log.h */
 
+#define ucs_log_component_is_enabled(_level, _comp_log_config) \
+    ucs_unlikely(((_level) <= UCS_MAX_LOG_LEVEL) && \
+                 ((_level) <= (((ucs_log_component_config_t*)(_comp_log_config))->log_level)))
+
 #define ucs_log_is_enabled(_level) \
-    ucs_unlikely(((_level) <= UCS_MAX_LOG_LEVEL) && ((_level) <= (ucs_global_opts.log_level)))
+    ucs_log_component_is_enabled(_level, &ucs_global_opts.log_component)
 
-
-#define ucs_log(_level, _fmt, ...) \
+#define ucs_log_component(_level, _comp_log_config, _fmt, ...) \
     do { \
-        if (ucs_log_is_enabled(_level)) { \
+        if (ucs_log_component_is_enabled(_level, _comp_log_config)) { \
             ucs_log_dispatch(__FILE__, __LINE__, __func__, \
-                             (ucs_log_level_t)(_level), _fmt, ## __VA_ARGS__); \
+                             (ucs_log_level_t)(_level), _comp_log_config, _fmt, ## __VA_ARGS__); \
         } \
     } while (0)
 
+#define ucs_log(_level, _fmt, ...) \
+    do { \
+        ucs_log_component(_level, &ucs_global_opts.log_component, _fmt, ## __VA_ARGS__); \
+    } while (0)
 
 #define ucs_error(_fmt, ...)        ucs_log(UCS_LOG_LEVEL_ERROR, _fmt, ## __VA_ARGS__)
 #define ucs_warn(_fmt, ...)         ucs_log(UCS_LOG_LEVEL_WARN, _fmt,  ## __VA_ARGS__)
@@ -65,7 +76,7 @@ BEGIN_C_DECLS
     do { \
         if (ucs_global_opts.log_print_enable) { \
             ucs_log_dispatch(__FILE__, __LINE__, __FUNCTION__, \
-                             UCS_LOG_LEVEL_PRINT, _fmt, ## __VA_ARGS__); \
+                             UCS_LOG_LEVEL_PRINT, &ucs_global_opts.log_component, _fmt, ## __VA_ARGS__); \
         } \
     } while(0)
 
@@ -75,21 +86,23 @@ typedef enum {
     UCS_LOG_FUNC_RC_CONTINUE
 } ucs_log_func_rc_t;
 
-
 /**
  * Function type for handling log messages.
  *
- * @param file     Source file name.
- * @param line     Source line number.
- * @param function Function name.
- * @param message  Log message - format string
- * @param ap       Log message format parameters.
+ * @param file      Source file name.
+ * @param line      Source line number.
+ * @param function  Function name.
+ * @param level     Log level
+ * @param comp_conf Component specific log config
+ * @param message   Log message - format string
+ * @param ap        Log message format parameters.
  *
  * @return UCS_LOG_FUNC_RC_CONTINUE - continue to next log handler
  *         UCS_LOG_FUNC_RC_STOP     - don't continue
  */
 typedef ucs_log_func_rc_t (*ucs_log_func_t)(const char *file, unsigned line,
                                             const char *function, ucs_log_level_t level,
+                                            const ucs_log_component_config_t *comp_conf,
                                             const char *message, va_list ap);
 
 
@@ -104,11 +117,13 @@ extern const char *ucs_log_category_names[];
  * @param [in] line       Source line number.
  * @param [in] function   Function name which generated the log.
  * @param [in] level      Log level of the message,
+ * @param [in] comp_conf  Component log config,
  * @param [in] message    Log format
  */
 void ucs_log_dispatch(const char *file, unsigned line, const char *function,
-                      ucs_log_level_t level, const char *format, ...)
-    UCS_F_PRINTF(5, 6);
+                      ucs_log_level_t level, ucs_log_component_config_t *comp_conf,
+                      const char *format, ...)
+    UCS_F_PRINTF(6, 7);
 
 
 /**
@@ -129,7 +144,9 @@ size_t ucs_log_get_buffer_size();
  */
 ucs_log_func_rc_t
 ucs_log_default_handler(const char *file, unsigned line, const char *function,
-                        ucs_log_level_t level, const char *format, va_list ap);
+                        ucs_log_level_t level,
+                        const ucs_log_component_config_t *comp_conf,
+                        const char *format, va_list ap);
 
 
 /**
@@ -143,6 +160,7 @@ void ucs_log_fatal_error(const char *format, ...);
  */
 void ucs_log_early_init();
 void ucs_log_init();
+void ucs_component_log_init();
 void ucs_log_cleanup();
 
 

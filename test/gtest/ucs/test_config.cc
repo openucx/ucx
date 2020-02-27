@@ -214,7 +214,9 @@ class test_config : public ucs::test {
 protected:
     static ucs_log_func_rc_t
     config_error_handler(const char *file, unsigned line, const char *function,
-                         ucs_log_level_t level, const char *message, va_list ap)
+                         ucs_log_level_t level,
+                         const ucs_log_component_config_t *comp_conf,
+                         const char *message, va_list ap)
     {
         // Ignore errors that invalid input parameters as it is expected
         if (level == UCS_LOG_LEVEL_WARN) {

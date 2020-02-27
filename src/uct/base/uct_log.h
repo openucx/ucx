@@ -17,7 +17,8 @@
  * In debug mode, print packet description to the log.
  */
 #define uct_log_data(_file, _line, _function, _info) \
-    ucs_log_dispatch(_file, _line, _function, UCS_LOG_LEVEL_TRACE_DATA, "%s", buf);
+    ucs_log_dispatch(_file, _line, _function, UCS_LOG_LEVEL_TRACE_DATA,\
+                     &ucs_global_opts.log_component, "%s", buf);
 
 
 /**
