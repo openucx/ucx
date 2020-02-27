@@ -1428,7 +1428,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
             /* GET Zcopy */
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
