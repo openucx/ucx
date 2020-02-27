@@ -43,6 +43,7 @@ typedef struct uct_ud_iface_config {
     double                        slow_timer_tick;
     double                        slow_timer_backoff;
     int                           dgid_check;
+    unsigned                      max_window;
 } uct_ud_iface_config_t;
 
 
@@ -145,6 +146,7 @@ struct uct_ud_iface {
         unsigned             max_inline;
         int                  check_grh_dgid;
         unsigned             gid_len;
+        unsigned             max_window;
     } config;
 
     UCS_STATS_NODE_DECLARE(stats)

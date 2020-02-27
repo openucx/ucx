@@ -90,7 +90,7 @@ static void uct_ud_ep_ca_drop(uct_ud_ep_t *ep)
 
 static UCS_F_ALWAYS_INLINE void uct_ud_ep_ca_ack(uct_ud_ep_t *ep)
 {
-    if (ep->ca.cwnd < UCT_UD_CA_MAX_WINDOW) {
+    if (ep->ca.cwnd < ep->ca.wmax) {
         ep->ca.cwnd += UCT_UD_CA_AI_VALUE;
     }
     ep->tx.max_psn = ep->tx.acked_psn + ep->ca.cwnd;
@@ -101,6 +101,8 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 {
     ep->tx.psn         = UCT_UD_INITIAL_PSN;
     ep->ca.cwnd        = UCT_UD_CA_MIN_WINDOW;
+    ep->ca.wmax        = ucs_derived_of(ep->super.super.iface,
+                                        uct_ud_iface_t)->config.max_window;
     ep->tx.max_psn     = ep->tx.psn + ep->ca.cwnd;
     ep->tx.acked_psn   = UCT_UD_INITIAL_PSN - 1;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;

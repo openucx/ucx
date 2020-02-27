@@ -441,6 +441,15 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->config.check_grh_dgid  = config->dgid_check &&
                                    uct_ib_iface_is_roce(&self->super);
 
+    if ((config->max_window < UCT_UD_CA_MIN_WINDOW) ||
+        (config->max_window > UCT_UD_CA_MAX_WINDOW)) {
+        ucs_error("Max congestion avoidance window should be >= %d and <= %d (%d)",
+                  UCT_UD_CA_MIN_WINDOW, UCT_UD_CA_MAX_WINDOW, config->max_window);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    self->config.max_window = config->max_window;
+
     if (config->slow_timer_tick <= 0.) {
         ucs_error("The slow timer tick should be > 0 (%lf)",
                   config->slow_timer_tick);
@@ -576,6 +585,13 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      "Enable checking destination GID for incoming packets of Ethernet network.\n"
      "Mismatched packets are silently dropped.",
      ucs_offsetof(uct_ud_iface_config_t, dgid_check), UCS_CONFIG_TYPE_BOOL},
+
+    {"MAX_WINDOW", UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
+     "Max congestion avoidance window. Should be >= "
+      UCS_PP_MAKE_STRING(UCT_UD_CA_MIN_WINDOW) " and <= "
+      UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
+     ucs_offsetof(uct_ud_iface_config_t, max_window), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
