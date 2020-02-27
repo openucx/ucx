@@ -598,11 +598,17 @@ UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_bidi) {
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
+    /* save testing address */
+    ucs::sock_addr_storage test_addr(m_test_addr);
     m_test_addr.reset_to_any();
 
     UCS_TEST_MESSAGE << "Testing " << m_test_addr.to_str();
 
     start_listener(cb_type());
+    /* get the actual port which was selected by listener */
+    test_addr.set_port(m_test_addr.get_port());
+    /* restore address */
+    m_test_addr = test_addr;
     connect_and_send_recv(false, SEND_DIRECTION_C2S);
 }
 
