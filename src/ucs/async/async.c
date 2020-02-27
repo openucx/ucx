@@ -382,7 +382,8 @@ void ucs_async_context_destroy(ucs_async_context_t *async)
 static ucs_status_t
 ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
                         int events, ucs_async_event_cb_t cb, void *arg,
-                        ucs_async_context_t *async, int *id_p)
+                        ucs_async_context_t *async,
+                        ucs_async_handler_t **handler_p)
 {
     ucs_async_handler_t *handler;
     ucs_status_t status;
@@ -426,7 +427,7 @@ ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
     }
 
     ucs_assert((handler->id >= min_id) && (handler->id < max_id));
-    *id_p = handler->id;
+    *handler_p = handler;
     return UCS_OK;
 
 err_free:
@@ -444,7 +445,7 @@ ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
                                          void *arg, ucs_async_context_t *async)
 {
     ucs_status_t status;
-    int event_id;
+    ucs_async_handler_t *handler;
 
     if (event_fd >= UCS_ASYNC_TIMER_ID_MIN) {
         /* File descriptor too large */
@@ -453,11 +454,11 @@ ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
     }
 
     status = ucs_async_alloc_handler(event_fd, event_fd + 1, mode, events, cb,
-                                     arg, async, &event_id);
+                                     arg, async, &handler);
     if (status != UCS_OK) {
         goto err;
     }
-    ucs_assert(event_id == event_fd);
+    ucs_assert(handler->id == event_fd);
 
     status = ucs_async_method_call(mode, add_event_fd, async, event_fd, events);
     if (status != UCS_OK) {
@@ -479,24 +480,25 @@ ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
                                  ucs_async_context_t *async, int *timer_id_p)
 {
     ucs_status_t status;
-    int timer_id;
+    ucs_async_handler_t *handler;
 
     status = ucs_async_alloc_handler(UCS_ASYNC_TIMER_ID_MIN, UCS_ASYNC_TIMER_ID_MAX,
-                                     mode, 1, cb, arg, async, &timer_id);
+                                     mode, 1, cb, arg, async, &handler);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = ucs_async_method_call(mode, add_timer, async, timer_id, interval);
+    status = ucs_async_method_call(mode, add_timer, async, interval,
+                                   &handler->timer_id);
     if (status != UCS_OK) {
         goto err_remove_handler;
     }
 
-    *timer_id_p = timer_id;
+    *timer_id_p = handler->id;
     return UCS_OK;
 
 err_remove_handler:
-    ucs_async_remove_handler(timer_id, 1);
+    ucs_async_remove_handler(handler->id, 1);
 err:
     return status;
 }

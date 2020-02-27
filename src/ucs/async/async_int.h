@@ -16,7 +16,8 @@
 /* Async event handler */
 typedef struct ucs_async_handler ucs_async_handler_t;
 struct ucs_async_handler {
-    int                        id;      /* Event/Timer ID */
+    int                        id;      /* Event ID */
+    int                        timer_id;/* Timer ID (location in TimerQ */
     ucs_async_mode_t           mode;    /* Event delivery mode */
     int                        events;  /* Bitmap of events */
     pthread_t                  caller;  /* Thread which invokes the callback */
@@ -68,8 +69,8 @@ typedef struct ucs_async_ops {
     ucs_status_t (*modify_event_fd)(ucs_async_context_t *async, int event_fd,
                                     int events);
 
-    ucs_status_t (*add_timer)(ucs_async_context_t *async, int timer_id,
-                              ucs_time_t interval);
+    ucs_status_t (*add_timer)(ucs_async_context_t *async, ucs_time_t interval,
+                              int *timer_id_p);
     ucs_status_t (*remove_timer)(ucs_async_context_t *async, int timer_id);
 } ucs_async_ops_t;
 

@@ -41,24 +41,16 @@ void ucs_timerq_cleanup(ucs_timer_queue_t *timerq)
     }
 }
 
-ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
-                            ucs_time_t interval)
+ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, ucs_time_t interval,
+                            int *timer_id_p)
 {
     ucs_status_t status;
     ucs_timer_t *ptr;
 
-    ucs_trace_func("timerq=%p interval=%.2fus timer_id=%d", timerq,
-                   ucs_time_to_usec(interval), timer_id);
+    ucs_trace_func("timerq=%p interval=%.2fus", timerq,
+                   ucs_time_to_usec(interval));
 
     ucs_recursive_spin_lock(&timerq->lock);
-
-    /* Make sure ID is unique */
-    for (ptr = timerq->timers; ptr < timerq->timers + timerq->num_timers; ++ptr) {
-        if (ptr->id == timer_id) {
-            status = UCS_ERR_ALREADY_EXISTS;
-            goto out_unlock;
-        }
-    }
 
     /* Resize timer array */
     ptr = ucs_realloc(timerq->timers, (timerq->num_timers + 1) * sizeof(ucs_timer_t),
@@ -68,7 +60,7 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
         goto out_unlock;
     }
     timerq->timers = ptr;
-    ++timerq->num_timers;
+    *timer_id_p = timerq->num_timers++;
     timerq->min_interval = ucs_min(interval, timerq->min_interval);
     ucs_assert(timerq->min_interval != UCS_TIME_INFINITY);
 
@@ -76,7 +68,7 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
     ptr = &timerq->timers[timerq->num_timers - 1];
     ptr->expiration = 0; /* will fire the next time sweep is called */
     ptr->interval   = interval;
-    ptr->id         = timer_id;
+    ptr->id         = *timer_id_p;
 
     status = UCS_OK;
 
