@@ -91,6 +91,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_get_unused_am_id, (worker, id_p),
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_ERR_INVALID_PARAM);
 
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
     id = 0;
     while ((id < worker->am_cb_array_len) &&
            (worker->am_cbs[id].cb)) {
@@ -103,6 +105,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_get_unused_am_id, (worker, id_p),
             return status;
         }
     }
+
+    /* Set this AM id as taken */
+    worker->am_cbs[id].cb = UCP_WORKER_AM_CB_TAKEN;
+
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     *id_p = id;
     return UCS_OK;
@@ -119,18 +126,22 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_ERR_INVALID_PARAM);
 
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
     if (id >= worker->am_cb_array_len) {
         status = ucp_am_extend_cb_array(worker, id);
-        if (status != UCS_OK) {
-            return status;
-        }
+        goto leave_set_am;
     }
 
     worker->am_cbs[id].cb      = cb;
     worker->am_cbs[id].context = arg;
     worker->am_cbs[id].flags   = flags;
+    status                     = UCS_OK;
 
-    return UCS_OK;
+leave_set_am:
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+
+    return status;
 }
 
 static size_t 

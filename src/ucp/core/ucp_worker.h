@@ -198,6 +198,9 @@ typedef struct ucp_worker_am_entry {
     uint32_t              flags;
 } ucp_worker_am_entry_t;
 
+/* If the ID is taken, but not yet set - the cb will be set to this value */
+#define UCP_WORKER_AM_CB_TAKEN ((ucp_am_callback_t)-1)
+
 /**
  * UCP worker (thread context).
  */
