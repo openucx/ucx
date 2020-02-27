@@ -88,6 +88,23 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_get_unused_am_id, (worker, id_p),
     uint16_t id;
     ucs_status_t status;
 
+    if (!worker) {
+        id = 0;
+        while ((id < UCT_AM_ID_MAX) &&
+               (ucp_am_handlers[id].cb)) {
+            id++;
+        }
+
+        if (ucs_unlikely(id == UCT_AM_ID_MAX)) {
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        ucp_am_handlers[id].cb = UCP_AM_CB_TAKEN;
+        *id_p = id;
+
+        return UCS_OK;
+    }
+
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_ERR_INVALID_PARAM);
 
@@ -122,6 +139,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
                  uint32_t flags)
 {
     ucs_status_t status;
+
+    if (!worker) {
+        ucs_assert(id < UCT_AM_ID_MAX);
+        ucs_assert(cb != NULL);
+
+        ucp_am_handlers[id].cb = (uct_am_callback_t)cb; // TODO: discuss this...
+        ucp_am_handlers[id].flags = flags;
+
+        return UCS_OK;
+    }
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_ERR_INVALID_PARAM);

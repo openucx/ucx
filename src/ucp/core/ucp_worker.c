@@ -149,7 +149,8 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
     ucs_trace_func("iface=%p is_proxy=%d", wiface->iface, is_proxy);
 
     for (am_id = 0; am_id < UCP_AM_ID_MAX; ++am_id) {
-        if (!ucp_am_handlers[am_id].cb) {
+        if ((ucp_am_handlers[am_id].cb == NULL) ||
+            (ucp_am_handlers[am_id].cb == UCP_AM_CB_TAKEN)) {
             continue;
         }
 
@@ -220,7 +221,8 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
             continue;
         }
         for (am_id = 0; am_id < UCP_AM_ID_MAX; ++am_id) {
-            if (!ucp_am_handlers[am_id].cb) {
+            if ((ucp_am_handlers[am_id].cb == NULL) ||
+                (ucp_am_handlers[am_id].cb == UCP_AM_CB_TAKEN)) {
                 continue;
             }
 

@@ -233,6 +233,8 @@ typedef struct ucp_context {
 
 } ucp_context_t;
 
+/* If the ID is taken, but not yet set - the cb will be set to this value */
+#define UCP_AM_CB_TAKEN ((uct_am_callback_t)-1)
 
 typedef struct ucp_am_handler {
     uint64_t                      features;

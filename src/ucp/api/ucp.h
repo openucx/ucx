@@ -2184,8 +2184,14 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  * @brief Get an unused Active Message id.
  *
  * This routine returns an unused id for calling @ref ucp_worker_set_am_handler .
+ * This function can refer to either the Active Message ids within a given
+ * worker, or the global Active Message IDs if worker is set to NULL.
  *
- * @param [in]  worker      UCP worker where to find the Active Message id.
+ * @note There is no multi-thread protection if the global Active Message space
+ *       is requested.
+ *
+ * @param [in]  worker      UCP worker on which to set the Active Message
+ *                          handler (optional - NULL for the global id space).
  * @param [out] id          Active Message id.
  *
  * @return error code if the worker does not support Active Messages or
@@ -2203,8 +2209,11 @@ ucs_status_t ucp_worker_get_unused_am_id(ucp_worker_h worker, uint16_t *id_p);
  * Message that was sent from the remote peer by @ref ucp_am_send_nb is 
  * received on this worker.
  *
+ * @note There is no multi-thread protection if the global Active Message space
+ *       is requested.
+ *
  * @param [in]  worker      UCP worker on which to set the Active Message 
- *                          handler.
+ *                          handler (optional - NULL for the global id space).
  * @param [in]  id          Active Message id.
  * @param [in]  cb          Active Message callback. NULL to clear.
  * @param [in]  arg         Active Message argument, which will be passed
