@@ -95,9 +95,13 @@ public:
         ucs_async_pipe_push(&m_event_pipe);
     }
 
+    void reset() {
+        ucs_async_pipe_drain(&m_event_pipe);
+    }
+
 protected:
     virtual void ack_event() {
-        ucs_async_pipe_drain(&m_event_pipe);
+        reset();
     }
 
 private:
@@ -576,6 +580,7 @@ UCS_TEST_P(test_async, modify_event) {
     le.push_event();
     suspend_and_poll(&le, COUNT);
     EXPECT_EQ(le.count(), count);
+    le.reset();
 
     ucs_async_modify_handler(le.event_id(), UCS_EVENT_SET_EVREAD);
     count = le.count();
