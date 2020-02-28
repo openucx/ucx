@@ -350,10 +350,16 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
         goto err;
     }
 
-    dci->ep    = NULL;
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ucs_arbiter_group_init(&dci->arb_group);
+    } else {
+        dci->ep = NULL;
+    }
+
 #if UCS_ENABLE_ASSERT
     dci->flags = 0;
 #endif
+
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
                                    iface->super.tx.mmio_mode, &dci->txwq,
                                    dci->txwq.super.verbs.qp);
@@ -538,6 +544,9 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     int i;
 
     for (i = 0; i < iface->tx.ndci; i++) {
+        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+            ucs_arbiter_group_cleanup(&iface->tx.dcis[i].arb_group);
+        }
         uct_ib_mlx5_txwq_cleanup(&iface->tx.dcis[i].txwq);
     }
 }
