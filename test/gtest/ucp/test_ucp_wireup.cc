@@ -1239,9 +1239,7 @@ UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
                                           m_send_data[0], sizeof(elem_type),
                                           (uint64_t)&m_recv_data[0], rkey);
     ASSERT_UCS_OK(status);
-    request_t *req = (request_t *)ucp_ep_flush_nb(sender().ep(),
-                                                  UCT_FLUSH_FLAG_LOCAL,
-                                                  flush_cb);
+    request_t *req = (request_t *)ucp_ep_flush_nb(sender().ep(), 0, flush_cb);
     if (UCS_PTR_IS_PTR(req)) {
         req->test = this;
         wait(req);
