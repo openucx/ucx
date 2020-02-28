@@ -125,9 +125,6 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_PUT_MAX_SHORT(_av_size) \
     (UCT_IB_MLX5_AM_MAX_SHORT(_av_size) - sizeof(struct mlx5_wqe_raddr_seg))
 
-#define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
-                                  sizeof(struct mlx5_wqe_data_seg))
-
 #define UCT_IB_MLX5_XRQ_MIN_UWQ_POST 33
 
 #define UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(_devx_objs) \
@@ -147,9 +144,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_MP_RQ            = UCS_BIT(3),
     /* Device supports creation of indirect MR with atomics access rights */
     UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS = UCS_BIT(4),
+    /* Device supports RMP to create SRQ for AM */
+    UCT_IB_MLX5_MD_FLAG_RMP              = UCS_BIT(5),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 5,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 6,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -225,7 +224,6 @@ typedef enum {
 /* Shared receive queue */
 typedef struct uct_ib_mlx5_srq {
     uct_ib_mlx5_obj_type_t             type;
-    int                                topo;       /* linked-list or cyclic */
     uint32_t                           srq_num;
     void                               *buf;
     volatile uint32_t                  *db;
@@ -527,13 +525,14 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
 /**
  * Initialize srq structure.
  */
-ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                                  size_t sg_byte_count, int num_sge);
+ucs_status_t
+uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
+                           size_t sg_byte_count, int num_sge);
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
                                uint32_t tail, size_t sg_byte_count, int num_sge);
 
-void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
+void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 
 /**
  * DEVX UAR API

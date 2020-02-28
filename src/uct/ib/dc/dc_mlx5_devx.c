@@ -13,39 +13,29 @@
 
 ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
+    uct_ib_device_t *dev  = uct_ib_iface_device(&iface->super.super.super);
+    struct mlx5dv_pd dvpd = {};
+    struct mlx5dv_cq dvcq = {};
+    struct mlx5dv_obj dv  = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_out)] = {};
-    struct mlx5dv_pd dvpd   = {};
-    struct mlx5dv_cq dvcq   = {};
-    struct mlx5dv_srq dvsrq = {};
-    struct mlx5dv_obj dv    = {};
     int dvflags;
     void *dctc;
 
-    dvflags             = MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ;
-    dv.pd.in            = uct_ib_iface_md(&iface->super.super.super)->pd;
-    dv.pd.out           = &dvpd;
-    dv.cq.in            = iface->super.super.super.cq[UCT_IB_DIR_RX];
-    dv.cq.out           = &dvcq;
-
-    if (!UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
-        dvflags        |= MLX5DV_OBJ_SRQ;
-        dv.srq.in       = iface->super.rx.srq.verbs.srq;
-        dv.srq.out      = &dvsrq;
-        dvsrq.comp_mask = MLX5DV_SRQ_MASK_SRQN;
-    }
-
+    dvflags   = MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ;
+    dv.pd.in  = uct_ib_iface_md(&iface->super.super.super)->pd;
+    dv.pd.out = &dvpd;
+    dv.cq.in  = iface->super.super.super.cq[UCT_IB_DIR_RX];
+    dv.cq.out = &dvcq;
     mlx5dv_init_obj(&dv, dvflags);
 
     UCT_IB_MLX5DV_SET(create_dct_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_DCT);
     dctc = UCT_IB_MLX5DV_ADDR_OF(create_dct_in, in, dct_context_entry);
     UCT_IB_MLX5DV_SET(dctc, dctc, pd, dvpd.pdn);
+    ucs_assert(iface->super.rx.srq.srq_num != 0);
+    UCT_IB_MLX5DV_SET(dctc, dctc, srqn_xrqn, iface->super.rx.srq.srq_num);
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
-        UCT_IB_MLX5DV_SET(dctc, dctc, srqn_xrqn, iface->super.rx.srq.srq_num);
         UCT_IB_MLX5DV_SET(dctc, dctc, offload_type, UCT_IB_MLX5_QPC_OFFLOAD_TYPE_RNDV);
-    } else {
-        UCT_IB_MLX5DV_SET(dctc, dctc, srqn_xrqn, dvsrq.srqn);
     }
     UCT_IB_MLX5DV_SET(dctc, dctc, cqn, dvcq.cqn);
     UCT_IB_MLX5DV_SET64(dctc, dctc, dc_access_key, UCT_IB_KEY);
@@ -151,6 +141,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, cnak_reverse_sl, iface->super.super.super.config.sl);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, ack_timeout, iface->super.super.config.timeout);
     UCT_IB_MLX5DV_SET64(set_xrq_dc_params_entry_in, in, dc_access_key, UCT_IB_KEY);
+    ucs_assert(iface->super.rx.srq.srq_num != 0);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, xrqn, iface->super.rx.srq.srq_num);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, opcode,
                       UCT_IB_MLX5_CMD_OP_SET_XRQ_DC_PARAMS_ENTRY);

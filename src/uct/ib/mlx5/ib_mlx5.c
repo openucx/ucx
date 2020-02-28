@@ -572,21 +572,31 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *verbs_qp, uct_ib_mlx5_rxwq_t *r
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                                  size_t sg_byte_count, int sge_num)
+ucs_status_t
+uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
+                           size_t sg_byte_count, int sge_num)
 {
     uct_ib_mlx5dv_srq_t srq_info = {};
     uct_ib_mlx5dv_t obj          = {};
     ucs_status_t status;
     uint16_t stride;
 
-    obj.dv.srq.in  = verbs_srq;
-    obj.dv.srq.out = &srq_info.dv;
+    obj.dv.srq.in         = verbs_srq;
+    obj.dv.srq.out        = &srq_info.dv;
+#if HAVE_DEVX
+    srq_info.dv.comp_mask = MLX5DV_SRQ_MASK_SRQN;
+#endif
 
     status = uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_SRQ);
     if (status != UCS_OK) {
         return status;
     }
+
+#if HAVE_DEVX
+    srq->srq_num = srq_info.dv.srqn;
+#else
+    srq->srq_num = 0;
+#endif
 
     if (srq_info.dv.head != 0) {
         ucs_error("SRQ head is not 0 (%d)", srq_info.dv.head);
@@ -609,6 +619,7 @@ ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_
     srq->db  = srq_info.dv.dbrec;
     uct_ib_mlx5_srq_buff_init(srq, srq_info.dv.head, srq_info.dv.tail,
                               sg_byte_count, sge_num);
+
     return UCS_OK;
 }
 
@@ -638,7 +649,8 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     }
 }
 
-void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq)
+void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq,
+                                   struct ibv_srq *verbs_srq)
 {
     uct_ib_mlx5dv_srq_t srq_info = {};
     uct_ib_mlx5dv_t obj = {};

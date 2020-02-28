@@ -12,16 +12,6 @@
 #include <ucs/arch/bitops.h>
 
 
-#if HAVE_DEVX
-static const char *uct_rc_mlx5_srq_topo_names[] = {
-    [UCT_RC_MLX5_SRQ_TOPO_LIST]   = "list",
-    [UCT_RC_MLX5_SRQ_TOPO_CYCLIC] = "cyclic",
-    [UCT_RC_MLX5_SRQ_TOPO_AUTO]   = "auto",
-    [UCT_RC_MLX5_SRQ_TOPO_LAST]   = NULL
-};
-#endif
-
-
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
   {UCT_IB_CONFIG_PREFIX, "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
@@ -69,19 +59,12 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, exp_backoff),
    UCS_CONFIG_TYPE_UINT},
 
-#if HAVE_DEVX
-  {"SRQ_TOPO", "auto",
-   "SRQ topology type. The types are:\n"
-   "\n"
-   "list       SRQ is organized as a buffer containing linked list of WQEs.\n"
-   "\n"
-   "cyclic     SRQ is organized as a continuos array of WQEs.\n"
-   "           Supported with tag offload only.\n"
-   "\n"
-   "auto       The most optimal SRQ topology is selected automatically.",
-   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
-   UCS_CONFIG_TYPE_ENUM(uct_rc_mlx5_srq_topo_names)},
-#endif
+  {"CYCLIC_SRQ_ENABLE", "try",
+   "Enable using the \"cyclic\" SRQ type (SRQ is organized as a continuous \n"
+   "array of WQEs), otherwise - using the \"list\" SRQ type (SRQ is organized \n"
+   "as a buffer containing linked list of WQEs.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, cyclic_srq_enable),
+   UCS_CONFIG_TYPE_TERNARY},
 
   {NULL}
 };
@@ -468,11 +451,57 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         uct_rc_iface_fill_attr(&iface->super, qp_attr, max_send_wr, NULL);
-        qp_attr->srq_num = srq->srq_num;
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
+
+    qp_attr->srq_num = srq->srq_num;
+}
+
+static ucs_status_t
+uct_rc_mlx5_iface_check_no_devx_rx(uct_rc_mlx5_iface_common_t *iface)
+{
+    if (iface->config.cyclic_srq_enable == UCS_YES) {
+        ucs_error(UCT_IB_IFACE_FMT ": cyclic SRQ type is not supported",
+                  UCT_IB_IFACE_ARG(&iface->super.super));
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
+                                 const uct_rc_iface_common_config_t *rc_config)
+{
+    ucs_status_t status;
+
+    status = uct_rc_mlx5_iface_check_no_devx_rx(iface);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_rc_iface_init_rx(&iface->super, rc_config,
+                                  &iface->rx.srq.verbs.srq);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
+                                        iface->super.super.config.seg_size,
+                                        iface->tm.mp.num_strides);
+    if (status != UCS_OK) {
+        goto err_free_srq;
+    }
+
+    iface->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
+    return UCS_OK;
+
+err_free_srq:
+    uct_rc_mlx5_destroy_srq(&iface->rx.srq);
+err:
+    return status;
 }
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq)
@@ -489,9 +518,7 @@ void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq)
         if (ret) {
             ucs_warn("mlx5dv_devx_obj_destroy(SRQ) failed: %m");
         }
-        uct_ib_mlx5_put_dbrec(srq->devx.dbrec);
-        mlx5dv_devx_umem_dereg(srq->devx.mem);
-        ucs_free(srq->buf);
+        uct_rc_mlx5_devx_cleanup_srq(srq);
 #endif
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
@@ -761,6 +788,11 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
     ucs_status_t status;
 
+    status = uct_rc_mlx5_iface_check_no_devx_rx(iface);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_rc_mlx5_init_rx_tm_common(iface, config, rndv_hdr_len);
 
     ucs_assert(iface->tm.mp.num_strides == 1); /* MP XRQ is supported with DEVX only */
@@ -817,9 +849,9 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     iface->super.rx.srq.quota = srq_attr->attr.max_wr;
 #endif
 
-    status = uct_ib_mlx5_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
-                                  iface->super.super.config.seg_size,
-                                  iface->tm.mp.num_strides);
+    status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
+                                        iface->super.super.config.seg_size,
+                                        iface->tm.mp.num_strides);
     if (status != UCS_OK) {
         goto err_free_srq;
     }

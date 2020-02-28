@@ -625,12 +625,15 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ext_stride_num_range)) {
-        /* TODO: check if need to check for XRQ (not RQ) MP support */
         md->flags |= UCT_IB_MLX5_MD_FLAG_MP_RQ;
     }
 
     if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_modify_atomic_disabled)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_rmp) > 0) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_RMP;
     }
 
     status = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
