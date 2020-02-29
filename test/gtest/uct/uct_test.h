@@ -372,6 +372,10 @@ protected:
                                     uct_error_handler_t err_handler = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
     uct_test::entity* create_entity();
+    uct_test::entity* create_entity(uct_tag_unexp_eager_cb_t eager_cb,
+                                    uct_tag_unexp_rndv_cb_t rndv_cb,
+                                    void *eager_arg = NULL,
+                                    void *rndv_arg = NULL);
     int max_connections();
     int max_connect_batch();
 

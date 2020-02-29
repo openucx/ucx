@@ -85,7 +85,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
                 "iovcnt %zu, maxcnt (%zu, %zu)",
                 iovcnt, UCT_IB_MAX_IOV, iface->config.max_send_sge);
 
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
     UCT_SKIP_ZERO_LENGTH(sge_cnt);
     UCT_RC_VERBS_FILL_RDMA_WR_IOV(wr, wr.opcode, (enum ibv_wr_opcode)opcode,
@@ -122,7 +122,7 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
                                                  uct_rc_verbs_iface_t);
     uct_rc_iface_send_desc_t *desc;
 
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->short_desc_mp,
                                           desc, iface->super.config.atomic64_handler,
                                           result, comp);
@@ -141,7 +141,7 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 
     UCT_CHECK_LENGTH(length, 0, iface->config.max_inline, "put_short");
 
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_rwrite_wr,
@@ -159,7 +159,7 @@ ssize_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     struct ibv_sge sge;
     size_t length;
 
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                        pack_cb, arg, length);
     UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.opcode, IBV_WR_RDMA_WRITE, sge,
@@ -202,7 +202,7 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
     struct ibv_sge sge;
 
     UCT_CHECK_LENGTH(length, 0, iface->super.super.config.seg_size, "get_bcopy");
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                        unpack_cb, comp, arg, length);
 
@@ -337,7 +337,7 @@ ucs_status_t uct_rc_verbs_ep_atomic64_post(uct_ep_h tl_ep, unsigned opcode, uint
     }
 
     /* TODO don't allocate descriptor - have dummy buffer */
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     uct_rc_verbs_ep_atomic_post(ep,

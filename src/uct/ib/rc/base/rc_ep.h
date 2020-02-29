@@ -31,7 +31,6 @@ enum {
 
 enum {
     UCT_RC_TXQP_STAT_QP_FULL,
-    UCT_RC_TXQP_STAT_NO_READS,
     UCT_RC_TXQP_STAT_SIGNAL,
     UCT_RC_TXQP_STAT_LAST
 };
@@ -93,9 +92,10 @@ enum {
         return _ret; \
     }
 
-#define UCT_RC_CHECK_NUM_RDMA_READ(_iface, _txqp) \
+#define UCT_RC_CHECK_NUM_RDMA_READ(_iface) \
     if (ucs_unlikely((_iface)->tx.reads_available == 0)) { \
-        UCS_STATS_UPDATE_COUNTER((_txqp)->stats, UCT_RC_TXQP_STAT_NO_READS, 1); \
+        UCS_STATS_UPDATE_COUNTER((_iface)->stats, \
+                                 UCT_RC_IFACE_STAT_NO_READS, 1); \
         return UCS_ERR_NO_RESOURCE; \
     }
 
@@ -114,9 +114,9 @@ enum {
  * Otherwise operations ordering can be broken (which fence operation
  * relies on).
  */
-#define UCT_RC_CHECK_RMA_RES(_iface, _ep, _txqp) \
+#define UCT_RC_CHECK_RMA_RES(_iface, _ep) \
     UCT_RC_CHECK_RES(_iface, _ep) \
-    UCT_RC_CHECK_NUM_RDMA_READ(_iface, _txqp)
+    UCT_RC_CHECK_NUM_RDMA_READ(_iface)
 
 /*
  * check for FC credits and add FC protocol bits (if any)

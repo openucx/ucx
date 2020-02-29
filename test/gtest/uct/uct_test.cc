@@ -616,6 +616,33 @@ uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
 uct_test::entity* uct_test::create_entity() {
     return new entity(*GetParam(), m_md_config, m_cm_config);
 }
+uct_test::entity* uct_test::create_entity(uct_tag_unexp_eager_cb_t eager_cb,
+                                          uct_tag_unexp_rndv_cb_t rndv_cb,
+                                          void *eager_arg, void *rndv_arg) {
+    uct_iface_params_t iface_params;
+
+    iface_params.field_mask  = UCT_IFACE_PARAM_FIELD_RX_HEADROOM     |
+                               UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
+                               UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB  |
+                               UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG |
+                               UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB   |
+                               UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG;
+    iface_params.rx_headroom = 0;
+    iface_params.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
+    iface_params.eager_cb    = (eager_cb == NULL) ?
+                               reinterpret_cast<uct_tag_unexp_eager_cb_t>
+                               (ucs_empty_function_return_success) :
+                               eager_cb;
+    iface_params.eager_arg   = eager_arg;
+    iface_params.rndv_cb     = (rndv_cb == NULL) ?
+                               reinterpret_cast<uct_tag_unexp_rndv_cb_t>
+                               (ucs_empty_function_return_success) :
+                               rndv_cb;
+    iface_params.rndv_arg    = rndv_arg;
+    entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
+                                 m_md_config);
+    return new_ent;
+}
 
 const uct_test::entity& uct_test::ent(unsigned index) const {
     return m_entities.at(index);

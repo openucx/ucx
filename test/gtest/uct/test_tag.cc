@@ -63,24 +63,9 @@ public:
 
         uct_test::init();
 
-        uct_iface_params params;
-        params.field_mask  = UCT_IFACE_PARAM_FIELD_RX_HEADROOM     |
-                             UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
-                             UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB  |
-                             UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG |
-                             UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB   |
-                             UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG;
-
-        // tl and dev names are taken from resources via GetParam, no need
-        // to fill it here
-        params.rx_headroom = 0;
-        params.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
-        params.eager_cb    = unexp_eager;
-        params.eager_arg   = reinterpret_cast<void*>(this);
-        params.rndv_cb     = unexp_rndv;
-        params.rndv_arg    = reinterpret_cast<void*>(this);
-
-        entity *sender = uct_test::create_entity(params);
+        entity *sender = uct_test::create_entity(unexp_eager, unexp_rndv,
+                                                 reinterpret_cast<void*>(this),
+                                                 reinterpret_cast<void*>(this));
         m_entities.push_back(sender);
 
         check_skip_test();
@@ -88,7 +73,9 @@ public:
         if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
             sender->connect(0, *sender, 0);
         } else {
-            entity *receiver = uct_test::create_entity(params);
+            entity *receiver = uct_test::create_entity(unexp_eager, unexp_rndv,
+                                                       reinterpret_cast<void*>(this),
+                                                       reinterpret_cast<void*>(this));
             m_entities.push_back(receiver);
 
             sender->connect(0, *receiver, 0);
@@ -1041,27 +1028,14 @@ void test_tag_mp_xrq::init()
 
     uct_test::init();
 
-    uct_iface_params params;
-    params.field_mask  = UCT_IFACE_PARAM_FIELD_RX_HEADROOM     |
-                         UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
-                         UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB  |
-                         UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG |
-                         UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB   |
-                         UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG;
-
-    // tl and dev names are taken from resources via GetParam, no need
-    // to fill it here
-    params.rx_headroom = 0;
-    params.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
-    params.eager_cb    = unexp_eager;
-    params.eager_arg   = reinterpret_cast<void*>(this);
-    params.rndv_cb     = unexp_rndv;
-    params.rndv_arg    = reinterpret_cast<void*>(this);
-
-    entity *sender = uct_test::create_entity(params);
+    entity *sender = uct_test::create_entity(unexp_eager, unexp_rndv,
+                                             reinterpret_cast<void*>(this),
+                                             reinterpret_cast<void*>(this));
     m_entities.push_back(sender);
 
-    entity *receiver = uct_test::create_entity(params);
+    entity *receiver = uct_test::create_entity(unexp_eager, unexp_rndv,
+                                             reinterpret_cast<void*>(this),
+                                             reinterpret_cast<void*>(this));
     m_entities.push_back(receiver);
 
     if (!UCT_RC_MLX5_MP_ENABLED(rc_mlx5_iface(test_tag_mp_xrq::sender()))) {
