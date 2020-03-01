@@ -64,7 +64,7 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep);
  * @param [in]  uct_ep            Stub endpoint to connect.
  * @param [in]  ucp_ep_init_flags Initial flags of UCP EP.
  * @param [in]  rsc_index         Resource of the real transport.
- * @param [in]  path_index
+ * @param [in]  path_index        Path index the transport endpoint should use.
  * @param [in]  connect_aux       Whether to connect the auxiliary transport,
  *                                for sending.
  * @param [in]  remote_address    Remote address connect to.

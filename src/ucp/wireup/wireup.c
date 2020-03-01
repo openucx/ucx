@@ -737,8 +737,8 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
             /* create an endpoint connected to the remote interface */
             ucs_trace("ep %p: connect uct_ep[%d] to addr[%d]", ep, lane,
                       addr_index);
-            uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
-                                       UCT_EP_PARAM_FIELD_DEV_ADDR |
+            uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
+                                       UCT_EP_PARAM_FIELD_DEV_ADDR   |
                                        UCT_EP_PARAM_FIELD_IFACE_ADDR |
                                        UCT_EP_PARAM_FIELD_PATH_INDEX;
             uct_ep_params.iface      = wiface->iface;
