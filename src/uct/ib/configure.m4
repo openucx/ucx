@@ -336,6 +336,9 @@ AS_IF([test "x$with_ib" = "xyes"],
            AS_IF([test "x$with_odp_i" = "xyes" ], [
                AC_DEFINE([HAVE_ODP_IMPLICIT], 1, [Implicit ODP support])])])
 
+       AC_CHECK_DECLS(IBV_ACCESS_RELAXED_ORDERING, [], [],
+                      [[#include <infiniband/verbs.h>]])
+
        AC_CHECK_DECLS(ibv_exp_prefetch_mr, [with_prefetch=yes], [],
                       [[#include <infiniband/verbs_exp.h>]])
 

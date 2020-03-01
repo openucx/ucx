@@ -174,6 +174,10 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #  define UCT_IB_HAVE_ODP_IMPLICIT(_attr)           0
 #endif
 
+#if !HAVE_DECL_IBV_ACCESS_RELAXED_ORDERING
+#  define IBV_ACCESS_RELAXED_ORDERING               0
+#endif
+
 #if !HAVE_DECL_IBV_EXP_PREFETCH_WRITE_ACCESS
 #  define IBV_EXP_PREFETCH_WRITE_ACCESS IBV_EXP_ACCESS_LOCAL_WRITE
 #endif

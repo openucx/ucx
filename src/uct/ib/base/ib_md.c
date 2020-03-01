@@ -185,6 +185,11 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Enable setting CPU affinity of memory registration threads.",
      ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_bind), UCS_CONFIG_TYPE_BOOL},
 
+    {"PCI_RELAXED_ORDERING", "auto",
+     "Enable relaxed ordering for PCI writes from device to memory, "
+     "to improve performance on some systems.",
+     ucs_offsetof(uct_ib_md_config_t, ext.mr_relaxed_order), UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
     {NULL}
 };
 
@@ -586,6 +591,11 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
         (length <= md->config.odp.max_size)) {
         access |= IBV_ACCESS_ON_DEMAND;
     }
+
+    if (md->config.mr_relaxed_order == UCS_CONFIG_ON) {
+        access |= IBV_ACCESS_RELAXED_ORDERING;
+    }
+
     return access;
 }
 
@@ -1601,6 +1611,12 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     status = uct_ib_md_parse_device_config(md, md_config);
     if (status != UCS_OK) {
         goto err_free_context;
+    }
+
+    if ((md->config.mr_relaxed_order == UCS_CONFIG_ON) && !IBV_ACCESS_RELAXED_ORDERING) {
+        ucs_warn("relaxed order memory access requested but not supported");
+    } else if (md->config.mr_relaxed_order == UCS_CONFIG_AUTO) {
+        md->config.mr_relaxed_order = UCS_CONFIG_OFF;
     }
 
     status = uct_ib_md_open_common(md, ibv_device, md_config);
