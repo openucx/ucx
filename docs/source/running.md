@@ -19,9 +19,9 @@ $ ./autogen.sh
 
 * Alternatively, download and extract one of UCX pre-configured [releases](download):
 ```
-$ wget https://github.com/openucx/ucx/releases/download/v1.6.1/ucx-1.6.1.tar.gz
-$ tar xzf ucx-1.6.1.tar.gz
-$ cd ucx-1.6.1
+$ wget https://github.com/openucx/ucx/releases/download/v{RELEASE}/ucx-{RELEASE}.tar.gz
+$ tar xzf ucx-{RELEASE}.tar.gz
+$ cd ucx-{RELEASE}
 ```
 
 * (This step is only required for OpenPOWER platforms)

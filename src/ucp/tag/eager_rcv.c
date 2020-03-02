@@ -150,25 +150,47 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_first_handler,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_eager_common_middle_handler(ucp_worker_t *worker, ucp_tag_frag_match_t *matchq,
-                                khiter_t iter, void *data, size_t length,
+ucp_eager_common_middle_handler(ucp_worker_t *worker, void *data, size_t length,
                                 uint16_t hdr_len, unsigned tl_flags,
                                 uint16_t flags, uint16_t priv_length)
 {
     ucp_eager_middle_hdr_t *hdr = data;
+    ucp_tag_frag_match_t *matchq;
     ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_status_t status;
     size_t recv_len;
+    khiter_t iter;
+    int ret;
+
+    iter   = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, hdr->msg_id, &ret);
+    ucs_assert(ret >= 0);
+    matchq = &kh_value(&worker->tm.frag_hash, iter);
+    if (ret != 0) {
+        /* initialize a previously empty hash entry */
+        ucp_tag_frag_match_init_unexp(matchq);
+    }
 
     if (ucp_tag_frag_match_is_unexp(matchq)) {
         /* add new received descriptor to the queue */
         status = ucp_recv_desc_init(worker, data, length, 0, tl_flags,
                                     hdr_len, flags, priv_length, &rdesc);
-        if (!UCS_STATUS_IS_ERR(status)) {
+        if (ucs_likely(!UCS_STATUS_IS_ERR(status))) {
             ucp_tag_frag_match_add_unexp(matchq, rdesc, hdr->offset);
+        } else if (ucs_queue_is_empty(&matchq->unexp_q)) {
+            /* If adding the first fragment to the unexpected queue fails,
+             * remove the element from the hash. Otherwise hash would contain an
+             * empty queue, which is not allowed, because queue implementation
+             * relies on the address of its head for certain operations (e.g.
+             * ucs_queue_is_empty). And khash may change address of its elements
+             * during resize (provoked by kh_put). */
+            kh_del(ucp_tag_frag_hash, &worker->tm.frag_hash, iter);
         }
     } else {
+        /* If fragment is expected, the corresponding element must be present
+         * in the hash (added in ucp_tag_frag_list_process_queue). */
+        ucs_assert(ret == 0);
+
         /* hash entry contains a request, copy data to user buffer */
         req      = matchq->exp_req;
         recv_len = length - hdr_len;
@@ -188,6 +210,10 @@ ucp_eager_common_middle_handler(ucp_worker_t *worker, ucp_tag_frag_match_t *matc
         status = UCS_OK;
     }
 
+    /* If hash contains queue of unexpected fragments, it should not be empty */
+    ucs_assert(!ucp_tag_frag_match_is_unexp(matchq) ||
+               !ucs_queue_is_empty(&matchq->unexp_q));
+
     return status;
 }
 
@@ -195,22 +221,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    ucp_worker_h worker         = arg;
-    ucp_eager_middle_hdr_t *hdr = data;
-    ucp_tag_frag_match_t *matchq;
-    khiter_t iter;
-    int ret;
-
-    iter   = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, hdr->msg_id, &ret);
-    matchq = &kh_value(&worker->tm.frag_hash, iter);
-    if (ret != 0) {
-        /* initialize a previously empty hash entry */
-        ucp_tag_frag_match_init_unexp(matchq);
-    }
-
-    return ucp_eager_common_middle_handler(worker, matchq, iter, data, length,
-                                           sizeof(*hdr), am_flags,
-                                           UCP_RECV_DESC_FLAG_EAGER, 0);
+    return ucp_eager_common_middle_handler(arg, data, length,
+                                           sizeof(ucp_eager_middle_hdr_t),
+                                           am_flags, UCP_RECV_DESC_FLAG_EAGER,
+                                           0);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_only_handler,
@@ -290,10 +304,8 @@ ucp_tag_offload_eager_first_handler(ucp_worker_h worker, void *data,
                                     void **context)
 {
     ucp_eager_first_hdr_t *priv;
-    ucp_tag_frag_match_t *frag;
     uint64_t msg_ctx;
-    khiter_t iter;
-    int priv_len, ret;
+    int priv_len;
 
     /* First part of the fragmented message. Pass message id back to UCT,
      * so it will be provided with the rest of message fragments. Immediate
@@ -301,15 +313,9 @@ ucp_tag_offload_eager_first_handler(ucp_worker_h worker, void *data,
      * ack will be sent upon receiving of the last fragment. */
     msg_ctx               = worker->am_message_id++;
     *(uint64_t*)context   = msg_ctx;
-    iter                  = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash,
-                                   msg_ctx, &ret);
-    ucs_assert((ret == 1) || (ret == 2));
-    frag                  = &kh_value(&worker->tm.frag_hash, iter);
-    ucp_tag_frag_match_init_unexp(frag);
     priv_len              = sizeof(*priv);
     priv                  = ucp_tag_eager_offload_priv(tl_flags, data, length,
                                                        ucp_eager_first_hdr_t);
-
     priv->super.super.tag = stag;
     priv->total_len       = SIZE_MAX; /* length is not known at this point */
     priv->msg_id          = msg_ctx;
@@ -326,17 +332,7 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
     ucp_offload_last_ssend_hdr_t *l_priv;
     ucp_eager_middle_hdr_t *m_priv;
     void *tag_priv;
-    ucp_tag_frag_match_t *frag;
-    uint64_t msg_ctx;
-    khiter_t iter;
     int priv_len;
-
-    /* It is not the first fragment - the corresponding entry must be
-     * present in the hash */
-    msg_ctx = *(uint64_t*)context;
-    iter    = kh_get(ucp_tag_frag_hash, &worker->tm.frag_hash, msg_ctx);
-    ucs_assert(iter != kh_end(&worker->tm.frag_hash));
-    frag    = &kh_val(&worker->tm.frag_hash, iter);
 
     /* Last fragment may contain immediate data, indicating that it is
      * synchronous send */
@@ -362,11 +358,10 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
     /* Offset is calculated during data processing in the
      * ucp_tag_request_process_recv_data function */
     m_priv->offset = 0;
-    m_priv->msg_id = msg_ctx;
+    m_priv->msg_id = *(uint64_t*)context;
 
-    return ucp_eager_common_middle_handler(worker, frag, iter, tag_priv,
-                                           length + priv_len, priv_len,
-                                           tl_flags, flags, priv_len);
+    return ucp_eager_common_middle_handler(worker, tag_priv, length + priv_len,
+                                           priv_len, tl_flags, flags, priv_len);
 }
 
 /* TODO: can handle multi-fragment messages in a more efficient way by saving
@@ -387,12 +382,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
 
     UCP_WORKER_STAT_TAG_OFFLOAD(wiface->worker, RX_UNEXP_EGR);
 
-    ucp_tag_offload_unexp(wiface, stag, length);
-
     /* Fast path - single-fragment, non-sync eager message */
     if (ucs_likely((tl_flags & UCT_CB_PARAM_FLAG_FIRST) &&
                    !(tl_flags & UCT_CB_PARAM_FLAG_MORE) &&
                    !imm)) {
+        ucp_tag_offload_unexp(wiface, stag, length);
+
         return ucp_eager_offload_handler(wiface->worker, data, length, tl_flags,
                                          flags | UCP_RECV_DESC_FLAG_EAGER_ONLY,
                                          stag);
@@ -403,7 +398,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
         return ucp_tag_offload_eager_middle_handler(worker, data, length,
                                                     tl_flags, stag, imm, flags,
                                                     context);
-    } else if (tl_flags & UCT_CB_PARAM_FLAG_MORE) {
+    }
+
+    /* Either first eager fragment or entire sync eager message */
+    ucp_tag_offload_unexp(wiface, stag, length);
+
+    if (tl_flags & UCT_CB_PARAM_FLAG_MORE) {
         /* First part of the fragmented message */
         return ucp_tag_offload_eager_first_handler(worker, data, length,
                                                    tl_flags, stag, flags,

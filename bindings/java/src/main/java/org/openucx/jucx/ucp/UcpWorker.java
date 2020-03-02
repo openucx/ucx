@@ -11,12 +11,12 @@ import java.nio.ByteBuffer;
 import org.openucx.jucx.*;
 
 /**
- * UCP worker is an opaque object representing the communication context.  The
- * worker represents an instance of a local communication resource and progress
- * engine associated with it. Progress engine is a construct that is
- * responsible for asynchronous and independent progress of communication
- * directives. The progress engine could be implement in hardware or software.
- * The worker object abstract an instance of network resources such as a host
+ * UCP worker is an opaque object representing the communication context. The
+ * worker represents an instance of a local communication resource and the
+ * progress engine associated with it. The progress engine is a construct that
+ * is responsible for asynchronous and independent progress of communication
+ * directives. The progress engine could be implemented in hardware or software.
+ * The worker object abstracts an instance of network resources such as a host
  * channel adapter port, network interface, or multiple resources such as
  * multiple network interfaces or communication ports. It could also represent
  * virtual communication resources that are defined across multiple devices.
@@ -148,6 +148,62 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * Non-blocking probe and return a message.
+     * This routine probes (checks) if a messages described by the {@code tag} and
+     * {@code tagMask} was received (fully or partially) on the worker. The tag
+     * value of the received message has to match the {@code tag} and {@code tagMask}
+     * values, where the {@code tagMask} indicates what bits of the tag have to be
+     * matched. The function returns immediately and if the message is matched it
+     * returns a handle for the message.
+     *
+     * This function does not advance the communication state of the network.
+     * If this routine is used in busy-poll mode, need to make sure
+     * {@link UcpWorker#progress()} is called periodically to extract messages from the transport.
+     *
+     * @param remove - The flag indicates if the matched message has to be removed from UCP library.
+     *                 If true, the message handle is removed from the UCP library
+     *                 and the application is responsible to call
+     *                 {@link UcpWorker#recvTaggedMessageNonBlocking(long, long, UcpTagMessage,
+     *                 UcxCallback)} in order to receive the data and release the resources
+     *                 associated with the message handle.
+     *                 If false, the return value is merely an indication to whether a matching
+     *                 message is present, and it cannot be used in any other way,
+     *                 and in particular it cannot be passed to
+     *                 {@link UcpWorker#recvTaggedMessageNonBlocking(long, long, UcpTagMessage,
+     *                 UcxCallback)}
+     * @return  NULL                      - No match found.
+     *          Message handle (not NULL) - If message is matched the message handle is returned.
+     */
+    public UcpTagMessage tagProbeNonBlocking(long tag, long tagMask, boolean remove) {
+        return tagProbeNonBlockingNative(getNativeId(), tag, tagMask, remove);
+    }
+
+    /**
+     * Non-blocking receive operation for a probed message.
+     * This routine receives a messages that is described by the local {@code address},
+     * {@code size}, and a {@code message} handle. The {@code message} handle can be obtain
+     * by calling the {@link UcpWorker#tagProbeNonBlocking(long, long, boolean)}. This routine
+     * is a non-blocking and therefore returns immediately. The receive operation is considered
+     * completed when the message is delivered to the buffer, described by {@code address}
+     * and {@code size}.
+     * In order to notify the application about completion of the receive operation
+     * the UCP library will invoke the call-back {@code callback} when the received message
+     * is in the receive buffer and ready for application access.
+     * If the receive operation cannot be stated the routine returns an error.
+     */
+    public UcpRequest recvTaggedMessageNonBlocking(long address, long size, UcpTagMessage message,
+                                                   UcxCallback callback) {
+        return recvTaggedMessageNonBlockingNative(getNativeId(), address, size,
+            message.getNativeId(), callback);
+    }
+
+    public UcpRequest recvTaggedMessageNonBlocking(ByteBuffer buffer, UcpTagMessage message,
+                                                   UcxCallback callback) {
+        return recvTaggedMessageNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(),
+            message, callback);
+    }
+
+    /**
      * This routine tries to cancels an outstanding communication request. After
      * calling this routine, the request will be in completed or canceled (but
      * not both) state regardless of the status of the target endpoint associated
@@ -197,6 +253,13 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native UcpRequest recvTaggedNonBlockingNative(long workerId, long localAddress,
                                                                  long size, long tag, long tagMask,
                                                                  UcxCallback callback);
+
+    private static native UcpTagMessage tagProbeNonBlockingNative(long workerId, long tag,
+                                                                  long tagMask, boolean remove);
+
+    private static native UcpRequest recvTaggedMessageNonBlockingNative(long workerId, long address,
+                                                                        long size, long tagMsgId,
+                                                                        UcxCallback callback);
 
     private static native void cancelRequestNative(long workerId, long requestId);
 }

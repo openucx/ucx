@@ -26,7 +26,7 @@ static const char *uct_rc_fence_mode_values[] = {
 };
 
 ucs_config_field_t uct_rc_iface_common_config_table[] = {
-  {"IB_", "RX_INLINE=64;RX_QUEUE_LEN=4095;SEG_SIZE=8256", NULL,
+  {UCT_IB_CONFIG_PREFIX, "RX_INLINE=64;RX_QUEUE_LEN=4095;SEG_SIZE=8256", NULL,
    ucs_offsetof(uct_rc_iface_common_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
@@ -85,6 +85,14 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "  auto   - select fence mode based on hardware capabilities",
    ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
                 UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
+
+  {"TX_NUM_GET_OPS", "inf",
+   "Maximal number of simultaneous get/RDMA_READ operations.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_ops), UCS_CONFIG_TYPE_UINT},
+
+  {"MAX_GET_ZCOPY", "auto",
+   "Maximal size of get operation with zcopy protocol.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_zcopy), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -156,7 +164,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov,
-                                size_t tag_max_iov, size_t tag_min_hdr)
+                                size_t am_min_hdr, size_t rma_max_iov)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     ucs_status_t status;
@@ -216,20 +224,20 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.put.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+    iface_attr->cap.put.max_iov   = rma_max_iov;
 
     /* GET */
     iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.get.min_zcopy = iface->super.config.max_inl_resp + 1;
-    iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+    iface_attr->cap.get.max_zcopy = iface->config.max_get_zcopy;
+    iface_attr->cap.get.max_iov   = rma_max_iov;
 
     /* AM */
-    iface_attr->cap.am.max_short  = uct_ib_iface_hdr_size(max_inline, tag_min_hdr);
-    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - tag_min_hdr;
+    iface_attr->cap.am.max_short  = uct_ib_iface_hdr_size(max_inline, am_min_hdr);
+    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - am_min_hdr;
     iface_attr->cap.am.min_zcopy  = 0;
-    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - tag_min_hdr;
-    iface_attr->cap.am.max_hdr    = am_max_hdr - tag_min_hdr;
+    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - am_min_hdr;
+    iface_attr->cap.am.max_hdr    = am_max_hdr - am_min_hdr;
     iface_attr->cap.am.max_iov    = am_max_iov;
 
     /* Error Handling */
@@ -527,12 +535,14 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
+    uint32_t max_ib_msg_size;
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               &config->super, init_attr);
 
     self->tx.cq_available           = init_attr->tx_cq_len - 1;
+    self->tx.reads_available        = config->tx.max_get_ops;
     self->rx.srq.available          = 0;
     self->rx.srq.quota              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
@@ -555,6 +565,18 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 #if UCS_ENABLE_ASSERT
     self->config.tx_cq_len          = init_attr->tx_cq_len;
 #endif
+    max_ib_msg_size                 = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
+
+    if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
+        self->config.max_get_zcopy = max_ib_msg_size;
+    } else if (config->tx.max_get_zcopy <= max_ib_msg_size) {
+        self->config.max_get_zcopy = config->tx.max_get_zcopy;
+    } else {
+        ucs_warn("rc_iface on %s:%d: reduced max_get_zcopy to %u",
+                 uct_ib_device_name(dev), self->super.config.port_num,
+                 max_ib_msg_size);
+        self->config.max_get_zcopy = max_ib_msg_size;
+    }
 
     uct_ib_fence_info_init(&self->tx.fi);
     uct_rc_iface_set_path_mtu(self, config);

@@ -318,6 +318,10 @@ public:
 
     void set_sock_addr(const struct sockaddr &addr, const size_t size);
 
+    void reset_to_any();
+
+    bool operator==(const struct sockaddr_storage &sockaddr) const;
+
     void set_port(uint16_t port);
 
     uint16_t get_port() const;
@@ -325,6 +329,8 @@ public:
     size_t get_addr_size() const;
 
     ucs_sock_addr_t to_ucs_sock_addr() const;
+
+    std::string to_str() const;
 
     const struct sockaddr* get_sock_addr_ptr() const;
 
@@ -764,6 +770,12 @@ public:
 private:
     void *m_ptr;
 };
+
+
+template <typename T>
+static void deleter(T *ptr) {
+    delete ptr;
+}
 
 
 extern int    perf_retry_count;

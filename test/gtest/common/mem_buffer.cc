@@ -11,6 +11,7 @@
 
 #include "mem_buffer.h"
 
+#include <ucp/core/ucp_mm.h>
 #include <ucs/debug/assert.h>
 #include <common/test_helpers.h>
 
@@ -78,6 +79,14 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
         return ptr;
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_CALL(cudaMallocManaged(&ptr, size));
+        return ptr;
+#endif
+#if HAVE_ROCM
+    case UCS_MEMORY_TYPE_ROCM:
+        ROCM_CALL(hipMalloc(&ptr, size));
+        return ptr;
+    case UCS_MEMORY_TYPE_ROCM_MANAGED:
+        ROCM_CALL(hipMallocManaged(&ptr, size));
         return ptr;
 #endif
     default:
@@ -163,8 +172,7 @@ void mem_buffer::pattern_check(const void *buffer, size_t length)
 void mem_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed,
                               ucs_memory_type_t mem_type)
 {
-    if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
-        (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
         pattern_fill(buffer, length, seed);
     } else {
         ucs::auto_buffer temp(length);
@@ -176,8 +184,7 @@ void mem_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed,
 void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed,
                                ucs_memory_type_t mem_type)
 {
-    if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
-        (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
         pattern_check(buffer, length, seed);
     } else {
         ucs::auto_buffer temp(length);
@@ -192,12 +199,19 @@ void mem_buffer::copy_to(void *dst, const void *src, size_t length,
     switch (dst_mem_type) {
     case UCS_MEMORY_TYPE_HOST:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
+    case UCS_MEMORY_TYPE_ROCM_MANAGED:
         memcpy(dst, src, length);
         break;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
         CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyHostToDevice));
         CUDA_CALL(cudaDeviceSynchronize());
+        break;
+#endif
+#if HAVE_ROCM
+    case UCS_MEMORY_TYPE_ROCM:
+        ROCM_CALL(hipMemcpy(dst, src, length, hipMemcpyHostToDevice));
+        ROCM_CALL(hipDeviceSynchronize());
         break;
 #endif
     default:
@@ -211,12 +225,19 @@ void mem_buffer::copy_from(void *dst, const void *src, size_t length,
     switch (src_mem_type) {
     case UCS_MEMORY_TYPE_HOST:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
+    case UCS_MEMORY_TYPE_ROCM_MANAGED:
         memcpy(dst, src, length);
         break;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
         CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyDeviceToHost));
         CUDA_CALL(cudaDeviceSynchronize());
+        break;
+#endif
+#if HAVE_ROCM
+    case UCS_MEMORY_TYPE_ROCM:
+        ROCM_CALL(hipMemcpy(dst, src, length, hipMemcpyDeviceToHost));
+        ROCM_CALL(hipDeviceSynchronize());
         break;
 #endif
     default:
@@ -227,8 +248,7 @@ void mem_buffer::copy_from(void *dst, const void *src, size_t length,
 bool mem_buffer::compare(const void *expected, const void *buffer,
                          size_t length, ucs_memory_type_t mem_type)
 {
-    if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
-        (mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
         return memcmp(expected, buffer, length) == 0;
     } else {
         ucs::auto_buffer temp(length);

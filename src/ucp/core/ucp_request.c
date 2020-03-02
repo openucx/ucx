@@ -12,7 +12,7 @@
 #include "ucp_worker.h"
 #include "ucp_request.inl"
 
-#include <ucp/proto/proto.h>
+#include <ucp/proto/proto_am.h>
 
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug.h>
@@ -230,13 +230,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     case UCP_DATATYPE_IOV:
         iovcnt = state->dt.iov.iovcnt;
         iov    = buffer;
-        dt_reg = ucs_malloc(sizeof(*dt_reg) * iovcnt, "iov_dt_reg");
+        dt_reg = ((state->dt.iov.dt_reg == NULL) ?
+                  ucs_calloc(iovcnt, sizeof(*dt_reg), "iov_dt_reg") :
+                  state->dt.iov.dt_reg);
         if (NULL == dt_reg) {
             status = UCS_ERR_NO_MEMORY;
             goto err;
         }
         for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-            dt_reg[iov_it].md_map = 0;
             if (iov[iov_it].length) {
                 status = ucp_mem_rereg_mds(context, md_map, iov[iov_it].buffer,
                                            iov[iov_it].length, flags, NULL,
@@ -314,7 +315,7 @@ ucs_status_t
 ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                        size_t zcopy_thresh, size_t zcopy_max, size_t dt_count,
                        const ucp_ep_msg_config_t* msg_config,
-                       const ucp_proto_t *proto)
+                       const ucp_request_send_proto_t *proto)
 {
     size_t       length = req->send.length;
     ucs_status_t status;

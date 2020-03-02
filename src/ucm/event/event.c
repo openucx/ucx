@@ -548,7 +548,7 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (!ucm_global_opts.enable_events) {
+    if (events && !ucm_global_opts.enable_events) {
         return UCS_ERR_UNSUPPORTED;
     }
 

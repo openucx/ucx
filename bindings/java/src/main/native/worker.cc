@@ -152,7 +152,44 @@ Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedNonBlockingNative(JNIEnv *env, jcl
                                                 ucp_dt_make_contig(1), tag, tagMask,
                                                 recv_callback);
 
-    ucs_trace_req("JUCX: recv_nb request %p, msg size: %zu, tag: %ld", request, size, tag);
+    ucs_trace_req("JUCX: tag_recv_nb request %p, msg size: %zu, tag: %ld", request, size, tag);
+
+    return process_request(request, callback);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpWorker_tagProbeNonBlockingNative(JNIEnv *env, jclass cls,
+                                                              jlong ucp_worker_ptr,
+                                                              jlong tag, jlong tag_mask,
+                                                              jboolean remove)
+{
+    ucp_tag_recv_info_t info_tag;
+    ucp_tag_message_h msg_tag = ucp_tag_probe_nb((ucp_worker_h)ucp_worker_ptr, tag, tag_mask,
+                                                 remove, &info_tag);
+    jobject result = NULL;
+
+    if (msg_tag != NULL) {
+        result = new_tag_msg_instance(env, msg_tag, &info_tag);
+    }
+
+    return result;
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedMessageNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                       jlong ucp_worker_ptr,
+                                                                       jlong laddr, jlong size,
+                                                                       jlong msg_ptr,
+                                                                       jobject callback)
+{
+    ucs_status_ptr_t request = ucp_tag_msg_recv_nb((ucp_worker_h)ucp_worker_ptr,
+                                                   (void *)laddr, size,
+                                                   ucp_dt_make_contig(1),
+                                                   (ucp_tag_message_h)msg_ptr,
+                                                   recv_callback);
+
+    ucs_trace_req("JUCX: tag_msg_recv_nb request %p, msg size: %zu, msg: %p", request, size,
+                  (ucp_tag_message_h)msg_ptr);
 
     return process_request(request, callback);
 }

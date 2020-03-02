@@ -16,10 +16,10 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
-#include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucp/dt/dt.h>
 #include <ucp/dt/dt.inl>
+
 
 void ucp_am_ep_init(ucp_ep_h ep)
 {
@@ -239,7 +239,7 @@ static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
     
-    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE_REPLY, 
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE_REPLY,
                                     ucp_am_bcopy_pack_args_single_reply);
     if (status == UCS_OK) {
         ucp_request_send_generic_dt_finish(req);
@@ -252,8 +252,7 @@ static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
 static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
 {
     ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_MULTI,
-                                                UCP_AM_ID_MULTI, 
-                                                sizeof(ucp_am_long_hdr_t),
+                                                UCP_AM_ID_MULTI,
                                                 ucp_am_bcopy_pack_args_first,
                                                 ucp_am_bcopy_pack_args_mid, 0);
     ucp_request_t *req;
@@ -272,8 +271,7 @@ static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
 static ucs_status_t ucp_am_bcopy_multi_reply(uct_pending_req_t *self)
 {
     ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_MULTI_REPLY,
-                                                UCP_AM_ID_MULTI_REPLY, 
-                                                sizeof(ucp_am_long_hdr_t),
+                                                UCP_AM_ID_MULTI_REPLY,
                                                 ucp_am_bcopy_pack_args_first,
                                                 ucp_am_bcopy_pack_args_mid, 0);
     ucp_request_t *req;
@@ -376,7 +374,7 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_am_send_req(ucp_request_t *req, size_t count,
                 const ucp_ep_msg_config_t *msg_config,
-                ucp_send_callback_t cb, const ucp_proto_t *proto)
+                ucp_send_callback_t cb, const ucp_request_send_proto_t *proto)
 {
     
     size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config,
@@ -698,26 +696,22 @@ UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE_REPLY,
 UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_MULTI_REPLY,
               ucp_am_long_handler_reply, NULL, 0);
 
-const ucp_proto_t ucp_am_proto = {
+const ucp_request_send_proto_t ucp_am_proto = {
     .contig_short           = ucp_am_contig_short,
     .bcopy_single           = ucp_am_bcopy_single,
     .bcopy_multi            = ucp_am_bcopy_multi,
     .zcopy_single           = ucp_am_zcopy_single,
     .zcopy_multi            = ucp_am_zcopy_multi,
     .zcopy_completion       = ucp_proto_am_zcopy_completion,
-    .only_hdr_size          = sizeof(ucp_am_hdr_t),
-    .first_hdr_size         = sizeof(ucp_am_long_hdr_t),
-    .mid_hdr_size           = sizeof(ucp_am_long_hdr_t)
+    .only_hdr_size          = sizeof(ucp_am_hdr_t)
 };
 
-const ucp_proto_t ucp_am_reply_proto = {
+const ucp_request_send_proto_t ucp_am_reply_proto = {
     .contig_short           = NULL,
     .bcopy_single           = ucp_am_bcopy_single_reply,
     .bcopy_multi            = ucp_am_bcopy_multi_reply,
     .zcopy_single           = ucp_am_zcopy_single_reply,
     .zcopy_multi            = ucp_am_zcopy_multi_reply,
     .zcopy_completion       = ucp_proto_am_zcopy_completion,
-    .only_hdr_size          = sizeof(ucp_am_reply_hdr_t),
-    .first_hdr_size         = sizeof(ucp_am_long_hdr_t),
-    .mid_hdr_size           = sizeof(ucp_am_long_hdr_t)
+    .only_hdr_size          = sizeof(ucp_am_reply_hdr_t)
 };

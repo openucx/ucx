@@ -46,9 +46,12 @@ enum {
     UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(16),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17)
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17),
+    UCP_REQUEST_DEBUG_RNDV_FRAG           = UCS_BIT(18)
 #else
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
+    UCP_REQUEST_FLAG_STREAM_RECV          = 0,
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0,
+    UCP_REQUEST_DEBUG_RNDV_FRAG           = 0
 #endif
 };
 
@@ -257,7 +260,7 @@ struct ucp_request {
                     ssize_t                 remaining; /* How much more data to be received */
 
                     /* Can use union, because rdesc is used in expected flow,
-                     * while gen_buf is used in unexpected flow only. */
+                     * while non_contig_buf is used in unexpected flow only. */
                     union {
                         ucp_mem_desc_t      *rdesc;   /* Offload bounce buffer */
                         void                *non_contig_buf; /* Used for assembling
@@ -327,6 +330,21 @@ struct ucp_recv_desc {
 };
 
 
+/**
+ * Defines protocol functions for ucp_request_send_start() function.
+ * TODO will be removed when switching to new protocols implementation.
+ */
+struct ucp_request_send_proto {
+    uct_pending_callback_t     contig_short;     /**< Progress short data */
+    uct_pending_callback_t     bcopy_single;     /**< Progress bcopy single fragment */
+    uct_pending_callback_t     bcopy_multi;      /**< Progress bcopy multi-fragment */
+    uct_pending_callback_t     zcopy_single;     /**< Progress zcopy single fragment */
+    uct_pending_callback_t     zcopy_multi;      /**< Progress zcopy multi-fragment */
+    uct_completion_callback_t  zcopy_completion; /**< Callback for UCT zcopy completion */
+    size_t                     only_hdr_size;    /**< Header size for single / short */
+};
+
+
 extern ucs_mpool_ops_t ucp_request_mpool_ops;
 extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 
@@ -346,7 +364,7 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,
                                     size_t dt_count,
                                     const ucp_ep_msg_config_t* msg_config,
-                                    const ucp_proto_t *proto);
+                                    const ucp_request_send_proto_t *proto);
 
 /* Fast-forward to data end */
 void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);

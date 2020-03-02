@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -101,15 +101,18 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     int is_global;
     uct_ib_mlx5_base_av_t av;
     struct mlx5_grh_av grh_av;
+    unsigned path_index;
 
     ucs_trace_func("");
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
-    ib_addr = (const uct_ib_address_t *)params->dev_addr;
-    if_addr = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
+    ib_addr    = (const uct_ib_address_t *)params->dev_addr;
+    if_addr    = (const uct_dc_mlx5_iface_addr_t *)params->iface_addr;
+    path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
 
-    status = uct_ud_mlx5_iface_get_av(&iface->super.super.super, &iface->ud_common,
-                                      ib_addr, &av, &grh_av, &is_global);
+    status = uct_ud_mlx5_iface_get_av(&iface->super.super.super,
+                                      &iface->ud_common, ib_addr, path_index,
+                                      &av, &grh_av, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }
@@ -147,8 +150,8 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
                                 max_am_inline,
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
                                 UCT_IB_MLX5_AM_ZCOPY_MAX_IOV,
-                                UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE),
-                                sizeof(uct_rc_mlx5_hdr_t));
+                                sizeof(uct_rc_mlx5_hdr_t),
+                                UCT_RC_MLX5_RMA_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE));
     if (status != UCS_OK) {
         return status;
     }
@@ -162,7 +165,8 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->latency.overhead += 60e-9; /* connect packet + cqe */
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
-                                   max_am_inline, UCT_IB_MLX5_AV_FULL_SIZE);
+                                   max_am_inline,
+                                   UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE));
 
     /* Error handling is not supported with random dci policy
      * TODO: Fix */
@@ -346,10 +350,16 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
         goto err;
     }
 
-    dci->ep    = NULL;
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ucs_arbiter_group_init(&dci->arb_group);
+    } else {
+        dci->ep = NULL;
+    }
+
 #if UCS_ENABLE_ASSERT
     dci->flags = 0;
 #endif
+
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
                                    iface->super.tx.mmio_mode, &dci->txwq,
                                    dci->txwq.super.verbs.qp);
@@ -399,7 +409,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
     attr.path_mtu                   = iface->super.super.config.path_mtu;
-    attr.ah_attr.is_global          = iface->super.super.super.is_global_addr;
+    attr.ah_attr.is_global          = iface->super.super.super.config.force_global_addr;
     attr.ah_attr.sl                 = iface->super.super.super.config.sl;
     /* ib_core expects valied ah_attr::port_num when IBV_QP_AV is set */
     attr.ah_attr.port_num           = iface->super.super.super.config.port_num;
@@ -488,10 +498,10 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     attr.qp_state                  = IBV_QPS_RTR;
     attr.path_mtu                  = iface->super.super.config.path_mtu;
     attr.min_rnr_timer             = iface->super.super.config.min_rnr_timer;
-    attr.ah_attr.is_global         = iface->super.super.super.is_global_addr;
+    attr.ah_attr.is_global         = iface->super.super.super.config.force_global_addr;
     attr.ah_attr.grh.hop_limit     = iface->super.super.super.config.hop_limit;
     attr.ah_attr.grh.traffic_class = iface->super.super.super.config.traffic_class;
-    attr.ah_attr.grh.sgid_index    = iface->super.super.super.config.gid_index;
+    attr.ah_attr.grh.sgid_index    = iface->super.super.super.gid_info.gid_index;
     attr.ah_attr.port_num          = iface->super.super.super.config.port_num;
 
     ret = ibv_modify_qp(iface->rx.dct.verbs.qp, &attr, IBV_QP_STATE |
@@ -534,6 +544,9 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     int i;
 
     for (i = 0; i < iface->tx.ndci; i++) {
+        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+            ucs_arbiter_group_cleanup(&iface->tx.dcis[i].arb_group);
+        }
         uct_ib_mlx5_txwq_cleanup(&iface->tx.dcis[i].txwq);
     }
 }
@@ -657,7 +670,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     init_attr.min_rnr_timer    = iface->super.super.config.min_rnr_timer;
     init_attr.tclass           = iface->super.super.super.config.traffic_class;
     init_attr.hop_limit        = iface->super.super.super.config.hop_limit;
-    init_attr.gid_index        = iface->super.super.super.config.gid_index;
+    init_attr.gid_index        = iface->super.super.super.gid_info.gid_index;
     init_attr.inline_size      = iface->super.super.config.rx_inline;
     init_attr.pkey_index       = iface->super.super.super.pkey_index;
     init_attr.create_flags    |= uct_dc_mlx5_iface_ooo_flag(iface,
@@ -704,7 +717,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
     attr.path_mtu                   = iface->super.super.config.path_mtu;
-    attr.ah_attr.is_global          = iface->super.super.super.is_global_addr;
+    attr.ah_attr.is_global          = iface->super.super.super.config.force_global_addr;
     attr.ah_attr.sl                 = iface->super.super.super.config.sl;
     attr_mask                       = IBV_EXP_QP_STATE     |
                                       IBV_EXP_QP_PATH_MTU  |
@@ -774,7 +787,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
     }
 
     iface->super.super.config.tx_qp_len = iface->tx.dcis[0].txwq.bb_max;
-    uct_ib_iface_set_max_iov(&iface->super.super.super, cap.max_send_sge);
+
     return UCS_OK;
 
 err:
@@ -972,11 +985,12 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
 
         status = uct_dc_mlx5_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){
-            status = uct_ep_pending_add(&ep->super.super, &dc_req->super.super,
-                                        0);
+            uct_dc_mlx5_ep_pending_common(iface, ep, &dc_req->super.super, 0, 1);
+        } else {
+            ucs_assertv_always(status == UCS_OK,
+                               "Failed to send FC grant msg: %s",
+                               ucs_status_string(status));
         }
-        ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
-                           ucs_status_string(status));
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
         ep = *((uct_dc_mlx5_ep_t**)(hdr + 1));
 
@@ -1016,14 +1030,6 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
     }
 
     return UCS_OK;
-}
-
-void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
-                                    uct_ib_mlx5_base_av_t *av,
-                                    uint32_t remote_dctn)
-{
-    uct_ib_mlx5_iface_set_av_sport(&iface->super.super.super, av,
-                                   remote_dctn, iface->rx.dct.qp_num);
 }
 
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
@@ -1205,13 +1211,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     self->tx.available_quota = self->super.super.config.tx_qp_len -
                                ucs_min(self->super.super.config.tx_qp_len, config->quota);
-    /* Set max_iov for put_zcopy and get_zcopy */
-    uct_ib_iface_set_max_iov(&self->super.super.super,
-                             (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
-                             sizeof(struct mlx5_wqe_raddr_seg) -
-                             sizeof(struct mlx5_wqe_ctrl_seg) -
-                             UCT_IB_MLX5_AV_FULL_SIZE) /
-                             sizeof(struct mlx5_wqe_data_seg));
 
     uct_rc_mlx5_iface_common_prepost_recvs(&self->super);
 

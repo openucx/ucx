@@ -30,9 +30,6 @@
 
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
-/* define string to use it in debug messages */
-#define UCT_IB_MD_PCI_DATA_PATH_FMT "/sys/class/infiniband/%s/device/%s"
-
 typedef struct uct_ib_md_pci_info {
     double      bw;       /* bandwidth */
     uint16_t    payload;  /* payload used to data transfer */
@@ -168,7 +165,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "DEVX support\n",
      ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
 
-    {"MLX5_DEVX_OBJECTS", "dct,dcsrq",
+    {"MLX5_DEVX_OBJECTS", "rcqp,rcsrq,dct,dcsrq",
      "Objects to be created by DevX\n",
      ucs_offsetof(uct_ib_md_config_t, devx_objs),
      UCS_CONFIG_TYPE_BITMAP(uct_ib_devx_objs)},
@@ -187,6 +184,11 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
     {"REG_MT_BIND", "n",
      "Enable setting CPU affinity of memory registration threads.",
      ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_bind), UCS_CONFIG_TYPE_BOOL},
+
+    {"PCI_RELAXED_ORDERING", "auto",
+     "Enable relaxed ordering for PCI writes from device to memory, "
+     "to improve performance on some systems.",
+     ucs_offsetof(uct_ib_md_config_t, ext.mr_relaxed_order), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {NULL}
 };
@@ -589,6 +591,11 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
         (length <= md->config.odp.max_size)) {
         access |= IBV_ACCESS_ON_DEMAND;
     }
+
+    if (md->config.mr_relaxed_order == UCS_CONFIG_ON) {
+        access |= IBV_ACCESS_RELAXED_ORDERING;
+    }
+
     return access;
 }
 
@@ -1309,19 +1316,21 @@ static double uct_ib_md_read_pci_bw(struct ibv_device *ib_device)
     ssize_t len;
     size_t i;
 
-    len = ucs_read_file(pci_width_str, sizeof(pci_width_str) - 1, 1, UCT_IB_MD_PCI_DATA_PATH_FMT,
-                        ib_device->name, pci_width_file_name);
+    len = ucs_read_file(pci_width_str, sizeof(pci_width_str) - 1, 1,
+                        UCT_IB_DEVICE_SYSFS_FMT, ib_device->name,
+                        pci_width_file_name);
     if (len < 1) {
-        ucs_debug("failed to read file: " UCT_IB_MD_PCI_DATA_PATH_FMT,
+        ucs_debug("failed to read file: " UCT_IB_DEVICE_SYSFS_FMT,
                   ib_device->name, pci_width_file_name);
         return DBL_MAX; /* failed to read file */
     }
     pci_width_str[len] = '\0';
 
-    len = ucs_read_file(pci_speed_str, sizeof(pci_speed_str) - 1, 1, UCT_IB_MD_PCI_DATA_PATH_FMT,
-                        ib_device->name, pci_speed_file_name);
+    len = ucs_read_file(pci_speed_str, sizeof(pci_speed_str) - 1, 1,
+                        UCT_IB_DEVICE_SYSFS_FMT, ib_device->name,
+                        pci_speed_file_name);
     if (len < 1) {
-        ucs_debug("failed to read file: " UCT_IB_MD_PCI_DATA_PATH_FMT,
+        ucs_debug("failed to read file: " UCT_IB_DEVICE_SYSFS_FMT,
                   ib_device->name, pci_speed_file_name);
         return DBL_MAX; /* failed to read file */
     }
@@ -1437,11 +1446,15 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     ucs_list_for_each(md_ops_entry, &uct_ib_md_ops_list, list) {
         status = md_ops_entry->ops->open(ib_device, md_config, &md);
         if (status == UCS_OK) {
+            ucs_debug("%s: md open by '%s' is successful", md_name,
+                      md_ops_entry->name);
             md->ops = md_ops_entry->ops;
             break;
         } else if (status != UCS_ERR_UNSUPPORTED) {
             goto out_free_dev_list;
         }
+        ucs_debug("%s: md open by '%s' failed, trying next", md_name,
+                  md_ops_entry->name);
     }
 
     if (status != UCS_OK) {
@@ -1469,7 +1482,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     md->super.ops       = &uct_ib_md_ops;
     md->super.component = &uct_ib_component;
-    md->config          = md_config->ext;
 
     if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
         md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
@@ -1580,6 +1592,8 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err;
     }
 
+    md->config = md_config->ext;
+
     status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {
         goto err_free_context;
@@ -1597,6 +1611,12 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     status = uct_ib_md_parse_device_config(md, md_config);
     if (status != UCS_OK) {
         goto err_free_context;
+    }
+
+    if ((md->config.mr_relaxed_order == UCS_CONFIG_ON) && !IBV_ACCESS_RELAXED_ORDERING) {
+        ucs_warn("relaxed order memory access requested but not supported");
+    } else if (md->config.mr_relaxed_order == UCS_CONFIG_AUTO) {
+        md->config.mr_relaxed_order = UCS_CONFIG_OFF;
     }
 
     status = uct_ib_md_open_common(md, ibv_device, md_config);
@@ -1642,7 +1662,7 @@ uct_component_t uct_ib_component = {
     .name               = "ib",
     .md_config          = {
         .name           = "IB memory domain",
-        .prefix         = "IB_",
+        .prefix         = UCT_IB_CONFIG_PREFIX,
         .table          = uct_ib_md_config_table,
         .size           = sizeof(uct_ib_md_config_t),
     },

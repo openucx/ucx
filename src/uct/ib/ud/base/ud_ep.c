@@ -90,7 +90,7 @@ static void uct_ud_ep_ca_drop(uct_ud_ep_t *ep)
 
 static UCS_F_ALWAYS_INLINE void uct_ud_ep_ca_ack(uct_ud_ep_t *ep)
 {
-    if (ep->ca.cwnd < UCT_UD_CA_MAX_WINDOW) {
+    if (ep->ca.cwnd < ep->ca.wmax) {
         ep->ca.cwnd += UCT_UD_CA_AI_VALUE;
     }
     ep->tx.max_psn = ep->tx.acked_psn + ep->ca.cwnd;
@@ -101,6 +101,8 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 {
     ep->tx.psn         = UCT_UD_INITIAL_PSN;
     ep->ca.cwnd        = UCT_UD_CA_MIN_WINDOW;
+    ep->ca.wmax        = ucs_derived_of(ep->super.super.iface,
+                                        uct_ud_iface_t)->config.max_window;
     ep->tx.max_psn     = ep->tx.psn + ep->ca.cwnd;
     ep->tx.acked_psn   = UCT_UD_INITIAL_PSN - 1;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
@@ -188,7 +190,8 @@ again:
     ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer, ep->tx.slow_tick);
 }
 
-UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
+UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
+                    const uct_ep_params_t* params)
 {
     ucs_trace_func("");
 
@@ -196,6 +199,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
+    self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     uct_ud_ep_reset(self);
     ucs_list_head_init(&self->cep_list);
     uct_ud_iface_add_ep(iface, self);
@@ -310,6 +314,7 @@ static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
 ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
                                                const uct_ib_address_t *ib_addr,
                                                const uct_ud_iface_addr_t *if_addr,
+                                               unsigned path_index,
                                                uct_ud_ep_t **new_ep_p,
                                                uct_ud_send_skb_t **skb_p)
 {
@@ -327,8 +332,11 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
         return UCS_ERR_ALREADY_EXISTS;
     }
 
-    params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                        UCT_EP_PARAM_FIELD_PATH_INDEX;
     params.iface      = &iface->super.super.super;
+    params.path_index = path_index;
+
     status = uct_ep_create(&params, &new_ep_h);
     if (status != UCS_OK) {
         return status;

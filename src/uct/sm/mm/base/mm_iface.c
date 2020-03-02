@@ -33,7 +33,7 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
      "Size of the receive FIFO in the memory-map UCTs.",
      ucs_offsetof(uct_mm_iface_config_t, fifo_size), UCS_CONFIG_TYPE_UINT},
 
-    {"SEG_SIZE", "8k",
+    {"SEG_SIZE", "8256",
      "Size of send/receive buffers for copy-out sends.",
      ucs_offsetof(uct_mm_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
@@ -523,9 +523,9 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     /* check the value defining the size of the FIFO element */
     if (mm_config->fifo_elem_size <= sizeof(uct_mm_fifo_element_t)) {
-        ucs_error("The UCT_MM_MAX_SHORT parameter must be larger than the FIFO "
-                  "element header size. ( > %ld bytes).",
-                  sizeof(uct_mm_fifo_element_t));
+        ucs_error("The UCX_MM_FIFO_ELEM_SIZE parameter (%u) must be larger "
+                  "than the FIFO element header size (%ld bytes).",
+                  mm_config->fifo_elem_size, sizeof(uct_mm_fifo_element_t));
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }

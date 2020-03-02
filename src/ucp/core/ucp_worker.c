@@ -458,15 +458,11 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 
     ucp_ep->am_lane = 0;
 
-    if (ucp_ep_ext_gen(ucp_ep)->err_cb != NULL) {
-        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_USED);
-        ucs_debug("ep %p: calling user error callback %p with arg %p", ucp_ep,
-                  ucp_ep_ext_gen(ucp_ep)->err_cb,  ucp_ep_ext_gen(ucp_ep)->user_data);
-        ucp_ep_ext_gen(ucp_ep)->err_cb(ucp_ep_ext_gen(ucp_ep)->user_data, ucp_ep,
-                                       key.status);
-    } else if (!(ucp_ep->flags & UCP_EP_FLAG_USED)) {
+    if (!(ucp_ep->flags & UCP_EP_FLAG_USED)) {
         ucs_debug("ep %p: destroy internal endpoint due to peer failure", ucp_ep);
         ucp_ep_disconnected(ucp_ep, 1);
+    } else {
+        ucp_ep_invoke_err_cb(ucp_ep, key.status);
     }
 
     ucs_free(err_handle_arg);
@@ -479,8 +475,14 @@ int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
 {
     ucp_worker_err_handle_arg_t *err_handle_arg = elem->arg;
 
-    return (elem->cb == ucp_worker_iface_err_handle_progress) &&
-           (err_handle_arg->ucp_ep == arg);
+    if ((elem->cb == ucp_worker_iface_err_handle_progress) &&
+        (err_handle_arg->ucp_ep == arg)) {
+        /* release err handling argument to avoid memory leak */
+        ucs_free(err_handle_arg);
+        return 1;
+    }
+
+    return 0;
 }
 
 ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
@@ -492,6 +494,7 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
     ucp_rsc_index_t             rsc_index;
     uct_tl_resource_desc_t      *tl_rsc;
     ucp_worker_err_handle_arg_t *err_handle_arg;
+    ucs_log_level_t             log_level;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         goto out_ok;
@@ -533,18 +536,23 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
 
     if ((ucp_ep_ext_gen(ucp_ep)->err_cb == NULL) &&
         (ucp_ep->flags & UCP_EP_FLAG_USED)) {
+        /* do not print error if connection reset by remote peer since it can
+         * be part of user level close protocol  */
+        log_level = (status == UCS_ERR_CONNECTION_RESET) ? UCS_LOG_LEVEL_DIAG :
+                    UCS_LOG_LEVEL_ERROR;
+
         if (lane != UCP_NULL_LANE) {
             rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
             tl_rsc    = &worker->context->tl_rscs[rsc_index].tl_rsc;
-            ucs_error("error '%s' will not be handled for ep %p - "
-                      UCT_TL_RESOURCE_DESC_FMT " since no error callback is installed",
-                      ucs_status_string(status), ucp_ep,
-                      UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+            ucs_log(log_level, "error '%s' will not be handled for ep %p - "
+                    UCT_TL_RESOURCE_DESC_FMT " since no error callback is installed",
+                    ucs_status_string(status), ucp_ep,
+                    UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
         } else {
             ucs_assert(uct_ep == NULL);
-            ucs_error("error '%s' occurred on wireup will not be handled for ep %p "
-                      "since no error callback is installed",
-                      ucs_status_string(status), ucp_ep);
+            ucs_log(log_level, "error '%s' occurred on wireup will not be "
+                    "handled for ep %p since no error callback is installed",
+                    ucs_status_string(status), ucp_ep);
         }
         ret_status = status;
         goto out;
@@ -810,8 +818,10 @@ void ucp_worker_iface_event(int fd, void *arg)
 
 static void ucp_worker_uct_iface_close(ucp_worker_iface_t *wiface)
 {
-    uct_iface_close(wiface->iface);
-    wiface->iface = NULL;
+    if (wiface->iface != NULL) {
+        uct_iface_close(wiface->iface);
+        wiface->iface = NULL;
+    }
 }
 
 static int ucp_worker_iface_find_better(ucp_worker_h worker,
@@ -1046,7 +1056,7 @@ static void ucp_worker_close_ifaces(ucp_worker_h worker)
     UCS_ASYNC_BLOCK(&worker->async);
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         wiface = worker->ifaces[iface_id];
-        if (wiface->iface != NULL) {
+        if (wiface != NULL) {
             ucp_worker_iface_cleanup(wiface);
         }
     }
@@ -1329,7 +1339,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucp_rsc_index_t iface_id;
     uint64_t iface_cap_flags;
     double score, best_score;
-    ucp_rsc_index_t md_index;
+    ucp_md_index_t md_index;
     ucp_worker_iface_t *wiface;
     uct_md_attr_t *md_attr;
     uint64_t supp_tls;

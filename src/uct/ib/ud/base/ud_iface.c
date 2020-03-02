@@ -274,7 +274,6 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     }
 
     self->config.max_inline = qp_init_attr.cap.max_inline_data;
-    uct_ib_iface_set_max_iov(&self->super, qp_init_attr.cap.max_send_sge);
 
     memset(&qp_attr, 0, sizeof(qp_attr));
     /* Modify QP to INIT state */
@@ -361,7 +360,7 @@ void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
  * buffer). In this case, the content of the first 20 bytes is undefined." */
 static void uct_ud_iface_calc_gid_len(uct_ud_iface_t *iface)
 {
-    uint16_t *local_gid_u16 = (uint16_t*)iface->super.gid.raw;
+    uint16_t *local_gid_u16 = (uint16_t*)iface->super.gid_info.gid.raw;
 
     /* Make sure that daddr in IPv4 resides in the last 4 bytes in GRH */
     UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - (20 + offsetof(struct iphdr, daddr))) ==
@@ -440,6 +439,15 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
     self->config.check_grh_dgid  = config->dgid_check &&
                                    uct_ib_iface_is_roce(&self->super);
+
+    if ((config->max_window < UCT_UD_CA_MIN_WINDOW) ||
+        (config->max_window > UCT_UD_CA_MAX_WINDOW)) {
+        ucs_error("Max congestion avoidance window should be >= %d and <= %d (%d)",
+                  UCT_UD_CA_MIN_WINDOW, UCT_UD_CA_MAX_WINDOW, config->max_window);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    self->config.max_window = config->max_window;
 
     if (config->slow_timer_tick <= 0.) {
         ucs_error("The slow timer tick should be > 0 (%lf)",
@@ -556,7 +564,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
 UCS_CLASS_DEFINE(uct_ud_iface_t, uct_ib_iface_t);
 
 ucs_config_field_t uct_ud_iface_config_table[] = {
-    {"IB_", "", NULL,
+    {UCT_IB_CONFIG_PREFIX, "", NULL,
      ucs_offsetof(uct_ud_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
     {"UD_", "", NULL,
@@ -576,11 +584,20 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      "Enable checking destination GID for incoming packets of Ethernet network.\n"
      "Mismatched packets are silently dropped.",
      ucs_offsetof(uct_ud_iface_config_t, dgid_check), UCS_CONFIG_TYPE_BOOL},
+
+    {"MAX_WINDOW", UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
+     "Max congestion avoidance window. Should be >= "
+      UCS_PP_MAKE_STRING(UCT_UD_CA_MIN_WINDOW) " and <= "
+      UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
+     ucs_offsetof(uct_ud_iface_config_t, max_window), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
 
-ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr)
+ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
+                                uct_iface_attr_t *iface_attr,
+                                size_t am_max_iov, size_t am_max_hdr)
 {
     ucs_status_t status;
 
@@ -609,8 +626,8 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_a
     iface_attr->cap.am.max_zcopy       = iface->super.config.seg_size - sizeof(uct_ud_neth_t);
     iface_attr->cap.am.align_mtu       = uct_ib_mtu_value(uct_ib_iface_port_attr(&iface->super)->active_mtu);
     iface_attr->cap.am.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
-    /* The first iov is reserved for the header */
-    iface_attr->cap.am.max_iov         = uct_ib_iface_get_max_iov(&iface->super) - 1;
+    iface_attr->cap.am.max_iov         = am_max_iov;
+    iface_attr->cap.am.max_hdr         = am_max_hdr;
 
     iface_attr->cap.put.max_short      = uct_ib_iface_hdr_size(iface->config.max_inline,
                                                                sizeof(uct_ud_neth_t) +

@@ -11,7 +11,7 @@
 #include "offload.h"
 #include "eager.h"
 #include "rndv.h"
-#include <ucp/proto/proto.h>
+
 #include <ucp/proto/proto_am.inl>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.h>
@@ -258,7 +258,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
     ucp_mem_desc_t *rdesc  = NULL;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
-    ucp_rsc_index_t mdi;
+    ucp_md_index_t mdi;
     uct_iov_t iov;
 
     wiface = ucp_tag_offload_iface(worker, req->recv.tag.tag);
@@ -549,6 +549,8 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     ucs_assert((UCP_DT_IS_CONTIG(req->send.datatype) &&
                (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) ||
                !UCP_DT_IS_CONTIG(req->send.datatype) ||
+               !(ep->worker->context->tl_mds[ucp_ep_md_index(ep, req->send.lane)].attr.cap.
+                 reg_mem_types & UCS_BIT(req->send.mem_type)) ||
                ep->worker->context->config.ext.tm_sw_rndv);
 
     /* send RTS to allow fallback to SW RNDV on receiver */
@@ -577,7 +579,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     size_t max_iov     = ucp_ep_config(ep)->tag.eager.max_iov;
     uct_iov_t *iov     = ucs_alloca(max_iov * sizeof(uct_iov_t));
     size_t iovcnt      = 0;
-    ucp_rsc_index_t md_index;
+    ucp_md_index_t md_index;
     ucp_dt_state_t dt_state;
     void *rndv_op;
 
@@ -623,6 +625,8 @@ void ucp_tag_offload_cancel_rndv(ucp_request_t *req)
     if (status != UCS_OK) {
         ucs_error("Failed to cancel tag rndv op %s", ucs_status_string(status));
     }
+
+    req->flags &= ~UCP_REQUEST_FLAG_OFFLOADED;
 }
 
 ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
@@ -669,16 +673,14 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
     return UCS_OK;
 }
 
-const ucp_proto_t ucp_tag_offload_proto = {
+const ucp_request_send_proto_t ucp_tag_offload_proto = {
     .contig_short     = ucp_tag_offload_eager_short,
     .bcopy_single     = ucp_tag_offload_eager_bcopy,
     .bcopy_multi      = NULL,
     .zcopy_single     = ucp_tag_offload_eager_zcopy,
     .zcopy_multi      = NULL,
     .zcopy_completion = ucp_proto_am_zcopy_completion,
-    .only_hdr_size    = 0,
-    .first_hdr_size   = 0,
-    .mid_hdr_size     = 0
+    .only_hdr_size    = 0
 };
 
 /* Eager sync */
@@ -741,14 +743,12 @@ void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
     ucp_request_send(req, 0);
 }
 
-const ucp_proto_t ucp_tag_offload_sync_proto = {
+const ucp_request_send_proto_t ucp_tag_offload_sync_proto = {
     .contig_short     = NULL,
     .bcopy_single     = ucp_tag_offload_eager_sync_bcopy,
     .bcopy_multi      = NULL,
     .zcopy_single     = ucp_tag_offload_eager_sync_zcopy,
     .zcopy_multi      = NULL,
     .zcopy_completion = ucp_tag_eager_sync_zcopy_completion,
-    .only_hdr_size    = 0,
-    .first_hdr_size   = 0,
-    .mid_hdr_size     = 0
+    .only_hdr_size    = 0
 };

@@ -21,6 +21,11 @@
  * - "Element" - a single work element.
  * - "Group"   - queue of work elements which would be dispatched in-order
  *
+ * The arbiter contains a double-linked list of the group head elements. The
+ * next group head to dispatch is the first entry in the list. Whenever a group
+ * is rescheduled it's moved to the tail of the list. At any point a group head
+ * can be removed from the "middle" of the list.
+ *
  * The groups and elements are arranged like this:
  *  - every arbitrated element points to the group (head).
  *  - first element in the group points to previous and next group (list)
@@ -36,18 +41,21 @@
  *
  *
  * Arbiter:
- *   +=========+
- *   | current +-----------------------+
- *   +=========+                       |
- *                                     |
- * Elements:                           |
- *                                     |
- *   +---------------------------------]----------------------------------+
- *   |                                 V                                  |
- *   |   +------------+          +------------+          +------------+<--+
- *   +-->| list       |<-------->| list       |<-------->| list       |
- *       +------------+          +------------+          +------------+<--+
- *    +->| next       +---+   +->| next       +---+      + next       +---+
+ *   +=============+
+ *   | list        +
+ *   +======+======+
+ *   | next | prev |
+ *   +==|===+===|==+
+ *      |       +----------------------------------------------+
+ *      |                                                      |
+ *      +------+                                               |
+ *             |                                               |
+ *             |                                               |
+ * Elements:   V                                               V
+ *       +------------+          +------------+          +------------+
+ *       | list       |<-------->| list       |<-------->| list       |
+ *       +------------+          +------------+          +------------+
+ *    +->| next       +---+   +->| next       +---+      + next       +
  *    |  +------------+   |   |  +------------+   |      +------------+
  *    |  | group      |   |   |  | group      |   |      | group      |
  *    |  +------------+   |   |  +------------+   |      +--------+---+
@@ -94,19 +102,19 @@ typedef enum {
 } ucs_arbiter_cb_result_t;
 
 #if UCS_ENABLE_ASSERT
-#define UCS_ARBITER_GUARD                   int guard;
-#define UCS_ARBITER_GUARD_INIT(_arbiter)    (_arbiter)->guard = 0
-#define UCS_ARBITER_GUARD_ENTER(_arbiter)   (_arbiter)->guard++
-#define UCS_ARBITER_GUARD_EXIT(_arbiter)    (_arbiter)->guard--
-#define UCS_ARBITER_GUARD_CHECK(_arbiter) \
-    ucs_assertv((_arbiter)->guard == 0, \
-                "scheduling group from the arbiter callback")
+#define UCS_ARBITER_GROUP_GUARD_DEFINE          int guard
+#define UCS_ARBITER_GROUP_GUARD_INIT(_group)    (_group)->guard = 0
+#define UCS_ARBITER_GROUP_GUARD_ENTER(_group)   (_group)->guard++
+#define UCS_ARBITER_GROUP_GUARD_EXIT(_group)    (_group)->guard--
+#define UCS_ARBITER_GROUP_GUARD_CHECK(_group) \
+    ucs_assertv((_group)->guard == 0, \
+                "scheduling arbiter group %p while it's being dispatched", _group)
 #else
-#define UCS_ARBITER_GUARD
-#define UCS_ARBITER_GUARD_INIT(_arbiter)
-#define UCS_ARBITER_GUARD_ENTER(_arbiter)
-#define UCS_ARBITER_GUARD_EXIT(_arbiter)
-#define UCS_ARBITER_GUARD_CHECK(_arbiter)
+#define UCS_ARBITER_GROUP_GUARD_DEFINE
+#define UCS_ARBITER_GROUP_GUARD_INIT(_group)
+#define UCS_ARBITER_GROUP_GUARD_ENTER(_group)
+#define UCS_ARBITER_GROUP_GUARD_EXIT(_group)
+#define UCS_ARBITER_GROUP_GUARD_CHECK(_group)
 #endif
 
 
@@ -128,8 +136,7 @@ typedef ucs_arbiter_cb_result_t (*ucs_arbiter_callback_t)(ucs_arbiter_t *arbiter
  * Top-level arbiter.
  */
 struct ucs_arbiter {
-    ucs_arbiter_elem_t      *current;
-    UCS_ARBITER_GUARD
+    ucs_list_link_t         list;
 };
 
 
@@ -138,6 +145,7 @@ struct ucs_arbiter {
  */
 struct ucs_arbiter_group {
     ucs_arbiter_elem_t      *tail;
+    UCS_ARBITER_GROUP_GUARD_DEFINE;
 };
 
 
@@ -179,6 +187,12 @@ static inline void ucs_arbiter_elem_init(ucs_arbiter_elem_t *elem)
 {
     elem->next = NULL;
 }
+
+
+/**
+ * Check if a group is scheduled on an arbiter.
+ */
+int ucs_arbiter_group_is_scheduled(ucs_arbiter_group_t *group);
 
 
 /**
@@ -234,7 +248,7 @@ void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
  */
 static inline int ucs_arbiter_is_empty(ucs_arbiter_t *arbiter)
 {
-    return arbiter->current == NULL;
+    return ucs_list_is_empty(&arbiter->list);
 }
 
 
@@ -245,7 +259,6 @@ static inline int ucs_arbiter_group_is_empty(ucs_arbiter_group_t *group)
 {
     return group->tail == NULL;
 }
-
 
 /**
  * Schedule a group for arbitration. If the group is already there, the operation
@@ -264,22 +277,47 @@ static inline void ucs_arbiter_group_schedule(ucs_arbiter_t *arbiter,
 
 
 /**
+ * Reset the group head element and mark it as not-scheduled.
+ *
+ * @param [in]  head    Group head element to reset.
+ */
+static inline void ucs_arbiter_group_head_reset(ucs_arbiter_elem_t *head)
+{
+    head->list.next = NULL; /* Not scheduled yet */
+}
+
+
+/**
+ * Return whether the group head element is scheduled on the arbiter.
+ *
+ * @param [in]  head    Group head element to check.
+ */
+static inline int ucs_arbiter_group_head_is_scheduled(ucs_arbiter_elem_t *head)
+{
+    return head->list.next != NULL;
+}
+
+
+/**
  * Deschedule already scheduled group. If the group is not scheduled, the operation
  * will have no effect
  *
  * @param [in]  arbiter  Arbiter object that  group on.
  * @param [in]  group    Group to deschedule.
  */
-
 static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
                                              ucs_arbiter_group_t *group)
 {
-    if (ucs_unlikely(!ucs_arbiter_group_is_empty(group))) {
-        ucs_arbiter_elem_t *head;
+    ucs_arbiter_elem_t *head;
 
-        head = group->tail->next;
-        ucs_arbiter_group_head_desched(arbiter, head);
-        head->list.next = NULL;
+    if (ucs_likely(ucs_arbiter_group_is_empty(group))) {
+        return; /* Group is empty - means it's not scheduled */
+    }
+
+    head = group->tail->next;
+    if (ucs_arbiter_group_head_is_scheduled(head)) {
+        ucs_list_del(&head->list);
+        ucs_arbiter_group_head_reset(head);
     }
 }
 

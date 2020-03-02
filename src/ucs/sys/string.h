@@ -28,11 +28,11 @@ BEGIN_C_DECLS
 
 /* the numeric value of "infinity" */
 #define UCS_MEMUNITS_INF    ((size_t)-1)
-#define UCS_ULUNITS_INF     ((size_t)-1)
+#define UCS_ULUNITS_INF     ((unsigned long)-1)
 
 /* value which specifies "auto" for a numeric variable */
 #define UCS_MEMUNITS_AUTO   ((size_t)-2)
-#define UCS_ULUNITS_AUTO    ((size_t)-2)
+#define UCS_ULUNITS_AUTO    ((unsigned long)-2)
 #define UCS_HEXUNITS_AUTO   ((uint16_t)-2)
 
 #define UCS_BANDWIDTH_AUTO  (-1.0)

@@ -31,6 +31,7 @@ enum {
 
 enum {
     UCT_RC_TXQP_STAT_QP_FULL,
+    UCT_RC_TXQP_STAT_NO_READS,
     UCT_RC_TXQP_STAT_SIGNAL,
     UCT_RC_TXQP_STAT_LAST
 };
@@ -90,6 +91,18 @@ enum {
         UCS_STATS_UPDATE_COUNTER((_ep)->txqp.stats, UCT_RC_TXQP_STAT_QP_FULL, 1); \
         UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
         return _ret; \
+    }
+
+#define UCT_RC_CHECK_NUM_RDMA_READ(_iface, _txqp) \
+    if (ucs_unlikely((_iface)->tx.reads_available == 0)) { \
+        UCS_STATS_UPDATE_COUNTER((_txqp)->stats, UCT_RC_TXQP_STAT_NO_READS, 1); \
+        return UCS_ERR_NO_RESOURCE; \
+    }
+
+#define UCT_RC_RDMA_READ_POSTED(_iface) \
+    { \
+        ucs_assert((_iface)->tx.reads_available > 0); \
+        --(_iface)->tx.reads_available; \
     }
 
 #define UCT_RC_CHECK_RES(_iface, _ep) \
@@ -180,9 +193,10 @@ struct uct_rc_ep {
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
     uct_rc_fc_t         fc;
+    uint8_t             path_index;
 };
 
-UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t);
+UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*);
 
 
 typedef struct uct_rc_ep_address {
@@ -197,6 +211,9 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp);
+
+void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                            const void *resp);
 
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                           const void *resp);
@@ -302,7 +319,8 @@ uct_rc_txqp_add_send_op_sn(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
-                          uct_completion_t *comp, uint16_t sn, uint16_t flags)
+                          uct_rc_send_handler_t handler, uct_completion_t *comp,
+                          uint16_t sn, uint16_t flags)
 {
     uct_rc_iface_send_op_t *op;
 
@@ -311,6 +329,7 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     }
 
     op            = uct_rc_iface_get_send_op(iface);
+    op->handler   = handler;
     op->user_comp = comp;
     op->flags    |= flags;
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);

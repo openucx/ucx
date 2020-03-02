@@ -9,7 +9,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)
-define([ucx_ver_minor], 8)
+define([ucx_ver_minor], 9)
 define([ucx_ver_patch], 0)
 define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
 
@@ -202,6 +202,9 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [false])
      AM_CONDITIONAL([INSTALL_DEVEL_HEADERS], [false])
      AM_CONDITIONAL([HAVE_EXAMPLES], [false])
+     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [false])
+     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
+     AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
@@ -358,8 +361,9 @@ AC_CONFIG_FILES([
                  test/apps/sockaddr/Makefile
                  test/examples/Makefile
                  test/mpi/Makefile
-                 bindings/java/src/main/native/Makefile
+                 bindings/java/Makefile
                  bindings/java/pom.xml
+                 bindings/java/src/main/native/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

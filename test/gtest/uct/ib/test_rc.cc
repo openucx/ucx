@@ -6,6 +6,7 @@
 */
 
 #include "test_rc.h"
+#include <uct/ib/rc/verbs/rc_verbs.h>
 
 
 #define UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
@@ -52,12 +53,11 @@ void test_rc::test_iface_ops(int cq_len)
     comp.func  = NULL;
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                            sendbuf.memh(),
-                            m_e1->iface_attr().cap.am.max_iov);
+                            sendbuf.memh(), m_e1->iface_attr().cap.put.max_iov);
     // For _x transports several CQEs can be consumed per WQE, post less put zcopy
     // ops, so that flush would be sucessfull (otherwise flush will return
     // NO_RESOURCES and completion will not be added for it).
-    for (int i = 0; i < cq_len / 3; i++) {
+    for (int i = 0; i < cq_len / 5; i++) {
         ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(e->ep(0), iov, iovcnt,
                                                      recvbuf.addr(),
                                                      recvbuf.rkey(), &comp));
@@ -133,6 +133,139 @@ UCS_TEST_P(test_rc_max_wr, send_limit)
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
+
+class test_rc_get_limit : public test_rc {
+public:
+    test_rc_get_limit() {
+        m_num_get_ops = 8;
+        modify_config("RC_TX_NUM_GET_OPS",
+                      ucs::to_string(m_num_get_ops).c_str());
+
+        m_max_get_zcopy = 4096;
+        modify_config("RC_MAX_GET_ZCOPY",
+                      ucs::to_string(m_max_get_zcopy).c_str());
+        modify_config("RC_TX_CQ_LEN", "32");
+
+        m_comp.count = 300000; // some big value to avoid func invocation
+        m_comp.func  = NULL;
+    }
+
+    void init() {
+        test_rc::init();
+        check_skip_test();
+    }
+
+    unsigned reads_available(entity *e) {
+        return rc_iface(e)->tx.reads_available;
+    }
+
+protected:
+    unsigned         m_num_get_ops;
+    unsigned         m_max_get_zcopy;
+    uct_completion_t m_comp;
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_ops_limit,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_BCOPY))
+{
+    mapped_buffer sendbuf(1024, 0ul, *m_e1);
+    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), m_e1->iface_attr().cap.get.max_iov);
+
+    ucs_status_t status_b, status_z, status_exp;
+
+
+    for (unsigned i = 0; i <= m_num_get_ops;) {
+       status_z = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
+                                  recvbuf.rkey(), &m_comp);
+       status_b = uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
+                                   sendbuf.ptr(), sendbuf.length(),
+                                   recvbuf.addr(), recvbuf.rkey(), &m_comp);
+       i += 2;
+       status_exp = (i > m_num_get_ops) ? UCS_ERR_NO_RESOURCE : UCS_INPROGRESS;
+       EXPECT_EQ(status_exp, status_z);
+       EXPECT_EQ(status_exp, status_b);
+    }
+    EXPECT_EQ(0u, reads_available(m_e1));
+
+    // Check that it is possible to add to pending if get returns NO_RESOURCE
+    // due to lack of get credits
+    uct_pending_req_t pend_req;
+    pend_req.func = NULL; // Make valgrind happy
+    EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
+    uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+}
+
+// Check that get function fails for messages bigger than MAX_GET_ZCOPY value
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_size_limit,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    EXPECT_EQ(m_max_get_zcopy, m_e1->iface_attr().cap.get.max_zcopy);
+
+    mapped_buffer buf(m_max_get_zcopy + 1, 0ul, *m_e1);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf.ptr(), buf.length(), buf.memh(),
+                            m_e1->iface_attr().cap.get.max_iov);
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucs_status_t status = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt,
+                                           buf.addr(), buf.rkey(), &m_comp);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+}
+
+// Check that get size value is trimmed by the actual maximum IB msg size
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, invalid_get_size,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    size_t max_ib_msg = uct_ib_iface_port_attr(&rc_iface(m_e1)->super)->max_msg_sz;
+
+    modify_config("RC_MAX_GET_ZCOPY", ucs::to_string(max_ib_msg + 1).c_str());
+
+    scoped_log_handler wrap_warn(hide_warns_logger);
+    entity *e = uct_test::create_entity(0);
+    m_entities.push_back(e);
+
+    EXPECT_EQ(m_max_get_zcopy, m_e1->iface_attr().cap.get.max_zcopy);
+}
+
+// Check that gets resource counter is not affected/changed when the get
+// function fails due to lack of some other resources.
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_AM_BCOPY))
+{
+    unsigned max_get_ops = reads_available(m_e1);
+    ucs_status_t status;
+
+    do {
+        status = send_am_message(m_e1, 0, 0);
+    } while (status == UCS_OK);
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+    EXPECT_EQ(max_get_ops, reads_available(m_e1));
+
+    mapped_buffer buf(1024, 0ul, *m_e1);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf.ptr(), buf.length(), buf.memh(),
+                            m_e1->iface_attr().cap.get.max_iov);
+
+    status = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, buf.addr(), buf.rkey(),
+                              &m_comp);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+    EXPECT_EQ(max_get_ops, reads_available(m_e1));
+
+    flush();
+}
+
+UCT_INSTANTIATE_RC_TEST_CASE(test_rc_get_limit)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
 
@@ -289,7 +422,7 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
     send_am_and_flush(m_e1, wnd);
 
     m_e2->destroy_ep(0);
-    ASSERT_TRUE(rc_iface(m_e2)->tx.arbiter.current == NULL);
+    ASSERT_TRUE(ucs_arbiter_is_empty(&rc_iface(m_e2)->tx.arbiter));
 }
 
 /* Check that user callback passed to uct_ep_pending_purge is not
@@ -369,3 +502,70 @@ UCS_TEST_P(test_rc_flow_control_stats, soft_request)
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control_stats)
 
 #endif
+
+#if HAVE_MLX5_HW
+extern "C" {
+#include <uct/ib/rc/accel/rc_mlx5_common.h>
+}
+#endif
+
+test_uct_iface_attrs::attr_map_t test_rc_iface_attrs::get_num_iov() {
+    if (has_transport("rc_mlx5")) {
+        return get_num_iov_mlx5_common(0ul);
+    } else {
+        EXPECT_TRUE(has_transport("rc_verbs"));
+        m_e->connect(0, *m_e, 0);
+        uct_rc_verbs_ep_t *ep = ucs_derived_of(m_e->ep(0), uct_rc_verbs_ep_t);
+        uint32_t max_sge;
+        ASSERT_UCS_OK(uct_ib_qp_max_send_sge(ep->qp, &max_sge));
+
+        attr_map_t iov_map;
+        iov_map["put"] = iov_map["get"] = max_sge;
+        iov_map["am"]  = max_sge - 1; // 1 iov reserved for am header
+        return iov_map;
+    }
+}
+
+test_uct_iface_attrs::attr_map_t
+test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
+{
+    attr_map_t iov_map;
+
+#if HAVE_MLX5_HW
+    // For RMA iovs can use all WQE space, remainig from control and
+    // remote address segments (and AV if relevant)
+    size_t rma_iov = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
+                      (sizeof(struct mlx5_wqe_raddr_seg) +
+                       sizeof(struct mlx5_wqe_ctrl_seg) + av_size)) /
+                     sizeof(struct mlx5_wqe_data_seg);
+
+    iov_map["put"] = iov_map["get"] = rma_iov;
+
+    // For am zcopy just small constant number of iovs is allowed
+    // (to preserve some inline space for AM zcopy header)
+    iov_map["am"]  = UCT_IB_MLX5_AM_ZCOPY_MAX_IOV;
+
+#if IBV_HW_TM
+    if (UCT_RC_MLX5_TM_ENABLED(ucs_derived_of(m_e->iface(),
+                                              uct_rc_mlx5_iface_common_t))) {
+        // For TAG eager zcopy iovs can use all WQE space, remainig from control
+        // segment, TMH header (+ inline data segment) and AV (if relevant)
+        iov_map["tag"] = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
+                          (sizeof(struct mlx5_wqe_ctrl_seg) +
+                           sizeof(struct mlx5_wqe_inl_data_seg) +
+                           sizeof(struct ibv_tmh) + av_size)) /
+                         sizeof(struct mlx5_wqe_data_seg);
+    }
+#endif // IBV_HW_TM
+#endif // HAVE_MLX5_HW
+
+    return iov_map;
+}
+
+UCS_TEST_P(test_rc_iface_attrs, iface_attrs)
+{
+    basic_iov_test();
+}
+
+UCT_INSTANTIATE_RC_TEST_CASE(test_rc_iface_attrs)
+

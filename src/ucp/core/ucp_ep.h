@@ -124,6 +124,9 @@ typedef struct ucp_ep_config_key {
     /* Lanes for high-bw memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_bw_lanes[UCP_MAX_LANES];
 
+    /* Lane for obtaining remote memory pointer */
+    ucp_lane_index_t       rkey_ptr_lane;
+
     /* Lanes for atomic operations, sorted by priority, highest first */
     ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
 
@@ -223,8 +226,8 @@ typedef struct ucp_ep_config {
     struct {
         /* Protocols used for tag matching operations
          * (can be AM based or tag offload). */
-        const ucp_proto_t   *proto;
-        const ucp_proto_t   *sync_proto;
+        const ucp_request_send_proto_t   *proto;
+        const ucp_request_send_proto_t   *sync_proto;
 
         /* Lane used for tag matching operations. */
         ucp_lane_index_t    lane;
@@ -251,8 +254,14 @@ typedef struct ucp_ep_config {
             size_t          am_thresh;
             /* Total size of packed rkey, according to high-bw md_map */
             size_t          rkey_size;
+            /* remote memory domains which support rkey_ptr */
+            ucp_md_map_t    rkey_ptr_dst_mds;
+            /* Lanes for GET zcopy */
+            ucp_lane_index_t get_zcopy_lanes[UCP_MAX_LANES];
+            /* Lanes for PUT zcopy */
+            ucp_lane_index_t put_zcopy_lanes[UCP_MAX_LANES];
             /* BW based scale factor */
-            double          scale[UCP_MAX_LANES];
+            double           scale[UCP_MAX_LANES];
         } rndv;
 
         /* special thresholds for the ucp_tag_send_nbr() */
@@ -277,13 +286,13 @@ typedef struct ucp_ep_config {
     struct {
         /* Protocols used for stream operations
          * (currently it's only AM based). */
-        const ucp_proto_t   *proto;
+        const ucp_request_send_proto_t   *proto;
     } stream;
     
     struct {
         /* Protocols used for am operations */
-        const ucp_proto_t *proto;
-        const ucp_proto_t *reply_proto;
+        const ucp_request_send_proto_t   *proto;
+        const ucp_request_send_proto_t   *reply_proto;
     } am_u;
 
 } ucp_ep_config_t;
@@ -386,7 +395,7 @@ enum {
 
 struct ucp_wireup_sockaddr_data {
     uintptr_t                 ep_ptr;        /**< Endpoint pointer */
-    ucp_err_handling_mode_t   err_mode;      /**< Error handling mode */
+    uint8_t                   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
                                                   UCP_WIREUP_SA_DATA_xx */
@@ -490,5 +499,11 @@ uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep);
 int ucp_ep_is_cm_local_connected(ucp_ep_h ep);
 
 unsigned ucp_ep_local_disconnect_progress(void *arg);
+
+size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
+
+void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
+
+int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
 
 #endif

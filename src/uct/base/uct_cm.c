@@ -51,6 +51,115 @@ ucs_status_t uct_cm_config_read(uct_component_h component,
     return UCS_OK;
 }
 
+ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
+                               const uct_cm_ep_priv_data_pack_args_t *pack_args,
+                               void *priv_data, size_t priv_data_max,
+                               size_t *priv_data_ret)
+{
+    ucs_status_t status = UCS_OK;
+    ssize_t ret;
+
+    ret = cep->priv_pack_cb(arg, pack_args, priv_data);
+    if (ret < 0) {
+        ucs_assert(ret > UCS_ERR_LAST);
+        status = (ucs_status_t)ret;
+        ucs_error("private data pack function failed with error: %s",
+                  ucs_status_string(status));
+        goto out;
+    } else if (ret > priv_data_max) {
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        ucs_error("private data pack function returned %zd (max: %zu)",
+                  ret, priv_data_max);
+        goto out;
+    }
+
+    *priv_data_ret = ret;
+out:
+    return status;
+}
+
+void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
+                                 uct_cm_remote_data_t *remote_data,
+                                 ucs_status_t status)
+{
+    uct_cm_ep_client_connect_args_t connect_args;
+
+    connect_args.field_mask  = UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_REMOTE_DATA |
+                               UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS;
+    connect_args.remote_data = remote_data;
+    connect_args.status      = status;
+
+    cep->client.connect_cb(&cep->super.super, cep->user_data, &connect_args);
+}
+
+void uct_cm_ep_server_connect_cb(uct_cm_base_ep_t *cep, ucs_status_t status)
+{
+    uct_cm_ep_server_connect_args_t connect_args;
+
+    connect_args.field_mask = UCT_CM_EP_SERVER_CONNECT_ARGS_FIELD_STATUS;
+    connect_args.status     = status;
+
+    cep->server.connect_cb(&cep->super.super, cep->user_data, &connect_args);
+}
+
+ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
+{
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
+        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
+                  params->field_mask);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ||
+        !(params->sockaddr_cb_flags & UCT_CB_FLAG_ASYNC)) {
+        ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS and UCT_CB_FLAG_ASYNC "
+                  "should be set. field_mask 0x%lx, sockaddr_cb_flags 0x%x",
+                  params->field_mask, params->sockaddr_cb_flags);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (!(params->field_mask & (UCT_EP_PARAM_FIELD_SOCKADDR |
+                                UCT_EP_PARAM_FIELD_CONN_REQUEST))) {
+        ucs_error("neither UCT_EP_PARAM_FIELD_SOCKADDR nor "
+                  "UCT_EP_PARAM_FIELD_CONN_REQUEST is set. field_mask 0x%lx",
+                  params->field_mask);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
+UCS_CLASS_INIT_FUNC(uct_cm_base_ep_t, const uct_ep_params_t *params)
+{
+    ucs_status_t status;
+
+    status = uct_cm_check_ep_params(params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &params->cm->iface);
+
+    self->priv_pack_cb      = (params->field_mask &
+                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
+                              params->sockaddr_pack_cb : NULL;
+    self->disconnect_cb     = (params->field_mask &
+                               UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB) ?
+                              params->disconnect_cb : NULL;
+    self->user_data         = (params->field_mask &
+                               UCT_EP_PARAM_FIELD_USER_DATA) ?
+                              params->user_data : NULL;
+
+    return UCS_OK;
+}
+
+UCS_CLASS_CLEANUP_FUNC(uct_cm_base_ep_t){}
+
+UCS_CLASS_DEFINE(uct_cm_base_ep_t, uct_base_ep_t);
+UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_base_ep_t, uct_base_ep_t, const uct_ep_params_t *);
+UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_base_ep_t, uct_base_ep_t);
+
+
 UCS_CLASS_INIT_FUNC(uct_listener_t, uct_cm_h cm)
 {
     self->cm = cm;

@@ -318,7 +318,8 @@ static inline int ucp_mem_map_is_allocate(ucp_mem_map_params_t *params)
 
 static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
                                        size_t length, unsigned uct_flags,
-                                       int is_allocate, ucp_mem_h *memh_p)
+                                       int is_allocate, const char *alloc_name,
+                                       ucp_mem_h *memh_p)
 {
     ucs_status_t            status;
     ucp_mem_h               memh;
@@ -336,9 +337,8 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
     memh->length  = length;
 
     if (is_allocate) {
-        ucs_debug("allocation user memory at %p length %zu", address, length);
-        status = ucp_mem_alloc(context, length, uct_flags,
-                               "user allocation", memh);
+        ucs_debug("allocating %s at %p length %zu", alloc_name, address, length);
+        status = ucp_mem_alloc(context, length, uct_flags, alloc_name, memh);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
@@ -348,7 +348,7 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
 
-        ucs_debug("registering user memory at %p length %zu mem_type %s",
+        ucs_debug("registering %s %p length %zu mem_type %s", alloc_name,
                   address, length, ucs_memory_type_names[memh->mem_type]);
         status = ucp_mem_rereg_mds(context, UCS_MASK(context->num_mds),
                                    memh->address, memh->length,
@@ -433,7 +433,8 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
 
     status = ucp_mem_map_common(context, mem_params.address, mem_params.length,
                                 ucp_mem_map_params2uct_flags(&mem_params),
-                                ucp_mem_map_is_allocate(&mem_params), memh_p);
+                                ucp_mem_map_is_allocate(&mem_params),
+                                "user memory", memh_p);
 out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
@@ -625,7 +626,7 @@ ucp_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **ch
     status = ucp_mem_map_common(worker->context, NULL,
                                 *size_p + sizeof(*chunk_hdr),
                                 ucp_mem_map_params2uct_flags(&mem_params),
-                                1, &memh);
+                                1, ucs_mpool_name(mp), &memh);
     if (status != UCS_OK) {
         goto out;
     }

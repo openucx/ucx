@@ -41,13 +41,14 @@ typedef struct ucp_wireup_atomic_flag {
 
 
 enum {
-    UCP_WIREUP_LANE_USAGE_AM     = UCS_BIT(0), /* Active messages */
-    UCP_WIREUP_LANE_USAGE_AM_BW  = UCS_BIT(1), /* High-BW active messages */
-    UCP_WIREUP_LANE_USAGE_RMA    = UCS_BIT(2), /* Remote memory access */
-    UCP_WIREUP_LANE_USAGE_RMA_BW = UCS_BIT(3), /* High-BW remote memory access */
-    UCP_WIREUP_LANE_USAGE_AMO    = UCS_BIT(4), /* Atomic memory access */
-    UCP_WIREUP_LANE_USAGE_TAG    = UCS_BIT(5), /* Tag matching offload */
-    UCP_WIREUP_LANE_USAGE_CM     = UCS_BIT(6)  /* CM wireup */
+    UCP_WIREUP_LANE_USAGE_AM       = UCS_BIT(0), /* Active messages */
+    UCP_WIREUP_LANE_USAGE_AM_BW    = UCS_BIT(1), /* High-BW active messages */
+    UCP_WIREUP_LANE_USAGE_RMA      = UCS_BIT(2), /* Remote memory access */
+    UCP_WIREUP_LANE_USAGE_RMA_BW   = UCS_BIT(3), /* High-BW remote memory access */
+    UCP_WIREUP_LANE_USAGE_RKEY_PTR = UCS_BIT(4), /* Obtain remote memory pointer */
+    UCP_WIREUP_LANE_USAGE_AMO      = UCS_BIT(5), /* Atomic memory access */
+    UCP_WIREUP_LANE_USAGE_TAG      = UCS_BIT(6), /* Tag matching offload */
+    UCP_WIREUP_LANE_USAGE_CM       = UCS_BIT(7)  /* CM wireup */
 };
 
 
@@ -55,7 +56,7 @@ typedef struct {
     ucp_rsc_index_t   rsc_index;
     unsigned          addr_index;
     ucp_lane_index_t  proxy_lane;
-    ucp_rsc_index_t   dst_md_index;
+    ucp_md_index_t    dst_md_index;
     uint32_t          usage;
     double            am_bw_score;
     double            rma_score;
@@ -459,7 +460,7 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
 
 static UCS_F_NOINLINE void
 ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
-                         ucp_rsc_index_t dst_md_index,
+                         ucp_md_index_t dst_md_index,
                          uint32_t usage, int is_proxy,
                          ucp_wireup_select_context_t *select_ctx)
 {
@@ -550,7 +551,7 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
                     uint32_t usage, ucp_wireup_select_context_t *select_ctx)
 {
     int is_proxy = 0;
-    ucp_rsc_index_t dst_md_index;
+    ucp_md_index_t dst_md_index;
     uint64_t remote_cap_flags;
 
     if (usage & (UCP_WIREUP_LANE_USAGE_AM |
@@ -618,8 +619,8 @@ ucp_wireup_unset_tl_by_md(const ucp_wireup_select_params_t *sparams,
     ucp_context_h context         = sparams->ep->worker->context;
     const ucp_address_entry_t *ae = &sparams->address->
                                         address_list[sinfo->addr_index];
-    ucp_rsc_index_t md_index      = context->tl_rscs[sinfo->rsc_index].md_index;
-    ucp_rsc_index_t dst_md_index  = ae->md_index;
+    ucp_md_index_t md_index       = context->tl_rscs[sinfo->rsc_index].md_index;
+    ucp_md_index_t dst_md_index   = ae->md_index;
     ucp_rsc_index_t i;
 
     *remote_md_map &= ~UCS_BIT(dst_md_index);
@@ -1003,12 +1004,6 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
     return size / time * 1e-5;
 }
 
-int ucp_wireup_is_rsc_self_or_shm(ucp_ep_h ep, ucp_rsc_index_t rsc_index)
-{
-    return (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SHM) ||
-           (ep->worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_SELF);
-}
-
 static unsigned
 ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
                         const ucp_wireup_select_bw_info_t *bw_info,
@@ -1051,13 +1046,6 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
         local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[sinfo.rsc_index].dev_index);
         ae                 = &select_params->address->address_list[sinfo.addr_index];
         remote_dev_bitmap &= ~UCS_BIT(ae->dev_index);
-
-        if (ucp_wireup_is_rsc_self_or_shm(ep, sinfo.rsc_index)) {
-            /* special case for SHM: do not try to lookup additional lanes when
-             * SHM transport detected (another transport will be significantly
-             * slower) */
-            break;
-        }
     }
 
     return num_lanes;
@@ -1116,13 +1104,8 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
             bw_info.local_dev_bitmap  &= ~UCS_BIT(context->tl_rscs[rsc_index].dev_index);
             bw_info.remote_dev_bitmap &= ~UCS_BIT(select_params->address->
                                                   address_list[addr_index].dev_index);
-            if (ucp_wireup_is_rsc_self_or_shm(ep, rsc_index)) {
-                /* if AM lane is SELF or SHMEM - then do not use more lanes */
-                return UCS_OK;
-            } else {
-                break; /* do not continue searching due to we found
-                          AM lane (and there is only one lane) */
-            }
+            break; /* do not continue searching due to we found
+                      AM lane (and there is only one lane) */
         }
     }
 
@@ -1161,27 +1144,26 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         UCP_RNDV_MODE_GET_ZCOPY,
         UCP_RNDV_MODE_PUT_ZCOPY
     };
-    size_t added_lanes;
     ucp_wireup_select_bw_info_t bw_info;
     ucs_memory_type_t mem_type;
+    size_t added_lanes;
+    uint64_t md_reg_flag;
     uint8_t i;
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
-        bw_info.criteria.remote_md_flags = 0;
-        bw_info.criteria.local_md_flags  = 0;
+        md_reg_flag = 0;
     } else if (ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) {
         /* if needed for RNDV, need only access for remote registered memory */
-        bw_info.criteria.remote_md_flags = UCT_MD_FLAG_REG;
-        bw_info.criteria.local_md_flags  = UCT_MD_FLAG_REG;
+        md_reg_flag = UCT_MD_FLAG_REG;
     } else {
         return UCS_OK;
     }
 
-    bw_info.criteria.title              = "high-bw remote memory access";
     bw_info.criteria.remote_iface_flags = 0;
     bw_info.criteria.local_iface_flags  = UCT_IFACE_FLAG_PENDING;
     bw_info.criteria.calc_score         = ucp_wireup_rma_bw_score_func;
     bw_info.criteria.tl_rsc_flags       = 0;
+    bw_info.criteria.remote_md_flags    = md_reg_flag;
     ucp_wireup_clean_amo_criteria(&bw_info.criteria);
     ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
 
@@ -1193,10 +1175,32 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.local_dev_bitmap  = UINT64_MAX;
     bw_info.remote_dev_bitmap = UINT64_MAX;
     bw_info.md_map            = 0;
-    bw_info.max_lanes         = context->config.ext.max_rndv_lanes;
-    bw_info.usage             = UCP_WIREUP_LANE_USAGE_RMA_BW;
+
+    /* check rkey_ptr */
+    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
+         (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO)) {
+
+        /* We require remote memory registration and local ability to obtain
+         * a pointer to the remote key. Only one is needed since we are doing
+         * memory copy on the CPU.
+         * Allow selecting additional lanes in case the remote memory will not be
+         * registered with this memory domain, i.e with GPU memory.
+         */
+        bw_info.usage                    = UCP_WIREUP_LANE_USAGE_RKEY_PTR;
+        bw_info.criteria.title           = "obtain remote memory pointer";
+        bw_info.criteria.local_md_flags  = UCT_MD_FLAG_RKEY_PTR;
+        bw_info.max_lanes                = 1;
+
+        ucp_wireup_add_bw_lanes(select_params, &bw_info,
+                                context->mem_type_access_tls[UCS_MEMORY_TYPE_HOST],
+                                select_ctx);
+    }
 
     /* First checked RNDV mode has to be a mode specified in config */
+    bw_info.usage                    = UCP_WIREUP_LANE_USAGE_RMA_BW;
+    bw_info.criteria.title           = "high-bw remote memory access";
+    bw_info.criteria.local_md_flags  = md_reg_flag;
+    bw_info.max_lanes                = context->config.ext.max_rndv_lanes;
     ucs_assert(rndv_modes[0] == context->config.ext.rndv_mode);
 
     /* RNDV protocol can't mix different schemes, i.e. wireup has to
@@ -1457,6 +1461,10 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         }
         if (select_ctx->lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RMA_BW) {
             key->rma_bw_lanes[lane] = lane;
+        }
+        if (select_ctx->lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_RKEY_PTR) {
+            ucs_assert(key->rkey_ptr_lane == UCP_NULL_LANE);
+            key->rkey_ptr_lane = lane;
         }
         if (select_ctx->lane_descs[lane].usage & UCP_WIREUP_LANE_USAGE_AMO) {
             key->amo_lanes[lane] = lane;

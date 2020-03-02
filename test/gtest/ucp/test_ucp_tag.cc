@@ -178,153 +178,158 @@ int test_ucp_tag::get_worker_index(int buf_index)
 }
 
 test_ucp_tag::request *
-test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                      ucp_tag_t tag, int buf_index)
+test_ucp_tag::send(entity &sender, send_type_t type, const void *buffer,
+                   size_t count, ucp_datatype_t datatype, ucp_tag_t tag,
+                   int buf_index)
 {
     int worker_index = get_worker_index(buf_index);
     request *req;
+    ucs_status_t status;
 
-    req = (request*)ucp_tag_send_nb(sender().ep(worker_index), buffer, count, datatype,
-                                    tag, send_callback);
-    if (UCS_PTR_IS_ERR(req)) {
-        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    switch (type) {
+    case SEND_B:
+    case SEND_NB:
+        req = (request*)ucp_tag_send_nb(sender.ep(worker_index), buffer, count,
+                                        datatype, tag, send_callback);
+        if ((req != NULL) && (type == SEND_B)) {
+            wait(req, get_worker_index(buf_index));
+            request_release(req);
+            return NULL;
+        }
+
+        if (UCS_PTR_IS_ERR(req)) {
+            ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+        }
+        break;
+    case SEND_NBR:
+        req = request_alloc();
+        status = ucp_tag_send_nbr(sender.ep(worker_index), buffer, count,
+                                  datatype, tag, req);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            request_free(req);
+            return (request*)UCS_STATUS_PTR(UCS_OK);
+        }
+        break;
+    case SEND_SYNC_NB:
+        return (request*)ucp_tag_send_sync_nb(sender.ep(worker_index), buffer,
+                                              count, datatype, tag, send_callback);
+    default:
+        return NULL;
     }
+
     return req;
 }
 
 test_ucp_tag::request *
-test_ucp_tag::send_nbr(const void *buffer, size_t count,
-                            ucp_datatype_t datatype,
-                            ucp_tag_t tag, int buf_index)
+test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
+                      ucp_tag_t tag, int buf_index)
 {
-    int worker_index = get_worker_index(buf_index);
-    ucs_status_t status;
-    request *req;
+    return send(sender(), SEND_NB, buffer, count, datatype, tag, buf_index);
+}
 
-    req = request_alloc();
-
-    status = ucp_tag_send_nbr(sender().ep(worker_index), buffer, count, datatype,
-                              tag, req);
-
-    ASSERT_UCS_OK_OR_INPROGRESS(status);
-    if (status == UCS_OK) {
-        request_free(req);
-        return (request *)UCS_STATUS_PTR(UCS_OK);
-    }
-    return req;
+test_ucp_tag::request *
+test_ucp_tag::send_nbr(const void *buffer, size_t count,
+                       ucp_datatype_t datatype,
+                       ucp_tag_t tag, int buf_index)
+{
+    return send(sender(), SEND_NBR, buffer, count, datatype, tag, buf_index);
 }
 
 
 void test_ucp_tag::send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
                           ucp_tag_t tag, int buf_index)
 {
-    request *req = send_nb(buffer, count, datatype, tag, buf_index);
-
-    if (req != NULL) {
-        wait(req, get_worker_index(buf_index));
-        request_release(req);
-    }
+    send(sender(), SEND_B, buffer, count, datatype, tag, buf_index);
 }
 
 test_ucp_tag::request *
 test_ucp_tag::send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
                            ucp_tag_t tag, int buf_index)
 {
-    int worker_index = get_worker_index(buf_index);
-
-    return (request*)ucp_tag_send_sync_nb(sender().ep(worker_index), buffer, count,
-                                          datatype, tag, send_callback);
+    return send(sender(), SEND_SYNC_NB, buffer, count, datatype, tag, buf_index);
 }
 
 test_ucp_tag::request*
-test_ucp_tag::recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
+test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
+                   size_t count, ucp_datatype_t datatype,
+                   ucp_tag_t tag, ucp_tag_t tag_mask,
+                   ucp_tag_recv_info_t *info, int buf_index)
+{
+    int worker_index = get_worker_index(buf_index);
+    request *req;
+    ucs_status_t status;
+
+    switch (type) {
+    case RECV_B:
+    case RECV_NB:
+        req = (request*)ucp_tag_recv_nb(receiver.worker(worker_index), buffer, count,
+                                        datatype, tag, tag_mask, recv_callback);
+        if (type == RECV_NB) {
+            if (UCS_PTR_IS_ERR(req)) {
+                ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+            } else if (req == NULL) {
+                UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
+            }
+        } else {
+            if (UCS_PTR_IS_ERR(req)) {
+                return req;
+            } else if (req == NULL) {
+                UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
+            } else {
+                wait(req, worker_index);
+                status = req->status;
+                *info  = req->info;
+                request_release(req);
+                return (request*)UCS_STATUS_PTR(status);
+            }
+        }
+        break;
+    case RECV_BR:
+    case RECV_NBR:
+        req = request_alloc();
+        status = ucp_tag_recv_nbr(receiver.worker(worker_index), buffer,
+                                  count, datatype, tag, tag_mask, req);
+        if (type == RECV_NBR) {
+            if (UCS_STATUS_IS_ERR(status)) {
+                UCS_TEST_ABORT("ucp_tag_recv_nb returned status " <<
+                               ucs_status_string(status));
+            }
+        } else {
+            if (!UCS_STATUS_IS_ERR(status)) {
+                wait(req, worker_index);
+                status = req->status;
+                *info  = req->info;
+                request_release(req);
+                return (request*)UCS_STATUS_PTR(status);
+            }
+        }
+        break;
+    default:
+        return NULL;
+    }
+
+    return req;
+}
+
+test_ucp_tag::request*
+test_ucp_tag::recv_nb(void *buffer, size_t count, ucp_datatype_t datatype,
                       ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index)
 {
-    return is_external_request() ?
-                    recv_req_nb(buffer, count, dt, tag, tag_mask, buf_index) :
-                    recv_cb_nb(buffer, count, dt, tag, tag_mask, buf_index);
-}
-
-test_ucp_tag::request*
-test_ucp_tag::recv_req_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                          ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index)
-{
-    request *req = request_alloc();
-    int worker_index = get_worker_index(buf_index);
-
-    ucs_status_t status = ucp_tag_recv_nbr(receiver().worker(worker_index), buffer, count,
-                                           dt, tag, tag_mask, req);
-    if ((status != UCS_OK) && (status != UCS_INPROGRESS)) {
-        UCS_TEST_ABORT("ucp_tag_recv_nb returned status " <<
-                       ucs_status_string(status));
-    }
-    return req;
-}
-
-test_ucp_tag::request*
-test_ucp_tag::recv_cb_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                         ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index)
-{
-    int worker_index = get_worker_index(buf_index);
-
-    request *req = (request*) ucp_tag_recv_nb(receiver().worker(worker_index), buffer, count,
-                                              dt, tag, tag_mask, recv_callback);
-    if (UCS_PTR_IS_ERR(req)) {
-        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
-    } else if (req == NULL) {
-        UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
-    }
-    return req;
+    recv_type_t type = is_external_request() ? RECV_NBR : RECV_NB;
+    return recv(receiver(), type, buffer, count, datatype,
+                tag, tag_mask, NULL, buf_index);
 }
 
 ucs_status_t
-test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t dt, ucp_tag_t tag,
-                     ucp_tag_t tag_mask, ucp_tag_recv_info_t *info, int buf_index)
+test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
+                     ucp_tag_t tag, ucp_tag_t tag_mask,
+                     ucp_tag_recv_info_t *info, int buf_index)
 {
-    return is_external_request() ?
-                    recv_req_b(buffer, count, dt, tag, tag_mask, info, buf_index) :
-                    recv_cb_b(buffer, count, dt, tag, tag_mask, info, buf_index);
-}
-
-ucs_status_t test_ucp_tag::recv_cb_b(void *buffer, size_t count, ucp_datatype_t datatype,
-                                     ucp_tag_t tag, ucp_tag_t tag_mask,
-                                     ucp_tag_recv_info_t *info, int buf_index)
-{
-    int worker_index = get_worker_index(buf_index);
-    ucs_status_t status;
-    request *req;
-
-    req = (request*)ucp_tag_recv_nb(receiver().worker(worker_index), buffer, count, datatype,
-                                    tag, tag_mask, recv_callback);
-    if (UCS_PTR_IS_ERR(req)) {
-        return UCS_PTR_STATUS(req);
-    } else if (req == NULL) {
-        UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
-    } else {
-        wait(req, worker_index);
-        status = req->status;
-        *info  = req->info;
-        request_release(req);
-        return status;
-    }
-}
-
-ucs_status_t test_ucp_tag::recv_req_b(void *buffer, size_t count, ucp_datatype_t datatype,
-                                      ucp_tag_t tag, ucp_tag_t tag_mask,
-                                      ucp_tag_recv_info_t *info, int buf_index)
-{
-    int worker_index = get_worker_index(buf_index);
-    request *req = request_alloc();
-
-    ucs_status_t status = ucp_tag_recv_nbr(receiver().worker(worker_index), buffer, count,
-                                           datatype, tag, tag_mask, req);
-    if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
-        wait(req, worker_index);
-        status = req->status;
-        *info  = req->info;
-    }
-    request_release(req);
-    return status;
+    recv_type_t type = is_external_request() ? RECV_BR : RECV_B;
+    request* req = recv(receiver(), type, buffer, count, datatype,
+                        tag, tag_mask, info, buf_index);
+    return UCS_PTR_STATUS(req);
 }
 
 bool test_ucp_tag::is_external_request()
@@ -381,6 +386,20 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_rndv_thresh_zero, "RNDV_THRESH=0
               ucp_ep_config(sender().ep())->tag.rndv_send_nbr.am_thresh);
     EXPECT_LE(max_short,
               ucp_ep_config(sender().ep())->tag.rndv_send_nbr.rma_thresh);
+
+    if (m_test_offload) {
+        // There is a lower bound for rndv threshold with tag offload. We should
+        // not send messages smaller than SW RNDV request size, because receiver
+        // may temporarily store this request in the user buffer (which will
+        // result in crash if the request does not fit user buffer).
+        size_t min_rndv = ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config(sender().ep()));
+
+        EXPECT_GT(min_rndv, 0ul); // min_rndv should be RTS size at least
+        EXPECT_GE(min_rndv,
+                  ucp_ep_config(sender().ep())->tag.rndv_send_nbr.am_thresh);
+        EXPECT_GE(min_rndv,
+                  ucp_ep_config(sender().ep())->tag.rndv_send_nbr.rma_thresh);
+    }
 }
 
 UCS_TEST_P(test_ucp_tag_limits, check_max_short_zcopy_thresh_zero, "ZCOPY_THRESH=0") {

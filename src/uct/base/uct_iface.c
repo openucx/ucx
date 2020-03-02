@@ -393,7 +393,8 @@ void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(*iface_attr));
 
-    iface_attr->max_num_eps = iface->config.max_num_eps;
+    iface_attr->max_num_eps   = iface->config.max_num_eps;
+    iface_attr->dev_num_paths = 1;
 }
 
 ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,

@@ -59,6 +59,17 @@ void ucs_iov_advance(struct iovec *iov, size_t iov_cnt,
  */
 size_t ucs_iov_get_max();
 
+/**
+ * Calculates the total length of the iov array buffers.
+ *
+ * @param [in]     iov            A pointer to an array of iovec elements.
+ * @param [in]     iov_cnt        A number of elements in a iov array.
+ *
+ * @return The amount, in bytes, of the data that is stored in the iov
+ *         array buffers.
+ */
+size_t ucs_iov_total_length(const struct iovec *iov, size_t iov_cnt);
+
 END_C_DECLS
 
 #endif

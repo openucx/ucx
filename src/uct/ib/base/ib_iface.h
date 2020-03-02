@@ -58,6 +58,17 @@ enum {
 #endif
 };
 
+
+/**
+ * IB address packing flags
+ */
+enum {
+    UCT_IB_ADDRESS_PACK_FLAG_ETH           = UCS_BIT(0),
+    UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID  = UCS_BIT(1),
+    UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2)
+};
+
+
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
 
@@ -92,7 +103,7 @@ struct uct_ib_iface_config {
     /* Change the address type */
     int                     addr_type;
 
-    /* Forice global routing */
+    /* Force global routing */
     int                     is_global;
 
     /* IB SL to use */
@@ -103,6 +114,12 @@ struct uct_ib_iface_config {
 
     /* IB hop limit / TTL */
     unsigned                hop_limit;
+
+    /* Number of paths to expose for the interface  */
+    unsigned long           num_paths;
+
+    /* Multiplier for RoCE LAG UDP source port calculation */
+    unsigned                roce_path_factor;
 
     /* Ranges of path bits */
     UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
@@ -164,40 +181,40 @@ struct uct_ib_iface_ops {
 
 
 struct uct_ib_iface {
-    uct_base_iface_t        super;
+    uct_base_iface_t          super;
 
-    struct ibv_cq           *cq[UCT_IB_DIR_NUM];
-    struct ibv_comp_channel *comp_channel;
-    uct_recv_desc_t         release_desc;
+    struct ibv_cq             *cq[UCT_IB_DIR_NUM];
+    struct ibv_comp_channel   *comp_channel;
+    uct_recv_desc_t           release_desc;
 
-    uint8_t                 *path_bits;
-    unsigned                path_bits_count;
-    uint16_t                pkey_index;
-    uint16_t                pkey_value;
-    uint8_t                 is_global_addr;
-    uint8_t                 addr_size;
-    union ibv_gid           gid;
+    uint8_t                   *path_bits;
+    unsigned                  path_bits_count;
+    unsigned                  num_paths;
+    uint16_t                  pkey_index;
+    uint16_t                  pkey_value;
+    uint8_t                   addr_size;
+    uct_ib_device_gid_info_t  gid_info;
 
     struct {
-        unsigned            rx_payload_offset;   /* offset from desc to payload */
-        unsigned            rx_hdr_offset;       /* offset from desc to network header */
-        unsigned            rx_headroom_offset;  /* offset from desc to user headroom */
-        unsigned            rx_max_batch;
-        unsigned            rx_max_poll;
-        unsigned            tx_max_poll;
-        unsigned            seg_size;
-        uint8_t             max_inl_resp;
-        uint8_t             port_num;
-        uint8_t             sl;
-        uint8_t             traffic_class;
-        uint8_t             hop_limit;
-        uint8_t             gid_index;           /* IB GID index to use  */
-        uint8_t             enable_res_domain;   /* Disable multiple resource domains */
-        uint8_t             qp_type;
-        size_t              max_iov;             /* Maximum buffers in IOV array */
+        unsigned              rx_payload_offset;   /* offset from desc to payload */
+        unsigned              rx_hdr_offset;       /* offset from desc to network header */
+        unsigned              rx_headroom_offset;  /* offset from desc to user headroom */
+        unsigned              rx_max_batch;
+        unsigned              rx_max_poll;
+        unsigned              tx_max_poll;
+        unsigned              seg_size;
+        unsigned              roce_path_factor;
+        uint8_t               max_inl_resp;
+        uint8_t               port_num;
+        uint8_t               sl;
+        uint8_t               traffic_class;
+        uint8_t               hop_limit;
+        uint8_t               enable_res_domain;   /* Disable multiple resource domains */
+        uint8_t               qp_type;
+        uint8_t               force_global_addr;
     } config;
 
-    uct_ib_iface_ops_t      *ops;
+    uct_ib_iface_ops_t        *ops;
 };
 
 
@@ -317,10 +334,14 @@ int uct_ib_iface_is_ib(uct_ib_iface_t *iface);
 
 
 /**
+ * Get the expected size of IB packed address.
+ *
+ * @param [in]  gid        GID address to pack.
+ * @param [in]  pack_flags Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx.
+ *
  * @return IB address size of the given link scope.
  */
-size_t uct_ib_address_size(const union ibv_gid *gid, uint8_t is_global_addr,
-                           int is_link_layer_eth);
+size_t uct_ib_address_size(const union ibv_gid *gid, unsigned pack_flags);
 
 
 /**
@@ -332,15 +353,19 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
 /**
  * Pack IB address.
  *
- * @param [in]  gid        GID address to pack.
- * @param [in]  lid        LID address to pack.
- * @param [in/out] ib_addr Filled with packed ib address. Size of the structure
- *                         must be at least what @ref uct_ib_address_size()
- *                         returns for the given scope.
+ * @param [in]  gid         GID address to pack.
+ * @param [in]  lid         LID address to pack.
+ * @param [in]  pack_flags  Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx.
+ * @param [in]  roce_info   RoCE version to pack in case of an Ethernet link layer.
+ * @param [in/out] ib_addr  Filled with packed ib address. Size of the structure
+ *                          must be at least what @ref uct_ib_address_size()
+ *                          returns for the given scope.
  */
 void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
-                         int is_link_layer_eth, uint8_t is_global_addr,
+                         unsigned pack_flags,
+                         const uct_ib_roce_version_info_t *roce_info,
                          uct_ib_address_t *ib_addr);
+
 
 
 /**
@@ -386,6 +411,22 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr);
 
+
+int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev);
+
+
+/**
+ * Select the IB gid index and RoCE version to use for a RoCE port.
+ *
+ * @param iface                 IB interface
+ * @param dev                   IB device.
+ * @param md_config_index       Gid index from the md configuration.
+ */
+ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
+                                             uct_ib_device_t *dev,
+                                             size_t md_config_index);
+
+
 static inline uct_ib_md_t* uct_ib_iface_md(uct_ib_iface_t *iface)
 {
     return ucs_derived_of(iface->super.md, uct_ib_md_t);
@@ -424,6 +465,16 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     struct ibv_ah **ah_p);
+
+void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
+                                            const union ibv_gid *gid,
+                                            unsigned path_index,
+                                            struct ibv_ah_attr *ah_attr);
+
+void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
+                                         const uct_ib_address_t *ib_addr,
+                                         unsigned path_index,
+                                         struct ibv_ah_attr *ah_attr);
 
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
@@ -500,64 +551,6 @@ size_t uct_ib_verbs_sge_fill_iov(struct ibv_sge *sge, const uct_iov_t *iov,
     }
 
     return sge_it;
-}
-
-
-static UCS_F_ALWAYS_INLINE
-size_t uct_ib_iface_get_max_iov(uct_ib_iface_t *iface)
-{
-    return iface->config.max_iov;
-}
-
-
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_set_max_iov(uct_ib_iface_t *iface, size_t max_iov)
-{
-    size_t min_iov_requested;
-
-    ucs_assert((ssize_t)max_iov > 0);
-
-    min_iov_requested = ucs_max(max_iov, 1UL); /* max_iov mustn't be 0 */
-    iface->config.max_iov = ucs_min(UCT_IB_MAX_IOV, min_iov_requested);
-}
-
-
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
-                                            const union ibv_gid *gid,
-                                            struct ibv_ah_attr *ah_attr)
-{
-    memset(ah_attr, 0, sizeof(*ah_attr));
-
-    ah_attr->sl                = iface->config.sl;
-    ah_attr->src_path_bits     = iface->path_bits[0];
-    ah_attr->dlid              = lid | iface->path_bits[0];
-    ah_attr->port_num          = iface->config.port_num;
-    ah_attr->grh.traffic_class = iface->config.traffic_class;
-
-    if (iface->is_global_addr ||
-        (iface->gid.global.subnet_prefix != gid->global.subnet_prefix)) {
-        ucs_assert_always(gid->global.interface_id != 0);
-        ah_attr->is_global      = 1;
-        ah_attr->grh.dgid       = *gid;
-        ah_attr->grh.sgid_index = iface->config.gid_index;
-        ah_attr->grh.hop_limit  = iface->config.hop_limit;
-    } else {
-        ah_attr->is_global      = 0;
-    }
-}
-
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
-                                         const uct_ib_address_t *ib_addr,
-                                         struct ibv_ah_attr *ah_attr)
-{
-    union ibv_gid  gid;
-    uint16_t       lid;
-
-    uct_ib_address_unpack(ib_addr, &lid, &gid);
-
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, ah_attr);
 }
 
 static UCS_F_ALWAYS_INLINE

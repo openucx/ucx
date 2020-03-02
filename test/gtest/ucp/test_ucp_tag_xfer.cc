@@ -33,7 +33,11 @@ public:
         enable_tag_mp_offload();
 
         if (RUNNING_ON_VALGRIND) {
-            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
+            // Alow using TM MP offload for messages with a size of at least
+            // 10000 bytes by setting HW TM segment size to 10 kB, since each
+            // packet in TM MP offload is MTU-size buffer (i.e., in most cases
+            // it is 4 kB segments)
+            m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "10k"));
             m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
         }
     }
@@ -588,6 +592,10 @@ UCS_TEST_P(test_ucp_tag_xfer, generic_unexp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, false, false);
 }
 
+UCS_TEST_P(test_ucp_tag_xfer, generic_unexp_truncated) {
+    test_xfer(&test_ucp_tag_xfer::test_xfer_generic, false, false, true);
+}
+
 UCS_TEST_P(test_ucp_tag_xfer, iov_exp) {
     test_xfer(&test_ucp_tag_xfer::test_xfer_iov, true, false, false);
 }
@@ -740,7 +748,7 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_sync_rndv_truncated,
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
-    test_run_xfer(true, true, true, false, false);
+    test_run_xfer(true, true, true, true, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_unexp_rndv, "RNDV_THRESH=1000",
@@ -760,7 +768,7 @@ UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_unexp_sync_rndv, "RNDV_THR
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_unexp_sync_rndv_truncated,
            "RNDV_THRESH=1000", "ZCOPY_THRESH=1248576") {
-    test_run_xfer(true, true, false, false, true);
+    test_run_xfer(true, true, false, true, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_contig_recv_contig_exp_rndv_probe, "RNDV_THRESH=1000",
@@ -790,7 +798,7 @@ UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_sync_rndv_truncated,
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
-    test_run_xfer(false, false, true, false, false);
+    test_run_xfer(false, false, true, true, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_rndv, "RNDV_THRESH=1000") {
@@ -807,7 +815,7 @@ UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_sync_rndv, "RNDV_T
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_unexp_sync_rndv_truncated,
            "RNDV_THRESH=1000") {
-    test_run_xfer(false, false, false, false, true);
+    test_run_xfer(false, false, false, true, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_generic_exp_rndv_probe, "RNDV_THRESH=1000") {
@@ -836,7 +844,7 @@ UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_sync_rndv_truncated,
     /* because ucp_tag_send_req return status (instead request) if send operation
      * completed immediately */
     skip_loopback();
-    test_run_xfer(false, true, true, false, false);
+    test_run_xfer(false, true, true, true, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_rndv, "RNDV_THRESH=1000") {
@@ -853,7 +861,7 @@ UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync_rndv, "RNDV_TH
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_unexp_sync_rndv_truncated,
            "RNDV_THRESH=1000") {
-    test_run_xfer(false, true, false, false, true);
+    test_run_xfer(false, true, false, true, true);
 }
 
 UCS_TEST_P(test_ucp_tag_xfer, send_generic_recv_contig_exp_rndv_probe, "RNDV_THRESH=1000") {

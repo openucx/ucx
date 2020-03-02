@@ -12,7 +12,6 @@
 
 #include "ucp_context.h"
 #include "ucp_request.h"
-#include <ucp/proto/proto.h>
 
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
@@ -100,7 +99,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which is equivalent to all UCT components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SOCKADDR_TLS_PRIORITY", "rdmacm,*",
+  {"SOCKADDR_TLS_PRIORITY", "rdmacm,sockcm",
    "Priority of sockaddr transports for client/server connection establishment.\n"
    "The '*' wildcard expands to all the available sockaddr transports.",
    ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -245,7 +244,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"MEMTYPE_CACHE", "y",
-   "Enable memory type(cuda) cache \n",
+   "Enable memory type (cuda/rocm) cache \n",
    ucs_offsetof(ucp_config_t, ctx.enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
 
   {"FLUSH_WORKER_EPS", "y",
@@ -526,7 +525,7 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
 }
 
 static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *md,
-                                           ucp_rsc_index_t md_index,
+                                           ucp_md_index_t md_index,
                                            const ucp_config_t *config,
                                            const uct_tl_resource_desc_t *resource,
                                            uint8_t rsc_flags, unsigned *num_resources_p,
@@ -560,7 +559,7 @@ static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *m
 }
 
 static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
-                                         ucp_rsc_index_t md_index,
+                                         ucp_md_index_t md_index,
                                          const ucp_config_t *config,
                                          unsigned *num_resources_p,
                                          ucs_string_set_t avail_devices[],
@@ -672,11 +671,11 @@ static void ucp_report_unavailable(const ucs_config_names_array_t* cfg,
 
     found = 0;
     for (i = 0; i < cfg->count; i++) {
-        if (!(mask & UCS_BIT(i)) && strcmp(cfg->names[i], UCP_RSC_CONFIG_ALL)) {
+        if (!(mask & UCS_BIT(i)) && strcmp(cfg->names[i], UCP_RSC_CONFIG_ALL) &&
+            !ucs_string_set_contains(avail_names, cfg->names[i])) {
             ucs_string_buffer_appendf(&unavail_strb, "%s'%s'",
-                                      found ? "," : "",
+                                      found++ ? "," : "",
                                       cfg->names[i]);
-            ++found;
         }
     }
 

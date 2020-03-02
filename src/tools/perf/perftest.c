@@ -282,6 +282,8 @@ static void print_header(struct perftest_context *ctx)
             printf("| API:          %-60s               |\n", test_api_str);
             printf("| Test:         %-60s               |\n", test->desc);
             printf("| Data layout:  %-60s               |\n", test_data_str);
+            printf("| Send memory:  %-60s               |\n", ucs_memory_type_names[ctx->params.send_mem_type]);
+            printf("| Recv memory:  %-60s               |\n", ucs_memory_type_names[ctx->params.recv_mem_type]);
             printf("| Message size: %-60zu               |\n", ucx_perf_get_message_size(&ctx->params));
         }
     }
@@ -330,6 +332,18 @@ static void print_test_name(struct perftest_context *ctx)
     }
 }
 
+static void print_memory_type_usage(void)
+{
+    ucs_memory_type_t it;
+    for (it = UCS_MEMORY_TYPE_HOST; it < UCS_MEMORY_TYPE_LAST; it++) {
+        if (ucx_perf_mem_type_allocators[it] != NULL) {
+            printf("                        %s - %s\n",
+                   ucs_memory_type_names[it],
+                   ucs_memory_type_descs[it]);
+        }
+    }
+}
+
 static void usage(const struct perftest_context *ctx, const char *program)
 {
     static const char* api_names[] = {
@@ -365,20 +379,9 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -s <size>      list of scatter-gather sizes for single message (%zu)\n",
                                 ctx->params.msg_size_list[0]);
     printf("                    for example: \"-s 16,48,8192,8192,14\"\n");
-    printf("     -m <mem type>  memory type of messages\n");
-    printf("                        host - system memory(default)\n");
-    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL) {
-        printf("                        cuda - NVIDIA GPU memory\n");
-    }
-    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL) {
-        printf("                        cuda-managed - NVIDIA GPU managed/unified memory\n");
-    }
-    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM] != NULL) {
-        printf("                        rocm - AMD/ROCm GPU memory\n");
-    }
-    if (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] != NULL) {
-        printf("                        rocm-managed - AMD/ROCm GPU managed memory\n");
-    }
+    printf("     -m <send mem type>[,<recv mem type>]\n");
+    printf("                    memory type of message for sender and receiver (host)\n");
+    print_memory_type_usage();
     printf("     -n <iters>     number of iterations to run (%ld)\n", ctx->params.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%zu)\n",
                                 ctx->params.warmup_iter);
@@ -460,6 +463,41 @@ static ucs_status_t parse_ucp_datatype_params(const char *optarg,
     return UCS_OK;
 }
 
+static ucs_status_t parse_mem_type(const char *optarg,
+                                   ucs_memory_type_t *mem_type)
+{
+    ucs_memory_type_t it;
+    for (it = UCS_MEMORY_TYPE_HOST; it < UCS_MEMORY_TYPE_LAST; it++) {
+        if(!strcmp(optarg, ucs_memory_type_names[it]) &&
+           (ucx_perf_mem_type_allocators[it] != NULL)) {
+            *mem_type = it;
+            return UCS_OK;
+        }
+    }
+    ucs_error("Unsupported memory type: \"%s\"", optarg);
+    return UCS_ERR_INVALID_PARAM;
+}
+
+static ucs_status_t parse_mem_type_params(const char *optarg,
+                                          ucs_memory_type_t *send_mem_type,
+                                          ucs_memory_type_t *recv_mem_type)
+{
+    const char *delim = ",";
+    char *token       = strtok((char*)optarg, delim);
+
+    if (UCS_OK != parse_mem_type(token, send_mem_type)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    token = strtok(NULL, delim);
+    if (NULL == token) {
+        *recv_mem_type = *send_mem_type;
+        return UCS_OK;
+    } else {
+        return parse_mem_type(token, recv_mem_type);
+    }
+}
+
 static ucs_status_t parse_message_sizes_params(const char *optarg,
                                                ucx_perf_params_t *params)
 {
@@ -523,7 +561,8 @@ static ucs_status_t init_test_params(ucx_perf_params_t *params)
     params->flags             = UCX_PERF_TEST_FLAG_VERBOSE;
     params->uct.fc_window     = UCT_PERF_TEST_MAX_FC_WINDOW;
     params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
-    params->mem_type          = UCS_MEMORY_TYPE_HOST;
+    params->send_mem_type     = UCS_MEMORY_TYPE_HOST;
+    params->recv_mem_type     = UCS_MEMORY_TYPE_HOST;
     params->msg_size_cnt      = 1;
     params->iov_stride        = 0;
     params->ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
@@ -668,29 +707,12 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         }
         return UCS_ERR_INVALID_PARAM;
     case 'm':
-        if (!strcmp(optarg, "host")) {
-            params->mem_type = UCS_MEMORY_TYPE_HOST;
-            return UCS_OK;
-        } else if (!strcmp(optarg, "cuda") &&
-                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA] != NULL)) {
-            params->mem_type = UCS_MEMORY_TYPE_CUDA;
-            return UCS_OK;
-        } else if (!strcmp(optarg, "cuda-managed") &&
-                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] != NULL)) {
-            params->mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
-            return UCS_OK;
-        } else if (!strcmp(optarg, "rocm") &&
-                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM] != NULL)) {
-            params->mem_type = UCS_MEMORY_TYPE_ROCM;
-            return UCS_OK;
-        } else if (!strcmp(optarg, "rocm-managed") &&
-                   (ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_ROCM_MANAGED] != NULL)) {
-            params->mem_type = UCS_MEMORY_TYPE_ROCM_MANAGED;
-            return UCS_OK;
+        if (UCS_OK != parse_mem_type_params(optarg,
+                                            &params->send_mem_type,
+                                            &params->recv_mem_type)) {
+            return UCS_ERR_INVALID_PARAM;
         }
-
-        ucs_error("Unsupported memory type: \"%s\"", optarg);
-        return UCS_ERR_INVALID_PARAM;
+        return UCS_OK;
     default:
        return UCS_ERR_INVALID_PARAM;
     }

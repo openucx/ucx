@@ -141,6 +141,7 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 }
 
 uct_test::uct_test() {
+    uct_component_attr_t component_attr = {0};
     ucs_status_t status;
     uct_md_attr_t md_attr;
     uct_md_h md;
@@ -159,7 +160,6 @@ uct_test::uct_test() {
         status = uct_md_iface_config_read(md, NULL, NULL, NULL, &m_iface_config);
     } else if (!strcmp(GetParam()->tl_name.c_str(), "sockaddr")) {
         m_iface_config = NULL;
-        return;
     } else {
         status = uct_md_iface_config_read(md, GetParam()->tl_name.c_str(), NULL,
                                           NULL, &m_iface_config);
@@ -167,9 +167,25 @@ uct_test::uct_test() {
 
     ASSERT_UCS_OK(status);
     uct_md_close(md);
+
+    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
+                                UCT_COMPONENT_ATTR_FIELD_FLAGS;
+    /* coverity[var_deref_model] */
+    status = uct_component_query(GetParam()->component, &component_attr);
+    ASSERT_UCS_OK(status);
+
+    if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
+        status = uct_cm_config_read(GetParam()->component, NULL, NULL, &m_cm_config);
+        ASSERT_UCS_OK(status);
+    } else {
+        m_cm_config = NULL;
+    }
 }
 
 uct_test::~uct_test() {
+    if (m_cm_config != NULL) {
+        uct_config_release(m_cm_config);
+    }
     if (m_iface_config != NULL) {
         uct_config_release(m_iface_config);
     }
@@ -470,20 +486,35 @@ bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
 
 void uct_test::modify_config(const std::string& name, const std::string& value,
                              bool optional) {
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
 
-    status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
-    if (status == UCS_ERR_NO_ELEM) {
-        status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
-        if (status == UCS_ERR_NO_ELEM) {
-            test_base::modify_config(name, value, optional);
-        } else if (status != UCS_OK) {
-            UCS_TEST_ABORT("Couldn't modify pd config parameter: " << name.c_str() <<
+    if (m_cm_config != NULL) {
+        status = uct_config_modify(m_cm_config, name.c_str(), value.c_str());
+        if (status == UCS_OK) {
+            return;
+        } else if (status != UCS_ERR_NO_ELEM) {
+            UCS_TEST_ABORT("Couldn't modify cm config parameter: " << name.c_str() <<
                            " to " << value.c_str() << ": " << ucs_status_string(status));
         }
+    }
 
+    if (m_iface_config != NULL) {
+        status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
+        if (status == UCS_OK) {
+            return;
+        } else if (status != UCS_ERR_NO_ELEM) {
+            UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
+                           " to " << value.c_str() << ": " << ucs_status_string(status));
+        }
+    }
+
+    ucs_assert(status == UCS_ERR_NO_ELEM);
+
+    status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
+    if (status == UCS_ERR_NO_ELEM) {
+        test_base::modify_config(name, value, optional);
     } else if (status != UCS_OK) {
-        UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
+        UCS_TEST_ABORT("Couldn't modify md config parameter: " << name.c_str() <<
                        " to " << value.c_str() << ": " << ucs_status_string(status));
     }
 }
@@ -494,15 +525,30 @@ bool uct_test::get_config(const std::string& name, std::string& value) const
     const size_t max = 1024;
 
     value.resize(max);
-    status = uct_config_get(m_iface_config, name.c_str(),
-                            const_cast<char *>(value.c_str()), max);
 
-    if (status == UCS_ERR_NO_ELEM) {
-        status = uct_config_get(m_md_config, name.c_str(),
+    if (m_cm_config != NULL) {
+        status = uct_config_get(m_cm_config, name.c_str(),
                                 const_cast<char *>(value.c_str()), max);
+        if (status == UCS_OK) {
+            return true;
+        }
     }
 
-    return (status == UCS_OK);
+    if (m_iface_config != NULL) {
+        status = uct_config_get(m_iface_config, name.c_str(),
+                                const_cast<char *>(value.c_str()), max);
+        if (status == UCS_OK) {
+            return true;
+        }
+    }
+
+    status = uct_config_get(m_md_config, name.c_str(),
+                            const_cast<char *>(value.c_str()), max);
+    if (status == UCS_OK) {
+        return true;
+    }
+
+    return false;
 }
 
 bool uct_test::has_transport(const std::string& tl_name) const {
@@ -568,7 +614,7 @@ uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
 }
 
 uct_test::entity* uct_test::create_entity() {
-    return new entity(*GetParam(), m_md_config);
+    return new entity(*GetParam(), m_md_config, m_cm_config);
 }
 
 const uct_test::entity& uct_test::ent(unsigned index) const {
@@ -695,11 +741,11 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
         if (ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr =
                 reinterpret_cast<struct sockaddr_in *>(ifa_addr);
-            addr->sin_port = ucs::get_port();
+            addr->sin_port = ntohs(ucs::get_port());
         } else {
             struct sockaddr_in6 *addr =
                 reinterpret_cast<struct sockaddr_in6 *>(ifa_addr);
-            addr->sin6_port = ucs::get_port();
+            addr->sin6_port = ntohs(ucs::get_port());
         }
     }
 
@@ -713,9 +759,9 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     max_conn_priv = 0;
 }
 
-uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
+uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
+                         uct_cm_config_t *cm_config) {
     ucs_status_t         status;
-    uct_cm_config_t      *cm_config;
     uct_component_attr_t comp_attr;
 
     memset(&m_iface_attr,   0, sizeof(m_iface_attr));
@@ -739,9 +785,6 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
     ASSERT_UCS_OK(status);
 
     if (comp_attr.flags & UCT_COMPONENT_FLAG_CM) {
-        status = uct_cm_config_read(resource.component, NULL, NULL, &cm_config);
-        ASSERT_UCS_OK(status);
-
         UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm, uct_cm_close, uct_cm_open,
                                resource.component, m_worker, cm_config);
 
@@ -750,7 +793,6 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
         ASSERT_UCS_OK(status);
 
         max_conn_priv = 0;
-        uct_config_release(cm_config);
     } else {
         UCS_TEST_SKIP_R(std::string("cm is not supported on component ") +
                         comp_attr.name );
@@ -999,8 +1041,9 @@ size_t uct_test::entity::priv_data_do_pack(void *priv_data)
     return priv_data_len;
 }
 
-ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,
-                                              void *priv_data)
+ssize_t uct_test::entity::server_priv_data_cb(void *arg,
+                                              const uct_cm_ep_priv_data_pack_args_t
+                                              *pack_args, void *priv_data)
 {
     const size_t priv_data_len = server_priv_data.length() + 1;
 
@@ -1011,8 +1054,8 @@ ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,
 void
 uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
                                       const ucs::sock_addr_storage &remote_addr,
-                                      uct_sockaddr_priv_pack_callback_t pack_cb,
-                                      uct_ep_client_connect_cb_t connect_cb,
+                                      uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                                      uct_cm_ep_client_connect_callback_t connect_cb,
                                       uct_ep_disconnect_cb_t disconnect_cb,
                                       void *user_data)
 {
@@ -1127,8 +1170,8 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
 void uct_test::entity::connect(unsigned index, entity& other,
                                unsigned other_index,
                                const ucs::sock_addr_storage &remote_addr,
-                               uct_sockaddr_priv_pack_callback_t pack_cb,
-                               uct_ep_client_connect_cb_t connect_cb,
+                               uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                               uct_cm_ep_client_connect_callback_t connect_cb,
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
 {
@@ -1153,7 +1196,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
 }
 
 void uct_test::entity::accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                              uct_ep_server_connect_cb_t connect_cb,
+                              uct_cm_ep_server_connect_callback_t connect_cb,
                               uct_ep_disconnect_cb_t disconnect_cb,
                               void *user_data)
 {
@@ -1210,11 +1253,11 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
         if (ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr =
                             reinterpret_cast<struct sockaddr_in *>(ifa_addr);
-            addr->sin_port = ucs::get_port();
+            addr->sin_port = ntohs(ucs::get_port());
         } else {
             struct sockaddr_in6 *addr =
                             reinterpret_cast<struct sockaddr_in6 *>(ifa_addr);
-            addr->sin6_port = ucs::get_port();
+            addr->sin6_port = ntohs(ucs::get_port());
         }
     }
 }
@@ -1375,3 +1418,31 @@ ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
         return (ucs_status_t)(res >= 0 ? UCS_OK : res);
     }
 }
+
+void test_uct_iface_attrs::init()
+{
+    uct_test::init();
+    m_e = uct_test::create_entity(0);
+    m_entities.push_back(m_e);
+}
+
+void test_uct_iface_attrs::basic_iov_test()
+{
+    attr_map_t max_iov_map = get_num_iov();
+
+    EXPECT_FALSE(max_iov_map.empty());
+
+    if (max_iov_map.find("am")  != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("am"), m_e->iface_attr().cap.am.max_iov);
+    }
+    if (max_iov_map.find("tag") != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("tag"), m_e->iface_attr().cap.tag.eager.max_iov);
+    }
+    if (max_iov_map.find("put") != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("put"), m_e->iface_attr().cap.put.max_iov);
+    }
+    if (max_iov_map.find("get") != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("get"), m_e->iface_attr().cap.get.max_iov);
+    }
+}
+

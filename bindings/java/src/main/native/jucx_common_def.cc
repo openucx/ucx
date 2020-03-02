@@ -21,6 +21,10 @@ static jfieldID native_id_field;
 static jfieldID recv_size_field;
 static jmethodID on_success;
 static jmethodID jucx_request_constructor;
+static jclass ucp_rkey_cls;
+static jmethodID ucp_rkey_cls_constructor;
+static jclass ucp_tag_msg_cls;
+static jmethodID ucp_tag_msg_cls_constructor;
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     ucs_debug_disable_signals();
@@ -38,6 +42,13 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
                                   "(Lorg/openucx/jucx/ucp/UcpRequest;)V");
     jucx_request_constructor = env->GetMethodID(jucx_request_cls, "<init>", "(J)V");
+
+    jclass ucp_rkey_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRemoteKey");
+    ucp_rkey_cls = (jclass) env->NewGlobalRef(ucp_rkey_cls_local);
+    ucp_rkey_cls_constructor = env->GetMethodID(ucp_rkey_cls, "<init>", "(J)V");
+    jclass ucp_tag_msg_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpTagMessage");
+    ucp_tag_msg_cls = (jclass) env->NewGlobalRef(ucp_tag_msg_cls_local);
+    ucp_tag_msg_cls_constructor = env->GetMethodID(ucp_tag_msg_cls, "<init>", "(JJJ)V");
     return JNI_VERSION_1_1;
 }
 
@@ -173,7 +184,12 @@ static inline void call_on_success(jobject callback, jobject request)
 
 static inline void call_on_error(jobject callback, ucs_status_t status)
 {
-    ucs_error("JUCX: send request error: %s", ucs_status_string(status));
+    if (status == UCS_ERR_CANCELED) {
+        ucs_debug("JUCX: Request canceled");
+    } else {
+        ucs_error("JUCX: request error: %s", ucs_status_string(status));
+    }
+
     JNIEnv *env = get_jni_env();
     jclass callback_cls = env->GetObjectClass(callback);
     jmethodID on_error = env->GetMethodID(callback_cls, "onError", "(ILjava/lang/String;)V");
@@ -225,6 +241,13 @@ void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info
     jucx_request_callback(request, status);
 }
 
+void stream_recv_callback(void *request, ucs_status_t status, size_t length)
+{
+    struct jucx_context *ctx = (struct jucx_context *)request;
+    ctx->length = length;
+    jucx_request_callback(request, status);
+}
+
 UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, jobject callback)
 {
     JNIEnv *env = get_jni_env();
@@ -252,6 +275,7 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
         }
         ucs_spin_unlock(&ctx->lock);
     } else {
+        set_jucx_request_completed(env, jucx_request, NULL);
         if (UCS_PTR_IS_ERR(request)) {
             JNU_ThrowExceptionByStatus(env, UCS_PTR_STATUS(request));
             if (callback != NULL) {
@@ -260,11 +284,21 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
         } else if (callback != NULL) {
             call_on_success(callback, jucx_request);
         }
-        set_jucx_request_completed(env, jucx_request, NULL);
     }
     return jucx_request;
 }
 
+jobject process_completed_stream_recv(size_t length, jobject callback)
+{
+    JNIEnv *env = get_jni_env();
+    jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor, NULL);
+    env->SetObjectField(jucx_request, native_id_field, NULL);
+    env->SetLongField(jucx_request, recv_size_field, length);
+    if (callback != NULL) {
+        jucx_call_callback(callback, jucx_request, UCS_OK);
+    }
+    return jucx_request;
+}
 
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
 {
@@ -284,4 +318,17 @@ void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
                                        "(Lorg/openucx/jucx/ucp/UcpConnectionRequest;)V");
     env->CallVoidMethod(jucx_conn_handler, on_conn_request, jucx_conn_request);
     env->DeleteGlobalRef(jucx_conn_handler);
+}
+
+
+jobject new_rkey_instance(JNIEnv *env, ucp_rkey_h rkey)
+{
+    return env->NewObject(ucp_rkey_cls, ucp_rkey_cls_constructor, (native_ptr)rkey);
+}
+
+jobject new_tag_msg_instance(JNIEnv *env, ucp_tag_message_h msg_tag,
+                             ucp_tag_recv_info_t *info_tag)
+{
+    return env->NewObject(ucp_tag_msg_cls, ucp_tag_msg_cls_constructor,
+                         (native_ptr)msg_tag, info_tag->length, info_tag->sender_tag);
 }

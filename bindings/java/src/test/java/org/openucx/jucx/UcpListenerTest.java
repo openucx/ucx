@@ -87,10 +87,10 @@ public class UcpListenerTest  extends UcxTest {
 
     @Test
     public void testConnectionHandler() {
-        UcpContext context1 = new UcpContext(new UcpParams().requestRmaFeature()
-            .requestTagFeature());
-        UcpContext context2 = new UcpContext(new UcpParams().requestRmaFeature()
-            .requestTagFeature());
+        UcpContext context1 = new UcpContext(new UcpParams().requestStreamFeature()
+            .requestRmaFeature());
+        UcpContext context2 = new UcpContext(new UcpParams().requestStreamFeature()
+            .requestRmaFeature());
         UcpWorker serverWorker1 = context1.newWorker(new UcpWorkerParams());
         UcpWorker serverWorker2 = context1.newWorker(new UcpWorkerParams());
         UcpWorker clientWorker = context2.newWorker(new UcpWorkerParams());
@@ -124,15 +124,28 @@ public class UcpListenerTest  extends UcxTest {
             } catch (Exception ignored) { }
         }
 
-        UcpRequest sent = serverToClient.sendTaggedNonBlocking(
+        UcpRequest sent = serverToClient.sendStreamNonBlocking(
             ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), null);
-        UcpRequest recv = clientWorker.recvTaggedNonBlocking(
-            ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), null);
+
+        // Progress all workers to make sure recv request will complete immediately
+        for (int i = 0; i < 10; i++) {
+            serverWorker1.progress();
+            serverWorker2.progress();
+            clientWorker.progress();
+            try {
+                Thread.sleep(2);
+            } catch (Exception ignored) { }
+        }
+
+        UcpRequest recv = clientToServer.recvStreamNonBlocking(
+            ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), 0, null);
 
         while (!sent.isCompleted() || !recv.isCompleted()) {
             serverWorker1.progress();
             clientWorker.progress();
         }
+
+        assertEquals(UcpMemoryTest.MEM_SIZE, recv.getRecvSize());
 
         Collections.addAll(resources, context2, context1, clientWorker, serverWorker1,
             serverWorker2, listener, serverToClient, clientToServer);

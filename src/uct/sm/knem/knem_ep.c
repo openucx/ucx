@@ -43,43 +43,42 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         size_t iovcnt, uint64_t remote_addr,
                                         uct_knem_key_t *key, int write)
 {
+    uct_knem_iface_t *knem_iface = ucs_derived_of(tl_ep->iface, uct_knem_iface_t);
+    int knem_fd                  = knem_iface->knem_md->knem_fd;
+    size_t knem_iov_it           = 0;
     struct knem_cmd_inline_copy icopy;
     struct knem_cmd_param_iovec knem_iov[UCT_SM_MAX_IOV];
-    uct_knem_iface_t *knem_iface = ucs_derived_of(tl_ep->iface, uct_knem_iface_t);
-    int knem_fd = knem_iface->knem_md->knem_fd;
     int rc;
     size_t iov_it;
-    size_t knem_iov_it = 0;
 
     for (iov_it = 0; iov_it < ucs_min(UCT_SM_MAX_IOV, iovcnt); ++iov_it) {
         knem_iov[knem_iov_it].base = (uintptr_t)iov[iov_it].buffer;
-        knem_iov[knem_iov_it].len = uct_iov_get_length(iov + iov_it);
-        if (knem_iov[knem_iov_it].len) {
+        knem_iov[knem_iov_it].len  = uct_iov_get_length(iov + iov_it);
+        /* Skip zero length buffers */
+        if (knem_iov[knem_iov_it].len != 0) {
             ++knem_iov_it;
-        } else {
-            continue; /* Skip zero length buffers */
         }
     }
 
     UCT_KNEM_ZERO_LENGTH_POST(knem_iov_it);
 
-    icopy.local_iovec_array = (uintptr_t) knem_iov;
-    icopy.local_iovec_nr = knem_iov_it;
-    icopy.remote_cookie = key->cookie;
+    icopy.local_iovec_array = (uintptr_t)knem_iov;
+    icopy.local_iovec_nr    = knem_iov_it;
+    icopy.remote_cookie     = key->cookie;
     ucs_assert(remote_addr >= key->address);
-    icopy.remote_offset = remote_addr - key->address;
-
-    icopy.write = write; /* if 0 then, READ from the remote region into my local segments
-                          * if 1 then, WRITE to the remote region from my local segment */
-    icopy.flags = 0;     /* TBD: add check and support for KNEM_FLAG_DMA */
-    icopy.current_status = 0;
-    icopy.async_status_index = 0;
-    icopy.pad = 0;
+    icopy.current_status    = 0;
+    icopy.remote_offset     = remote_addr - key->address;
+    /* if 0 then, READ from the remote region into my local segments
+     * if 1 then, WRITE to the remote region from my local segment */
+    icopy.write             = write;
+    /* TBD: add check and support for KNEM_FLAG_DMA */
+    icopy.flags             = 0;
 
     ucs_assert(knem_fd > -1);
     rc = ioctl(knem_fd, KNEM_CMD_INLINE_COPY, &icopy);
-    if (rc < 0) {
-        ucs_error("KNEM inline copy failed, err = %d %m", rc);
+    if (ucs_unlikely((rc < 0) || (icopy.current_status != KNEM_STATUS_SUCCESS))) {
+        ucs_error("KNEM inline copy failed, ioctl() return value - %d, "
+                  "copy status - %d: %m", rc, icopy.current_status);
         return UCS_ERR_IO_ERROR;
     }
 

@@ -211,11 +211,11 @@ enum ucp_mem_attr_field {
  * @brief UCP Worker
  *
  * UCP worker is an opaque object representing the communication context.  The
- * worker represents an instance of a local communication resource and progress
- * engine associated with it. Progress engine is a construct that is
- * responsible for asynchronous and independent progress of communication
- * directives. The progress engine could be implement in hardware or software.
- * The worker object abstract an instance of network resources such as a host
+ * worker represents an instance of a local communication resource and the
+ * progress engine associated with it. The progress engine is a construct that
+ * is responsible for asynchronous and independent progress of communication
+ * directives. The progress engine could be implemented in hardware or software.
+ * The worker object abstracts an instance of network resources such as a host
  * channel adapter port, network interface, or multiple resources such as
  * multiple network interfaces or communication ports. It could also represent
  * virtual communication resources that are defined across multiple devices.

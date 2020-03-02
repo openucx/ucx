@@ -14,6 +14,7 @@
 #  - JOB_URL           : jenkins job url
 #  - EXECUTOR_NUMBER   : number of executor within the test machine
 #  - JENKINS_RUN_TESTS : whether to run unit tests
+#  - RUN_TESTS         : same as JENKINS_RUN_TESTS, but for Azure
 #  - JENKINS_TEST_PERF : whether to validate performance
 #
 # Optional environment variables (could be set by job configuration):
@@ -44,7 +45,9 @@ fi
 
 
 #
-# Set affinity to 2 cores according to Jenkins executor number
+# Set affinity to 2 cores according to Jenkins executor number.
+# Affinity is inherited from agent in Azure CI.
+# TODO: remove or rename after CI migration.
 #
 if [ -n "$EXECUTOR_NUMBER" ] && [ -n "$JENKINS_RUN_TESTS" ]
 then
@@ -230,8 +233,12 @@ prepare() {
 	echo " ==== Prepare ===="
 	env
 	cd ${WORKSPACE}
+	if [ -d build-test ]
+	then
+		chmod u+rwx build-test -R
+		rm -rf build-test
+	fi
 	./autogen.sh
-	rm -rf build-test
 	mkdir -p build-test
 	cd build-test
 }
@@ -364,6 +371,11 @@ build_icc() {
 	then
 		echo "==== Build with Intel compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
+		$MAKEP clean
+		$MAKEP
+		$MAKEP distclean
+		echo "==== Build with Intel compiler (clang) ===="
+		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
 		$MAKEP clean
 		$MAKEP
 		$MAKEP distclean
@@ -946,6 +958,7 @@ run_ucx_perftest() {
 		if [ $with_mpi -eq 1 ]
 		then
 			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 -x UCX_TLS=self,sm,cuda_ipc,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
 			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
 		else
 			export UCX_TLS=self,shm,cma,cuda_copy
@@ -1172,6 +1185,7 @@ test_jucx() {
 	then
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
 		export JUCX_TEST_PORT=$jucx_port
+		export UCX_MEM_EVENTS=no
 		$MAKE -C bindings/java/src/main/native test
 	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
 		if [ -n "$ifaces" ]
@@ -1194,20 +1208,21 @@ test_jucx() {
 
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
                                 -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			         -cp "bindings/java/src/main/native/build-java/*" \
+			         -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
 				 org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
 				 s=$server_ip p=$JUCX_TEST_PORT &
                         java_pid=$!
 			 sleep 10
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
 				 -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			         -cp "bindings/java/src/main/native/build-java/*"  \
+			         -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*"  \
 				 org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
 				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
 			 wait $java_pid
 		done
 
 		unset JUCX_TEST_PORT
+		unset UCX_MEM_EVENTS
 		module unload dev/jdk
 		module unload dev/mvn
 		echo "ok 1 - jucx test" >> jucx_tests.tap
@@ -1537,7 +1552,7 @@ do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
 do_distributed_task 1 4 check_make_distcheck
 
-if [ -n "$JENKINS_RUN_TESTS" ]
+if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
 	run_tests
 fi

@@ -125,7 +125,8 @@ protected:
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
-        entity(const resource& resource, uct_md_config_t *md_config);
+        entity(const resource& resource, uct_md_config_t *md_config,
+               uct_cm_config_t *cm_config);
 
         void mem_alloc_host(size_t length, uct_allocated_memory_t *mem) const;
 
@@ -174,8 +175,8 @@ protected:
         void connect(unsigned index, entity& other, unsigned other_index);
         void connect(unsigned index, entity& other, unsigned other_index,
                      const ucs::sock_addr_storage &remote_addr,
-                     uct_sockaddr_priv_pack_callback_t pack_cb,
-                     uct_ep_client_connect_cb_t connect_cb,
+                     uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                     uct_cm_ep_client_connect_callback_t connect_cb,
                      uct_ep_disconnect_cb_t disconnect_cb,
                      void *user_data);
         void connect_to_iface(unsigned index, entity& other);
@@ -183,14 +184,14 @@ protected:
                            unsigned other_index);
         void connect_to_sockaddr(unsigned index, entity& other,
                                  const ucs::sock_addr_storage &remote_addr,
-                                 uct_sockaddr_priv_pack_callback_t pack_cb,
-                                 uct_ep_client_connect_cb_t connect_cb,
+                                 uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                                 uct_cm_ep_client_connect_callback_t connect_cb,
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_sata);
 
         static size_t priv_data_do_pack(void *priv_data);
         void accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                    uct_ep_server_connect_cb_t connect_cb,
+                    uct_cm_ep_server_connect_callback_t connect_cb,
                     uct_ep_disconnect_cb_t disconnect_cb,
                     void *user_data);
         void listen(const ucs::sock_addr_storage &listen_addr,
@@ -230,8 +231,9 @@ protected:
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
         void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
-        static ssize_t server_priv_data_cb(void *arg, const char *dev_name,
-                                           void *priv_data);
+        static ssize_t server_priv_data_cb(void *arg,
+                                           const uct_cm_ep_priv_data_pack_args_t
+                                           *pack_args, void *priv_data);
 
 
         const resource              m_resource;
@@ -378,9 +380,23 @@ protected:
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
     uct_md_config_t         *m_md_config;
+    uct_cm_config_t         *m_cm_config;
 };
 
 std::ostream& operator<<(std::ostream& os, const resource* resource);
+
+
+class test_uct_iface_attrs : public uct_test {
+public:
+    typedef std::map<std::string, size_t> attr_map_t;
+
+    void init();
+    virtual attr_map_t get_num_iov() = 0;
+    void basic_iov_test();
+
+protected:
+    entity *m_e;
+};
 
 
 #define UCT_TEST_IB_TLS \

@@ -228,7 +228,8 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 {
     ucp_worker_h          worker  = listener->worker;
     const ucp_rsc_index_t num_cms = ucp_worker_num_cm_cmpts(worker);
-    struct sockaddr       addr    = *params->sockaddr.addr;
+    struct sockaddr_storage addr_storage;
+    struct sockaddr       *addr;
     uct_listener_h        *uct_listeners;
     uct_listener_params_t uct_params;
     uct_listener_attr_t   uct_attr;
@@ -237,6 +238,12 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
     char                  addr_str[UCS_SOCKADDR_STRING_LEN];
     ucp_worker_cm_t       *ucp_cm;
     ucs_status_t          status;
+
+    addr = (struct sockaddr *)&addr_storage;
+    status = ucs_sockaddr_copy(addr, params->sockaddr.addr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     ucs_assert_always(num_cms > 0);
 
@@ -257,7 +264,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 
     for (i = 0; i < num_cms; ++i) {
         ucp_cm = &worker->cms[i];
-        status = uct_listener_create(ucp_cm->cm, &addr,
+        status = uct_listener_create(ucp_cm->cm, addr,
                                      params->sockaddr.addrlen, &uct_params,
                                      &uct_listeners[listener->num_rscs]);
         if (status != UCS_OK) {
@@ -272,7 +279,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 
         ++listener->num_rscs;
 
-        status = ucs_sockaddr_get_port(&addr, &port);
+        status = ucs_sockaddr_get_port(addr, &port);
         if (status != UCS_OK) {
             goto err_destroy_listeners;
         }
@@ -292,7 +299,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 
         if (port != uct_listen_port) {
             ucs_assert(port == 0);
-            status = ucs_sockaddr_set_port(&addr, uct_listen_port);
+            status = ucs_sockaddr_set_port(addr, uct_listen_port);
             if (status != UCS_OK) {
                 goto err_destroy_listeners;
             }
@@ -301,7 +308,7 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 
     if (listener->num_rscs > 0) {
         status = ucs_sockaddr_copy((struct sockaddr *)&listener->sockaddr,
-                                   (struct sockaddr *)&uct_attr.sockaddr);
+                                   addr);
         if (status != UCS_OK) {
             goto err_destroy_listeners;
         }
@@ -530,6 +537,7 @@ ucs_status_t ucp_listener_reject(ucp_listener_h listener,
 
     if (ucp_worker_sockaddr_is_cm_proto(worker)) {
         uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
+        ucs_free(conn_request->remote_dev_addr);
     } else {
         uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
     }

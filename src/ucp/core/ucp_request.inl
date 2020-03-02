@@ -353,21 +353,51 @@ ucp_request_send_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_send_buffer_reg_lane_check(ucp_request_t *req, ucp_lane_index_t lane,
+                                       ucp_md_map_t prev_md_map, unsigned uct_flags)
+{
+    ucp_md_map_t md_map;
+
+    if (!(ucp_ep_md_attr(req->send.ep,
+                         lane)->cap.flags & UCT_MD_FLAG_NEED_MEMH)) {
+        return UCS_OK;
+    }
+
+    ucs_assert(ucp_ep_md_attr(req->send.ep,
+                              lane)->cap.flags & UCT_MD_FLAG_REG);
+    md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane)) | prev_md_map;
+    return ucp_request_send_buffer_reg(req, md_map, uct_flags);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_send_buffer_reg_lane(ucp_request_t *req, ucp_lane_index_t lane,
                                  unsigned uct_flags)
 {
-    ucp_md_map_t md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane));
-    return ucp_request_send_buffer_reg(req, md_map, uct_flags);
+    return ucp_request_send_buffer_reg_lane_check(req, lane, 0, uct_flags);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_send_request_add_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
 {
-    /* add new lane to registration map */
-    ucp_md_map_t md_map = UCS_BIT(ucp_ep_md_index(req->send.ep, lane)) |
-                          req->send.state.dt.dt.contig.md_map;
+    /* Add new lane to registration map */
+    ucp_md_map_t md_map;
+
+    if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
+        md_map = req->send.state.dt.dt.contig.md_map;
+    } else if (UCP_DT_IS_IOV(req->send.datatype) &&
+               (req->send.state.dt.dt.iov.dt_reg != NULL)) {
+        /* dt_reg can be NULL if underlying UCT TL doesn't require
+         * memory handle for for local AM/GET/PUT operations
+         * (i.e. UCT_MD_FLAG_NEED_MEMH is not set) */
+        /* Can use the first DT registration element, since
+         * they have the same MD maps */
+        md_map = req->send.state.dt.dt.iov.dt_reg[0].md_map;
+    } else {
+        md_map = 0;
+    }
+
     ucs_assert(ucs_popcount(md_map) <= UCP_MAX_OP_MDS);
-    return ucp_request_send_buffer_reg(req, md_map, 0);
+    return ucp_request_send_buffer_reg_lane_check(req, lane, md_map, 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -532,22 +562,22 @@ ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
 }
 
 static UCS_F_ALWAYS_INLINE ucp_lane_index_t
-ucp_send_request_get_next_am_bw_lane(ucp_request_t *req)
+ucp_send_request_get_am_bw_lane(ucp_request_t *req)
 {
     ucp_lane_index_t lane;
 
-    /* at least one lane must be initialized */
-    ucs_assert(ucp_ep_config(req->send.ep)->key.am_bw_lanes[0] != UCP_NULL_LANE);
+    lane = ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index];
+    ucs_assert(lane != UCP_NULL_LANE);
+    return lane;
+}
 
-    lane = (req->send.tag.am_bw_index >= UCP_MAX_LANES) ?
-           UCP_NULL_LANE :
-           ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index];
-    if (lane != UCP_NULL_LANE) {
-        req->send.tag.am_bw_index++;
-        return lane;
-    } else {
-        req->send.tag.am_bw_index = 1;
-        return ucp_ep_config(req->send.ep)->key.am_bw_lanes[0];
+static UCS_F_ALWAYS_INLINE void
+ucp_send_request_next_am_bw_lane(ucp_request_t *req)
+{
+    ++req->send.tag.am_bw_index;
+    if ((req->send.tag.am_bw_index >= UCP_MAX_LANES) ||
+        (ucp_ep_config(req->send.ep)->key.am_bw_lanes[req->send.tag.am_bw_index] == UCP_NULL_LANE)) {
+        req->send.tag.am_bw_index = 0;
     }
 }
 

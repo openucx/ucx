@@ -7,6 +7,9 @@ package org.openucx.jucx.ucp;
 
 import org.openucx.jucx.UcxParams;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Tuning parameters for UCP library.
  * The structure defines the parameters that are used for
@@ -34,6 +37,8 @@ public class UcpParams extends UcxParams {
 
     private long estimatedNumEps;
 
+    private Map<String, String> config;
+
     @Override
     public UcpParams clear() {
         super.clear();
@@ -41,6 +46,7 @@ public class UcpParams extends UcxParams {
         tagSenderMask = 0L;
         mtWorkersShared = false;
         estimatedNumEps = 0L;
+        config = null;
         return this;
     }
 
@@ -138,6 +144,17 @@ public class UcpParams extends UcxParams {
     public UcpParams requestStreamFeature() {
         this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_FEATURES;
         this.features |= UcpConstants.UCP_FEATURE_STREAM;
+        return this;
+    }
+
+    /**
+     * The routine sets runtime UCP library configuration.
+     */
+    public UcpParams setConfig(String key, String value) {
+        if (config == null) {
+            config = new HashMap<>();
+        }
+        config.put(key, value);
         return this;
     }
 }

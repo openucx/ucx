@@ -72,9 +72,14 @@ JNIEnv* get_jni_env();
 void jucx_request_callback(void *request, ucs_status_t status);
 
 /**
- * @brief Recv callback used to invoke java callback class on completion of ucp recv_nb operation.
+ * @brief Recv callback used to invoke java callback class on completion of ucp tag_recv_nb operation.
  */
 void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info);
+
+/**
+ * @brief Recv callback used to invoke java callback class on completion of ucp stream_recv_nb operation.
+ */
+void stream_recv_callback(void *request, ucs_status_t status, size_t length);
 
 /**
  * @brief Utility to process request logic: if request is pointer - set callback to request context.
@@ -83,6 +88,22 @@ void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info
  */
 jobject process_request(void *request, jobject callback);
 
+/**
+ * @brief Call java callback on completed stream recv operation, that didn't invoke callback.
+ */
+jobject process_completed_stream_recv(size_t length, jobject callback);
+
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg);
+
+/**
+ * @brief Creates new jucx rkey class.
+ */
+jobject new_rkey_instance(JNIEnv *env, ucp_rkey_h rkey);
+
+/**
+ * @brief Creates new jucx tag_msg class.
+ */
+jobject new_tag_msg_instance(JNIEnv *env, ucp_tag_message_h msg_tag,
+                             ucp_tag_recv_info_t *info_tag);
 
 #endif

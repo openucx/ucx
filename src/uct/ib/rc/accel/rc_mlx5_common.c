@@ -23,7 +23,7 @@ static const char *uct_rc_mlx5_srq_topo_names[] = {
 
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
-  {"IB_", "", NULL,
+  {UCT_IB_CONFIG_PREFIX, "", NULL,
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ib_mlx5_iface_config_table)},
 
@@ -227,7 +227,7 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     }
 
     ah_attr.is_global     = 1;
-    ah_attr.grh.dgid      = iface->super.super.gid;
+    ah_attr.grh.dgid      = iface->super.super.gid_info.gid;
     ah_attr.dlid          = uct_ib_device_port_attr(dev, attr.port)->lid;
     ah_attr.port_num      = dev->first_port;
     status = uct_rc_mlx5_iface_common_devx_connect_qp(
@@ -297,7 +297,7 @@ uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_attr.ah_attr.port_num         = port_num;
     qp_attr.ah_attr.dlid             = port_attr->lid;
     qp_attr.ah_attr.is_global        = 1;
-    qp_attr.ah_attr.grh.dgid         = iface->super.super.gid;
+    qp_attr.ah_attr.grh.dgid         = iface->super.super.gid_info.gid;
     ret = ibv_modify_qp(qp, &qp_attr,
                         IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN |
                         IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER);
@@ -841,7 +841,7 @@ void uct_rc_mlx5_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 
 static void uct_rc_mlx5_tag_query(uct_rc_mlx5_iface_common_t *iface,
                                   uct_iface_attr_t *iface_attr,
-                                  size_t max_inline, size_t max_iov)
+                                  size_t max_inline, size_t max_tag_eager_iov)
 {
 #if IBV_HW_TM
     unsigned eager_hdr_size = sizeof(struct ibv_tmh);
@@ -871,7 +871,7 @@ static void uct_rc_mlx5_tag_query(uct_rc_mlx5_iface_common_t *iface,
     iface_attr->cap.tag.recv.max_iov         = 1;
     iface_attr->cap.tag.recv.min_recv        = 0;
     iface_attr->cap.tag.recv.max_outstanding = iface->tm.num_tags;
-    iface_attr->cap.tag.eager.max_iov        = max_iov;
+    iface_attr->cap.tag.eager.max_iov        = max_tag_eager_iov;
     iface_attr->cap.tag.eager.max_bcopy      = iface->tm.max_bcopy - eager_hdr_size;
     iface_attr->cap.tag.eager.max_zcopy      = iface->tm.max_zcopy - eager_hdr_size;
 #endif
@@ -918,7 +918,7 @@ void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
 
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                     uct_iface_attr_t *iface_attr,
-                                    size_t max_inline, size_t av_size)
+                                    size_t max_inline, size_t max_tag_eager_iov)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
                                                        uct_rc_mlx5_iface_common_t);
@@ -981,11 +981,10 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     }
 
     /* Software overhead */
-    iface_attr->overhead          = 40e-9;
+    iface_attr->overhead = 40e-9;
 
     /* Tag Offload */
-    uct_rc_mlx5_tag_query(iface, iface_attr, max_inline,
-                          UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(av_size));
+    uct_rc_mlx5_tag_query(iface, iface_attr, max_inline, max_tag_eager_iov);
 }
 
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,

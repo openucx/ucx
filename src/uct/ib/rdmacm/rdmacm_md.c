@@ -242,7 +242,7 @@ uct_component_t uct_rdmacm_component = {
     .name               = "rdmacm",
     .md_config          = {
         .name           = "RDMA-CM memory domain",
-        .prefix         =  "IB_",
+        .prefix         = "RDMACM_",
         .table          = uct_rdmacm_md_config_table,
         .size           = sizeof(uct_rdmacm_md_config_t),
     },

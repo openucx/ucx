@@ -36,6 +36,8 @@
   </scm>
 
   <properties>
+    <gpg.defaultKeyring>false</gpg.defaultKeyring>
+    <gpg.passphrase>${env.GPG_PASSPHRASE}</gpg.passphrase>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <ucx.src.dir>@abs_top_srcdir@/src</ucx.src.dir>
     <jucx.src.dir>${ucx.src.dir}/../bindings/java</jucx.src.dir>
@@ -45,7 +47,6 @@
     <ucs.lib.path>${ucx.build.dir}/src/ucs/.libs</ucs.lib.path>
     <uct.lib.path>${ucx.build.dir}/src/uct/.libs</uct.lib.path>
     <ucp.lib.path>${ucx.build.dir}/src/ucp/.libs</ucp.lib.path>
-    <ucx.inst.dir>@(DESTDIR)@/@libdir@</ucx.inst.dir>
     <junit.version>4.12</junit.version>
     <sources>**/jucx/**</sources>
     <skipCopy>false</skipCopy>
@@ -80,6 +81,65 @@
     </repository>
   </distributionManagement>
 
+  <repositories>
+    <repository>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <!--
+        This is used as a fallback when the first try fails.
+      -->
+      <id>central</id>
+      <name>Maven Repository</name>
+      <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
+    <pluginRepository>
+      <id>central</id>
+      <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
+  </pluginRepositories>
+
   <dependencies>
     <dependency>
       <groupId>junit</groupId>
@@ -105,7 +165,7 @@
       <resource>
         <directory>resources</directory>
         <includes>
-          <include>**/*</include>
+          <include>libjucx.so</include>
         </includes>
       </resource>
     </resources>
@@ -130,6 +190,12 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-gpg-plugin</artifactId>
         <version>1.6</version>
+        <configuration>
+          <gpgArguments>
+            <arg>--pinentry-mode</arg>
+            <arg>loopback</arg>
+          </gpgArguments>
+        </configuration>
         <executions>
           <execution>
             <id>sign-artifacts</id>
@@ -146,6 +212,10 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.1</version>
         <configuration>
+          <compilerArgs>
+            <arg>-h</arg>
+            <arg>${native.dir}</arg>
+          </compilerArgs>
           <source>1.8</source>
           <target>1.8</target>
           <includes>
@@ -194,12 +264,6 @@
               <outputDirectory>${basedir}/resources</outputDirectory>
               <resources>
                 <resource>
-                  <directory>${ucx.inst.dir}</directory>
-                  <includes>
-                    <include>**/*.so</include>
-                  </includes>
-                </resource>
-                <resource>
                   <directory>${native.dir}/.libs</directory>
                   <includes>
                     <include>**/*.so</include>
@@ -238,12 +302,12 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.0.0</version>
+        <version>3.1.0</version>
         <dependencies>
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.18</version>
+            <version>8.29</version>
           </dependency>
         </dependencies>
         <executions>
@@ -264,32 +328,6 @@
             </goals>
           </execution>
         </executions>
-      </plugin>
-
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>native-maven-plugin</artifactId>
-        <version>1.0-alpha-9</version>
-        <extensions>true</extensions>
-        <configuration>
-          <javahOutputDirectory>${native.dir}</javahOutputDirectory>
-          <javahClassNames>
-            <javahClassName>org.openucx.jucx.ucp.UcpConstants</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpContext</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpEndpoint</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpListener</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpMemory</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpRequest</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpRemoteKey</javahClassName>
-            <javahClassName>org.openucx.jucx.ucp.UcpWorker</javahClassName>
-            <javahClassName>org.openucx.jucx.ucs.UcsConstants</javahClassName>
-          </javahClassNames>
-          <sources>
-            <source>
-              <directory>${jucx.src.dir}/src/main/native</directory>
-            </source>
-          </sources>
-        </configuration>
       </plugin>
 
       <plugin>

@@ -73,8 +73,9 @@ struct ucp_address_entry {
     ucp_address_entry_ep_addr_t ep_addrs[UCP_MAX_LANES]; /* Endpoint addresses */
     ucp_address_iface_attr_t    iface_attr;     /* Interface attributes information */
     uint64_t                    md_flags;       /* MD reg/alloc flags */
+    unsigned                    dev_num_paths;  /* Number of paths on the device */
     uint16_t                    tl_name_csum;   /* Checksum of transport name */
-    ucp_rsc_index_t             md_index;       /* Memory domain index */
+    ucp_md_index_t              md_index;       /* Memory domain index */
     ucp_rsc_index_t             dev_index;      /* Device index */
 };
 

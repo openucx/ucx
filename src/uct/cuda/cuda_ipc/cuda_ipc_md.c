@@ -66,14 +66,14 @@ static inline void uct_cuda_ipc_uuid_copy(CUuuid* dst, const CUuuid* src)
     *b   = *a;
 }
 
-static ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
-                                                           uct_cuda_ipc_md_t* md,
-                                                           CUuuid* uuid)
+ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
+                                                    uct_cuda_ipc_md_t* md,
+                                                    uct_cuda_ipc_key_t *rkey)
 {
     int i;
 
     for (i = 0; i < md->uuid_map_size; i++) {
-        if (uct_cuda_ipc_uuid_equals(uuid, &md->uuid_map[i])) {
+        if (uct_cuda_ipc_uuid_equals(&rkey->uuid, &md->uuid_map[i])) {
             *idx = i;
             return UCS_OK; /* found */
         }
@@ -108,7 +108,7 @@ static ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
     }
 
     /* Add new mapping */
-    uct_cuda_ipc_uuid_copy(&md->uuid_map[md->uuid_map_size], uuid);
+    uct_cuda_ipc_uuid_copy(&md->uuid_map[md->uuid_map_size], &rkey->uuid);
     *idx = md->uuid_map_size++;
 
     return UCS_OK;
@@ -123,10 +123,15 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
     int num_devices;
     char* accessible;
 
-    status = uct_cuda_ipc_get_unique_index_for_uuid(&peer_idx, mdc->md, &rkey->uuid);
+    status = uct_cuda_ipc_get_unique_index_for_uuid(&peer_idx, mdc->md, rkey);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
+
+    /* overwrite dev_num with a unique ID; this means that relative remote
+     * device number of multiple peers do not map on the same stream and reduces
+     * stream sequentialization */
+    rkey->dev_num = peer_idx;
 
     UCT_CUDA_IPC_GET_DEVICE(this_device);
     UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);

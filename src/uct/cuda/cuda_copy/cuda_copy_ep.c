@@ -97,6 +97,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_zcopy,
                                                 iov[0].length, cudaMemcpyDeviceToHost,
                                                 iface->stream_d2h,
                                                 &iface->outstanding_d2h_cuda_event_q, comp);
+    if (!UCS_STATUS_IS_ERR(status)) {
+        VALGRIND_MAKE_MEM_DEFINED(iov[0].buffer, iov[0].length);
+    }
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));

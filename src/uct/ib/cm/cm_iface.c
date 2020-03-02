@@ -20,7 +20,7 @@
 
 
 static ucs_config_field_t uct_cm_iface_config_table[] = {
-  {"IB_", "RX_INLINE=0", NULL,
+  {UCT_IB_CONFIG_PREFIX, "RX_INLINE=0", NULL,
    ucs_offsetof(uct_cm_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
   {"TIMEOUT", "300ms", "Timeout for MAD layer",

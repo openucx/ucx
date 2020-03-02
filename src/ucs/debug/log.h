@@ -29,7 +29,7 @@ BEGIN_C_DECLS
 #define ucs_log(_level, _fmt, ...) \
     do { \
         if (ucs_log_is_enabled(_level)) { \
-            ucs_log_dispatch(__FILE__, __LINE__, __FUNCTION__, \
+            ucs_log_dispatch(__FILE__, __LINE__, __func__, \
                              (ucs_log_level_t)(_level), _fmt, ## __VA_ARGS__); \
         } \
     } while (0)
@@ -37,6 +37,7 @@ BEGIN_C_DECLS
 
 #define ucs_error(_fmt, ...)        ucs_log(UCS_LOG_LEVEL_ERROR, _fmt, ## __VA_ARGS__)
 #define ucs_warn(_fmt, ...)         ucs_log(UCS_LOG_LEVEL_WARN, _fmt,  ## __VA_ARGS__)
+#define ucs_diag(_fmt, ...)         ucs_log(UCS_LOG_LEVEL_DIAG, _fmt,  ## __VA_ARGS__)
 #define ucs_info(_fmt, ...)         ucs_log(UCS_LOG_LEVEL_INFO, _fmt, ## __VA_ARGS__)
 #define ucs_debug(_fmt, ...)        ucs_log(UCS_LOG_LEVEL_DEBUG, _fmt, ##  __VA_ARGS__)
 #define ucs_trace(_fmt, ...)        ucs_log(UCS_LOG_LEVEL_TRACE, _fmt, ## __VA_ARGS__)

@@ -49,7 +49,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                  const ucp_ep_msg_config_t* msg_config,
                  size_t rndv_rma_thresh, size_t rndv_am_thresh,
-                 ucp_send_callback_t cb, const ucp_proto_t *proto,
+                 ucp_send_callback_t cb, const ucp_request_send_proto_t *proto,
                  int enable_zcopy)
 {
     size_t rndv_thresh  = ucp_tag_get_rndv_threshold(req, dt_count,
@@ -89,10 +89,6 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
         } else {
             return UCS_STATUS_PTR(status);
         }
-    } else if (ucs_unlikely((req->send.uct.func == proto->zcopy_multi) ||
-                            (req->send.uct.func == proto->bcopy_multi))) {
-        req->send.tag.message_id  = req->send.ep->worker->am_message_id++;
-        req->send.tag.am_bw_index = 1;
     }
 
     if (req->flags & UCP_REQUEST_FLAG_SYNC) {
@@ -284,7 +280,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
     ucs_trace_req("send_sync_nb buffer %p count %zu tag %"PRIx64" to %s cb %p",
                   buffer, count, tag, ucp_ep_peer_name(ep), cb);
 
-    if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+    if (!ucp_ep_config_test_rndv_support(ucp_ep_config(ep))) {
         ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
         goto out;
     }

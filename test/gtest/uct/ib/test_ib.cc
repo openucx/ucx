@@ -74,6 +74,10 @@ size_t test_uct_ib::m_ib_am_handler_counter = 0;
 
 class test_uct_ib_addr : public test_uct_ib {
 public:
+    uct_ib_iface_config_t *ib_config() {
+        return ucs_derived_of(m_iface_config, uct_ib_iface_config_t);
+    }
+
     void test_address_pack(uint64_t subnet_prefix) {
         uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
         static const uint16_t lid_in = 0x1ee7;
@@ -90,17 +94,46 @@ public:
         uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
 
         if (uct_ib_iface_is_roce(iface)) {
-            EXPECT_TRUE(iface->is_global_addr);
+            EXPECT_TRUE(iface->config.force_global_addr);
         } else {
             EXPECT_EQ(lid_in, lid_out);
         }
 
-        if (iface->is_global_addr) {
+        if (ib_config()->is_global) {
             EXPECT_EQ(gid_in.global.subnet_prefix, gid_out.global.subnet_prefix);
             EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
         }
 
         free(ib_addr);
+    }
+
+    void test_fill_ah_attr(uint64_t subnet_prefix) {
+        uct_ib_iface_t *iface     = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
+        static const uint16_t lid = 0x1ee7;
+        union ibv_gid gid;
+        struct ibv_ah_attr ah_attr;
+
+        ASSERT_EQ(iface->config.force_global_addr,
+                  ib_config()->is_global || uct_ib_iface_is_roce(iface));
+
+        gid.global.subnet_prefix = subnet_prefix ?: iface->gid_info.gid.global.subnet_prefix;
+        gid.global.interface_id  = 0xdeadbeef;
+
+        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, 0, &ah_attr);
+
+        if (uct_ib_iface_is_roce(iface)) {
+            /* in case of roce, should be global */
+            EXPECT_TRUE(ah_attr.is_global);
+        } else if (ib_config()->is_global) {
+            /* in case of global address is forced - ah_attr should use GRH */
+            EXPECT_TRUE(ah_attr.is_global);
+        } else if (iface->gid_info.gid.global.subnet_prefix == gid.global.subnet_prefix) {
+            /* in case of subnets are same - ah_attr depend from forced/nonforced GRH */
+            EXPECT_FALSE(ah_attr.is_global);
+        } else if (iface->gid_info.gid.global.subnet_prefix != gid.global.subnet_prefix) {
+            /* in case of subnets are different - ah_attr should use GRH */
+            EXPECT_TRUE(ah_attr.is_global);
+        }
     }
 };
 
@@ -108,6 +141,26 @@ UCS_TEST_P(test_uct_ib_addr, address_pack) {
     test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
     test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
     test_address_pack(0xdeadfeedbeefa880ul);
+}
+
+UCS_TEST_P(test_uct_ib_addr, fill_ah_attr) {
+    test_fill_ah_attr(UCT_IB_LINK_LOCAL_PREFIX);
+    test_fill_ah_attr(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
+    test_fill_ah_attr(0xdeadfeedbeefa880ul);
+    test_fill_ah_attr(0l);
+}
+
+UCS_TEST_P(test_uct_ib_addr, address_pack_global, "IB_IS_GLOBAL=y") {
+    test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
+    test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
+    test_address_pack(0xdeadfeedbeefa880ul);
+}
+
+UCS_TEST_P(test_uct_ib_addr, fill_ah_attr_global, "IB_IS_GLOBAL=y") {
+    test_fill_ah_attr(UCT_IB_LINK_LOCAL_PREFIX);
+    test_fill_ah_attr(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
+    test_fill_ah_attr(0xdeadfeedbeefa880ul);
+    test_fill_ah_attr(0l);
 }
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_addr);
@@ -230,11 +283,12 @@ public:
         if (!IBV_PORT_IS_LINK_LAYER_ETHERNET(&m_port_attr)) {
             UCS_TEST_SKIP_R(device_str.str() + " is not Ethernet");
         }
-   
+
         union ibv_gid gid;
         uct_ib_md_config_t *md_config =
             ucs_derived_of(m_md_config, uct_ib_md_config_t);
         ucs::handle<uct_md_h> uct_md;
+        uct_ib_iface_t dummy_ib_iface;
         uct_ib_md_t *ib_md;
         ucs_status_t status;
         uint8_t gid_index;
@@ -244,11 +298,16 @@ public:
                                ibv_get_device_name(m_ibctx->device), m_md_config);
 
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
-        status = uct_ib_device_select_gid_index(&ib_md->dev, m_port,
-                                                md_config->ext.gid_index,
-                                                &gid_index);
+
+        dummy_ib_iface.config.port_num = m_port;
+        /* uct_ib_iface_init_roce_gid_info() requires only the port from the
+         * ib_iface so we can use a dummy one here.
+         * this function will set the gid_index in the dummy ib_iface. */
+        status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface, &ib_md->dev,
+                                                 md_config->ext.gid_index);
         ASSERT_UCS_OK(status);
 
+        gid_index = dummy_ib_iface.gid_info.gid_index;
         device_str << " gid index " << static_cast<int>(gid_index);
 
         /* check the gid index */

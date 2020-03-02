@@ -43,6 +43,7 @@ typedef struct uct_ud_iface_config {
     double                        slow_timer_tick;
     double                        slow_timer_backoff;
     int                           dgid_check;
+    unsigned                      max_window;
 } uct_ud_iface_config_t;
 
 
@@ -145,6 +146,7 @@ struct uct_ud_iface {
         unsigned             max_inline;
         int                  check_grh_dgid;
         unsigned             gid_len;
+        unsigned             max_window;
     } config;
 
     UCS_STATS_NODE_DECLARE(stats)
@@ -183,7 +185,10 @@ struct uct_ud_ctl_hdr {
 
 extern ucs_config_field_t uct_ud_iface_config_table[];
 
-ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface, uct_iface_attr_t *iface_attr);
+ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
+                                uct_iface_attr_t *iface_attr,
+                                size_t am_max_iov, size_t am_max_hdr);
+
 void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc);
 
 ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
@@ -255,7 +260,7 @@ uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *grh_end, int is_grh_present)
         return 1;
     }
 
-    local_gid = (char*)iface->super.gid.raw + (16 - iface->config.gid_len);
+    local_gid = (char*)iface->super.gid_info.gid.raw + (16 - iface->config.gid_len);
     dest_gid  = (char*)grh_end - iface->config.gid_len;
 
     if (memcmp(local_gid, dest_gid, iface->config.gid_len)) {

@@ -703,7 +703,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, req_exp_auto_thresh, "RNDV_THRESH=auto") {
 }
 
 UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
-    const size_t sizes[] = { 1000, 2000, 2500ul * UCS_MBYTE };
+    const size_t sizes[] = { 1000, 2000, 8000, 2500ul * UCS_MBYTE };
 
     /* small sizes should warm-up tag cache */
     for (unsigned i = 0; i < ucs_array_size(sizes); ++i) {
@@ -731,6 +731,69 @@ UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
 
         wait_and_validate(my_send_req);
         request_free(my_recv_req);
+    }
+}
+
+UCS_TEST_P(test_ucp_tag_match_rndv, bidir_multi_exp_post, "RNDV_THRESH=0") {
+    const size_t sizes[] = { 8 * UCS_KBYTE, 128 * UCS_KBYTE, 512 * UCS_KBYTE,
+                             8 * UCS_MBYTE, 128 * UCS_MBYTE, 512 * UCS_MBYTE };
+
+    receiver().connect(&sender(), get_ep_params());
+
+    for (unsigned i = 0; i < ucs_array_size(sizes); ++i) {
+        const size_t size = sizes[i] /
+                            ucs::test_time_multiplier() /
+                            ucs::test_time_multiplier();
+        const size_t count = ucs_max((size_t)(5000.0 / sqrt(sizes[i]) /
+                                              ucs::test_time_multiplier()), 3lu);
+        std::vector<request*> sreqs;
+        std::vector<request*> rreqs;
+        std::vector<std::vector<char> > sbufs;
+        std::vector<std::vector<char> > rbufs;
+
+        sbufs.resize(count * 2);
+        rbufs.resize(count * 2);
+
+        for (size_t repeat = 0; repeat < count * 2; ++repeat) {
+            entity &send_e = repeat < count ? sender() : receiver();
+            entity &recv_e = repeat < count ? receiver() : sender();
+            request *my_send_req, *my_recv_req;
+
+            sbufs[repeat].resize(size, 0);
+            rbufs[repeat].resize(size, 0);
+            ucs::fill_random(sbufs[repeat]);
+
+            my_recv_req = recv(recv_e, RECV_NB,
+                               &rbufs[repeat][0], rbufs[repeat].size(),
+                               DATATYPE, 0x1337, 0xffff, NULL);
+            ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+            EXPECT_FALSE(my_recv_req->completed);
+
+            my_send_req = send(send_e, SEND_NB,
+                               &sbufs[repeat][0], sbufs[repeat].size(),
+                               DATATYPE, 0x111337);
+            ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
+
+            sreqs.push_back(my_send_req);
+            rreqs.push_back(my_recv_req);
+        }
+
+        for (size_t repeat = 0; repeat < count * 2; ++repeat) {
+            request *my_send_req, *my_recv_req;
+
+            my_recv_req = rreqs[repeat];
+            my_send_req = sreqs[repeat];
+
+            wait(my_recv_req);
+
+            EXPECT_EQ(sbufs[repeat].size(), my_recv_req->info.length);
+            EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+            EXPECT_TRUE(my_recv_req->completed);
+            EXPECT_EQ(sbufs[repeat], rbufs[repeat]);
+
+            wait_and_validate(my_send_req);
+            request_free(my_recv_req);
+        }
     }
 }
 

@@ -13,7 +13,6 @@
 
 extern "C" {
 #include <ucp/wireup/address.h>
-#include <ucp/proto/proto.h>
 #include <ucp/core/ucp_ep.inl>
 }
 
@@ -865,7 +864,8 @@ public:
         /* do nothing */
     }
 
-    bool test_est_num_eps_fallback(size_t est_num_eps, size_t &min_max_num_eps,
+    bool test_est_num_eps_fallback(size_t est_num_eps,
+                                   unsigned long &min_max_num_eps,
                                    bool has_only_unscalable) {
         size_t num_lanes = 0;
         bool res         = true;
@@ -929,7 +929,7 @@ private:
 };
 
 UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
-    size_t test_min_max_eps, min_max_eps;
+    unsigned long test_min_max_eps, min_max_eps;
     std::vector<std::string> rc_tls;
 
     rc_tls.push_back("rc_v");
@@ -1115,7 +1115,7 @@ protected:
     }
 
     size_t get_min_max_num_eps(ucp_ep_h ep) {
-        size_t min_max_num_eps = UCS_ULUNITS_INF;
+        unsigned long min_max_num_eps = UCS_ULUNITS_INF;
 
         for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(ep); lane++) {
             uct_iface_attr_t *iface_attr = ucp_ep_get_iface_attr(ep, lane);
@@ -1130,7 +1130,7 @@ protected:
 
     size_t test_wireup_fallback_amo(const std::vector<std::string> &tls,
                                     size_t est_num_eps, bool should_use_device_amo) {
-        size_t min_max_num_eps = UCS_ULUNITS_INF;
+        unsigned long min_max_num_eps = UCS_ULUNITS_INF;
 
         UCS_TEST_MESSAGE << "Testing " << est_num_eps << " number of EPs";
         modify_config("NUM_EPS", ucs::to_string(est_num_eps).c_str());
@@ -1239,9 +1239,7 @@ UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
                                           m_send_data[0], sizeof(elem_type),
                                           (uint64_t)&m_recv_data[0], rkey);
     ASSERT_UCS_OK(status);
-    request_t *req = (request_t *)ucp_ep_flush_nb(sender().ep(),
-                                                  UCT_FLUSH_FLAG_LOCAL,
-                                                  flush_cb);
+    request_t *req = (request_t *)ucp_ep_flush_nb(sender().ep(), 0, flush_cb);
     if (UCS_PTR_IS_PTR(req)) {
         req->test = this;
         wait(req);

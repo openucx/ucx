@@ -27,6 +27,8 @@
                                   IBV_ACCESS_REMOTE_ATOMIC)
 
 #define UCT_IB_MEM_DEREG          0
+#define UCT_IB_CONFIG_PREFIX      "IB_"
+
 
 /**
  * IB MD statistics counters
@@ -81,6 +83,8 @@ typedef struct uct_ib_md_ext_config {
     size_t                   min_mt_reg;   /**< Multi-threaded registration threshold */
     size_t                   mt_reg_chunk; /**< Multi-threaded registration chunk */
     int                      mt_reg_bind;  /**< Multi-threaded registration bind to core */
+
+    ucs_on_off_auto_value_t  mr_relaxed_order; /**< Allow reorder memory accesses */
 } uct_ib_md_ext_config_t;
 
 
@@ -309,6 +313,7 @@ typedef struct uct_ib_rcache_region {
  */
 typedef struct uct_ib_md_ops_entry {
     ucs_list_link_t             list;
+    const char                  *name;
     uct_ib_md_ops_t             *ops;
     int                         priority;
 } uct_ib_md_ops_entry_t;
@@ -317,7 +322,8 @@ typedef struct uct_ib_md_ops_entry {
     UCS_STATIC_INIT { \
         extern ucs_list_link_t uct_ib_md_ops_list; \
         static uct_ib_md_ops_entry_t *p, entry = { \
-            .ops = &_md_ops, \
+            .name     = UCS_PP_MAKE_STRING(_md_ops), \
+            .ops      = &_md_ops, \
             .priority = _priority, \
         }; \
         ucs_list_for_each(p, &uct_ib_md_ops_list, list) { \
