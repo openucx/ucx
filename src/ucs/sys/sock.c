@@ -21,7 +21,8 @@
 #include <string.h>
 
 
-#define UCS_SOCKET_MAX_CONN_PATH "/proc/sys/net/core/somaxconn"
+#define UCS_NETIF_BOND_AD_NUM_PORTS_FMT  "/sys/class/net/%s/bonding/ad_num_ports"
+#define UCS_SOCKET_MAX_CONN_PATH         "/proc/sys/net/core/somaxconn"
 
 
 typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
@@ -80,6 +81,22 @@ int ucs_netif_is_active(const char *if_name)
     }
 
     return ucs_netif_flags_is_active(ifr.ifr_flags);
+}
+
+unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
+{
+    ucs_status_t status;
+    long ad_num_ports;
+
+    status = ucs_read_file_number(&ad_num_ports, 1,
+                                  UCS_NETIF_BOND_AD_NUM_PORTS_FMT, bond_name);
+    if (status != UCS_OK) {
+        ucs_diag("failed to read " UCS_NETIF_BOND_AD_NUM_PORTS_FMT ": %m, "
+                 "assuming 802.3ad bonding is disabled", bond_name);
+        return 1;
+    }
+
+    return ad_num_ports;
 }
 
 ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)

@@ -85,6 +85,17 @@ int ucs_netif_is_active(const char *if_name);
 
 
 /**
+ * Get number of active 802.3ad ports for a bond device. If the device is not
+ * a bond device, or 802.3ad is not enabled, return 1.
+ *
+ * @param [in]  if_name      Name of network interface to check.
+ *
+ * @return Number of active 802.3ad ports on @a if_name.
+ */
+unsigned ucs_netif_bond_ad_num_ports(const char *if_name);
+
+
+/**
  * Create a socket.
  *
  * @param [in]   domain     Communication domain (AF_INET/AF_INET6/etc).

@@ -19,35 +19,39 @@
 #include <endian.h>
 
 
-#define UCT_IB_QPN_ORDER               24  /* How many bits can be an IB QP number */
-#define UCT_IB_LRH_LEN                 8   /* IB Local routing header */
-#define UCT_IB_GRH_LEN                 40  /* IB GLobal routing header */
-#define UCT_IB_BTH_LEN                 12  /* IB base transport header */
-#define UCT_IB_ROCE_LEN                14  /* Ethernet header -
-                                              6B for Destination MAC +
-                                              6B for Source MAC + 2B Type (RoCE) */
-#define UCT_IB_DETH_LEN                8   /* IB datagram header */
-#define UCT_IB_RETH_LEN                16  /* IB RDMA header */
-#define UCT_IB_ATOMIC_ETH_LEN          28  /* IB atomic header */
-#define UCT_IB_AETH_LEN                4   /* IB ack */
-#define UCT_IB_PAYLOAD_ALIGN           4   /* IB payload padding */
-#define UCT_IB_ICRC_LEN                4   /* IB invariant crc footer */
-#define UCT_IB_VCRC_LEN                2   /* IB variant crc footer */
-#define UCT_IB_DELIM_LEN               2   /* IB wire delimiter */
-#define UCT_IB_FDR_PACKET_GAP          64  /* Minimal FDR packet gap */
-#define UCT_IB_MAX_MESSAGE_SIZE        (2UL << 30) /* Maximal IB message size */
-#define UCT_IB_PKEY_PARTITION_MASK     0x7fff /* IB partition number mask */
-#define UCT_IB_PKEY_MEMBERSHIP_MASK    0x8000 /* Full/send-only member */
-#define UCT_IB_DEV_MAX_PORTS           2
-#define UCT_IB_FABRIC_TIME_MAX         32
-#define UCT_IB_INVALID_RKEY            0xffffffffu
-#define UCT_IB_KEY                     0x1ee7a330
-#define UCT_IB_LINK_LOCAL_PREFIX       be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
-#define UCT_IB_SITE_LOCAL_PREFIX       be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
-#define UCT_IB_SITE_LOCAL_MASK         be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
-#define UCT_IB_DEFAULT_ROCEV2_DSCP     106  /* Default DSCP for RoCE v2 */
-#define UCT_IB_ROCE_UDP_SRC_PORT_BASE  0xC000
-#define UCT_IB_DEVICE_SYSFS_FMT        "/sys/class/infiniband/%s/device/%s"
+#define UCT_IB_QPN_ORDER                  24  /* How many bits can be an IB QP number */
+#define UCT_IB_LRH_LEN                    8   /* IB Local routing header */
+#define UCT_IB_GRH_LEN                    40  /* IB GLobal routing header */
+#define UCT_IB_BTH_LEN                    12  /* IB base transport header */
+#define UCT_IB_ROCE_LEN                   14  /* Ethernet header -
+                                                 6B for Destination MAC +
+                                                 6B for Source MAC + 2B Type (RoCE) */
+#define UCT_IB_DETH_LEN                   8   /* IB datagram header */
+#define UCT_IB_RETH_LEN                   16  /* IB RDMA header */
+#define UCT_IB_ATOMIC_ETH_LEN             28  /* IB atomic header */
+#define UCT_IB_AETH_LEN                   4   /* IB ack */
+#define UCT_IB_PAYLOAD_ALIGN              4   /* IB payload padding */
+#define UCT_IB_ICRC_LEN                   4   /* IB invariant crc footer */
+#define UCT_IB_VCRC_LEN                   2   /* IB variant crc footer */
+#define UCT_IB_DELIM_LEN                  2   /* IB wire delimiter */
+#define UCT_IB_FDR_PACKET_GAP             64  /* Minimal FDR packet gap */
+#define UCT_IB_MAX_MESSAGE_SIZE           (2UL << 30) /* Maximal IB message size */
+#define UCT_IB_PKEY_PARTITION_MASK        0x7fff /* IB partition number mask */
+#define UCT_IB_PKEY_MEMBERSHIP_MASK       0x8000 /* Full/send-only member */
+#define UCT_IB_DEV_MAX_PORTS              2
+#define UCT_IB_FABRIC_TIME_MAX            32
+#define UCT_IB_INVALID_RKEY               0xffffffffu
+#define UCT_IB_KEY                        0x1ee7a330
+#define UCT_IB_LINK_LOCAL_PREFIX          be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
+#define UCT_IB_SITE_LOCAL_PREFIX          be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_SITE_LOCAL_MASK            be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
+#define UCT_IB_DEFAULT_ROCEV2_DSCP        106  /* Default DSCP for RoCE v2 */
+#define UCT_IB_ROCE_UDP_SRC_PORT_BASE     0xC000
+#define UCT_IB_DEVICE_SYSFS_PFX           "/sys/class/infiniband/%s"
+#define UCT_IB_DEVICE_SYSFS_FMT           UCT_IB_DEVICE_SYSFS_PFX "/device/%s"
+#define UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX  UCT_IB_DEVICE_SYSFS_PFX "/ports/%d/gid_attrs"
+#define UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/types/%d"
+#define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
 
 
 enum {
@@ -306,7 +310,8 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
 
 void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
 
-unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev);
+unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev,
+                                          uint8_t port_num);
 
 
 static inline struct ibv_port_attr*
