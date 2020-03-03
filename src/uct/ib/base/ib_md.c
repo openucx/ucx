@@ -186,8 +186,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_bind), UCS_CONFIG_TYPE_BOOL},
 
     {"PCI_RELAXED_ORDERING", "auto",
-     "Enable relaxed ordering for PCI writes from device to memory, "
-     "to improve performance on some systems.",
+     "Enable relaxed ordering for PCIe transactions to improve performance on some systems.",
      ucs_offsetof(uct_ib_md_config_t, ext.mr_relaxed_order), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {NULL}
