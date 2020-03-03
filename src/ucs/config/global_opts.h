@@ -27,7 +27,7 @@ BEGIN_C_DECLS
  */
 typedef struct {
 
-    /* Log level above which log messages will be printed for default component*/
+    /* Log level above which log messages will be printed for default component */
     ucs_log_component_config_t log_component;
 
     /* Log file */

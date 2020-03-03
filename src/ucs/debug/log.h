@@ -92,13 +92,13 @@ typedef enum {
  * @param file      Source file name.
  * @param line      Source line number.
  * @param function  Function name.
- * @param level     Log level
- * @param comp_conf Component specific log config
- * @param message   Log message - format string
+ * @param level     Log level.
+ * @param comp_conf Component specific log config.
+ * @param message   Log message - format string.
  * @param ap        Log message format parameters.
  *
- * @return UCS_LOG_FUNC_RC_CONTINUE - continue to next log handler
- *         UCS_LOG_FUNC_RC_STOP     - don't continue
+ * @return UCS_LOG_FUNC_RC_CONTINUE - continue to next log handler.
+ *         UCS_LOG_FUNC_RC_STOP     - don't continue.
  */
 typedef ucs_log_func_rc_t (*ucs_log_func_t)(const char *file, unsigned line,
                                             const char *function, ucs_log_level_t level,
@@ -116,9 +116,9 @@ extern const char *ucs_log_category_names[];
  * @param [in] file       Source file name.
  * @param [in] line       Source line number.
  * @param [in] function   Function name which generated the log.
- * @param [in] level      Log level of the message,
- * @param [in] comp_conf  Component log config,
- * @param [in] message    Log format
+ * @param [in] level      Log level of the message.
+ * @param [in] comp_conf  Component log config.
+ * @param [in] message    Log format.
  */
 void ucs_log_dispatch(const char *file, unsigned line, const char *function,
                       ucs_log_level_t level, ucs_log_component_config_t *comp_conf,

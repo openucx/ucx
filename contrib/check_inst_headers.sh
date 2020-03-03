@@ -27,7 +27,7 @@ do
 	fi
 
 	# try to compile a test program (from stdin) which includes hfile
-	${CC} -I. -x c -c - -o /dev/null -DHAVE_CONFIG_H=1 <<EOF || exit $?
+	${CC} -I. -x c -c - -o /dev/null -DUCS_MAX_LOG_LEVEL=UCS_INFO <<EOF || exit $?
 #include "${hfile}"
 EOF
 

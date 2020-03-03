@@ -68,7 +68,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "will be printed.\n"
   "Possible values are: fatal, error, warn, info, debug, trace, data, func, poll.",
   ucs_offsetof(ucs_global_opts_t, log_component),
-  UCS_CONFIG_TYPE_COMP},
+  UCS_CONFIG_TYPE_LOG_COMP},
 
  {"LOG_FILE", "",
   "If not empty, UCS will print log messages to the specified file instead of stdout.\n"
