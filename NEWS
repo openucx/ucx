@@ -8,8 +8,26 @@
 #
 
 ## Current
+## 1.8.0-rc1 (TBD)
 Features:
-- TBD
+- Improved detection for DEVX support
+- Improved TCP scalability 
+- Added ROCM perftest
+- Added optimized memcpy for ROCM devices
+- Protection from TCP connection from non-UCX applications
+- Added hardware tag-matching for CUDA buffers
+- Added support for CUDA and ROCM managed memories
+
+Bugfixes:
+- Multiple fixes in JUCX
+- Fixes in UCP thread safety
+- Fixes for most recent versions GCC, PGI, and ICC
+- Fixes for CPU affinity on Azure instances
+- Fixes in XPMEM support on PPC64
+- Performance fixes in CUDA IPC
+- Fixes in RDMA CM flows 
+- Multiple fixes in TCP TL
+- Multiple fixes in documentation
 
 ## 1.7.0 (January 19, 2020)
 Features:
