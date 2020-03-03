@@ -444,6 +444,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     key.wireup_lane        = 0;
     key.tag_lane           = 0;
     key.rma_lanes[0]       = 0;
+    key.rkey_ptr_lane      = UCP_NULL_LANE;
     key.rma_bw_lanes[0]    = 0;
     key.amo_lanes[0]       = 0;
     key.lanes[0].rsc_index = UCP_NULL_RESOURCE;

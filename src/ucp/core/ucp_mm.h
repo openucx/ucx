@@ -53,7 +53,7 @@ typedef struct ucp_rkey {
         ucp_ep_cfg_index_t        ep_cfg_index; /* EP configuration relevant for the cache */
         ucp_lane_index_t          rma_lane;     /* Lane to use for RMAs */
         ucp_lane_index_t          amo_lane;     /* Lane to use for AMOs */
-        unsigned                  max_put_short;/* Cached value of max_put_short */
+        ssize_t                   max_put_short;/* Cached value of max_put_short */
         uct_rkey_t                rma_rkey;     /* Key to use for RMAs */
         uct_rkey_t                amo_rkey;     /* Key to use for AMOs */
         ucp_amo_proto_t           *amo_proto;   /* Protocol for AMOs */
