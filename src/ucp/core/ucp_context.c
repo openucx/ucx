@@ -22,6 +22,7 @@
 #include <ucs/debug/debug.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/topo.h>
 #include <string.h>
 
 
@@ -1640,13 +1641,14 @@ ucs_memory_type_t
 ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t size)
 {
     ucs_memory_type_t mem_type;
+    ucs_sys_device_t sys_dev;
     unsigned i, md_index;
     ucs_status_t status;
 
     for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
         md_index = context->mem_type_detect_mds[i];
         status   = uct_md_detect_memory_type(context->tl_mds[md_index].md,
-                                             address, size, &mem_type);
+                                             address, size, &mem_type, &sys_dev);
         if (status == UCS_OK) {
             if (context->memtype_cache != NULL) {
                 ucs_memtype_cache_update(context->memtype_cache, address, size,

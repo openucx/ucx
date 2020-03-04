@@ -9,6 +9,7 @@
 #endif
 
 #include "cuda_md.h"
+#include "cuda_iface.h"
 
 #include <ucs/sys/module.h>
 #include <ucs/profile/profile.h>
@@ -16,11 +17,36 @@
 #include <cuda_runtime.h>
 #include <cuda.h>
 
+static ucs_status_t uct_cuda_base_get_sys_dev(ucs_sys_device_t *sys_dev_p)
+{
+    CUdevice dev;
+    int attrib;
+
+    if (UCS_OK != UCT_CUDADRV_FUNC(cuCtxGetDevice(&dev))) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (UCS_OK != UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&attrib,
+                    CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, dev))) {
+        return UCS_ERR_IO_ERROR;
+    }
+    sys_dev_p->bus_id.domain = (uint16_t) attrib;
+
+    if (UCS_OK != UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&attrib,
+                    CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev))) {
+        return UCS_ERR_IO_ERROR;
+    }
+    sys_dev_p->bus_id.bus = (uint8_t) attrib;
+
+    return UCS_OK;
+
+}
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
-                 (md, addr, length, mem_type_p),
+                 (md, addr, length, mem_type_p, sys_dev_p),
                  uct_md_h md, const void *addr, size_t length,
-                 ucs_memory_type_t *mem_type_p)
+                 ucs_memory_type_t *mem_type_p,
+                 ucs_sys_device_t *sys_dev_p)
 {
     CUmemorytype memType = (CUmemorytype)0;
     uint32_t isManaged   = 0;
@@ -48,6 +74,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
                 cuGetErrorString(cu_err, &cu_err_str);
                 ucs_warn("cuPointerSetAttribute(%p) error: %s", (void*) addr, cu_err_str);
             }
+
+            return uct_cuda_base_get_sys_dev(sys_dev_p);
         }
         return UCS_OK;
     }
