@@ -355,32 +355,36 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
     uct_ib_device_t UCS_V_UNUSED *dev = &md->super.dev;
     struct ibv_tmh tmh;
     int mtu;
+    int tm_params;
     ucs_status_t status;
 
-    iface->tm.enabled = mlx5_config->tm.enable && (init_attr->flags &
-                                                   UCT_IB_TM_SUPPORTED);
+    /* Both eager and rndv callbacks should be provided for
+     * tag matching support */
+    tm_params = ucs_test_all_flags(params->field_mask,
+                                   UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB |
+                                   UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB);
+
+    iface->tm.enabled = mlx5_config->tm.enable && tm_params &&
+                        (init_attr->flags & UCT_IB_TM_SUPPORTED);
     if (!iface->tm.enabled) {
         goto out_tm_disabled;
     }
 
-    /* Compile-time check that THM and uct_rc_mlx5_hdr_t are wire-compatible for the
-     * case of no-tag protocol.
+    /* Compile-time check that THM and uct_rc_mlx5_hdr_t are wire-compatible
+     * for the case of no-tag protocol.
      */
-    UCS_STATIC_ASSERT(sizeof(tmh.opcode) == sizeof(((uct_rc_mlx5_hdr_t*)0)->tmh_opcode));
+    UCS_STATIC_ASSERT(sizeof(tmh.opcode) ==
+                      sizeof(((uct_rc_mlx5_hdr_t*)0)->tmh_opcode));
     UCS_STATIC_ASSERT(ucs_offsetof(struct ibv_tmh, opcode) ==
                       ucs_offsetof(uct_rc_mlx5_hdr_t, tmh_opcode));
 
     UCS_STATIC_ASSERT(sizeof(uct_rc_mlx5_ctx_priv_t) <= UCT_TAG_PRIV_LEN);
 
-    iface->tm.eager_unexp.cb  = (params->field_mask &
-                                 UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB) ?
-                                params->eager_cb : NULL;
+    iface->tm.eager_unexp.cb  = params->eager_cb;
+    iface->tm.rndv_unexp.cb   = params->rndv_cb;
     iface->tm.eager_unexp.arg = (params->field_mask &
                                  UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG) ?
                                 params->eager_arg : NULL;
-    iface->tm.rndv_unexp.cb   = (params->field_mask &
-                                 UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB) ?
-                                params->rndv_cb : NULL;
     iface->tm.rndv_unexp.arg  = (params->field_mask &
                                  UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG) ?
                                 params->rndv_arg : NULL;
