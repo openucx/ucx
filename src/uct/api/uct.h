@@ -16,6 +16,7 @@
 #include <ucs/async/async_fwd.h>
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/sys/topo.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
@@ -2045,12 +2046,16 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @param [in]     length       Size of memory
  * @param [out]    mem_type_p   Filled with memory type of the address range if
                                 function succeeds
- * @return UCS_OK               If memory type is successfully detected
+ * @param [out]    sys_type_p   Filled with system device info associated with
+                                supplied addr. eg: numa node ID of addr
+ * @return UCS_OK               If memory type is successfully detected and
+ *                              system device associated with addr is detected
  *         UCS_ERR_INVALID_ADDR If failed to detect memory type
  */
 ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
                                        size_t length,
-                                       ucs_memory_type_t *mem_type_p);
+                                       ucs_memory_type_t *mem_type_p,
+                                       ucs_sys_device_t *sys_dev_p);
 
 
 /**

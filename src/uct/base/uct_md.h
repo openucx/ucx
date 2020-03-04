@@ -70,7 +70,8 @@ typedef int (*uct_md_is_sockaddr_accessible_func_t)(uct_md_h md,
 typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
                                                          const void *addr,
                                                          size_t length,
-                                                         ucs_memory_type_t *mem_type_p);
+                                                         ucs_memory_type_t *mem_type_p,
+                                                         ucs_sys_device_t *sys_dev_p);
 
 
 /**

@@ -28,6 +28,7 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
                                         hsa_agent_t *agent);
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
                                               size_t length,
-                                              ucs_memory_type_t *mem_type_p);
+                                              ucs_memory_type_t *mem_type_p,
+                                              ucs_sys_device_t *sys_dev_p);
 
 #endif
