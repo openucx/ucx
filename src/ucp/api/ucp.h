@@ -486,11 +486,11 @@ typedef enum {
  */
 typedef enum {
     UCP_STREAM_RECV_FLAG_WAITALL = UCS_BIT(0)  /**< This flag requests that
-                                                    operation will not be
-                                                    completed untill all amout
-                                                    of requested data is
-                                                    received and placed in the
-                                                    user buffer. */
+                                                    the operation will not be
+                                                    completed until all
+                                                    requested data is received
+                                                    and placed in the user
+                                                    buffer. */
 } ucp_stream_recv_flags_t;
 
 
