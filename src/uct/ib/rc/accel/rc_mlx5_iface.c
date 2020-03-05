@@ -405,20 +405,20 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
     /* Multi-Packet XRQ initialization */
     if (!ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_MP_RQ       |
                                        UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ |
-                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP)) {
+                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) ||
+        (mlx5_config->tm.mp_num_strides == 1)) {
         return UCS_OK;
     }
 
-    if ((mlx5_config->tm.mp_num_strides == UCS_ULUNITS_AUTO) ||
-        (mlx5_config->tm.mp_num_strides == 1)) {
-        return UCS_OK;
-        /* TODO: make the following to be default when MP support is added to UCP
-        iface->tm.mp.num_strides = UCS_BIT(IBV_DEVICE_MP_MIN_LOG_NUM_STRIDES); */
+    if (mlx5_config->tm.mp_num_strides == UCS_ULUNITS_AUTO) {
+        iface->tm.mp.num_strides = 8;
     } else if ((mlx5_config->tm.mp_num_strides != 8) &&
                (mlx5_config->tm.mp_num_strides != 16)){
         ucs_error("invalid value of TM_NUM_STRIDES: %lu, must be 1,8 or 16",
                   mlx5_config->tm.mp_num_strides);
         return UCS_ERR_INVALID_PARAM;
+    } else {
+        iface->tm.mp.num_strides = mlx5_config->tm.mp_num_strides;
     }
 
     status = uct_ib_device_mtu(params->mode.device.dev_name, tl_md, &mtu);
@@ -427,8 +427,7 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
         return UCS_ERR_IO_ERROR;
     }
 
-    iface->tm.mp.num_strides = mlx5_config->tm.mp_num_strides;
-    init_attr->seg_size      = mtu;
+    init_attr->seg_size = mtu;
 
     return UCS_OK;
 
