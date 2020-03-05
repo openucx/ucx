@@ -116,6 +116,17 @@ def test_fallback_from_rc(dev, neps) :
         print "RC transport must not be used when estimated number of EPs = " + str(neps)
         sys.exit(1)
 
+    os.putenv("UCX_TLS", "rc,ud,tcp")
+
+    status,output_rc = commands.getstatusoutput(ucx_info + ucx_info_args + str(neps) + " | grep rc")
+    status,output_tcp = commands.getstatusoutput(ucx_info + ucx_info_args + str(neps) + " | grep tcp")
+
+    if output_rc != "" or output_tcp != "":
+        print "RC/TCP transports must not be used when estimated number of EPs = " + str(neps)
+        sys.exit(1)
+
+    os.unsetenv("UCX_TLS")
+
 if len(sys.argv) > 1:
     bin_prefix = sys.argv[1] + "/bin"
 else:
