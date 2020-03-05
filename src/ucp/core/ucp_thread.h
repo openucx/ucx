@@ -40,8 +40,6 @@ typedef struct ucp_mt_lock {
 } ucp_mt_lock_t;
 
 
-#if ENABLE_MT
-
 #define UCP_THREAD_IS_REQUIRED(_lock_ptr) \
     ((_lock_ptr)->mt_type)
 #define UCP_THREAD_LOCK_INIT(_lock_ptr) \
@@ -81,29 +79,5 @@ typedef struct ucp_mt_lock {
             ucs_spin_unlock(&((_lock_ptr)->lock.mt_spinlock));          \
         }                                                               \
     }
-
-#else
-
-#define UCP_THREAD_IS_REQUIRED(_lock_ptr)                0
-#define UCP_THREAD_LOCK_INIT(_lock_ptr)                  {}
-#define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)              {}
-#define UCP_THREAD_CS_ENTER(_lock_ptr)                   {}
-#define UCP_THREAD_CS_EXIT(_lock_ptr)                    {}
-
-#endif
-
-#define UCP_THREAD_CS_ENTER_CONDITIONAL(_lock_ptr)                      \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_CS_ENTER(_lock_ptr);                             \
-        }                                                               \
-    }
-#define UCP_THREAD_CS_EXIT_CONDITIONAL(_lock_ptr)                       \
-    {                                                                   \
-        if (UCP_THREAD_IS_REQUIRED(_lock_ptr)) {                        \
-            UCP_THREAD_CS_EXIT(_lock_ptr);                              \
-        }                                                               \
-    }
-
 
 #endif

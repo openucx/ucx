@@ -545,7 +545,7 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
     return UCS_OK;
 }
 
-static ucs_status_t ucp_advice2uct(unsigned ucp_advice, uct_mem_advice_t *uct_advice) 
+static ucs_status_t ucp_advice2uct(unsigned ucp_advice, uct_mem_advice_t *uct_advice)
 {
     switch(ucp_advice) {
     case UCP_MADV_NORMAL:
@@ -558,8 +558,8 @@ static ucs_status_t ucp_advice2uct(unsigned ucp_advice, uct_mem_advice_t *uct_ad
     return UCS_ERR_INVALID_PARAM;
 }
 
-ucs_status_t 
-ucp_mem_advise(ucp_context_h context, ucp_mem_h memh, 
+ucs_status_t
+ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
                ucp_mem_advise_params_t *params)
 {
     ucs_status_t status, tmp_status;
