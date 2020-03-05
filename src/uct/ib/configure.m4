@@ -305,6 +305,9 @@ AS_IF([test "x$with_ib" = "xyes"],
                      [],
                      [[#include <infiniband/verbs.h>]])
 
+       AC_CHECK_MEMBERS([struct ibv_device_attr_ex.pci_atomic_caps],
+                        [], [], [[#include <infiniband/verbs.h>]])
+
        # Extended atomics
        AS_IF([test "x$have_ext_atomics" != xno],
              [AC_DEFINE([HAVE_IB_EXT_ATOMICS], 1, [IB extended atomics support])],
