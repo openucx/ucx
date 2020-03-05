@@ -547,8 +547,9 @@ public:
 
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
-        params.features     = std::numeric_limits<uint64_t>::max() &
-                              ~UCP_FEATURE_TAG;
+        // Do not pass UCP_FEATURE_TAG feature to check that UCT will not
+        // initialize tag offload infrastructure in this case.
+        params.features     = UCP_FEATURE_RMA;
         return params;
     }
 };
