@@ -48,9 +48,14 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.seg_size),
    UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_NUM_STRIDES", "auto",
+  {"TM_MP_SRQ_ENABLE", "try",
+   "Enable multi-packet SRQ support. Relevant for hardware tag-matching only.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.mp_enable),
+   UCS_CONFIG_TYPE_TERNARY},
+
+  {"TM_MP_NUM_STRIDES", "8",
    "Number of strides used per single receive WQE for hardware tag-matching\n"
-   "unexpected messages. Can be 1, 8 or 16 only.",
+   "unexpected messages. Can be 8 or 16 only. Relevant when MP SRQ is enabled.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.mp_num_strides),
    UCS_CONFIG_TYPE_ULUNITS},
 

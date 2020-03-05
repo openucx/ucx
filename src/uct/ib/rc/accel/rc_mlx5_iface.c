@@ -350,8 +350,8 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
                                               const uct_iface_params_t *params,
                                               uct_ib_iface_init_attr_t *init_attr)
 {
-#if IBV_HW_TM
     uct_ib_mlx5_md_t *md              = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+#if IBV_HW_TM
     uct_ib_device_t UCS_V_UNUSED *dev = &md->super.dev;
     struct ibv_tmh tmh;
     int mtu;
@@ -402,19 +402,20 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
     iface->tm.mp.num_strides = 1;
     iface->tm.max_bcopy      = init_attr->seg_size;
 
-    /* Multi-Packet XRQ initialization */
-    if (!ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_MP_RQ       |
-                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ |
-                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) ||
-        (mlx5_config->tm.mp_num_strides == 1)) {
+    if (mlx5_config->tm.mp_enable == UCS_NO) {
         return UCS_OK;
     }
 
-    if (mlx5_config->tm.mp_num_strides == UCS_ULUNITS_AUTO) {
-        iface->tm.mp.num_strides = 8;
-    } else if ((mlx5_config->tm.mp_num_strides != 8) &&
-               (mlx5_config->tm.mp_num_strides != 16)){
-        ucs_error("invalid value of TM_NUM_STRIDES: %lu, must be 1,8 or 16",
+    /* Multi-Packet XRQ initialization */
+    if (!ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_MP_RQ       |
+                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ |
+                                       UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP)) {
+        goto out_mp_disabled;
+    }
+
+    if ((mlx5_config->tm.mp_num_strides != 8) &&
+        (mlx5_config->tm.mp_num_strides != 16)) {
+        ucs_error("invalid value of TM_MP_NUM_STRIDES: %lu, must be 8 or 16",
                   mlx5_config->tm.mp_num_strides);
         return UCS_ERR_INVALID_PARAM;
     } else {
@@ -438,6 +439,16 @@ out_tm_disabled:
     init_attr->rx_cq_len     = rc_config->super.rx.queue_len;
     init_attr->seg_size      = rc_config->super.seg_size;
     iface->tm.mp.num_strides = 1;
+
+#if IBV_HW_TM
+out_mp_disabled:
+#endif
+    if (mlx5_config->tm.mp_enable == UCS_YES) {
+        ucs_error("MP SRQ is requested, but not supported: (md flags 0x%x), "
+                  "hardware tag-matching is %s",
+                  md->flags, iface->tm.enabled ? "enabled" : "disabled");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     return UCS_OK;
 }
