@@ -103,9 +103,9 @@ ucp_am_bcopy_pack_args_single(void *dest, void *arg)
 
     ucs_assert(req->send.state.dt.offset == 0);
     
-    hdr->am_hdr.am_id  = req->send.am.am_id;
+    hdr->am_hdr.am_id  = req->send.msg_proto.am.am_id;
     hdr->am_hdr.length = req->send.length;
-    hdr->am_hdr.flags  = req->send.am.flags;
+    hdr->am_hdr.flags  = req->send.msg_proto.am.flags;
 
     length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                          UCS_MEMORY_TYPE_HOST, hdr + 1, req->send.buffer,
@@ -125,9 +125,9 @@ ucp_am_bcopy_pack_args_single_reply(void *dest, void *arg)
 
     ucs_assert(req->send.state.dt.offset == 0);
     
-    reply_hdr->super.am_hdr.am_id  = req->send.am.am_id;
+    reply_hdr->super.am_hdr.am_id  = req->send.msg_proto.am.am_id;
     reply_hdr->super.am_hdr.length = req->send.length;
-    reply_hdr->super.am_hdr.flags  = req->send.am.flags;
+    reply_hdr->super.am_hdr.flags  = req->send.msg_proto.am.flags;
     reply_hdr->ep_ptr              = ucp_request_get_dest_ep_ptr(req);
 
     length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
@@ -150,8 +150,8 @@ ucp_am_bcopy_pack_args_first(void *dest, void *arg)
     length = ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
                                   sizeof(*hdr);
     hdr->total_size = req->send.length;
-    hdr->am_id      = req->send.am.am_id;
-    hdr->msg_id     = req->send.am.message_id;
+    hdr->am_id      = req->send.msg_proto.am.am_id;
+    hdr->msg_id     = req->send.msg_proto.message_id;
     hdr->ep         = ucp_request_get_dest_ep_ptr(req);
     hdr->offset     = req->send.state.dt.offset;
     
@@ -177,10 +177,10 @@ ucp_am_bcopy_pack_args_mid(void *dest, void *arg)
     length    = ucs_min(max_bcopy - sizeof(*hdr),
                         req->send.length - req->send.state.dt.offset);
 
-    hdr->msg_id     = req->send.am.message_id;
+    hdr->msg_id     = req->send.msg_proto.message_id;
     hdr->offset     = req->send.state.dt.offset;
     hdr->ep         = ucp_request_get_dest_ep_ptr(req);
-    hdr->am_id      = req->send.am.am_id;
+    hdr->am_id      = req->send.msg_proto.am.am_id;
     hdr->total_size = req->send.length;
     
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker,
@@ -209,7 +209,7 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t  status = ucp_am_send_short(req->send.ep, 
-                                             req->send.am.am_id, 
+                                             req->send.msg_proto.am.am_id, 
                                              req->send.buffer, 
                                              req->send.length);
     if (ucs_likely(status == UCS_OK)) {
@@ -292,9 +292,9 @@ static ucs_status_t ucp_am_zcopy_single(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_am_hdr_t hdr;
     
-    hdr.am_hdr.am_id  = req->send.am.am_id;
+    hdr.am_hdr.am_id  = req->send.msg_proto.am.am_id;
     hdr.am_hdr.length = req->send.length;
-    hdr.am_hdr.flags  = req->send.am.flags;
+    hdr.am_hdr.flags  = req->send.msg_proto.am.flags;
     
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_SINGLE, &hdr,
                                   sizeof(hdr), ucp_proto_am_zcopy_req_complete);
@@ -305,9 +305,9 @@ static ucs_status_t ucp_am_zcopy_single_reply(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_am_reply_hdr_t reply_hdr;
 
-    reply_hdr.super.am_hdr.am_id  = req->send.am.am_id;
+    reply_hdr.super.am_hdr.am_id  = req->send.msg_proto.am.am_id;
     reply_hdr.super.am_hdr.length = req->send.length;
-    reply_hdr.super.am_hdr.flags  = req->send.am.flags;
+    reply_hdr.super.am_hdr.flags  = req->send.msg_proto.am.flags;
     reply_hdr.ep_ptr              = ucp_request_get_dest_ep_ptr(req);
     
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_SINGLE_REPLY, 
@@ -321,16 +321,16 @@ static ucs_status_t ucp_am_zcopy_multi(uct_pending_req_t *self)
     ucp_am_long_hdr_t hdr;
     
     hdr.ep         = ucp_request_get_dest_ep_ptr(req);
-    hdr.msg_id     = req->send.am.message_id;
+    hdr.msg_id     = req->send.msg_proto.message_id;
     hdr.offset     = req->send.state.dt.offset;
-    hdr.am_id      = req->send.am.am_id;
+    hdr.am_id      = req->send.msg_proto.am.am_id;
     hdr.total_size = req->send.length;
     
     return ucp_do_am_zcopy_multi(self, UCP_AM_ID_MULTI, 
                                  UCP_AM_ID_MULTI,
                                  &hdr, sizeof(hdr),
                                  &hdr, sizeof(hdr),
-                                 ucp_proto_am_zcopy_req_complete, 0);
+                                 ucp_proto_am_zcopy_req_complete, 1);
 }
 
 static ucs_status_t ucp_am_zcopy_multi_reply(uct_pending_req_t *self)
@@ -339,16 +339,16 @@ static ucs_status_t ucp_am_zcopy_multi_reply(uct_pending_req_t *self)
     ucp_am_long_hdr_t hdr;
 
     hdr.ep         = ucp_request_get_dest_ep_ptr(req);
-    hdr.msg_id     = req->send.am.message_id;
+    hdr.msg_id     = req->send.msg_proto.message_id;
     hdr.offset     = req->send.state.dt.offset;
-    hdr.am_id      = req->send.am.am_id;
+    hdr.am_id      = req->send.msg_proto.am.am_id;
     hdr.total_size = req->send.length;
     
-    return ucp_do_am_zcopy_multi(self, UCP_AM_ID_MULTI_REPLY, 
+    return ucp_do_am_zcopy_multi(self, UCP_AM_ID_MULTI_REPLY,
                                  UCP_AM_ID_MULTI_REPLY,
                                  &hdr, sizeof(hdr),
                                  &hdr, sizeof(hdr),
-                                 ucp_proto_am_zcopy_req_complete, 0);
+                                 ucp_proto_am_zcopy_req_complete, 1);
 }
 
 static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
@@ -356,14 +356,14 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
                                  size_t count, uint16_t flags, 
                                  uint16_t am_id)
 {
-    req->flags          = UCP_REQUEST_FLAG_SEND_AM;
-    req->send.ep        = ep;
-    req->send.am.am_id  = am_id;
-    req->send.am.flags  = flags;
-    req->send.buffer    = (void *) buffer;
-    req->send.datatype  = datatype;
-    req->send.mem_type  = UCS_MEMORY_TYPE_HOST;
-    req->send.lane      = ep->am_lane;
+    req->flags                   = UCP_REQUEST_FLAG_SEND_AM;
+    req->send.ep                 = ep;
+    req->send.msg_proto.am.am_id = am_id;
+    req->send.msg_proto.am.flags = flags;
+    req->send.buffer             = (void *)buffer;
+    req->send.datatype           = datatype;
+    req->send.mem_type           = UCS_MEMORY_TYPE_HOST;
+    req->send.lane               = ep->am_lane;
 
     ucp_request_send_state_init(req, datatype, count);
     req->send.length = ucp_dt_length(req->send.datatype, count,

@@ -43,7 +43,8 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.mem_type     = ucp_memory_type_detect(ep->worker->context,
                                                     (void*)buffer,
                                                     req->send.length);
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.tag, sizeof(req->send.tag));
+    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.msg_proto.tag,
+                                sizeof(req->send.msg_proto.tag));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t

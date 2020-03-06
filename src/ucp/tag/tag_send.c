@@ -125,11 +125,11 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
                       uintptr_t datatype, size_t count, ucp_tag_t tag,
                       uint32_t flags)
 {
-    req->flags             = flags | UCP_REQUEST_FLAG_SEND_TAG;
-    req->send.ep           = ep;
-    req->send.buffer       = (void*)buffer;
-    req->send.datatype     = datatype;
-    req->send.tag.tag      = tag;
+    req->flags                  = flags | UCP_REQUEST_FLAG_SEND_TAG;
+    req->send.ep                = ep;
+    req->send.buffer            = (void*)buffer;
+    req->send.datatype          = datatype;
+    req->send.msg_proto.tag.tag = tag;
     ucp_request_send_state_init(req, datatype, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
