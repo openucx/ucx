@@ -1109,20 +1109,23 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
-                                      UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG   |
-                                      UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG    |
-                                      UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     |
-                                      UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB    |
                                       UCT_IFACE_PARAM_FIELD_CPU_MASK;
     iface_params->stats_root        = UCS_STATS_RVAL(worker->stats);
     iface_params->rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
     iface_params->err_handler_arg   = worker;
     iface_params->err_handler       = ucp_worker_iface_error_handler;
     iface_params->err_handler_flags = UCT_CB_FLAG_ASYNC;
-    iface_params->eager_arg         = iface_params->rndv_arg = wiface;
-    iface_params->eager_cb          = ucp_tag_offload_unexp_eager;
-    iface_params->rndv_cb           = ucp_tag_offload_unexp_rndv;
     iface_params->cpu_mask          = worker->cpu_mask;
+
+    if (context->config.features & UCP_FEATURE_TAG) {
+        iface_params->eager_arg     = iface_params->rndv_arg = wiface;
+        iface_params->eager_cb      = ucp_tag_offload_unexp_eager;
+        iface_params->rndv_cb       = ucp_tag_offload_unexp_rndv;
+        iface_params->field_mask   |= UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG |
+                                      UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG  |
+                                      UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB   |
+                                      UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB;
+    }
 
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, iface_params, iface_config,

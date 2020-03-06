@@ -539,6 +539,31 @@ UCS_TEST_P(test_ucp_tag_offload_cuda, sw_rndv_to_cuda_mem, "TM_SW_RNDV=y")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_cuda, rc_dc_cuda,
                               "dc_x,rc_x,cuda_copy")
 
+class test_ucp_tag_offload_status : public test_ucp_tag {
+public:
+    test_ucp_tag_offload_status() {
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+    }
+
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        // Do not pass UCP_FEATURE_TAG feature to check that UCT will not
+        // initialize tag offload infrastructure in this case.
+        params.features     = UCP_FEATURE_RMA;
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_tag_offload_status, check_offload_status)
+{
+    for (ucp_rsc_index_t i = 0; i < sender().ucph()->num_tls; ++i) {
+        EXPECT_FALSE(ucp_worker_iface_get_attr(sender().worker(), i)->cap.flags &
+                     (UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                      UCT_IFACE_FLAG_TAG_RNDV_ZCOPY));
+    }
+}
+
+UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload_status)
 
 #if ENABLE_STATS
 
