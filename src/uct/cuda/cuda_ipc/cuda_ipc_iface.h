@@ -58,6 +58,8 @@ typedef struct uct_cuda_ipc_event_desc {
     uct_completion_t  *comp;
     ucs_queue_elem_t  queue;
     uct_cuda_ipc_ep_t *ep;
+    void              *cache;
+    uintptr_t         d_bptr;
 } uct_cuda_ipc_event_desc_t;
 
 
