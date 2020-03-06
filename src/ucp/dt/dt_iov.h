@@ -19,7 +19,7 @@
  * Get the total length of the data in @a iov buffers
  *
  * @param [in]     iov            @ref ucp_dt_iov_t buffer
- * @param [in]     iovcnt         Number of entries the @a iov buffer
+ * @param [in]     iovcnt         Number of entries in the @a iov buffer
  *
  * @return Total length of data in the @a iov buffers
  */
@@ -46,7 +46,7 @@ static inline size_t ucp_dt_iov_length(const ucp_dt_iov_t *iov, size_t iovcnt)
  *                                from an @a iov item pointed by
  *                                @a iovcnt_offset. The @a iov_offset is not aligned
  *                                by @ref ucp_dt_iov_t items length.
- * @param [inout]  iovcnt_offset  Auxiliary offset to select @a iov item which
+ * @param [inout]  iovcnt_offset  Auxiliary offset to select @a iov item that
  *                                belongs to the @a iov_offset. The point to start
  *                                copying from should be selected as
  *                                iov[iovcnt_offset].buffer + iov_offset
@@ -66,12 +66,12 @@ void ucp_dt_iov_gather(void *dest, const ucp_dt_iov_t *iov, size_t length,
  *                                to an @a iov item pointed by @a iovcnt_offset.
  *                                The @a iov_offset is not aligned by
  *                                @ref ucp_dt_iov_t items length.
- * @param [inout]  iovcnt_offset  Auxiliary offset to select @a iov item which
+ * @param [inout]  iovcnt_offset  Auxiliary offset to select @a iov item that
  *                                belongs to the @a iov_offset. The point to
  *                                start copying to should be selected as
  *                                iov[iovcnt_offset].buffer + iov_offset
  *
- * @return Size in bytes that is actually copied from @a src to @a iov. It must
+ * @return Size in bytes that was actually copied from @a src to @a iov. It must
  *         be less or equal to @a length.
  */
 size_t ucp_dt_iov_scatter(ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
@@ -97,7 +97,7 @@ void ucp_dt_iov_seek(ucp_dt_iov_t *iov, size_t iovcnt, ptrdiff_t distance,
  * Count non-empty entries in the @a iov array
  *
  * @param [in]     iov            @ref ucp_dt_iov_t buffer to count
- * @param [in]     iovcnt         Number of entries the @a iov buffer
+ * @param [in]     iovcnt         Number of entries in the @a iov buffer
  *
  * @return Number of non-empty entries in the @a iov array
  */
