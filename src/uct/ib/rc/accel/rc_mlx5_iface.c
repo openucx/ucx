@@ -444,9 +444,10 @@ out_tm_disabled:
 out_mp_disabled:
 #endif
     if (mlx5_config->tm.mp_enable == UCS_YES) {
-        ucs_error("MP SRQ is requested, but not supported: (md flags 0x%x), "
+        ucs_error("%s: MP SRQ is requested, but not supported: (md flags 0x%x), "
                   "hardware tag-matching is %s",
-                  md->flags, iface->tm.enabled ? "enabled" : "disabled");
+                  uct_ib_device_name(&md->super.dev), md->flags,
+                  iface->tm.enabled ? "enabled" : "disabled");
         return UCS_ERR_INVALID_PARAM;
     }
 
