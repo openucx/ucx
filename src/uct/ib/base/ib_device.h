@@ -163,7 +163,7 @@ typedef struct uct_ib_device {
     uint8_t                     pci_cswap_arg_sizes;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
-    ucs_spinlock_t              ah_lock;
+    ucs_recursive_spinlock_t    ah_lock;
 } uct_ib_device_t;
 
 

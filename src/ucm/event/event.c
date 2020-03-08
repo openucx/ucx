@@ -31,7 +31,7 @@
 
 UCS_LIST_HEAD(ucm_event_installer_list);
 
-static ucs_spinlock_t ucm_kh_lock;
+static ucs_recursive_spinlock_t ucm_kh_lock;
 #define ucm_ptr_hash(_ptr)  kh_int64_hash_func((uintptr_t)(_ptr))
 KHASH_INIT(ucm_ptr_size, const void*, size_t, 1, ucm_ptr_hash, kh_int64_hash_equal)
 
@@ -294,16 +294,16 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
     event.shmat.shmflg  = shmflg;
     ucm_event_dispatch(UCM_EVENT_SHMAT, &event);
 
-    ucs_spin_lock(&ucm_kh_lock);
+    ucs_recursive_spin_lock(&ucm_kh_lock);
     if (event.shmat.result != MAP_FAILED) {
         iter = kh_put(ucm_ptr_size, &ucm_shmat_ptrs, event.mmap.result, &result);
         if (result != -1) {
             kh_value(&ucm_shmat_ptrs, iter) = size;
         }
-        ucs_spin_unlock(&ucm_kh_lock);
+        ucs_recursive_spin_unlock(&ucm_kh_lock);
         ucm_dispatch_vm_mmap(event.shmat.result, size);
     } else {
-        ucs_spin_unlock(&ucm_kh_lock);
+        ucs_recursive_spin_unlock(&ucm_kh_lock);
     }
 
     ucm_event_leave();
@@ -321,7 +321,7 @@ int ucm_shmdt(const void *shmaddr)
 
     ucm_debug("ucm_shmdt(shmaddr=%p)", shmaddr);
 
-    ucs_spin_lock(&ucm_kh_lock);
+    ucs_recursive_spin_lock(&ucm_kh_lock);
     iter = kh_get(ucm_ptr_size, &ucm_shmat_ptrs, shmaddr);
     if (iter != kh_end(&ucm_shmat_ptrs)) {
         size = kh_value(&ucm_shmat_ptrs, iter);
@@ -329,7 +329,7 @@ int ucm_shmdt(const void *shmaddr)
     } else {
         size = ucm_get_shm_seg_size(shmaddr);
     }
-    ucs_spin_unlock(&ucm_kh_lock);
+    ucs_recursive_spin_unlock(&ucm_kh_lock);
 
     ucm_dispatch_vm_munmap((void*)shmaddr, size);
 
@@ -630,7 +630,7 @@ ucs_status_t ucm_test_events(int events)
 }
 
 UCS_STATIC_INIT {
-    ucs_spinlock_init(&ucm_kh_lock);
+    ucs_recursive_spinlock_init(&ucm_kh_lock, 0);
     kh_init_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
 }
 
@@ -639,8 +639,8 @@ UCS_STATIC_CLEANUP {
 
     kh_destroy_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
 
-    status = ucs_spinlock_destroy(&ucm_kh_lock);
+    status = ucs_recursive_spinlock_destroy(&ucm_kh_lock);
     if (status != UCS_OK) {
-        ucm_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucm_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
 }

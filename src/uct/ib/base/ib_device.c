@@ -355,7 +355,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     }
 
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
-    ucs_spinlock_init(&dev->ah_lock);
+    ucs_recursive_spinlock_init(&dev->ah_lock, 0);
 
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
@@ -383,9 +383,9 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
 
-    status = ucs_spinlock_destroy(&dev->ah_lock);
+    status = ucs_recursive_spinlock_destroy(&dev->ah_lock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
 
     if (dev->async_events) {
@@ -1003,7 +1003,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
     khiter_t iter;
     int ret;
 
-    ucs_spin_lock(&dev->ah_lock);
+    ucs_recursive_spin_lock(&dev->ah_lock);
 
     /* looking for existing AH with same attributes */
     iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
@@ -1031,7 +1031,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
     }
 
 unlock:
-    ucs_spin_unlock(&dev->ah_lock);
+    ucs_recursive_spin_unlock(&dev->ah_lock);
     return status;
 }
 

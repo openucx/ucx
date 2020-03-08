@@ -110,7 +110,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_ptr_array_t);
         PRINT_SIZE(ucs_queue_elem_t);
         PRINT_SIZE(ucs_queue_head_t);
-        PRINT_SIZE(ucs_spinlock_t);
+        PRINT_SIZE(ucs_recursive_spinlock_t);
         PRINT_SIZE(ucs_timer_t);
         PRINT_SIZE(ucs_timer_queue_t);
         PRINT_SIZE(ucs_twheel_t);

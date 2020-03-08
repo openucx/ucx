@@ -46,25 +46,25 @@ do {\
 
 #if ENABLE_MT
 #define uct_ugni_check_lock_needed(_cdm) UCS_THREAD_MODE_MULTI == (_cdm)->thread_mode
-#define uct_ugni_cdm_init_lock(_cdm) ucs_spinlock_init(&(_cdm)->lock)
+#define uct_ugni_cdm_init_lock(_cdm) ucs_recursive_spinlock_init(&(_cdm)->lock, 0)
 #define uct_ugni_cdm_destroy_lock(_cdm) \
     do { \
         ucs_status_t status; \
         \
-        status = ucs_spinlock_destroy(&(_cdm)->lock); \
+        status = ucs_recursive_spinlock_destroy(&(_cdm)->lock); \
         if (status != UCS_OK) {\
-            ucs_warn("ucs_spinlock_destroy() failed (%d)", status); \
+            ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status); \
         } \
     } while(0)
 #define uct_ugni_cdm_lock(_cdm) \
 if (uct_ugni_check_lock_needed(_cdm)) {  \
     ucs_trace_async("Taking lock");      \
-    ucs_spin_lock(&(_cdm)->lock);   \
+    ucs_recursive_spin_lock(&(_cdm)->lock);   \
 }
 #define uct_ugni_cdm_unlock(_cdm) \
 if (uct_ugni_check_lock_needed(_cdm)) {    \
     ucs_trace_async("Releasing lock");        \
-    ucs_spin_unlock(&(_cdm)->lock);   \
+    ucs_recursive_spin_unlock(&(_cdm)->lock);   \
 }
 #else
 #define uct_ugni_cdm_init_lock(x) UCS_OK

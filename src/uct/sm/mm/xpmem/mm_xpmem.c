@@ -56,7 +56,7 @@ static xpmem_segid_t   uct_xpmem_global_xsegid        = -1;
 
 /* Hash of remote regions */
 static khash_t(xpmem_remote_mem) uct_xpmem_remote_mem_hash;
-static ucs_spinlock_t            uct_xpmem_remote_mem_lock;
+static ucs_recursive_spinlock_t  uct_xpmem_remote_mem_lock;
 
 static ucs_config_field_t uct_xpmem_md_config_table[] = {
   {"MM_", "", NULL,
@@ -67,7 +67,7 @@ static ucs_config_field_t uct_xpmem_md_config_table[] = {
 };
 
 UCS_STATIC_INIT {
-    ucs_spinlock_init(&uct_xpmem_remote_mem_lock);
+    ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
     kh_init_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
 }
 
@@ -82,9 +82,10 @@ UCS_STATIC_CLEANUP {
     })
     kh_destroy_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
 
-    status = ucs_spinlock_destroy(&uct_xpmem_remote_mem_lock);
+    status = ucs_recursive_spinlock_destroy(&uct_xpmem_remote_mem_lock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed: %s", ucs_status_string(status));
+        ucs_warn("ucs_recursive_spinlock_destroy() failed: %s",
+                 ucs_status_string(status));
     }
 }
 
@@ -325,7 +326,7 @@ uct_xpmem_rmem_get(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
     ucs_status_t status;
     khiter_t khiter;
 
-    ucs_spin_lock(&uct_xpmem_remote_mem_lock);
+    ucs_recursive_spin_lock(&uct_xpmem_remote_mem_lock);
 
     khiter = kh_get(xpmem_remote_mem, &uct_xpmem_remote_mem_hash, xsegid);
     if (ucs_likely(khiter != kh_end(&uct_xpmem_remote_mem_hash))) {
@@ -343,17 +344,17 @@ uct_xpmem_rmem_get(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
     status  = UCS_OK;
 
 out_unlock:
-    ucs_spin_unlock(&uct_xpmem_remote_mem_lock);
+    ucs_recursive_spin_unlock(&uct_xpmem_remote_mem_lock);
     return status;
 }
 
 static void uct_xpmem_rmem_put(uct_xpmem_remote_mem_t *rmem)
 {
-    ucs_spin_lock(&uct_xpmem_remote_mem_lock);
+    ucs_recursive_spin_lock(&uct_xpmem_remote_mem_lock);
     if (--rmem->refcount == 0) {
         uct_xpmem_rmem_del(rmem);
     }
-    ucs_spin_unlock(&uct_xpmem_remote_mem_lock);
+    ucs_recursive_spin_unlock(&uct_xpmem_remote_mem_lock);
 }
 
 static ucs_status_t

@@ -13,8 +13,8 @@
 
 typedef struct ucs_async_thread_context {
     union {
-        ucs_spinlock_t      spinlock;
-        pthread_mutex_t     mutex;
+        ucs_recursive_spinlock_t spinlock;
+        pthread_mutex_t          mutex;
     };
 } ucs_async_thread_context_t;
 
