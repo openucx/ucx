@@ -59,8 +59,8 @@ static ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock, int flags)
     return UCS_OK;
 }
 
-static inline ucs_status_t ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock,
-                                                       int flags)
+static inline ucs_status_t
+ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock, int flags)
 {
     lock->count = 0;
     lock->owner = UCS_SPINLOCK_OWNER_NULL;
@@ -84,7 +84,8 @@ static inline ucs_status_t ucs_spinlock_destroy(ucs_spinlock_t *lock)
     return UCS_OK;
 }
 
-static inline ucs_status_t ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock)
+static inline ucs_status_t
+ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock)
 {
     if (lock->count != 0) {
         return UCS_ERR_BUSY;
@@ -93,7 +94,8 @@ static inline ucs_status_t ucs_recursive_spinlock_destroy(ucs_recursive_spinlock
     return ucs_spinlock_destroy(&lock->super);
 }
 
-static inline int ucs_recursive_spin_is_owner(ucs_recursive_spinlock_t *lock, pthread_t self)
+static inline int
+ucs_recursive_spin_is_owner(ucs_recursive_spinlock_t *lock, pthread_t self)
 {
     return lock->owner == self;
 }
