@@ -35,11 +35,9 @@
 #    define IBV_TMH_NO_TAG                  IBV_EXP_TMH_NO_TAG
 #  endif
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
-#  define IBV_DEVICE_MP_MIN_NUM_STRIDES     8
 #else
 #  define IBV_TM_CAP_RC                     0
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
-#  define IBV_DEVICE_MP_MIN_NUM_STRIDES     0
 #endif
 
 #if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
@@ -445,6 +443,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
         int                          enable;
         unsigned                     list_size;
         size_t                       seg_size;
+        ucs_ternary_value_t          mp_enable;
         size_t                       mp_num_strides;
     } tm;
     unsigned                         exp_backoff;
