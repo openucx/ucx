@@ -72,7 +72,7 @@ static void ucp_amo_completed_single(uct_completion_t *self,
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
-    ucs_trace("invoking completion on AMO request %p", req);
+    ucp_trace_req(req, "invoking completion");
     ucp_request_complete_send(req, status);
 }
 
