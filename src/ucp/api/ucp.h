@@ -973,7 +973,7 @@ typedef struct ucp_conn_request_attr {
      * The address of the remote client who sent the connection request to the
      * server.
      */
-    ucs_sock_addr_t         client_address;
+    struct sockaddr_storage client_address;
 } ucp_conn_request_attr_t;
 
 
