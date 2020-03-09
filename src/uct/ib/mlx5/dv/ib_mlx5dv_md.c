@@ -435,7 +435,7 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_cleanup   = NULL
 };
 
-static UCS_F_MAYBE_UNUSED ucs_status_t
+static ucs_status_t
 uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                            const uct_ib_md_config_t *md_config, void *cap)
 {
