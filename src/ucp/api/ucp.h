@@ -957,7 +957,7 @@ typedef struct ucp_listener_attr {
  * @ingroup UCP_WORKER
  * @brief UCP listener's connection request attributes.
  *
- * The structure defines the attributes which characterize
+ * The structure defines the attributes that characterize
  * the particular connection request received on the server side.
  */
 typedef struct ucp_conn_request_attr {
@@ -970,7 +970,7 @@ typedef struct ucp_conn_request_attr {
     uint64_t                field_mask;
 
     /**
-     * The address of the remote client who sent the connection request to the
+     * The address of the remote client that sent the connection request to the
      * server.
      */
     struct sockaddr_storage client_address;
