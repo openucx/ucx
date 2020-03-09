@@ -13,9 +13,7 @@
 
 static UCS_CLASS_INIT_FUNC(uct_knem_ep_t, const uct_ep_params_t *params)
 {
-    uct_knem_iface_t *iface = ucs_derived_of(params->iface, uct_knem_iface_t);
-
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_scopy_ep_t, params);
     return UCS_OK;
 }
 
@@ -24,7 +22,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_knem_ep_t)
     /* No op */
 }
 
-UCS_CLASS_DEFINE(uct_knem_ep_t, uct_base_ep_t)
+UCS_CLASS_DEFINE(uct_knem_ep_t, uct_scopy_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_knem_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_knem_ep_t, uct_ep_t);
 
@@ -50,6 +48,9 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
     struct knem_cmd_param_iovec knem_iov[UCT_SM_MAX_IOV];
     int rc;
     size_t iov_it;
+
+    UCT_CHECK_IOV_SIZE(iovcnt, knem_iface->super.config.max_iov,
+                       write ? "uct_knem_ep_put_zcopy" : "uct_knem_ep_get_zcopy");
 
     for (iov_it = 0; iov_it < ucs_min(UCT_SM_MAX_IOV, iovcnt); ++iov_it) {
         knem_iov[knem_iov_it].base = (uintptr_t)iov[iov_it].buffer;
@@ -95,8 +96,6 @@ ucs_status_t uct_knem_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
     uct_knem_key_t *key = (uct_knem_key_t *)rkey;
     ucs_status_t status;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, uct_sm_get_max_iov(), "uct_knem_ep_put_zcopy");
-
     status = uct_knem_rma(tl_ep, iov, iovcnt, remote_addr, key, 1);
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, ucs_derived_of(tl_ep, uct_base_ep_t),
                                  PUT, ZCOPY, uct_iov_total_length(iov, iovcnt));
@@ -109,8 +108,6 @@ ucs_status_t uct_knem_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
 {
     uct_knem_key_t *key = (uct_knem_key_t *)rkey;
     ucs_status_t status;
-
-    UCT_CHECK_IOV_SIZE(iovcnt, uct_sm_get_max_iov(), "uct_knem_ep_get_zcopy");
 
     status = uct_knem_rma(tl_ep, iov, iovcnt, remote_addr, key, 0);
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, ucs_derived_of(tl_ep, uct_base_ep_t),
