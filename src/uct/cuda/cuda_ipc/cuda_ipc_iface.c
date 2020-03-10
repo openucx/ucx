@@ -212,7 +212,10 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
             uct_invoke_completion(cuda_ipc_event->comp, UCS_OK);
         }
 
-        status = iface->unmap_memhandle(cuda_ipc_event->mapped_addr);
+        status = iface->unmap_memhandle(cuda_ipc_event->cache,
+                                        cuda_ipc_event->d_bptr,
+                                        cuda_ipc_event->mapped_addr,
+                                        iface->config.enable_cache);
         if (status != UCS_OK) {
             ucs_fatal("failed to unmap addr:%p", cuda_ipc_event->mapped_addr);
         }
@@ -362,24 +365,6 @@ static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
     .obj_cleanup   = uct_cuda_ipc_event_desc_cleanup,
 };
 
-ucs_status_t uct_cuda_ipc_map_memhandle(void *arg, uct_cuda_ipc_key_t *key,
-                                        void **mapped_addr)
-{
-    if (key->d_mapped != 0) {
-        /* potentially already mapped in uct_cuda_ipc_rkey_unpack */
-        *mapped_addr = (void *) key->d_mapped;
-        return UCS_OK;
-    }
-
-    return  UCT_CUDADRV_FUNC(cuIpcOpenMemHandle((CUdeviceptr *)mapped_addr,
-                             key->ph, CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS));
-}
-
-ucs_status_t uct_cuda_ipc_unmap_memhandle(void *mapped_addr)
-{
-    return UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)mapped_addr));
-}
-
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -403,13 +388,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     self->config.enable_cache        = config->enable_cache;
     self->config.max_cuda_ipc_events = config->max_cuda_ipc_events;
 
-    if (self->config.enable_cache) {
-        self->map_memhandle   = uct_cuda_ipc_cache_map_memhandle;
-        self->unmap_memhandle = ucs_empty_function_return_success;
-    } else {
-        self->map_memhandle   = uct_cuda_ipc_map_memhandle;
-        self->unmap_memhandle = uct_cuda_ipc_unmap_memhandle;
-    }
+    self->map_memhandle   = uct_cuda_ipc_map_memhandle;
+    self->unmap_memhandle = uct_cuda_ipc_unmap_memhandle;
 
     status = ucs_mpool_init(&self->event_desc,
                             0,
