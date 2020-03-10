@@ -23,6 +23,9 @@ stages:
       - job: commit_title
         displayName: commit title
         steps:
+          - checkout: self
+            clean: true
+
           - bash: |
               set -eE
               range="remotes/origin/$(System.PullRequest.TargetBranch)..$(Build.SourceVersion)"
@@ -52,6 +55,9 @@ stages:
         displayName: Static checks
         container: fedora
         steps:
+          - checkout: self
+            clean: true
+
           - bash: ./autogen.sh
             displayName: Setup autotools
 
@@ -105,6 +111,9 @@ stages:
               CONFIGURE_OPTS:
         container: $[ variables['CONTAINER'] ]
         steps:
+          - checkout: self
+            clean: true
+
           - bash: ./autogen.sh
             displayName: Setup autotools
 
@@ -126,6 +135,9 @@ stages:
         displayName: build tarball and source rpm
         container: fedora
         steps:
+          - checkout: self
+            clean: true
+
           - bash: ./autogen.sh
             displayName: Setup autotools
 
@@ -142,6 +154,9 @@ stages:
         container: fedora
         condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
         steps:
+          - checkout: self
+            clean: true
+
           - bash: ./autogen.sh
             displayName: Setup autotools
 
