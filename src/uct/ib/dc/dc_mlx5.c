@@ -224,9 +224,8 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 
     uct_dc_mlx5_iface_dci_put(iface, dci);
-    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
-
     uct_dc_mlx5_iface_progress_pending(iface);
+    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
     return 1;
 }
 
