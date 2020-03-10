@@ -19,6 +19,9 @@ stages:
         displayName: build tarball and source rpm
         container: fedora
         steps:
+          - checkout: self
+            clean: true
+
           - bash: ./autogen.sh
             displayName: Setup autotools
 

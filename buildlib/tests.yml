@@ -17,6 +17,9 @@ jobs:
           ${{ wid }}:
             worker_id: ${{ wid }}
     steps:
+      - checkout: self
+        clean: true
+
       - bash: |
           ./contrib/test_jenkins.sh
         displayName: Run ./contrib/test_jenkins.sh
