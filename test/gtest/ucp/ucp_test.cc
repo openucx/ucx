@@ -462,14 +462,20 @@ ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
                                        ucp_conn_request_h conn_request)
 {
     ucp_ep_params_t ep_params = *m_server_ep_params;
-    ucp_ep_h        ep;
+    ucp_conn_request_attr_t attr;
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+    status = ucp_conn_request_query(conn_request, &attr);
+    EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_UNSUPPORTED));
 
     ep_params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST |
                              UCP_EP_PARAM_FIELD_USER_DATA;
     ep_params.user_data    = reinterpret_cast<void*>(this);
     ep_params.conn_request = conn_request;
 
-    ucs_status_t status    = ucp_ep_create(worker, &ep_params, &ep);
+    status = ucp_ep_create(worker, &ep_params, &ep);
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
                         "feature or no supported transport to send partial "
