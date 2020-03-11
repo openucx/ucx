@@ -291,7 +291,7 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
                                     "device_name:<number>[T|G|M|K]B|b[[p|/]s] or device_name:auto"}
 
 #define UCS_CONFIG_TYPE_LOG_COMP   {ucs_config_sscanf_enum,      ucs_config_sprintf_enum, \
-                                    ucs_config_clone_log_comp,       ucs_config_release_nop, \
+                                    ucs_config_clone_log_comp,   ucs_config_release_nop, \
                                     ucs_config_help_enum,        ucs_log_level_names}
 
 #define UCS_CONFIG_TYPE_SIGNO      {ucs_config_sscanf_signo,     ucs_config_sprintf_signo, \
