@@ -911,7 +911,8 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
     if (config->num_paths == UCS_ULUNITS_AUTO) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
-            iface->num_paths = uct_ib_device_get_roce_lag_level(dev);
+            iface->num_paths =
+                    uct_ib_device_get_roce_lag_level(dev, iface->config.port_num);
         } else {
             /* IB - number of paths is LMC level */
             ucs_assert(iface->path_bits_count > 0);
