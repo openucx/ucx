@@ -241,6 +241,27 @@ static void print_progress(char **test_names, unsigned num_names,
     fflush(stdout);
 }
 
+static char *overhead_lat(struct perftest_context *ctx)
+{
+    test_type_t *test;
+    size_t len;
+    int i;
+    char *overhead[7] = {"am_bw", "put_bw", "tag_bw", "tag_sync_bw",
+                         "ucp_put_bw", "ucp_add", "stream_bw"};
+
+    for (test = tests; test->name; ++test) {
+        if ((test->command == ctx->params.command) && (test->test_type == ctx->params.test_type)) {
+            for (i=0; i<7; i++) {
+                len = strlen(test->name) > strlen(overhead[i])? strlen(overhead[i]):strlen(test->name);
+                if (strncmp(test->name, overhead[i], len) == 0) {
+                    return "overhead";
+                }
+            }
+        }
+    }
+    return "latency";
+}
+
 static void print_header(struct perftest_context *ctx)
 {
     const char *test_api_str;
@@ -298,7 +319,7 @@ static void print_header(struct perftest_context *ctx)
     } else {
         if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
             printf("+--------------+-----------------------------+---------------------+-----------------------+\n");
-            printf("|              |       latency (usec)        |   bandwidth (MB/s)  |  message rate (msg/s) |\n");
+            printf("|              |      %8s (usec)        |   bandwidth (MB/s)  |  message rate (msg/s) |\n", overhead_lat(ctx));
             printf("+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
             printf("| # iterations | typical | average | overall |  average |  overall |   average |   overall |\n");
             printf("+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
