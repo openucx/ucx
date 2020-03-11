@@ -75,6 +75,11 @@ typedef struct test_req {
 } test_req_t;
 
 
+/**
+ * Print this application's usage help message.
+ */
+static void usage(void);
+
 static void tag_recv_cb(void *request, ucs_status_t status,
                         ucp_tag_recv_info_t *info)
 {

@@ -164,7 +164,7 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([#include <malloc.h>
                                       rc = 0;
                                       return NULL;
                                   }
-                                  int main() {
+                                  int main(int argc, char** argv) {
                                       __malloc_hook = myhook;
                                       ptr = malloc(1);
                                       return rc;
