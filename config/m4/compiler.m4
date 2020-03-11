@@ -416,32 +416,14 @@ AM_CONDITIONAL([HAVE_GNUXX11], [test "x$gnuxx11_happy" != xno])
 #
 # PGI specific switches
 #
-ADD_COMPILER_FLAG_IF_SUPPORTED([--display_error_number],
-                               [--display_error_number],
-                               [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                               [],
-                               [])
-
-# Suppress incorrect printf format for PGI18 compiler. TODO: remove it after compiler fix
-ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 181],
-                               [--diag_suppress 181],
-                               [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                               [],
-                               [])
-
-# Suppress deprecated API warning for PGI18 compiler
-ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 1215],
-                               [--diag_suppress 1215],
-                               [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                               [],
-                               [])
-
-# Use of a const variable in a constant expression is nonstandard in C
-ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 1901],
-                               [--diag_suppress 1901],
-                               [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                               [],
-                               [])
+# --diag_suppress 181  - Suppress incorrect printf format for PGI18 compiler. TODO: remove it after compiler fix
+# --diag_suppress 1215 - Suppress deprecated API warning for PGI18 compiler
+# --diag_suppress 1901 - Use of a const variable in a constant expression is nonstandard in C
+ADD_COMPILER_FLAGS_IF_SUPPORTED([[--display_error_number],
+                                 [--diag_suppress 181],
+                                 [--diag_suppress 1215],
+                                 [--diag_suppress 1901]],
+                                [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
 # Check if "-pedantic" flag is supported
 CHECK_COMPILER_FLAG([-pedantic], [-pedantic],
