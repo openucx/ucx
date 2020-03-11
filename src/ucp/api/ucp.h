@@ -357,6 +357,18 @@ enum ucp_listener_attr_field {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief UCP listener's connection request attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_conn_request_attr_t
+ * are present. It is used to enable backward compatibility support.
+ */
+enum ucp_conn_request_attr_field {
+    UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR = UCS_BIT(0) /**< Client's address */
+};
+
+
+/**
  * @ingroup UCP_DATATYPE
  * @brief UCP data type classification
  *
@@ -939,6 +951,30 @@ typedef struct ucp_listener_attr {
      */
     struct sockaddr_storage sockaddr;
 } ucp_listener_attr_t;
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP listener's connection request attributes.
+ *
+ * The structure defines the attributes that characterize
+ * the particular connection request received on the server side.
+ */
+typedef struct ucp_conn_request_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_conn_request_attr_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * The address of the remote client that sent the connection request to the
+     * server.
+     */
+    struct sockaddr_storage client_address;
+} ucp_conn_request_attr_t;
 
 
 /**
@@ -1686,6 +1722,22 @@ void ucp_listener_destroy(ucp_listener_h listener);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_listener_query(ucp_listener_h listener, ucp_listener_attr_t *attr);
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Get attributes specific to a particular connection request received
+ * on the server side.
+ *
+ * This routine fetches information about the connection request.
+ *
+ * @param [in]  conn_request  connection request object to query.
+ * @param [out] attr          Filled with attributes of the connection request.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
+                                    ucp_conn_request_attr_t *attr);
 
 
 /**

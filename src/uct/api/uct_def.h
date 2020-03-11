@@ -319,7 +319,7 @@ typedef struct uct_cm_listener_conn_request_args {
     /**
      * Client's address.
      */
-    ucs_sock_addr_t             client_address;
+    ucs_sock_addr_t            client_address;
 } uct_cm_listener_conn_request_args_t;
 
 
