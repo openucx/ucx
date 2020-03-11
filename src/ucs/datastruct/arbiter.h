@@ -109,12 +109,18 @@ typedef enum {
 #define UCS_ARBITER_GROUP_GUARD_CHECK(_group) \
     ucs_assertv((_group)->guard == 0, \
                 "scheduling arbiter group %p while it's being dispatched", _group)
+#define UCS_ARBITER_GROUP_ARBITER_DEFINE                  ucs_arbiter_t *arbiter
+#define UCS_ARBITER_GROUP_ARBITER_SET(_group, _arbiter)   (_group)->arbiter = _arbiter
+#define UCS_ARBITER_GROUP_ARBITER_CHECK(_group, _arbiter) ucs_assert((_group)->arbiter == _arbiter)
 #else
 #define UCS_ARBITER_GROUP_GUARD_DEFINE
 #define UCS_ARBITER_GROUP_GUARD_INIT(_group)
 #define UCS_ARBITER_GROUP_GUARD_ENTER(_group)
 #define UCS_ARBITER_GROUP_GUARD_EXIT(_group)
 #define UCS_ARBITER_GROUP_GUARD_CHECK(_group)
+#define UCS_ARBITER_GROUP_ARBITER_DEFINE
+#define UCS_ARBITER_GROUP_ARBITER_SET(_group, _arbiter)
+#define UCS_ARBITER_GROUP_ARBITER_CHECK(_group, _arbiter)
 #endif
 
 
@@ -146,6 +152,7 @@ struct ucs_arbiter {
 struct ucs_arbiter_group {
     ucs_arbiter_elem_t      *tail;
     UCS_ARBITER_GROUP_GUARD_DEFINE;
+    UCS_ARBITER_GROUP_ARBITER_DEFINE;
 };
 
 
@@ -316,6 +323,8 @@ static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
 
     head = group->tail->next;
     if (ucs_arbiter_group_head_is_scheduled(head)) {
+        UCS_ARBITER_GROUP_ARBITER_CHECK(group, arbiter);
+        UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
         ucs_list_del(&head->list);
         ucs_arbiter_group_head_reset(head);
     }
