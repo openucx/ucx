@@ -48,10 +48,6 @@ size_t uct_sm_iface_get_device_addr_len();
 
 ucs_status_t uct_sm_ep_fence(uct_ep_t *tl_ep, unsigned flags);
 
-static UCS_F_ALWAYS_INLINE size_t uct_sm_get_max_iov() {
-    return ucs_min(UCT_SM_MAX_IOV, ucs_iov_get_max());
-}
-
 UCS_CLASS_DECLARE(uct_sm_iface_t, uct_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, const uct_iface_config_t*);
 

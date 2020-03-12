@@ -10,16 +10,16 @@
 #include "knem_md.h"
 
 #include <uct/base/uct_iface.h>
-#include <uct/sm/base/sm_iface.h>
+#include <uct/sm/scopy/base/scopy_iface.h>
 
 
 typedef struct uct_knem_iface_config {
-    uct_sm_iface_config_t         super;
+    uct_scopy_iface_config_t      super;
 } uct_knem_iface_config_t;
 
 
 typedef struct uct_knem_iface {
-    uct_sm_iface_t                super;
+    uct_scopy_iface_t             super;
     uct_knem_md_t                 *knem_md;
 } uct_knem_iface_t;
 
