@@ -440,6 +440,36 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     ASSERT_TRUE(packed_dev_priorities == unpacked_dev_priorities);
 }
 
+UCS_TEST_P(test_ucp_wireup_1sided, ep_address, "IB_NUM_PATHS?=2") {
+    ucs_status_t status;
+    size_t size;
+    void *buffer;
+    ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
+
+    sender().connect(&receiver(), get_ep_params());
+
+    status = ucp_address_pack(sender().worker(), sender().ep(),
+                              std::numeric_limits<uint64_t>::max(),
+                              UCP_ADDRESS_PACK_FLAG_ALL, lanes2remote, &size,
+                              &buffer);
+    ASSERT_UCS_OK(status);
+    ASSERT_TRUE(buffer != NULL);
+
+    ucp_unpacked_address unpacked_address;
+
+    status = ucp_address_unpack(sender().worker(), buffer,
+                                std::numeric_limits<uint64_t>::max(),
+                                &unpacked_address);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);
+    EXPECT_LE(unpacked_address.address_count,
+              static_cast<unsigned>(sender().ucph()->num_tls));
+
+    ucs_free(unpacked_address.address_list);
+    ucs_free(buffer);
+}
+
 UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     ucs_status_t status;
     size_t size;
