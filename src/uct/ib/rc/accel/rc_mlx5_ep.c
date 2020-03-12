@@ -972,7 +972,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
                               self->tx.wq.bb_max -
                               uct_rc_txqp_available(&self->super.txqp));
 
-    uct_ib_mlx5_srq_cleanup(&iface->rx.srq, iface->rx.srq.verbs.srq);
+    uct_ib_mlx5_verbs_srq_cleanup(&iface->rx.srq, iface->rx.srq.verbs.srq);
 
     uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
     uct_ib_mlx5_destroy_qp(&self->tx.wq.super);

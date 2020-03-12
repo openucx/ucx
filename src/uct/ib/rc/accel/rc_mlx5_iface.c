@@ -357,7 +357,11 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
     int mtu;
     int tm_params;
     ucs_status_t status;
+#endif
 
+    iface->config.cyclic_srq_enable = mlx5_config->cyclic_srq_enable;
+
+#if IBV_HW_TM
     /* Both eager and rndv callbacks should be provided for
      * tag matching support */
     tm_params = ucs_test_all_flags(params->field_mask,
@@ -462,8 +466,10 @@ static ucs_status_t
 uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
                           const uct_rc_iface_common_config_t *rc_config)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_md_t *md = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
+    uct_rc_mlx5_iface_common_t *iface    = ucs_derived_of(rc_iface,
+                                                          uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md                 = ucs_derived_of(rc_iface->super.super.md,
+                                                          uct_ib_mlx5_md_t);
     struct ibv_srq_init_attr_ex srq_attr = {};
     ucs_status_t status;
 
@@ -477,7 +483,7 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
         }
 
         if (status != UCS_OK) {
-            goto err;
+            return status;
         }
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
@@ -485,28 +491,21 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
     }
 
     /* MP XRQ is supported with HW TM only */
-    ucs_assert(iface->tm.mp.num_strides == 1);
+    ucs_assert(!UCT_RC_MLX5_MP_ENABLED(iface));
 
-    status = uct_rc_iface_init_rx(rc_iface, rc_config, &iface->rx.srq.verbs.srq);
-    if (status != UCS_OK) {
-        goto err;
+    if (ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_RMP |
+                                      UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ)) {
+        status = uct_rc_mlx5_devx_init_rx(iface, rc_config);
+    } else {
+        status = uct_rc_mlx5_common_iface_init_rx(iface, rc_config);
     }
 
-    status = uct_ib_mlx5_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
-                                  iface->super.super.config.seg_size,
-                                  iface->tm.mp.num_strides);
     if (status != UCS_OK) {
-        goto err_free_srq;
+        return status;
     }
 
-    iface->rx.srq.type    = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     iface->super.progress = uct_rc_mlx5_iface_progress;
     return UCS_OK;
-
-err_free_srq:
-    uct_rc_mlx5_destroy_srq(&iface->rx.srq);
-err:
-    return status;
 }
 
 static void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface)
@@ -554,27 +553,6 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
     return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
 }
 
-
-static int uct_rc_mlx5_iface_srq_topo(uct_rc_mlx5_iface_common_t *iface,
-                                      uct_md_h md,
-                                      uct_rc_mlx5_iface_common_config_t *mlx5_config)
-{
-    uct_ib_mlx5_md_t *ib_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
-
-    /* Cyclic SRQ is supported with HW TM and DEVX only. */
-    if (((mlx5_config->srq_topo == UCT_RC_MLX5_SRQ_TOPO_AUTO) ||
-        (mlx5_config->srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC)) &&
-        UCT_RC_MLX5_TM_ENABLED(iface) &&
-        (ib_md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
-
-        return UCT_RC_MLX5_MP_ENABLED(iface) ?
-               UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ : UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
-    }
-
-    return UCT_RC_MLX5_MP_ENABLED(iface) ?
-           UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ : UCT_IB_MLX5_SRQ_TOPO_LIST;
-}
-
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                     uct_rc_iface_ops_t *ops,
                     uct_md_h md, uct_worker_h worker,
@@ -593,7 +571,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     }
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
-    self->rx.srq.topo                = uct_rc_mlx5_iface_srq_topo(self, md, mlx5_config);
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
     init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
                                        0 : sizeof(uct_rc_mlx5_hdr_t);
