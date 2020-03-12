@@ -1060,8 +1060,13 @@ static unsigned uct_tcp_ep_progress_magic_number_rx(uct_tcp_ep_t *ep)
     prev_length = ep->rx.length;
     recv_length = sizeof(magic_number) - ep->rx.length;
 
-    if (!uct_tcp_ep_recv(ep, recv_length) ||
-        (ep->rx.length < sizeof(magic_number))) {
+    if (!uct_tcp_ep_recv(ep, recv_length)) {
+        /* Do not touch EP here as it could be destroyed during
+         * socket error handling */
+        return 0;
+    }
+
+    if (ep->rx.length < sizeof(magic_number)) {
         return ((ep->rx.length - prev_length) > 0);
     }
 
