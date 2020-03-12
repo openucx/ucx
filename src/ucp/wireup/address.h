@@ -36,13 +36,16 @@ enum {
 
 
 enum {
-    UCP_ADDRESS_PACK_FLAG_WORKER_UUID    = UCS_BIT(0),
-    UCP_ADDRESS_PACK_FLAG_WORKER_NAME    = UCS_BIT(1), /* valid only for debug build */
-    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR    = UCS_BIT(2),
-    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR     = UCS_BIT(3),
-    UCP_ADDRESS_PACK_FLAG_EP_ADDR        = UCS_BIT(4),
-    UCP_ADDRESS_PACK_FLAG_TRACE          = UCS_BIT(16), /* show debug prints of pack/unpack */
-    UCP_ADDRESS_PACK_FLAG_ALL            = (uint64_t)-1
+    UCP_ADDRESS_PACK_FLAG_WORKER_UUID = UCS_BIT(0), /* Add worker UUID */
+    UCP_ADDRESS_PACK_FLAG_WORKER_NAME = UCS_BIT(1), /* Pack worker name */
+    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR = UCS_BIT(2), /* Pack device addresses */
+    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  = UCS_BIT(3), /* Pack interface addresses */
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR     = UCS_BIT(4), /* Pack endpoint addresses */
+
+    UCP_ADDRESS_PACK_FLAG_LAST,
+    UCP_ADDRESS_PACK_FLAGS_ALL        = (UCP_ADDRESS_PACK_FLAG_LAST << 1) - 3,
+
+    UCP_ADDRESS_PACK_FLAG_NO_TRACE    = UCS_BIT(16)
 };
 
 
@@ -115,7 +118,7 @@ struct ucp_unpacked_address {
  *                            Can be set to NULL, to take addresses only from worker.
  * @param [in]  tl_bitmap     Specifies the resources whose transport address
  *                            (ep or iface) should be packed.
- * @param [in]  flags         UCP_ADDRESS_PACK_FLAG_xx flags to specify address
+ * @param [in]  pack_flags    UCP_ADDRESS_PACK_FLAG_xx flags to specify address
  *                            format.
  * @param [in]  lanes2remote  If NULL, the lane index in each packed ep address
  *                            will be the local lane index. Otherwise, specifies
@@ -126,7 +129,7 @@ struct ucp_unpacked_address {
  *                            released by ucs_free().
  */
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
-                              uint64_t tl_bitmap, uint64_t flags,
+                              uint64_t tl_bitmap, unsigned pack_flags,
                               const ucp_lane_index_t *lanes2remote,
                               size_t *size_p, void **buffer_p);
 
@@ -136,7 +139,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
  *
  * @param [in]  worker           Worker object.
  * @param [in]  buffer           Buffer with data to unpack.
- * @param [in]  flags            UCP_ADDRESS_PACK_FLAG_xx flags to specify
+ * @param [in]  unpack_flags     UCP_ADDRESS_PACK_FLAG_xx flags to specify
  *                               address format, must be the same as the address
  *                               which was packed by @ref ucp_address_pack.
  * @param [out] unpacked_address Filled with remote address data.
@@ -148,7 +151,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
  *       by ucs_free().
  */
 ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
-                                uint64_t flags,
+                                unsigned unpack_flags,
                                 ucp_unpacked_address_t *unpacked_address);
 
 

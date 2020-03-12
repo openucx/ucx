@@ -182,7 +182,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
     /* pack all addresses */
     status = ucp_address_pack(ep->worker,
                               ucp_wireup_is_ep_needed(ep) ? ep : NULL,
-                              tl_bitmap, UCP_ADDRESS_PACK_FLAG_ALL,
+                              tl_bitmap, UCP_ADDRESS_PACK_FLAGS_ALL,
                               lanes2remote, &req->send.length, &address);
     if (status != UCS_OK) {
         ucs_free(req);
@@ -646,7 +646,8 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    status = ucp_address_unpack(worker, msg + 1, UINT64_MAX, &remote_address);
+    status = ucp_address_unpack(worker, msg + 1, UCP_ADDRESS_PACK_FLAGS_ALL,
+                                &remote_address);
     if (status != UCS_OK) {
         ucs_error("failed to unpack address: %s", ucs_status_string(status));
         goto out;
@@ -1190,7 +1191,9 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     char *p, *end;
     ucp_rsc_index_t tl;
 
-    status = ucp_address_unpack(worker, msg + 1, ~UCP_ADDRESS_PACK_FLAG_TRACE,
+    status = ucp_address_unpack(worker, msg + 1,
+                                UCP_ADDRESS_PACK_FLAGS_ALL |
+                                UCP_ADDRESS_PACK_FLAG_NO_TRACE,
                                 &unpacked_address);
     if (status != UCS_OK) {
         strncpy(unpacked_address.name, "<malformed address>", UCP_WORKER_NAME_MAX);

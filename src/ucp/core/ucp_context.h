@@ -66,6 +66,8 @@ typedef struct ucp_context_config {
     size_t                                 tm_max_bb_size;
     /** Enabling SW rndv protocol with tag offload mode */
     int                                    tm_sw_rndv;
+    /** Pack debug information in worker address */
+    int                                    address_debug_info;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */

@@ -196,7 +196,7 @@ static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 #if ENABLE_DEBUG_DATA
     return ep->peer_name;
 #else
-    return "<no debug data>";
+    return UCP_WIREUP_EMPTY_PEER_NAME;
 #endif
 }
 

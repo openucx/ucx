@@ -176,14 +176,18 @@ static ucs_config_field_t ucp_config_table[] = {
    "          Otherwise the CPU mode is selected.",
    ucs_offsetof(ucp_config_t, ctx.atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
 
-  {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
-   "Maximal length of worker name. "
+  {"ADDRESS_DEBUG_INFO",
 #if ENABLE_DEBUG_DATA
-   "Sent to remote peer as part of worker address."
+   "y",
 #else
-   "Not sent to remote peer per build configuration."
+   "n",
 #endif
-   ,
+   "Add debugging information to worker address.",
+   ucs_offsetof(ucp_config_t, ctx.address_debug_info), UCS_CONFIG_TYPE_BOOL},
+
+  {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
+   "Maximal length of worker name. Sent to remote peer as part of worker address\n"
+   "if UCX_ADDRESS_DEBUG_INFO is set to 'yes'",
    ucs_offsetof(ucp_config_t, ctx.max_worker_name), UCS_CONFIG_TYPE_UINT},
 
   {"USE_MT_MUTEX", "n", "Use mutex for multithreading support in UCP.\n"
