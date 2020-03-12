@@ -252,6 +252,9 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         address_index      = addr_indices[lane];
         address            = &remote_address->address_list[address_index];
         ep_addr_index      = ep_addr_indexes[address_index]++;
+        ucs_assertv(ep_addr_index < address->num_ep_addrs,
+                    "ep_addr_index=%u num_ep_addrs=%u",
+                    ep_addr_index, address->num_ep_addrs);
         remote_lane        = address->ep_addrs[ep_addr_index].lane;
         lanes2remote[lane] = remote_lane;
 
