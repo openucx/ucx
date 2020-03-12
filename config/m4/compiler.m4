@@ -440,8 +440,7 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
                                  [-Wno-multichar],
                                  [-Wno-deprecated-declarations],
                                  [-Winvalid-pch],
-                                 [-Wvariadic-macros],
-                                 [-Wno-format-zero-length]],
+                                 [-Wvariadic-macros]de],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
 
@@ -463,6 +462,14 @@ CHECK_COMPILER_FLAG([-Werror-implicit-function-declaration],
                     [-Werror-implicit-function-declaration],
                     [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                     [BASE_CFLAGS="$BASE_CFLAGS -Werror-implicit-function-declaration"],
+                    [])
+
+# Check if "-Wno-format-zero-length" flag is supported, this flag is
+# supported by C compiler only
+CHECK_COMPILER_FLAG([-Wno-format-zero-length],
+                    [-Wno-format-zero-length],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
+                    [BASE_CFLAGS="$BASE_CFLAGS -Wno-format-zero-length"],
                     [])
 
 AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS]) 
