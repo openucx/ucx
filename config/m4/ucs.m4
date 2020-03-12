@@ -142,7 +142,7 @@ AC_MSG_CHECKING([__attribute__((constructor))])
 CHECK_CROSS_COMP([AC_LANG_SOURCE([static int rc = 1;
                   static void constructor_test() __attribute__((constructor));
                   static void constructor_test() { rc = 0; }
-                  int main() { return rc; }])],
+                  int main(int argc, char** argv) { return rc; }])],
                 [AC_MSG_RESULT([yes])],
                 [AC_MSG_ERROR([Cannot continue. Please use compiler that
                              supports __attribute__((constructor))])]

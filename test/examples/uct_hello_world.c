@@ -61,6 +61,8 @@ typedef struct {
 
 static void* desc_holder = NULL;
 
+int print_err_usage(void);
+
 static char *func_am_t_str(func_am_t func_am_type)
 {
     switch (func_am_type) {
