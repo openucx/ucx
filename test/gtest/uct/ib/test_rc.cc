@@ -159,6 +159,34 @@ public:
         return rc_iface(e)->tx.reads_available;
     }
 
+    void post_max_reads(entity *e, const mapped_buffer &sendbuf,
+                        const mapped_buffer &recvbuf) {
+        ucs_status_t status, status_exp;
+
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(), e->iface_attr().cap.get.max_iov);
+
+        for (unsigned i = 0; i <= m_num_get_ops; ++i) {
+            if (i % 2) {
+                status = uct_ep_get_zcopy(e->ep(0), iov, iovcnt, recvbuf.addr(),
+                                          recvbuf.rkey(), &m_comp);
+            } else {
+                status = uct_ep_get_bcopy(e->ep(0), (uct_unpack_callback_t)memcpy,
+                                          sendbuf.ptr(), sendbuf.length(),
+                                          recvbuf.addr(), recvbuf.rkey(), &m_comp);
+            }
+            status_exp = (i == m_num_get_ops) ? UCS_ERR_NO_RESOURCE :
+                                                UCS_INPROGRESS;
+            EXPECT_EQ(status_exp, status);
+        }
+
+        EXPECT_EQ(0u, reads_available(e));
+    }
+
+    static size_t empty_pack_cb(void *dest, void *arg) {
+        return 0ul;
+    }
+
 protected:
     unsigned         m_num_get_ops;
     unsigned         m_max_get_zcopy;
@@ -172,24 +200,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_ops_limit,
     mapped_buffer sendbuf(1024, 0ul, *m_e1);
     mapped_buffer recvbuf(1024, 0ul, *m_e2);
 
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                            sendbuf.memh(), m_e1->iface_attr().cap.get.max_iov);
-
-    ucs_status_t status_b, status_z, status_exp;
-
-
-    for (unsigned i = 0; i <= m_num_get_ops;) {
-       status_z = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
-                                  recvbuf.rkey(), &m_comp);
-       status_b = uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
-                                   sendbuf.ptr(), sendbuf.length(),
-                                   recvbuf.addr(), recvbuf.rkey(), &m_comp);
-       i += 2;
-       status_exp = (i > m_num_get_ops) ? UCS_ERR_NO_RESOURCE : UCS_INPROGRESS;
-       EXPECT_EQ(status_exp, status_z);
-       EXPECT_EQ(status_exp, status_b);
-    }
-    EXPECT_EQ(0u, reads_available(m_e1));
+    post_max_reads(m_e1, sendbuf, recvbuf);
 
     // Check that it is possible to add to pending if get returns NO_RESOURCE
     // due to lack of get credits
@@ -263,6 +274,62 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
     EXPECT_EQ(max_get_ops, reads_available(m_e1));
 
     flush();
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, check_rma_ops,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_BCOPY |
+                                 UCT_IFACE_FLAG_PUT_SHORT |
+                                 UCT_IFACE_FLAG_PUT_BCOPY |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_AM_SHORT  |
+                                 UCT_IFACE_FLAG_AM_BCOPY  |
+                                 UCT_IFACE_FLAG_AM_ZCOPY))
+
+{
+    mapped_buffer sendbuf(1024, 0ul, *m_e1);
+    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+
+    post_max_reads(m_e1, sendbuf, recvbuf);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, NULL, 0, NULL, 1);
+    uct_ep_h ep = m_e1->ep(0);
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_short(ep, NULL, 0, 0, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_bcopy(ep, NULL, NULL, 0, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_zcopy(ep, iov, iovcnt, 0, 0,
+                                                    NULL));
+
+    if (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64)) {
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64));
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP64));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, 0));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0,
+                                        NULL));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic_cswap64(ep, 0, 0, 0, 0, NULL, NULL));
+    }
+
+    if (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP32)) {
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32));
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, 0));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0,
+                                        NULL));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic_cswap32(ep, 0, 0, 0, 0, NULL, NULL));
+    }
+    EXPECT_UCS_OK(uct_ep_am_short(ep, 0, 0, NULL, 0));
+    EXPECT_EQ(0l, uct_ep_am_bcopy(ep, 0, empty_pack_cb, NULL, 0));
+    EXPECT_FALSE(UCS_STATUS_IS_ERR(uct_ep_am_zcopy(ep, 0, NULL, 0, iov, iovcnt,
+                                                   0, NULL)));
+
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_get_limit)

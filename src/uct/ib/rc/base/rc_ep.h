@@ -109,6 +109,15 @@ enum {
     UCT_RC_CHECK_CQE_RET(_iface, _ep, UCS_ERR_NO_RESOURCE) \
     UCT_RC_CHECK_TXQP_RET(_iface, _ep, UCS_ERR_NO_RESOURCE)
 
+/**
+ * All RMA and AMO operations are not allowed if no RDMA_READ credits.
+ * Otherwise operations ordering can be broken (which fence operation
+ * relies on).
+ */
+#define UCT_RC_CHECK_RMA_RES(_iface, _ep, _txqp) \
+    UCT_RC_CHECK_RES(_iface, _ep) \
+    UCT_RC_CHECK_NUM_RDMA_READ(_iface, _txqp)
+
 /*
  * check for FC credits and add FC protocol bits (if any)
  */

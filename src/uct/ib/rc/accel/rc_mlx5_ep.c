@@ -81,7 +81,7 @@ uct_rc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer, unsigned len
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     UCT_RC_MLX5_CHECK_PUT_SHORT(length, 0);
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
 
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
@@ -162,11 +162,11 @@ uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
     }
 
     UCT_CHECK_LENGTH(length, 0, iface->dm.seg_len, "put_short");
-    UCT_RC_CHECK_RES(rc_iface, &ep->super);
-    status =  uct_rc_mlx5_ep_short_dm(ep, NULL, 0, buffer, length,
-                                      MLX5_OPCODE_RDMA_WRITE,
-                                      MLX5_WQE_CTRL_CQ_UPDATE,
-                                      remote_addr, rkey);
+    UCT_RC_CHECK_RMA_RES(rc_iface, &ep->super, &ep->super.txqp);
+    status = uct_rc_mlx5_ep_short_dm(ep, NULL, 0, buffer, length,
+                                     MLX5_OPCODE_RDMA_WRITE,
+                                     MLX5_WQE_CTRL_CQ_UPDATE,
+                                     remote_addr, rkey);
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     }
@@ -183,7 +183,7 @@ ssize_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     uct_rc_iface_send_desc_t *desc;
     size_t length;
 
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp,
                                        desc, pack_cb, arg, length);
 
@@ -199,16 +199,15 @@ ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uct_completion_t *comp)
 {
-    uct_ib_iface_t UCS_V_UNUSED *iface = ucs_derived_of(tl_ep->iface,
-                                                        uct_ib_iface_t);
-    uct_rc_mlx5_ep_t *ep               = ucs_derived_of(tl_ep,
-                                                        uct_rc_mlx5_ep_t);
+    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    uct_rc_mlx5_ep_t *ep  = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
     ucs_status_t status;
 
     UCT_CHECK_IOV_SIZE(iovcnt, UCT_RC_MLX5_RMA_MAX_IOV(0),
                        "uct_rc_mlx5_ep_put_zcopy");
     UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), 0, UCT_IB_MAX_MESSAGE_SIZE,
                      "put_zcopy");
+    UCT_RC_CHECK_NUM_RDMA_READ(iface, &ep->super.txqp);
 
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_RDMA_WRITE, iov, iovcnt,
                                        0, NULL, 0, remote_addr, rkey, 0ul, 0, 0,
@@ -230,8 +229,7 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
     uct_rc_iface_send_desc_t *desc;
 
     UCT_CHECK_LENGTH(length, 0, iface->super.super.config.seg_size, "get_bcopy");
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_CHECK_NUM_RDMA_READ(&iface->super, &ep->super.txqp);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
     UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                        unpack_cb, comp, arg, length);
 
@@ -391,15 +389,17 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_mlx5_ep_atomic_fop(uct_ep_h tl_ep, int opcode, void *result, int ext,
                           unsigned length, uint64_t remote_addr, uct_rkey_t rkey,
                           uint64_t compare_mask, uint64_t compare,
-                          uint64_t swap_mask, uint64_t swap_add, uct_completion_t *comp)
+                          uint64_t swap_mask, uint64_t swap_add,
+                          uct_completion_t *comp)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_rc_iface_send_desc_t *desc;
 
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
-    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->tx.atomic_desc_mp,
-                                          desc, uct_rc_iface_atomic_handler(&iface->super, ext,
-                                                                            length),
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
+    UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super,
+                                          &iface->tx.atomic_desc_mp, desc,
+                                          uct_rc_iface_atomic_handler(&iface->super,
+                                                                      ext, length),
                                           result, comp);
     uct_rc_mlx5_ep_atomic_post(tl_ep, opcode, desc, length, remote_addr, rkey,
                                compare_mask, compare, swap_mask, swap_add);
@@ -408,7 +408,8 @@ uct_rc_mlx5_ep_atomic_fop(uct_ep_h tl_ep, int opcode, void *result, int ext,
 
 static ucs_status_t UCS_F_ALWAYS_INLINE
 uct_rc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
-                              uint64_t value, uint64_t remote_addr, uct_rkey_t rkey)
+                              uint64_t value, uint64_t remote_addr,
+                              uct_rkey_t rkey)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_rc_iface_send_desc_t *desc;
@@ -420,16 +421,18 @@ uct_rc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
     int      ext; /* not used here */
     ucs_status_t status;
 
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super, &ep->super.txqp);
     UCT_RC_MLX5_CHECK_ATOMIC_OPS(opcode, size, UCT_RC_MLX5_ATOMIC_OPS);
 
-    status = uct_rc_mlx5_iface_common_atomic_data(opcode, size, value, &op, &compare_mask,
-                                                  &compare, &swap_mask, &swap, &ext);
+    status = uct_rc_mlx5_iface_common_atomic_data(opcode, size, value, &op,
+                                                  &compare_mask, &compare,
+                                                  &swap_mask, &swap, &ext);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
     }
 
-    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->tx.atomic_desc_mp, desc);
+    UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->tx.atomic_desc_mp,
+                                    desc);
 
     uct_rc_mlx5_ep_atomic_post(tl_ep, op, desc, size, remote_addr, rkey,
                                compare_mask, compare, swap_mask, swap);
