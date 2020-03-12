@@ -123,7 +123,6 @@ AS_IF([test "x$enable_logging" != xno],
         [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_INFO], [Highest log level])]
     )
 
-
 #
 # Disable assertions
 #

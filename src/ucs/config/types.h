@@ -119,4 +119,12 @@ typedef struct ucs_sock_addr {
     socklen_t                addrlen;   /**< Address length */
 } ucs_sock_addr_t;
 
+/**
+ * Logging component.
+ */
+typedef struct ucs_log_component_config {
+    ucs_log_level_t log_level;
+    char            name[16];
+} ucs_log_component_config_t;
+
 #endif /* TYPES_H_ */

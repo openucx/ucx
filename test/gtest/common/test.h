@@ -70,19 +70,27 @@ public:
 
     static ucs_log_func_rc_t
     count_warns_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *message, va_list ap);
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     hide_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *message, va_list ap);
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     hide_warns_logger(const char *file, unsigned line, const char *function,
-                      ucs_log_level_t level, const char *message, va_list ap);
+                      ucs_log_level_t level,
+                      const ucs_log_component_config_t *comp_conf,
+                      const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     wrap_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *message, va_list ap);
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap);
 
     state_t                         m_state;
     bool                            m_initialized;
