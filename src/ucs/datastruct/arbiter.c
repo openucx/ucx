@@ -198,6 +198,7 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
     }
 
     ucs_arbiter_schedule_head_if_not_scheduled(arbiter, head);
+    UCS_ARBITER_GROUP_ARBITER_SET(group, arbiter);
 }
 
 void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
@@ -253,6 +254,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                     group->tail = NULL; /* Group is empty now */
                     sched_group = 0;
                     group_head  = NULL; /* for debugging */
+                    UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
                     break;
                 } else {
                     /* Not last element */
@@ -278,7 +280,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                     /* resched/desched must avoid adding the group to the arbiter */
                     sched_group = 0;
                     if (result == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) {
-                        /* Nothing to do */
+                        UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
                     } else if (result == UCS_ARBITER_CB_RESULT_RESCHED_GROUP) {
                         ucs_list_add_tail(&resched_list, &group_head->list);
                     } else {
