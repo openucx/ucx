@@ -95,16 +95,18 @@ typedef struct {
                                                 device is packed right after device
                                                 address, otherwise number of paths
                                                 defaults to 1. */
-#define UCP_ADDRESS_FLAG_LEN_MASK     ~(UCP_ADDRESS_FLAG_HAS_EP_ADDR | \
-                                        UCP_ADDRESS_FLAG_HAVE_PATHS  | \
-                                        UCP_ADDRESS_FLAG_LAST)
+#define UCP_ADDRESS_FLAG_LEN_MASK     (UCS_MASK(8) ^ \
+                                        (UCP_ADDRESS_FLAG_HAS_EP_ADDR | \
+                                         UCP_ADDRESS_FLAG_HAVE_PATHS  | \
+                                         UCP_ADDRESS_FLAG_LAST))
 
 #define UCP_ADDRESS_FLAG_MD_EMPTY_DEV 0x80u  /* Device without TL addresses */
 #define UCP_ADDRESS_FLAG_MD_ALLOC     0x40u  /* MD can register  */
 #define UCP_ADDRESS_FLAG_MD_REG       0x20u  /* MD can allocate */
-#define UCP_ADDRESS_FLAG_MD_MASK      ~(UCP_ADDRESS_FLAG_MD_EMPTY_DEV | \
-                                        UCP_ADDRESS_FLAG_MD_ALLOC | \
-                                        UCP_ADDRESS_FLAG_MD_REG)
+#define UCP_ADDRESS_FLAG_MD_MASK      (UCS_MASK(8) ^ \
+                                        (UCP_ADDRESS_FLAG_MD_EMPTY_DEV | \
+                                         UCP_ADDRESS_FLAG_MD_ALLOC | \
+                                         UCP_ADDRESS_FLAG_MD_REG))
 
 static size_t ucp_address_worker_name_size(ucp_worker_h worker, uint64_t flags)
 {
@@ -477,7 +479,8 @@ ucp_address_pack_length(ucp_worker_h worker, void *ptr, size_t addr_length)
         return ptr;
     }
 
-    ucs_assert(addr_length <= UCP_ADDRESS_FLAG_LEN_MASK);
+    ucs_assertv(addr_length <= UCP_ADDRESS_FLAG_LEN_MASK, "addr_length=%zu",
+                addr_length);
     *(uint8_t*)ptr = addr_length;
 
     return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
@@ -575,7 +578,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
         /* MD index */
         md_index       = context->tl_rscs[dev->rsc_index].md_index;
         md_flags       = context->tl_mds[md_index].attr.cap.flags & md_flags_pack_mask;
-        ucs_assert_always(!(md_index & ~UCP_ADDRESS_FLAG_MD_MASK));
+        ucs_assertv_always(md_index <= UCP_ADDRESS_FLAG_MD_MASK,
+                           "md_index=%d", md_index);
 
         *(uint8_t*)ptr = md_index |
                          ((dev_tl_bitmap == 0)           ? UCP_ADDRESS_FLAG_MD_EMPTY_DEV : 0) |
@@ -587,7 +591,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
         *(uint8_t*)ptr = (dev == (devices + num_devices - 1)) ?
                          UCP_ADDRESS_FLAG_LAST : 0;
         if (flags & UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR) {
-            ucs_assert(dev->dev_addr_len <= UCP_ADDRESS_FLAG_LEN_MASK);
+            ucs_assertv(dev->dev_addr_len <= UCP_ADDRESS_FLAG_LEN_MASK,
+                        "dev_addr_len=%zu", dev->dev_addr_len);
             *(uint8_t*)ptr |= dev->dev_addr_len;
         }
 
@@ -648,8 +653,6 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             flags_ptr = ucp_address_iface_flags_ptr(worker, ptr, attr_len);
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
-            ucs_assertv(iface_addr_len < UCP_ADDRESS_FLAG_HAS_EP_ADDR,
-                        "iface_addr_len=%zu", iface_addr_len);
 
             /* Pack iface address */
             ptr = ucp_address_pack_length(worker, ptr, iface_addr_len);
