@@ -31,12 +31,12 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
     {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
      ucs_offsetof(uct_md_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
 
-    {"RCACHE_OVERHEAD", "90ns", "Registration cache lookup overhead",
+    {"RCACHE_OVERHEAD", "180ns", "Registration cache lookup overhead",
      ucs_offsetof(uct_md_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME},
 
     {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
      "Registration cache address alignment, must be power of 2\n"
-         "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
+     "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
      ucs_offsetof(uct_md_rcache_config_t, alignment), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
