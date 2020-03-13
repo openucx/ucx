@@ -447,7 +447,6 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
 # Set C++ optimization/debug flags to be the same as for C
 #
 BASE_CXXFLAGS="$BASE_CFLAGS"
-AC_SUBST([BASE_CXXFLAGS], [$BASE_CXXFLAGS])
 
 # Add flags supported by C compiler only
 ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-pointer-sign],
@@ -456,8 +455,9 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-pointer-sign],
                                  [-Wnested-externs]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
-AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS]) 
-AC_SUBST([CFLAGS_PEDANTIC], [$CFLAGS_PEDANTIC]) 
+AC_SUBST([BASE_CFLAGS])
+AC_SUBST([BASE_CXXFLAGS])
+AC_SUBST([CFLAGS_PEDANTIC])
 
 #
 # Set common preprocessor flags
