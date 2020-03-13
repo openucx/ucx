@@ -8,6 +8,7 @@
 
 #include "knem_ep.h"
 #include "knem_md.h"
+#include <uct/base/uct_iov.inl>
 #include <uct/sm/base/sm_iface.h>
 #include <ucs/debug/log.h>
 
@@ -37,34 +38,45 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_knem_ep_t, uct_ep_t);
         return UCS_OK;                                  \
     }
 
+
+static UCS_F_ALWAYS_INLINE
+void uct_knem_iovec_set_length(struct knem_cmd_param_iovec *iov, size_t length)
+{
+    iov->len = length;
+}
+
+static UCS_F_ALWAYS_INLINE
+void uct_knem_iovec_set_buffer(struct knem_cmd_param_iovec *iov, void *buffer)
+{
+    iov->base = (uintptr_t)buffer;
+}
+
 static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         size_t iovcnt, uint64_t remote_addr,
                                         uct_knem_key_t *key, int write)
 {
     uct_knem_iface_t *knem_iface = ucs_derived_of(tl_ep->iface, uct_knem_iface_t);
     int knem_fd                  = knem_iface->knem_md->knem_fd;
-    size_t knem_iov_it           = 0;
+    size_t knem_iov_cnt          = UCT_SM_MAX_IOV;
     struct knem_cmd_inline_copy icopy;
     struct knem_cmd_param_iovec knem_iov[UCT_SM_MAX_IOV];
+    ucs_iov_iter_t uct_iov_iter;
     int rc;
-    size_t iov_it;
 
     UCT_CHECK_IOV_SIZE(iovcnt, knem_iface->super.config.max_iov,
                        write ? "uct_knem_ep_put_zcopy" : "uct_knem_ep_get_zcopy");
 
-    for (iov_it = 0; iov_it < ucs_min(UCT_SM_MAX_IOV, iovcnt); ++iov_it) {
-        knem_iov[knem_iov_it].base = (uintptr_t)iov[iov_it].buffer;
-        knem_iov[knem_iov_it].len  = uct_iov_get_length(iov + iov_it);
-        /* Skip zero length buffers */
-        if (knem_iov[knem_iov_it].len != 0) {
-            ++knem_iov_it;
-        }
-    }
+    ucs_iov_iter_init(&uct_iov_iter);
+    ucs_iov_converter(knem_iov, &knem_iov_cnt,
+                      uct_knem_iovec_set_buffer, uct_knem_iovec_set_length,
+                      iov, iovcnt,
+                      uct_iov_get_buffer, uct_iov_get_length,
+                      SIZE_MAX, &uct_iov_iter);
 
-    UCT_KNEM_ZERO_LENGTH_POST(knem_iov_it);
+    UCT_KNEM_ZERO_LENGTH_POST(knem_iov_cnt);
 
     icopy.local_iovec_array = (uintptr_t)knem_iov;
-    icopy.local_iovec_nr    = knem_iov_it;
+    icopy.local_iovec_nr    = knem_iov_cnt;
     icopy.remote_cookie     = key->cookie;
     ucs_assert(remote_addr >= key->address);
     icopy.current_status    = 0;

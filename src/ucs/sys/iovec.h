@@ -21,6 +21,15 @@ typedef enum ucs_iov_copy_direction {
 } ucs_iov_copy_direction_t;
 
 
+/* An iterator that should be used by IOV convertor in order to save
+ * information about the current offset in the destination IOV array */
+typedef struct ucs_iov_iter {
+    size_t     iov_index;     /* The current index in iov array */
+    size_t     buffer_offset; /* The current offset in the buffer of the
+                               * current iov element */
+} ucs_iov_iter_t;
+
+
 /**
  * Copy a data from iovec [buffer] to buffer [iovec].
  *
@@ -58,17 +67,6 @@ void ucs_iov_advance(struct iovec *iov, size_t iov_cnt,
  * @return The maximum number of IOVs.
  */
 size_t ucs_iov_get_max();
-
-/**
- * Calculates the total length of the iov array buffers.
- *
- * @param [in]     iov            A pointer to an array of iovec elements.
- * @param [in]     iov_cnt        A number of elements in a iov array.
- *
- * @return The amount, in bytes, of the data that is stored in the iov
- *         array buffers.
- */
-size_t ucs_iov_total_length(const struct iovec *iov, size_t iov_cnt);
 
 END_C_DECLS
 

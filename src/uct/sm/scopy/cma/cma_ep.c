@@ -11,6 +11,7 @@
 #include <sys/uio.h>
 
 #include "cma_ep.h"
+#include <uct/base/uct_iov.inl>
 #include <ucs/debug/log.h>
 #include <ucs/sys/iovec.h>
 
@@ -84,25 +85,21 @@ ucs_status_t uct_cma_ep_common_zcopy(uct_ep_h tl_ep,
                                      const char *fn_name)
 {
     uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
-    size_t iov_idx   = 0;
     ucs_status_t status;
     size_t local_iov_cnt;
     size_t length;
-    size_t cur_iov_cnt;
     struct iovec local_iov[UCT_SM_MAX_IOV];
     struct iovec remote_iov;
+    ucs_iov_iter_t uct_iov_iter;
 
+    ucs_iov_iter_init(&uct_iov_iter);
     remote_iov.iov_base = (void*)remote_addr;
 
-    while (iov_idx < iovcnt) {
-        cur_iov_cnt   = ucs_min(iovcnt - iov_idx, UCT_SM_MAX_IOV);
-        local_iov_cnt = uct_iovec_fill_iov(local_iov, &iov[iov_idx],
-                                           cur_iov_cnt, &length);
-        ucs_assert(local_iov_cnt <= cur_iov_cnt);
-
-        iov_idx += cur_iov_cnt;
-        ucs_assert(iov_idx <= iovcnt);
-
+    while (uct_iov_iter.iov_index < iovcnt) {
+        local_iov_cnt = UCT_SM_MAX_IOV;
+        length        = uct_iov_to_iovec(local_iov, &local_iov_cnt,
+                                         iov, iovcnt, SIZE_MAX,
+                                         &uct_iov_iter);
         if (!length) {
             continue; /* Nothing to deliver */
         }

@@ -12,6 +12,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/iovec.h>
+#include <ucs/sys/iovec.inl>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -423,8 +424,8 @@ ucs_socket_handle_io(int fd, const void *data, size_t count,
 
     if ((io_retval == 0) &&
         ((count == 0) ||
-         (is_iov && (ucs_iov_total_length((const struct iovec*)data,
-                                          count) == 0)))) {
+         (is_iov && (ucs_iovec_total_length((const struct iovec*)data,
+                                            count) == 0)))) {
         /* - the return value == 0 and the user's data length == 0
          *   (the number of the iov array buffers == 0 or the total
          *   length of the iov array buffers == 0) */
