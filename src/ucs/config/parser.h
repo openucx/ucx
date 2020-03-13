@@ -101,7 +101,6 @@ typedef struct ucs_config_bw_spec {
 
 #define UCS_CONFIG_REGISTER_TABLE_ENTRY(_entry) \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t ucs_config_global_list; \
         ucs_list_add_tail(&ucs_config_global_list, &(_entry)->list); \
     } \
     \
@@ -117,6 +116,8 @@ typedef struct ucs_config_bw_spec {
         .size   = sizeof(_type) \
     }; \
     UCS_CONFIG_REGISTER_TABLE_ENTRY(&_table##_config_entry);
+
+extern ucs_list_link_t ucs_config_global_list;
 
 /*
  * Parsing and printing different data types

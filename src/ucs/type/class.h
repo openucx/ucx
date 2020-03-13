@@ -34,6 +34,8 @@ struct ucs_class {
 /*
  * Helper: Define names of class-related identifiers.
  */
+#define UCS_CLASS_DECL_NAME(_type) \
+    _UCS_CLASS_DECL_NAME(_type)
 #define _UCS_CLASS_DECL_NAME(_type) \
     UCS_PP_TOKENPASTE(_type, _class)
 #define _UCS_CLASS_INIT_NAME(_type) \
@@ -91,7 +93,6 @@ struct ucs_class {
  */
 #define UCS_CLASS_INIT(_type, _obj, ...) \
     ({ \
-        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
         int init_count = 1; \
         ucs_status_t status; \
@@ -125,7 +126,6 @@ struct ucs_class {
  */
 #define UCS_CLASS_CLEANUP(_type, _obj) \
     { \
-        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         UCS_CLASS_CLEANUP_CALL(&_UCS_CLASS_DECL_NAME(_type), _obj); \
     }
 
@@ -143,7 +143,6 @@ struct ucs_class {
     _UCS_CLASS_NEW (_type, _obj, ## __VA_ARGS__)
 #define _UCS_CLASS_NEW(_type, _obj, ...) \
     ({ \
-        extern ucs_class_t _UCS_CLASS_DECL_NAME(_type); \
         ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
         ucs_status_t status; \
         void *obj; \

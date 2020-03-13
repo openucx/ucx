@@ -440,40 +440,23 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
                                  [-Wno-multichar],
                                  [-Wno-deprecated-declarations],
                                  [-Winvalid-pch],
-                                 [-Wvariadic-macros]de],
+                                 [-Wvariadic-macros]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
-
 
 #
 # Set C++ optimization/debug flags to be the same as for C
 #
 BASE_CXXFLAGS="$BASE_CFLAGS"
+AC_SUBST([BASE_CXXFLAGS], [$BASE_CXXFLAGS])
 
-# Check if "-Wno-pointer-sign" flag is supported, this flag is
-# supported by C compiler only
-CHECK_COMPILER_FLAG([-Wno-pointer-sign], [-Wno-pointer-sign],
-                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                    [BASE_CFLAGS="$BASE_CFLAGS -Wno-pointer-sign"],
-                    [])
-
-# Check if "-Werror-implicit-function-declaration" flag is supported, this flag is
-# supported by C compiler only
-CHECK_COMPILER_FLAG([-Werror-implicit-function-declaration],
-                    [-Werror-implicit-function-declaration],
-                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                    [BASE_CFLAGS="$BASE_CFLAGS -Werror-implicit-function-declaration"],
-                    [])
-
-# Check if "-Wno-format-zero-length" flag is supported, this flag is
-# supported by C compiler only
-CHECK_COMPILER_FLAG([-Wno-format-zero-length],
-                    [-Wno-format-zero-length],
-                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                    [BASE_CFLAGS="$BASE_CFLAGS -Wno-format-zero-length"],
-                    [])
+# Add flags supported by C compiler only
+ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-pointer-sign],
+                                 [-Werror-implicit-function-declaration],
+                                 [-Wno-format-zero-length],
+                                 [-Wnested-externs]],
+                                [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
 AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS]) 
-AC_SUBST([BASE_CXXFLAGS], [$BASE_CXXFLAGS])
 AC_SUBST([CFLAGS_PEDANTIC], [$CFLAGS_PEDANTIC]) 
 
 #
