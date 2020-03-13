@@ -63,6 +63,7 @@ typedef struct test_type {
     ucx_perf_cmd_t               command;
     ucx_perf_test_type_t         test_type;
     const char                   *desc;
+    const char                   *overhead_lat;
 } test_type_t;
 
 
@@ -84,73 +85,73 @@ struct perftest_context {
 
 test_type_t tests[] = {
     {"am_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
-     "active message latency"},
+     "active message latency", "latency"},
 
     {"put_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
-     "put latency"},
+     "put latency", "latency"},
 
     {"add_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_PINGPONG,
-     "atomic add latency"},
+     "atomic add latency", "latency"},
 
     {"get", UCX_PERF_API_UCT, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "get latency / bandwidth / message rate"},
+     "get latency / bandwidth / message rate", "latency"},
 
     {"fadd", UCX_PERF_API_UCT, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic fetch-and-add latency / rate"},
+     "atomic fetch-and-add latency / rate", "latency"},
 
     {"swap", UCX_PERF_API_UCT, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic swap latency / rate"},
+     "atomic swap latency / rate", "latency"},
 
     {"cswap", UCX_PERF_API_UCT, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic compare-and-swap latency / rate"},
+     "atomic compare-and-swap latency / rate", "latency"},
 
     {"am_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "active message bandwidth / message rate"},
+     "active message bandwidth / message rate", "overhead"},
 
     {"put_bw", UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "put bandwidth / message rate"},
+     "put bandwidth / message rate", "overhead"},
 
     {"add_mr", UCX_PERF_API_UCT, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic add message rate"},
+     "atomic add message rate", "overhead"},
 
     {"tag_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
-     "tag match latency"},
+     "tag match latency", "latency"},
 
     {"tag_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "tag match bandwidth"},
+     "tag match bandwidth", "overhead"},
 
     {"tag_sync_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_PINGPONG,
-     "tag sync match latency"},
+     "tag sync match latency", "latency"},
 
     {"tag_sync_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "tag sync match bandwidth"},
+     "tag sync match bandwidth", "overhead"},
 
     {"ucp_put_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
-     "put latency"},
+     "put latency", "latency"},
 
     {"ucp_put_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "put bandwidth"},
+     "put bandwidth", "overhead"},
 
     {"ucp_get", UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "get latency / bandwidth / message rate"},
+     "get latency / bandwidth / message rate", "latency"},
 
     {"ucp_add", UCX_PERF_API_UCP, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic add bandwidth / message rate"},
+     "atomic add bandwidth / message rate", "overhead"},
 
     {"ucp_fadd", UCX_PERF_API_UCP, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic fetch-and-add latency / bandwidth / rate"},
+     "atomic fetch-and-add latency / bandwidth / rate", "latency"},
 
     {"ucp_swap", UCX_PERF_API_UCP, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic swap latency / bandwidth / rate"},
+     "atomic swap latency / bandwidth / rate", "latency"},
 
     {"ucp_cswap", UCX_PERF_API_UCP, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "atomic compare-and-swap latency / bandwidth / rate"},
+     "atomic compare-and-swap latency / bandwidth / rate", "latency"},
 
     {"stream_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI,
-     "stream bandwidth"},
+     "stream bandwidth", "overhead"},
 
     {"stream_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
-     "stream latency"},
+     "stream latency", "latency"},
 
      {NULL}
 };
@@ -297,8 +298,14 @@ static void print_header(struct perftest_context *ctx)
         }
     } else {
         if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
+            for (test = tests; test->name; ++test) {
+                if ((test->command == ctx->params.command) && (test->test_type == ctx->params.test_type)) {
+                    break;
+                }
+            }
+
             printf("+--------------+-----------------------------+---------------------+-----------------------+\n");
-            printf("|              |       latency (usec)        |   bandwidth (MB/s)  |  message rate (msg/s) |\n");
+            printf("|              |      %8s (usec)        |   bandwidth (MB/s)  |  message rate (msg/s) |\n", test->overhead_lat);
             printf("+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
             printf("| # iterations | typical | average | overall |  average |  overall |   average |   overall |\n");
             printf("+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
