@@ -491,11 +491,9 @@ ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void
     uct_iface_attr_t *attr;
     const ucp_address_unified_iface_attr_t *unified;
 
-    if (is_ep_addr) {
-        /* Caller should not use *is_last_iface for ep address, because for ep
-         * address last flag is part of lane index */
-        ucs_assert(is_last_iface == NULL);
-    }
+    /* Caller should not use *is_last_iface for ep address, because for ep
+     * address last flag is part of lane index */
+    ucs_assert(!is_ep_addr || is_last_iface == NULL);
 
     if (ucp_worker_unified_mode(worker)) {
         /* In unified mode:
@@ -698,13 +696,13 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                     /* pack ep lane index, and save the pointer for lane index
                      * of last ep in 'ep_last_ptr' to set UCP_ADDRESS_FLAG_LAST.
                      */
-                    remote_lane    = (lanes2remote == NULL) ? lane :
-                                     lanes2remote[lane];
+                    remote_lane  = (lanes2remote == NULL) ? lane :
+                                   lanes2remote[lane];
                     ucs_assertv(remote_lane <= UCP_ADDRESS_FLAG_LEN_MASK,
                                 "remote_lane=%d", remote_lane);
-                    ep_lane_ptr    = ptr;
-                    *ep_lane_ptr   = remote_lane;
-                    ptr            = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+                    ep_lane_ptr  = ptr;
+                    *ep_lane_ptr = remote_lane;
+                    ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
                     if (flags & UCP_ADDRESS_PACK_FLAG_TRACE) {
                         ucs_trace("pack addr[%d].ep_addr[%d] : len %zu lane %d->%d",
