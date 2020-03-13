@@ -825,7 +825,6 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     ucp_rsc_index_t dev_index;
     ucp_md_index_t md_index;
     unsigned dev_num_paths;
-    unsigned address_count;
     int empty_dev;
     uint64_t md_flags;
     size_t dev_addr_len;
@@ -849,57 +848,15 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                                           sizeof(unpacked_address->name),
                                           flags);
 
-    /* Count addresses */
-    ptr           = aptr;
-    address_count = 0;
-
-    last_dev = (*(uint8_t*)ptr == UCP_NULL_RESOURCE);
-    while (!last_dev) {
-        /* md_index */
-        empty_dev    = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_EMPTY;
-        ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
-
-        /* device address length */
-        dev_addr_len = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LEN_MASK;
-        last_dev     = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LAST;
-        if ((*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_HAVE_PATHS) {
-            ptr      = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
-        }
-        ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
-        ptr          = UCS_PTR_BYTE_OFFSET(ptr, dev_addr_len);
-
-        last_tl = empty_dev;
-        while (!last_tl) {
-            ptr       = UCS_PTR_TYPE_OFFSET(ptr, uint16_t); /* tl_name_csum */
-            attr_len  = ucp_address_iface_attr_size(worker);
-            flags_ptr = ucp_address_iface_flags_ptr(worker, (void*)ptr, attr_len);
-            ptr       = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
-            ptr       = ucp_address_unpack_length(worker, flags_ptr, ptr,
-                                                  &iface_addr_len, 0, &last_tl);
-            ptr       = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
-
-            last_ep_addr = !(*(uint8_t*)flags_ptr & UCP_ADDRESS_FLAG_HAVE_EP_ADDR);
-            while (!last_ep_addr) {
-                ptr = ucp_address_unpack_length(worker, flags_ptr, ptr,
-                                                &ep_addr_len, 1, &last_ep_addr);
-                ucs_assert(flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR);
-                ucs_assert(ep_addr_len > 0);
-                ptr = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
-                ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
-            }
-
-            ++address_count;
-            ucs_assert(address_count <= UCP_MAX_RESOURCES);
-        }
-    }
-
-    if (address_count == 0) {
-        address_list = NULL;
+    /* Empty address list */
+    if (*(uint8_t*)aptr == UCP_NULL_RESOURCE) {
+        unpacked_address->address_count = 0;
+        unpacked_address->address_list  = NULL;
         goto out;
     }
 
     /* Allocate address list */
-    address_list = ucs_calloc(address_count, sizeof(*address_list),
+    address_list = ucs_calloc(UCP_MAX_RESOURCES, sizeof(*address_list),
                               "ucp_address_list");
     if (address_list == NULL) {
         ucs_error("failed to allocate address list");
@@ -936,6 +893,8 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
         last_tl = empty_dev;
         while (!last_tl) {
+            ucs_assert_always((address - address_list) < UCP_MAX_RESOURCES);
+
             /* tl_name_csum */
             address->tl_name_csum = *(uint16_t*)ptr;
             ptr = UCS_PTR_TYPE_OFFSET(ptr, address->tl_name_csum);
@@ -991,11 +950,9 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         ++dev_index;
     } while (!last_dev);
 
-    ucs_assert((unsigned)(address - address_list) == address_count);
-
-out:
-    unpacked_address->address_count = address_count;
+    unpacked_address->address_count = address - address_list;
     unpacked_address->address_list  = address_list;
+out:
     return UCS_OK;
 }
 
