@@ -1034,8 +1034,8 @@ void test_tag_mp_xrq::init()
     m_entities.push_back(sender);
 
     entity *receiver = uct_test::create_entity(unexp_eager, unexp_rndv,
-                                             reinterpret_cast<void*>(this),
-                                             reinterpret_cast<void*>(this));
+                                               reinterpret_cast<void*>(this),
+                                               reinterpret_cast<void*>(this));
     m_entities.push_back(receiver);
 
     if (!UCT_RC_MLX5_MP_ENABLED(rc_mlx5_iface(test_tag_mp_xrq::sender()))) {

@@ -639,9 +639,8 @@ uct_test::entity* uct_test::create_entity(uct_tag_unexp_eager_cb_t eager_cb,
                                (ucs_empty_function_return_success) :
                                rndv_cb;
     iface_params.rndv_arg    = rndv_arg;
-    entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
-                                 m_md_config);
-    return new_ent;
+
+    return new entity(*GetParam(), m_iface_config, &iface_params, m_md_config);
 }
 
 const uct_test::entity& uct_test::ent(unsigned index) const {
