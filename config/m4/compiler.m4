@@ -439,8 +439,7 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
                                  [-Wno-sign-compare],
                                  [-Wno-multichar],
                                  [-Wno-deprecated-declarations],
-                                 [-Winvalid-pch],
-                                 [-Wvariadic-macros]],
+                                 [-Winvalid-pch]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
 #
