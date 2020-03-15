@@ -385,19 +385,26 @@ public:
         return enum_test_params_features(ctx_params, name, test_case_name, tls,
                                          UCP_FEATURE_RMA | UCP_FEATURE_TAG);
     }
+
+    test_ucp_wireup_1sided() {
+        for (ucp_lane_index_t i = 0; i < UCP_MAX_LANES; ++i) {
+            m_lanes2remote[i] = i;
+        }
+    }
+
+    ucp_lane_index_t m_lanes2remote[UCP_MAX_LANES];
 };
 
 UCS_TEST_P(test_ucp_wireup_1sided, address) {
     ucs_status_t status;
     size_t size;
     void *buffer;
-    ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
     std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
     ucp_rsc_index_t tl;
 
     status = ucp_address_pack(sender().worker(), NULL,
                               std::numeric_limits<uint64_t>::max(),
-                              UCP_ADDRESS_PACK_FLAG_ALL, lanes2remote, &size,
+                              UCP_ADDRESS_PACK_FLAG_ALL, m_lanes2remote, &size,
                               &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
@@ -440,14 +447,42 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     ASSERT_TRUE(packed_dev_priorities == unpacked_dev_priorities);
 }
 
+UCS_TEST_P(test_ucp_wireup_1sided, ep_address, "IB_NUM_PATHS?=2") {
+    ucs_status_t status;
+    size_t size;
+    void *buffer;
+
+    sender().connect(&receiver(), get_ep_params());
+
+    status = ucp_address_pack(sender().worker(), sender().ep(),
+                              std::numeric_limits<uint64_t>::max(),
+                              UCP_ADDRESS_PACK_FLAG_ALL, m_lanes2remote, &size,
+                              &buffer);
+    ASSERT_UCS_OK(status);
+    ASSERT_TRUE(buffer != NULL);
+
+    ucp_unpacked_address unpacked_address;
+
+    status = ucp_address_unpack(sender().worker(), buffer,
+                                std::numeric_limits<uint64_t>::max(),
+                                &unpacked_address);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);
+    EXPECT_LE(unpacked_address.address_count,
+              static_cast<unsigned>(sender().ucph()->num_tls));
+
+    ucs_free(unpacked_address.address_list);
+    ucs_free(buffer);
+}
+
 UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     ucs_status_t status;
     size_t size;
     void *buffer;
-    ucp_lane_index_t lanes2remote[UCP_MAX_LANES];
 
     status = ucp_address_pack(sender().worker(), NULL, 0,
-                              UCP_ADDRESS_PACK_FLAG_ALL, lanes2remote, &size,
+                              UCP_ADDRESS_PACK_FLAG_ALL, m_lanes2remote, &size,
                               &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
