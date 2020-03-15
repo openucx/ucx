@@ -159,6 +159,10 @@ static ucs_recursive_spinlock_t ucs_kh_lock;
 
 static int ucs_debug_initialized = 0;
 
+#ifdef HAVE_CPLUS_DEMANGLE
+extern char *cplus_demangle(const char *, int);
+#endif
+
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
 
 
@@ -267,7 +271,6 @@ static char *ucs_debug_demangle(const char *name)
 {
     char *demangled = NULL;
 #ifdef HAVE_CPLUS_DEMANGLE
-    extern char *cplus_demangle(const char *, int);
     demangled = cplus_demangle(name, 0);
 #endif
     return demangled ? demangled : strdup(name);

@@ -19,6 +19,8 @@
 #include <dirent.h>
 
 
+extern ucs_class_t UCS_CLASS_DECL_NAME(uct_tcp_iface_t);
+
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {"", "MAX_NUM_EPS=256", NULL,
    ucs_offsetof(uct_tcp_iface_config_t, super),
