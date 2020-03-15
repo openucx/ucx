@@ -1134,7 +1134,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     for (lane_desc_idx = 0; lane_desc_idx < select_ctx->num_lanes; ++lane_desc_idx) {
         if (select_ctx->lane_descs[lane_desc_idx].usage & UCP_WIREUP_LANE_USAGE_AM) {
             /* do not continue searching since we found AM lane (and there is
-             * only one am lane) */
+             * only one AM lane) */
             am_lane = lane_desc_idx;
             break;
         }
