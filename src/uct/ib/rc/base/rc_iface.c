@@ -128,7 +128,8 @@ static ucs_stats_class_t uct_rc_iface_stats_class = {
     .counter_names = {
         [UCT_RC_IFACE_STAT_RX_COMPLETION] = "rx_completion",
         [UCT_RC_IFACE_STAT_TX_COMPLETION] = "tx_completion",
-        [UCT_RC_IFACE_STAT_NO_CQE]        = "no_cqe"
+        [UCT_RC_IFACE_STAT_NO_CQE]        = "no_cqe",
+        [UCT_RC_IFACE_STAT_NO_READS]      = "no_reads"
     }
 };
 

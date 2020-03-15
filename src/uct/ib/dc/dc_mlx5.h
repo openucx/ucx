@@ -293,7 +293,8 @@ static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uin
 static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_has_tx_resources(uct_dc_mlx5_iface_t *iface)
 {
-    return !ucs_mpool_is_empty(&iface->super.super.tx.mp);
+    return !ucs_mpool_is_empty(&iface->super.super.tx.mp) &&
+           (iface->super.super.tx.reads_available > 0);
 }
 
 static inline int uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface, uint8_t dci)

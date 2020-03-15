@@ -428,7 +428,8 @@ static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface, uct_dc
     ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
 }
 
-static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     uct_rc_txqp_t *txqp;
     int16_t available;
@@ -524,6 +525,18 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
     }
 
 
+/**
+ * All RMA and AMO operations are not allowed if no RDMA_READ credits.
+ * Otherwise operations ordering can be broken (which fence operation
+ * relies on).
+ */
+#define UCT_DC_MLX5_CHECK_RMA_RES(_iface, _ep) \
+    { \
+        UCT_RC_CHECK_NUM_RDMA_READ(&(_iface)->super.super) \
+        UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
+    }
+
+
 /* First, check whether we have FC window. If hard threshold is reached, credit
  * request will be sent by "fc_ctrl" as a separate message. TX resources
  * are checked after FC, because fc credits request may consume latest
@@ -536,7 +549,8 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
             if (ucs_unlikely(status != UCS_OK)) { \
                 if (((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI) && \
                     !uct_dc_mlx5_iface_is_dci_rand(_iface)) { \
-                    ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(_iface, (_ep)->dci), \
+                    ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(_iface, \
+                                                                             (_ep)->dci), \
                                        "iface (%p) ep (%p) dci leak detected: dci=%d", \
                                        _iface, _ep, (_ep)->dci); \
                 } \
