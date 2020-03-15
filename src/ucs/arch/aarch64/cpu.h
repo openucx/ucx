@@ -198,10 +198,13 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 }
 #endif
 
+#if defined(HAVE_AARCH64_THUNDERX2)
+extern void *__memcpy_thunderx2(void *, const void *, size_t);
+#endif
+
 static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
 {
 #if defined(HAVE_AARCH64_THUNDERX2)
-    extern void *__memcpy_thunderx2(void *, const void *, size_t);
     return __memcpy_thunderx2(dst, src,len);
 #else
     return memcpy(dst, src, len);
@@ -212,12 +215,10 @@ static UCS_F_ALWAYS_INLINE void
 ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
 {
 #if defined(HAVE_AARCH64_THUNDERX2)
-    extern void *__memcpy_thunderx2(void *, const void *, size_t);
     __memcpy_thunderx2(dst, src,len);
 #else
     memcpy(dst, src, len);
 #endif
-
 }
 
 static inline ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
