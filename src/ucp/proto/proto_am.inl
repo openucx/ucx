@@ -115,7 +115,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             /* If the last segment was sent, return UCS_OK,
              * otherwise - UCS_INPROGRESS */
             if (enable_am_bw) {
-                ucp_send_request_next_am_bw_lane(req);
+                ucp_send_request_next_am_bw_lane(req, state.offset > 0);
             }
             return ((req->send.state.dt.offset < req->send.length) ?
                     UCS_INPROGRESS : UCS_OK);
@@ -374,7 +374,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                                status);
                 if (!UCS_STATUS_IS_ERR(status)) {
                     if (enable_am_bw) {
-                        ucp_send_request_next_am_bw_lane(req);
+                        ucp_send_request_next_am_bw_lane(req, state.offset > 0);
                     }
                     return UCS_OK;
                 }
@@ -401,7 +401,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             return status;
         } else {
             if (enable_am_bw) {
-                ucp_send_request_next_am_bw_lane(req);
+                ucp_send_request_next_am_bw_lane(req, state.offset > 0);
             }
             return UCS_INPROGRESS;
         }
