@@ -47,8 +47,9 @@ typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t         super;
     uct_ud_iface_common_config_t  ud_common;
     double                        peer_timeout;
-    double                        slow_timer_tick;
-    double                        slow_timer_backoff;
+    double                        timer_tick;
+    double                        timer_backoff;
+    double                        event_timer_tick;
     int                           dgid_check;
     unsigned                      max_window;
 } uct_ud_iface_config_t;
@@ -143,10 +144,14 @@ struct uct_ud_iface {
         ucs_queue_head_t       outstanding_q;
         ucs_arbiter_t          pending_q;
         ucs_queue_head_t       async_comp_q;
+        ucs_twheel_t           timer;
+        ucs_time_t             tick;
+        double                 timer_backoff;
+        unsigned               timer_sweep_count;
+        unsigned               timer_disable;
     } tx;
     struct {
         ucs_time_t           peer_timeout;
-        double               slow_timer_backoff;
         unsigned             tx_qp_len;
         unsigned             max_inline;
         int                  check_grh_dgid;
@@ -159,8 +164,7 @@ struct uct_ud_iface {
     ucs_ptr_array_t       eps;
     uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];
     struct {
-        ucs_twheel_t              slow_timer;
-        ucs_time_t                slow_tick;
+        ucs_time_t                tick;
         int                       timer_id;
     } async;
 };
@@ -381,9 +385,31 @@ uct_ud_iface_get_async_time(uct_ud_iface_t *iface)
     return iface->super.super.worker->async->last_wakeup;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_time_t
+uct_ud_iface_get_time(uct_ud_iface_t *iface)
+{
+    return ucs_get_time();
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_twheel_sweep(uct_ud_iface_t *iface)
+{
+    if (iface->tx.timer_sweep_count++ % UCT_UD_SKIP_SWEEP) {
+        return;
+    }
+
+    if (ucs_twheel_is_empty(&iface->tx.timer)) {
+        return;
+    }
+
+    ucs_twheel_sweep(&iface->tx.timer, uct_ud_iface_get_time(iface));
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
 {
+    uct_ud_iface_twheel_sweep(iface);
+
     if (!is_async) {
         iface->tx.async_before_pending = 0;
     }

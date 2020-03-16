@@ -39,7 +39,7 @@ public:
                                                uct_ud_iface_t);
 
         /* hack to disable retransmit */
-        ep->tx.send_time = ucs_twheel_get_time(&iface->async.slow_timer);
+        ep->tx.send_time = ucs_twheel_get_time(&iface->tx.timer);
         tick_count++;
         return UCS_OK;
     }
