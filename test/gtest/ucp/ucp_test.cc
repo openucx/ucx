@@ -213,10 +213,11 @@ void ucp_test::wait(void *req, int worker_index)
     }
 
     ucs_status_t status;
+    ucs_time_t deadline = ucs::get_deadline();
     do {
         progress(worker_index);
         status = ucp_request_check_status(req);
-    } while (status == UCS_INPROGRESS);
+    } while ((status == UCS_INPROGRESS) && (ucs_get_time() < deadline));
 
     if (status != UCS_OK) {
         /* UCS errors are suppressed in case of error handling tests */
