@@ -15,7 +15,7 @@ BASE_CFLAGS="-g -Wall -Werror"
 #
 # AC_PROG_CXX never fails but falls back on g++ as a default CXX compiler that
 # always present. If g++ isn't installed, the macro doesn't detect this and
-# compilation fails later one. CHECK_CXX_COMP compiles simple C++ code to
+# compilation fails later on. CHECK_CXX_COMP compiles simple C++ code to
 # verify that compiler is present and functional.
 #
 AC_DEFUN([CHECK_CXX_COMP],
