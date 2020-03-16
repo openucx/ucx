@@ -466,14 +466,16 @@ bool ucp_test_base::entity::verify_client_address(struct sockaddr_storage
                                                   *client_address)
 {
     struct ifaddrs* ifaddrs;
-    int ret = getifaddrs(&ifaddrs);
-    EXPECT_EQ(0, ret);
+
+    if (getifaddrs(&ifaddrs) != 0) {
+        return false;
+    }
 
     for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
         if (ucs_netif_flags_is_active(ifa->ifa_flags) &&
             ucs::is_inet_addr(ifa->ifa_addr))
         {
-            if (!ucs_sockaddr_ip_cmp((struct sockaddr*)client_address,
+            if (!ucs_sockaddr_ip_cmp((const struct sockaddr*)client_address,
                                      ifa->ifa_addr)) {
                 freeifaddrs(ifaddrs);
                 return true;
