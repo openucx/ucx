@@ -1705,6 +1705,7 @@ static void* ucx_perf_thread_run_test(void* arg)
                 goto out;
             }
         }
+#pragma omp master
         ucx_perf_test_prepare_new_run(perf, params);
     }
 
