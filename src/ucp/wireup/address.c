@@ -115,7 +115,7 @@ typedef struct {
  * Every release which changes the address binary format must bump this number.
  */
 enum {
-    UCP_ADDRESS_VERSION_V1     = 0,
+    UCP_ADDRESS_VERSION_V1      = 0,
     UCP_ADDRESS_VERSION_LAST,
     UCP_ADDRESS_VERSION_CURRENT = UCP_ADDRESS_VERSION_LAST - 1
 };
@@ -689,8 +689,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                     }
 
                     /* pack ep address length and save pointer to flags */
-                    ptr          = ucp_address_pack_length(worker, ptr,
-                                                           ep_addr_len);
+                    ptr = ucp_address_pack_length(worker, ptr, ep_addr_len);
 
                     /* pack ep address */
                     status = uct_ep_get_address(ep->uct_eps[lane], ptr);

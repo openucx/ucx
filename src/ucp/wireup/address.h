@@ -43,6 +43,11 @@ enum {
     UCP_ADDRESS_PACK_FLAG_EP_ADDR     = UCS_BIT(4), /* Pack endpoint addresses */
 
     UCP_ADDRESS_PACK_FLAG_LAST,
+
+    /* A bitmap of all flags: UCP_ADDRESS_PACK_FLAG_LAST is the last bit plus 1,
+     * so UCP_ADDRESS_PACK_FLAG_LAST<<1 is the next bit plus 2. If we subtract 3
+     * we get the next bit minus 1.
+     */
     UCP_ADDRESS_PACK_FLAGS_ALL        = (UCP_ADDRESS_PACK_FLAG_LAST << 1) - 3,
 
     UCP_ADDRESS_PACK_FLAG_NO_TRACE    = UCS_BIT(16)
