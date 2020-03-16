@@ -588,7 +588,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucs_assert_always(ucs_test_all_flags(conn_req_args->field_mask,
                                          (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
                                           UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
-                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME)));
+                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
+                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR)));
 
     conn_request = conn_req_args->conn_request;
     remote_data  = conn_req_args->remote_data;

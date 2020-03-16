@@ -5,6 +5,7 @@
 
 #include "ucp_test.h"
 #include <common/test_helpers.h>
+#include <ifaddrs.h>
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
@@ -458,6 +459,32 @@ void ucp_test_base::entity::connect(const entity* other,
     }
 }
 
+/*
+ * Checks if the client's address matches any IP address on the server's side.
+ */
+bool ucp_test_base::entity::verify_client_address(struct sockaddr_storage
+                                                  *client_address)
+{
+    struct ifaddrs* ifaddrs;
+    int ret = getifaddrs(&ifaddrs);
+    EXPECT_EQ(0, ret);
+
+    for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ucs_netif_flags_is_active(ifa->ifa_flags) &&
+            ucs::is_inet_addr(ifa->ifa_addr))
+        {
+            if (!ucs_sockaddr_ip_cmp((struct sockaddr*)client_address,
+                                     ifa->ifa_addr)) {
+                freeifaddrs(ifaddrs);
+                return true;
+            }
+        }
+    }
+
+    freeifaddrs(ifaddrs);
+    return false;
+}
+
 ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
                                        ucp_conn_request_h conn_request)
 {
@@ -469,6 +496,9 @@ ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
     attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
     status = ucp_conn_request_query(conn_request, &attr);
     EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_UNSUPPORTED));
+    if (status == UCS_OK) {
+        EXPECT_TRUE(verify_client_address(&attr.client_address));
+    }
 
     ep_params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST |
                              UCP_EP_PARAM_FIELD_USER_DATA;

@@ -528,8 +528,8 @@ static void server_conn_handle_cb(ucp_conn_request_h conn_request, void *arg)
     status = ucp_conn_request_query(conn_request, &attr);
     if (status == UCS_OK) {
         printf("Server received a connection request from client at address %s:%s\n",
-               sockaddr_get_ip_str(&attr.client_address, ip_str, IP_STRING_LEN),
-               sockaddr_get_port_str(&attr.client_address, port_str, PORT_STRING_LEN));
+               sockaddr_get_ip_str(&attr.client_address, ip_str, sizeof(ip_str)),
+               sockaddr_get_port_str(&attr.client_address, port_str, sizeof(port_str)));
     } else if (status != UCS_ERR_UNSUPPORTED) {
         fprintf(stderr, "failed to query the connection request (%s)\n",
                 ucs_status_string(status));
