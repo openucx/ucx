@@ -931,11 +931,9 @@ public:
 
             num_lanes++;
 
-            if (!has_only_unscalable) {
-                if (iface_attr.max_num_eps < est_num_eps) {
-                    res = false;
-                    goto out;
-                }
+            if (!has_only_unscalable && (iface_attr.max_num_eps < est_num_eps)) {
+                res = false;
+                goto out;
             }
 
             if (iface_attr.max_num_eps < min_max_num_eps) {
@@ -965,17 +963,18 @@ private:
 
 UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
     unsigned long test_min_max_eps, min_max_eps;
-    std::vector<std::string> rc_tls;
+    std::vector<std::string> unscalable_tls;
 
-    rc_tls.push_back("rc_v");
-    rc_tls.push_back("rc_x");
+    unscalable_tls.push_back("rc_v");
+    unscalable_tls.push_back("rc_x");
+    unscalable_tls.push_back("tcp");
 
-    /* If test is running with RC only (i.e. unscalable transport),
-     * check that a number of created lanes is the same for different
-     * number of estimated EPs values */
-    bool has_only_rc = has_only_transports(rc_tls);
+    /* If test is running with unscalable transports only, check that a number
+     * of created lanes is the same for different number of estimated EPs
+     * values */
+    bool has_only_unscalable = has_only_transports(unscalable_tls);
 
-    test_est_num_eps_fallback(1, test_min_max_eps, has_only_rc);
+    test_est_num_eps_fallback(1, test_min_max_eps, has_only_unscalable);
 
     size_t prev_min_max_eps = 0;
     while ((test_min_max_eps != UCS_ULUNITS_INF) &&
@@ -983,14 +982,14 @@ UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
            (test_min_max_eps != prev_min_max_eps)) {
         if (test_min_max_eps > 1) {
             EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps - 1,
-                                                  min_max_eps, has_only_rc));
+                                                  min_max_eps, has_only_unscalable));
         }
 
         EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps,
-                                              min_max_eps, has_only_rc));
+                                              min_max_eps, has_only_unscalable));
 
         EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps + 1,
-                                              min_max_eps, has_only_rc));
+                                              min_max_eps, has_only_unscalable));
         prev_min_max_eps = test_min_max_eps;
         test_min_max_eps = min_max_eps;
     }
@@ -1013,6 +1012,9 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
 /* Test all available IB transports */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               ib, "ib")
+/* Test on TCP only */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
+                              tcp, "tcp")
 
 class test_ucp_wireup_unified : public test_ucp_wireup {
 public:
