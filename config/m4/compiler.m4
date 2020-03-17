@@ -1,7 +1,7 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
-# Copyright (C) ARM Ltd. 2016-2018.  ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -9,6 +9,27 @@
 # Initialize CFLAGS
 #
 BASE_CFLAGS="-g -Wall -Werror"
+
+#
+# Check that C++ is functional.
+#
+# AC_PROG_CXX never fails but falls back on g++ as a default CXX compiler that
+# always present. If g++ isn't installed, the macro doesn't detect this and
+# compilation fails later on. CHECK_CXX_COMP compiles simple C++ code to
+# verify that compiler is present and functional.
+#
+AC_DEFUN([CHECK_CXX_COMP],
+         [AC_MSG_CHECKING(if $CXX works)
+          AC_LANG_PUSH([C++])
+          AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+                            #ifndef __cplusplus
+                            #error "No C++ support, AC_PROG_CXX failed"
+                            #endif
+                            ]])],
+                            [AC_MSG_RESULT([yes])],
+                            [AC_MSG_ERROR([Cannot continue. Please install C++ compiler.])])
+          AC_LANG_POP([C++])
+         ])
 
 #
 # Debug mode
@@ -363,6 +384,10 @@ AS_IF([test "x$enable_frame_pointer" = xyes],
                                       [AS_MESSAGE([compiling with frame pointer is not supported])])],
       [:])
 
+#
+# Check for C++ support
+#
+CHECK_CXX_COMP()
 
 #
 # Check for C++11 support
