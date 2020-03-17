@@ -160,6 +160,7 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     conn_request->listener  = listener;
     conn_request->uct_req   = uct_req;
     conn_request->uct.iface = tl_iface;
+    memset(&conn_request->client_address, 0, sizeof(struct sockaddr_storage));
     memcpy(&conn_request->sa_data, conn_priv_data, length);
 
     uct_worker_progress_register_safe(listener->worker->uct,
@@ -170,6 +171,26 @@ static void ucp_listener_conn_request_callback(uct_iface_h tl_iface, void *arg,
     /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
      * that he can wake-up on this event */
     ucp_worker_signal_internal(listener->worker);
+}
+
+ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
+                                    ucp_conn_request_attr_t *attr)
+{
+    ucs_status_t status;
+
+    if (attr->field_mask & UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR) {
+        if (conn_request->client_address.ss_family == 0) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        status = ucs_sockaddr_copy((struct sockaddr *)&attr->client_address,
+                                   (struct sockaddr *)&conn_request->client_address);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t ucp_listener_query(ucp_listener_h listener,

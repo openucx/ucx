@@ -423,6 +423,19 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
                      const struct sockaddr *sa2,
                      ucs_status_t *status_p);
 
+
+/**
+ * Check if the IP addresses of the given sockaddrs are the same.
+ *
+ * @param [in] sa1        Pointer to sockaddr structure #1.
+ * @param [in] sa2        Pointer to sockaddr structure #2.
+ *
+ * @return Return 0 if the IP addresses are the same and a non-zero value
+ *         otherwise.
+ */
+int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2);
+
+
 /**
  * Indicate if given IP addr is INADDR_ANY (IPV4) or in6addr_any (IPV6)
  * 

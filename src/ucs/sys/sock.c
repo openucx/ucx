@@ -675,6 +675,20 @@ out:
     return result;
 }
 
+int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
+{
+    if (!ucs_sockaddr_is_known_af(sa1) || !ucs_sockaddr_is_known_af(sa2)) {
+        ucs_error("unknown address family: %d",
+                  !ucs_sockaddr_is_known_af(sa1) ? sa1->sa_family : sa2->sa_family);
+        return -1;
+    }
+
+    return memcmp(ucs_sockaddr_get_inet_addr(sa1),
+                  ucs_sockaddr_get_inet_addr(sa2),
+                  (sa1->sa_family == AF_INET) ?
+                  sizeof(struct in_addr) : sizeof(struct in6_addr));
+}
+
 int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
 {
     switch (addr->sa_family) {

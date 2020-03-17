@@ -588,7 +588,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucs_assert_always(ucs_test_all_flags(conn_req_args->field_mask,
                                          (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
                                           UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
-                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME)));
+                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
+                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR)));
 
     conn_request = conn_req_args->conn_request;
     remote_data  = conn_req_args->remote_data;
@@ -602,7 +603,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                   remote_data->conn_priv_data_length,
                                   "ucp_conn_request_h");
     if (ucp_conn_request == NULL) {
-        ucs_error("failed to allocate connect request, rejecting connection request %p on TL listener %p",
+        ucs_error("failed to allocate connect request, rejecting connection "
+                  "request %p on TL listener %p",
                   conn_request, listener);
         goto err_reject;
     }
@@ -610,7 +612,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_conn_request->remote_dev_addr = ucs_malloc(remote_data->dev_addr_length,
                                                    "remote device address");
     if (ucp_conn_request->remote_dev_addr == NULL) {
-        ucs_error("failed to allocate device address, rejecting connection request %p on TL listener %p",
+        ucs_error("failed to allocate device address, rejecting connection "
+                  "request %p on TL listener %p",
                   conn_request, listener);
         goto err_free_ucp_conn_request;
     }
@@ -618,6 +621,13 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_conn_request->listener     = ucp_listener;
     ucp_conn_request->uct.listener = listener;
     ucp_conn_request->uct_req      = conn_request;
+
+    status = ucs_sockaddr_copy((struct sockaddr *)&ucp_conn_request->client_address,
+                               conn_req_args->client_address.addr);
+    if (status != UCS_OK) {
+        goto err_free_remote_dev_addr;
+    }
+
     ucs_strncpy_safe(ucp_conn_request->dev_name, conn_req_args->dev_name,
                      UCT_DEVICE_NAME_MAX);
     memcpy(ucp_conn_request->remote_dev_addr, remote_data->dev_addr,
@@ -635,6 +645,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_worker_signal_internal(ucp_listener->worker);
     return;
 
+err_free_remote_dev_addr:
+    ucs_free(ucp_conn_request->remote_dev_addr);
 err_free_ucp_conn_request:
     ucs_free(ucp_conn_request);
 err_reject:
