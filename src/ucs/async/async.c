@@ -501,7 +501,7 @@ err:
     return status;
 }
 
-ucs_status_t ucs_async_remove_handler(int id, int sync)
+ucs_status_t ucs_async_remove_handler(int id, int wait)
 {
     ucs_async_handler_t *handler;
     ucs_status_t status;
@@ -535,7 +535,7 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
         ucs_atomic_add32(&handler->async->num_handlers, (uint32_t)-1);
     }
 
-    if (sync) {
+    if (wait) {
         int called = (pthread_self() == handler->caller);
         ucs_trace("waiting for " UCS_ASYNC_HANDLER_FMT " completion (called=%d)",
                   UCS_ASYNC_HANDLER_ARG(handler), called);

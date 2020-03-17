@@ -68,8 +68,8 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(ucs_stats_clsid_t, UCS_STATS_CLS_HASH_SI
 
 #define FREAD(_buf, _size, _stream) \
     { \
-        size_t nread = fread(_buf, 1, _size, _stream); \
-        assert(nread == _size); \
+        size_t _nread = fread(_buf, 1, _size, _stream); \
+        assert(_nread == _size); \
     }
 
 #define FWRITE(_buf, _size, _stream) \
@@ -262,7 +262,7 @@ ucs_stats_serialize_binary(FILE *stream, ucs_stats_node_t *root,
     ucs_stats_class_t *cls;
     ucs_stats_clsid_t *elem;
     ucs_stats_data_header_t hdr;
-    unsigned index, counter;
+    unsigned idx, counter;
 
     sglib_hashed_ucs_stats_clsid_t_init(cls_hash);
 
@@ -275,7 +275,7 @@ ucs_stats_serialize_binary(FILE *stream, ucs_stats_node_t *root,
     FWRITE_ONE(&hdr, stream);
 
     /* Write stats node classes */
-    index = 0;
+    idx = 0;
     for (elem = sglib_hashed_ucs_stats_clsid_t_it_init(&it, cls_hash);
          elem != NULL; elem = sglib_hashed_ucs_stats_clsid_t_it_next(&it))
     {
@@ -285,10 +285,10 @@ ucs_stats_serialize_binary(FILE *stream, ucs_stats_node_t *root,
         for (counter = 0; counter < cls->num_counters; ++counter) {
             ucs_stats_write_str(cls->counter_names[counter], stream);
         }
-        elem->clsid = index++;
+        elem->clsid = idx++;
     }
 
-    assert(index == hdr.num_classes);
+    assert(idx == hdr.num_classes);
 
     /* Write stats nodes */
     ucs_stats_serialize_binary_recurs(stream, root, sel, cls_hash);

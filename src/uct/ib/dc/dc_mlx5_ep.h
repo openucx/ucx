@@ -509,9 +509,9 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 
 #define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
     { \
-        ucs_status_t status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
-        if (ucs_unlikely(status != UCS_OK)) { \
-            return status; \
+        ucs_status_t _status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
+        if (ucs_unlikely(_status != UCS_OK)) { \
+            return _status; \
         } \
     }
 
@@ -545,8 +545,8 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
     { \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= \
                          (_iface)->super.super.config.fc_hard_thresh)) { \
-            ucs_status_t status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
-            if (ucs_unlikely(status != UCS_OK)) { \
+            ucs_status_t _status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
+            if (ucs_unlikely(_status != UCS_OK)) { \
                 if (((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI) && \
                     !uct_dc_mlx5_iface_is_dci_rand(_iface)) { \
                     ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(_iface, \
@@ -554,7 +554,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
                                        "iface (%p) ep (%p) dci leak detected: dci=%d", \
                                        _iface, _ep, (_ep)->dci); \
                 } \
-                return status; \
+                return _status; \
             } \
         } \
         UCT_DC_MLX5_CHECK_RES(_iface, _ep) \

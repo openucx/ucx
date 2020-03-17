@@ -60,7 +60,7 @@ static char *ucm_log_ltoa(char *p, char *end, long n, int base, int flags,
                           int pad)
 {
     static const char digits[] = "0123456789abcdef";
-    long div;
+    long divider;
 
     if (((n < 0) || (flags & UCM_LOG_LTOA_FLAG_SIGN)) && (p < end)) {
         *(p++) = (n < 0 ) ? '-' : '+';
@@ -75,9 +75,9 @@ static char *ucm_log_ltoa(char *p, char *end, long n, int base, int flags,
 
     n = labs(n);
 
-    div = 1;
-    while ((n / div) != 0) {
-        div *= base;
+    divider = 1;
+    while ((n / divider) != 0) {
+        divider *= base;
         --pad;
     }
 
@@ -86,10 +86,10 @@ static char *ucm_log_ltoa(char *p, char *end, long n, int base, int flags,
                                 (flags & UCM_LOG_LTOA_FLAG_PAD0) ? '0' : ' ');
     }
 
-    div /= base;
-    while ((p < end) && (div > 0)) {
-        *(p++) = digits[(n / div + base) % base];
-        div /= base;
+    divider /= base;
+    while ((p < end) && (divider > 0)) {
+        *(p++) = digits[(n / divider + base) % base];
+        divider /= base;
     }
 
     if (flags & UCM_LOG_LTOA_PAD_LEFT) {

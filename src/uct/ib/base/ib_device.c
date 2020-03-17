@@ -726,11 +726,11 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu)
     ucs_fatal("Invalid MTU value (%d)", mtu);
 }
 
-uint8_t uct_ib_to_qp_fabric_time(double time)
+uint8_t uct_ib_to_qp_fabric_time(double t)
 {
     double to;
 
-    to = log(time / 4.096e-6) / log(2.0);
+    to = log(t / 4.096e-6) / log(2.0);
     if (to < 1) {
         return 1; /* Very small timeout */
     } else if ((long)(to + 0.5) >= UCT_IB_FABRIC_TIME_MAX) {
@@ -740,22 +740,22 @@ uint8_t uct_ib_to_qp_fabric_time(double time)
     }
 }
 
-uint8_t uct_ib_to_rnr_fabric_time(double time)
+uint8_t uct_ib_to_rnr_fabric_time(double t)
 {
-    double time_ms = time * UCS_MSEC_PER_SEC;
-    uint8_t index, next_index;
+    double time_ms = t * UCS_MSEC_PER_SEC;
+    uint8_t idx, next_index;
     double avg_ms;
 
-    for (index = 1; index < UCT_IB_FABRIC_TIME_MAX; index++) {
-        next_index = (index + 1) % UCT_IB_FABRIC_TIME_MAX;
+    for (idx = 1; idx < UCT_IB_FABRIC_TIME_MAX; idx++) {
+        next_index = (idx + 1) % UCT_IB_FABRIC_TIME_MAX;
 
         if (time_ms <= uct_ib_qp_rnr_time_ms[next_index]) {
-            avg_ms = (uct_ib_qp_rnr_time_ms[index] +
+            avg_ms = (uct_ib_qp_rnr_time_ms[idx] +
                       uct_ib_qp_rnr_time_ms[next_index]) * 0.5;
 
             if (time_ms < avg_ms) {
                 /* return previous index */
-                return index;
+                return idx;
             } else {
                 /* return current index */
                 return next_index;

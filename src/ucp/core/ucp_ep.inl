@@ -228,9 +228,9 @@ static inline ucp_rsc_index_t
 ucp_ep_config_get_dst_md_cmpt(const ucp_ep_config_key_t *key,
                               ucp_md_index_t dst_md_index)
 {
-    unsigned index = ucs_popcount(key->reachable_md_map & UCS_MASK(dst_md_index));
+    unsigned idx = ucs_popcount(key->reachable_md_map & UCS_MASK(dst_md_index));
 
-    return key->dst_md_cmpts[index];
+    return key->dst_md_cmpts[idx];
 }
 
 static inline ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)

@@ -313,7 +313,7 @@ static void ucp_address_memcheck(ucp_context_h context, void *ptr, size_t size,
 }
 
 static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
-                                       ucp_rsc_index_t index,
+                                       ucp_rsc_index_t idx,
                                        const uct_iface_attr_t *iface_attr,
                                        int enable_atomics)
 {
@@ -336,7 +336,7 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
          * from its local iface. Also send latency overhead, because it
          * depends on device NUMA locality. */
         unified            = ptr;
-        unified->rsc_index = index;
+        unified->rsc_index = idx;
         unified->lat_ovh   = enable_atomics ? -iface_attr->latency.overhead :
                                                iface_attr->latency.overhead;
 
@@ -543,13 +543,13 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     uint64_t md_flags;
     uint8_t *ep_lane_ptr;
     void *flags_ptr;
-    unsigned index;
+    unsigned idx;
     int attr_len;
     void *ptr;
     int enable_amo;
 
     ptr               = buffer;
-    index             = 0;
+    idx               = 0;
     address_header_p  = ptr;
     *address_header_p = UCP_ADDRESS_VERSION_CURRENT;
     ptr               = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
@@ -713,7 +713,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
                     if (!(pack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                         ucs_trace("pack addr[%d].ep_addr[%d] : len %zu lane %d->%d",
-                                  index, num_ep_addrs, ep_addr_len, lane,
+                                  idx, num_ep_addrs, ep_addr_len, lane,
                                   remote_lane);
                     }
 
@@ -736,7 +736,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT" "
                           "eps %u md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e/n ovh %e "
                           "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
-                          index,
+                          idx,
                           UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
                           num_ep_addrs, md_flags, iface_attr->cap.flags,
                           iface_attr->bandwidth.dedicated,
@@ -750,8 +750,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                           iface_attr->cap.atomic64.fop_flags);
             }
 
-            ++index;
-            ucs_assert(index <= UCP_MAX_RESOURCES);
+            ++idx;
+            ucs_assert(idx <= UCP_MAX_RESOURCES);
         }
 
         /* flags_ptr is a valid pointer to the flags set to the last entry

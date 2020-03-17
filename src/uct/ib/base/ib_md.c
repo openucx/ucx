@@ -308,14 +308,14 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 }
 
 static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address,
-                                            size_t length, uint64_t access)
+                                            size_t length, uint64_t acc)
 {
     char msg[200] = {0};
     struct rlimit limit_info;
 
     ucs_snprintf_zero(msg, sizeof(msg),
                       "%s(address=%p, length=%zu, access=0x%lx) failed: %m",
-                      ibv_reg_mr_func_name, address, length, access);
+                      ibv_reg_mr_func_name, address, length, acc);
 
     /* Check the value of the max locked memory which is set on the system
      * (ulimit -l) */
@@ -369,7 +369,7 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
 
 ucs_status_t
 uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
-                                       size_t length, uint64_t access,
+                                       size_t length, uint64_t acc,
                                        size_t chunk, struct ibv_mr **mrs)
 {
     int thread_num_mrs, thread_num, thread_idx, mr_idx = 0, cpu_id = 0;
@@ -392,7 +392,7 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
     thread_num = ucs_min(CPU_COUNT(&parent_set), mr_num);
 
     ucs_trace("multithreaded handle %p..%p access %lx threads %d affinity %s\n",
-              address, UCS_PTR_BYTE_OFFSET(address, length), access, thread_num,
+              address, UCS_PTR_BYTE_OFFSET(address, length), acc, thread_num,
               ucs_make_affinity_str(&parent_set, affinity_str, sizeof(affinity_str)));
 
     if (thread_num == 1) {
@@ -416,7 +416,7 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
         cur_ctx->pd     = md->pd;
         cur_ctx->addr   = UCS_PTR_BYTE_OFFSET(address, mr_idx * chunk);
         cur_ctx->len    = ucs_min(thread_num_mrs * chunk, length - (mr_idx * chunk));
-        cur_ctx->access = access;
+        cur_ctx->access = acc;
         cur_ctx->mr     = &mrs[mr_idx];
         cur_ctx->chunk  = chunk;
 
@@ -465,7 +465,7 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
 }
 
 static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
-                                     size_t length, uint64_t access,
+                                     size_t length, uint64_t acc,
                                      int silent, uct_ib_mem_t *memh)
 {
     ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
@@ -474,7 +474,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
     if (length >= md->config.min_mt_reg) {
         UCS_PROFILE_CODE("reg ksm") {
             status = md->ops->reg_multithreaded(md, address, length,
-                                                access, memh);
+                                                acc, memh);
         }
 
         if (status != UCS_ERR_UNSUPPORTED) {
@@ -482,16 +482,16 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
                 memh->flags |= UCT_IB_MEM_MULTITHREADED;
             } else {
                 uct_ib_md_print_mem_reg_err_msg(level, address, length,
-                                                access);
+                                                acc);
             }
 
             return status;
         } /* if unsuported - fallback to regular registration */
     }
 
-    status = md->ops->reg_key(md, address, length, access, memh);
+    status = md->ops->reg_key(md, address, length, acc, memh);
     if (status != UCS_OK) {
-        uct_ib_md_print_mem_reg_err_msg(level, address, length, access);
+        uct_ib_md_print_mem_reg_err_msg(level, address, length, acc);
         return status;
     }
 
@@ -499,7 +499,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
 }
 
 ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
-                           uint64_t access, struct ibv_mr **mr_p)
+                           uint64_t acc, struct ibv_mr **mr_p)
 {
     struct ibv_mr *mr;
 #if HAVE_DECL_IBV_EXP_REG_MR
@@ -508,10 +508,10 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
     in.pd         = pd;
     in.addr       = addr;
     in.length     = length;
-    in.exp_access = access;
+    in.exp_access = acc;
     mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
 #else
-    mr = UCS_PROFILE_CALL(ibv_reg_mr, pd, addr, length, access);
+    mr = UCS_PROFILE_CALL(ibv_reg_mr, pd, addr, length, acc);
 #endif
     if (mr == NULL) {
         return UCS_ERR_IO_ERROR;
@@ -584,18 +584,18 @@ static uct_ib_mem_t *uct_ib_memh_alloc(uct_ib_md_t *md)
 static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
                                        size_t length)
 {
-    uint64_t access = UCT_IB_MEM_ACCESS_FLAGS;
+    uint64_t acc = UCT_IB_MEM_ACCESS_FLAGS;
 
     if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) && (length > 0) &&
         (length <= md->config.odp.max_size)) {
-        access |= IBV_ACCESS_ON_DEMAND;
+        acc |= IBV_ACCESS_ON_DEMAND;
     }
 
     if (md->config.mr_relaxed_order == UCS_CONFIG_ON) {
-        access |= IBV_ACCESS_RELAXED_ORDERING;
+        acc |= IBV_ACCESS_RELAXED_ORDERING;
     }
 
-    return access;
+    return acc;
 }
 
 #if HAVE_NUMA
@@ -692,12 +692,12 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, void *address,
 #endif /* UCT_MD_DISABLE_NUMA */
 
 static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
-                            uint64_t access)
+                            uint64_t acc)
 {
     memh->flags = 0;
 
     /* coverity[dead_error_condition] */
-    if (access & IBV_ACCESS_ON_DEMAND) {
+    if (acc & IBV_ACCESS_ON_DEMAND) {
         memh->flags |= UCT_IB_MEM_FLAG_ODP;
     }
 
@@ -712,11 +712,11 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     ucs_status_t status;
-    uint64_t access;
+    uint64_t acc;
 
-    access = uct_ib_md_access_flags(md, flags, length);
-    uct_ib_mem_init(memh, flags, access);
-    status = uct_ib_md_reg_mr(md, address, length, access, silent, memh);
+    acc = uct_ib_md_access_flags(md, flags, length);
+    uct_ib_mem_init(memh, flags, acc);
+    status = uct_ib_md_reg_mr(md, address, length, acc, silent, memh);
     if (status != UCS_OK) {
         return status;
     }
@@ -725,7 +725,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
               "access 0x%lx flags 0x%x", address,
               UCS_PTR_BYTE_OFFSET(address, length),
               uct_ib_device_name(&md->dev), memh->lkey, memh->rkey,
-              access, flags);
+              acc, flags);
 
     uct_ib_mem_set_numa_policy(md, address, length, memh);
 
@@ -771,13 +771,13 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
 }
 
 static ucs_status_t uct_ib_verbs_reg_key(uct_ib_md_t *md, void *address,
-                                         size_t length, uint64_t access,
+                                         size_t length, uint64_t acc,
                                          uct_ib_mem_t *ib_memh)
 {
     uct_ib_verbs_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
     ucs_status_t status;
 
-    status = uct_ib_reg_mr(md->pd, address, length, access, &memh->mr);
+    status = uct_ib_reg_mr(md->pd, address, length, acc, &memh->mr);
     if (status != UCS_OK) {
         return status;
     }

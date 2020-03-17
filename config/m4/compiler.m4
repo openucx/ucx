@@ -476,7 +476,8 @@ BASE_CXXFLAGS="$BASE_CFLAGS"
 ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-pointer-sign],
                                  [-Werror-implicit-function-declaration],
                                  [-Wno-format-zero-length],
-                                 [-Wnested-externs]],
+                                 [-Wnested-externs],
+                                 [-Wshadow]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
 AC_SUBST([BASE_CFLAGS])

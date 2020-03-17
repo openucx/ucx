@@ -151,11 +151,11 @@ enum {
 
 #define ucp_worker_mpool_get(_mp) \
     ({ \
-        ucp_mem_desc_t *rdesc = ucs_mpool_get_inline((_mp)); \
-        if (rdesc != NULL) { \
-            VALGRIND_MAKE_MEM_DEFINED(rdesc, sizeof(*rdesc)); \
+        ucp_mem_desc_t *_rdesc = ucs_mpool_get_inline((_mp)); \
+        if (_rdesc != NULL) { \
+            VALGRIND_MAKE_MEM_DEFINED(_rdesc, sizeof(*_rdesc)); \
         } \
-        rdesc; \
+        _rdesc; \
     })
 
 

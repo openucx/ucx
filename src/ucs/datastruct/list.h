@@ -90,10 +90,10 @@ static inline void ucs_list_insert_before(ucs_list_link_t *pos,
  *
  * @param link  Item to remove.
  */
-static inline void ucs_list_del(ucs_list_link_t *link)
+static inline void ucs_list_del(ucs_list_link_t *lnk)
 {
-    link->prev->next = link->next;
-    link->next->prev = link->prev;
+    lnk->prev->next = lnk->next;
+    lnk->next->prev = lnk->prev;
 }
 
 /**
