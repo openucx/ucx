@@ -177,3 +177,7 @@ stages:
       parameters:
         name: althca
         demands: ucx_althca -equals yes
+    - template: tests.yml
+      parameters:
+        name: legacy
+        demands: ucx_legacy -equals yes
