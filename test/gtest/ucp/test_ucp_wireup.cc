@@ -14,6 +14,7 @@
 extern "C" {
 #include <ucp/wireup/address.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucs/sys/math.h>
 }
 
 class test_ucp_wireup : public ucp_test {
@@ -899,11 +900,36 @@ public:
         /* do nothing */
     }
 
+    bool check_scalable_tls(const ucp_worker_h worker, size_t est_num_eps) {
+        ucp_rsc_index_t rsc_index;
+
+        ucs_for_each_bit(rsc_index, worker->context->tl_bitmap) {
+            ucp_md_index_t md_index      = worker->context->tl_rscs[rsc_index].md_index;
+            const uct_md_attr_t *md_attr = &worker->context->tl_mds[md_index].attr;
+
+            if ((worker->context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) ||
+                (md_attr->cap.flags & UCT_MD_FLAG_SOCKADDR) ||
+                (worker->context->tl_rscs[rsc_index].tl_rsc.dev_type == UCT_DEVICE_TYPE_ACC)) {
+                // Skip TLs for wireup and CM and acceleration TLs
+                continue;
+            }
+
+            if (ucp_worker_iface_get_attr(worker, rsc_index)->max_num_eps >= est_num_eps) {
+                EXPECT_TRUE((worker->scalable_tl_bitmap & UCS_BIT(rsc_index)) != 0);
+                return true;
+            } else {
+                EXPECT_TRUE((worker->scalable_tl_bitmap & UCS_BIT(rsc_index)) == 0);
+            }
+        }
+
+        return false;
+    }
+
     bool test_est_num_eps_fallback(size_t est_num_eps,
-                                   unsigned long &min_max_num_eps,
-                                   bool has_only_unscalable) {
+                                   unsigned long &min_max_num_eps) {
         size_t num_lanes = 0;
         bool res         = true;
+        bool has_only_unscalable;
 
         min_max_num_eps = UCS_ULUNITS_INF;
 
@@ -917,6 +943,9 @@ public:
         }
         send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
         flush_worker(sender());
+
+        has_only_unscalable = !check_scalable_tls(sender().worker(),
+                                                  est_num_eps);
 
         for (ucp_lane_index_t lane = 0;
              lane < ucp_ep_num_lanes(sender().ep()); lane++) {
@@ -963,18 +992,8 @@ private:
 
 UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
     unsigned long test_min_max_eps, min_max_eps;
-    std::vector<std::string> unscalable_tls;
 
-    unscalable_tls.push_back("rc_v");
-    unscalable_tls.push_back("rc_x");
-    unscalable_tls.push_back("tcp");
-
-    /* If test is running with unscalable transports only, check that a number
-     * of created lanes is the same for different number of estimated EPs
-     * values */
-    bool has_only_unscalable = has_only_transports(unscalable_tls);
-
-    test_est_num_eps_fallback(1, test_min_max_eps, has_only_unscalable);
+    test_est_num_eps_fallback(1, test_min_max_eps);
 
     size_t prev_min_max_eps = 0;
     while ((test_min_max_eps != UCS_ULUNITS_INF) &&
@@ -982,14 +1001,14 @@ UCS_TEST_P(test_ucp_wireup_fallback, est_num_eps_fallback) {
            (test_min_max_eps != prev_min_max_eps)) {
         if (test_min_max_eps > 1) {
             EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps - 1,
-                                                  min_max_eps, has_only_unscalable));
+                                                  min_max_eps));
         }
 
         EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps,
-                                              min_max_eps, has_only_unscalable));
+                                              min_max_eps));
 
         EXPECT_TRUE(test_est_num_eps_fallback(test_min_max_eps + 1,
-                                              min_max_eps, has_only_unscalable));
+                                              min_max_eps));
         prev_min_max_eps = test_min_max_eps;
         test_min_max_eps = min_max_eps;
     }
