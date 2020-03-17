@@ -7,7 +7,11 @@
 #ifndef UCT_IB_MLX5_EXP_H_
 #define UCT_IB_MLX5_EXP_H_
 
-#if HAVE_VERBS_EXP_H
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
+#if HAVE_MLX5_HW && HAVE_VERBS_EXP_H
 void uct_ib_exp_qp_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr);
 #else
 static inline void uct_ib_exp_qp_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr) { }
