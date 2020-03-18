@@ -73,7 +73,7 @@ typedef struct uct_cm_base_ep {
         } client;
         struct {
             /* On the server side - callback to process an incoming connection
-             * establishment acknowledgment from the client */
+             * establishment notification from the client */
             uct_cm_ep_server_notify_callback_t  notify_cb;
         } server;
     };
