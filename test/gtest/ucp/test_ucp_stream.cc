@@ -89,19 +89,19 @@ UCS_TEST_P(test_ucp_stream_onesided, recv_connected_ep_cleanup) {
     ucp_datatype_t dt  = ucp_dt_make_contig(sizeof(uint64_t));
 
     ucp::data_type_desc_t send_dt_desc(dt, &send_data, sizeof(send_data));
-    void *sreq  = stream_send_nb(send_dt_desc);
-    size_t length;
-    EXPECT_EQ(sizeof(send_data),
-              wait_stream_recv(
-                    ucp_stream_recv_nb(receiver().ep(), &recv_data, 1, dt,
-                                       ucp_recv_cb, &length,
-                                       UCP_STREAM_RECV_FLAG_WAITALL)));
+    void *sreq = stream_send_nb(send_dt_desc);
+
+    size_t recvd_length;
+    void *rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1, dt,
+                                    ucp_recv_cb, &recvd_length,
+                                    UCP_STREAM_RECV_FLAG_WAITALL);
+
+    EXPECT_EQ(sizeof(send_data), wait_stream_recv(rreq));
     EXPECT_EQ(send_data, recv_data);
     wait(sreq);
 
-    void *rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1, dt,
-                                    ucp_recv_cb, &length,
-                                    UCP_STREAM_RECV_FLAG_WAITALL);
+    rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1, dt, ucp_recv_cb,
+                              &recvd_length, UCP_STREAM_RECV_FLAG_WAITALL);
     EXPECT_TRUE(UCS_PTR_IS_PTR(rreq));
     EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(rreq));
     disconnect(sender());
