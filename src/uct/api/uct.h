@@ -3102,7 +3102,7 @@ ucs_status_t uct_cm_config_read(uct_component_h component,
  *
  * @return Error code.
  */
-ucs_status_t uct_cm_client_ep_conn_establish(uct_ep_h ep);
+ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep);
 
 
 /**
