@@ -29,6 +29,7 @@ noinst_HEADERS = \
 	base/uct_log.h \
 	base/uct_worker.h \
 	base/uct_cm.h \
+	base/uct_iov.inl \
 	sm/base/sm_ep.h \
 	sm/base/sm_iface.h \
 	sm/mm/base/mm_iface.h \

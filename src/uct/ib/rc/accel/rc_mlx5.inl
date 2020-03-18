@@ -7,6 +7,7 @@
 #include "rc_mlx5.h"
 #include "rc_mlx5_common.h"
 
+#include <uct/base/uct_iov.inl>
 #include <uct/ib/mlx5/ib_mlx5.inl>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 

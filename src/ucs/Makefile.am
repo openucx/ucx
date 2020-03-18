@@ -95,6 +95,7 @@ noinst_HEADERS = \
 	sys/module.h \
 	sys/sys.h \
 	sys/iovec.h \
+	sys/iovec.inl \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \

@@ -9,6 +9,7 @@
 #include "cuda_ipc_md.h"
 
 #include <uct/base/uct_log.h>
+#include <uct/base/uct_iov.inl>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
