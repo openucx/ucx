@@ -33,12 +33,13 @@ protected:
 
 size_t test_ucp_stream_base::wait_stream_recv(void *request)
 {
+    ucs_time_t deadline = ucs::get_deadline();
     ucs_status_t status;
     size_t       length;
     do {
         progress();
         status = ucp_stream_recv_request_test(request, &length);
-    } while (status == UCS_INPROGRESS);
+    } while ((status == UCS_INPROGRESS) && (ucs_get_time() < deadline));
     ASSERT_UCS_OK(status);
     ucp_request_free(request);
 
@@ -61,6 +62,53 @@ public:
         return params;
     }
 };
+
+UCS_TEST_P(test_ucp_stream_onesided, recv_not_connected_ep_cleanup) {
+    receiver().connect(&sender(), get_ep_params());
+
+    uint64_t recv_data = 0;
+    size_t length;
+    void *rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1,
+                                    ucp_dt_make_contig(sizeof(uint64_t)),
+                                    ucp_recv_cb, &length,
+                                    UCP_STREAM_RECV_FLAG_WAITALL);
+    EXPECT_TRUE(UCS_PTR_IS_PTR(rreq));
+    EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(rreq));
+    disconnect(receiver());
+    EXPECT_EQ(UCS_ERR_CANCELED, ucp_request_check_status(rreq));
+    ucp_request_free(rreq);
+}
+
+UCS_TEST_P(test_ucp_stream_onesided, recv_connected_ep_cleanup) {
+    skip_loopback();
+    sender().connect(&receiver(), get_ep_params());
+    receiver().connect(&sender(), get_ep_params());
+
+    uint64_t send_data = ucs::rand();
+    uint64_t recv_data = 0;
+    ucp_datatype_t dt  = ucp_dt_make_contig(sizeof(uint64_t));
+
+    ucp::data_type_desc_t send_dt_desc(dt, &send_data, sizeof(send_data));
+    void *sreq = stream_send_nb(send_dt_desc);
+
+    size_t recvd_length;
+    void *rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1, dt,
+                                    ucp_recv_cb, &recvd_length,
+                                    UCP_STREAM_RECV_FLAG_WAITALL);
+
+    EXPECT_EQ(sizeof(send_data), wait_stream_recv(rreq));
+    EXPECT_EQ(send_data, recv_data);
+    wait(sreq);
+
+    rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1, dt, ucp_recv_cb,
+                              &recvd_length, UCP_STREAM_RECV_FLAG_WAITALL);
+    EXPECT_TRUE(UCS_PTR_IS_PTR(rreq));
+    EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(rreq));
+    disconnect(sender());
+    disconnect(receiver());
+    EXPECT_EQ(UCS_ERR_CANCELED, ucp_request_check_status(rreq));
+    ucp_request_free(rreq);
+}
 
 UCS_TEST_P(test_ucp_stream_onesided, send_recv_no_ep) {
 
@@ -460,7 +508,6 @@ UCS_TEST_P(test_ucp_stream, send_recv_generic) {
     ASSERT_UCS_OK(status);
     do_send_recv_test<uint8_t, UCP_STREAM_RECV_FLAG_WAITALL>(dt);
     ucp_dt_destroy(dt);
-
 }
 
 UCS_TEST_P(test_ucp_stream, send_exp_recv_8) {

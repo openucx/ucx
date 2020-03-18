@@ -118,7 +118,7 @@ ucp_request_complete_stream_recv(ucp_request_t *req, ucp_ep_ext_proto_t* ep_ext,
             ucs_queue_pull_elem_non_empty(&ep_ext->stream.match_q, ucp_request_t,
                                           recv.queue);
     ucs_assert(check_req               == req);
-    ucs_assert(req->recv.stream.offset >  0);
+    ucs_assert((req->recv.stream.offset > 0) || UCS_STATUS_IS_ERR(status));
 
     req->recv.stream.length = req->recv.stream.offset;
     ucs_trace_req("completing stream receive request %p (%p) "
