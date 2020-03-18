@@ -50,7 +50,7 @@ enum {
      */
     UCP_ADDRESS_PACK_FLAGS_ALL        = (UCP_ADDRESS_PACK_FLAG_LAST << 1) - 3,
 
-    UCP_ADDRESS_PACK_FLAG_NO_TRACE    = UCS_BIT(16)
+    UCP_ADDRESS_PACK_FLAG_NO_TRACE    = UCS_BIT(16) /* Suppress debug tracing */
 };
 
 
