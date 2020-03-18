@@ -65,6 +65,12 @@ static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t
     return ucp_ep_config(ep)->key.lanes[lane].rsc_index;
 }
 
+static inline ucp_rsc_index_t ucp_ep_get_path_index(ucp_ep_h ep,
+                                                    ucp_lane_index_t lane)
+{
+    return ucp_ep_config(ep)->key.lanes[lane].path_index;
+}
+
 static inline uct_iface_attr_t *ucp_ep_get_iface_attr(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     return ucp_worker_iface_get_attr(ep->worker, ucp_ep_get_rsc_index(ep, lane));

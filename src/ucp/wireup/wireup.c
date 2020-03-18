@@ -704,7 +704,7 @@ static uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
 
 ucs_status_t
 ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
-                        ucp_lane_index_t lane,
+                        ucp_lane_index_t lane, unsigned path_index,
                         const ucp_unpacked_address_t *remote_address,
                         unsigned addr_index)
 {
@@ -740,12 +740,14 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
             /* create an endpoint connected to the remote interface */
             ucs_trace("ep %p: connect uct_ep[%d] to addr[%d]", ep, lane,
                       addr_index);
-            uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
-                                       UCT_EP_PARAM_FIELD_DEV_ADDR |
-                                       UCT_EP_PARAM_FIELD_IFACE_ADDR;
+            uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
+                                       UCT_EP_PARAM_FIELD_DEV_ADDR   |
+                                       UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                                       UCT_EP_PARAM_FIELD_PATH_INDEX;
             uct_ep_params.iface      = wiface->iface;
             uct_ep_params.dev_addr   = remote_address->address_list[addr_index].dev_addr;
             uct_ep_params.iface_addr = remote_address->address_list[addr_index].iface_addr;
+            uct_ep_params.path_index = path_index;
             status = uct_ep_create(&uct_ep_params, &uct_ep);
             if (status != UCS_OK) {
                 /* coverity[leaked_storage] */
@@ -789,8 +791,9 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
                                              UCP_EP_INIT_CM_WIREUP_SERVER)) &&
                           (lane == ucp_ep_get_wireup_msg_lane(ep));
             status = ucp_wireup_ep_connect(ep->uct_eps[lane], ep_init_flags,
-                                           rsc_index, connect_aux,
-                                           remote_address);
+                                           rsc_index,
+                                           ucp_ep_get_path_index(ep, lane),
+                                           connect_aux, remote_address);
             if (status != UCS_OK) {
                 return status;
             }
@@ -1022,6 +1025,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         }
 
         status = ucp_wireup_connect_lane(ep, ep_init_flags, lane,
+                                         key.lanes[lane].path_index,
                                          remote_address, addr_indices[lane]);
         if (status != UCS_OK) {
             return status;

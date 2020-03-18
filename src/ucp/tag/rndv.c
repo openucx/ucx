@@ -366,14 +366,9 @@ static void ucp_rndv_get_lanes_count(ucp_request_t *rndv_req)
                                                  ep->worker->context->config.ext.max_rndv_lanes);
 }
 
-static ucp_lane_index_t ucp_rndv_get_next_lane(ucp_request_t *rndv_req, uct_rkey_t *uct_rkey)
+static ucp_lane_index_t
+ucp_rndv_get_zcopy_get_lane(ucp_request_t *rndv_req, uct_rkey_t *uct_rkey)
 {
-    /* get lane and mask it for next iteration.
-     * next time this lane will not be selected & we continue
-     * with another lane. After all lanes are masked - reset mask
-     * to zero & start from scratch. this way allows to enumerate
-     * all lanes */
-    ucp_ep_h ep = rndv_req->send.ep;
     ucp_lane_index_t lane;
 
     lane = ucp_rndv_req_get_zcopy_rma_lane(rndv_req,
@@ -390,19 +385,24 @@ static ucp_lane_index_t ucp_rndv_get_next_lane(ucp_request_t *rndv_req, uct_rkey
                                                uct_rkey);
     }
 
-    if (ucs_unlikely(lane == UCP_NULL_LANE)) {
-        /* there are no BW lanes */
-        return UCP_NULL_LANE;
-    }
+    return lane;
+}
 
-    rndv_req->send.rndv_get.lanes_map |= UCS_BIT(lane);
+static void ucp_rndv_get_zcopy_next_lane(ucp_request_t *rndv_req)
+{
+    /* mask lane for next iteration.
+     * next time this lane will not be selected & we continue
+     * with another lane */
+    ucp_ep_h ep = rndv_req->send.ep;
+
+    rndv_req->send.rndv_get.lanes_map |= UCS_BIT(rndv_req->send.lane);
+
     /* in case if masked too much lanes - reset mask to zero
      * to select first lane next time */
     if (ucs_popcount(rndv_req->send.rndv_get.lanes_map) >=
         ep->worker->context->config.ext.max_rndv_lanes) {
         rndv_req->send.rndv_get.lanes_map = 0;
     }
-    return lane;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
@@ -429,7 +429,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     ucp_rndv_get_lanes_count(rndv_req);
 
     /* Figure out which lane to use for get operation */
-    rndv_req->send.lane = lane = ucp_rndv_get_next_lane(rndv_req, &uct_rkey);
+    rndv_req->send.lane = lane = ucp_rndv_get_zcopy_get_lane(rndv_req, &uct_rkey);
 
     if (lane == UCP_NULL_LANE) {
         /* If can't perform get_zcopy - switch to active-message.
@@ -523,6 +523,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
         } else if (!UCS_STATUS_IS_ERR(status)) {
             /* in case if not all chunks are transmitted - return in_progress
              * status */
+            ucp_rndv_get_zcopy_next_lane(rndv_req);
             return UCS_INPROGRESS;
         } else {
             if (status == UCS_ERR_NO_RESOURCE) {

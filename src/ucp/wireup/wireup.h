@@ -74,6 +74,7 @@ typedef struct ucp_wireup_msg {
 typedef struct {
     double          score;
     unsigned        addr_index;
+    unsigned        path_index;
     ucp_rsc_index_t rsc_index;
     uint8_t         priority;
 } ucp_wireup_select_info_t;
@@ -126,7 +127,7 @@ void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
 
 ucs_status_t
 ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
-                        ucp_lane_index_t lane,
+                        ucp_lane_index_t lane, unsigned path_index,
                         const ucp_unpacked_address_t *remote_address,
                         unsigned addr_index);
 
