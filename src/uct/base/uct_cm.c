@@ -92,14 +92,14 @@ void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
     cep->client.connect_cb(&cep->super.super, cep->user_data, &connect_args);
 }
 
-void uct_cm_ep_server_connect_cb(uct_cm_base_ep_t *cep, ucs_status_t status)
+void uct_cm_ep_server_notify_cb(uct_cm_base_ep_t *cep, ucs_status_t status)
 {
-    uct_cm_ep_server_connect_args_t connect_args;
+    uct_cm_ep_server_notify_args_t notify_args;
 
-    connect_args.field_mask = UCT_CM_EP_SERVER_CONNECT_ARGS_FIELD_STATUS;
-    connect_args.status     = status;
+    notify_args.field_mask = UCT_CM_EP_SERVER_NOTIFY_ARGS_FIELD_STATUS;
+    notify_args.status     = status;
 
-    cep->server.connect_cb(&cep->super.super, cep->user_data, &connect_args);
+    cep->server.notify_cb(&cep->super.super, cep->user_data, &notify_args);
 }
 
 ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)

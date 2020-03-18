@@ -136,7 +136,7 @@ BEGIN_C_DECLS
  *      the connection acknowledgement or reject notification back to the client.
  *      Send the client a connection acknowledgement or reject notification.
  *      Wait for an acknowledgment from the client, indicating that it is connected.
- * @ref uct_cm_ep_server_connect_callback_t
+ * @ref uct_cm_ep_server_notify_callback_t
  *      This callback is invoked by the UCT transport to handle the connection
  *      acknowledgment from the client.
  *
@@ -1093,7 +1093,7 @@ struct uct_ep_params {
          * Callback that will be invoked when the endpoint on the server side
          * is being connected to a client by a connection manager @ref uct_cm_h .
          */
-        uct_cm_ep_server_connect_callback_t   server;
+        uct_cm_ep_server_notify_callback_t    server;
     } sockaddr_connect_cb;
 
     /**
@@ -1893,7 +1893,7 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  * @return UCS_OK                Operation has completed successfully.
  *         UCS_ERR_BUSY          The @a ep is not connected yet (either
  *                               @ref uct_cm_ep_client_connect_callback_t or
- *                               @ref uct_cm_ep_server_connect_callback_t was not
+ *                               @ref uct_cm_ep_server_notify_callback_t was not
  *                               invoked).
  *         UCS_INPROGRESS        The disconnect request has been initiated, but
  *                               the remote peer has not yet responded to this
@@ -3088,6 +3088,21 @@ ucs_status_t uct_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr);
 ucs_status_t uct_cm_config_read(uct_component_h component,
                                 const char *env_prefix, const char *filename,
                                 uct_cm_config_t **config_p);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Notify the server about client-side connection establishment.
+ *
+ * This routine should be called on the client side after the client completed
+ * establishing its connection to the server. The routine will send a
+ * notification message to the server indicating that the client is connected.
+ *
+ * @param [in]  ep      The connected endpoint on the client side.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_cm_client_ep_conn_establish(uct_ep_h ep);
 
 
 /**

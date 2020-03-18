@@ -38,11 +38,11 @@ void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
     uct_cm_ep_client_connect_cb(&cep->super, remote_data, status);
 }
 
-void uct_rdmacm_cm_ep_server_connect_cb(uct_rdmacm_cm_ep_t *cep,
-                                        ucs_status_t status)
+void uct_rdmacm_cm_ep_server_notify_cb(uct_rdmacm_cm_ep_t *cep,
+                                       ucs_status_t status)
 {
     cep->flags |= UCT_RDMACM_CM_EP_CONN_CB_INVOKED;
-    uct_cm_ep_server_connect_cb(&cep->super, status);
+    uct_cm_ep_server_notify_cb(&cep->super, status);
 }
 
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
@@ -65,9 +65,9 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
         uct_rdmacm_cm_ep_client_connect_cb(cep, remote_data, status);
     } else {
         ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
-        /* not connected yet, so call server side connect callback with err
+        /* not connected yet, so call server side notify callback with err
          * status */
-        uct_rdmacm_cm_ep_server_connect_cb(cep, status);
+        uct_rdmacm_cm_ep_server_notify_cb(cep, status);
     }
 }
 
@@ -298,9 +298,9 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                   event->id, event->listen_id->channel, cm, cm->ev_ch);
     }
 
-    cep->super.server.connect_cb = params->sockaddr_connect_cb.server;
-    cep->id                      = event->id;
-    cep->id->context             = cep;
+    cep->super.server.notify_cb = params->sockaddr_connect_cb.server;
+    cep->id                     = event->id;
+    cep->id->context            = cep;
 
     memset(&conn_param, 0, sizeof(conn_param));
     conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +

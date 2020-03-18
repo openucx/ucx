@@ -41,7 +41,7 @@ static void uct_tcp_sockcm_ep_handle_disconnect(uct_tcp_sockcm_ep_t *cep,
 
     ucs_assert(status != UCS_OK);
     if (cep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) {
-        uct_cm_ep_server_connect_cb(&cep->super, status);
+        uct_cm_ep_server_notify_cb(&cep->super, status);
     } else {
         ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT);
         remote_data.field_mask = 0;
@@ -297,8 +297,8 @@ out:
 static ucs_status_t uct_tcp_sockcm_ep_server_init(uct_tcp_sockcm_ep_t *cep,
                                                   const uct_ep_params_t *params)
 {
-    cep->state                  |= UCT_TCP_SOCKCM_EP_ON_SERVER;
-    cep->super.server.connect_cb = params->sockaddr_connect_cb.server;
+    cep->state                 |= UCT_TCP_SOCKCM_EP_ON_SERVER;
+    cep->super.server.notify_cb = params->sockaddr_connect_cb.server;
     return UCS_OK;
 }
 
