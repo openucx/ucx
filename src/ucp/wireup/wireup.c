@@ -964,6 +964,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     char str[32];
     ucp_wireup_ep_t *cm_wireup_ep;
 
+    ucs_assert(tl_bitmap != 0);
+
     ucs_trace("ep %p: initialize lanes", ep);
 
     ucp_ep_config_key_reset(&key);

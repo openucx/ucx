@@ -1677,3 +1677,20 @@ uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)
 
     return tl_bitmap;
 }
+
+uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
+                                       ucp_rsc_index_t dev_idx)
+{
+    uint64_t        tl_bitmap;
+    ucp_rsc_index_t tl_idx;
+
+    tl_bitmap = 0;
+
+    ucs_for_each_bit(tl_idx, context->tl_bitmap) {
+        if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
+            tl_bitmap |= UCS_BIT(tl_idx);
+        }
+    }
+
+    return tl_bitmap;
+}

@@ -346,6 +346,8 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
+    ucs_assert(!(ucp_ep_get_tl_bitmap(ep) & ~local_tl_bitmap));
+
     *ep_p = ep;
     return UCS_OK;
 

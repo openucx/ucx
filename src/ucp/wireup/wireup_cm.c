@@ -239,9 +239,11 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_cm_client_connect_progress_arg_t *progress_arg = arg;
     ucp_ep_h ucp_ep                                    = progress_arg->ucp_ep;
     ucp_worker_h worker                                = ucp_ep->worker;
+    ucp_context_h context                              = worker->context;
     ucp_wireup_ep_t *wireup_ep;
     ucp_unpacked_address_t addr;
     uint64_t tl_bitmap;
+    ucp_rsc_index_t dev_index;
     unsigned addr_idx;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
@@ -272,11 +274,15 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
+
+    /* extend tl_bitmap to all TLs on the same device as initial configuration
+       since TL can be changed due to server side configuration */
     tl_bitmap = ucp_ep_get_tl_bitmap(ucp_ep);
-    /* EP lanes must be configured to right device on previous stage */
-    ucs_assert(tl_bitmap & worker->context->tl_bitmap);
-    status = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
-                                   tl_bitmap, &addr, addr_indices);
+    ucs_assert(tl_bitmap != 0);
+    dev_index = context->tl_rscs[ucs_ffs64(tl_bitmap)].dev_index;
+    tl_bitmap = ucp_context_dev_idx_tl_bitmap(context, dev_index);
+    status    = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
+                                      tl_bitmap, &addr, addr_indices);
     if (status != UCS_OK) {
         goto out_unblock;
     }
@@ -682,7 +688,6 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         return status;
     }
 
-    ucs_assert(!(ucp_ep_get_tl_bitmap(ep) & ~tl_bitmap));
     status = ucp_wireup_connect_local(ep, remote_addr, NULL);
     if (status != UCS_OK) {
         return status;
