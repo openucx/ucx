@@ -10,8 +10,7 @@
 
 ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, const void *addr,
                                               size_t length,
-                                              ucs_memory_type_t *mem_type_p,
-                                              ucs_sys_device_t *sys_dev_p);
+                                              ucs_mem_info_t *mem_info_p);
 
 ucs_status_t
 uct_cuda_base_query_md_resources(uct_component_t *component,

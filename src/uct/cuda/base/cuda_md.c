@@ -17,8 +17,9 @@
 #include <cuda_runtime.h>
 #include <cuda.h>
 
-static ucs_status_t uct_cuda_base_get_sys_dev(ucs_sys_device_t *sys_dev_p)
+static ucs_status_t uct_cuda_base_get_sys_dev(ucs_mem_info_t *mem_info_p)
 {
+    ucs_sys_device_t *sys_dev_p = &(mem_info_p->sys_dev);
     CUdevice dev;
     int attrib;
 
@@ -38,15 +39,16 @@ static ucs_status_t uct_cuda_base_get_sys_dev(ucs_sys_device_t *sys_dev_p)
     }
     sys_dev_p->bus_id.bus = (uint8_t) attrib;
 
+    mem_info_p->field_mask |= UCS_MEM_INFO_SYS_DEV;
+
     return UCS_OK;
 
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
-                 (md, addr, length, mem_type_p, sys_dev_p),
+                 (md, addr, length, mem_info_p),
                  uct_md_h md, const void *addr, size_t length,
-                 ucs_memory_type_t *mem_type_p,
-                 ucs_sys_device_t *sys_dev_p)
+                 ucs_mem_info_t *mem_info_p)
 {
     CUmemorytype memType = (CUmemorytype)0;
     uint32_t isManaged   = 0;
@@ -57,17 +59,21 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
     CUresult cu_err;
     const char *cu_err_str;
 
+    mem_info_p->field_mask = 0;
+
     if (addr == NULL) {
-        *mem_type_p = UCS_MEMORY_TYPE_HOST;
+        mem_info_p->mem_type = UCS_MEMORY_TYPE_HOST;
         return UCS_OK;
     }
 
     cu_err = cuPointerGetAttributes(2, attributes, attrdata, (CUdeviceptr)addr);
     if ((cu_err == CUDA_SUCCESS) && (memType == CU_MEMORYTYPE_DEVICE)) {
         if (isManaged) {
-            *mem_type_p = UCS_MEMORY_TYPE_CUDA_MANAGED;
+            mem_info_p->field_mask |= UCS_MEM_INFO_MEM_TYPE;
+            mem_info_p->mem_type    = UCS_MEMORY_TYPE_CUDA_MANAGED;
         } else {
-            *mem_type_p = UCS_MEMORY_TYPE_CUDA;
+            mem_info_p->field_mask |= UCS_MEM_INFO_MEM_TYPE;
+            mem_info_p->mem_type    = UCS_MEMORY_TYPE_CUDA;
             cu_err = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
                                            (CUdeviceptr)addr);
             if (cu_err != CUDA_SUCCESS) {
@@ -75,7 +81,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
                 ucs_warn("cuPointerSetAttribute(%p) error: %s", (void*) addr, cu_err_str);
             }
 
-            return uct_cuda_base_get_sys_dev(sys_dev_p);
+            return uct_cuda_base_get_sys_dev(mem_info_p);
         }
         return UCS_OK;
     }
