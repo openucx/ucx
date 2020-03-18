@@ -2038,18 +2038,14 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @param [in]     md           Memory domain to detect memory type
  * @param [in]     addr         Memory address to detect.
  * @param [in]     length       Size of memory
- * @param [out]    mem_type_p   Filled with memory type of the address range if
+ * @param [out]    mem_info_p   Filled with memory info of the address range if
                                 function succeeds
- * @param [out]    sys_type_p   Filled with system device info associated with
-                                supplied addr. eg: numa node ID of addr
- * @return UCS_OK               If memory type is successfully detected and
- *                              system device associated with addr is detected
+ * @return UCS_OK               If memory info is successfully detected
  *         UCS_ERR_INVALID_ADDR If failed to detect memory type
  */
 ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
                                        size_t length,
-                                       ucs_memory_type_t *mem_type_p,
-                                       ucs_sys_device_t *sys_dev_p);
+                                       ucs_mem_info_t *mem_info_p);
 
 
 /**

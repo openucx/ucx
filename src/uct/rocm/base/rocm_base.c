@@ -168,14 +168,16 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
 
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
                                               size_t length,
-                                              ucs_memory_type_t *mem_type_p,
-                                              ucs_sys_device_t *sys_dev_p);
+                                              ucs_mem_info_t *mem_info_p);
 {
     hsa_status_t status;
     hsa_amd_pointer_info_t info;
 
+    mem_info_p->field_mask = 0;
+
     if (addr == NULL) {
-        *mem_type_p = UCS_MEMORY_TYPE_HOST;
+        mem_info_p->field_mask |= UCS_MEM_INFO_MEM_TYPE;
+        mem_info_p->mem_type    = UCS_MEMORY_TYPE_HOST;
         return UCS_OK;
     }
 
@@ -188,7 +190,8 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
         status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE, &dev_type);
         if ((status == HSA_STATUS_SUCCESS) &&
             (dev_type == HSA_DEVICE_TYPE_GPU)) {
-            *mem_type_p = UCS_MEMORY_TYPE_ROCM;
+            mem_info_p->field_mask |= UCS_MEM_INFO_MEM_TYPE;
+            mem_info_p->mem_type    = UCS_MEMORY_TYPE_HOST;
             return UCS_OK;
         }
     }
