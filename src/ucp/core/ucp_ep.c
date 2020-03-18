@@ -248,13 +248,14 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 
         status = ucp_address_pack(worker, NULL,
                                   context->mem_type_access_tls[mem_type],
-                                  UCP_ADDRESS_PACK_FLAG_ALL, NULL,
+                                  UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
                                   &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
 
-        status = ucp_address_unpack(worker, address_buffer, UINT64_MAX, &local_address);
+        status = ucp_address_unpack(worker, address_buffer,
+                                    UCP_ADDRESS_PACK_FLAGS_ALL, &local_address);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
         }
@@ -427,10 +428,9 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 
     if (sa_data->addr_mode == UCP_WIREUP_SA_DATA_CM_ADDR) {
         addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                     UCP_ADDRESS_PACK_FLAG_EP_ADDR |
-                     UCP_ADDRESS_PACK_FLAG_TRACE;
+                     UCP_ADDRESS_PACK_FLAG_EP_ADDR;
     } else {
-        addr_flags = UINT64_MAX;
+        addr_flags = UCP_ADDRESS_PACK_FLAGS_ALL;
     }
 
     /* coverity[overrun-local] */
@@ -580,7 +580,8 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
-    status = ucp_address_unpack(worker, params->address, UINT64_MAX, &remote_address);
+    status = ucp_address_unpack(worker, params->address,
+                                UCP_ADDRESS_PACK_FLAGS_ALL, &remote_address);
     if (status != UCS_OK) {
         goto out;
     }

@@ -15,6 +15,11 @@
 #include <ucs/arch/bitops.h>
 
 
+/* Peer name to show when we don't have debug information, or the name was not
+ * packed in the worker address */
+#define UCP_WIREUP_EMPTY_PEER_NAME  "<no debug data>"
+
+
 /**
  * Wireup message types
  */
