@@ -241,6 +241,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_worker_h worker                                = ucp_ep->worker;
     ucp_wireup_ep_t *wireup_ep;
     ucp_unpacked_address_t addr;
+    uint64_t tl_bitmap;
     unsigned addr_idx;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
@@ -271,8 +272,11 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
-    status = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags, &addr,
-                                   addr_indices);
+    tl_bitmap = ucp_ep_get_tl_bitmap(ucp_ep);
+    /* EP lanes must be configured to right device on previous stage */
+    ucs_assert(tl_bitmap & worker->context->tl_bitmap);
+    status = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
+                                   tl_bitmap, &addr, addr_indices);
     if (status != UCS_OK) {
         goto out_unblock;
     }
@@ -665,16 +669,20 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                                   ucp_conn_request_h conn_request,
                                   ucp_ep_h *ep_p)
 {
+    uint64_t tl_bitmap = ucp_context_dev_tl_bitmap(worker->context,
+                                                   conn_request->dev_name);
     ucp_ep_h ep;
     ucs_status_t status;
 
     /* Create and connect TL part */
-    status = ucp_ep_create_to_worker_addr(worker, remote_addr, ep_init_flags,
+    status = ucp_ep_create_to_worker_addr(worker, tl_bitmap, remote_addr,
+                                          ep_init_flags,
                                           "conn_request on uct_listener", &ep);
     if (status != UCS_OK) {
         return status;
     }
 
+    ucs_assert(!(ucp_ep_get_tl_bitmap(ep) & ~tl_bitmap));
     status = ucp_wireup_connect_local(ep, remote_addr, NULL);
     if (status != UCS_OK) {
         return status;

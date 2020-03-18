@@ -109,6 +109,7 @@ int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                             const ucp_address_entry_t *ae);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
+                                   uint64_t local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices);
 
