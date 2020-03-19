@@ -42,6 +42,11 @@ stages:
                 ./ucx-*.tar.gz
                 ./rpm-dist/ucx-*.src.rpm
 
+          - bash: |
+              set -eE
+              make -s -j`nproc`
+            displayName: Build ucx
+
           - template: jucx-publish.yml
             parameters:
               target: publish-release
