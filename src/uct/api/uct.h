@@ -136,9 +136,9 @@ BEGIN_C_DECLS
  *      the connection acknowledgement or reject notification back to the client.
  *      Send the client a connection acknowledgement or reject notification.
  *      Wait for an acknowledgment from the client, indicating that it is connected.
- * @ref uct_cm_ep_server_notify_callback_t
+ * @ref uct_cm_ep_server_conn_notify_callback_t
  *      This callback is invoked by the UCT transport to handle the connection
- *      acknowledgment from the client.
+ *      notification from the client.
  *
  * Disconnecting:
  * @ref uct_ep_disconnect
@@ -177,6 +177,12 @@ BEGIN_C_DECLS
  *      from the server.
  *      After invoking this callback, the UCT transport will finalize the client's
  *      connection to the server.
+ * @ref uct_cm_client_ep_conn_notify
+ *      After the client's connection establishment is completed, the client
+ *      should call this function in which it sends a notification message to
+ *      the server stating that it (the client) is connected.
+ *      The notification message that is sent depends on the transport's
+ *      implementation.
  *
  * Disconnecting:
  * @ref uct_ep_disconnect
@@ -1087,13 +1093,13 @@ struct uct_ep_params {
          * Callback that will be invoked when the endpoint on the client side
          * is being connected to the server by a connection manager @ref uct_cm_h .
          */
-        uct_cm_ep_client_connect_callback_t   client;
+        uct_cm_ep_client_connect_callback_t      client;
 
         /**
          * Callback that will be invoked when the endpoint on the server side
          * is being connected to a client by a connection manager @ref uct_cm_h .
          */
-        uct_cm_ep_server_notify_callback_t    server;
+        uct_cm_ep_server_conn_notify_callback_t  server;
     } sockaddr_connect_cb;
 
     /**
@@ -1893,8 +1899,8 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
  * @return UCS_OK                Operation has completed successfully.
  *         UCS_ERR_BUSY          The @a ep is not connected yet (either
  *                               @ref uct_cm_ep_client_connect_callback_t or
- *                               @ref uct_cm_ep_server_notify_callback_t was not
- *                               invoked).
+ *                               @ref uct_cm_ep_server_conn_notify_callback_t
+ *                               was not invoked).
  *         UCS_INPROGRESS        The disconnect request has been initiated, but
  *                               the remote peer has not yet responded to this
  *                               request, and consequently the registered

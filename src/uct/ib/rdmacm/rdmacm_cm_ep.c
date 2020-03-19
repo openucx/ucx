@@ -38,11 +38,11 @@ void uct_rdmacm_cm_ep_client_connect_cb(uct_rdmacm_cm_ep_t *cep,
     uct_cm_ep_client_connect_cb(&cep->super, remote_data, status);
 }
 
-void uct_rdmacm_cm_ep_server_notify_cb(uct_rdmacm_cm_ep_t *cep,
-                                       ucs_status_t status)
+void uct_rdmacm_cm_ep_server_conn_notify_cb(uct_rdmacm_cm_ep_t *cep,
+                                            ucs_status_t status)
 {
     cep->flags |= UCT_RDMACM_CM_EP_CONN_CB_INVOKED;
-    uct_cm_ep_server_notify_cb(&cep->super, status);
+    uct_cm_ep_server_conn_notify_cb(&cep->super, status);
 }
 
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
@@ -67,7 +67,7 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
         ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
         /* not connected yet, so call server side notify callback with err
          * status */
-        uct_rdmacm_cm_ep_server_notify_cb(cep, status);
+        uct_rdmacm_cm_ep_server_conn_notify_cb(cep, status);
     }
 }
 

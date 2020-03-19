@@ -69,12 +69,12 @@ typedef struct uct_cm_base_ep {
         struct {
             /* On the client side - callback to process an incoming
              * connection response from the server */
-            uct_cm_ep_client_connect_callback_t connect_cb;
+            uct_cm_ep_client_connect_callback_t      connect_cb;
         } client;
         struct {
             /* On the server side - callback to process an incoming connection
              * establishment notification from the client */
-            uct_cm_ep_server_notify_callback_t  notify_cb;
+            uct_cm_ep_server_conn_notify_callback_t  notify_cb;
         } server;
     };
 } uct_cm_base_ep_t;
@@ -101,6 +101,6 @@ void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,
                                  ucs_status_t status);
 
-void uct_cm_ep_server_notify_cb(uct_cm_base_ep_t *cep, ucs_status_t status);
+void uct_cm_ep_server_conn_notify_cb(uct_cm_base_ep_t *cep, ucs_status_t status);
 
 #endif /* UCT_CM_H_ */

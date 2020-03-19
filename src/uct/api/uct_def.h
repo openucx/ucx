@@ -372,14 +372,14 @@ typedef struct uct_cm_ep_client_connect_args {
  *        callback.
  *
  * The enumeration allows specifying which fields in
- * @ref uct_cm_ep_server_notify_args are present, for backward compatibility
+ * @ref uct_cm_ep_server_conn_notify_args are present, for backward compatibility
  * support.
  */
-enum uct_cm_ep_server_notify_args_field {
-    /** Enables @ref uct_cm_ep_server_notify_args::status
-     *  Indicates that status field in uct_cm_ep_server_notify_args_t is valid.
+enum uct_cm_ep_server_conn_notify_args_field {
+    /** Enables @ref uct_cm_ep_server_conn_notify_args::status
+     *  Indicates that status field in uct_cm_ep_server_conn_notify_args_t is valid.
      */
-    UCT_CM_EP_SERVER_NOTIFY_ARGS_FIELD_STATUS = UCS_BIT(0)
+    UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS = UCS_BIT(0)
 };
 
 
@@ -389,10 +389,10 @@ enum uct_cm_ep_server_notify_args_field {
  *
  * Used with the client-server API on a connection manager.
  */
-typedef struct uct_cm_ep_server_notify_args {
+typedef struct uct_cm_ep_server_conn_notify_args {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_cm_ep_server_notify_args_field.
+     * @ref uct_cm_ep_server_conn_notify_args_field.
      * Fields not specified by this mask should not be accessed by the callback.
      */
     uint64_t                   field_mask;
@@ -401,7 +401,7 @@ typedef struct uct_cm_ep_server_notify_args {
      * Indicates the client's @ref ucs_status_t status.
      */
     ucs_status_t               status;
-} uct_cm_ep_server_notify_args_t;
+} uct_cm_ep_server_conn_notify_args_t;
 
 
 /**
@@ -614,9 +614,9 @@ typedef void
  *                               @ref uct_ep_params_t::user_data
  * @param [in]  connect_args     Server's connect callback arguments.
  */
-typedef void (*uct_cm_ep_server_notify_callback_t)(uct_ep_h ep, void *arg,
-                                                   const uct_cm_ep_server_notify_args_t
-                                                   *connect_args);
+typedef void (*uct_cm_ep_server_conn_notify_callback_t)
+                (uct_ep_h ep, void *arg,
+                 const uct_cm_ep_server_conn_notify_args_t *connect_args);
 
 
 /**

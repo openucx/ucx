@@ -1222,7 +1222,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
 }
 
 void uct_test::entity::accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                              uct_cm_ep_server_notify_callback_t notify_cb,
+                              uct_cm_ep_server_conn_notify_callback_t notify_cb,
                               uct_ep_disconnect_cb_t disconnect_cb,
                               void *user_data)
 {

@@ -457,7 +457,7 @@ protected:
     }
 
     virtual void server_accept(entity *server, uct_conn_request_h conn_request,
-                               uct_cm_ep_server_notify_callback_t notify_cb,
+                               uct_cm_ep_server_conn_notify_callback_t notify_cb,
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
     {
@@ -516,10 +516,10 @@ protected:
 
     static void
     server_connect_cb(uct_ep_h ep, void *arg,
-                      const uct_cm_ep_server_notify_args_t *notify_args) {
+                      const uct_cm_ep_server_conn_notify_args_t *notify_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
-        if (notify_args->field_mask & UCT_CM_EP_SERVER_NOTIFY_ARGS_FIELD_STATUS) {
+        if (notify_args->field_mask & UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS) {
             EXPECT_EQ(UCS_OK, notify_args->status);
         }
 
@@ -1085,7 +1085,7 @@ public:
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
-                       uct_cm_ep_server_notify_callback_t notify_cb,
+                       uct_cm_ep_server_conn_notify_callback_t notify_cb,
                        uct_ep_disconnect_cb_t disconnect_cb,
                        void *user_data)
     {

@@ -781,7 +781,7 @@ out:
 /*
  * The main thread progress part of connection establishment on server side
  */
-static unsigned ucp_cm_server_notify_progress(void *arg)
+static unsigned ucp_cm_server_conn_notify_progress(void *arg)
 {
     ucp_ep_h ucp_ep = arg;
 
@@ -794,9 +794,9 @@ static unsigned ucp_cm_server_notify_progress(void *arg)
 /*
  * Async callback on a server side which notifies that client is connected.
  */
-static void ucp_cm_server_notify_cb(uct_ep_h ep, void *arg,
-                                   const uct_cm_ep_server_notify_args_t
-                                   *notify_args)
+static void ucp_cm_server_conn_notify_cb(uct_ep_h ep, void *arg,
+                                         const uct_cm_ep_server_conn_notify_args_t
+                                         *notify_args)
 {
     ucp_ep_h ucp_ep            = arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
@@ -804,13 +804,13 @@ static void ucp_cm_server_notify_cb(uct_ep_h ep, void *arg,
     ucs_status_t status;
 
     ucs_assert_always(notify_args->field_mask &
-                      UCT_CM_EP_SERVER_NOTIFY_ARGS_FIELD_STATUS);
+                      UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS);
 
     status = notify_args->status;
 
     if (status == UCS_OK) {
         uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                          ucp_cm_server_notify_progress,
+                                          ucp_cm_server_conn_notify_progress,
                                           ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                           &prog_id);
         ucp_worker_signal_internal(ucp_ep->worker);
@@ -823,7 +823,7 @@ static void ucp_cm_server_notify_cb(uct_ep_h ep, void *arg,
          * 3) TODO: remove (1) when the EP can be moved to err state to block
          *          new send operations but still able to flush transport lanes */
         uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                          ucp_cm_server_notify_progress,
+                                          ucp_cm_server_conn_notify_progress,
                                           ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                           &prog_id);
         ucp_cm_disconnect_cb(ep, ucp_ep);
@@ -872,7 +872,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     uct_ep_params.conn_request               = conn_request->uct_req;
     uct_ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
     uct_ep_params.sockaddr_pack_cb           = ucp_cm_server_priv_pack_cb;
-    uct_ep_params.sockaddr_connect_cb.server = ucp_cm_server_notify_cb;
+    uct_ep_params.sockaddr_connect_cb.server = ucp_cm_server_conn_notify_cb;
     uct_ep_params.disconnect_cb              = ucp_cm_disconnect_cb;
 
     status = uct_ep_create(&uct_ep_params, &uct_ep);
@@ -925,7 +925,7 @@ static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
     if ((elem->cb == ucp_ep_cm_disconnect_progress)        ||
         (elem->cb == ucp_ep_cm_remote_disconnect_progress) ||
         (elem->cb == ucp_cm_client_connect_progress)       ||
-        (elem->cb == ucp_cm_server_notify_progress)) {
+        (elem->cb == ucp_cm_server_conn_notify_progress)) {
         return arg == elem->arg;
     } else {
         return 0;
