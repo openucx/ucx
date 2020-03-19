@@ -88,5 +88,5 @@ UCS_CONFIG_REGISTER_TABLE(ucm_global_config_table, "UCM", UCM_CONFIG_PREFIX,
 
 UCS_STATIC_INIT {
     (void)ucs_config_parser_fill_opts(&ucm_global_opts, ucm_global_config_table,
-                                      NULL, UCM_CONFIG_PREFIX, 0);
+                                      UCS_CONFIG_PREFIX, UCM_CONFIG_PREFIX, 0);
 }

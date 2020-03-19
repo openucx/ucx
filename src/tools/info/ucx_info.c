@@ -202,7 +202,7 @@ int main(int argc, char **argv)
     }
 
     if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
-        ucs_config_parser_print_all_opts(stdout, print_flags);
+        ucs_config_parser_print_all_opts(stdout, UCS_CONFIG_PREFIX, print_flags);
     }
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP|PRINT_MEM_MAP)) {

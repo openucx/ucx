@@ -97,6 +97,7 @@ ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
                              size_t config_size, const char *env_prefix,
                              const char *cfg_prefix)
 {
+    char full_prefix[128] = UCS_CONFIG_PREFIX;
     uct_config_bundle_t *config_bundle;
     ucs_status_t status;
 
@@ -107,8 +108,12 @@ ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
     }
 
     /* TODO use env_prefix */
+    if ((env_prefix != NULL) && (strlen(env_prefix) > 0)) {
+        snprintf(full_prefix, sizeof(full_prefix), "%s_%s", env_prefix, UCS_CONFIG_PREFIX);
+    }
+
     status = ucs_config_parser_fill_opts(config_bundle->data, config_table,
-                                         env_prefix, cfg_prefix, 0);
+                                         full_prefix, cfg_prefix, 0);
     if (status != UCS_OK) {
         goto err_free_bundle;
     }

@@ -1828,7 +1828,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* At this point all UCT memory domains and interfaces are already created
      * so warn about unused environment variables.
      */
-    ucs_config_parser_warn_unused_env_vars_once();
+    ucs_config_parser_warn_unused_env_vars_once(context->config.env_prefix);
+    ucs_config_parser_warn_unused_env_vars_once(UCS_CONFIG_PREFIX);
 
     *worker_p = worker;
     return UCS_OK;

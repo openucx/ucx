@@ -382,19 +382,23 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
  * @param opts           User-defined options structure.
  * @param fields         Array of fields which define the options.
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
+ * @param env_prefix     Base environment variable prefix.
  * @param flags          Flags which control the output.
  */
 void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
                                   ucs_config_field_t *fields, const char *table_prefix,
+                                  const char *env_prefix,
                                   ucs_config_print_flags_t flags);
 
 /**
  * Print all options defined in the library - names, values, documentation.
  *
  * @param stream         Output stream to print to.
+ * @param env_prefix     Base environment variable prefix.
  * @param flags          Flags which control the output.
  */
-void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t flags);
+void ucs_config_parser_print_all_opts(FILE *stream, const char *env_prefix,
+                                      ucs_config_print_flags_t flags);
 
 /**
  * Read a value from options structure.
@@ -420,16 +424,22 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
 /**
- * Check all UCX_ environment variables have been used so far by the
- * configuration parser, issue a warning if not. Called just before program exit.
+ * Check all environment variables that start from prefix have been used so far
+ * by the configuration parser, issue a warning if not. Called just before
+ * program exit.
+ *
+ * @param prefix     Environment variable prefix.
  */
-void ucs_config_parser_warn_unused_env_vars();
+void ucs_config_parser_warn_unused_env_vars(const char *prefix);
 
 /**
  * Wrapper for `ucs_config_parser_warn_unused_env_vars`
  * that ensures that this is called once
+ *
+ * @param prefix     Environment variable prefix.
  */
-void ucs_config_parser_warn_unused_env_vars_once();
+
+void ucs_config_parser_warn_unused_env_vars_once(const char *prefix);
 
 /**
  * Translate configuration value of "MEMUNITS" type to actual value.
