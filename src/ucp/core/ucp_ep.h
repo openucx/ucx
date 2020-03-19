@@ -441,6 +441,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep);
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
+                                          uint64_t local_tl_bitmap,
                                           const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p);

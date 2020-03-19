@@ -260,7 +260,8 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             goto err_free_address_buffer;
         }
 
-        status = ucp_ep_create_to_worker_addr(worker, &local_address,
+        status = ucp_ep_create_to_worker_addr(worker, UINT64_MAX,
+                                              &local_address,
                                               UCP_EP_INIT_FLAG_MEM_TYPE,
                                               "mem type",
                                               &worker->mem_type_ep[mem_type]);
@@ -324,6 +325,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
 }
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
+                                          uint64_t local_tl_bitmap,
                                           const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p)
@@ -339,11 +341,13 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     }
 
     /* initialize transport endpoints */
-    status = ucp_wireup_init_lanes(ep, ep_init_flags, remote_address,
-                                   addr_indices);
+    status = ucp_wireup_init_lanes(ep, ep_init_flags, local_tl_bitmap,
+                                   remote_address, addr_indices);
     if (status != UCS_OK) {
         goto err_delete;
     }
+
+    ucs_assert(!(ucp_ep_get_tl_bitmap(ep) & ~local_tl_bitmap));
 
     *ep_p = ep;
     return UCS_OK;
@@ -442,7 +446,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
     switch (sa_data->addr_mode) {
     case UCP_WIREUP_SA_DATA_FULL_ADDR:
         /* create endpoint to the worker address we got in the private data */
-        status = ucp_ep_create_to_worker_addr(worker, &remote_addr,
+        status = ucp_ep_create_to_worker_addr(worker, UINT64_MAX, &remote_addr,
                                               ep_init_flags |
                                               UCP_EP_INIT_CREATE_AM_LANE,
                                               "listener", ep_p);
@@ -611,7 +615,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out_free_address;
     }
 
-    status = ucp_ep_create_to_worker_addr(worker, &remote_address,
+    status = ucp_ep_create_to_worker_addr(worker, UINT64_MAX, &remote_address,
                                           ucp_ep_init_flags(worker, params),
                                           "from api call", &ep);
     if (status != UCS_OK) {
