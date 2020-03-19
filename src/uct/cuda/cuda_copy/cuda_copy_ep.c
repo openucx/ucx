@@ -7,6 +7,7 @@
 #include "cuda_copy_iface.h"
 
 #include <uct/base/uct_log.h>
+#include <uct/base/uct_iov.inl>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>

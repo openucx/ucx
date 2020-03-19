@@ -8,6 +8,7 @@
 #include "rocm_ipc_md.h"
 
 #include <uct/rocm/base/rocm_base.h>
+#include <uct/base/uct_iov.inl>
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_ep_t, const uct_ep_params_t *params)
 {

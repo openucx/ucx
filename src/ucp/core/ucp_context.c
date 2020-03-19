@@ -176,14 +176,18 @@ static ucs_config_field_t ucp_config_table[] = {
    "          Otherwise the CPU mode is selected.",
    ucs_offsetof(ucp_config_t, ctx.atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
 
-  {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
-   "Maximal length of worker name. "
+  {"ADDRESS_DEBUG_INFO",
 #if ENABLE_DEBUG_DATA
-   "Sent to remote peer as part of worker address."
+   "y",
 #else
-   "Not sent to remote peer per build configuration."
+   "n",
 #endif
-   ,
+   "Add debugging information to worker address.",
+   ucs_offsetof(ucp_config_t, ctx.address_debug_info), UCS_CONFIG_TYPE_BOOL},
+
+  {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
+   "Maximal length of worker name. Sent to remote peer as part of worker address\n"
+   "if UCX_ADDRESS_DEBUG_INFO is set to 'yes'",
    ucs_offsetof(ucp_config_t, ctx.max_worker_name), UCS_CONFIG_TYPE_UINT},
 
   {"USE_MT_MUTEX", "n", "Use mutex for multithreading support in UCP.\n"
@@ -1673,6 +1677,23 @@ uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)
         }
 
         tl_bitmap |= UCS_BIT(tl_idx);
+    }
+
+    return tl_bitmap;
+}
+
+uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
+                                       ucp_rsc_index_t dev_idx)
+{
+    uint64_t        tl_bitmap;
+    ucp_rsc_index_t tl_idx;
+
+    tl_bitmap = 0;
+
+    ucs_for_each_bit(tl_idx, context->tl_bitmap) {
+        if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
+            tl_bitmap |= UCS_BIT(tl_idx);
+        }
     }
 
     return tl_bitmap;

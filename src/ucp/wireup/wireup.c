@@ -182,7 +182,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
     /* pack all addresses */
     status = ucp_address_pack(ep->worker,
                               ucp_wireup_is_ep_needed(ep) ? ep : NULL,
-                              tl_bitmap, UCP_ADDRESS_PACK_FLAG_ALL,
+                              tl_bitmap, UCP_ADDRESS_PACK_FLAGS_ALL,
                               lanes2remote, &req->send.length, &address);
     if (status != UCS_OK) {
         ucs_free(req);
@@ -358,7 +358,7 @@ ucp_wireup_init_lanes_by_request(ucp_worker_h worker, ucp_ep_h ep,
                                  const ucp_unpacked_address_t *remote_address,
                                  unsigned *addr_indices)
 {
-    ucs_status_t status = ucp_wireup_init_lanes(ep, ep_init_flags,
+    ucs_status_t status = ucp_wireup_init_lanes(ep, ep_init_flags, UINT64_MAX,
                                                 remote_address, addr_indices);
     if (status == UCS_OK) {
         return UCS_OK;
@@ -646,7 +646,8 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    status = ucp_address_unpack(worker, msg + 1, UINT64_MAX, &remote_address);
+    status = ucp_address_unpack(worker, msg + 1, UCP_ADDRESS_PACK_FLAGS_ALL,
+                                &remote_address);
     if (status != UCS_OK) {
         ucs_error("failed to unpack address: %s", ucs_status_string(status));
         goto out;
@@ -951,10 +952,12 @@ ucp_wireup_get_reachable_mds(ucp_worker_h worker,
 }
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
+                                   uint64_t local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices)
 {
     ucp_worker_h worker = ep->worker;
+    uint64_t tl_bitmap  = local_tl_bitmap & worker->context->tl_bitmap;
     ucp_ep_config_key_t key;
     ucp_ep_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
@@ -962,14 +965,15 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     char str[32];
     ucp_wireup_ep_t *cm_wireup_ep;
 
+    ucs_assert(tl_bitmap != 0);
+
     ucs_trace("ep %p: initialize lanes", ep);
 
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
-    status = ucp_wireup_select_lanes(ep, ep_init_flags,
-                                     worker->context->tl_bitmap, remote_address,
-                                     addr_indices, &key);
+    status = ucp_wireup_select_lanes(ep, ep_init_flags, tl_bitmap,
+                                     remote_address, addr_indices, &key);
     if (status != UCS_OK) {
         return status;
     }
@@ -1190,7 +1194,9 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     char *p, *end;
     ucp_rsc_index_t tl;
 
-    status = ucp_address_unpack(worker, msg + 1, ~UCP_ADDRESS_PACK_FLAG_TRACE,
+    status = ucp_address_unpack(worker, msg + 1,
+                                UCP_ADDRESS_PACK_FLAGS_ALL |
+                                UCP_ADDRESS_PACK_FLAG_NO_TRACE,
                                 &unpacked_address);
     if (status != UCS_OK) {
         strncpy(unpacked_address.name, "<malformed address>", UCP_WORKER_NAME_MAX);

@@ -66,6 +66,8 @@ typedef struct ucp_context_config {
     size_t                                 tm_max_bb_size;
     /** Enabling SW rndv protocol with tag offload mode */
     int                                    tm_sw_rndv;
+    /** Pack debug information in worker address */
+    int                                    address_debug_info;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */
@@ -445,5 +447,8 @@ ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length
 }
 
 uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
+
+uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
+                                       ucp_rsc_index_t dev_idx);
 
 #endif

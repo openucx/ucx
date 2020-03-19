@@ -483,7 +483,7 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 
     if (found_supported_tl) {
         status = ucp_address_pack(worker, NULL, tl_bitmap,
-                                  UCP_ADDRESS_PACK_FLAG_ALL, NULL,
+                                  UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
                                   address_length_p, (void**)address_p);
     } else {
         ucs_error("no supported sockaddr auxiliary transports found for %s", dev_name);
@@ -518,7 +518,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
     dev_name = pack_args->dev_name;
 
     status = ucp_address_pack(worker, NULL, UINT64_MAX,
-                              UCP_ADDRESS_PACK_FLAG_ALL, NULL,
+                              UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
                               &address_length, (void**)&worker_address);
     if (status != UCS_OK) {
         goto err;

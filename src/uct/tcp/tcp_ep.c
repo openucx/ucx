@@ -1356,6 +1356,8 @@ uct_tcp_ep_prepare_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep, uint8_t am_id
                          size_t *zcopy_payload_p, uct_tcp_ep_zcopy_tx_t **ctx_p)
 {
     uct_tcp_am_hdr_t *hdr = NULL;
+    size_t io_vec_cnt;
+    ucs_iov_iter_t uct_iov_iter;
     uct_tcp_ep_zcopy_tx_t *ctx;
     ucs_status_t status;
 
@@ -1386,10 +1388,12 @@ uct_tcp_ep_prepare_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep, uint8_t am_id
     }
 
     /* User-defined payload */
-    ctx->iov_cnt += uct_iovec_fill_iov(&ctx->iov[ctx->iov_cnt], iov,
-                                       iovcnt, zcopy_payload_p);
-
-    *ctx_p = ctx;
+    ucs_iov_iter_init(&uct_iov_iter);
+    io_vec_cnt       = iovcnt; 
+    *zcopy_payload_p = uct_iov_to_iovec(&ctx->iov[ctx->iov_cnt], &io_vec_cnt,
+                                        iov, iovcnt, SIZE_MAX, &uct_iov_iter);
+    *ctx_p           = ctx;
+    ctx->iov_cnt    += io_vec_cnt;
 
     return UCS_OK;
 }
