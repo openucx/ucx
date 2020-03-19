@@ -168,7 +168,7 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
 
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
                                               size_t length,
-                                              ucs_mem_info_t *mem_info_p);
+                                              ucs_mem_info_t *mem_info_p)
 {
     hsa_status_t status;
     hsa_amd_pointer_info_t info;
