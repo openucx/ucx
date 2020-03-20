@@ -123,16 +123,20 @@ uct_ud_iface_complete_tx(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     ucs_time_t now = uct_ud_iface_get_time(iface);
     iface->tx.skb  = ucs_mpool_get(&iface->tx.mp);
     ep->tx.psn++;
+
     if (has_data) {
         skb->len += length;
         memcpy(data, buffer, length);
     }
+
     ucs_queue_push(&ep->tx.window, &skb->queue);
     ep->tx.tick = iface->tx.tick;
+
     if (!iface->tx.timer_disable) {
         ucs_wtimer_add(&iface->tx.timer, &ep->timer,
                        now - ucs_twheel_get_time(&iface->tx.timer) + ep->tx.tick);
     }
+
     ep->tx.send_time = now;
 }
 

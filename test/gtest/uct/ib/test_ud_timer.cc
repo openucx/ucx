@@ -17,7 +17,7 @@ extern "C" {
 }
 
 
-class test_ud_slow_timer : public ud_base_test {
+class test_ud_timer : public ud_base_test {
 public:
     /* ack while doing retransmit */
     static int packet_count, rx_limit;
@@ -71,13 +71,13 @@ public:
     }
 };
 
-int test_ud_slow_timer::rx_limit = 10;
-int test_ud_slow_timer::packet_count = 0;
-int test_ud_slow_timer::tick_count = 0;
+int test_ud_timer::rx_limit = 10;
+int test_ud_timer::packet_count = 0;
+int test_ud_timer::tick_count = 0;
 
 
 /* single packet received without progress */
-UCS_TEST_SKIP_COND_P(test_ud_slow_timer, tx1,
+UCS_TEST_SKIP_COND_P(test_ud_timer, tx1,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     EXPECT_UCS_OK(tx(m_e1));
@@ -87,7 +87,7 @@ UCS_TEST_SKIP_COND_P(test_ud_slow_timer, tx1,
 }
 
 /* multiple packets received without progress */
-UCS_TEST_SKIP_COND_P(test_ud_slow_timer, txn,
+UCS_TEST_SKIP_COND_P(test_ud_timer, txn,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     unsigned i, N = 42;
 
@@ -101,7 +101,7 @@ UCS_TEST_SKIP_COND_P(test_ud_slow_timer, txn,
     EXPECT_EQ(N, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 }
 
-UCS_TEST_P(test_ud_slow_timer, ep_destroy, "UD_TIMEOUT=1s") {
+UCS_TEST_P(test_ud_timer, ep_destroy, "UD_TIMEOUT=1s") {
     void *ud_ep_tmp GTEST_ATTRIBUTE_UNUSED_;
     connect();
 
@@ -116,10 +116,10 @@ UCS_TEST_P(test_ud_slow_timer, ep_destroy, "UD_TIMEOUT=1s") {
     EXPECT_FALSE(ucs_ptr_array_lookup(&iface->eps, ep_idx, ud_ep_tmp));
 }
 
-UCS_TEST_P(test_ud_slow_timer, backoff_config) {
+UCS_TEST_P(test_ud_timer, backoff_config) {
     /* check minimum allowed value */
     ASSERT_UCS_OK(uct_config_modify(m_iface_config,
-                  "UD_SLOW_TIMER_BACKOFF",
+                  "UD_TIMER_BACKOFF",
                   ucs::to_string(UCT_UD_MIN_TIMER_TIMER_BACKOFF).c_str()));
     entity *e = uct_test::create_entity(0);
     m_entities.push_back(e);
@@ -128,7 +128,7 @@ UCS_TEST_P(test_ud_slow_timer, backoff_config) {
         /* iface creation should fail with back off value less than
          * UCT_UD_MIN_TIMER_TIMER_BACKOFF */
         ASSERT_UCS_OK(uct_config_modify(m_iface_config,
-                      "UD_SLOW_TIMER_BACKOFF",
+                      "UD_TIMER_BACKOFF",
                       ucs::to_string(UCT_UD_MIN_TIMER_TIMER_BACKOFF - 0.1).c_str()));
         scoped_log_handler wrap_err(wrap_errors_logger);
         uct_iface_h iface;
@@ -142,7 +142,7 @@ UCS_TEST_P(test_ud_slow_timer, backoff_config) {
 
 #if UCT_UD_EP_DEBUG_HOOKS
 /* no traffic - no ticks */
-UCS_TEST_P(test_ud_slow_timer, tick1) {
+UCS_TEST_P(test_ud_timer, tick1) {
     connect();
     tick_count = 0;
     ep(m_e1)->timer_hook = tick_counter;
@@ -151,7 +151,7 @@ UCS_TEST_P(test_ud_slow_timer, tick1) {
 }
 
 /* ticks while tx  window is not empty */
-UCS_TEST_SKIP_COND_P(test_ud_slow_timer, tick2,
+UCS_TEST_SKIP_COND_P(test_ud_timer, tick2,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     tick_count = 0;
@@ -163,7 +163,7 @@ UCS_TEST_SKIP_COND_P(test_ud_slow_timer, tick2,
 
 /* retransmit one packet */
 
-UCS_TEST_SKIP_COND_P(test_ud_slow_timer, retransmit1,
+UCS_TEST_SKIP_COND_P(test_ud_timer, retransmit1,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
     connect();
     ep(m_e2)->rx.rx_hook = drop_packet;
@@ -178,7 +178,7 @@ UCS_TEST_SKIP_COND_P(test_ud_slow_timer, retransmit1,
 }
 
 /* retransmit many packets */
-UCS_TEST_SKIP_COND_P(test_ud_slow_timer, retransmitn,
+UCS_TEST_SKIP_COND_P(test_ud_timer, retransmitn,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
 
     unsigned i, N = 42;
@@ -199,7 +199,7 @@ UCS_TEST_SKIP_COND_P(test_ud_slow_timer, retransmitn,
 }
 
 
-UCS_TEST_SKIP_COND_P(test_ud_slow_timer, partial_drop,
+UCS_TEST_SKIP_COND_P(test_ud_timer, partial_drop,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT)) {
 
     unsigned i, N = 24;
@@ -232,4 +232,4 @@ UCS_TEST_SKIP_COND_P(test_ud_slow_timer, partial_drop,
 }
 #endif
 
-UCT_INSTANTIATE_UD_TEST_CASE(test_ud_slow_timer)
+UCT_INSTANTIATE_UD_TEST_CASE(test_ud_timer)
