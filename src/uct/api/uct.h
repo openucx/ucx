@@ -2043,7 +2043,7 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @return UCS_OK               If memory info is successfully detected
  *         UCS_ERR_INVALID_ADDR If failed to detect memory type
  */
-ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
+ucs_status_t uct_md_detect_memory_info(uct_md_h md, const void *addr,
                                        size_t length,
                                        ucs_mem_info_t *mem_info_p);
 

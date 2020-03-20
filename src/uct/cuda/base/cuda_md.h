@@ -8,7 +8,7 @@
 
 #include <uct/base/uct_md.h>
 
-ucs_status_t uct_cuda_base_detect_memory_type(uct_md_h md, const void *addr,
+ucs_status_t uct_cuda_base_detect_memory_info(uct_md_h md, const void *addr,
                                               size_t length,
                                               ucs_mem_info_t *mem_info_p);
 

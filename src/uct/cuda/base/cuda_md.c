@@ -45,7 +45,7 @@ static ucs_status_t uct_cuda_base_get_sys_dev(ucs_mem_info_t *mem_info_p)
 
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_info,
                  (md, addr, length, mem_info_p),
                  uct_md_h md, const void *addr, size_t length,
                  ucs_mem_info_t *mem_info_p)

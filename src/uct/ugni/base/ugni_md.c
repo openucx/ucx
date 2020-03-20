@@ -187,7 +187,7 @@ uct_ugni_md_open(uct_component_h component,const char *md_name,
         .mem_reg            = uct_ugni_mem_reg,
         .mem_dereg          = uct_ugni_mem_dereg,
         .mkey_pack          = uct_ugni_rkey_pack,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .detect_memory_info = ucs_empty_function_return_unsupported,
     };
 
     static uct_ugni_md_t md = {
