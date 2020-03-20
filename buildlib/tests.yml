@@ -5,7 +5,7 @@ parameters:
   name: subtest
 
 jobs:
-  - job: tests
+  - job: tests_${{ parameters.name }}
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
