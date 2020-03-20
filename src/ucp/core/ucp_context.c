@@ -1657,7 +1657,7 @@ ucp_mem_info_detect_mds(ucp_context_h context, const void *address, size_t size)
         }
     }
 
-    /* Memory info not detected by any memtype MD - assume it is host memory */
+    /* Memory info not detected by any memtype MDs - assume it is host memory */
     mem_info.field_mask = UCS_MEM_INFO_MEM_TYPE;
     mem_info.mem_type   = UCS_MEMORY_TYPE_HOST;
     return mem_info;
