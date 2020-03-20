@@ -20,7 +20,7 @@ static uct_md_ops_t uct_sockcm_md_ops = {
     .close                  = uct_sockcm_md_close,
     .query                  = uct_sockcm_md_query,
     .is_sockaddr_accessible = uct_sockcm_is_sockaddr_accessible,
-    .detect_memory_type     = ucs_empty_function_return_unsupported,
+    .detect_memory_info     = ucs_empty_function_return_unsupported,
 };
 
 static void uct_sockcm_md_close(uct_md_h md)

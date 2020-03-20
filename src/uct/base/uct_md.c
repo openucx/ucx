@@ -424,8 +424,8 @@ int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
     return md->ops->is_sockaddr_accessible(md, sockaddr, mode);
 }
 
-ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr, size_t length,
+ucs_status_t uct_md_detect_memory_info(uct_md_h md, const void *addr, size_t length,
                                        ucs_mem_info_t *mem_info_p)
 {
-    return md->ops->detect_memory_type(md, addr, length, mem_info_p);
+    return md->ops->detect_memory_info(md, addr, length, mem_info_p);
 }

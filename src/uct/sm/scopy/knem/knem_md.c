@@ -234,7 +234,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack          = uct_knem_rkey_pack,
     .mem_reg            = uct_knem_mem_reg,
     .mem_dereg          = uct_knem_mem_dereg,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .detect_memory_info = ucs_empty_function_return_unsupported,
 };
 
 static inline uct_knem_rcache_region_t* uct_knem_rcache_region_from_memh(uct_mem_h memh)
@@ -276,7 +276,7 @@ static uct_md_ops_t uct_knem_md_rcache_ops = {
     .mkey_pack          = uct_knem_rkey_pack,
     .mem_reg            = uct_knem_mem_rcache_reg,
     .mem_dereg          = uct_knem_mem_rcache_dereg,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .detect_memory_info = ucs_empty_function_return_unsupported,
 };
 
 

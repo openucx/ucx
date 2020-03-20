@@ -166,7 +166,7 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
     return HSA_STATUS_SUCCESS;
 }
 
-ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
+ucs_status_t uct_rocm_base_detect_memory_info(uct_md_h md, const void *addr,
                                               size_t length,
                                               ucs_mem_info_t *mem_info_p)
 {

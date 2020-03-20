@@ -1650,7 +1650,7 @@ ucp_mem_info_detect_mds(ucp_context_h context, const void *address, size_t size)
 
     for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
         md_index = context->mem_type_detect_mds[i];
-        status   = uct_md_detect_memory_type(context->tl_mds[md_index].md,
+        status   = uct_md_detect_memory_info(context->tl_mds[md_index].md,
                                              address, size, &mem_info);
         if (status == UCS_OK) {
             if (context->memtype_cache != NULL) {

@@ -181,7 +181,7 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
         .mem_dereg              = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack              = uct_sysv_md_mkey_pack,
         .is_sockaddr_accessible = (uct_md_is_sockaddr_accessible_func_t)ucs_empty_function_return_zero,
-        .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
+        .detect_memory_info     = (uct_md_detect_memory_info_func_t)ucs_empty_function_return_unsupported
     },
    .query                       = (uct_mm_mapper_query_func_t)
                                       ucs_empty_function_return_success,

@@ -537,7 +537,7 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
         .mem_dereg              = uct_xmpem_mem_dereg,
         .mkey_pack              = uct_xpmem_mkey_pack,
         .is_sockaddr_accessible = (uct_md_is_sockaddr_accessible_func_t)ucs_empty_function_return_zero,
-        .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
+        .detect_memory_info     = (uct_md_detect_memory_info_func_t)ucs_empty_function_return_unsupported
     },
    .query                       = uct_xpmem_query,
    .iface_addr_length           = uct_xpmem_iface_addr_length,

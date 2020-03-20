@@ -865,7 +865,7 @@ static uct_md_ops_t uct_ib_md_ops = {
     .mem_dereg          = uct_ib_mem_dereg,
     .mem_advise         = uct_ib_mem_advise,
     .mkey_pack          = uct_ib_mkey_pack,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .detect_memory_info = ucs_empty_function_return_unsupported,
 };
 
 static inline uct_ib_rcache_region_t* uct_ib_rcache_region_from_memh(uct_mem_h memh)
@@ -917,7 +917,7 @@ static uct_md_ops_t uct_ib_md_rcache_ops = {
     .mem_dereg          = uct_ib_mem_rcache_dereg,
     .mem_advise         = uct_ib_mem_advise,
     .mkey_pack          = uct_ib_mkey_pack,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .detect_memory_info = ucs_empty_function_return_unsupported,
 };
 
 static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
@@ -1023,7 +1023,7 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .mem_dereg          = uct_ib_mem_global_odp_dereg,
     .mem_advise         = uct_ib_mem_advise,
     .mkey_pack          = uct_ib_mkey_pack,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .detect_memory_info = ucs_empty_function_return_unsupported,
 };
 
 static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
