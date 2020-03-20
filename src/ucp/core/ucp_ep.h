@@ -245,10 +245,16 @@ typedef struct ucp_ep_config {
             size_t          max_get_zcopy;
             /* Minimal size of rndv_get_zcopy */
             size_t          min_get_zcopy;
+            /* Can the message > `max_get_zcopy` be split to
+             * the segments that are >= `min_get_zcopy` */
+            int             get_zcopy_split;
             /* Maximal total size of rndv_put_zcopy */
             size_t          max_put_zcopy;
             /* Minimal size of rndv_put_zcopy */
             size_t          min_put_zcopy;
+            /* Can the message > `max_put_zcopy` be split to
+             * the segments that are >= `min_put_zcopy` */
+            int             put_zcopy_split;
             /* Threshold for switching from eager to RMA based rendezvous */
             size_t          rma_thresh;
             /* Threshold for switching from eager to AM based rendezvous */
