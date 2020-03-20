@@ -1641,30 +1641,28 @@ uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
     return NULL;
 }
 
-ucs_mem_info_t
-ucp_mem_info_detect_mds(ucp_context_h context, const void *address, size_t size)
+void
+ucp_mem_info_detect_mds(ucp_context_h context, const void *address,
+                        size_t size, ucs_mem_info_t *mem_info)
 {
-    ucs_mem_info_t mem_info;
     unsigned i, md_index;
     ucs_status_t status;
 
     for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
         md_index = context->mem_type_detect_mds[i];
         status   = uct_md_detect_memory_info(context->tl_mds[md_index].md,
-                                             address, size, &mem_info);
+                                             address, size, mem_info);
         if (status == UCS_OK) {
             if (context->memtype_cache != NULL) {
                 ucs_memtype_cache_update(context->memtype_cache, address, size,
-                                         mem_info.mem_type);
+                                         mem_info->mem_type);
             }
-            return mem_info;
         }
     }
 
     /* Memory info not detected by any memtype MDs - assume it is host memory */
-    mem_info.field_mask = UCS_MEM_INFO_MEM_TYPE;
-    mem_info.mem_type   = UCS_MEMORY_TYPE_HOST;
-    return mem_info;
+    mem_info->field_mask = UCS_MEM_INFO_MEM_TYPE;
+    mem_info->mem_type   = UCS_MEMORY_TYPE_HOST;
 }
 
 uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)

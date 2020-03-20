@@ -350,8 +350,9 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
 
-ucs_mem_info_t
-ucp_mem_info_detect_mds(ucp_context_h context, const void *address, size_t length);
+void
+ucp_mem_info_detect_mds(ucp_context_h context, const void *address,
+                        size_t length, ucs_mem_info_t *mem_info);
 
 /**
  * Calculate a small value to overcome float imprecision
@@ -444,7 +445,7 @@ ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length
          * UCT memory domains */
     }
 
-    mem_info = ucp_mem_info_detect_mds(context, address, length);
+    ucp_mem_info_detect_mds(context, address, length, &mem_info);
     return mem_info.mem_type;
 }
 
