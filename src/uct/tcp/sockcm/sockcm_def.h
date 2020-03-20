@@ -19,7 +19,7 @@
 #include <net/if.h>
 
 #define UCT_SOCKCM_TL_NAME              "sockcm"
-#define UCT_SOCKCM_PRIV_DATA_LEN        1024
+#define UCT_SOCKCM_PRIV_DATA_LEN        2048
 
 typedef struct uct_sockcm_iface   uct_sockcm_iface_t;
 typedef struct uct_sockcm_ep      uct_sockcm_ep_t;
