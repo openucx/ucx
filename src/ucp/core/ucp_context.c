@@ -310,10 +310,10 @@ const char *ucp_feature_str[] = {
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
 {
+    unsigned full_prefix_len = sizeof(UCS_CONFIG_PREFIX) + 1;
+    unsigned env_prefix_len  = 0;
     ucp_config_t *config;
     ucs_status_t status;
-    unsigned env_prefix_len  = 0;
-    unsigned full_prefix_len = sizeof(UCS_CONFIG_PREFIX) + 1;
 
     config = ucs_malloc(sizeof(*config), "ucp config");
     if (config == NULL) {
@@ -1395,14 +1395,14 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     context->config.env_prefix = ucs_strdup(config->env_prefix, "ucp config");
     if (context->config.env_prefix == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_strdup;
+        goto err;
     }
 
     /* Get allocation alignment from configuration, make sure it's valid */
     if (config->alloc_prio.count == 0) {
         ucs_error("No allocation methods specified - aborting");
         status = UCS_ERR_INVALID_PARAM;
-        goto err;
+        goto err_strdup;
     }
 
     num_alloc_methods = config->alloc_prio.count;
@@ -1414,7 +1414,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                                "ucp_alloc_methods");
     if (context->config.alloc_methods == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_strdup;
     }
 
     /* Parse the allocation methods specified in the configuration */

@@ -424,7 +424,7 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
 /**
- * Check all environment variables that start from prefix have been used so far
+ * Check all environment variables starting from prefix that have been used so far
  * by the configuration parser, issue a warning if not. Called just before
  * program exit.
  *

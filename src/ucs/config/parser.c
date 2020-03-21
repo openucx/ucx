@@ -1185,7 +1185,8 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
         goto err;
     }
 
-    /* Find if env_prefix consits of base prefix and custom prefix
+    /* Find if env_prefix consists of base prefix and custom prefix, base prefix
+     * should not contain underscores "_" except at the very end
      * e.g in env_prefix = "LONG_PREFIX_UCX_LOG_LEVEL":
      * "LONG_PREFIX_" is custom_prefix
      * "UCX_"         is base prefix */
