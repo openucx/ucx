@@ -758,7 +758,9 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     ucs_trace_func("");
 
-    init_attr.flags        = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.flags     = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.tx_cq_len = config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
+    init_attr.rx_cq_len = config->super.super.rx.queue_len;
 
     self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
@@ -783,12 +785,16 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     if (status != UCS_OK) {
         return status;
     }
+
     self->super.tx.available = self->tx.wq.bb_max;
+    ucs_assert(init_attr.tx_cq_len >= self->tx.wq.bb_max);
 
     status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq);
     if (status != UCS_OK) {
         return status;
     }
+
+    ucs_assert(init_attr.rx_cq_len > self->rx.wq.mask);
 
     status = uct_ud_mlx5_iface_common_init(&self->super.super,
                                            &self->ud_mlx5_common,
