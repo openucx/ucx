@@ -333,11 +333,11 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
     }
 
     if (env_prefix_len != 0) {
-        snprintf(config->env_prefix, full_prefix_len, "%s_%s",
-                 env_prefix, UCS_CONFIG_PREFIX);
+        ucs_snprintf_zero(config->env_prefix, full_prefix_len, "%s_%s",
+                          env_prefix, UCS_CONFIG_PREFIX);
     } else {
-        snprintf(config->env_prefix, full_prefix_len, "%s",
-                 UCS_CONFIG_PREFIX);
+        ucs_snprintf_zero(config->env_prefix, full_prefix_len, "%s",
+                          UCS_CONFIG_PREFIX);
     }
 
     status = ucs_config_parser_fill_opts(config, ucp_config_table,
@@ -1402,7 +1402,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     if (config->alloc_prio.count == 0) {
         ucs_error("No allocation methods specified - aborting");
         status = UCS_ERR_INVALID_PARAM;
-        goto err_strdup;
+        goto err_free_env_prefix;
     }
 
     num_alloc_methods = config->alloc_prio.count;
@@ -1414,7 +1414,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                                "ucp_alloc_methods");
     if (context->config.alloc_methods == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_strdup;
+        goto err_free_env_prefix;
     }
 
     /* Parse the allocation methods specified in the configuration */
@@ -1446,7 +1446,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
             if (context->config.alloc_methods[i].method == UCT_ALLOC_METHOD_LAST) {
                 ucs_error("Invalid allocation method: %s", method_name);
                 status = UCS_ERR_INVALID_PARAM;
-                goto err_free;
+                goto err_free_alloc_methods;
             }
         }
     }
@@ -1472,9 +1472,9 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     return UCS_OK;
 
-err_free:
+err_free_alloc_methods:
     ucs_free(context->config.alloc_methods);
-err_strdup:
+err_free_env_prefix:
     ucs_free(context->config.env_prefix);
 err:
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);

@@ -1175,8 +1175,8 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
                                          int ignore_errors)
 {
     ucs_status_t status;
-    int  cstm_prefix_len;
-    int  full_prefix_len;
+    int cstm_prefix_len;
+    int full_prefix_len;
 
     /* Set default values */
     status = ucs_config_parser_set_default_values(opts, fields);
@@ -1192,7 +1192,7 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
      * "UCX_"         is base prefix */
     full_prefix_len = strlen(env_prefix);
     cstm_prefix_len = full_prefix_len - 2;
-    while(cstm_prefix_len >= 0 && env_prefix[cstm_prefix_len] != '_') {
+    while ((cstm_prefix_len >= 0) && (env_prefix[cstm_prefix_len] != '_')) {
         cstm_prefix_len -= 1;
     }
     cstm_prefix_len += 1;
