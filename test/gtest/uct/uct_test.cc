@@ -1448,7 +1448,7 @@ ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
 void test_uct_iface_attrs::init()
 {
     uct_test::init();
-    m_e = uct_test::create_entity(0);
+    m_e = uct_test::create_entity(NULL, NULL, NULL, NULL);
     m_entities.push_back(m_e);
 }
 
