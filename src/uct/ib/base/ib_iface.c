@@ -207,9 +207,8 @@ int uct_ib_iface_is_ib(uct_ib_iface_t *iface)
 static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_ib_iface_recv_desc_t *desc = obj;
-    uct_ib_mem_t *ib_memh = memh;
 
-    desc->lkey = ib_memh->lkey;
+    desc->lkey = uct_ib_memh_get_lkey(memh);
 }
 
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,

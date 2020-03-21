@@ -546,7 +546,7 @@ size_t uct_ib_verbs_sge_fill_iov(struct ibv_sge *sge, const uct_iov_t *iov,
         if (iov[sge_it].memh == UCT_MEM_HANDLE_NULL) {
             sge[sge_it].lkey = 0;
         } else {
-            sge[sge_it].lkey = ((uct_ib_mem_t *)(iov[iov_it].memh))->lkey;
+            sge[sge_it].lkey = uct_ib_memh_get_lkey(iov[iov_it].memh);
         }
         ++sge_it;
     }

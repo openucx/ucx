@@ -244,9 +244,8 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
                                        uct_mem_h memh)
 {
     uct_ud_send_skb_t *skb = obj;
-    uct_ib_mem_t *ib_memh = memh;
 
-    skb->lkey  = ib_memh->lkey;
+    skb->lkey  = uct_ib_memh_get_lkey(memh);
     skb->flags = 0;
 }
 
