@@ -150,7 +150,7 @@ ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     uct_ud_enter(&iface->super);
 
-    status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
+    status = uct_ud_am_skb_common(&iface->super, &ep->super, id, &skb);
     if (status != UCS_OK) {
         uct_ud_leave(&iface->super);
         return status;
@@ -185,7 +185,7 @@ static ssize_t uct_ud_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     uct_ud_enter(&iface->super);
 
-    status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
+    status = uct_ud_am_skb_common(&iface->super, &ep->super, id, &skb);
     if (status != UCS_OK) {
         uct_ud_leave(&iface->super);
         return status;
@@ -223,7 +223,7 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
 
     uct_ud_enter(&iface->super);
 
-    status = uct_ud_am_common(&iface->super, &ep->super, id, &skb);
+    status = uct_ud_am_skb_common(&iface->super, &ep->super, id, &skb);
     if (status != UCS_OK) {
         uct_ud_leave(&iface->super);
         return status;
@@ -239,7 +239,7 @@ uct_ud_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_ud_verbs_ep_tx_skb(iface, ep, skb, 0);
     iface->tx.wr_skb.num_sge = 1;
 
-    uct_ud_am_set_zcopy_desc(skb, iov, iovcnt, comp);
+    uct_ud_skb_set_zcopy_desc(skb, iov, iovcnt, comp);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY, header_length +
                       uct_iov_total_length(iov, iovcnt));
