@@ -1049,7 +1049,7 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
 
     dptr = uct_ib_mlx5_txwq_wrap_none(txwq, (char*)txwq->curr + ctrl_size);
     uct_ib_mlx5_set_data_seg(dptr, iov->buffer, iov->length,
-                             ((uct_ib_mem_t *)(iov->memh))->lkey);
+                             uct_ib_memh_get_lkey(iov->memh));
 
     uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, sizeof(*dptr),
                                          UCT_RC_MLX5_TM_OPCODE_APPEND, next_idx,

@@ -315,9 +315,8 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_rc_iface_send_desc_t *desc = obj;
-    uct_ib_mem_t *ib_memh = memh;
 
-    desc->lkey = ib_memh->lkey;
+    desc->lkey        = uct_ib_memh_get_lkey(memh);
     desc->super.flags = 0;
 }
 
