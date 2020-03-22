@@ -318,7 +318,7 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
         return;
     }
 
-    uct_rdmacm_cm_ep_server_connect_cb(cep, UCS_OK);
+    uct_rdmacm_cm_ep_server_conn_notify_cb(cep, UCS_OK);
 }
 
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
