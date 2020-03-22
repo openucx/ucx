@@ -34,6 +34,13 @@ enum {
     UCT_UD_IFACE_STAT_LAST
 };
 
+/* flags for uct_ud_iface_send_ctl() */
+enum {
+    UCT_UD_IFACE_SEND_CTL_FLAG_INLINE    = UCS_BIT(0),
+    UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED = UCS_BIT(1),
+    UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED  = UCS_BIT(2)
+};
+
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */
 
 typedef struct uct_ud_iface_config {
@@ -108,8 +115,9 @@ static inline ucs_status_t uct_ud_iface_null_hook(uct_ud_iface_t *iface,
 typedef struct uct_ud_iface_ops {
     uct_ib_iface_ops_t        super;
     unsigned                  (*async_progress)(uct_ud_iface_t *iface);
-    void                      (*tx_skb)(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
-                                        int solicited);
+    uint16_t                  (*send_ctl)(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
+                                          const uct_ud_iov_t *iov, uint16_t iovcnt,
+                                          int flags);
     void                      (*ep_free)(uct_ep_h ep);
     ucs_status_t              (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                            struct ibv_qp **qp_p);
@@ -434,6 +442,9 @@ void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg,
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 
 void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
+
+void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
+                                  int is_async);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)

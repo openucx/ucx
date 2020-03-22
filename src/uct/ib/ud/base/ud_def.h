@@ -161,7 +161,8 @@ typedef struct uct_ud_comp_desc {
  */
 typedef struct uct_ud_iov {
     void                   *buffer;   /**< Data buffer */
-    uint16_t                length;   /**< Length of the buffer in bytes */
+    uint32_t               lkey;      /**< Lkey for memory region */
+    uint16_t               length;    /**< Length of the buffer in bytes */
 } UCS_S_PACKED uct_ud_iov_t;
 
 

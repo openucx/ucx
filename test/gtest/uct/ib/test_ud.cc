@@ -893,8 +893,8 @@ UCS_TEST_SKIP_COND_P(test_ud, res_skb_tx,
             memcpy(put_hdr+1, &m_dummy, sizeof(m_dummy));
             skb->len = sizeof(*neth) + sizeof(*put_hdr) + sizeof(m_dummy);
 
-            ucs_derived_of(ud_if->super.ops, uct_ud_iface_ops_t)->tx_skb(ep(m_e1),
-                                                                         skb, 0);
+            ucs_derived_of(ud_if->super.ops, uct_ud_iface_ops_t)->send_ctl(
+                    ep(m_e1), skb, NULL, 0, 0);
             uct_ud_iface_resend_skb_put(ud_if, skb);
             tx_count++;
         }
