@@ -156,6 +156,12 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         return UCS_ERR_IO_ERROR;
     }
 
+    if (qp_attr.ah_attr.is_global) {
+        ucs_assert(!memcmp(&cm_id->route.addr.addr.ibaddr.dgid,
+                           &qp_attr.ah_attr.grh.dgid,
+                           sizeof(qp_attr.ah_attr.grh.dgid)));
+    }
+
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
         /* Ethernet address */
         ucs_assert(qp_attr.ah_attr.is_global);
@@ -165,26 +171,22 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
          * that the remote peer is reachable to the local one */
         roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
         roce_info.addr_family = 0;
-    } else if (qp_attr.ah_attr.is_global) {
-        /* IB global address */
+    } else {
         address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
                              UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
-    } else {
-        /* IB local address - need just LID */
-        address_pack_flags = 0;
     }
 
-    addr_length = uct_ib_address_size(&qp_attr.ah_attr.grh.dgid,
+    addr_length = uct_ib_address_size(&cm_id->route.addr.addr.ibaddr.dgid,
                                       address_pack_flags);
-
-    dev_addr = ucs_malloc(addr_length, "IB device address");
+    dev_addr    = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
         ucs_error("failed to allocate IB device address");
         return UCS_ERR_NO_MEMORY;
     }
 
-    uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid, qp_attr.ah_attr.dlid,
-                        address_pack_flags, &roce_info, dev_addr);
+    uct_ib_address_pack(&cm_id->route.addr.addr.ibaddr.dgid,
+                        qp_attr.ah_attr.dlid, address_pack_flags, &roce_info,
+                        dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
     *dev_addr_len_p = addr_length;
