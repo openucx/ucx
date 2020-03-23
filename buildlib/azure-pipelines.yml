@@ -162,3 +162,8 @@ stages:
       parameters:
         name: althca
         demands: ucx_althca -equals yes
+    - template: tests.yml
+      parameters:
+        name: gpu
+        demands: ucx_gpu -equals yes
+
