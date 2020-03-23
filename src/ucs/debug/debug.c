@@ -55,6 +55,34 @@ struct dl_address_search {
 
 #ifdef HAVE_DETAILED_BACKTRACE
 
+#if HAVE_DECL_BFD_GET_SECTION_FLAGS
+#  define ucs_debug_bfd_section_flags(_abfd, _section) \
+    bfd_get_section_flags(_abfd, _section)
+#elif HAVE_DECL_BFD_SECTION_FLAGS
+#  define ucs_debug_bfd_section_flags(_abfd, _section) \
+    bfd_section_flags(_section)
+#else
+#  error "Unsupported BFD API"
+#endif
+
+#if HAVE_DECL_BFD_GET_SECTION_VMA
+#  define ucs_debug_bfd_section_vma(_abfd, _section) \
+    bfd_get_section_vma(_abfd, _section)
+#elif HAVE_DECL_BFD_SECTION_VMA
+#  define ucs_debug_bfd_section_vma(_abfd, _section) \
+    bfd_section_vma(_section)
+#else
+#  error "Unsupported BFD API"
+#endif
+
+#if HAVE_1_ARG_BFD_SECTION_SIZE
+#  define ucs_debug_bfd_section_size(_abfd, _section) \
+    bfd_section_size(_section)
+#else
+#  define ucs_debug_bfd_section_size(_abfd, _section) \
+    bfd_section_size(_abfd, _section);
+#endif
+
 struct backtrace_line {
     unsigned long            address;
     char                     *file;
@@ -284,17 +312,17 @@ static void find_address_in_section(bfd *abfd, asection *section, void *data)
     int found;
 
     if ((search->count > 0) || (search->max_lines == 0) ||
-        ((bfd_get_section_flags(abfd, section) & SEC_ALLOC) == 0)) {
+        ((ucs_debug_bfd_section_flags(abfd, section) & SEC_ALLOC) == 0)) {
         return;
     }
 
     address = search->file->dl.address - search->file->dl.base;
-    vma = bfd_get_section_vma(abfd, section);
+    vma = ucs_debug_bfd_section_vma(abfd, section);
     if (address < vma) {
         return;
     }
 
-    size = bfd_section_size(abfd, section);
+    size = ucs_debug_bfd_section_size(abfd, section);
     if (address >= vma + size) {
         return;
     }
