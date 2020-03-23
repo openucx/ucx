@@ -236,6 +236,9 @@ typedef struct ucp_worker {
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
+    ucs_queue_head_t              rkey_ptr_reqs; /* Queue of submitted RKEY PTR requests that
+                                                  * are in-progress */
+    uct_worker_cb_id_t            rkey_ptr_cb_id;/* RKEY PTR worker callback queue ID */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
     uint64_t                      am_message_id; /* For matching long am's */
     ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */

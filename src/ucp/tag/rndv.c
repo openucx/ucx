@@ -694,11 +694,53 @@ ucp_rndv_is_rkey_ptr(const ucp_rndv_rts_hdr_t *rndv_rts_hdr, ucp_ep_h ep,
            UCP_MEM_IS_ACCESSIBLE_FROM_CPU(recv_mem_type);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_rndv_rkey_ptr_rreq_advance(ucp_request_t *req, size_t length)
+{
+    /* advance `offset` only in case of contiguous datatype, `state` for other
+     * datatypes is advanced in ucp_request_recv_data_unpack() */
+    if ((req->recv.datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG) {
+        req->recv.state.offset += length;
+    }
+}
+
+static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
+{
+    ucp_worker_h worker     = (ucp_worker_h)arg;
+    ucp_request_t *rndv_req = ucs_queue_head_elem_non_empty(&worker->rkey_ptr_reqs,
+                                                            ucp_request_t,
+                                                            send.rkey_ptr.queue_elem);
+    ucp_request_t *rreq     = rndv_req->send.rndv_get.rreq;
+    size_t seg_size         = ucs_min(worker->context->config.ext.rkey_ptr_seg_size,
+                                      rndv_req->send.length - rreq->recv.state.offset);
+    ucs_status_t status;
+
+    status = ucp_request_recv_data_unpack(rreq, rndv_req->send.buffer, seg_size,
+                                          rreq->recv.state.offset, 1);
+    ucp_rndv_rkey_ptr_rreq_advance(rreq, seg_size);
+    if (ucs_unlikely(status != UCS_OK) ||
+        (rreq->recv.state.offset == rndv_req->send.length)) {
+        ucp_request_complete_tag_recv(rreq, status);
+        ucp_rkey_destroy(rndv_req->send.rndv_get.rkey);
+        ucp_rndv_req_send_ats(rndv_req, rreq,
+                              rndv_req->send.rndv_get.remote_request, status);
+
+        ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);
+        if (ucs_queue_is_empty(&worker->rkey_ptr_reqs)) {
+            uct_worker_progress_unregister_safe(worker->uct,
+                                                &worker->rkey_ptr_cb_id);
+        }
+    }
+
+    return 1;
+}
+
 static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
                                  const ucp_rndv_rts_hdr_t *rndv_rts_hdr)
 {
     ucp_ep_h ep                      = rndv_req->send.ep;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
+    ucp_worker_h worker              = rreq->recv.worker;
     ucp_md_index_t dst_md_index;
     ucp_lane_index_t i, lane;
     ucs_status_t status;
@@ -736,16 +778,29 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     status     = uct_rkey_ptr(rkey->tl_rkey[rkey_index].cmpt,
                               &rkey->tl_rkey[rkey_index].rkey,
                               rndv_rts_hdr->address, &local_ptr);
-    if (status == UCS_OK) {
-        ucp_trace_req(rndv_req, "obtained a local pointer to remote buffer: %p",
-                      local_ptr);
-        status = ucp_request_recv_data_unpack(rreq, local_ptr,
-                                              rndv_rts_hdr->size, 0, 1);
+    if (status != UCS_OK) {
+        ucp_request_complete_tag_recv(rreq, status);
+        ucp_rkey_destroy(rkey);
+        ucp_rndv_req_send_ats(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr, status);
+        return;
     }
 
-    ucp_request_complete_tag_recv(rreq, status);
-    ucp_rkey_destroy(rkey);
-    ucp_rndv_req_send_ats(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr, status);
+    rreq->recv.state.offset = 0;
+
+    ucp_trace_req(rndv_req, "obtained a local pointer to remote buffer: %p",
+                  local_ptr);
+    rndv_req->send.buffer                  = local_ptr;
+    rndv_req->send.length                  = rndv_rts_hdr->size;
+    rndv_req->send.rkey_ptr.rkey           = rkey;
+    rndv_req->send.rkey_ptr.remote_request = rndv_rts_hdr->sreq.reqptr;
+    rndv_req->send.rkey_ptr.rreq           = rreq;
+
+    ucs_queue_push(&worker->rkey_ptr_reqs, &rndv_req->send.rkey_ptr.queue_elem);
+    uct_worker_progress_register_safe(worker->uct,
+                                      ucp_rndv_progress_rkey_ptr,
+                                      rreq->recv.worker,
+                                      UCS_CALLBACKQ_FLAG_FAST,
+                                      &worker->rkey_ptr_cb_id);
 }
 
 static UCS_F_ALWAYS_INLINE int
