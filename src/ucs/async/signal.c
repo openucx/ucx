@@ -318,20 +318,20 @@ static ucs_status_t ucs_async_signal_modify_event_fd(ucs_async_context_t *async,
                                                      int event_fd, int events)
 {
     ucs_status_t status;
-    int add, rmv;
+    int add, rm;
 
     UCS_ASYNC_SIGNAL_CHECK_THREAD(async);
 
     if (events) {
         add = O_ASYNC; /* Enable notifications */
-        rmv = 0;
+        rm  = 0;
     } else {
         add = 0;       /* Disable notifications */
-        rmv = O_ASYNC;
+        rm  = O_ASYNC;
     }
 
-    ucs_trace_async("fcntl(fd=%d, add=0x%x, remove=0x%x)", event_fd, add, rmv);
-    status = ucs_sys_fcntl_modfl(event_fd, add, rmv);
+    ucs_trace_async("fcntl(fd=%d, add=0x%x, remove=0x%x)", event_fd, add, rm);
+    status = ucs_sys_fcntl_modfl(event_fd, add, rm);
     if (status != UCS_OK) {
         ucs_error("fcntl F_SETFL failed: %m");
         return UCS_ERR_IO_ERROR;

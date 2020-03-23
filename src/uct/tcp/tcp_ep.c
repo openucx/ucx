@@ -877,7 +877,7 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
     unsigned handled       = 0;
     uct_tcp_am_hdr_t *hdr;
     size_t recv_length;
-    size_t remain;
+    size_t remaining;
 
     ucs_trace_func("ep=%p", ep);
 
@@ -912,13 +912,13 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 
     /* Parse received active messages */
     while (uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
-        remain = ep->rx.length - ep->rx.offset;
-        if (remain < sizeof(*hdr)) {
+        remaining = ep->rx.length - ep->rx.offset;
+        if (remaining < sizeof(*hdr)) {
             /* Move the partially received hdr to the beginning of the buffer */
             memmove(ep->rx.buf, UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset),
-                    remain);
+                    remaining);
             ep->rx.offset = 0;
-            ep->rx.length = remain;
+            ep->rx.length = remaining;
             handled++;
             goto out;
         }
@@ -929,7 +929,7 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
                     ep, uct_tcp_ep_cm_state[ep->conn_state].name, hdr->length,
                     (iface->config.rx_seg_size - sizeof(*hdr)));
 
-        if (remain < (sizeof(*hdr) + hdr->length)) {
+        if (remaining < (sizeof(*hdr) + hdr->length)) {
             handled++;
             goto out;
         }

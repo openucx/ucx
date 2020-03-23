@@ -163,7 +163,7 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value,
                               uint32_t *placeholder_p)
 {
     ucs_ptr_array_elem_t *elem;
-    unsigned idx;
+    unsigned elem_index;
 
     ucs_assert_always(((uintptr_t)value & UCS_PTR_ARRAY_FLAG_FREE) == 0);
 
@@ -172,9 +172,9 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value,
     }
 
     /* Get the first item on the free list */
-    idx = ptr_array->freelist;
-    ucs_assert(idx != UCS_PTR_ARRAY_SENTINEL);
-    elem = &ptr_array->start[idx];
+    elem_index = ptr_array->freelist;
+    ucs_assert(elem_index != UCS_PTR_ARRAY_SENTINEL);
+    elem = &ptr_array->start[elem_index];
 
     /* Remove from free list */
     ptr_array->freelist = ucs_ptr_array_freelist_get_next(*elem);
@@ -182,27 +182,27 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value,
     /* Populate */
     *placeholder_p = ucs_ptr_array_placeholder_get(*elem);
     *elem = (uintptr_t)value;
-    return idx;
+    return elem_index;
 }
 
-void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned idx,
+void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned elem_index,
                           uint32_t placeholder)
 {
-    ucs_ptr_array_elem_t *elem = &ptr_array->start[idx];
+    ucs_ptr_array_elem_t *elem = &ptr_array->start[elem_index];
 
-    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, idx));
+    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, elem_index));
     *elem = UCS_PTR_ARRAY_FLAG_FREE;
     ucs_ptr_array_placeholder_set(elem, placeholder);
     ucs_ptr_array_freelist_set_next(elem, ptr_array->freelist);
-    ptr_array->freelist = idx;
+    ptr_array->freelist = elem_index;
 }
 
-void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned idx, void *new_val)
+void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned elem_index, void *new_val)
 {
     void *old_elem;
 
-    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, idx));
-    old_elem = (void *)ptr_array->start[idx];
-    ptr_array->start[idx] = (uintptr_t)new_val;
+    ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, elem_index));
+    old_elem = (void *)ptr_array->start[elem_index];
+    ptr_array->start[elem_index] = (uintptr_t)new_val;
     return old_elem;
 }

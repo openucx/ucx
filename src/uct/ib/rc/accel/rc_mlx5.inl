@@ -857,7 +857,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 #if IBV_HW_TM
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
-                       uct_rc_mlx5_wqe_tm_seg_t *tmseg, int op, int idx,
+                       uct_rc_mlx5_wqe_tm_seg_t *tmseg, int op, int tag_index,
                        uint32_t unexp_cnt, uint64_t tag, uint64_t mask,
                        unsigned tm_flags)
 {
@@ -869,7 +869,7 @@ uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
         return;
     }
 
-    tmseg->index = htons(idx);
+    tmseg->index = htons(tag_index);
 
     if (op == UCT_RC_MLX5_TM_OPCODE_REMOVE) {
         return;
