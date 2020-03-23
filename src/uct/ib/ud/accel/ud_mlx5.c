@@ -83,9 +83,9 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     ucs_assert((int16_t)iface->tx.wq.bb_max >= iface->super.tx.available);
 }
 
-static UCS_F_ALWAYS_INLINE size_t
+static UCS_F_ALWAYS_INLINE struct mlx5_wqe_ctrl_seg *
 uct_ud_mlx5_ep_get_next_wqe(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
-                            struct mlx5_wqe_ctrl_seg **ctrl_p, void **wqe_data_p)
+                            size_t *wqe_size_p, void **next_seg_p)
 {
     size_t ctrl_av_size = uct_ud_mlx5_ep_ctrl_av_size(ep);
     struct mlx5_wqe_ctrl_seg *ctrl;
@@ -95,12 +95,12 @@ uct_ud_mlx5_ep_get_next_wqe(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
     ctrl        = iface->tx.wq.curr;
     ptr         = UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size);
-    *wqe_data_p = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq, ptr);
-    *ctrl_p     = ctrl;
 
-    return ctrl_av_size;
+    *wqe_size_p = ctrl_av_size;
+    *next_seg_p = uct_ib_mlx5_txwq_wrap_exact(&iface->tx.wq, ptr);
+
+    return ctrl;
 }
-
 
 static void uct_ud_mlx5_ep_tx_ctl_skb(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
                                       int solicited)
@@ -115,13 +115,14 @@ static void uct_ud_mlx5_ep_tx_ctl_skb(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb
     void *next_seg;
     uint8_t se;
 
+    /* set WQE flags */
     se = 0;
     if (solicited) {
         se |= MLX5_WQE_CTRL_SOLICITED;
     }
 
     /* set skb header as inline (if fits the length) or as data pointer */
-    wqe_size = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &ctrl, &next_seg);
+    ctrl = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &wqe_size, &next_seg);
     if (skb->len <= uct_ud_mlx5_max_inline()) {
         inl             = next_seg;
         inl->byte_count = htonl(skb->len | MLX5_INLINE_SEG);
@@ -208,10 +209,10 @@ uct_ud_mlx5_ep_inline_iov_post(uct_ep_h tl_ep, uint8_t am_id,
     struct mlx5_wqe_inl_data_seg *inl;
     struct mlx5_wqe_ctrl_seg *ctrl;
     size_t inline_size, wqe_size;
+    void *next_seg, *wqe_data;
     uct_ud_send_skb_t *skb;
     ucs_status_t status;
     uct_ud_neth_t *neth;
-    void *wqe_data;
 
     UCT_CHECK_AM_ID(am_id);
     UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_size + data_size,
@@ -226,7 +227,9 @@ uct_ud_mlx5_ep_inline_iov_post(uct_ep_h tl_ep, uint8_t am_id,
         goto out;
     }
 
-    wqe_size        = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &ctrl, (void**)&inl);
+    ctrl            = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &wqe_size,
+                                                  &next_seg);
+    inl             = next_seg;
     inline_size     = sizeof(*neth) + header_size + data_size;
     inl->byte_count = htonl(inline_size | MLX5_INLINE_SEG);
     wqe_size       += sizeof(*inl) + inline_size;
@@ -243,7 +246,10 @@ uct_ud_mlx5_ep_inline_iov_post(uct_ep_h tl_ep, uint8_t am_id,
         neth->packet_type |= uct_ud_ep_req_ack(&ep->super) << UCT_UD_PACKET_ACK_REQ_SHIFT;
     }
 
-    /* copy inline "header", assume it fits to one BB */
+    /* copy inline "header", assume it fits to one BB so we won't have to check
+     * for QP wrap-around. This is either the "put" header or the 64-bit
+     * am_short header, not the am_zcopy header.
+     */
     wqe_data = UCS_PTR_BYTE_OFFSET(neth + 1, header_size);
     ucs_assert(wqe_data <= iface->tx.wq.qend);
     memcpy(neth + 1, header, header_size);
@@ -312,7 +318,8 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                        /* inline header */ &hdr, sizeof(hdr),
                                        /* inline data */  buffer, length,
                                        /* packet flags */ UCT_UD_PACKET_FLAG_AM,
-                                       UCT_EP_STAT_AM, "am_short");
+                                       UCT_EP_STAT_AM,
+                                       "uct_ud_mlx5_ep_am_short");
 }
 
 static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
@@ -327,6 +334,7 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     uct_ud_send_skb_t *skb;
     ucs_status_t status;
     size_t wqe_size;
+    void *next_seg;
     size_t length;
 
     uct_ud_enter(&iface->super);
@@ -340,7 +348,8 @@ static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     length = uct_ud_skb_bcopy(skb, pack_cb, arg);
     UCT_UD_CHECK_BCOPY_LENGTH(&iface->super, length);
 
-    wqe_size = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &ctrl, (void**)&dptr);
+    ctrl = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &wqe_size, &next_seg);
+    dptr = next_seg;
     uct_ib_mlx5_set_data_seg(dptr, skb->neth, skb->len, skb->lkey);
     uct_ud_mlx5_post_send(iface, ep, 0, ctrl, wqe_size + sizeof(*dptr),
                           skb->neth, INT_MAX);
@@ -356,11 +365,14 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                         unsigned header_length, const uct_iov_t *iov,
                         size_t iovcnt, unsigned flags, uct_completion_t *comp)
 {
+    char dummy; /* pass dummy pointer to 0-length header to avoid compiler
+                   warnings */
+
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length, 0,
                      UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
                      "am_zcopy header");
     return uct_ud_mlx5_ep_inline_iov_post(tl_ep, id,
-                                          /* inl. header */  header, 0,
+                                          /* inl. header */  &dummy, 0,
                                           /* inl. data */    header, header_length,
                                           /* iov */          iov, iovcnt,
                                           /* packet flags */ UCT_UD_PACKET_FLAG_AM |
@@ -379,7 +391,8 @@ uct_ud_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
                                        /* inl. header */  &puth, sizeof(puth),
                                        /* inl. data */    buffer, length,
                                        /* packet flags */ UCT_UD_PACKET_FLAG_PUT,
-                                       UCT_EP_STAT_PUT, "put_short");
+                                       UCT_EP_STAT_PUT,
+                                       "uct_ud_mlx5_ep_put_short");
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
