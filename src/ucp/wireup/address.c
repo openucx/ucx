@@ -396,12 +396,12 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         unified               = ptr;
         rsc_idx               = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
         iface_attr->lat_ovh   = fabs(unified->lat_ovh);
-        wiface                = ucp_worker_iface(worker, rsc_idx);
-        ucs_assertv_always(rsc_idx < worker->context->num_tls,
-                           "rsc_idx=%u num_tls=%u",
-                           rsc_idx , worker->context->num_tls);
+        ucs_assertv_always(worker->context->tl_bitmap & UCS_BIT(rsc_idx),
+                           "rsc_idx=%u tl_bitmap=0x%"PRIx64,
+                           rsc_idx, worker->context->tl_bitmap);
 
         /* Just take the rest of iface attrs from the local resource. */
+        wiface                = ucp_worker_iface(worker, rsc_idx);
         iface_attr->cap_flags = wiface->attr.cap.flags;
         iface_attr->priority  = wiface->attr.priority;
         iface_attr->overhead  = wiface->attr.overhead;
