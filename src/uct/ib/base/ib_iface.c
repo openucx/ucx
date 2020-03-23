@@ -163,7 +163,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "to the port link layer:\n"
    " RoCE       - "UCS_PP_MAKE_STRING(UCT_IB_DEV_MAX_PORTS) " for LAG port, otherwise - 1.\n"
    " InfiniBand - As the number of path bits enabled by fabric's LMC value and selected\n"
-   "              by "UCS_CONFIG_PREFIX UCT_IB_CONFIG_PREFIX"LID_PATH_BITS configuration.",
+   "              by "UCS_DEFAULT_ENV_PREFIX UCT_IB_CONFIG_PREFIX"LID_PATH_BITS configuration.",
    ucs_offsetof(uct_ib_iface_config_t, num_paths), UCS_CONFIG_TYPE_ULUNITS},
 
   {"ROCE_PATH_FACTOR", "1",

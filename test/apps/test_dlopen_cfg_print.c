@@ -48,7 +48,7 @@ int main(int argc, char **argv)
     /* print all config table, to force going over the global list in ucs */
     print_all_opts_func_t print_all_opts =
         (print_all_opts_func_t)dlsym(ucs_handle, "ucs_config_parser_print_all_opts");
-    print_all_opts(stdout, "UCX_", 0);
+    print_all_opts(stdout, "TEST_", 0);
     dlclose(ucs_handle);
 
     printf("done\n");

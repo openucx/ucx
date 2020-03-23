@@ -16,7 +16,7 @@
 #include <stdio.h>
 
 
-#define UCS_CONFIG_PREFIX      "UCX_"
+#define UCS_DEFAULT_ENV_PREFIX "UCX_"
 #define UCS_CONFIG_ARRAY_MAX   128
 
 BEGIN_C_DECLS
@@ -346,7 +346,9 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields);
  *
  * @param opts           User-defined options structure to fill.
  * @param fields         Array of fields which define how to parse.
- * @param env_prefix     Prefix to add to all environment variables.
+ * @param env_prefix     Prefix to add to all environment variables,
+ *                       env_prefix may consist of base preifx and sub prefix
+ *                       which are delimited by last "_" in a string.
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
  * @param ignore_errors  Whether to ignore parsing errors and continue parsing
  *                       other fields.
@@ -382,22 +384,21 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
  * @param opts           User-defined options structure.
  * @param fields         Array of fields which define the options.
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
- * @param env_prefix     Base environment variable prefix.
+ * @param prefix         Prefix to add to all environment variables.
  * @param flags          Flags which control the output.
  */
 void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
                                   ucs_config_field_t *fields, const char *table_prefix,
-                                  const char *env_prefix,
-                                  ucs_config_print_flags_t flags);
+                                  const char *prefix, ucs_config_print_flags_t flags);
 
 /**
  * Print all options defined in the library - names, values, documentation.
  *
  * @param stream         Output stream to print to.
- * @param env_prefix     Base environment variable prefix.
+ * @param prefix         Prefix to add to all environment variables.
  * @param flags          Flags which control the output.
  */
-void ucs_config_parser_print_all_opts(FILE *stream, const char *env_prefix,
+void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
                                       ucs_config_print_flags_t flags);
 
 /**
@@ -424,22 +425,26 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
 /**
- * Check all environment variables starting from prefix that have been used so far
- * by the configuration parser, issue a warning if not. Called just before
+ * Check all environment variables starting from env_prefix that have been used
+ * so far by the configuration parser, issue a warning if not. Called just before
  * program exit.
  *
- * @param prefix     Environment variable prefix.
+ * @param env_prefix     Environment variable prefix.
+ *                       env_prefix may consist of base preifx and sub prefix
+ *                       which are delimited by last "_" in a string.
  */
-void ucs_config_parser_warn_unused_env_vars(const char *prefix);
+void ucs_config_parser_warn_unused_env_vars(const char *env_prefix);
 
 /**
  * Wrapper for `ucs_config_parser_warn_unused_env_vars`
  * that ensures that this is called once
  *
- * @param prefix     Environment variable prefix.
+ * @param env_prefix     Environment variable prefix.
+ *                       env_prefix may consist of base preifx and sub prefix
+ *                       which are delimited by last "_" in a string.
  */
 
-void ucs_config_parser_warn_unused_env_vars_once(const char *prefix);
+void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix);
 
 /**
  * Translate configuration value of "MEMUNITS" type to actual value.

@@ -310,7 +310,7 @@ const char *ucp_feature_str[] = {
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
 {
-    unsigned full_prefix_len = sizeof(UCS_CONFIG_PREFIX) + 1;
+    unsigned full_prefix_len = sizeof(UCS_DEFAULT_ENV_PREFIX) + 1;
     unsigned env_prefix_len  = 0;
     ucp_config_t *config;
     ucs_status_t status;
@@ -334,10 +334,10 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
 
     if (env_prefix_len != 0) {
         ucs_snprintf_zero(config->env_prefix, full_prefix_len, "%s_%s",
-                          env_prefix, UCS_CONFIG_PREFIX);
+                          env_prefix, UCS_DEFAULT_ENV_PREFIX);
     } else {
         ucs_snprintf_zero(config->env_prefix, full_prefix_len, "%s",
-                          UCS_CONFIG_PREFIX);
+                          UCS_DEFAULT_ENV_PREFIX);
     }
 
     status = ucs_config_parser_fill_opts(config, ucp_config_table,
@@ -374,7 +374,7 @@ void ucp_config_print(const ucp_config_t *config, FILE *stream,
                       const char *title, ucs_config_print_flags_t print_flags)
 {
     ucs_config_parser_print_opts(stream, title, config, ucp_config_table,
-                                 NULL, UCS_CONFIG_PREFIX, print_flags);
+                                 NULL, UCS_DEFAULT_ENV_PREFIX, print_flags);
 }
 
 /* Search str in the array. If str_suffix is specified, search for

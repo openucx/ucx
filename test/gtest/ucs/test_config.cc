@@ -308,7 +308,7 @@ protected:
         size_t dump_size;
         char line_buf[1024];
         char alias[128];
-        car_opts opts(UCS_CONFIG_PREFIX, NULL);
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
 
         memset(alias, 0, sizeof(alias));
 
@@ -316,7 +316,7 @@ protected:
         dump_data = NULL;
         FILE *file = open_memstream(&dump_data, &dump_size);
         ucs_config_parser_print_opts(file, "", *opts, car_opts_table,
-                                     prefix, UCS_CONFIG_PREFIX,
+                                     prefix, UCS_DEFAULT_ENV_PREFIX,
                                      (ucs_config_print_flags_t)flags);
 
         /* Sanity check - all lines begin with UCS_ */
@@ -365,7 +365,7 @@ protected:
 };
 
 UCS_TEST_F(test_config, parse_default) {
-    car_opts opts(UCS_CONFIG_PREFIX, "TEST");
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, "TEST");
 
     EXPECT_EQ(999U, opts->price);
     EXPECT_EQ(std::string("Chevy"), opts->brand);
@@ -409,7 +409,7 @@ UCS_TEST_F(test_config, clone) {
         /* coverity[tainted_string_argument] */
         ucs::scoped_setenv env2("UCX_PRICE_ALIAS", "0");
         
-        car_opts opts(UCS_CONFIG_PREFIX, NULL);
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
         EXPECT_EQ(COLOR_WHITE, opts->color);
         EXPECT_EQ(0U, opts->price);
 
@@ -423,7 +423,7 @@ UCS_TEST_F(test_config, clone) {
 }
 
 UCS_TEST_F(test_config, set_get) {
-    car_opts opts(UCS_CONFIG_PREFIX, NULL);
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
     EXPECT_EQ(COLOR_RED, opts->color);
     EXPECT_EQ(std::string(color_names[COLOR_RED]),
               std::string(opts.get("COLOR")));
@@ -448,7 +448,7 @@ UCS_TEST_F(test_config, set_get_with_table_prefix) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env2("UCX_CARS_COLOR", "white");
 
-    car_opts opts(UCS_CONFIG_PREFIX, "CARS_");
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, "CARS_");
     EXPECT_EQ(COLOR_WHITE, opts->color);
     EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
               std::string(opts.get("COLOR")));
@@ -460,7 +460,7 @@ UCS_TEST_F(test_config, set_get_with_env_prefix) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv env2("TEST_UCX_COLOR", "white");
 
-    car_opts opts("TEST_" UCS_CONFIG_PREFIX, NULL);
+    car_opts opts("TEST_" UCS_DEFAULT_ENV_PREFIX, NULL);
     EXPECT_EQ(COLOR_WHITE, opts->color);
     EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
               std::string(opts.get("COLOR")));
@@ -478,7 +478,7 @@ UCS_TEST_F(test_config, performance) {
 
     /* Now test the time */
     UCS_TEST_TIME_LIMIT(0.05) {
-        car_opts opts(UCS_CONFIG_PREFIX, NULL);
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
     }
 }
 
@@ -496,9 +496,9 @@ UCS_TEST_F(test_config, unused) {
     {
         config_err_exp_str.push_back(warn_str + ": " + unused_var1);
         scoped_log_handler log_handler(config_error_handler);
-        car_opts opts(UCS_CONFIG_PREFIX, NULL);
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
 
-        ucs_config_parser_warn_unused_env_vars(UCS_CONFIG_PREFIX);
+        ucs_config_parser_warn_unused_env_vars(UCS_DEFAULT_ENV_PREFIX);
 
         config_err_exp_str.pop_back();
     }
@@ -511,9 +511,9 @@ UCS_TEST_F(test_config, unused) {
         config_err_exp_str.push_back(warn_str + "s: " +
                                      unused_var1 + ", " + unused_var2);
         scoped_log_handler log_handler(config_error_handler);
-        car_opts opts(UCS_CONFIG_PREFIX, NULL);
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
 
-        ucs_config_parser_warn_unused_env_vars(UCS_CONFIG_PREFIX);
+        ucs_config_parser_warn_unused_env_vars(UCS_DEFAULT_ENV_PREFIX);
 
         config_err_exp_str.pop_back();
     }
@@ -559,7 +559,7 @@ UCS_TEST_F(test_config, deprecated) {
 
     {
         scoped_log_handler log_handler(config_error_handler);
-        car_opts opts(UCS_CONFIG_PREFIX, NULL);
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
     }
 
     {
@@ -569,7 +569,7 @@ UCS_TEST_F(test_config, deprecated) {
         config_err_exp_str.push_back(deprecated_var2 + warn_str);
 
         scoped_log_handler log_handler_vars(config_error_handler);
-        car_opts opts(UCS_CONFIG_PREFIX, NULL);
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
         config_err_exp_str.pop_back();
     }
 
