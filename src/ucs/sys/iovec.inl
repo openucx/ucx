@@ -91,6 +91,14 @@
         ((_max_length) - __remain_length); \
     })
 
+/**
+ * Calculates the total length of the IOV array buffers.
+ *
+ * @param [in]     iov             Pointer to the array of IOVs.
+ * @param [in]     iov_cnt         Number of the elements in the array of IOVs.
+ *
+ * @return The total length of the array of IOVs.
+ */
 #define ucs_iov_total_length(_iov, _iov_cnt, _iov_get_length_f) \
     ({ \
         size_t __total_length = 0; \
@@ -101,6 +109,32 @@
         } \
         \
         __total_length; \
+    })
+
+/**
+ * Calculates the flat offset in the IOV array, which is the total data size
+ * before the position of the iterator.
+ *
+ * @param [in]     iov             Pointer to the array of IOVs.
+ * @param [in]     iov_cnt         Number of the elements in the array of IOVs.
+ * @param [in]     iov_iter        Pointer to the IOV iterator.
+ *
+ * @return The flat offset in the IOV array.
+ */
+#define ucs_iov_iter_flat_offset(_iov, _iov_cnt, _iov_iter, _iov_get_length_f) \
+    ({ \
+        size_t __offset = 0; \
+        size_t __iov_it; \
+        \
+        for (__iov_it = 0; __iov_it < (_iov_iter)->iov_index; ++__iov_it) { \
+            __offset += _iov_get_length_f(&(_iov)[__iov_it]); \
+        } \
+        \
+        if ((_iov_iter)->iov_index < (_iov_cnt)) { \
+            __offset += (_iov_iter)->buffer_offset; \
+        } \
+        \
+        __offset; \
     })
 
 

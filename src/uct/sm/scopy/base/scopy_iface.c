@@ -4,6 +4,10 @@
  */
 
 #include "scopy_iface.h"
+#include "scopy_ep.h"
+
+#include <ucs/arch/cpu.h>
+#include <ucs/sys/string.h>
 
 #include <uct/sm/base/sm_iface.h>
 
@@ -18,7 +22,22 @@ ucs_config_field_t uct_scopy_iface_config_table[] = {
      "call to GET/PUT Zcopy operation",
      ucs_offsetof(uct_scopy_iface_config_t, max_iov), UCS_CONFIG_TYPE_ULONG},
 
+    {"SEG_SIZE", "512k",
+     "Segment size that is used to perform data transfer when doing progress\n"
+     "of GET/PUT Zcopy operations",
+     ucs_offsetof(uct_scopy_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+    UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, "send",
+                                  ucs_offsetof(uct_scopy_iface_config_t, tx_mpool), ""),
+
     {NULL}
+};
+
+static ucs_mpool_ops_t uct_scopy_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL
 };
 
 void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_attr)
@@ -55,17 +74,66 @@ UCS_CLASS_INIT_FUNC(uct_scopy_iface_t, uct_scopy_iface_ops_t *ops, uct_md_h md,
 {
     uct_scopy_iface_config_t *config = ucs_derived_of(tl_config,
                                                       uct_scopy_iface_config_t);
+    size_t elem_size;
+    ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &ops->super, md, worker, params, tl_config);
 
-    self->config.max_iov = ucs_min(config->max_iov, ucs_iov_get_max());
+    self->tx              = ops->ep_tx;
+    self->outstanding     = 0;
+    self->config.max_iov  = ucs_min(config->max_iov, ucs_iov_get_max());
+    self->config.seg_size = config->seg_size;
 
-    return UCS_OK;
+    elem_size             = sizeof(uct_scopy_tx_t) +
+                            self->config.max_iov * sizeof(uct_iov_t);
+
+    ucs_arbiter_init(&self->arbiter);
+
+    status = ucs_mpool_init(&self->tx_mpool, 0, elem_size,
+                            0, UCS_SYS_CACHE_LINE_SIZE,
+                            config->tx_mpool.bufs_grow,
+                            config->tx_mpool.max_bufs,
+                            &uct_scopy_mpool_ops,
+                            "uct_scopy_iface_tx_mp");
+
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_scopy_iface_t)
 {
-    /* No op */
+    self->super.super.super.ops.iface_progress_disable(&self->super.super.super,
+                                                       UCT_PROGRESS_SEND |
+                                                       UCT_PROGRESS_RECV);
+    ucs_mpool_cleanup(&self->tx_mpool, 1);
+    ucs_arbiter_cleanup(&self->arbiter);
 }
 
 UCS_CLASS_DEFINE(uct_scopy_iface_t, uct_sm_iface_t);
+
+unsigned uct_scopy_iface_progress(uct_iface_h tl_iface)
+{
+    uct_scopy_iface_t *iface = ucs_derived_of(tl_iface, uct_scopy_iface_t);
+    unsigned count           = 0;
+
+    ucs_arbiter_dispatch(&iface->arbiter, 1, uct_scopy_ep_progress_tx, &count);
+    return count;
+}
+
+ucs_status_t uct_scopy_iface_flush(uct_iface_h tl_iface, unsigned flags,
+                                   uct_completion_t *comp)
+{
+    uct_scopy_iface_t *iface = ucs_derived_of(tl_iface, uct_scopy_iface_t);
+
+    if (ucs_unlikely(comp != NULL)) {
+        return UCS_ERR_UNSUPPORTED;        
+    }
+
+    if (iface->outstanding != 0) {
+        ucs_assert(!ucs_arbiter_is_empty(&iface->arbiter));
+        UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
+        return UCS_INPROGRESS;
+    }
+
+    UCT_TL_IFACE_STAT_FLUSH(&iface->super.super);
+    return UCS_OK;
+}
