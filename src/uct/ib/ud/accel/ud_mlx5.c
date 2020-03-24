@@ -365,8 +365,8 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                         unsigned header_length, const uct_iov_t *iov,
                         size_t iovcnt, unsigned flags, uct_completion_t *comp)
 {
-    char dummy; /* pass dummy pointer to 0-length header to avoid compiler
-                   warnings */
+    char dummy = 0 ; /* pass dummy pointer to 0-length header to avoid compiler
+                        warnings */
 
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length, 0,
                      UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
