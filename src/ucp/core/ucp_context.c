@@ -1660,9 +1660,11 @@ ucp_mem_info_detect_mds(ucp_context_h context, const void *address,
         }
     }
 
-    /* Memory info not detected by any memtype MDs - assume it is host memory */
-    mem_info->field_mask = UCS_MEM_INFO_MEM_TYPE;
-    mem_info->mem_type   = UCS_MEMORY_TYPE_HOST;
+    if (UCS_OK != status) {
+        /* Memory info not detected by any memtype MDs - assume it is host memory */
+        mem_info->field_mask = UCS_MEM_INFO_MEM_TYPE;
+        mem_info->mem_type   = UCS_MEMORY_TYPE_HOST;
+    }
 }
 
 uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)
