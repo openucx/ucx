@@ -25,7 +25,7 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface);
 
 static void uct_ud_peer_name(uct_ud_peer_name_t *peer)
 {
-    gethostname(peer->name, sizeof(peer->name));
+    ucs_strncpy_zero(peer->name, ucs_get_host_name(), sizeof(peer->name));
     peer->pid = getpid();
 }
 
