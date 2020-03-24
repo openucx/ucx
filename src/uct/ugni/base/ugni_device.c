@@ -323,7 +323,7 @@ static ucs_status_t get_nic_address(uct_ugni_device_t *dev_p)
     return UCS_OK;
 }
 
-ucs_status_t uct_ugni_device_create(int dev_id, int index, uct_ugni_device_t *dev_p)
+ucs_status_t uct_ugni_device_create(int dev_id, int idx, uct_ugni_device_t *dev_p)
 {
     ucs_status_t status;
     gni_return_t ugni_rc;
@@ -358,7 +358,7 @@ ucs_status_t uct_ugni_device_create(int dev_id, int index, uct_ugni_device_t *de
     }
 
     ucs_snprintf_zero(dev_p->fname, sizeof(dev_p->fname), "%s:%d",
-                      dev_p->type_name, index);
+                      dev_p->type_name, idx);
 
     return UCS_OK;
 }
@@ -402,15 +402,15 @@ static int uct_ugni_next_power_of_two_inclusive (int value)
 
 ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device, ucs_thread_mode_t thread_mode)
 {
-    uct_ugni_job_info_t *job_info;
+    uct_ugni_job_info_t *j_info;
     int modes;
     gni_return_t ugni_rc;
     ucs_status_t status = UCS_OK;
     int pid_max = 32768, free_bits;
     FILE *fh;
 
-    job_info = uct_ugni_get_job_info();
-    if (NULL == job_info) {
+    j_info = uct_ugni_get_job_info();
+    if (NULL == j_info) {
         return UCS_ERR_IO_ERROR;
     }
 
@@ -432,7 +432,7 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
               cdm->domain_id, getpid (), free_bits, ugni_domain_counter);
     modes = GNI_CDM_MODE_FORK_FULLCOPY | GNI_CDM_MODE_CACHED_AMO_ENABLED |
         GNI_CDM_MODE_ERR_NO_KILL | GNI_CDM_MODE_FAST_DATAGRAM_POLL | GNI_CDM_MODE_FMA_SHARED;
-    ugni_rc = GNI_CdmCreate(cdm->domain_id, job_info->ptag, job_info->cookie,
+    ugni_rc = GNI_CdmCreate(cdm->domain_id, j_info->ptag, j_info->cookie,
                             modes, &cdm->cdm_handle);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_CdmCreate failed, Error status: %s %d",

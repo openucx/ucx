@@ -53,7 +53,7 @@ void uct_knem_iovec_set_buffer(struct knem_cmd_param_iovec *iov, void *buffer)
 
 static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         size_t iovcnt, uint64_t remote_addr,
-                                        uct_knem_key_t *key, int write)
+                                        uct_knem_key_t *key, int write_op)
 {
     uct_knem_iface_t *knem_iface = ucs_derived_of(tl_ep->iface, uct_knem_iface_t);
     int knem_fd                  = knem_iface->knem_md->knem_fd;
@@ -64,7 +64,7 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
     int rc;
 
     UCT_CHECK_IOV_SIZE(iovcnt, knem_iface->super.config.max_iov,
-                       write ? "uct_knem_ep_put_zcopy" : "uct_knem_ep_get_zcopy");
+                       write_op ? "uct_knem_ep_put_zcopy" : "uct_knem_ep_get_zcopy");
 
     ucs_iov_iter_init(&uct_iov_iter);
     ucs_iov_converter(knem_iov, &knem_iov_cnt,
@@ -83,7 +83,7 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
     icopy.remote_offset     = remote_addr - key->address;
     /* if 0 then, READ from the remote region into my local segments
      * if 1 then, WRITE to the remote region from my local segment */
-    icopy.write             = write;
+    icopy.write             = write_op;
     /* TBD: add check and support for KNEM_FLAG_DMA */
     icopy.flags             = 0;
 
@@ -96,7 +96,7 @@ static inline ucs_status_t uct_knem_rma(uct_ep_h tl_ep, const uct_iov_t *iov,
     }
 
     uct_knem_trace_data(remote_addr, (uintptr_t)key, "%s [length %zu]",
-                        write?"PUT_ZCOPY":"GET_ZCOPY",
+                        write_op ? "PUT_ZCOPY" : "GET_ZCOPY",
                         uct_iov_total_length(iov, iovcnt));
     return UCS_OK;
 }

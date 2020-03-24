@@ -37,13 +37,13 @@ typedef struct uct_ib_mlx5_dbrec_page {
 
 
 static ucs_status_t uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address,
-                                         size_t length, uint64_t access,
-                                         uct_ib_mem_t *ib_memh)
+                                        size_t length, uint64_t access_flags,
+                                        uct_ib_mem_t *ib_memh)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     ucs_status_t status;
 
-    status = uct_ib_reg_mr(md->pd, address, length, access, &memh->mr);
+    status = uct_ib_reg_mr(md->pd, address, length, access_flags, &memh->mr);
     if (status != UCS_OK) {
         return status;
     }
@@ -292,7 +292,7 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_atomic_key(uct_ib_md_t *ibmd,
 
 static ucs_status_t uct_ib_mlx5_devx_reg_multithreaded(uct_ib_md_t *ibmd,
                                                        void *address, size_t length,
-                                                       uint64_t access,
+                                                       uint64_t access_flags,
                                                        uct_ib_mem_t *ib_memh)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
@@ -321,7 +321,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_multithreaded(uct_ib_md_t *ibmd,
 
     ksm_data->mr_num = mr_num;
     status = uct_ib_md_handle_mr_list_multithreaded(ibmd, address, length,
-                                                    access, chunk, ksm_data->mrs);
+                                                    access_flags, chunk,
+                                                    ksm_data->mrs);
     if (status != UCS_OK) {
         goto err;
     }

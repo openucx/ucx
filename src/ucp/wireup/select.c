@@ -1002,12 +1002,12 @@ static double ucp_wireup_am_bw_score_func(ucp_context_h context,
 {
     /* best single MTU bandwidth */
     double size = iface_attr->cap.am.max_bcopy;
-    double time = (size / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
+    double t    = (size / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
                                   ucp_tl_iface_bandwidth(context, &remote_iface_attr->bandwidth))) +
                   iface_attr->overhead + remote_iface_attr->overhead +
                   ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr);
 
-    return size / time * 1e-5;
+    return size / t * 1e-5;
 }
 
 static unsigned

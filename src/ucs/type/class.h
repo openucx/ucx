@@ -93,18 +93,18 @@ struct ucs_class {
  */
 #define UCS_CLASS_INIT(_type, _obj, ...) \
     ({ \
-        ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
-        int init_count = 1; \
-        ucs_status_t status; \
+        ucs_class_t *_cls = &_UCS_CLASS_DECL_NAME(_type); \
+        int _init_count = 1; \
+        ucs_status_t __status; \
         \
-        status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), cls, &init_count, \
-                                             ## __VA_ARGS__); \
-        if (status != UCS_OK) { \
+        __status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), _cls, \
+                                             &_init_count, ## __VA_ARGS__); \
+        if (__status != UCS_OK) { \
             ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
-                                         (_obj), init_count); \
+                                         (_obj), _init_count); \
         } \
         \
-        (status); \
+        (__status); \
     })
 
 
@@ -144,22 +144,22 @@ struct ucs_class {
 #define _UCS_CLASS_NEW(_type, _obj, ...) \
     ({ \
         ucs_class_t *cls = &_UCS_CLASS_DECL_NAME(_type); \
-        ucs_status_t status; \
+        ucs_status_t _status; \
         void *obj; \
         \
         obj = ucs_class_malloc(cls); \
         if (obj != NULL) { \
-            status = UCS_CLASS_INIT(_type, obj, ## __VA_ARGS__); \
-            if (status == UCS_OK) { \
+            _status = UCS_CLASS_INIT(_type, obj, ## __VA_ARGS__); \
+            if (_status == UCS_OK) { \
                 *(_obj) = (typeof(*(_obj)))obj; /* Success - assign pointer */ \
             } else { \
                 ucs_class_free(obj); /* Initialization failure */ \
             } \
         } else { \
-            status = UCS_ERR_NO_MEMORY; /* Allocation failure */ \
+            _status = UCS_ERR_NO_MEMORY; /* Allocation failure */ \
         } \
         \
-        (status); \
+        (_status); \
     })
 
 
@@ -186,10 +186,10 @@ struct ucs_class {
 #define UCS_CLASS_CALL_SUPER_INIT(_superclass, ...) \
     { \
         { \
-            ucs_status_t status = _UCS_CLASS_INIT_NAME(_superclass)\
+            ucs_status_t _status = _UCS_CLASS_INIT_NAME(_superclass)\
                     (&self->super, _myclass->superclass, _init_count, ## __VA_ARGS__); \
-            if (status != UCS_OK) { \
-                return status; \
+            if (_status != UCS_OK) { \
+                return _status; \
             } \
             if (_myclass->superclass != &_UCS_CLASS_DECL_NAME(void)) { \
                 ++(*_init_count); \

@@ -451,7 +451,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("\n");
 }
 
-static ucs_status_t parse_ucp_datatype_params(const char *optarg,
+static ucs_status_t parse_ucp_datatype_params(const char *opt_arg,
                                               ucp_perf_datatype_t *datatype)
 {
     const char  *iov_type         = "iov";
@@ -459,9 +459,9 @@ static ucs_status_t parse_ucp_datatype_params(const char *optarg,
     const char  *contig_type      = "contig";
     const size_t contig_type_size = strlen("contig");
 
-    if (0 == strncmp(optarg, iov_type, iov_type_size)) {
+    if (0 == strncmp(opt_arg, iov_type, iov_type_size)) {
         *datatype = UCP_PERF_DATATYPE_IOV;
-    } else if (0 == strncmp(optarg, contig_type, contig_type_size)) {
+    } else if (0 == strncmp(opt_arg, contig_type, contig_type_size)) {
         *datatype = UCP_PERF_DATATYPE_CONTIG;
     } else {
         return UCS_ERR_INVALID_PARAM;
@@ -470,27 +470,27 @@ static ucs_status_t parse_ucp_datatype_params(const char *optarg,
     return UCS_OK;
 }
 
-static ucs_status_t parse_mem_type(const char *optarg,
+static ucs_status_t parse_mem_type(const char *opt_arg,
                                    ucs_memory_type_t *mem_type)
 {
     ucs_memory_type_t it;
     for (it = UCS_MEMORY_TYPE_HOST; it < UCS_MEMORY_TYPE_LAST; it++) {
-        if(!strcmp(optarg, ucs_memory_type_names[it]) &&
+        if(!strcmp(opt_arg, ucs_memory_type_names[it]) &&
            (ucx_perf_mem_type_allocators[it] != NULL)) {
             *mem_type = it;
             return UCS_OK;
         }
     }
-    ucs_error("Unsupported memory type: \"%s\"", optarg);
+    ucs_error("Unsupported memory type: \"%s\"", opt_arg);
     return UCS_ERR_INVALID_PARAM;
 }
 
-static ucs_status_t parse_mem_type_params(const char *optarg,
+static ucs_status_t parse_mem_type_params(const char *opt_arg,
                                           ucs_memory_type_t *send_mem_type,
                                           ucs_memory_type_t *recv_mem_type)
 {
     const char *delim = ",";
-    char *token       = strtok((char*)optarg, delim);
+    char *token       = strtok((char*)opt_arg, delim);
 
     if (UCS_OK != parse_mem_type(token, send_mem_type)) {
         return UCS_ERR_INVALID_PARAM;
@@ -505,14 +505,14 @@ static ucs_status_t parse_mem_type_params(const char *optarg,
     }
 }
 
-static ucs_status_t parse_message_sizes_params(const char *optarg,
+static ucs_status_t parse_message_sizes_params(const char *opt_arg,
                                                ucx_perf_params_t *params)
 {
     const char delim = ',';
     size_t *msg_size_list, token_num, token_it;
     char *optarg_ptr, *optarg_ptr2;
 
-    optarg_ptr = (char *)optarg;
+    optarg_ptr = (char *)opt_arg;
     token_num  = 0;
     /* count the number of given message sizes */
     while ((optarg_ptr = strchr(optarg_ptr, delim)) != NULL) {
@@ -529,7 +529,7 @@ static ucs_status_t parse_message_sizes_params(const char *optarg,
 
     params->msg_size_list = msg_size_list;
 
-    optarg_ptr = (char *)optarg;
+    optarg_ptr = (char *)opt_arg;
     errno = 0;
     for (token_it = 0; token_it < token_num; ++token_it) {
         params->msg_size_list[token_it] = strtoul(optarg_ptr, &optarg_ptr2, 10);
@@ -588,7 +588,8 @@ static ucs_status_t init_test_params(ucx_perf_params_t *params)
     return UCS_OK;
 }
 
-static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const char *optarg)
+static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt,
+                                      const char *opt_arg)
 {
     test_type_t *test;
     char *optarg2 = NULL;
@@ -596,15 +597,15 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
     switch (opt) {
     case 'd':
         ucs_snprintf_zero(params->uct.dev_name, sizeof(params->uct.dev_name),
-                          "%s", optarg);
+                          "%s", opt_arg);
         return UCS_OK;
     case 'x':
         ucs_snprintf_zero(params->uct.tl_name, sizeof(params->uct.tl_name),
-                          "%s", optarg);
+                          "%s", opt_arg);
         return UCS_OK;
     case 't':
         for (test = tests; test->name; ++test) {
-            if (!strcmp(optarg, test->name)) {
+            if (!strcmp(opt_arg, test->name)) {
                 params->api       = test->api;
                 params->command   = test->command;
                 params->test_type = test->test_type;
@@ -617,15 +618,15 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         }
         return UCS_OK;
     case 'D':
-        if (!strcmp(optarg, "short")) {
+        if (!strcmp(opt_arg, "short")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
-        } else if (!strcmp(optarg, "bcopy")) {
+        } else if (!strcmp(opt_arg, "bcopy")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_BCOPY;
-        } else if (!strcmp(optarg, "zcopy")) {
+        } else if (!strcmp(opt_arg, "zcopy")) {
             params->uct.data_layout   = UCT_PERF_DATA_LAYOUT_ZCOPY;
-        } else if (UCS_OK == parse_ucp_datatype_params(optarg,
+        } else if (UCS_OK == parse_ucp_datatype_params(opt_arg,
                                                        &params->ucp.send_datatype)) {
-            optarg2 = strchr(optarg, ',');
+            optarg2 = strchr(opt_arg, ',');
             if (optarg2) {
                 if (UCS_OK != parse_ucp_datatype_params(optarg2 + 1,
                                                        &params->ucp.recv_datatype)) {
@@ -638,24 +639,24 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         }
         return UCS_OK;
     case 'i':
-        params->iov_stride = atol(optarg);
+        params->iov_stride = atol(opt_arg);
         return UCS_OK;
     case 'n':
-        params->max_iter = atol(optarg);
+        params->max_iter = atol(opt_arg);
         return UCS_OK;
     case 's':
-        return parse_message_sizes_params(optarg, params);
+        return parse_message_sizes_params(opt_arg, params);
     case 'H':
-        params->am_hdr_size = atol(optarg);
+        params->am_hdr_size = atol(opt_arg);
         return UCS_OK;
     case 'W':
-        params->uct.fc_window = atoi(optarg);
+        params->uct.fc_window = atoi(opt_arg);
         return UCS_OK;
     case 'O':
-        params->max_outstanding = atoi(optarg);
+        params->max_outstanding = atoi(opt_arg);
         return UCS_OK;
     case 'w':
-        params->warmup_iter = atol(optarg);
+        params->warmup_iter = atol(opt_arg);
         return UCS_OK;
     case 'o':
         params->flags |= UCX_PERF_TEST_FLAG_ONE_SIDED;
@@ -673,13 +674,13 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
         params->flags |= UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE;
         return UCS_OK;
     case 'M':
-        if (!strcmp(optarg, "single")) {
+        if (!strcmp(opt_arg, "single")) {
             params->thread_mode = UCS_THREAD_MODE_SINGLE;
             return UCS_OK;
-        } else if (!strcmp(optarg, "serialized")) {
+        } else if (!strcmp(opt_arg, "serialized")) {
             params->thread_mode = UCS_THREAD_MODE_SERIALIZED;
             return UCS_OK;
-        } else if (!strcmp(optarg, "multi")) {
+        } else if (!strcmp(opt_arg, "multi")) {
             params->thread_mode = UCS_THREAD_MODE_MULTI;
             return UCS_OK;
         } else {
@@ -687,17 +688,17 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             return UCS_ERR_INVALID_PARAM;
         }
     case 'T':
-        params->thread_count = atoi(optarg);
+        params->thread_count = atoi(opt_arg);
         params->thread_mode = UCS_THREAD_MODE_MULTI;
         return UCS_OK;
     case 'A':
-        if (!strcmp(optarg, "thread") || !strcmp(optarg, "thread_spinlock")) {
+        if (!strcmp(opt_arg, "thread") || !strcmp(opt_arg, "thread_spinlock")) {
             params->async_mode = UCS_ASYNC_MODE_THREAD_SPINLOCK;
             return UCS_OK;
-        } else if (!strcmp(optarg, "thread_mutex")) {
+        } else if (!strcmp(opt_arg, "thread_mutex")) {
             params->async_mode = UCS_ASYNC_MODE_THREAD_MUTEX;
             return UCS_OK;
-        } else if (!strcmp(optarg, "signal")) {
+        } else if (!strcmp(opt_arg, "signal")) {
             params->async_mode = UCS_ASYNC_MODE_SIGNAL;
             return UCS_OK;
         } else {
@@ -705,16 +706,16 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt, const
             return UCS_ERR_INVALID_PARAM;
         }
     case 'r':
-        if (!strcmp(optarg, "recv_data")) {
+        if (!strcmp(opt_arg, "recv_data")) {
             params->flags |= UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
             return UCS_OK;
-        } else if (!strcmp(optarg, "recv")) {
+        } else if (!strcmp(opt_arg, "recv")) {
             params->flags &= ~UCX_PERF_TEST_FLAG_STREAM_RECV_DATA;
             return UCS_OK;
         }
         return UCS_ERR_INVALID_PARAM;
     case 'm':
-        if (UCS_OK != parse_mem_type_params(optarg,
+        if (UCS_OK != parse_mem_type_params(opt_arg,
                                             &params->send_mem_type,
                                             &params->recv_mem_type)) {
             return UCS_ERR_INVALID_PARAM;
@@ -857,15 +858,15 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
   {
     sock_rte_group_t *group = rte_group;
     const unsigned magic = 0xdeadbeef;
-    unsigned sync;
+    unsigned snc;
 
-    sync = magic;
-    safe_send(group->connfd, &sync, sizeof(unsigned), progress, arg);
+    snc = magic;
+    safe_send(group->connfd, &snc, sizeof(unsigned), progress, arg);
 
-    sync = 0;
-    safe_recv(group->connfd, &sync, sizeof(unsigned), progress, arg);
+    snc = 0;
+    safe_recv(group->connfd, &snc, sizeof(unsigned), progress, arg);
 
-    ucs_assert(sync == magic);
+    ucs_assert(snc == magic);
   }
 #pragma omp barrier
 }
@@ -1200,16 +1201,6 @@ static void mpi_rte_report(void *rte_group, const ucx_perf_result_t *result,
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
                    is_final);
 }
-
-static ucx_perf_rte_t mpi_rte = {
-    .group_size    = mpi_rte_group_size,
-    .group_index   = mpi_rte_group_index,
-    .barrier       = mpi_rte_barrier,
-    .post_vec      = mpi_rte_post_vec,
-    .recv          = mpi_rte_recv,
-    .exchange_vec  = (void*)ucs_empty_function,
-    .report        = mpi_rte_report,
-};
 #elif HAVE_RTE
 static unsigned ext_rte_group_size(void *rte_group)
 {
@@ -1338,6 +1329,16 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ucs_trace_func("");
 
 #if HAVE_MPI
+    static ucx_perf_rte_t mpi_rte = {
+        .group_size    = mpi_rte_group_size,
+        .group_index   = mpi_rte_group_index,
+        .barrier       = mpi_rte_barrier,
+        .post_vec      = mpi_rte_post_vec,
+        .recv          = mpi_rte_recv,
+        .exchange_vec  = (void*)ucs_empty_function,
+        .report        = mpi_rte_report,
+    };
+
     int size, rank;
 
     MPI_Comm_size(MPI_COMM_WORLD, &size);

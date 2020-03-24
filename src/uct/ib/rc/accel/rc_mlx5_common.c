@@ -76,7 +76,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
     uct_rc_iface_t *rc_iface = &iface->super;
     uct_ib_mlx5_srq_seg_t *seg;
     uct_ib_iface_recv_desc_t *desc;
-    uint16_t count, index, next_index;
+    uint16_t count, wqe_index, next_index;
     uint64_t desc_map;
     void *hdr;
     int i;
@@ -89,9 +89,9 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
 
     ucs_assert(UCS_CIRCULAR_COMPARE16(srq->ready_idx, <=, srq->free_idx));
 
-    index = srq->ready_idx;
+    wqe_index = srq->ready_idx;
     for (;;) {
-        next_index = index + 1;
+        next_index = wqe_index + 1;
         seg = uct_ib_mlx5_srq_get_wqe(srq, next_index);
         if (UCS_CIRCULAR_COMPARE16(next_index, >, srq->free_idx)) {
             if (!seg->srq.free) {
@@ -117,16 +117,16 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
             VALGRIND_MAKE_MEM_NOACCESS(hdr, rc_iface->super.config.seg_size);
         }
 
-        index = next_index;
+        wqe_index = next_index;
     }
 
 out:
-    count = index - srq->sw_pi;
+    count = wqe_index - srq->sw_pi;
     ucs_assert(rc_iface->rx.srq.available >= count);
 
     if (count > 0) {
-        srq->ready_idx              = index;
-        srq->sw_pi                  = index;
+        srq->ready_idx              = wqe_index;
+        srq->sw_pi                  = wqe_index;
         rc_iface->rx.srq.available -= count;
         ucs_memory_cpu_store_fence();
         *srq->db                    = htonl(srq->sw_pi);

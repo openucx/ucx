@@ -37,11 +37,13 @@
     do { \
         char *___p = _p; \
         uint32_t ___v = _v; \
+        uint32_t ___h; \
         UCS_STATIC_ASSERT(__uct_st_sz_bits(_typ) % 32 == 0); \
-        *((__be32 *)(___p) + __uct_dw_off(_typ, _fld)) = \
-            htobe32((be32toh(*((__be32 *)(___p) + __uct_dw_off(_typ, _fld))) & \
-            (~__uct_dw_mask(_typ, _fld))) | (((___v) & __uct_mask(_typ, _fld)) \
-            << __uct_dw_bit_off(_typ, _fld))); \
+        ___h = (be32toh(*((__be32 *)(___p) + __uct_dw_off(_typ, _fld))) & \
+                (~__uct_dw_mask(_typ, _fld))) | \
+               (((___v) & __uct_mask(_typ, _fld)) << \
+                __uct_dw_bit_off(_typ, _fld)); \
+        *((__be32 *)(___p) + __uct_dw_off(_typ, _fld)) = htobe32(___h); \
     } while (0)
 
 #define UCT_IB_MLX5DV_GET(_typ, _p, _fld) \

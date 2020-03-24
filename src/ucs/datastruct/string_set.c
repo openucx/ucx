@@ -106,7 +106,7 @@ ucs_status_t ucs_string_set_print_sorted(const ucs_string_set_t *sset,
 {
     const char **sorted_strings;
     ucs_status_t status;
-    size_t index, count;
+    size_t idx, count;
     char *str;
 
     /* allocate a temporary array to hold the sorted strings */
@@ -118,18 +118,18 @@ ucs_status_t ucs_string_set_print_sorted(const ucs_string_set_t *sset,
     }
 
     /* collect and sort the strings */
-    index = 0;
+    idx = 0;
     kh_foreach_key(sset, str, {
-        sorted_strings[index++] = str;
+        sorted_strings[idx++] = str;
     })
-    ucs_assert(index == count);
+    ucs_assert(idx == count);
     qsort(sorted_strings, count, sizeof(*sorted_strings),
           ucs_string_set_compare_func);
 
     /* append the sorted strings to the string buffer */
-    for (index = 0; index < count; ++index) {
-        status = ucs_string_buffer_appendf(strb, "%s%s", (index > 0) ? sep : "",
-                                           sorted_strings[index]);
+    for (idx = 0; idx < count; ++idx) {
+        status = ucs_string_buffer_appendf(strb, "%s%s", (idx > 0) ? sep : "",
+                                           sorted_strings[idx]);
         if (status != UCS_OK) {
             goto out_free_array;
         }

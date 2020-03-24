@@ -407,7 +407,7 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
     return wireup_ep->aux_rsc_index;
 }
 
-ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
+ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
                                    ucp_rsc_index_t rsc_index,
                                    unsigned path_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address)
@@ -440,7 +440,7 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {
-        status = ucp_wireup_ep_connect_aux(wireup_ep, ucp_ep_init_flags,
+        status = ucp_wireup_ep_connect_aux(wireup_ep, ep_init_flags,
                                            remote_address);
         if (status != UCS_OK) {
             goto err_destroy_next_ep;

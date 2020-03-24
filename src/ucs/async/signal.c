@@ -209,13 +209,13 @@ static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
 
 static void ucs_async_signal_allow(int allow)
 {
-    sigset_t sigset;
+    sigset_t sig_set;
 
     ucs_trace_func("enable=%d tid=%d", allow, ucs_get_tid());
 
-    sigemptyset(&sigset);
-    sigaddset(&sigset, ucs_global_opts.async_signo);
-    pthread_sigmask(allow ? SIG_UNBLOCK : SIG_BLOCK, &sigset, NULL);
+    sigemptyset(&sig_set);
+    sigaddset(&sig_set, ucs_global_opts.async_signo);
+    pthread_sigmask(allow ? SIG_UNBLOCK : SIG_BLOCK, &sig_set, NULL);
 }
 
 static void ucs_async_signal_block_all()
@@ -318,20 +318,20 @@ static ucs_status_t ucs_async_signal_modify_event_fd(ucs_async_context_t *async,
                                                      int event_fd, int events)
 {
     ucs_status_t status;
-    int add, remove;
+    int add, rm;
 
     UCS_ASYNC_SIGNAL_CHECK_THREAD(async);
 
     if (events) {
-        add    = O_ASYNC; /* Enable notifications */
-        remove = 0;
+        add = O_ASYNC; /* Enable notifications */
+        rm  = 0;
     } else {
-        add    = 0;       /* Disable notifications */
-        remove = O_ASYNC;
+        add = 0;       /* Disable notifications */
+        rm  = O_ASYNC;
     }
 
-    ucs_trace_async("fcntl(fd=%d, add=0x%x, remove=0x%x)", event_fd, add, remove);
-    status = ucs_sys_fcntl_modfl(event_fd, add, remove);
+    ucs_trace_async("fcntl(fd=%d, add=0x%x, remove=0x%x)", event_fd, add, rm);
+    status = ucs_sys_fcntl_modfl(event_fd, add, rm);
     if (status != UCS_OK) {
         ucs_error("fcntl F_SETFL failed: %m");
         return UCS_ERR_IO_ERROR;

@@ -8,16 +8,16 @@
 
 
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
-uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned index)
+uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned cqe_index)
 {
-    return UCS_PTR_BYTE_OFFSET(cq->cq_buf, ((index & (cq->cq_length - 1)) <<
+    return UCS_PTR_BYTE_OFFSET(cq->cq_buf, ((cqe_index & (cq->cq_length - 1)) <<
                                             cq->cqe_size_log));
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned index, unsigned mask)
+uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned cqe_index, unsigned mask)
 {
-    return (op_own & MLX5_CQE_OWNER_MASK) == !(index & mask);
+    return (op_own & MLX5_CQE_OWNER_MASK) == !(cqe_index & mask);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -66,14 +66,14 @@ static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {
     struct mlx5_cqe64 *cqe;
-    unsigned index;
+    unsigned cqe_index;
     uint8_t op_own;
 
-    index  = cq->cq_ci;
-    cqe    = uct_ib_mlx5_get_cqe(cq, index);
-    op_own = cqe->op_own;
+    cqe_index = cq->cq_ci;
+    cqe       = uct_ib_mlx5_get_cqe(cq, cqe_index);
+    op_own    = cqe->op_own;
 
-    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, index, cq->cq_length))) {
+    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, cqe_index, cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
@@ -82,7 +82,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
         return NULL; /* No CQE */
     }
 
-    cq->cq_ci = index + 1;
+    cq->cq_ci = cqe_index + 1;
     return cqe; /* TODO optimize - let complier know cqe is not null */
 }
 
@@ -501,9 +501,9 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
 
 
 static inline uct_ib_mlx5_srq_seg_t *
-uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
+uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t wqe_index)
 {
-    return UCS_PTR_BYTE_OFFSET(srq->buf, (index & srq->mask) * srq->stride);
+    return UCS_PTR_BYTE_OFFSET(srq->buf, (wqe_index & srq->mask) * srq->stride);
 }
 
 static ucs_status_t UCS_F_MAYBE_UNUSED

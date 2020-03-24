@@ -435,7 +435,7 @@ int print_err_usage()
 
 int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
 {
-    int c = 0, index = 0;
+    int c = 0, idx = 0;
 
     assert(args);
     memset(args, 0, sizeof(*args));
@@ -504,8 +504,8 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
             func_am_t_str(args->func_am_type), args->server_name,
             args->server_port);
 
-    for (index = optind; index < argc; index++) {
-        fprintf(stderr, "WARNING: Non-option argument %s\n", argv[index]);
+    for (idx = optind; idx < argc; idx++) {
+        fprintf(stderr, "WARNING: Non-option argument %s\n", argv[idx]);
     }
 
     if (args->dev_name == NULL) {
