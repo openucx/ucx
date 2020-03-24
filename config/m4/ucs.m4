@@ -18,8 +18,8 @@ AC_ARG_ENABLE([profiling],
 AS_IF([test "x$enable_profiling" = xyes],
 	[AS_MESSAGE([enabling profiling])
 	 AC_DEFINE([HAVE_PROFILING], [1], [Enable profiling])
-	 HAVE_PROFILING=yes]
-	[:]
+	 HAVE_PROFILING=yes],
+	[AC_DEFINE([HAVE_PROFILING], [0], [Enable profiling])]
 )
 AM_CONDITIONAL([HAVE_PROFILING],[test "x$HAVE_PROFILING" = "xyes"])
 
@@ -92,7 +92,7 @@ AS_IF([test "x$enable_stats" = xyes],
 	  [AS_MESSAGE([enabling statistics])
 	   AC_DEFINE([ENABLE_STATS], [1], [Enable statistics])
 	   HAVE_STATS=yes],
-	  [:]
+	  [AC_DEFINE([ENABLE_STATS], [0], [Enable statistics])]
   )
 AM_CONDITIONAL([HAVE_STATS],[test "x$HAVE_STATS" = "xyes"])
 
@@ -128,7 +128,7 @@ AS_IF([test "x$enable_memtrack" = xyes],
 	  [AS_MESSAGE([enabling memory tracking])
 	   AC_DEFINE([ENABLE_MEMTRACK], [1], [Enable memory tracking])
 	   HAVE_MEMTRACK=yes],
-	  [:]
+	  [AC_DEFINE([ENABLE_MEMTRACK], [0], [Enable memory tracking])]
   )
 AM_CONDITIONAL([HAVE_MEMTRACK],[test "x$HAVE_MEMTRACK" = "xyes"])
 
@@ -155,7 +155,8 @@ AC_ARG_ENABLE([assertions],
 	)
 
 AS_IF([test "x$enable_assertions" != xno],
-		AC_DEFINE([ENABLE_ASSERT], [1], [Enable assertions])
+		[AC_DEFINE([ENABLE_ASSERT], [1], [Enable assertions])],
+		[AC_DEFINE([ENABLE_ASSERT], [0], [Enable assertions])]
 	)
 
 #

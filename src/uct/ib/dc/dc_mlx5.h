@@ -20,7 +20,7 @@
  * HW tag matching
  */
 #if IBV_HW_TM
-#  if HAVE_INFINIBAND_TM_TYPES_H
+#  ifdef HAVE_INFINIBAND_TM_TYPES_H
 /* upstream tm_types.h doesn't provide RAVH header */
 struct ibv_ravh {
     uint32_t    sl_dct;

@@ -7,6 +7,10 @@
 #ifndef UCT_MD_H_
 #define UCT_MD_H_
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "uct_component.h"
 
 #include <uct/api/uct.h>

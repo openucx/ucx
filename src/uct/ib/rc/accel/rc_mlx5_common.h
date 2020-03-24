@@ -23,7 +23,7 @@
 #endif
 
 #if IBV_HW_TM
-#  if HAVE_INFINIBAND_TM_TYPES_H
+#  ifdef HAVE_INFINIBAND_TM_TYPES_H
 #    include <infiniband/tm_types.h>
 #  else
 #    define ibv_tmh                         ibv_exp_tmh
@@ -40,7 +40,7 @@
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
 #endif
 
-#if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
+#ifdef HAVE_STRUCT_IBV_TM_CAPS_FLAGS
 #  define IBV_DEVICE_TM_FLAGS(_dev)         IBV_DEVICE_TM_CAPS(_dev, flags)
 #else
 #  define IBV_DEVICE_TM_FLAGS(_dev)         IBV_DEVICE_TM_CAPS(_dev, capability_flags)

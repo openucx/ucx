@@ -227,6 +227,9 @@ AS_IF([test "x$with_ib" = "xyes"],
                        [AC_MSG_ERROR([devx requested but not found])])
             ], [[#include <infiniband/mlx5dv.h>]])])
 
+       AS_IF([test "x$have_devx" != "xyes"], [
+            AC_DEFINE([HAVE_DEVX], [0], [DEVX support])])
+
        AS_IF([test "x$has_res_domain" = "xyes" -a "x$have_cq_io" = "xyes" ], [], [
                with_mlx5_hw=no])
 
@@ -367,6 +370,7 @@ AS_IF([test "x$with_ib" = "xyes"],
            AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
            AS_IF([test -n "$have_dc_dv"],
                  [AC_DEFINE([HAVE_DC_DV], 1, [DC DV support])], [
+           AC_DEFINE([HAVE_DC_DV], 0, [DC DV support])
            AS_IF([test -n "$have_dc_exp"],
                  [AC_DEFINE([HAVE_DC_EXP], 1, [DC EXP support])])])],
            [with_dc=no])
