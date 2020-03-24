@@ -58,7 +58,7 @@ $ cd ucx-{RELEASE}
 
 ## OpenMPI with UCX
 
-[OpenMPI](http://www.open-mpi.org) supports UCX starting from version 3.0, but
+[OpenMPI](https://www.open-mpi.org) supports UCX starting from version 3.0, but
 it's recommended to use version 4.0 or higher due to stability and performance
 improvements.
 

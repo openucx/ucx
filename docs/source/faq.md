@@ -24,7 +24,7 @@ UCP is responsible for the following functionality: initialization of the librar
 
 #### How do I get in touch with UCX developers?
 Please join our mailing list: https://elist.ornl.gov/mailman/listinfo/ucx-group or 
-submit issues on github: http://github.com/openucx/ucx/issues
+submit issues on github: https://github.com/openucx/ucx/issues
 
 <br/>
 
@@ -272,7 +272,7 @@ Currently only UCX tagged APIs (ucp_tag_send_XX/ucp_tag_recv_XX) and stream APIs
 
 In order to run UCX with GPU support, you will need an application which allocates
 GPU memory (for example,
-[MPI OSU benchmarks with Cuda support](http://mvapich.cse.ohio-state.edu/benchmarks)),
+[MPI OSU benchmarks with Cuda support](https://mvapich.cse.ohio-state.edu/benchmarks)),
 and UCX compiled with GPU support. Then you can run the application as usual (for
 example, with MPI) and whenever GPU memory is passed to UCX, it either use GPU-direct
 for zero copy operations, or copy the data to/from host memory.
