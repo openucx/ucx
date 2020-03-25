@@ -425,17 +425,6 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
 /**
- * Check all environment variables starting from env_prefix that have been used
- * so far by the configuration parser, issue a warning if not. Called just before
- * program exit.
- *
- * @param env_prefix     Environment variable prefix.
- *                       env_prefix may consist of base preifx and sub prefix
- *                       which are delimited by last "_" in a string.
- */
-void ucs_config_parser_warn_unused_env_vars(const char *env_prefix);
-
-/**
  * Wrapper for `ucs_config_parser_warn_unused_env_vars`
  * that ensures that this is called once
  *

@@ -1169,18 +1169,32 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
     return UCS_OK;
 }
 
-static const char * ucs_config_parser_get_base_prefix(const char *env_prefix)
+/* Find if env_prefix consists of base prefix and sub prefix and returns sub prefix
+ * length, base prefix should not contain underscores "_" except at the very end
+ * e.g in env_prefix = "LONG_PREFIX_UCX_":
+ * "LONG_PREFIX_" is sub prefix
+ * "UCX_"         is base prefix
+ */
+static ucs_status_t ucs_config_parser_get_sub_prefix_len(const char *env_prefix, 
+                                                         size_t *sub_prefix_len)
 {
-    int sub_prefix_len;
-    
+    size_t len;
+
     /* env_prefix always has "_" at the end and we want to find the last but one
      * "_" in the env_prefix */
-    sub_prefix_len = strlen(env_prefix) - 2;
-
-    while ((sub_prefix_len >= 0) && (env_prefix[sub_prefix_len] != '_')) {
-        sub_prefix_len -= 1;
+    len = strlen(env_prefix);
+    if (len < 2 ) {
+        ucs_error("Invalid value of env_prefix");
+        return UCS_ERR_INVALID_PARAM;
     }
-    return env_prefix + sub_prefix_len;
+
+    len -= 2;
+    while ((len > 0) && (env_prefix[len - 1] != '_')) {
+        len -= 1;
+    }
+    *sub_prefix_len = len;
+
+    return UCS_OK;
 }
 
 ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
@@ -1188,32 +1202,30 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
                                          const char *table_prefix,
                                          int ignore_errors)
 {
+    size_t       sub_prefix_len = 0;
     ucs_status_t status;
-    const char   *base_prefix;
 
     /* Set default values */
     status = ucs_config_parser_set_default_values(opts, fields);
-    ucs_assert(env_prefix != NULL);
     if (status != UCS_OK) {
         goto err;
     }
 
-    /* Find if env_prefix consists of base prefix and sub prefix, base prefix
-     * should not contain underscores "_" except at the very end
-     * e.g in env_prefix = "LONG_PREFIX_UCX_":
-     * "LONG_PREFIX_" is sub prefix
-     * "UCX_"         is base prefix */
-    base_prefix = ucs_config_parser_get_base_prefix(env_prefix);
+    ucs_assert(env_prefix != NULL);
+    status = ucs_config_parser_get_sub_prefix_len(env_prefix, &sub_prefix_len);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     /* Apply environment variables */
-    status = ucs_config_apply_env_vars(opts, fields, base_prefix, table_prefix,
-                                       1, ignore_errors);
+    status = ucs_config_apply_env_vars(opts, fields, env_prefix + sub_prefix_len,
+                                       table_prefix, 1, ignore_errors);
     if (status != UCS_OK) {
         goto err_free;
     }
 
     /* Apply environment variables with custom prefix */
-    if (base_prefix != env_prefix) {
+    if (sub_prefix_len != 0) {
         status = ucs_config_apply_env_vars(opts, fields, env_prefix, table_prefix,
                                            1, ignore_errors);
         if (status != UCS_OK) {
@@ -1559,7 +1571,7 @@ void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
     }
 }
 
-static void ucs_config_parser_warn_unused_env_vars_internal(const char *sub_prefix)
+static void ucs_config_parser_warn_unused_env_vars(const char *prefix)
 {
     char unused_env_vars_names[40];
     int num_unused_vars;
@@ -1578,7 +1590,7 @@ static void ucs_config_parser_warn_unused_env_vars_internal(const char *sub_pref
 
     pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
-    prefix_len      = strlen(sub_prefix);
+    prefix_len      = strlen(prefix);
     p               = unused_env_vars_names;
     endp            = p + sizeof(unused_env_vars_names) - 1;
     *endp           = '\0';
@@ -1592,7 +1604,7 @@ static void ucs_config_parser_warn_unused_env_vars_internal(const char *sub_pref
         }
 
         var_name = strtok_r(envstr, "=", &saveptr);
-        if (!var_name || strncmp(var_name, sub_prefix, prefix_len)) {
+        if (!var_name || strncmp(var_name, prefix, prefix_len)) {
             ucs_free(envstr);
             continue; /* Not UCX */
         }
@@ -1627,35 +1639,26 @@ static void ucs_config_parser_warn_unused_env_vars_internal(const char *sub_pref
 
 void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix)
 {
-    int        base_prefix_added, env_prefix_added;
-    const char *base_prefix;
+    size_t       sub_prefix_len = 0;
+    int          added;
+    ucs_status_t status;
 
     /* Although env_prefix is not real environment variable put it
      * into table anyway to save prefixes which was already checked.
-     * Need to save both base_prefix and sub_prefix */
-    ucs_config_parser_mark_env_var_used(env_prefix, &env_prefix_added);
-    if (env_prefix_added) {
-        ucs_config_parser_warn_unused_env_vars_internal(env_prefix);
-        base_prefix = ucs_config_parser_get_base_prefix(env_prefix);
-
-        ucs_config_parser_mark_env_var_used(base_prefix, &base_prefix_added);
-        if (base_prefix_added) {
-            ucs_config_parser_warn_unused_env_vars_internal(base_prefix);
-        }
+     * Need to save both env_prefix and base_prefix */
+    ucs_config_parser_mark_env_var_used(env_prefix, &added);
+    if (!added) return;
+    ucs_config_parser_warn_unused_env_vars(env_prefix);
+ 
+    status = ucs_config_parser_get_sub_prefix_len(env_prefix, &sub_prefix_len);
+    if (status != UCS_OK){
+        return;
     }
+
+    ucs_config_parser_mark_env_var_used(env_prefix + sub_prefix_len, &added);
+    if (!added) return;
+    ucs_config_parser_warn_unused_env_vars(env_prefix + sub_prefix_len);
 }
-
-void ucs_config_parser_warn_unused_env_vars(const char *env_prefix)
-{
-    const char *base_prefix;
-
-    base_prefix = ucs_config_parser_get_base_prefix(env_prefix);
-    ucs_config_parser_warn_unused_env_vars_internal(base_prefix);
-    if (base_prefix != env_prefix) {
-        ucs_config_parser_warn_unused_env_vars_internal(env_prefix);
-    }
-}
-
 
 size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
                                size_t max_size)

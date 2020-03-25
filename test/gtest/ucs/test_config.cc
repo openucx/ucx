@@ -498,22 +498,21 @@ UCS_TEST_F(test_config, unused) {
         scoped_log_handler log_handler(config_error_handler);
         car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
 
-        ucs_config_parser_warn_unused_env_vars(UCS_DEFAULT_ENV_PREFIX);
+        ucs_config_parser_warn_unused_env_vars_once(UCS_DEFAULT_ENV_PREFIX);
 
         config_err_exp_str.pop_back();
     }
 
     {
-        const std::string unused_var2 = "UCX_UNUSED_VAR2";
+        const std::string unused_var2 = "TEST_UNUSED_VAR2";
         /* coverity[tainted_string_argument] */
         ucs::scoped_setenv env2(unused_var2.c_str(), "unused");
 
-        config_err_exp_str.push_back(warn_str + "s: " +
-                                     unused_var1 + ", " + unused_var2);
+        config_err_exp_str.push_back(warn_str + ": " + unused_var2);
         scoped_log_handler log_handler(config_error_handler);
-        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+        car_opts opts("TEST_", NULL);
 
-        ucs_config_parser_warn_unused_env_vars(UCS_DEFAULT_ENV_PREFIX);
+        ucs_config_parser_warn_unused_env_vars_once("TEST_");
 
         config_err_exp_str.pop_back();
     }
