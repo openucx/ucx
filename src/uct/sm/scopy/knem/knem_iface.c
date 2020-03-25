@@ -39,25 +39,26 @@ static UCS_CLASS_DECLARE_DELETE_FUNC(uct_knem_iface_t, uct_iface_t);
 
 static uct_scopy_iface_ops_t uct_knem_iface_ops = {
     .super = {
-        .ep_put_zcopy             = uct_knem_ep_put_zcopy,
-        .ep_get_zcopy             = uct_knem_ep_get_zcopy,
+        .ep_put_zcopy             = uct_scopy_ep_put_zcopy,
+        .ep_get_zcopy             = uct_scopy_ep_get_zcopy,
         .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
         .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
-        .ep_flush                 = uct_base_ep_flush,
+        .ep_flush                 = uct_scopy_ep_flush,
         .ep_fence                 = uct_sm_ep_fence,
         .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_knem_ep_t),
         .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_knem_ep_t),
+        .iface_flush              = uct_scopy_iface_flush,
         .iface_fence              = uct_sm_iface_fence,
-        .iface_progress_enable    = ucs_empty_function,
-        .iface_progress_disable   = ucs_empty_function,
-        .iface_progress           = ucs_empty_function_return_zero,
-        .iface_flush              = uct_base_iface_flush,
+        .iface_progress_enable    = uct_base_iface_progress_enable,
+        .iface_progress_disable   = uct_base_iface_progress_disable,
+        .iface_progress           = uct_scopy_iface_progress,
         .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_knem_iface_t),
         .iface_query              = uct_knem_iface_query,
         .iface_get_device_address = uct_sm_iface_get_device_address,
         .iface_get_address        = (uct_iface_get_address_func_t)ucs_empty_function_return_success,
         .iface_is_reachable       = uct_sm_iface_is_reachable
-    }
+    },
+    .ep_tx                        = uct_knem_ep_tx
 };
 
 static UCS_CLASS_INIT_FUNC(uct_knem_iface_t, uct_md_h md, uct_worker_h worker,
@@ -76,7 +77,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_knem_iface_t)
     /* No OP */
 }
 
-UCS_CLASS_DEFINE(uct_knem_iface_t, uct_base_iface_t);
+UCS_CLASS_DEFINE(uct_knem_iface_t, uct_scopy_iface_t);
 
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_knem_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,

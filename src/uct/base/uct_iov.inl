@@ -58,6 +58,24 @@ size_t uct_iov_total_length(const uct_iov_t *iov, size_t iov_cnt)
 }
 
 /**
+ * Calculates the flat offset in the UCT IOV array, which is the total data size
+ * before the position of the iterator.
+ *
+ * @param [in]     iov             Pointer to the array of UCT IOVs.
+ * @param [in]     iov_cnt         Number of the elements in the array of UCT IOVs.
+ * @param [in]     iov_iter        Pointer to the UCT IOV iterator.
+ *
+ * @return The flat offset in the UCT IOV array.
+ */
+static UCS_F_ALWAYS_INLINE
+size_t uct_iov_iter_flat_offset(const uct_iov_t *iov, size_t iov_cnt,
+                                const ucs_iov_iter_t *iov_iter)
+{
+    return ucs_iov_iter_flat_offset(iov, iov_cnt, iov_iter,
+                                    uct_iov_get_length);
+}
+
+/**
  * Fill IOVEC data structure by the data provided in the array of UCT IOVs.
  * The function avoids copying IOVs with zero length.
  *
