@@ -1027,7 +1027,6 @@ static void ucp_ep_config_calc_params(ucp_worker_h worker,
     ucp_md_index_t md_index;
     uct_md_attr_t *md_attr;
     uct_iface_attr_t *iface_attr;
-    ucp_worker_iface_t *wiface;
     int i;
 
     memset(params, 0, sizeof(*params));
@@ -1049,11 +1048,12 @@ static void ucp_ep_config_calc_params(ucp_worker_h worker,
                 params->reg_growth   += md_attr->reg_cost.growth;
                 params->reg_overhead += md_attr->reg_cost.overhead;
                 params->overhead     += iface_attr->overhead;
-                params->latency      += ucp_tl_iface_latency(context, iface_attr);
+                params->latency      += ucp_tl_iface_latency(context,
+                                                             &iface_attr->latency);
             }
         }
-        wiface      = ucp_worker_iface(worker, rsc_index);
-        params->bw += ucp_tl_iface_bandwidth(context, &wiface->attr.bandwidth);
+
+        params->bw += ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
     }
 }
 
@@ -1086,7 +1086,7 @@ static size_t ucp_ep_config_calc_rndv_thresh(ucp_worker_t *worker,
     eager_iface_attr = ucp_worker_iface_get_attr(worker, eager_rsc_index);
 
     /* RTS/RTR latency is used from lanes[0] */
-    rts_latency      = ucp_tl_iface_latency(context, eager_iface_attr);
+    rts_latency      = ucp_tl_iface_latency(context, &eager_iface_attr->latency);
 
     numerator = diff_percent * (rndv.reg_overhead * (1 + recv_reg_cost) +
                                 (2 * rts_latency) + (2 * rndv.latency) +
@@ -1327,11 +1327,10 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
         config->zcopy_auto_thresh = 1;
         for (it = 0; it < UCP_MAX_IOV; ++it) {
-            zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(it + 1,
-                                                               &md_attr->reg_cost,
-                                                               context,
-                                                               ucp_tl_iface_bandwidth(context,
-                                                                                      &iface_attr->bandwidth));
+            zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(
+                               it + 1, &md_attr->reg_cost, context,
+                               ucp_tl_iface_bandwidth(context,
+                                                      &iface_attr->bandwidth));
             zcopy_thresh = ucs_min(zcopy_thresh, adjust_min_val);
             config->sync_zcopy_thresh[it] = zcopy_thresh;
             config->zcopy_thresh[it]      = zcopy_thresh;

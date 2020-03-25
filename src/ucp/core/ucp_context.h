@@ -395,16 +395,17 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 }
 
 static UCS_F_ALWAYS_INLINE double
-ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
+ucp_tl_iface_latency(ucp_context_h context, const uct_linear_growth_t *latency)
 {
-    return iface_attr->latency.overhead +
-           (iface_attr->latency.growth * context->config.est_num_eps);
+    return latency->overhead +
+           (latency->growth * context->config.est_num_eps);
 }
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwidth)
 {
-    return bandwidth->dedicated + (bandwidth->shared / context->config.est_num_ppn);
+    return bandwidth->dedicated +
+           (bandwidth->shared / context->config.est_num_ppn);
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)

@@ -97,14 +97,6 @@ ucs_mpool_ops_t ucp_frag_mpool_ops = {
     .obj_cleanup   = ucs_empty_function
 };
 
-void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force);
-
-static UCS_F_ALWAYS_INLINE double
-ucp_worker_iface_latency(ucp_worker_h worker, ucp_worker_iface_t *wiface)
-{
-    return wiface->attr.latency.overhead +
-           wiface->attr.latency.growth * worker->context->config.est_num_eps;
-}
 
 static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker,
                                              ucp_worker_event_fd_op_t op,
@@ -640,57 +632,6 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV | uct_flags);
 }
 
-static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
-{
-    ucs_trace("deactivate iface %p force=%d acount=%u aifaces=%u",
-              wiface->iface, force, wiface->activate_count,
-              wiface->worker->num_active_ifaces);
-
-    if (!force) {
-        ucs_assert(wiface->activate_count > 0);
-        if (--wiface->activate_count > 0) {
-            return; /* not completely deactivated yet */
-        }
-        --wiface->worker->num_active_ifaces;
-    }
-
-    /* Avoid progress on the interface to reduce overhead */
-    uct_iface_progress_disable(wiface->iface,
-                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-
-    /* Remove from user wakeup */
-    ucp_worker_iface_disarm(wiface);
-
-    /* Set proxy active message handlers to count receives */
-    ucp_worker_set_am_handlers(wiface, 1);
-
-    /* Prepare for next receive event */
-    ucp_worker_iface_check_events(wiface, force);
-}
-
-void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface)
-{
-    ucs_trace_func("iface=%p", wiface->iface);
-
-    UCS_ASYNC_BLOCK(&wiface->worker->async);
-
-    /* This function may be called from progress thread (such as when processing
-     * wireup messages), so ask UCT to be thread-safe.
-     */
-    ucp_worker_iface_activate(wiface, UCT_PROGRESS_THREAD_SAFE);
-
-    UCS_ASYNC_UNBLOCK(&wiface->worker->async);
-}
-
-void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface)
-{
-    ucs_trace_func("iface=%p", wiface->iface);
-
-    UCS_ASYNC_BLOCK(&wiface->worker->async);
-    ucp_worker_iface_deactivate(wiface, 0);
-    UCS_ASYNC_UNBLOCK(&wiface->worker->async);
-}
-
 /*
  * If active messages were received by am proxy handler, activate the interface.
  * Otherwise, arm the interface event and make sure that when an active message
@@ -770,7 +711,7 @@ static unsigned ucp_worker_iface_check_events_progress(void *arg)
     return progress_count;
 }
 
-void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
+static void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
 {
     unsigned progress_count;
     ucs_status_t status;
@@ -796,6 +737,57 @@ void ucp_worker_iface_check_events(ucp_worker_iface_t *wiface, int force)
                                           ucp_worker_iface_check_events_progress,
                                           wiface, 0, &wiface->check_events_id);
     }
+}
+
+static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
+{
+    ucs_trace("deactivate iface %p force=%d acount=%u aifaces=%u",
+              wiface->iface, force, wiface->activate_count,
+              wiface->worker->num_active_ifaces);
+
+    if (!force) {
+        ucs_assert(wiface->activate_count > 0);
+        if (--wiface->activate_count > 0) {
+            return; /* not completely deactivated yet */
+        }
+        --wiface->worker->num_active_ifaces;
+    }
+
+    /* Avoid progress on the interface to reduce overhead */
+    uct_iface_progress_disable(wiface->iface,
+                               UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
+    /* Remove from user wakeup */
+    ucp_worker_iface_disarm(wiface);
+
+    /* Set proxy active message handlers to count receives */
+    ucp_worker_set_am_handlers(wiface, 1);
+
+    /* Prepare for next receive event */
+    ucp_worker_iface_check_events(wiface, force);
+}
+
+void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface)
+{
+    ucs_trace_func("iface=%p", wiface->iface);
+
+    UCS_ASYNC_BLOCK(&wiface->worker->async);
+
+    /* This function may be called from progress thread (such as when processing
+     * wireup messages), so ask UCT to be thread-safe.
+     */
+    ucp_worker_iface_activate(wiface, UCT_PROGRESS_THREAD_SAFE);
+
+    UCS_ASYNC_UNBLOCK(&wiface->worker->async);
+}
+
+void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface)
+{
+    ucs_trace_func("iface=%p", wiface->iface);
+
+    UCS_ASYNC_BLOCK(&wiface->worker->async);
+    ucp_worker_iface_deactivate(wiface, 0);
+    UCS_ASYNC_UNBLOCK(&wiface->worker->async);
 }
 
 void ucp_worker_iface_event(int fd, void *arg)
@@ -839,7 +831,7 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
 
     ucs_assert(wiface != NULL);
 
-    latency_cur = ucp_worker_iface_latency(worker, wiface);
+    latency_cur = ucp_tl_iface_latency(ctx, &wiface->attr.latency);
     bw_cur      = ucp_tl_iface_bandwidth(ctx, &wiface->attr.bandwidth);
 
     test_flags = wiface->attr.cap.flags & ~(UCT_IFACE_FLAG_CONNECT_TO_IFACE |
@@ -855,7 +847,7 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
             continue;
         }
 
-        latency_iter = ucp_worker_iface_latency(worker, if_iter);
+        latency_iter = ucp_tl_iface_latency(ctx, &if_iter->attr.latency);
 
         /* Check that another iface: */
         if (/* 1. Supports all capabilities of the target iface (at least),
