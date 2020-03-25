@@ -1009,7 +1009,7 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
 {
     uct_ud_send_skb_t *skb;
     int is_creq_crep = 0;
-    int ctl_flags = 0;
+    int ctl_flags    = 0;
 
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
         skb = uct_ud_ep_prepare_creq(ep);

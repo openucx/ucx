@@ -146,7 +146,7 @@ static uint16_t uct_ud_mlx5_ep_send_ctl(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *s
     /* copy IOV from descriptor to WQE */
     dptr = UCS_PTR_BYTE_OFFSET(ctrl, wqe_size);
     for (iov_index = 0; iov_index < iovcnt; ++iov_index) {
-        if (!iov[iov_index].length) {
+        if (iov[iov_index].length == 0) {
             continue;
         }
 

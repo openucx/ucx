@@ -73,7 +73,7 @@ uct_ud_verbs_post_send(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
     int UCS_V_UNUSED ret;
 
     if ((send_flags & IBV_SEND_SIGNALED) ||
-        (iface->super.tx.unsignaled >= UCT_UD_TX_MODERATION - 1)) {
+        (iface->super.tx.unsignaled >= (UCT_UD_TX_MODERATION - 1))) {
         wr->send_flags             = send_flags | IBV_SEND_SIGNALED;
         wr->wr_id                  = iface->super.tx.unsignaled;
         iface->super.tx.unsignaled = 0;
@@ -140,7 +140,7 @@ uct_ud_verbs_ep_send_ctl(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
         send_flags |= IBV_SEND_SOLICITED;
     }
     if (flags & UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED) {
-        send_flags |= IBV_EXP_SEND_SIGNALED;
+        send_flags |= IBV_SEND_SIGNALED;
     }
 
     /* copy iov array */
