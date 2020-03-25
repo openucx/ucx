@@ -42,6 +42,7 @@ public:
 
         m_e1->connect(0, *m_e2, 0);
         m_e2->connect(0, *m_e1, 0);
+        flush();
     }
 
     typedef struct pending_send_request {
@@ -122,7 +123,6 @@ public:
             req->countdown ++;
             n_pending--;
             req->active = 0;
-            //ucs_warn("dispatched %p idx %d total %d", req->ep, req->id, req->countdown);
         }
         return status;
     }
@@ -200,7 +200,8 @@ protected:
 int test_uct_pending::n_pending = 0;
 int test_uct_pending::n_purge   = 0;
 
-void install_handler_sync_or_async(uct_iface_t *iface, uint8_t id, uct_am_callback_t cb, void *arg)
+void install_handler_sync_or_async(uct_iface_t *iface, uint8_t id,
+                                   uct_am_callback_t cb, void *arg)
 {
     ucs_status_t status;
     uct_iface_attr_t attr;
@@ -577,3 +578,130 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_fairness,
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_pending);
+
+class test_uct_pending_ooo : public test_uct_pending {
+public:
+    struct am_completion_t {
+        uct_completion_t uct;
+        uct_ep_h         ep;
+    };
+
+    test_uct_pending_ooo() {
+        modify_config("RC_TX_QUEUE_LEN", "32", true);
+        modify_config("UD_TX_QUEUE_LEN", "128", true);
+        modify_config("RC_FC_ENABLE", "n", true);
+    }
+
+    pending_send_request_t* pending_alloc_short() {
+        pending_send_request_t *req = new pending_send_request_t();
+        req->ep                     = m_e1->ep(0);
+        req->uct.func               = pending_send_short_op;
+        return req;
+    }
+
+    static ucs_status_t am_handler_check_rx_order(void *arg, void *data,
+                                                  size_t length, unsigned flags) {
+        volatile bool *comp_received = (volatile bool*)arg;
+        uint64_t hdr                 = *(uint64_t*)data;
+
+        /* We expect that message sent from pending callback will arrive
+         * before the one sent from the completion callback. */
+        if (hdr == m_pending_hdr) {
+            m_pend_received = true;
+            EXPECT_FALSE(*comp_received);
+        } else if (hdr == m_comp_hdr) {
+            *comp_received = true;
+            EXPECT_TRUE(m_pend_received);
+        } else {
+            EXPECT_EQ(m_am_hdr, hdr);
+        }
+
+        return UCS_OK;
+    }
+
+    static ucs_status_t pending_send_short_op(uct_pending_req_t *self) {
+        pending_send_request_t *req = ucs_container_of(self,
+                                                       pending_send_request_t,
+                                                       uct);
+
+        return uct_ep_am_short(req->ep, AM_ID, m_pending_hdr, NULL, 0);
+    }
+
+    static void completion_cb(uct_completion_t *self, ucs_status_t c_status) {
+        am_completion_t *comp = ucs_container_of(self, am_completion_t, uct);
+
+        EXPECT_UCS_OK(c_status);
+
+        ucs_status_t status = uct_ep_am_short(comp->ep, AM_ID, m_comp_hdr,
+                                              NULL, 0);
+        EXPECT_TRUE(!UCS_STATUS_IS_ERR(status) ||
+                    (status == UCS_ERR_NO_RESOURCE));
+    }
+
+protected:
+    static const uint64_t m_am_hdr;
+    static const uint64_t m_pending_hdr;
+    static const uint64_t m_comp_hdr;
+    static const uint8_t  AM_ID;
+    static bool m_pend_received;
+};
+
+bool test_uct_pending_ooo::m_pend_received         = false;
+const uint64_t test_uct_pending_ooo::m_am_hdr      = 0x0ul;
+const uint64_t test_uct_pending_ooo::m_pending_hdr = 0x1ul;
+const uint64_t test_uct_pending_ooo::m_comp_hdr    = 0x2ul;
+const uint8_t test_uct_pending_ooo::AM_ID          = 10;
+
+/* Check that pending requests are processed before the sends from
+ * completion callbacks */
+UCS_TEST_SKIP_COND_P(test_uct_pending_ooo, send_ooo_with_comp,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_AM_ZCOPY |
+                                 UCT_IFACE_FLAG_PENDING))
+{
+    initialize();
+
+    bool comp_received = false;
+    m_pend_received    = false;
+
+    install_handler_sync_or_async(m_e2->iface(), AM_ID,
+                                  am_handler_check_rx_order, &comp_received);
+
+    mapped_buffer sendbuf(32, 0, *m_e1);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                            sendbuf.memh(), 1);
+    am_completion_t comp;
+    comp.uct.func        = completion_cb;
+    comp.uct.count       = 1;
+    comp.ep              = m_e1->ep(0);
+    ucs_status_t status  = uct_ep_am_zcopy(m_e1->ep(0), AM_ID, &m_am_hdr,
+                                           sizeof(m_am_hdr), iov, iovcnt, 0,
+                                           &comp.uct);
+    ASSERT_FALSE(UCS_STATUS_IS_ERR(status));
+
+    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(2);
+    do {
+        status = uct_ep_am_short(m_e1->ep(0), AM_ID, m_am_hdr, NULL, 0);
+    } while (!UCS_STATUS_IS_ERR(status) && (ucs_get_time() < loop_end_limit));
+
+    if (!UCS_STATUS_IS_ERR(status)) {
+        /* got here due to reaching the time limit in the above loop.
+         * couldn't add a request to pending. all sends were successful. */
+        UCS_TEST_MESSAGE << "Can't create out-of-order in the given time.";
+        return;
+    }
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+    pending_send_request_t *req = pending_alloc_short();
+    status                      = uct_ep_pending_add(m_e1->ep(0), &req->uct, 0);
+    EXPECT_EQ(UCS_OK, status);
+
+    wait_for_flag(&m_pend_received);
+
+    pending_delete(req);
+
+    flush();
+}
+
+
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_pending_ooo);
