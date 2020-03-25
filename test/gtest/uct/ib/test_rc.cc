@@ -159,17 +159,7 @@ public:
 #if ENABLE_STATS
         stats_activate();
 #endif
-        // Create entities with tag offload parameters, so we could test TAG API
-        // if supported by the HW.
-        m_e1 = uct_test::create_entity(NULL, NULL, NULL, NULL);
-        m_entities.push_back(m_e1);
-
-        check_skip_test();
-
-        m_e2 = uct_test::create_entity(NULL, NULL, NULL, NULL);
-        m_entities.push_back(m_e2);
-
-        connect();
+        test_rc::init();
     }
 
 #if ENABLE_STATS

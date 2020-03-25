@@ -63,7 +63,8 @@ public:
 
         uct_test::init();
 
-        entity *sender = uct_test::create_entity(unexp_eager, unexp_rndv,
+        entity *sender = uct_test::create_entity(0ul, NULL, unexp_eager,
+                                                 unexp_rndv,
                                                  reinterpret_cast<void*>(this),
                                                  reinterpret_cast<void*>(this));
         m_entities.push_back(sender);
@@ -73,7 +74,8 @@ public:
         if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
             sender->connect(0, *sender, 0);
         } else {
-            entity *receiver = uct_test::create_entity(unexp_eager, unexp_rndv,
+            entity *receiver = uct_test::create_entity(0ul, NULL, unexp_eager,
+                                                       unexp_rndv,
                                                        reinterpret_cast<void*>(this),
                                                        reinterpret_cast<void*>(this));
             m_entities.push_back(receiver);
@@ -1028,12 +1030,12 @@ void test_tag_mp_xrq::init()
 
     uct_test::init();
 
-    entity *sender = uct_test::create_entity(unexp_eager, unexp_rndv,
+    entity *sender = uct_test::create_entity(0ul, NULL, unexp_eager, unexp_rndv,
                                              reinterpret_cast<void*>(this),
                                              reinterpret_cast<void*>(this));
     m_entities.push_back(sender);
 
-    entity *receiver = uct_test::create_entity(unexp_eager, unexp_rndv,
+    entity *receiver = uct_test::create_entity(0ul, NULL, unexp_eager, unexp_rndv,
                                                reinterpret_cast<void*>(this),
                                                reinterpret_cast<void*>(this));
     m_entities.push_back(receiver);
