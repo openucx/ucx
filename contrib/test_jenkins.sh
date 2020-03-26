@@ -1027,6 +1027,7 @@ run_mpi_tests() {
 		$MAKEP installcheck # check whether installation is valid (it compiles examples at least)
 
 		MPIRUN="mpirun \
+				--bind-to none \
 				-x UCX_ERROR_SIGNALS \
 				-x UCX_HANDLE_ERRORS \
 				-mca pml ob1 \
