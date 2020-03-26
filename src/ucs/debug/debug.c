@@ -166,9 +166,9 @@ const char *ucs_signal_names[] = {
     UCS_SYS_SIGNAME(PWR),
 #endif
     UCS_SYS_SIGNAME(SYS),
-#if __linux__
+#if defined __linux__
     [SIGSYS + 1] = NULL
-#elif __FreeBSD__
+#elif defined __FreeBSD__
     [SIGRTMIN] = NULL
 #else
 #error "Port me"
