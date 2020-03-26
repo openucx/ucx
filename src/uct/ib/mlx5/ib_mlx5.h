@@ -103,7 +103,7 @@ struct mlx5_grh_av {
 
 #endif
 
-#if !(HAVE_MLX5_WQE_CTRL_SOLICITED)
+#if !(HAVE_DECL_MLX5_WQE_CTRL_SOLICITED)
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
