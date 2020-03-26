@@ -48,19 +48,39 @@ enum {
         uct_mm_md_mapper_call(md, _func, ## __VA_ARGS__); \
     })
 
+/* AIMD (additive increase/multiplicative decrease) algorithm adopted for FIFO
+ * polling mechanism to adjust FIFO polling window.
+ * - FIFO window is increased if the number of completed RX operations during
+ *   the current iface progress call reaches FIFO window size and previous iface
+ *   progress call was able to fully consume FIFO window (protection against
+ *   impacting ping-pong pattern where handling of > 1 RX operation should not
+ *   be expected).
+ * - FIFO window is decreased if the number of completed RX operations during
+ *   the current iface progress call does not reach FIFO window size.
+ * See https://en.wikipedia.org/wiki/Additive_increase/multiplicative_decrease
+ * for more information about original AIMD algorithm used for congestion
+ * avoidance. */
+#define UCT_MM_IFACE_FIFO_MIN_POLL              1 /* Minimal FIFO window size */
+#define UCT_MM_IFACE_FIFO_MAX_POLL             16 /* Default value for FIFO maximal
+                                                   * window size */
+#define UCT_MM_IFACE_FIFO_AI_VALUE              1 /* FIFO window += AI value */
+#define UCT_MM_IFACE_FIFO_MD_FACTOR             2 /* FIFO window /= MD factor */
+
 
 /**
  * MM interface configuration
  */
 typedef struct uct_mm_iface_config {
     uct_sm_iface_config_t    super;
-    size_t                   seg_size;        /* Size of the receive
-                                               * descriptor (for payload) */
-    unsigned                 fifo_size;       /* Size of the receive FIFO */
+    size_t                   seg_size;            /* Size of the receive
+                                                   * descriptor (for payload) */
+    unsigned                 fifo_size;           /* Size of the receive FIFO */
+    size_t                   fifo_max_poll;       /* Maximal RX completions to pick
+                                                   * during RX poll */
     double                   release_fifo_factor; /* Tail index update frequency */
-    ucs_ternary_value_t      hugetlb_mode;    /* Enable using huge pages for
-                                               * shared memory buffers */
-    unsigned                 fifo_elem_size;  /* Size of the FIFO element size */
+    ucs_ternary_value_t      hugetlb_mode;        /* Enable using huge pages for
+                                                   * shared memory buffers */
+    unsigned                 fifo_elem_size;      /* Size of the FIFO element size */
     uct_iface_mpool_config_t mp;
 } uct_mm_iface_config_t;
 
@@ -151,11 +171,17 @@ typedef struct uct_mm_iface {
                                               /* shared_mem starts */
     void                    *recv_fifo_elems; /* pointer to the first fifo element
                                                  in the receive fifo */
+    uct_mm_fifo_element_t   *read_index_elem;
     uint64_t                read_index;       /* actual reading location */
 
     uint8_t                 fifo_shift;       /* = log2(fifo_size) */
     unsigned                fifo_mask;        /* = 2^fifo_shift - 1 */
     uint64_t                fifo_release_factor_mask;
+
+    unsigned                fifo_poll_count;     /* How much RX operations can be polled
+                                                  * during an iface progress call */
+    int                     fifo_prev_wnd_cons;  /* Was FIFO window size fully consumed by
+                                                  * the previous call to iface progress */
 
     ucs_mpool_t             recv_desc_mp;
     uct_mm_recv_desc_t      *last_recv_desc;  /* next receive descriptor to use */
@@ -170,6 +196,7 @@ typedef struct uct_mm_iface {
         unsigned            fifo_size;
         unsigned            fifo_elem_size;
         unsigned            seg_size;         /* size of the receive descriptor (for payload)*/
+        unsigned            fifo_max_poll;
     } config;
 } uct_mm_iface_t;
 
@@ -240,9 +267,6 @@ void uct_mm_iface_release_desc(uct_recv_desc_t *self, void *desc);
 
 
 ucs_status_t uct_mm_flush();
-
-
-unsigned uct_mm_iface_progress(void *arg);
 
 
 #endif
