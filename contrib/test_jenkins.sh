@@ -1250,8 +1250,8 @@ run_coverity() {
 		cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
 		cov_build="$WORKSPACE/$cov_build_id"
 		rm -rf $cov_build
-		cov-build   --dir $cov_build $MAKEP all
-		cov-analyze $COV_OPT --security --concurrency --dir $cov_build
+		cov-build --dir $cov_build $MAKEP all
+		cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
 		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 		rc=$(($rc+$nerrors))
 
