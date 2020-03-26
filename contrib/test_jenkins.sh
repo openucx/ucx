@@ -64,6 +64,8 @@ num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
 [ -z $num_cpus ] && num_cpus=1
 parallel_jobs=4
 [ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
+num_pinned_threads=$(taskset -pc $$ | awk -F': ' '{print $2}' | perl -lne 's/-/../g; @a=(eval); print scalar(@a)')
+[ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
 
 MAKE="make"
 MAKEP="make -j${parallel_jobs}"
