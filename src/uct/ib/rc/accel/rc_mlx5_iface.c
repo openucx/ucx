@@ -49,7 +49,7 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
 
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops;
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
     .name = "mlx5",
     .num_counters = UCT_RC_MLX5_IFACE_STAT_LAST,

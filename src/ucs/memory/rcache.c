@@ -48,7 +48,7 @@ typedef struct ucs_rcache_inv_entry {
 } ucs_rcache_inv_entry_t;
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucs_rcache_stats_class = {
     .name = "rcache",
     .num_counters = UCS_RCACHE_STAT_LAST,

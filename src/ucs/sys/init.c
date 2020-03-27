@@ -79,7 +79,7 @@ static void UCS_F_CTOR ucs_init()
     ucs_global_opts_init();
     ucs_cpu_init();
     ucs_log_init();
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     ucs_stats_init();
 #endif
     ucs_memtrack_init();
@@ -97,7 +97,7 @@ static void UCS_F_DTOR ucs_cleanup(void)
     ucs_profile_global_cleanup();
     ucs_debug_cleanup(0);
     ucs_memtrack_cleanup();
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     ucs_stats_cleanup();
 #endif
     ucs_log_cleanup();

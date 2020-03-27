@@ -192,7 +192,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
     {NULL}
 };
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_md_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_MD_STAT_LAST,

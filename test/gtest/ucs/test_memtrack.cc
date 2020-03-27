@@ -19,7 +19,7 @@ extern "C" {
 #include <limits>
 
 
-#if ENABLE_MEMTRACK
+#ifdef ENABLE_MEMTRACK
 
 class test_memtrack : public ucs::test {
 protected:

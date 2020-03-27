@@ -173,7 +173,7 @@ static inline ucs_frag_list_ooo_type_t
 ucs_frag_list_insert(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
                      ucs_frag_list_sn_t sn)
 {
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     ucs_frag_list_ooo_type_t ret;
 
     if (UCS_FRAG_LIST_SN_CMP(sn, >, head->head_sn)) {
@@ -194,7 +194,7 @@ ucs_frag_list_insert(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
     }
 
     /* return either dup or slow */
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     ret = ucs_frag_list_insert_slow(head, elem, sn);
     UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAP_OUT, 
                              ret != UCS_FRAG_LIST_INSERT_DUP ? head->list_count : 0);

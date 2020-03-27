@@ -565,7 +565,7 @@ UCS_TEST_P(test_ucp_tag_offload_status, check_offload_status)
 
 UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload_status)
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 class test_ucp_tag_offload_stats : public test_ucp_tag_offload_multi {
 public:

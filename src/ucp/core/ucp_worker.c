@@ -39,7 +39,7 @@ typedef enum ucp_worker_event_fd_op {
     UCP_WORKER_EPFD_OP_DEL
 } ucp_worker_event_fd_op_t;
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
     .name           = "tag_offload",
     .num_counters   = UCP_WORKER_STAT_TAG_OFFLOAD_LAST,
