@@ -160,8 +160,8 @@ public:
             }
         }
         freeifaddrs(ifaddrs);
-        UCS_TEST_SKIP_R("No interface for testing");
-    }
+            UCS_TEST_SKIP_R("No interface for testing");
+        }
 
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type)
     {
@@ -448,43 +448,37 @@ public:
     }
 
     void one_sided_disconnect(entity &e) {
-        void *dreq = e.disconnect_nb();
-        if (dreq == NULL) {
-            return;
-        }
-
-        ASSERT_EQ(UCS_INPROGRESS, UCS_PTR_STATUS(dreq));
-
-        ucs_status_t status;
-        ucs_time_t loop_end_limit = ucs_time_from_sec(10.0) + ucs_get_time();
-        do {
+        ucp_test_base::entity::closing_ep_t ep = e.disconnect_nb();
+        ucs_time_t deadline                    = ucs_time_from_sec(10.0) +
+                                                 ucs_get_time();
+        while (!e.is_ep_closed(ep) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
                      async progress is implemented. */
             progress();
-            status = ucp_request_check_status(dreq);
-            if (status != UCS_INPROGRESS) {
-                break;
-            }
-        } while (ucs_get_time() < loop_end_limit);
-        EXPECT_EQ(UCS_OK, status);
-        ucp_request_release(dreq);
+        };
+
+        e.closed_ep_free(ep);
     }
 
     void concurrent_disconnect() {
-        std::vector<void *> reqs;
-
         ASSERT_EQ(2ul, entities().size());
         ASSERT_EQ(1, sender().get_num_workers());
         ASSERT_EQ(1, sender().get_num_eps());
         ASSERT_EQ(1, receiver().get_num_workers());
         ASSERT_EQ(1, receiver().get_num_eps());
 
-        reqs.push_back(sender().disconnect_nb());
-        reqs.push_back(receiver().disconnect_nb());
-        while (!reqs.empty()) {
-            wait(reqs.back());
-            reqs.pop_back();
+        ucp_test_base::entity::closing_ep_t sender_ep   = sender().disconnect_nb();
+        ucp_test_base::entity::closing_ep_t receiver_ep = receiver().disconnect_nb();
+
+        while (!sender().is_ep_closed(sender_ep)) {
+            progress();
         }
+        sender().closed_ep_free(sender_ep);
+
+        while (!receiver().is_ep_closed(receiver_ep)) {
+            progress();
+        }
+        receiver().closed_ep_free(receiver_ep);
     }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
@@ -659,6 +653,54 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
 
+class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
+public:
+    void init() {
+        test_ucp_sockaddr::init();
+
+        ucp_ep_params_t params;
+        params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER       |
+                                 UCP_EP_PARAM_FIELD_USER_DATA;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb  = err_handler_cb;
+        params.err_handler.arg = NULL;
+        params.user_data       = &receiver();
+
+        receiver().add_server_ep_params(params, true);
+    }
+
+    static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
+        test_ucp_sockaddr::err_handler_cb(arg, ep, status);
+        entity *e = reinterpret_cast<entity *>(arg);
+        e->disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
+    }
+
+private:
+    ucp_ep_params_t m_server_ep_params;
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, empty,
+                     no_close_protocol()) {
+    listen_and_communicate(false, 0);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, s2c,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_S2C);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, c2s,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, bidi,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
+UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_destroy_ep_on_err)
 
 class test_ucp_sockaddr_with_wakeup : public test_ucp_sockaddr {
 public:

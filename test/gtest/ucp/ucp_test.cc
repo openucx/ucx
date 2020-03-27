@@ -174,7 +174,7 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
     wait(request, worker_index);
 }
 
-void ucp_test::disconnect(const entity& e) {
+void ucp_test::disconnect(entity& e) {
     bool has_failed_entity = false;
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
          !has_failed_entity && (iter != entities().end()); ++iter) {
@@ -191,13 +191,7 @@ void ucp_test::disconnect(const entity& e) {
             close_mode = UCP_EP_CLOSE_MODE_FLUSH;
         }
 
-        for (int j = 0; j < e.get_num_eps(i); j++) {
-            void *dreq = e.disconnect_nb(i, j, close_mode);
-            if (!UCS_PTR_IS_PTR(dreq)) {
-                ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
-            }
-            wait(dreq, i);
-        }
+        e.close_all_eps(*this, i, close_mode);
     }
 }
 
@@ -583,13 +577,54 @@ void ucp_test_base::entity::fence(int worker_index) const {
     ASSERT_UCS_OK(status);
 }
 
-void* ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
-                                           enum ucp_ep_close_mode mode) const {
+ucp_test_base::entity::closing_ep_t
+ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
+                                     enum ucp_ep_close_mode mode) {
     ucp_ep_h ep = revoke_ep(worker_index, ep_index);
     if (ep == NULL) {
-        return NULL;
+        return m_closing_eps.end();
     }
-    return ucp_ep_close_nb(ep, mode);
+
+    void *req = ucp_ep_close_nb(ep, mode);
+    if (UCS_PTR_IS_PTR(req)) {
+        m_closing_eps.push_back(std::make_pair(ep, req));
+        return --m_closing_eps.end();
+    }
+
+    ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    return m_closing_eps.end();
+}
+
+bool ucp_test_base::entity::is_ep_closed(const closing_ep_t &closing_ep) const {
+    return (closing_ep == m_closing_eps.end()) ||
+           (ucp_request_check_status(closing_ep->second) != UCS_INPROGRESS);
+}
+
+void ucp_test_base::entity::closed_ep_free(closing_ep_t &closing_ep) {
+    ASSERT_TRUE(is_ep_closed(closing_ep));
+    if (closing_ep != m_closing_eps.end()) {
+        ucp_request_free(closing_ep->second);
+        m_closing_eps.erase(closing_ep);
+    }
+}
+
+void ucp_test_base::entity::close_all_eps(const ucp_test &test, int worker_idx,
+                                          enum ucp_ep_close_mode mode) {
+    for (int j = 0; j < get_num_eps(worker_idx); j++) {
+        closing_ep_t ep = disconnect_nb(worker_idx, j, mode);
+        while (!is_ep_closed(ep)) {
+            test.progress(worker_idx);
+        }
+        closed_ep_free(ep);
+    }
+
+    while (!m_closing_eps.empty()) {
+        closing_ep_t ep = m_closing_eps.begin();
+        while (!is_ep_closed(ep)) {
+            progress(worker_idx);
+        }
+        closed_ep_free(ep);
+    }
 }
 
 void ucp_test_base::entity::destroy_worker(int worker_index) {
@@ -651,8 +686,7 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
         UCS_TEST_ABORT("invalid test parameter");
     }
 
-    m_server_ep_params.reset(new ucp_ep_params_t(ep_params),
-                             ucs::deleter<ucp_ep_params_t>);
+    add_server_ep_params(ep_params);
 
     ucs_status_t status;
     {
@@ -791,6 +825,73 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     } while (status == UCS_INPROGRESS);
     EXPECT_EQ(UCS_OK, status);
     ucp_request_release(req);
+}
+
+template <typename T>
+static void set_server_ep_param(T &param, bool is_set, const T &new_param,
+                                bool override, const char *param_name) {
+
+    if (!is_set || override) {
+        if (is_set) {
+            UCS_TEST_MESSAGE << "overriding " << param_name << " for server ep";
+        }
+
+        param = new_param;
+    } else {
+        UCS_TEST_MESSAGE << "ignoring " << param_name << " for server ep";
+    }
+}
+
+void ucp_test_base::entity::add_server_ep_params(const ucp_ep_params_t &params,
+                                                 bool override) {
+
+    ASSERT_FALSE(params.field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS) <<
+                "worker address is not acceptable for server ep";
+    ASSERT_FALSE(params.field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR) <<
+                "sock addr is not acceptable for server ep";
+
+    if (!m_server_ep_params) {
+        m_server_ep_params.reset(new ucp_ep_params_t(params),
+                                 ucs::deleter<ucp_ep_params_t>);
+        return;
+    }
+
+    if (params.field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
+        set_server_ep_param(m_server_ep_params.get()->err_mode,
+                            m_server_ep_params.get()->field_mask &
+                            UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE,
+                            params.err_mode, override, "err mode");
+    }
+
+    if (params.field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
+        set_server_ep_param(m_server_ep_params.get()->err_handler,
+                            m_server_ep_params.get()->field_mask &
+                            UCP_EP_PARAM_FIELD_ERR_HANDLER,
+                            params.err_handler, override, "err handler");
+    }
+
+    if (params.field_mask & UCP_EP_PARAM_FIELD_USER_DATA) {
+        set_server_ep_param(m_server_ep_params.get()->user_data,
+                            m_server_ep_params.get()->field_mask &
+                            UCP_EP_PARAM_FIELD_USER_DATA,
+                            params.user_data, override, "user data");
+    }
+
+    if (params.field_mask & UCP_EP_PARAM_FIELD_FLAGS) {
+        set_server_ep_param(m_server_ep_params.get()->flags,
+                            m_server_ep_params.get()->field_mask &
+                            UCP_EP_PARAM_FIELD_FLAGS,
+                            params.flags, override, "flags");
+    }
+
+    if (params.field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
+        set_server_ep_param(m_server_ep_params.get()->conn_request,
+                            m_server_ep_params.get()->field_mask &
+                            UCP_EP_PARAM_FIELD_CONN_REQUEST,
+                            params.conn_request, override, "conn request");
+    }
+
+    m_server_ep_params.get()->field_mask |= params.field_mask;
 }
 
 ucp_test::mapped_buffer::mapped_buffer(size_t size, const entity& entity,

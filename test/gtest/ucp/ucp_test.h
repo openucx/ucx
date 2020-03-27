@@ -34,6 +34,8 @@ struct ucp_test_param {
     int                       thread_type;
 };
 
+class ucp_test; // forward declaration
+
 class ucp_test_base : public ucs::test_base {
 public:
     enum {
@@ -46,8 +48,11 @@ public:
         typedef std::vector<ucs::handle<ucp_ep_h, entity *> > ep_vec_t;
         typedef std::vector<std::pair<ucs::handle<ucp_worker_h>,
                                       ep_vec_t> > worker_vec_t;
+        typedef std::deque<std::pair<ucp_ep_h, void *> > closing_eps_t;
 
     public:
+        typedef closing_eps_t::iterator            closing_ep_t;
+
         typedef enum {
             LISTEN_CB_EP,       /* User's callback accepts ucp_ep_h */
             LISTEN_CB_CONN,     /* User's callback accepts ucp_conn_request_h */
@@ -76,8 +81,15 @@ public:
 
         void fence(int worker_index = 0) const;
 
-        void* disconnect_nb(int worker_index = 0, int ep_index = 0,
-                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH) const;
+        closing_ep_t disconnect_nb(int worker_index = 0, int ep_index = 0,
+                                   enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
+
+        bool is_ep_closed(const closing_ep_t &closing_ep) const;
+
+        void closed_ep_free(closing_ep_t &closing_ep);
+
+        void close_all_eps(const ucp_test &test, int wirker_idx,
+                           enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
 
         void destroy_worker(int worker_index = 0);
 
@@ -116,11 +128,14 @@ public:
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
+        void add_server_ep_params(const ucp_ep_params_t &params, bool override = false);
+
     protected:
         ucs::handle<ucp_context_h>      m_ucph;
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
         std::queue<ucp_conn_request_h>  m_conn_reqs;
+        std::deque<std::pair<ucp_ep_h, void *> > m_closing_eps;
         size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
         ucs::handle<ucp_ep_params_t*>   m_server_ep_params;
@@ -199,7 +214,7 @@ protected:
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
     void flush_worker(const entity &e, int worker_index = 0);
-    void disconnect(const entity& entity);
+    void disconnect(entity& entity);
     void wait(void *req, int worker_index = 0);
     void set_ucp_config(ucp_config_t *config);
     int max_connections();
