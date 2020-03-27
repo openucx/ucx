@@ -161,6 +161,7 @@ gtest_SOURCES = \
 	ucs/test_strided_alloc.cc \
 	ucs/test_string.cc \
 	ucs/test_sys.cc \
+	ucs/test_topo.cc \
 	ucs/test_sock.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
