@@ -138,6 +138,7 @@ static int ucp_flush_check_completion(ucp_request_t *req)
     }
 
     ucs_trace_req("flush req %p completed", req);
+    req->flags |= UCP_REQUEST_FLAG_COMPLETED;
     ucp_ep_flush_slow_path_remove(req);
     req->send.flush.flushed_cb(req);
     return 1;

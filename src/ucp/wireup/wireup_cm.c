@@ -422,11 +422,17 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_BLOCK(async);
     ucs_assert(req->flags & UCP_REQUEST_FLAG_COMPLETED);
     if (req->status == UCS_OK) {
+        ucs_assert(ucp_ep_is_cm_local_connected(ucp_ep));
         ucp_ep_cm_disconnect_cm_lane(ucp_ep);
-    } else {
-        /* make sure the EP is disconnected form err handler */
-        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FAILED);
+    } else if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         ucs_assert(!ucp_ep_is_cm_local_connected(ucp_ep));
+    } else {
+        /* ucp_ep_close(force) is called from err callback which was invoked
+           on remote connection reset
+           TODO: remove this case when IB flush cancel is fixed (#4743),
+                 moving QP to err state should move UCP EP to error state,
+                 then ucp_worker_set_ep_failed disconnects CM lane */
+        ucs_assert(req->status == UCS_ERR_CANCELED);
     }
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
@@ -502,8 +508,6 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     ucs_trace("ep %p: got remote disconnect, cm_ep %p", ucp_ep, uct_cm_ep);
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == uct_cm_ep);
 
-    ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
-
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
     if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
@@ -516,6 +520,8 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
         close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
     }
+
+    ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
 
     UCS_ASYNC_UNBLOCK(async);
     return 1;
