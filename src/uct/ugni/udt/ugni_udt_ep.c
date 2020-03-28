@@ -35,14 +35,15 @@ ucs_status_t uct_ugni_udt_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
 }
 
 ucs_arbiter_cb_result_t uct_ugni_udt_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                        ucs_arbiter_group_t *group,
                                                         ucs_arbiter_elem_t *elem,
                                                         void *arg)
 {
     ucs_arbiter_cb_result_t result;
-    uct_ugni_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_ugni_ep_t, arb_group);
+    uct_ugni_ep_t *ep = ucs_container_of(group, uct_ugni_ep_t, arb_group);
     uct_ugni_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ugni_iface_t);
 
-    result = uct_ugni_ep_process_pending(arbiter, elem, arg);
+    result = uct_ugni_ep_process_pending(arbiter, group, elem, arg);
     if (UCS_ARBITER_CB_RESULT_REMOVE_ELEM == result) {
         uct_worker_progress_remove(iface->super.worker, &iface->super.prog);
     }
@@ -50,14 +51,15 @@ ucs_arbiter_cb_result_t uct_ugni_udt_ep_process_pending(ucs_arbiter_t *arbiter,
 }
 
 static ucs_arbiter_cb_result_t uct_ugni_udt_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                                ucs_arbiter_group_t *group,
                                                                 ucs_arbiter_elem_t *elem,
                                                                 void *arg)
 {
-    uct_ugni_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_ugni_ep_t, arb_group);
+    uct_ugni_ep_t *ep = ucs_container_of(group, uct_ugni_ep_t, arb_group);
     uct_ugni_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ugni_iface_t);
     ucs_arbiter_cb_result_t result;
 
-    result = uct_ugni_ep_abriter_purge_cb(arbiter, elem, arg);
+    result = uct_ugni_ep_abriter_purge_cb(arbiter, group, elem, arg);
     if (UCS_ARBITER_CB_RESULT_REMOVE_ELEM == result) {
         uct_worker_progress_remove(iface->super.worker, &iface->super.prog);
     }
