@@ -9,7 +9,6 @@
 #define UCS_MEMORY_TYPE_H_
 
 #include <ucs/sys/compiler_def.h>
-#include <ucs/sys/topo.h>
 
 BEGIN_C_DECLS
 
@@ -43,17 +42,6 @@ extern const char *ucs_memory_type_names[];
  * Array of string descriptions for each memory type
  */
 extern const char *ucs_memory_type_descs[];
-
-enum ucs_mem_info_field {
-    UCS_MEM_INFO_MEM_TYPE = UCS_BIT(0),
-    UCS_MEM_INFO_SYS_DEV  = UCS_BIT(1)
-};
-
-typedef struct ucs_mem_info {
-    uint64_t          field_mask;
-    ucs_memory_type_t mem_type;
-    ucs_sys_device_t  sys_dev;
-} ucs_mem_info_t;
 
 
 END_C_DECLS
