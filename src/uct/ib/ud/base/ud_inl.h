@@ -187,3 +187,14 @@ uct_ud_skb_bcopy(uct_ud_send_skb_t *skb, uct_pack_callback_t pack_cb, void *arg)
     skb->len = sizeof(skb->neth[0]) + payload_len;
     return payload_len;
 }
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_dispatch_comp(uct_ud_iface_t *iface, uct_completion_t *comp,
+                           ucs_status_t status)
+{
+    /* Avoid reordering with pending queue - if we have any pending requests,
+     * prevent send operations from the completion callback
+     */
+    uct_ud_iface_raise_pending_async_ev(iface);
+    uct_invoke_completion(comp, status);
+}

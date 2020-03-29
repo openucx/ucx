@@ -792,7 +792,8 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 
         if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
             ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_DISCONNECTED));
-            uct_invoke_completion(cdesc->comp, (ucs_status_t)skb->status);
+            uct_ud_iface_dispatch_comp(iface, cdesc->comp,
+                                       (ucs_status_t)skb->status);
         }
 
         if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ERR)) {
