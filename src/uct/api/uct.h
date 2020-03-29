@@ -21,6 +21,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/topo.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -1211,6 +1212,53 @@ struct uct_md_attr {
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
     ucs_cpu_set_t            local_cpus;    /**< Mask of CPUs near the resource */
 };
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief UCT MD memory attributes field mask
+ *
+ * The enumeration allows specifying which fields in @ref uct_md_mem_attr_t
+ * are present.
+ */
+enum uct_md_mem_attr_field {
+    UCT_MD_MEM_ATTR_MEM_TYPE = UCS_BIT(0),
+    UCT_MD_MEM_ATTR_SYS_DEV  = UCS_BIT(1)
+};
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief  Memory domain attributes.
+ *
+ * This structure defines the attributes of a memory pointer which may
+ * include memory type of the pointer, the system device that backs the
+ * pointer depending on the bit fields populated in field_mask
+ */
+typedef struct uct_md_mem_attr {
+    uint64_t          field_mask; /**< @ref uct_md_mem_attr_t */
+    ucs_memory_type_t mem_type;   /**< Is the type CPU memory or GPU memory, etc*/
+    ucs_sys_device_t  sys_dev;    /**< location of device pointer. eg: NUMA/GPU */
+} uct_md_mem_attr_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Query attributes of a given pointer
+ *
+ * Return attributes such as memory type, and system device for the
+ * given pointer of specific length. @ref uct_md_mem_attr_t
+ *
+ * @param [in]     md          Memory domain to allocate memory on.
+ * @param [in]     address     The address of the pointer. Must be non-NULL
+ * @param [in]     length      Indicates the range of memory starting from (address) to
+ *                             (address + length) bytes. Must be >0.
+ * @param [out]    mem_attr    If successful, filled with ptr attributes.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, const size_t length,
+		              uct_md_mem_attr_t *mem_attr);
 
 
 /**
