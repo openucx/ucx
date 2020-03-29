@@ -69,6 +69,7 @@ num_pinned_threads=$(nproc)
 
 MAKE="make"
 MAKEP="make -j${parallel_jobs}"
+export AUTOMAKE_JOBS=$parallel_jobs
 
 
 #
