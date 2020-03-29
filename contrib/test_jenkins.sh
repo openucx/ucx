@@ -64,9 +64,12 @@ num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
 [ -z $num_cpus ] && num_cpus=1
 parallel_jobs=4
 [ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
+num_pinned_threads=$(nproc)
+[ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
 
 MAKE="make"
 MAKEP="make -j${parallel_jobs}"
+export AUTOMAKE_JOBS=$parallel_jobs
 
 
 #
@@ -1248,8 +1251,8 @@ run_coverity() {
 		cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
 		cov_build="$WORKSPACE/$cov_build_id"
 		rm -rf $cov_build
-		cov-build   --dir $cov_build $MAKEP all
-		cov-analyze $COV_OPT --security --concurrency --dir $cov_build
+		cov-build --dir $cov_build $MAKEP all
+		cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
 		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 		rc=$(($rc+$nerrors))
 
