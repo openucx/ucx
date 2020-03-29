@@ -71,7 +71,7 @@ and run a simple client/server example:
 Documentation
 *************
 
-*  API doc: `HTML <http://openucx.github.io/ucx/api/v{VERSION}/html/index.html>`_ `PDF <http://openucx.github.io/ucx/api/v{VERSION}/ucx-v{VERSION}.pdf>`_
+*  API doc: `HTML <https://openucx.github.io/ucx/api/v{VERSION}/html/index.html>`_ `PDF <https://openucx.github.io/ucx/api/v{VERSION}/ucx-v{VERSION}.pdf>`_
 * `Examples <https://github.com/openucx/ucx/tree/v{VERSION}.x/test/examples>`_
 
 
@@ -80,9 +80,9 @@ Projects using UCX
 
 * `UCX-PY <https://ucx-py.readthedocs.io/en/latest>`_
 * `Dask <https://blog.dask.org/2019/06/09/ucx-dgx>`_
-* `SparkUCX <http://github.com/openucx/sparkucx>`_
+* `SparkUCX <https://github.com/openucx/sparkucx>`_
 * `NCCL <https://developer.nvidia.com/nccl>`_
-* `OpenMPI <http://www.open-mpi.org>`_
-* `MPICH <http://www.mpich.org>`_
+* `OpenMPI <https://www.open-mpi.org>`_
+* `MPICH <https://www.mpich.org>`_
 * `Charm++ <https://www.hpccharm.com>`_
-* `OSSS shmem <http://github.com/openshmem-org/osss-ucx>`_
+* `OSSS shmem <https://github.com/openshmem-org/osss-ucx>`_
