@@ -94,14 +94,14 @@ struct ucs_class {
 #define UCS_CLASS_INIT(_type, _obj, ...) \
     ({ \
         ucs_class_t *_cls = &_UCS_CLASS_DECL_NAME(_type); \
-        int _init_count = 1; \
+        int _init_counter = 1; \
         ucs_status_t __status; \
         \
         __status = _UCS_CLASS_INIT_NAME(_type)((_type*)(_obj), _cls, \
-                                             &_init_count, ## __VA_ARGS__); \
+                                             &_init_counter, ## __VA_ARGS__); \
         if (__status != UCS_OK) { \
             ucs_class_call_cleanup_chain(&_UCS_CLASS_DECL_NAME(_type), \
-                                         (_obj), _init_count); \
+                                         (_obj), _init_counter); \
         } \
         \
         (__status); \
