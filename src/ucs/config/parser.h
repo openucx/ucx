@@ -347,8 +347,7 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields);
  * @param opts           User-defined options structure to fill.
  * @param fields         Array of fields which define how to parse.
  * @param env_prefix     Prefix to add to all environment variables,
- *                       env_prefix may consist of base preifx and sub prefix
- *                       which are delimited by last "_" in a string.
+ *                       env_prefix may consist of multiple sub preifxes
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
  * @param ignore_errors  Whether to ignore parsing errors and continue parsing
  *                       other fields.
@@ -429,8 +428,7 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
  * that ensures that this is called once
  *
  * @param env_prefix     Environment variable prefix.
- *                       env_prefix may consist of base preifx and sub prefix
- *                       which are delimited by last "_" in a string.
+ *                       env_prefix may consist of multiple sub prefixex
  */
 
 void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix);
