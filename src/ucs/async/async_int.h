@@ -69,8 +69,8 @@ typedef struct ucs_async_ops {
     ucs_status_t (*modify_event_fd)(ucs_async_context_t *async, int event_fd,
                                     int events);
 
-    ucs_status_t (*add_timer)(ucs_async_context_t *async, int timer_id,
-                              ucs_time_t interval);
+    ucs_status_t (*add_timer)(ucs_async_context_t *async, ucs_time_t interval,
+                                int *timer_id_p);
     ucs_status_t (*remove_timer)(ucs_async_context_t *async, int timer_id);
 } ucs_async_ops_t;
 

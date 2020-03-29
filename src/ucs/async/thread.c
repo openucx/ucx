@@ -175,7 +175,7 @@ static ucs_status_t ucs_async_thread_start(ucs_async_thread_t **thread_p)
     thread->stop   = 0;
     thread->refcnt = 1;
 
-    status = ucs_timerq_init(&thread->timerq);
+    status = ucs_timerq_init(&thread->timerq, "async_thread_timer");
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -368,7 +368,7 @@ static void ucs_async_thread_mutex_unblock(ucs_async_context_t *async)
 }
 
 static ucs_status_t ucs_async_thread_add_timer(ucs_async_context_t *async,
-                                               int timer_id, ucs_time_t interval)
+                                               ucs_time_t interval, int *timer_id_p)
 {
     ucs_async_thread_t *thread;
     ucs_status_t status;
@@ -384,7 +384,7 @@ static ucs_status_t ucs_async_thread_add_timer(ucs_async_context_t *async,
         goto err;
     }
 
-    status = ucs_timerq_add(&thread->timerq, timer_id, interval);
+    status = ucs_timerq_add(&thread->timerq, interval, timer_id_p);
     if (status != UCS_OK) {
         goto err_stop;
     }
