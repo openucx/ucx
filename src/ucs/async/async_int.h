@@ -79,8 +79,8 @@ typedef ucs_status_t (*ucs_async_modify_event_fd_t)(ucs_async_context_t *async,
                                                     ucs_event_set_types_t events);
 
 typedef ucs_status_t (*ucs_async_add_timer_t)(ucs_async_context_t *async,
-                                              int timer_id,
-                                              ucs_time_t interval);
+                                              ucs_time_t interval,
+                                              int *timer_id_p);
 
 typedef ucs_status_t (*ucs_async_remove_timer_t)(ucs_async_context_t *async,
                                                  int timer_id);
