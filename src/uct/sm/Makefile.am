@@ -3,4 +3,4 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = cma knem mm
+SUBDIRS = scopy mm

@@ -37,13 +37,13 @@ typedef struct uct_ib_mlx5_dbrec_page {
 
 
 static ucs_status_t uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address,
-                                         size_t length, uint64_t access,
-                                         uct_ib_mem_t *ib_memh)
+                                        size_t length, uint64_t access_flags,
+                                        uct_ib_mem_t *ib_memh)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     ucs_status_t status;
 
-    status = uct_ib_reg_mr(md->pd, address, length, access, &memh->mr);
+    status = uct_ib_reg_mr(md->pd, address, length, access_flags, &memh->mr);
     if (status != UCS_OK) {
         return status;
     }
@@ -292,7 +292,7 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_atomic_key(uct_ib_md_t *ibmd,
 
 static ucs_status_t uct_ib_mlx5_devx_reg_multithreaded(uct_ib_md_t *ibmd,
                                                        void *address, size_t length,
-                                                       uint64_t access,
+                                                       uint64_t access_flags,
                                                        uct_ib_mem_t *ib_memh)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
@@ -321,7 +321,8 @@ static ucs_status_t uct_ib_mlx5_devx_reg_multithreaded(uct_ib_md_t *ibmd,
 
     ksm_data->mr_num = mr_num;
     status = uct_ib_md_handle_mr_list_multithreaded(ibmd, address, length,
-                                                    access, chunk, ksm_data->mrs);
+                                                    access_flags, chunk,
+                                                    ksm_data->mrs);
     if (status != UCS_OK) {
         goto err;
     }
@@ -435,7 +436,7 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .obj_cleanup   = NULL
 };
 
-static UCS_F_MAYBE_UNUSED ucs_status_t
+static ucs_status_t
 uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
                            const uct_ib_md_config_t *md_config, void *cap)
 {
@@ -625,12 +626,15 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ext_stride_num_range)) {
-        /* TODO: check if need to check for XRQ (not RQ) MP support */
         md->flags |= UCT_IB_MLX5_MD_FLAG_MP_RQ;
     }
 
     if (!UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, umr_modify_atomic_disabled)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, log_max_rmp) > 0) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_RMP;
     }
 
     status = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
@@ -688,7 +692,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    ucs_spinlock_init(&md->dbrec_lock);
+    ucs_recursive_spinlock_init(&md->dbrec_lock, 0);
     status = ucs_mpool_init(&md->dbrec_pool, 0,
                             sizeof(uct_ib_mlx5_dbrec_t), 0,
                             UCS_SYS_CACHE_LINE_SIZE,
@@ -737,9 +741,9 @@ void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
     mlx5dv_devx_umem_dereg(md->zero_mem);
     ucs_free(md->zero_buf);
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
-    status = ucs_spinlock_destroy(&md->dbrec_lock);
+    status = ucs_recursive_spinlock_destroy(&md->dbrec_lock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
 }
 
@@ -919,6 +923,11 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr)) {
         dev->atomic_arg_sizes = sizeof(uint64_t);
+
+#if HAVE_STRUCT_IBV_DEVICE_ATTR_EX_PCI_ATOMIC_CAPS
+        dev->pci_fadd_arg_sizes  = dev->dev_attr.pci_atomic_caps.fetch_add << 2;
+        dev->pci_cswap_arg_sizes = dev->dev_attr.pci_atomic_caps.compare_swap << 2;
+#endif
     }
 
     status = uct_ib_mlx5dv_check_dc(dev);

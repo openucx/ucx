@@ -35,11 +35,9 @@
 #    define IBV_TMH_NO_TAG                  IBV_EXP_TMH_NO_TAG
 #  endif
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
-#  define IBV_DEVICE_MP_MIN_NUM_STRIDES     8
 #else
 #  define IBV_TM_CAP_RC                     0
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  0
-#  define IBV_DEVICE_MP_MIN_NUM_STRIDES     0
 #endif
 
 #if HAVE_STRUCT_IBV_TM_CAPS_FLAGS
@@ -104,13 +102,6 @@
 
 UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(32)
 UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(64)
-
-typedef enum {
-    UCT_RC_MLX5_SRQ_TOPO_LIST,
-    UCT_RC_MLX5_SRQ_TOPO_CYCLIC,
-    UCT_RC_MLX5_SRQ_TOPO_AUTO,
-    UCT_RC_MLX5_SRQ_TOPO_LAST
-} uct_rc_mlx5_srq_topo_t;
 
 enum {
     UCT_RC_MLX5_IFACE_STAT_RX_INL_32,
@@ -431,6 +422,7 @@ typedef struct uct_rc_mlx5_iface_common {
     struct {
         uint8_t                        atomic_fence_flag;
         uint8_t                        put_fence_flag;
+        ucs_ternary_value_t            cyclic_srq_enable;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
@@ -445,10 +437,11 @@ typedef struct uct_rc_mlx5_iface_common_config {
         int                          enable;
         unsigned                     list_size;
         size_t                       seg_size;
+        ucs_ternary_value_t          mp_enable;
         size_t                       mp_num_strides;
     } tm;
     unsigned                         exp_backoff;
-    uct_rc_mlx5_srq_topo_t           srq_topo;
+    ucs_ternary_value_t              cyclic_srq_enable;
 } uct_rc_mlx5_iface_common_config_t;
 
 
@@ -669,6 +662,26 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
 }
 #endif
 
+#if HAVE_DEVX
+ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
+                                      const uct_rc_iface_common_config_t *config);
+
+void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_srq_t *srq);
+#else
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
+                         const uct_rc_iface_common_config_t *config)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static UCS_F_MAYBE_UNUSED void
+uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_srq_t *srq)
+{
+    ucs_bug("DevX SRQ cleanup has to be done only if DevX support is enabled");
+}
+#endif
+
 void uct_rc_mlx5_tag_cleanup(uct_rc_mlx5_iface_common_t *iface);
 
 ucs_status_t uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface);
@@ -712,6 +725,10 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_qp_attr_t *qp_attr,
                                  unsigned max_send_wr,
                                  uct_ib_mlx5_srq_t *srq);
+
+ucs_status_t
+uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
+                                 const uct_rc_iface_common_config_t *rc_config);
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq);
 

@@ -7,6 +7,7 @@
 #include "rc_mlx5.h"
 #include "rc_mlx5_common.h"
 
+#include <uct/base/uct_iov.inl>
 #include <uct/ib/mlx5/ib_mlx5.inl>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 
@@ -257,24 +258,24 @@ uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *iface)
 {
     uct_ib_mlx5_cq_t *cq = &iface->cq[UCT_IB_DIR_RX];
     struct mlx5_cqe64 *cqe;
-    unsigned index;
+    unsigned idx;
     uint8_t op_own;
 
     /* Prefetch the descriptor if it was scheduled */
     ucs_prefetch(iface->rx.pref_ptr);
 
-    index  = cq->cq_ci;
-    cqe    = uct_ib_mlx5_get_cqe(cq, index);
+    idx    = cq->cq_ci;
+    cqe    = uct_ib_mlx5_get_cqe(cq, idx);
     op_own = cqe->op_own;
 
-    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, index, cq->cq_length))) {
+    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, idx, cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
         uct_rc_mlx5_iface_check_rx_completion(iface, cqe);
         return NULL;
     }
 
-    cq->cq_ci = index + 1;
+    cq->cq_ci = idx + 1;
     return cqe; /* TODO optimize - let complier know cqe is not null */
 }
 
@@ -858,7 +859,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
 #if IBV_HW_TM
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
-                       uct_rc_mlx5_wqe_tm_seg_t *tmseg, int op, int index,
+                       uct_rc_mlx5_wqe_tm_seg_t *tmseg, int op, int tag_index,
                        uint32_t unexp_cnt, uint64_t tag, uint64_t mask,
                        unsigned tm_flags)
 {
@@ -870,7 +871,7 @@ uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
         return;
     }
 
-    tmseg->index = htons(index);
+    tmseg->index = htons(tag_index);
 
     if (op == UCT_RC_MLX5_TM_OPCODE_REMOVE) {
         return;
@@ -1050,7 +1051,7 @@ uct_rc_mlx5_iface_common_tag_recv(uct_rc_mlx5_iface_common_t *iface,
 
     dptr = uct_ib_mlx5_txwq_wrap_none(txwq, (char*)txwq->curr + ctrl_size);
     uct_ib_mlx5_set_data_seg(dptr, iov->buffer, iov->length,
-                             ((uct_ib_mem_t *)(iov->memh))->lkey);
+                             uct_ib_memh_get_lkey(iov->memh));
 
     uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, sizeof(*dptr),
                                          UCT_RC_MLX5_TM_OPCODE_APPEND, next_idx,
@@ -1080,11 +1081,11 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
                                          uct_tag_context_t *ctx, int force)
 {
     uct_rc_mlx5_ctx_priv_t   *priv = uct_rc_mlx5_ctx_priv(ctx);
-    uint16_t                 index = priv->tag_handle;
+    uint16_t                 idx   = priv->tag_handle;
     uct_rc_mlx5_tag_entry_t  *tag_entry;
     unsigned flags;
 
-    tag_entry = &iface->tm.list[index];
+    tag_entry = &iface->tm.list[idx];
 
     if (ucs_likely(force)) {
         flags = UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT;
@@ -1096,7 +1097,7 @@ uct_rc_mlx5_iface_common_tag_recv_cancel(uct_rc_mlx5_iface_common_t *iface,
     }
 
     uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, 0,
-                                         UCT_RC_MLX5_TM_OPCODE_REMOVE, index,
+                                         UCT_RC_MLX5_TM_OPCODE_REMOVE, idx,
                                          iface->tm.unexpected_cnt, 0ul, 0ul,
                                          flags);
 

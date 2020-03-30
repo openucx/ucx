@@ -411,8 +411,9 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
     return wireup_ep->aux_rsc_index;
 }
 
-ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
-                                   ucp_rsc_index_t rsc_index, int connect_aux,
+ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
+                                   ucp_rsc_index_t rsc_index,
+                                   unsigned path_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address)
 {
     ucp_wireup_ep_t *wireup_ep     = ucp_wireup_ep(uct_ep);
@@ -424,7 +425,9 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
 
     ucs_assert(wireup_ep != NULL);
 
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                               UCT_EP_PARAM_FIELD_PATH_INDEX;
+    uct_ep_params.path_index = path_index;
     uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
     status = uct_ep_create(&uct_ep_params, &next_ep);
     if (status != UCS_OK) {
@@ -441,7 +444,7 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {
-        status = ucp_wireup_ep_connect_aux(wireup_ep, ucp_ep_init_flags,
+        status = ucp_wireup_ep_connect_aux(wireup_ep, ep_init_flags,
                                            remote_address);
         if (status != UCS_OK) {
             goto err_destroy_next_ep;
@@ -484,7 +487,7 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 
     if (found_supported_tl) {
         status = ucp_address_pack(worker, NULL, tl_bitmap,
-                                  UCP_ADDRESS_PACK_FLAG_ALL, NULL,
+                                  UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
                                   address_length_p, (void**)address_p);
     } else {
         ucs_error("no supported sockaddr auxiliary transports found for %s", dev_name);
@@ -519,7 +522,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
     dev_name = pack_args->dev_name;
 
     status = ucp_address_pack(worker, NULL, UINT64_MAX,
-                              UCP_ADDRESS_PACK_FLAG_ALL, NULL,
+                              UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
                               &address_length, (void**)&worker_address);
     if (status != UCS_OK) {
         goto err;

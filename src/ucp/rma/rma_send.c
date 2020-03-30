@@ -214,7 +214,7 @@ ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
     }
 
     /* Fast path for a single short message */
-    if (ucs_likely((ssize_t)length <= (int)rkey->cache.max_put_short)) {
+    if (ucs_likely((ssize_t)length <= rkey->cache.max_put_short)) {
         status = UCS_PROFILE_CALL(uct_ep_put_short, ep->uct_eps[rkey->cache.rma_lane],
                                   buffer, length, remote_addr, rkey->cache.rma_rkey);
         if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {

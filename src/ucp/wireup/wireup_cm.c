@@ -173,8 +173,10 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
         tl_bitmap |= UCS_BIT(rsc_idx);
         if (ucp_worker_is_tl_p2p(worker, rsc_idx)) {
-            tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+            tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                                      UCT_EP_PARAM_FIELD_PATH_INDEX;
             tl_ep_params.iface      = ucp_worker_iface(worker, rsc_idx)->iface;
+            tl_ep_params.path_index = ucp_ep_get_path_index(ep, lane_idx);
             status = uct_ep_create(&tl_ep_params, &tl_ep);
             if (status != UCS_OK) {
                 /* coverity[leaked_storage] */
@@ -237,8 +239,12 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_cm_client_connect_progress_arg_t *progress_arg = arg;
     ucp_ep_h ucp_ep                                    = progress_arg->ucp_ep;
     ucp_worker_h worker                                = ucp_ep->worker;
+    ucp_context_h context                              = worker->context;
     ucp_wireup_ep_t *wireup_ep;
     ucp_unpacked_address_t addr;
+    uint64_t tl_bitmap;
+    ucp_rsc_index_t dev_index;
+    ucp_rsc_index_t rsc_index;
     unsigned addr_idx;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
@@ -269,8 +275,23 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
-    status = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags, &addr,
-                                   addr_indices);
+
+    /* extend tl_bitmap to all TLs on the same device as initial configuration
+       since TL can be changed due to server side configuration */
+    tl_bitmap = ucp_ep_get_tl_bitmap(ucp_ep);
+    ucs_assert(tl_bitmap != 0);
+    rsc_index = ucs_ffs64(tl_bitmap);
+    dev_index = context->tl_rscs[rsc_index].dev_index;
+
+#if ENABLE_ASSERT
+    ucs_for_each_bit(rsc_index, tl_bitmap) {
+        ucs_assert(dev_index == context->tl_rscs[rsc_index].dev_index);
+    }
+#endif
+
+    tl_bitmap = ucp_context_dev_idx_tl_bitmap(context, dev_index);
+    status    = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
+                                      tl_bitmap, &addr, addr_indices);
     if (status != UCS_OK) {
         goto out_unblock;
     }
@@ -588,7 +609,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucs_assert_always(ucs_test_all_flags(conn_req_args->field_mask,
                                          (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
                                           UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
-                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME)));
+                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
+                                          UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR)));
 
     conn_request = conn_req_args->conn_request;
     remote_data  = conn_req_args->remote_data;
@@ -602,7 +624,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                   remote_data->conn_priv_data_length,
                                   "ucp_conn_request_h");
     if (ucp_conn_request == NULL) {
-        ucs_error("failed to allocate connect request, rejecting connection request %p on TL listener %p",
+        ucs_error("failed to allocate connect request, rejecting connection "
+                  "request %p on TL listener %p",
                   conn_request, listener);
         goto err_reject;
     }
@@ -610,7 +633,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_conn_request->remote_dev_addr = ucs_malloc(remote_data->dev_addr_length,
                                                    "remote device address");
     if (ucp_conn_request->remote_dev_addr == NULL) {
-        ucs_error("failed to allocate device address, rejecting connection request %p on TL listener %p",
+        ucs_error("failed to allocate device address, rejecting connection "
+                  "request %p on TL listener %p",
                   conn_request, listener);
         goto err_free_ucp_conn_request;
     }
@@ -618,6 +642,13 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_conn_request->listener     = ucp_listener;
     ucp_conn_request->uct.listener = listener;
     ucp_conn_request->uct_req      = conn_request;
+
+    status = ucs_sockaddr_copy((struct sockaddr *)&ucp_conn_request->client_address,
+                               conn_req_args->client_address.addr);
+    if (status != UCS_OK) {
+        goto err_free_remote_dev_addr;
+    }
+
     ucs_strncpy_safe(ucp_conn_request->dev_name, conn_req_args->dev_name,
                      UCT_DEVICE_NAME_MAX);
     memcpy(ucp_conn_request->remote_dev_addr, remote_data->dev_addr,
@@ -635,6 +666,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_worker_signal_internal(ucp_listener->worker);
     return;
 
+err_free_remote_dev_addr:
+    ucs_free(ucp_conn_request->remote_dev_addr);
 err_free_ucp_conn_request:
     ucs_free(ucp_conn_request);
 err_reject:
@@ -651,11 +684,14 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                                   ucp_conn_request_h conn_request,
                                   ucp_ep_h *ep_p)
 {
+    uint64_t tl_bitmap = ucp_context_dev_tl_bitmap(worker->context,
+                                                   conn_request->dev_name);
     ucp_ep_h ep;
     ucs_status_t status;
 
     /* Create and connect TL part */
-    status = ucp_ep_create_to_worker_addr(worker, remote_addr, ep_init_flags,
+    status = ucp_ep_create_to_worker_addr(worker, tl_bitmap, remote_addr,
+                                          ep_init_flags,
                                           "conn_request on uct_listener", &ep);
     if (status != UCS_OK) {
         return status;
@@ -745,7 +781,7 @@ out:
 /*
  * The main thread progress part of connection establishment on server side
  */
-static unsigned ucp_cm_server_connect_progress(void *arg)
+static unsigned ucp_cm_server_conn_notify_progress(void *arg)
 {
     ucp_ep_h ucp_ep = arg;
 
@@ -758,23 +794,23 @@ static unsigned ucp_cm_server_connect_progress(void *arg)
 /*
  * Async callback on a server side which notifies that client is connected.
  */
-static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
-                                     const uct_cm_ep_server_connect_args_t
-                                     *connect_args)
+static void ucp_cm_server_conn_notify_cb(uct_ep_h ep, void *arg,
+                                         const uct_cm_ep_server_conn_notify_args_t
+                                         *notify_args)
 {
     ucp_ep_h ucp_ep            = arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
     ucp_lane_index_t cm_lane;
     ucs_status_t status;
 
-    ucs_assert_always(connect_args->field_mask &
-                      UCT_CM_EP_SERVER_CONNECT_ARGS_FIELD_STATUS);
+    ucs_assert_always(notify_args->field_mask &
+                      UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS);
 
-    status = connect_args->status;
+    status = notify_args->status;
 
     if (status == UCS_OK) {
         uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                          ucp_cm_server_connect_progress,
+                                          ucp_cm_server_conn_notify_progress,
                                           ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                           &prog_id);
         ucp_worker_signal_internal(ucp_ep->worker);
@@ -787,7 +823,7 @@ static void ucp_cm_server_connect_cb(uct_ep_h ep, void *arg,
          * 3) TODO: remove (1) when the EP can be moved to err state to block
          *          new send operations but still able to flush transport lanes */
         uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                          ucp_cm_server_connect_progress,
+                                          ucp_cm_server_conn_notify_progress,
                                           ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                           &prog_id);
         ucp_cm_disconnect_cb(ep, ucp_ep);
@@ -836,7 +872,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     uct_ep_params.conn_request               = conn_request->uct_req;
     uct_ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
     uct_ep_params.sockaddr_pack_cb           = ucp_cm_server_priv_pack_cb;
-    uct_ep_params.sockaddr_connect_cb.server = ucp_cm_server_connect_cb;
+    uct_ep_params.sockaddr_connect_cb.server = ucp_cm_server_conn_notify_cb;
     uct_ep_params.disconnect_cb              = ucp_cm_disconnect_cb;
 
     status = uct_ep_create(&uct_ep_params, &uct_ep);
@@ -889,7 +925,7 @@ static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
     if ((elem->cb == ucp_ep_cm_disconnect_progress)        ||
         (elem->cb == ucp_ep_cm_remote_disconnect_progress) ||
         (elem->cb == ucp_cm_client_connect_progress)       ||
-        (elem->cb == ucp_cm_server_connect_progress)) {
+        (elem->cb == ucp_cm_server_conn_notify_progress)) {
         return arg == elem->arg;
     } else {
         return 0;

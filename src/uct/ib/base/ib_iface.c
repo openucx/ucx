@@ -207,9 +207,8 @@ int uct_ib_iface_is_ib(uct_ib_iface_t *iface)
 static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_ib_iface_recv_desc_t *desc = obj;
-    uct_ib_mem_t *ib_memh = memh;
 
-    desc->lkey = ib_memh->lkey;
+    desc->lkey = uct_ib_memh_get_lkey(memh);
 }
 
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
@@ -911,7 +910,8 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
     if (config->num_paths == UCS_ULUNITS_AUTO) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
-            iface->num_paths = uct_ib_device_get_roce_lag_level(dev);
+            iface->num_paths =
+                    uct_ib_device_get_roce_lag_level(dev, iface->config.port_num);
         } else {
             /* IB - number of paths is LMC level */
             ucs_assert(iface->path_bits_count > 0);

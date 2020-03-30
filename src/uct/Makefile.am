@@ -29,11 +29,14 @@ noinst_HEADERS = \
 	base/uct_log.h \
 	base/uct_worker.h \
 	base/uct_cm.h \
+	base/uct_iov.inl \
 	sm/base/sm_ep.h \
 	sm/base/sm_iface.h \
 	sm/mm/base/mm_iface.h \
 	sm/mm/base/mm_ep.h \
 	sm/mm/base/mm_md.h \
+	sm/scopy/base/scopy_iface.h \
+	sm/scopy/base/scopy_ep.h \
 	sm/self/self.h \
 	tcp/tcp.h \
 	tcp/tcp_sockcm.h \
@@ -59,6 +62,8 @@ libuct_la_SOURCES = \
 	sm/mm/base/mm_md.c \
 	sm/mm/posix/mm_posix.c \
 	sm/mm/sysv/mm_sysv.c \
+	sm/scopy/base/scopy_iface.c \
+	sm/scopy/base/scopy_ep.c \
 	sm/self/self.c \
 	tcp/tcp_ep.c \
 	tcp/tcp_iface.c \

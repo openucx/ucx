@@ -244,9 +244,8 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
                                        uct_mem_h memh)
 {
     uct_ud_send_skb_t *skb = obj;
-    uct_ib_mem_t *ib_memh = memh;
 
-    skb->lkey  = ib_memh->lkey;
+    skb->lkey  = uct_ib_memh_get_lkey(memh);
     skb->flags = 0;
 }
 
@@ -417,8 +416,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     init_attr->rx_priv_len = sizeof(uct_ud_recv_skb_t) -
                              sizeof(uct_ib_iface_recv_desc_t);
     init_attr->rx_hdr_len  = UCT_IB_GRH_LEN + sizeof(uct_ud_neth_t);
-    init_attr->tx_cq_len   = config->super.tx.queue_len;
-    init_attr->rx_cq_len   = config->super.rx.queue_len;
     init_attr->seg_size    = ucs_min(mtu, config->super.seg_size);
     init_attr->qp_type     = IBV_QPT_UD;
 
@@ -439,6 +436,15 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
     self->config.check_grh_dgid  = config->dgid_check &&
                                    uct_ib_iface_is_roce(&self->super);
+
+    if ((config->max_window < UCT_UD_CA_MIN_WINDOW) ||
+        (config->max_window > UCT_UD_CA_MAX_WINDOW)) {
+        ucs_error("Max congestion avoidance window should be >= %d and <= %d (%d)",
+                  UCT_UD_CA_MIN_WINDOW, UCT_UD_CA_MAX_WINDOW, config->max_window);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    self->config.max_window = config->max_window;
 
     if (config->slow_timer_tick <= 0.) {
         ucs_error("The slow timer tick should be > 0 (%lf)",
@@ -575,6 +581,13 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      "Enable checking destination GID for incoming packets of Ethernet network.\n"
      "Mismatched packets are silently dropped.",
      ucs_offsetof(uct_ud_iface_config_t, dgid_check), UCS_CONFIG_TYPE_BOOL},
+
+    {"MAX_WINDOW", UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
+     "Max congestion avoidance window. Should be >= "
+      UCS_PP_MAKE_STRING(UCT_UD_CA_MIN_WINDOW) " and <= "
+      UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
+     ucs_offsetof(uct_ud_iface_config_t, max_window), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 

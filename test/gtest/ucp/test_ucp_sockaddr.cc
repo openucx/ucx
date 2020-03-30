@@ -109,7 +109,9 @@ public:
 
     static ucs_log_func_rc_t
     detect_error_logger(const char *file, unsigned line, const char *function,
-                        ucs_log_level_t level, const char *message, va_list ap)
+                        ucs_log_level_t level,
+                        const ucs_log_component_config_t *comp_conf,
+                        const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             static std::vector<std::string> stop_list;
@@ -598,11 +600,17 @@ UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_bidi) {
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
+    /* save testing address */
+    ucs::sock_addr_storage test_addr(m_test_addr);
     m_test_addr.reset_to_any();
 
     UCS_TEST_MESSAGE << "Testing " << m_test_addr.to_str();
 
     start_listener(cb_type());
+    /* get the actual port which was selected by listener */
+    test_addr.set_port(m_test_addr.get_port());
+    /* restore address */
+    m_test_addr = test_addr;
     connect_and_send_recv(false, SEND_DIRECTION_C2S);
 }
 

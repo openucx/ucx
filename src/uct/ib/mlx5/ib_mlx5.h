@@ -103,7 +103,7 @@ struct mlx5_grh_av {
 
 #endif
 
-#if !(HAVE_MLX5_WQE_CTRL_SOLICITED)
+#if !(HAVE_DECL_MLX5_WQE_CTRL_SOLICITED)
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
@@ -125,9 +125,6 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_PUT_MAX_SHORT(_av_size) \
     (UCT_IB_MLX5_AM_MAX_SHORT(_av_size) - sizeof(struct mlx5_wqe_raddr_seg))
 
-#define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
-                                  sizeof(struct mlx5_wqe_data_seg))
-
 #define UCT_IB_MLX5_XRQ_MIN_UWQ_POST 33
 
 #define UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(_devx_objs) \
@@ -147,9 +144,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_MP_RQ            = UCS_BIT(3),
     /* Device supports creation of indirect MR with atomics access rights */
     UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS = UCS_BIT(4),
+    /* Device supports RMP to create SRQ for AM */
+    UCT_IB_MLX5_MD_FLAG_RMP              = UCS_BIT(5),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 5,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 6,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -172,7 +171,7 @@ typedef struct uct_ib_mlx5_md {
     uct_ib_md_t              super;
     uint32_t                 flags;
     ucs_mpool_t              dbrec_pool;
-    ucs_spinlock_t           dbrec_lock;
+    ucs_recursive_spinlock_t dbrec_lock;
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
 
@@ -225,7 +224,6 @@ typedef enum {
 /* Shared receive queue */
 typedef struct uct_ib_mlx5_srq {
     uct_ib_mlx5_obj_type_t             type;
-    int                                topo;       /* linked-list or cyclic */
     uint32_t                           srq_num;
     void                               *buf;
     volatile uint32_t                  *db;
@@ -528,13 +526,14 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
 /**
  * Initialize srq structure.
  */
-ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                                  size_t sg_byte_count, int num_sge);
+ucs_status_t
+uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
+                           size_t sg_byte_count, int num_sge);
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
                                uint32_t tail, size_t sg_byte_count, int num_sge);
 
-void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
+void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 
 /**
  * DEVX UAR API
@@ -601,9 +600,9 @@ static inline uct_ib_mlx5_dbrec_t *uct_ib_mlx5_get_dbrec(uct_ib_mlx5_md_t *md)
 {
     uct_ib_mlx5_dbrec_t *dbrec;
 
-    ucs_spin_lock(&md->dbrec_lock);
+    ucs_recursive_spin_lock(&md->dbrec_lock);
     dbrec = (uct_ib_mlx5_dbrec_t *)ucs_mpool_get_inline(&md->dbrec_pool);
-    ucs_spin_unlock(&md->dbrec_lock);
+    ucs_recursive_spin_unlock(&md->dbrec_lock);
     if (dbrec != NULL) {
         dbrec->md = md;
     }
@@ -615,9 +614,9 @@ static inline void uct_ib_mlx5_put_dbrec(uct_ib_mlx5_dbrec_t *dbrec)
 {
     uct_ib_mlx5_md_t *md = dbrec->md;
 
-    ucs_spin_lock(&md->dbrec_lock);
+    ucs_recursive_spin_lock(&md->dbrec_lock);
     ucs_mpool_put_inline(dbrec);
-    ucs_spin_unlock(&md->dbrec_lock);
+    ucs_recursive_spin_unlock(&md->dbrec_lock);
 }
 
 #endif

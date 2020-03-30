@@ -104,7 +104,7 @@ static const char* time_units_str[] = {
 static int read_profile_data(const char *file_name, profile_data_t *data)
 {
     uint32_t thread_idx;
-    struct stat stat;
+    struct stat stt;
     const void *ptr;
     int ret, fd;
 
@@ -115,14 +115,14 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
         goto out;
     }
 
-    ret = fstat(fd, &stat);
+    ret = fstat(fd, &stt);
     if (ret < 0) {
         print_error("fstat(%s) failed: %m", file_name);
         goto out_close;
     }
 
-    data->length = stat.st_size;
-    data->mem    = mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    data->length = stt.st_size;
+    data->mem    = mmap(NULL, stt.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (data->mem == MAP_FAILED) {
         print_error("mmap(%s, length=%zd) failed: %m", file_name,
                     data->length);
@@ -179,30 +179,30 @@ static void release_profile_data(profile_data_t *data)
 
 static int parse_thread_list(int *thread_list, const char *str)
 {
-    char *dup, *p, *saveptr, *tailptr;
+    char *str_dup, *p, *saveptr, *tailptr;
     int thread_idx;
-    unsigned index;
+    unsigned idx;
     int ret;
 
-    dup = strdup(str);
-    if (dup == NULL) {
+    str_dup = strdup(str);
+    if (str_dup == NULL) {
         ret = -ENOMEM;
         print_error("failed to duplicate thread list string");
         goto out;
     }
 
-    index = 0;
+    idx = 0;
 
     /* the special value 'all' will create an empty thread list, which means
      * use all threads
      */
-    if (!strcasecmp(dup, "all")) {
+    if (!strcasecmp(str_dup, "all")) {
         goto out_terminate;
     }
 
-    p = strtok_r(dup, ",", &saveptr);
+    p = strtok_r(str_dup, ",", &saveptr);
     while (p != NULL) {
-        if (index >= MAX_THREADS) {
+        if (idx >= MAX_THREADS) {
             ret = -EINVAL;
             print_error("up to %d threads are supported", MAX_THREADS);
             goto out;
@@ -221,11 +221,11 @@ static int parse_thread_list(int *thread_list, const char *str)
             goto out;
         }
 
-        thread_list[index++] = thread_idx;
+        thread_list[idx++] = thread_idx;
         p = strtok_r(NULL, ",", &saveptr);
     }
 
-    if (index == 0) {
+    if (idx == 0) {
         ret = -EINVAL;
         print_error("empty thread list");
         goto out;
@@ -233,9 +233,9 @@ static int parse_thread_list(int *thread_list, const char *str)
 
 out_terminate:
     ret                = 0;
-    thread_list[index] = -1; /* terminator */
+    thread_list[idx] = -1; /* terminator */
 out:
-    free(dup);
+    free(str_dup);
     return ret;
 }
 

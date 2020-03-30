@@ -106,8 +106,14 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
     ucs_memory_cpu_load_fence();
 
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num), uct_rc_mlx5_ep_t);
-    ucs_assert(ep != NULL);
+    ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
+                        uct_rc_mlx5_ep_t);
+    /* TODO: temporary workaround for uct_ep_flush(cancel) case when EP has been
+     *       destroyed but successful CQE was not polled out from the CQ */
+    if (ucs_unlikely(ep == NULL)) {
+        return 1;
+    }
+
     hw_ci = ntohs(cqe->wqe_counter);
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface, ep,
                    qp_num, hw_ci);
@@ -350,37 +356,45 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
                                               const uct_iface_params_t *params,
                                               uct_ib_iface_init_attr_t *init_attr)
 {
-#if IBV_HW_TM
     uct_ib_mlx5_md_t *md              = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+#if IBV_HW_TM
     uct_ib_device_t UCS_V_UNUSED *dev = &md->super.dev;
     struct ibv_tmh tmh;
     int mtu;
+    int tm_params;
     ucs_status_t status;
+#endif
 
-    iface->tm.enabled = mlx5_config->tm.enable && (init_attr->flags &
-                                                   UCT_IB_TM_SUPPORTED);
+    iface->config.cyclic_srq_enable = mlx5_config->cyclic_srq_enable;
+
+#if IBV_HW_TM
+    /* Both eager and rndv callbacks should be provided for
+     * tag matching support */
+    tm_params = ucs_test_all_flags(params->field_mask,
+                                   UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB |
+                                   UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB);
+
+    iface->tm.enabled = mlx5_config->tm.enable && tm_params &&
+                        (init_attr->flags & UCT_IB_TM_SUPPORTED);
     if (!iface->tm.enabled) {
         goto out_tm_disabled;
     }
 
-    /* Compile-time check that THM and uct_rc_mlx5_hdr_t are wire-compatible for the
-     * case of no-tag protocol.
+    /* Compile-time check that THM and uct_rc_mlx5_hdr_t are wire-compatible
+     * for the case of no-tag protocol.
      */
-    UCS_STATIC_ASSERT(sizeof(tmh.opcode) == sizeof(((uct_rc_mlx5_hdr_t*)0)->tmh_opcode));
+    UCS_STATIC_ASSERT(sizeof(tmh.opcode) ==
+                      sizeof(((uct_rc_mlx5_hdr_t*)0)->tmh_opcode));
     UCS_STATIC_ASSERT(ucs_offsetof(struct ibv_tmh, opcode) ==
                       ucs_offsetof(uct_rc_mlx5_hdr_t, tmh_opcode));
 
     UCS_STATIC_ASSERT(sizeof(uct_rc_mlx5_ctx_priv_t) <= UCT_TAG_PRIV_LEN);
 
-    iface->tm.eager_unexp.cb  = (params->field_mask &
-                                 UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB) ?
-                                params->eager_cb : NULL;
+    iface->tm.eager_unexp.cb  = params->eager_cb;
+    iface->tm.rndv_unexp.cb   = params->rndv_cb;
     iface->tm.eager_unexp.arg = (params->field_mask &
                                  UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG) ?
                                 params->eager_arg : NULL;
-    iface->tm.rndv_unexp.cb   = (params->field_mask &
-                                 UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB) ?
-                                params->rndv_cb : NULL;
     iface->tm.rndv_unexp.arg  = (params->field_mask &
                                  UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG) ?
                                 params->rndv_arg : NULL;
@@ -402,23 +416,24 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
     iface->tm.mp.num_strides = 1;
     iface->tm.max_bcopy      = init_attr->seg_size;
 
+    if (mlx5_config->tm.mp_enable == UCS_NO) {
+        return UCS_OK;
+    }
+
     /* Multi-Packet XRQ initialization */
     if (!ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_MP_RQ       |
                                        UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ |
                                        UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP)) {
-        return UCS_OK;
+        goto out_mp_disabled;
     }
 
-    if ((mlx5_config->tm.mp_num_strides == UCS_ULUNITS_AUTO) ||
-        (mlx5_config->tm.mp_num_strides == 1)) {
-        return UCS_OK;
-        /* TODO: make the following to be default when MP support is added to UCP
-        iface->tm.mp.num_strides = UCS_BIT(IBV_DEVICE_MP_MIN_LOG_NUM_STRIDES); */
-    } else if ((mlx5_config->tm.mp_num_strides != 8) &&
-               (mlx5_config->tm.mp_num_strides != 16)){
-        ucs_error("invalid value of TM_NUM_STRIDES: %lu, must be 1,8 or 16",
+    if ((mlx5_config->tm.mp_num_strides != 8) &&
+        (mlx5_config->tm.mp_num_strides != 16)) {
+        ucs_error("invalid value of TM_MP_NUM_STRIDES: %lu, must be 8 or 16",
                   mlx5_config->tm.mp_num_strides);
         return UCS_ERR_INVALID_PARAM;
+    } else {
+        iface->tm.mp.num_strides = mlx5_config->tm.mp_num_strides;
     }
 
     status = uct_ib_device_mtu(params->mode.device.dev_name, tl_md, &mtu);
@@ -427,8 +442,7 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
         return UCS_ERR_IO_ERROR;
     }
 
-    iface->tm.mp.num_strides = mlx5_config->tm.mp_num_strides;
-    init_attr->seg_size      = mtu;
+    init_attr->seg_size = mtu;
 
     return UCS_OK;
 
@@ -440,6 +454,17 @@ out_tm_disabled:
     init_attr->seg_size      = rc_config->super.seg_size;
     iface->tm.mp.num_strides = 1;
 
+#if IBV_HW_TM
+out_mp_disabled:
+#endif
+    if (mlx5_config->tm.mp_enable == UCS_YES) {
+        ucs_error("%s: MP SRQ is requested, but not supported: (md flags 0x%x), "
+                  "hardware tag-matching is %s",
+                  uct_ib_device_name(&md->super.dev), md->flags,
+                  iface->tm.enabled ? "enabled" : "disabled");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     return UCS_OK;
 }
 
@@ -447,8 +472,10 @@ static ucs_status_t
 uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
                           const uct_rc_iface_common_config_t *rc_config)
 {
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_md_t *md = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
+    uct_rc_mlx5_iface_common_t *iface    = ucs_derived_of(rc_iface,
+                                                          uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md                 = ucs_derived_of(rc_iface->super.super.md,
+                                                          uct_ib_mlx5_md_t);
     struct ibv_srq_init_attr_ex srq_attr = {};
     ucs_status_t status;
 
@@ -462,7 +489,7 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
         }
 
         if (status != UCS_OK) {
-            goto err;
+            return status;
         }
 
         iface->super.progress = uct_rc_mlx5_iface_progress_tm;
@@ -470,28 +497,21 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
     }
 
     /* MP XRQ is supported with HW TM only */
-    ucs_assert(iface->tm.mp.num_strides == 1);
+    ucs_assert(!UCT_RC_MLX5_MP_ENABLED(iface));
 
-    status = uct_rc_iface_init_rx(rc_iface, rc_config, &iface->rx.srq.verbs.srq);
-    if (status != UCS_OK) {
-        goto err;
+    if (ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_RMP |
+                                      UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ)) {
+        status = uct_rc_mlx5_devx_init_rx(iface, rc_config);
+    } else {
+        status = uct_rc_mlx5_common_iface_init_rx(iface, rc_config);
     }
 
-    status = uct_ib_mlx5_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
-                                  iface->super.super.config.seg_size,
-                                  iface->tm.mp.num_strides);
     if (status != UCS_OK) {
-        goto err_free_srq;
+        return status;
     }
 
-    iface->rx.srq.type    = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     iface->super.progress = uct_rc_mlx5_iface_progress;
     return UCS_OK;
-
-err_free_srq:
-    uct_rc_mlx5_destroy_srq(&iface->rx.srq);
-err:
-    return status;
 }
 
 static void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface)
@@ -539,27 +559,6 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
     return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
 }
 
-
-static int uct_rc_mlx5_iface_srq_topo(uct_rc_mlx5_iface_common_t *iface,
-                                      uct_md_h md,
-                                      uct_rc_mlx5_iface_common_config_t *mlx5_config)
-{
-    uct_ib_mlx5_md_t *ib_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
-
-    /* Cyclic SRQ is supported with HW TM and DEVX only. */
-    if (((mlx5_config->srq_topo == UCT_RC_MLX5_SRQ_TOPO_AUTO) ||
-        (mlx5_config->srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC)) &&
-        UCT_RC_MLX5_TM_ENABLED(iface) &&
-        (ib_md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
-
-        return UCT_RC_MLX5_MP_ENABLED(iface) ?
-               UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ : UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
-    }
-
-    return UCT_RC_MLX5_MP_ENABLED(iface) ?
-           UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ : UCT_IB_MLX5_SRQ_TOPO_LIST;
-}
-
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
                     uct_rc_iface_ops_t *ops,
                     uct_md_h md, uct_worker_h worker,
@@ -578,7 +577,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     }
 
     self->rx.srq.type                = UCT_IB_MLX5_OBJ_TYPE_LAST;
-    self->rx.srq.topo                = uct_rc_mlx5_iface_srq_topo(self, md, mlx5_config);
     self->tm.cmd_wq.super.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
     init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
                                        0 : sizeof(uct_rc_mlx5_hdr_t);

@@ -27,22 +27,22 @@ enum {
 
 
 struct ucs_rcache {
-    ucs_rcache_params_t    params;   /**< rcache parameters (immutable) */
-    pthread_rwlock_t       lock;     /**< Protects the page table and all regions
-                                          whose refcount is 0 */
-    ucs_pgtable_t          pgtable;  /**< page table to hold the regions */
+    ucs_rcache_params_t      params;   /**< rcache parameters (immutable) */
+    pthread_rwlock_t         lock;     /**< Protects the page table and all regions
+                                            whose refcount is 0 */
+    ucs_pgtable_t            pgtable;  /**< page table to hold the regions */
 
-    ucs_spinlock_t         inv_lock; /**< Lock for inv_q and inv_mp. This is a
+    ucs_recursive_spinlock_t inv_lock; /**< Lock for inv_q and inv_mp. This is a
                                           separate lock because we may want to put
                                           regions on inv_q while the page table
                                           lock is held by the calling context */
-    ucs_queue_head_t       inv_q;    /**< Regions which were invalidated during
-                                          memory events */
-    ucs_mpool_t            inv_mp;   /**< Memory pool to allocate entries for inv_q,
-                                          since we cannot use regulat malloc().
-                                          The backing storage is original mmap()
-                                          which does not generate memory events */
-    char                   *name;
+    ucs_queue_head_t         inv_q;    /**< Regions which were invalidated during
+                                            memory events */
+    ucs_mpool_t              inv_mp;   /**< Memory pool to allocate entries for inv_q,
+                                            since we cannot use regulat malloc().
+                                            The backing storage is original mmap()
+                                            which does not generate memory events */
+    char                     *name;
     UCS_STATS_NODE_DECLARE(stats)
 };
 

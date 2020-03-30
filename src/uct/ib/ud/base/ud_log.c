@@ -42,7 +42,8 @@ void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
         snprintf(p, endp - p, " NAK");
     } else if (neth->packet_type & UCT_UD_PACKET_FLAG_PUT) {
         puth = (uct_ud_put_hdr_t *)(neth + 1);
-        snprintf(p, endp - p, " PUT: 0x%0lx", puth->rva);
+        snprintf(p, endp - p, " PUT: 0x%0lx len %zu", puth->rva,
+                 length - sizeof(*puth) - sizeof(*neth));
     } else if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
         ctlh = (uct_ud_ctl_hdr_t *)(neth + 1);
         switch (ctlh->type) {

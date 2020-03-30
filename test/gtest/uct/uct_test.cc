@@ -589,22 +589,38 @@ void uct_test::stats_restore()
 }
 
 uct_test::entity* uct_test::create_entity(size_t rx_headroom,
-                                          uct_error_handler_t err_handler) {
+                                          uct_error_handler_t err_handler,
+                                          uct_tag_unexp_eager_cb_t eager_cb,
+                                          uct_tag_unexp_rndv_cb_t rndv_cb,
+                                          void *eager_arg, void *rndv_arg) {
     uct_iface_params_t iface_params;
 
-    iface_params.field_mask        = UCT_IFACE_PARAM_FIELD_RX_HEADROOM     |
-                                     UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
-                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER     |
-                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG |
-                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS;
+    iface_params.field_mask        = UCT_IFACE_PARAM_FIELD_RX_HEADROOM       |
+                                     UCT_IFACE_PARAM_FIELD_OPEN_MODE         |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB    |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG   |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG;
     iface_params.rx_headroom       = rx_headroom;
     iface_params.open_mode         = UCT_IFACE_OPEN_MODE_DEVICE;
     iface_params.err_handler       = err_handler;
     iface_params.err_handler_arg   = this;
     iface_params.err_handler_flags = 0;
-    entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
-                                 m_md_config);
-    return new_ent;
+    iface_params.eager_cb          = (eager_cb == NULL) ?
+                                     reinterpret_cast<uct_tag_unexp_eager_cb_t>
+                                     (ucs_empty_function_return_success) :
+                                     eager_cb;
+    iface_params.eager_arg         = eager_arg;
+    iface_params.rndv_cb           = (rndv_cb == NULL) ?
+                                     reinterpret_cast<uct_tag_unexp_rndv_cb_t>
+                                     (ucs_empty_function_return_success) :
+                                     rndv_cb;
+    iface_params.rndv_arg          = rndv_arg;
+
+    return new entity(*GetParam(), m_iface_config, &iface_params, m_md_config);
 }
 
 uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
@@ -1196,7 +1212,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
 }
 
 void uct_test::entity::accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                              uct_cm_ep_server_connect_callback_t connect_cb,
+                              uct_cm_ep_server_conn_notify_callback_t notify_cb,
                               uct_ep_disconnect_cb_t disconnect_cb,
                               void *user_data)
 {
@@ -1219,7 +1235,7 @@ void uct_test::entity::accept(uct_cm_h cm, uct_conn_request_h conn_request,
     ep_params.conn_request               = conn_request;
     ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
     ep_params.sockaddr_pack_cb           = server_priv_data_cb;
-    ep_params.sockaddr_connect_cb.server = connect_cb;
+    ep_params.sockaddr_connect_cb.server = notify_cb;
     ep_params.disconnect_cb              = disconnect_cb;
     ep_params.user_data                  = user_data;
 
@@ -1422,7 +1438,7 @@ ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
 void test_uct_iface_attrs::init()
 {
     uct_test::init();
-    m_e = uct_test::create_entity(0);
+    m_e = uct_test::create_entity(0ul);
     m_entities.push_back(m_e);
 }
 

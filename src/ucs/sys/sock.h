@@ -85,6 +85,17 @@ int ucs_netif_is_active(const char *if_name);
 
 
 /**
+ * Get number of active 802.3ad ports for a bond device. If the device is not
+ * a bond device, or 802.3ad is not enabled, return 1.
+ *
+ * @param [in]  if_name      Name of network interface to check.
+ *
+ * @return Number of active 802.3ad ports on @a if_name.
+ */
+unsigned ucs_netif_bond_ad_num_ports(const char *if_name);
+
+
+/**
  * Create a socket.
  *
  * @param [in]   domain     Communication domain (AF_INET/AF_INET6/etc).
@@ -411,6 +422,19 @@ const char *ucs_socket_getname_str(int fd, char *str, size_t max_size);
 int ucs_sockaddr_cmp(const struct sockaddr *sa1,
                      const struct sockaddr *sa2,
                      ucs_status_t *status_p);
+
+
+/**
+ * Check if the IP addresses of the given sockaddrs are the same.
+ *
+ * @param [in] sa1        Pointer to sockaddr structure #1.
+ * @param [in] sa2        Pointer to sockaddr structure #2.
+ *
+ * @return Return 0 if the IP addresses are the same and a non-zero value
+ *         otherwise.
+ */
+int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2);
+
 
 /**
  * Indicate if given IP addr is INADDR_ANY (IPV4) or in6addr_any (IPV6)

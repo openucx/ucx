@@ -264,7 +264,8 @@ static void uct_cm_iface_event_handler(int fd, void *arg)
 static void uct_cm_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_ib_iface_t *iface = ucs_container_of(self, uct_ib_iface_t, release_desc);
-    ucs_free(desc - iface->config.rx_headroom_offset);
+    /* Don't use UCS_PTR_BYTE_OFFSET here due to coverity false positive report */
+    ucs_free((char*)desc - iface->config.rx_headroom_offset);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
@@ -454,7 +455,7 @@ static uct_ib_iface_ops_t uct_cm_iface_ops = {
     .iface_is_reachable       = uct_ib_iface_is_reachable
     },
     .create_cq                = uct_ib_verbs_create_cq,
-    .arm_cq                   = (void*)ucs_empty_function_return_success,
+    .arm_cq                   = ucs_empty_function_return_success,
 };
 
 static int uct_cm_is_module_loaded(uct_ib_md_t *ib_md)

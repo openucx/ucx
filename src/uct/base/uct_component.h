@@ -161,8 +161,8 @@ struct uct_component {
  * @param [in] _component  Pointer to a global component structure to register.
  */
 #define UCT_COMPONENT_REGISTER(_component) \
+    extern ucs_list_link_t uct_components_list; \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t uct_components_list; \
         ucs_list_add_tail(&uct_components_list, &(_component)->list); \
     } \
     UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config); \

@@ -99,7 +99,9 @@ void uct_p2p_test::test_xfer(send_func_t send, size_t length, unsigned flags,
 
 ucs_log_func_rc_t
 uct_p2p_test::log_handler(const char *file, unsigned line, const char *function,
-                          ucs_log_level_t level, const char *message, va_list ap)
+                          ucs_log_level_t level,
+                          const ucs_log_component_config_t *comp_conf,
+                          const char *message, va_list ap)
 {
     if (level == UCS_LOG_LEVEL_TRACE_DATA) {
         ++log_data_count;
@@ -124,13 +126,13 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
      */
     int count_before = log_data_count;
     ucs_log_push_handler(log_handler);
-    orig_log_level = ucs_global_opts.log_level;
-    ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
+    orig_log_level = ucs_global_opts.log_component.log_level;
+    ucs_global_opts.log_component.log_level = UCS_LOG_LEVEL_TRACE_DATA;
     bool expect_log = ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA);
 
     UCS_TEST_SCOPE_EXIT() {
         /* Restore logging */
-        ucs_global_opts.log_level = orig_log_level;
+        ucs_global_opts.log_component.log_level = orig_log_level;
         ucs_log_pop_handler();
     } UCS_TEST_SCOPE_EXIT_END
 

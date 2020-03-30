@@ -46,9 +46,12 @@ enum {
     UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(16),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17)
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17),
+    UCP_REQUEST_DEBUG_RNDV_FRAG           = UCS_BIT(18)
 #else
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
+    UCP_REQUEST_FLAG_STREAM_RECV          = 0,
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0,
+    UCP_REQUEST_DEBUG_RNDV_FRAG           = 0
 #endif
 };
 
@@ -106,7 +109,7 @@ struct ucp_request {
 
     union {
 
-        /* "send" part - used for tag_send, stream_send,  put, get, and atomic
+        /* "send" part - used for tag_send, am_send, stream_send, put, get, and atomic
          * operations */
         struct {
             ucp_ep_h              ep;
@@ -117,17 +120,24 @@ struct ucp_request {
             ucp_send_callback_t   cb;       /* Completion callback */
 
             union {
-
                 ucp_wireup_msg_t  wireup;
 
-                /* Tagged send */
                 struct {
-                    ucp_tag_t        tag;
-                    uint64_t         message_id;  /* message ID used in AM */
-                    ucp_lane_index_t am_bw_index; /* AM BW lane index */
-                    uintptr_t        rreq_ptr;    /* receive request ptr on the
-                                                     recv side (used in AM rndv) */
-                } tag;
+                    ucp_lane_index_t     am_bw_index; /* AM BW lane index */
+                    uint64_t             message_id;  /* used to identify matching parts
+                                                         of a large message */
+
+                    struct {
+                        ucp_tag_t        tag;
+                        uintptr_t        rreq_ptr;    /* receive request ptr on the
+                                                         recv side (used in AM rndv) */
+                    } tag;
+
+                    struct {
+                        uint16_t         am_id;
+                        unsigned         flags;
+                    } am;
+                } msg_proto;
 
                 struct {
                     uint64_t      remote_addr; /* Remote address */
@@ -211,13 +221,6 @@ struct ucp_request {
                     uintptr_t              req;  /* Remote atomic request pointer */
                     ucp_atomic_reply_t     data; /* Atomic reply data */
                 } atomic_reply;
-                
-                struct {
-                    uint16_t am_id;
-                    uint64_t message_id;  /* used to identify matching parts
-                                             of a large message */
-                    unsigned flags;
-                } am;
             };
 
             /* This structure holds all mutable fields, and everything else

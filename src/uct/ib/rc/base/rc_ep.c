@@ -41,7 +41,6 @@ static ucs_stats_class_t uct_rc_txqp_stats_class = {
     .num_counters = UCT_RC_TXQP_STAT_LAST,
     .counter_names = {
         [UCT_RC_TXQP_STAT_QP_FULL]          = "qp_full",
-        [UCT_RC_TXQP_STAT_NO_READS]         = "no_reads",
         [UCT_RC_TXQP_STAT_SIGNAL]           = "signal"
     }
 };

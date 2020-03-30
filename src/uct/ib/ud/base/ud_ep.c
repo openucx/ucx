@@ -25,7 +25,7 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface);
 
 static void uct_ud_peer_name(uct_ud_peer_name_t *peer)
 {
-    gethostname(peer->name, sizeof(peer->name));
+    ucs_strncpy_zero(peer->name, ucs_get_host_name(), sizeof(peer->name));
     peer->pid = getpid();
 }
 
@@ -90,7 +90,7 @@ static void uct_ud_ep_ca_drop(uct_ud_ep_t *ep)
 
 static UCS_F_ALWAYS_INLINE void uct_ud_ep_ca_ack(uct_ud_ep_t *ep)
 {
-    if (ep->ca.cwnd < UCT_UD_CA_MAX_WINDOW) {
+    if (ep->ca.cwnd < ep->ca.wmax) {
         ep->ca.cwnd += UCT_UD_CA_AI_VALUE;
     }
     ep->tx.max_psn = ep->tx.acked_psn + ep->ca.cwnd;
@@ -101,6 +101,8 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 {
     ep->tx.psn         = UCT_UD_INITIAL_PSN;
     ep->ca.cwnd        = UCT_UD_CA_MIN_WINDOW;
+    ep->ca.wmax        = ucs_derived_of(ep->super.super.iface,
+                                        uct_ud_iface_t)->config.max_window;
     ep->tx.max_psn     = ep->tx.psn + ep->ca.cwnd;
     ep->tx.acked_psn   = UCT_UD_INITIAL_PSN - 1;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;

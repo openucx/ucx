@@ -66,6 +66,8 @@ typedef struct ucp_context_config {
     size_t                                 tm_max_bb_size;
     /** Enabling SW rndv protocol with tag offload mode */
     int                                    tm_sw_rndv;
+    /** Pack debug information in worker address */
+    int                                    address_debug_info;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */
@@ -117,12 +119,12 @@ struct ucp_config {
  * UCP communication resource descriptor
  */
 typedef struct ucp_tl_resource_desc {
-    uct_tl_resource_desc_t        tl_rsc;     /* UCT resource descriptor */
+    uct_tl_resource_desc_t        tl_rsc;       /* UCT resource descriptor */
     uint16_t                      tl_name_csum; /* Checksum of transport name */
-    ucp_rsc_index_t               md_index;   /* Memory domain index (within the context) */
-    ucp_rsc_index_t               dev_index;  /* Arbitrary device index. Resources
-                                                 with same index have same device name. */
-    uint8_t                       flags;      /* Flags that describe resource specifics */
+    ucp_md_index_t                md_index;     /* Memory domain index (within the context) */
+    ucp_rsc_index_t               dev_index;    /* Arbitrary device index. Resources
+                                                   with same index have same device name. */
+    uint8_t                       flags;        /* Flags that describe resource specifics */
 } ucp_tl_resource_desc_t;
 
 
@@ -164,11 +166,11 @@ typedef struct ucp_context {
     ucp_rsc_index_t               num_cmpts;  /* Number of UCT components */
 
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
-    ucp_rsc_index_t               num_mds;    /* Number of memory domains */
+    ucp_md_index_t                num_mds;    /* Number of memory domains */
 
     /* List of MDs which detect non host memory type */
-    ucp_rsc_index_t               mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
-    ucp_rsc_index_t               num_mem_type_detect_mds;  /* Number of mem type MDs */
+    ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
+    ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
     ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
@@ -393,16 +395,17 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 }
 
 static UCS_F_ALWAYS_INLINE double
-ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
+ucp_tl_iface_latency(ucp_context_h context, const uct_linear_growth_t *latency)
 {
-    return iface_attr->latency.overhead +
-           (iface_attr->latency.growth * context->config.est_num_eps);
+    return latency->overhead +
+           (latency->growth * context->config.est_num_eps);
 }
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwidth)
 {
-    return bandwidth->dedicated + (bandwidth->shared / context->config.est_num_ppn);
+    return bandwidth->dedicated +
+           (bandwidth->shared / context->config.est_num_ppn);
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
@@ -445,5 +448,8 @@ ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length
 }
 
 uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
+
+uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
+                                       ucp_rsc_index_t dev_idx);
 
 #endif

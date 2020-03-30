@@ -7,6 +7,7 @@
 #include "rocm_copy_iface.h"
 
 #include <uct/base/uct_log.h>
+#include <uct/base/uct_iov.inl>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
 #include <ucs/arch/cpu.h>

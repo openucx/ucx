@@ -552,7 +552,7 @@ err:
 
 ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
 {
-    int c = 0, index = 0;
+    int c = 0, idx = 0;
     opterr = 0;
 
     err_handling_opt.ucp_err_mode   = UCP_ERR_HANDLING_MODE_NONE;
@@ -627,8 +627,8 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
     fprintf(stderr, "INFO: UCP_HELLO_WORLD mode = %d server = %s port = %d\n",
             ucp_test_mode, *server_name, server_port);
 
-    for (index = optind; index < argc; index++) {
-        fprintf(stderr, "WARNING: Non-option argument %s\n", argv[index]);
+    for (idx = optind; idx < argc; idx++) {
+        fprintf(stderr, "WARNING: Non-option argument %s\n", argv[idx]);
     }
     return UCS_OK;
 }

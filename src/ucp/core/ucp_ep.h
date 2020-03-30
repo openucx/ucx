@@ -111,6 +111,7 @@ typedef struct ucp_ep_config_key {
                                             otherwise - in which lane the real
                                             transport endpoint is stored */
         ucp_md_index_t     dst_md_index; /* Destination memory domain index */
+        uint8_t            path_index;   /* Device path index */
     } lanes[UCP_MAX_LANES];
 
     ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
@@ -123,6 +124,9 @@ typedef struct ucp_ep_config_key {
 
     /* Lanes for high-bw memory access, sorted by priority, highest first */
     ucp_lane_index_t       rma_bw_lanes[UCP_MAX_LANES];
+
+    /* Lane for obtaining remote memory pointer */
+    ucp_lane_index_t       rkey_ptr_lane;
 
     /* Lanes for atomic operations, sorted by priority, highest first */
     ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
@@ -155,10 +159,10 @@ typedef struct ucp_ep_config_key {
  * Configuration for RMA protocols
  */
 typedef struct ucp_ep_rma_config {
-    size_t                 max_put_short;    /* Maximal payload of put short */
+    ssize_t                max_put_short;    /* Maximal payload of put short */
     size_t                 max_put_bcopy;    /* Maximal total size of put_bcopy */
     size_t                 max_put_zcopy;
-    size_t                 max_get_short;    /* Maximal payload of get short */
+    ssize_t                max_get_short;    /* Maximal payload of get short */
     size_t                 max_get_bcopy;    /* Maximal total size of get_bcopy */
     size_t                 max_get_zcopy;
     size_t                 put_zcopy_thresh;
@@ -413,6 +417,7 @@ typedef struct ucp_conn_request {
     uct_conn_request_h          uct_req;
     char                        dev_name[UCT_DEVICE_NAME_MAX];
     uct_device_addr_t           *remote_dev_addr;
+    struct sockaddr_storage     client_address;
     ucp_wireup_sockaddr_data_t  sa_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
@@ -436,6 +441,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep);
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
+                                          uint64_t local_tl_bitmap,
                                           const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p);

@@ -88,7 +88,7 @@ static ucs_status_t ucp_amo_basic_progress_fetch(uct_pending_req_t *self)
                                            &req->send.state.uct_comp);
         } else {
             status = uct_ep_atomic_cswap32(ep->uct_eps[req->send.lane],
-                                           value, *result, remote_addr,
+                                           value, *(uint32_t*)result, remote_addr,
                                            rkey->cache.amo_rkey, (uint32_t*)result,
                                            &req->send.state.uct_comp);
         }

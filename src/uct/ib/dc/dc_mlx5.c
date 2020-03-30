@@ -224,9 +224,11 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 
     uct_dc_mlx5_iface_dci_put(iface, dci);
-    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
-
+    /* process pending elements prior to CQ entries to
+     * avoid out-of-order transmission in completion
+     * callbacks */
     uct_dc_mlx5_iface_progress_pending(iface);
+    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
     return 1;
 }
 
@@ -350,10 +352,16 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
         goto err;
     }
 
-    dci->ep    = NULL;
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ucs_arbiter_group_init(&dci->arb_group);
+    } else {
+        dci->ep = NULL;
+    }
+
 #if UCS_ENABLE_ASSERT
     dci->flags = 0;
 #endif
+
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
                                    iface->super.tx.mmio_mode, &dci->txwq,
                                    dci->txwq.super.verbs.qp);
@@ -538,6 +546,9 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     int i;
 
     for (i = 0; i < iface->tx.ndci; i++) {
+        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+            ucs_arbiter_group_cleanup(&iface->tx.dcis[i].arb_group);
+        }
         uct_ib_mlx5_txwq_cleanup(&iface->tx.dcis[i].txwq);
     }
 }
@@ -566,9 +577,12 @@ static ucs_status_t
 uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                     const uct_rc_iface_common_config_t *rc_config)
 {
-    uct_ib_mlx5_md_t *md               = ucs_derived_of(rc_iface->super.super.md, uct_ib_mlx5_md_t);
-    uct_dc_mlx5_iface_config_t *config = ucs_derived_of(rc_config, uct_dc_mlx5_iface_config_t);
-    uct_dc_mlx5_iface_t *iface         = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
+    uct_ib_mlx5_md_t *md                 = ucs_derived_of(rc_iface->super.super.md,
+                                                          uct_ib_mlx5_md_t);
+    uct_dc_mlx5_iface_config_t *config   = ucs_derived_of(rc_config,
+                                                          uct_dc_mlx5_iface_config_t);
+    uct_dc_mlx5_iface_t *iface           = ucs_derived_of(rc_iface,
+                                                          uct_dc_mlx5_iface_t);
     struct ibv_srq_init_attr_ex srq_attr = {};
     ucs_status_t status;
 
@@ -611,21 +625,20 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
         return status;
     }
 
-    status = uct_rc_iface_init_rx(rc_iface, rc_config,
-                                  &iface->super.rx.srq.verbs.srq);
+    /* MP XRQ is supported with HW TM only */
+    ucs_assert(!UCT_RC_MLX5_MP_ENABLED(&iface->super));
+
+    if (ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_RMP |
+                                      UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ)) {
+        status = uct_rc_mlx5_devx_init_rx(&iface->super, &config->super);
+    } else {
+        status = uct_rc_mlx5_common_iface_init_rx(&iface->super, rc_config);
+    }
+
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = uct_ib_mlx5_srq_init(&iface->super.rx.srq,
-                                  iface->super.rx.srq.verbs.srq,
-                                  iface->super.super.super.config.seg_size,
-                                  iface->super.tm.mp.num_strides);
-    if (status != UCS_OK) {
-        goto err_free_srq;
-    }
-
-    iface->super.rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     iface->super.super.progress = uct_dc_mlx5_iface_progress;
     return UCS_OK;
 

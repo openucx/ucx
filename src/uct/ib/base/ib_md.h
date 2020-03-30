@@ -83,6 +83,8 @@ typedef struct uct_ib_md_ext_config {
     size_t                   min_mt_reg;   /**< Multi-threaded registration threshold */
     size_t                   mt_reg_chunk; /**< Multi-threaded registration chunk */
     int                      mt_reg_bind;  /**< Multi-threaded registration bind to core */
+
+    ucs_on_off_auto_value_t  mr_relaxed_order; /**< Allow reorder memory accesses */
 } uct_ib_md_ext_config_t;
 
 
@@ -317,8 +319,8 @@ typedef struct uct_ib_md_ops_entry {
 } uct_ib_md_ops_entry_t;
 
 #define UCT_IB_MD_OPS(_md_ops, _priority) \
+    extern ucs_list_link_t uct_ib_md_ops_list; \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t uct_ib_md_ops_list; \
         static uct_ib_md_ops_entry_t *p, entry = { \
             .name     = UCS_PP_MAKE_STRING(_md_ops), \
             .ops      = &_md_ops, \
@@ -381,11 +383,20 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
     return 8 * atomic_mr_id;
 }
 
+
 static inline void uct_ib_memh_init_from_mr(uct_ib_mem_t *memh, struct ibv_mr *mr)
 {
     memh->lkey = mr->lkey;
     memh->rkey = mr->rkey;
 }
+
+
+static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)
+{
+    ucs_assert(memh != UCT_MEM_HANDLE_NULL);
+    return ((uct_ib_mem_t*)memh)->lkey;
+}
+
 
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p);

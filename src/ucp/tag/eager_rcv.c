@@ -286,13 +286,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
 
 #define ucp_tag_eager_offload_priv(_flags, _data, _length, _priv_type) \
     ({ \
-         size_t priv_len = sizeof(_priv_type); \
+         size_t _priv_len = sizeof(_priv_type); \
          typeof(_priv_type) *priv_data; \
          if (ucs_unlikely((_flags) & UCT_CB_PARAM_FLAG_DESC)) { \
-             priv_data = UCS_PTR_BYTE_OFFSET(_data, -priv_len); \
+             priv_data = UCS_PTR_BYTE_OFFSET(_data, -_priv_len); \
          } else { /* Can not shift back, no headroom */ \
-             priv_data = ucs_alloca((_length) + priv_len); \
-             memcpy(UCS_PTR_BYTE_OFFSET(priv_data, priv_len), _data, (_length)); \
+             priv_data = ucs_alloca((_length) + _priv_len); \
+             memcpy(UCS_PTR_BYTE_OFFSET(priv_data, _priv_len), _data, (_length)); \
          } \
          priv_data; \
     })

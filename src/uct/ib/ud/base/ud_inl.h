@@ -85,8 +85,8 @@ uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_am_set_zcopy_desc(uct_ud_send_skb_t *skb, const uct_iov_t *iov, size_t iovcnt,
-                         uct_completion_t *comp)
+uct_ud_skb_set_zcopy_desc(uct_ud_send_skb_t *skb, const uct_iov_t *iov,
+                          size_t iovcnt, uct_completion_t *comp)
 {
     uct_ud_zcopy_desc_t *zdesc;
     size_t iov_it_length;
@@ -149,8 +149,8 @@ uct_ud_am_set_neth(uct_ud_neth_t *neth, uct_ud_ep_t *ep, uint8_t id)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_ud_am_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
-                 uct_ud_send_skb_t **skb_p)
+uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
+                     uct_ud_send_skb_t **skb_p)
 {
     uct_ud_send_skb_t *skb;
 

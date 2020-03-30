@@ -13,6 +13,7 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
 #include <sched.h>
@@ -355,7 +356,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     }
 
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
-    ucs_spinlock_init(&dev->ah_lock);
+    ucs_recursive_spinlock_init(&dev->ah_lock, 0);
 
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
@@ -383,9 +384,9 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
 
-    status = ucs_spinlock_destroy(&dev->ah_lock);
+    status = ucs_recursive_spinlock_destroy(&dev->ah_lock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
 
     if (dev->async_events) {
@@ -581,13 +582,12 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
         }
     }
 #else
-#define UCT_IB_SYSFS_GID_TYPE_FMT \
-    "/sys/class/infiniband/%s/ports/%d/gid_attrs/types/%d"
     char buf[16];
 
     ret = ibv_query_gid(ctx, port_num, gid_index, &info->gid);
     if (ret == 0) {
-        ret = ucs_read_file(buf, sizeof(buf) - 1, 1, UCT_IB_SYSFS_GID_TYPE_FMT,
+        ret = ucs_read_file(buf, sizeof(buf) - 1, 1,
+                            UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT,
                             dev_name, port_num, gid_index);
         if (ret > 0) {
             if (!strncmp(buf, "IB/RoCE v1", 10)) {
@@ -726,11 +726,11 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu)
     ucs_fatal("Invalid MTU value (%d)", mtu);
 }
 
-uint8_t uct_ib_to_qp_fabric_time(double time)
+uint8_t uct_ib_to_qp_fabric_time(double t)
 {
     double to;
 
-    to = log(time / 4.096e-6) / log(2.0);
+    to = log(t / 4.096e-6) / log(2.0);
     if (to < 1) {
         return 1; /* Very small timeout */
     } else if ((long)(to + 0.5) >= UCT_IB_FABRIC_TIME_MAX) {
@@ -740,22 +740,22 @@ uint8_t uct_ib_to_qp_fabric_time(double time)
     }
 }
 
-uint8_t uct_ib_to_rnr_fabric_time(double time)
+uint8_t uct_ib_to_rnr_fabric_time(double t)
 {
-    double time_ms = time * UCS_MSEC_PER_SEC;
-    uint8_t index, next_index;
+    double time_ms = t * UCS_MSEC_PER_SEC;
+    uint8_t idx, next_index;
     double avg_ms;
 
-    for (index = 1; index < UCT_IB_FABRIC_TIME_MAX; index++) {
-        next_index = (index + 1) % UCT_IB_FABRIC_TIME_MAX;
+    for (idx = 1; idx < UCT_IB_FABRIC_TIME_MAX; idx++) {
+        next_index = (idx + 1) % UCT_IB_FABRIC_TIME_MAX;
 
         if (time_ms <= uct_ib_qp_rnr_time_ms[next_index]) {
-            avg_ms = (uct_ib_qp_rnr_time_ms[index] +
+            avg_ms = (uct_ib_qp_rnr_time_ms[idx] +
                       uct_ib_qp_rnr_time_ms[next_index]) * 0.5;
 
             if (time_ms < avg_ms) {
                 /* return previous index */
-                return index;
+                return idx;
             } else {
                 /* return current index */
                 return next_index;
@@ -1003,7 +1003,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
     khiter_t iter;
     int ret;
 
-    ucs_spin_lock(&dev->ah_lock);
+    ucs_recursive_spin_lock(&dev->ah_lock);
 
     /* looking for existing AH with same attributes */
     iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
@@ -1031,7 +1031,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
     }
 
 unlock:
-    ucs_spin_unlock(&dev->ah_lock);
+    ucs_recursive_spin_unlock(&dev->ah_lock);
     return status;
 }
 
@@ -1070,16 +1070,50 @@ int uct_ib_get_cqe_size(int cqe_size_min)
     return cqe_size;
 }
 
-unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev)
+static ucs_status_t
+uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
+                                 char *ndev_name, size_t max)
 {
+    ssize_t nread;
+
+    ucs_assert_always(uct_ib_device_is_port_roce(dev, port_num));
+
+    /* get the network device name which corresponds to a RoCE port */
+    nread = ucs_read_file_str(ndev_name, max, 1,
+                              UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
+                              uct_ib_device_name(dev), port_num, 0);
+    if (nread < 0) {
+        ucs_diag("failed to read " UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT": %m",
+                 uct_ib_device_name(dev), port_num, 0);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    ucs_strtrim(ndev_name);
+    return UCS_OK;
+}
+
+unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num)
+{
+    char ndev_name[IFNAMSIZ];
+    unsigned roce_lag_level;
     ucs_status_t status;
     long lag_enable;
 
     status = ucs_read_file_number(&lag_enable, 1, UCT_IB_DEVICE_SYSFS_FMT,
                                   uct_ib_device_name(dev), "roce_lag_enable");
-    if ((status == UCS_OK) && lag_enable) {
-        return UCT_IB_DEV_MAX_PORTS;
-    } else {
-        return 1; /* default is no LAG */
+    if ((status != UCS_OK) || !lag_enable) {
+        ucs_debug("RoCE LAG is disabled on %s", uct_ib_device_name(dev));
+        return 1;
     }
+
+    status = uct_ib_device_get_roce_ndev_name(dev, port_num, ndev_name,
+                                              sizeof(ndev_name));
+    if (status != UCS_OK) {
+        return 1;
+    }
+
+    roce_lag_level = ucs_netif_bond_ad_num_ports(ndev_name);
+    ucs_debug("RoCE LAG level on %s:%d (%s) is %u", uct_ib_device_name(dev),
+              port_num, ndev_name, roce_lag_level);
+    return roce_lag_level;
 }

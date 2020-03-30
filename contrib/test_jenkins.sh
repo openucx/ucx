@@ -64,9 +64,12 @@ num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
 [ -z $num_cpus ] && num_cpus=1
 parallel_jobs=4
 [ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
+num_pinned_threads=$(nproc)
+[ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
 
 MAKE="make"
 MAKEP="make -j${parallel_jobs}"
+export AUTOMAKE_JOBS=$parallel_jobs
 
 
 #
@@ -1027,6 +1030,7 @@ run_mpi_tests() {
 		$MAKEP installcheck # check whether installation is valid (it compiles examples at least)
 
 		MPIRUN="mpirun \
+				--bind-to none \
 				-x UCX_ERROR_SIGNALS \
 				-x UCX_HANDLE_ERRORS \
 				-mca pml ob1 \
@@ -1185,6 +1189,7 @@ test_jucx() {
 	then
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
 		export JUCX_TEST_PORT=$jucx_port
+		export UCX_MEM_EVENTS=no
 		$MAKE -C bindings/java/src/main/native test
 	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
 		if [ -n "$ifaces" ]
@@ -1221,6 +1226,7 @@ test_jucx() {
 		done
 
 		unset JUCX_TEST_PORT
+		unset UCX_MEM_EVENTS
 		module unload dev/jdk
 		module unload dev/mvn
 		echo "ok 1 - jucx test" >> jucx_tests.tap
@@ -1245,8 +1251,8 @@ run_coverity() {
 		cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
 		cov_build="$WORKSPACE/$cov_build_id"
 		rm -rf $cov_build
-		cov-build   --dir $cov_build $MAKEP all
-		cov-analyze $COV_OPT --security --concurrency --dir $cov_build
+		cov-build --dir $cov_build $MAKEP all
+		cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
 		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 		rc=$(($rc+$nerrors))
 

@@ -57,6 +57,8 @@ static ucs_memory_type_t test_mem_type = UCS_MEMORY_TYPE_HOST;
     } while(0)
 
 
+void print_common_help(void);
+
 void *mem_type_malloc(size_t length)
 {
     void *ptr;

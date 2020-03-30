@@ -12,6 +12,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/iovec.h>
+#include <ucs/sys/iovec.inl>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -21,7 +22,8 @@
 #include <string.h>
 
 
-#define UCS_SOCKET_MAX_CONN_PATH "/proc/sys/net/core/somaxconn"
+#define UCS_NETIF_BOND_AD_NUM_PORTS_FMT  "/sys/class/net/%s/bonding/ad_num_ports"
+#define UCS_SOCKET_MAX_CONN_PATH         "/proc/sys/net/core/somaxconn"
 
 
 typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
@@ -80,6 +82,23 @@ int ucs_netif_is_active(const char *if_name)
     }
 
     return ucs_netif_flags_is_active(ifr.ifr_flags);
+}
+
+unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
+{
+    ucs_status_t status;
+    long ad_num_ports;
+
+    status = ucs_read_file_number(&ad_num_ports, 1,
+                                  UCS_NETIF_BOND_AD_NUM_PORTS_FMT, bond_name);
+    if ((status != UCS_OK) || (ad_num_ports <= 0) ||
+        (ad_num_ports > UINT_MAX)) {
+        ucs_diag("failed to read from " UCS_NETIF_BOND_AD_NUM_PORTS_FMT ": %m, "
+                 "assuming 802.3ad bonding is disabled", bond_name);
+        return 1;
+    }
+
+    return (unsigned)ad_num_ports;
 }
 
 ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)
@@ -405,8 +424,8 @@ ucs_socket_handle_io(int fd, const void *data, size_t count,
 
     if ((io_retval == 0) &&
         ((count == 0) ||
-         (is_iov && (ucs_iov_total_length((const struct iovec*)data,
-                                          count) == 0)))) {
+         (is_iov && (ucs_iovec_total_length((const struct iovec*)data,
+                                            count) == 0)))) {
         /* - the return value == 0 and the user's data length == 0
          *   (the number of the iov array buffers == 0 or the total
          *   length of the iov array buffers == 0) */
@@ -655,6 +674,20 @@ out:
         *status_p = status;
     }
     return result;
+}
+
+int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
+{
+    if (!ucs_sockaddr_is_known_af(sa1) || !ucs_sockaddr_is_known_af(sa2)) {
+        ucs_error("unknown address family: %d",
+                  !ucs_sockaddr_is_known_af(sa1) ? sa1->sa_family : sa2->sa_family);
+        return -1;
+    }
+
+    return memcmp(ucs_sockaddr_get_inet_addr(sa1),
+                  ucs_sockaddr_get_inet_addr(sa2),
+                  (sa1->sa_family == AF_INET) ?
+                  sizeof(struct in_addr) : sizeof(struct in6_addr));
 }
 
 int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)

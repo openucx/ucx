@@ -40,6 +40,25 @@ public class UcpContextTest {
         UcpContext context = createContext(contextParams);
         closeContext(context);
     }
+
+    @Test
+    public void testConfigMap() {
+        UcpParams contextParams = new UcpParams().requestTagFeature()
+            .setConfig("TLS", "abcd").setConfig("NOT_EXISTING_", "234");
+        boolean catched = false;
+        try {
+            createContext(contextParams);
+        } catch (UcxException exception) {
+            assertEquals("No such device", exception.getMessage());
+            catched = true;
+        }
+        assertTrue(catched);
+
+        // Return back original config
+        contextParams = new UcpParams().requestTagFeature().setConfig("TLS", "all");
+        UcpContext context = createContext(contextParams);
+        closeContext(context);
+    }
     
     @Test(expected = NullPointerException.class)
     public void testCatchJVMSignal() {

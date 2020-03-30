@@ -19,6 +19,9 @@ stages:
         displayName: build tarball and source rpm
         container: fedora
         steps:
+          - checkout: self
+            clean: true
+
           - bash: ./autogen.sh
             displayName: Setup autotools
 
@@ -41,6 +44,11 @@ stages:
               assets: |
                 ./ucx-*.tar.gz
                 ./rpm-dist/ucx-*.src.rpm
+
+          - bash: |
+              set -eE
+              make -s -j`nproc`
+            displayName: Build ucx
 
           - template: jucx-publish.yml
             parameters:

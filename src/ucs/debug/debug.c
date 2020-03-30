@@ -55,6 +55,34 @@ struct dl_address_search {
 
 #ifdef HAVE_DETAILED_BACKTRACE
 
+#if HAVE_DECL_BFD_GET_SECTION_FLAGS
+#  define ucs_debug_bfd_section_flags(_abfd, _section) \
+    bfd_get_section_flags(_abfd, _section)
+#elif HAVE_DECL_BFD_SECTION_FLAGS
+#  define ucs_debug_bfd_section_flags(_abfd, _section) \
+    bfd_section_flags(_section)
+#else
+#  error "Unsupported BFD API"
+#endif
+
+#if HAVE_DECL_BFD_GET_SECTION_VMA
+#  define ucs_debug_bfd_section_vma(_abfd, _section) \
+    bfd_get_section_vma(_abfd, _section)
+#elif HAVE_DECL_BFD_SECTION_VMA
+#  define ucs_debug_bfd_section_vma(_abfd, _section) \
+    bfd_section_vma(_section)
+#else
+#  error "Unsupported BFD API"
+#endif
+
+#if HAVE_1_ARG_BFD_SECTION_SIZE
+#  define ucs_debug_bfd_section_size(_abfd, _section) \
+    bfd_section_size(_section)
+#else
+#  define ucs_debug_bfd_section_size(_abfd, _section) \
+    bfd_section_size(_abfd, _section);
+#endif
+
 struct backtrace_line {
     unsigned long            address;
     char                     *file;
@@ -138,9 +166,9 @@ const char *ucs_signal_names[] = {
     UCS_SYS_SIGNAME(PWR),
 #endif
     UCS_SYS_SIGNAME(SYS),
-#if __linux__
+#if defined __linux__
     [SIGSYS + 1] = NULL
-#elif __FreeBSD__
+#elif defined __FreeBSD__
     [SIGRTMIN] = NULL
 #else
 #error "Port me"
@@ -155,9 +183,13 @@ static stack_t  ucs_debug_signal_stack    = {NULL, 0, 0};
 static khash_t(ucs_debug_symbol) ucs_debug_symbols_cache;
 static khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 
-static ucs_spinlock_t ucs_kh_lock;
+static ucs_recursive_spinlock_t ucs_kh_lock;
 
 static int ucs_debug_initialized = 0;
+
+#ifdef HAVE_CPLUS_DEMANGLE
+extern char *cplus_demangle(const char *, int);
+#endif
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
 
@@ -267,7 +299,6 @@ static char *ucs_debug_demangle(const char *name)
 {
     char *demangled = NULL;
 #ifdef HAVE_CPLUS_DEMANGLE
-    extern char *cplus_demangle(const char *, int);
     demangled = cplus_demangle(name, 0);
 #endif
     return demangled ? demangled : strdup(name);
@@ -284,17 +315,17 @@ static void find_address_in_section(bfd *abfd, asection *section, void *data)
     int found;
 
     if ((search->count > 0) || (search->max_lines == 0) ||
-        ((bfd_get_section_flags(abfd, section) & SEC_ALLOC) == 0)) {
+        ((ucs_debug_bfd_section_flags(abfd, section) & SEC_ALLOC) == 0)) {
         return;
     }
 
     address = search->file->dl.address - search->file->dl.base;
-    vma = bfd_get_section_vma(abfd, section);
+    vma = ucs_debug_bfd_section_vma(abfd, section);
     if (address < vma) {
         return;
     }
 
-    size = bfd_section_size(abfd, section);
+    size = ucs_debug_bfd_section_size(abfd, section);
     if (address >= vma + size) {
         return;
     }
@@ -530,18 +561,18 @@ static void ucs_debug_show_innermost_source_file(FILE *stream)
 
 ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *info)
 {
-    Dl_info dlinfo;
+    Dl_info dl_info;
     int ret;
 
-    ret = dladdr(address, &dlinfo);
+    ret = dladdr(address, &dl_info);
     if (!ret) {
         return UCS_ERR_NO_ELEM;
     }
 
-    ucs_strncpy_safe(info->file.path, dlinfo.dli_fname, sizeof(info->file.path));
-    info->file.base = (uintptr_t)dlinfo.dli_fbase;
+    ucs_strncpy_safe(info->file.path, dl_info.dli_fname, sizeof(info->file.path));
+    info->file.base = (uintptr_t)dl_info.dli_fbase;
     ucs_strncpy_safe(info->function,
-                     (dlinfo.dli_sname != NULL) ? dlinfo.dli_sname : UCS_DEBUG_UNKNOWN_SYM,
+                     (dl_info.dli_sname != NULL) ? dl_info.dli_sname : UCS_DEBUG_UNKNOWN_SYM,
                      sizeof(info->function));
     ucs_strncpy_safe(info->source_file, UCS_DEBUG_UNKNOWN_SYM, sizeof(info->source_file));
     info->line_number = 0;
@@ -1083,10 +1114,10 @@ static int ucs_debug_is_error_signal(int signum)
     }
 
     /* If this signal is error, but was disabled. */
-    ucs_spin_lock(&ucs_kh_lock);
+    ucs_recursive_spin_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
     result = (hash_it != kh_end(&ucs_signal_orig_action_map));
-    ucs_spin_unlock(&ucs_kh_lock);
+    ucs_recursive_spin_unlock(&ucs_kh_lock);
     return result;
 }
 
@@ -1151,7 +1182,7 @@ int sigaction(int signum, const struct sigaction *act, struct sigaction *oact)
 static void ucs_debug_signal_handler(int signo)
 {
     ucs_log_flush();
-    ucs_global_opts.log_level = UCS_LOG_LEVEL_TRACE_DATA;
+    ucs_global_opts.log_component.log_level = UCS_LOG_LEVEL_TRACE_DATA;
     ucs_profile_dump();
 }
 
@@ -1191,7 +1222,7 @@ static inline void ucs_debug_save_original_sighandler(int signum,
     khiter_t hash_it;
     int hash_extra_status;
 
-    ucs_spin_lock(&ucs_kh_lock);
+    ucs_recursive_spin_lock(&ucs_kh_lock);
     hash_it = kh_get(ucs_signal_orig_action, &ucs_signal_orig_action_map, signum);
     if (hash_it != kh_end(&ucs_signal_orig_action_map)) {
         goto out;
@@ -1209,7 +1240,7 @@ static inline void ucs_debug_save_original_sighandler(int signum,
     kh_value(&ucs_signal_orig_action_map, hash_it) = oact_copy;
 
 out:
-    ucs_spin_unlock(&ucs_kh_lock);
+    ucs_recursive_spin_unlock(&ucs_kh_lock);
 }
 
 static void ucs_set_signal_handler(void (*handler)(int, siginfo_t*, void *))
@@ -1261,12 +1292,12 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            (strstr(symbol, "_L_unlock_") == symbol);
 }
 
-static ucs_status_t ucs_debug_get_lib_info(Dl_info *dlinfo)
+static ucs_status_t ucs_debug_get_lib_info(Dl_info *dl_info)
 {
     int ret;
 
     (void)dlerror();
-    ret = dladdr(ucs_debug_get_lib_info, dlinfo);
+    ret = dladdr(ucs_debug_get_lib_info, dl_info);
     if (ret == 0) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -1277,32 +1308,32 @@ static ucs_status_t ucs_debug_get_lib_info(Dl_info *dlinfo)
 const char *ucs_debug_get_lib_path()
 {
     ucs_status_t status;
-    Dl_info dlinfo;
+    Dl_info dl_info;
 
-    status = ucs_debug_get_lib_info(&dlinfo);
+    status = ucs_debug_get_lib_info(&dl_info);
     if (status != UCS_OK) {
         return "<failed to resolve libucs path>";
     }
 
-    return dlinfo.dli_fname;
+    return dl_info.dli_fname;
 }
 
 unsigned long ucs_debug_get_lib_base_addr()
 {
     ucs_status_t status;
-    Dl_info dlinfo;
+    Dl_info dl_info;
 
-    status = ucs_debug_get_lib_info(&dlinfo);
+    status = ucs_debug_get_lib_info(&dl_info);
     if (status != UCS_OK) {
         return 0;
     }
 
-    return (uintptr_t)dlinfo.dli_fbase;
+    return (uintptr_t)dl_info.dli_fbase;
 }
 
 void ucs_debug_init()
 {
-    ucs_spinlock_init(&ucs_kh_lock);
+    ucs_recursive_spinlock_init(&ucs_kh_lock, 0);
 
     kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
@@ -1346,9 +1377,9 @@ void ucs_debug_cleanup(int on_error)
         kh_destroy_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     }
 
-    status = ucs_spinlock_destroy(&ucs_kh_lock);
+    status = ucs_recursive_spinlock_destroy(&ucs_kh_lock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
 }
 
@@ -1378,17 +1409,17 @@ static inline void ucs_debug_disable_signal_nolock(int signum)
 
 void ucs_debug_disable_signal(int signum)
 {
-    ucs_spin_lock(&ucs_kh_lock);
+    ucs_recursive_spin_lock(&ucs_kh_lock);
     ucs_debug_disable_signal_nolock(signum);
-    ucs_spin_unlock(&ucs_kh_lock);
+    ucs_recursive_spin_unlock(&ucs_kh_lock);
 }
 
 void ucs_debug_disable_signals()
 {
     int signum;
 
-    ucs_spin_lock(&ucs_kh_lock);
+    ucs_recursive_spin_lock(&ucs_kh_lock);
     kh_foreach_key(&ucs_signal_orig_action_map, signum,
                    ucs_debug_disable_signal_nolock(signum));
-    ucs_spin_unlock(&ucs_kh_lock);
+    ucs_recursive_spin_unlock(&ucs_kh_lock);
 }

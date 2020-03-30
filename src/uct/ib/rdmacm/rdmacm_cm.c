@@ -156,6 +156,12 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         return UCS_ERR_IO_ERROR;
     }
 
+    if (qp_attr.ah_attr.is_global) {
+        ucs_assert(!memcmp(&cm_id->route.addr.addr.ibaddr.dgid,
+                           &qp_attr.ah_attr.grh.dgid,
+                           sizeof(qp_attr.ah_attr.grh.dgid)));
+    }
+
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
         /* Ethernet address */
         ucs_assert(qp_attr.ah_attr.is_global);
@@ -165,26 +171,22 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
          * that the remote peer is reachable to the local one */
         roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
         roce_info.addr_family = 0;
-    } else if (qp_attr.ah_attr.is_global) {
-        /* IB global address */
+    } else {
         address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
                              UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
-    } else {
-        /* IB local address - need just LID */
-        address_pack_flags = 0;
     }
 
-    addr_length = uct_ib_address_size(&qp_attr.ah_attr.grh.dgid,
+    addr_length = uct_ib_address_size(&cm_id->route.addr.addr.ibaddr.dgid,
                                       address_pack_flags);
-
-    dev_addr = ucs_malloc(addr_length, "IB device address");
+    dev_addr    = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
         ucs_error("failed to allocate IB device address");
         return UCS_ERR_NO_MEMORY;
     }
 
-    uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid, qp_attr.ah_attr.dlid,
-                        address_pack_flags, &roce_info, dev_addr);
+    uct_ib_address_pack(&cm_id->route.addr.addr.ibaddr.dgid,
+                        qp_attr.ah_attr.dlid, address_pack_flags, &roce_info,
+                        dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
     *dev_addr_len_p = addr_length;
@@ -202,6 +204,8 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
     uct_cm_remote_data_t                remote_data;
     ucs_status_t                        status;
     uct_cm_listener_conn_request_args_t conn_req_args;
+    ucs_sock_addr_t                     client_saddr;
+    size_t                              size;
 
     ucs_assert(hdr->status == UCS_OK);
 
@@ -209,9 +213,7 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
 
     status = uct_rdmacm_cm_id_to_dev_addr(event->id, &dev_addr, &addr_length);
     if (status != UCS_OK) {
-        uct_rdmacm_cm_reject(event->id);
-        uct_rdmacm_cm_destroy_id(event->id);
-        return;
+        goto err;
     }
 
     remote_data.field_mask            = UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
@@ -223,16 +225,36 @@ static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *eve
     remote_data.conn_priv_data        = hdr + 1;
     remote_data.conn_priv_data_length = hdr->length;
 
-    conn_req_args.field_mask   = UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
-                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
-                                 UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA;
-    conn_req_args.conn_request = event;
-    conn_req_args.remote_data  = &remote_data;
+    client_saddr.addr = rdma_get_peer_addr(event->id);
+
+    status = ucs_sockaddr_sizeof(client_saddr.addr, &size);
+    if (status != UCS_OK) {
+        goto err_free_dev_addr;
+    }
+
+    client_saddr.addrlen = size;
+
+    conn_req_args.field_mask     = UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
+                                   UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR;
+    conn_req_args.conn_request   = event;
+    conn_req_args.remote_data    = &remote_data;
+    conn_req_args.client_address = client_saddr;
     ucs_strncpy_safe(conn_req_args.dev_name, dev_name, UCT_DEVICE_NAME_MAX);
 
     listener->conn_request_cb(&listener->super, listener->user_data,
                               &conn_req_args);
     ucs_free(dev_addr);
+
+    return;
+
+err_free_dev_addr:
+    ucs_free(dev_addr);
+err:
+    uct_rdmacm_cm_reject(event->id);
+    uct_rdmacm_cm_destroy_id(event->id);
+    uct_rdmacm_cm_ack_event(event);
 }
 
 static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *event)
@@ -298,7 +320,7 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
         return;
     }
 
-    uct_rdmacm_cm_ep_server_connect_cb(cep, UCS_OK);
+    uct_rdmacm_cm_ep_server_conn_notify_cb(cep, UCS_OK);
 }
 
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)

@@ -50,6 +50,18 @@ static inline void ucs_list_insert_replace(ucs_list_link_t *prev,
 }
 
 /**
+ * Replace an element in a list with another element.
+ *
+ * @param elem         Element in the list to replace.
+ * @param replacement  New element to insert in place of 'elem'.
+ */
+static inline void ucs_list_replace(ucs_list_link_t *elem,
+                                    ucs_list_link_t *replacement)
+{
+    ucs_list_insert_replace(elem->prev, elem->next, replacement);
+}
+
+/**
  * Insert an item to a list after another item.
  *
  * @param pos         Item after which to insert.
@@ -78,10 +90,10 @@ static inline void ucs_list_insert_before(ucs_list_link_t *pos,
  *
  * @param link  Item to remove.
  */
-static inline void ucs_list_del(ucs_list_link_t *link)
+static inline void ucs_list_del(ucs_list_link_t *elem)
 {
-    link->prev->next = link->next;
-    link->next->prev = link->prev;
+    elem->prev->next = elem->next;
+    elem->next->prev = elem->prev;
 }
 
 /**

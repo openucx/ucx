@@ -191,7 +191,7 @@ protected:
 
         static size_t priv_data_do_pack(void *priv_data);
         void accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                    uct_cm_ep_server_connect_callback_t connect_cb,
+                    uct_cm_ep_server_conn_notify_callback_t notify_cb,
                     uct_ep_disconnect_cb_t disconnect_cb,
                     void *user_data);
         void listen(const ucs::sock_addr_storage &listen_addr,
@@ -370,7 +370,11 @@ protected:
     static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
                                   struct sockaddr *connect_addr, size_t size);
     uct_test::entity* create_entity(size_t rx_headroom,
-                                    uct_error_handler_t err_handler = NULL);
+                                    uct_error_handler_t err_handler = NULL,
+                                    uct_tag_unexp_eager_cb_t eager_cb = NULL,
+                                    uct_tag_unexp_rndv_cb_t rndv_cb = NULL,
+                                    void *eager_arg = NULL,
+                                    void *rndv_arg = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
     uct_test::entity* create_entity();
     int max_connections();

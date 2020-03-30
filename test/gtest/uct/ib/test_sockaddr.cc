@@ -457,11 +457,11 @@ protected:
     }
 
     virtual void server_accept(entity *server, uct_conn_request_h conn_request,
-                               uct_cm_ep_server_connect_callback_t connect_cb,
+                               uct_cm_ep_server_conn_notify_callback_t notify_cb,
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
     {
-        server->accept(server->cm(), conn_request, connect_cb, disconnect_cb,
+        server->accept(server->cm(), conn_request, notify_cb, disconnect_cb,
                        user_data);
     }
 
@@ -470,16 +470,28 @@ protected:
                        const uct_cm_listener_conn_request_args_t
                        *conn_req_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
+        ucs_sock_addr_t m_connect_addr_sock_addr =
+                        self->m_connect_addr.to_ucs_sock_addr();
         uct_conn_request_h conn_request;
         const uct_cm_remote_data_t *remote_data;
+        uint16_t client_port;
         ucs_status_t status;
 
         EXPECT_TRUE(ucs_test_all_flags(conn_req_args->field_mask,
                                        (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
-                                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA)));
+                                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
+                                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR)));
 
         conn_request = conn_req_args->conn_request;
         remote_data  = conn_req_args->remote_data;
+
+        /* check the address of the remote client */
+        EXPECT_EQ(0, ucs_sockaddr_ip_cmp(m_connect_addr_sock_addr.addr,
+                                         conn_req_args->client_address.addr));
+
+        status = ucs_sockaddr_get_port(conn_req_args->client_address.addr, &client_port);
+        ASSERT_UCS_OK(status);
+        EXPECT_GT(client_port, 0);
 
         EXPECT_EQ(entity::client_priv_data.length() + 1, remote_data->conn_priv_data_length);
         EXPECT_EQ(entity::client_priv_data,
@@ -504,11 +516,11 @@ protected:
 
     static void
     server_connect_cb(uct_ep_h ep, void *arg,
-                      const uct_cm_ep_server_connect_args_t *connect_args) {
+                      const uct_cm_ep_server_conn_notify_args_t *notify_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
-        if (connect_args->field_mask & UCT_CM_EP_SERVER_CONNECT_ARGS_FIELD_STATUS) {
-            EXPECT_EQ(UCS_OK, connect_args->status);
+        if (notify_args->field_mask & UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS) {
+            EXPECT_EQ(UCS_OK, notify_args->status);
         }
 
         self->m_cm_state |= TEST_CM_STATE_SERVER_CONNECTED;
@@ -648,7 +660,9 @@ protected:
 
     static ucs_log_func_rc_t
     detect_addr_route_error_logger(const char *file, unsigned line, const char *function,
-                                   ucs_log_level_t level, const char *message, va_list ap)
+                                   ucs_log_level_t level,
+                                   const ucs_log_component_config_t *comp_conf,
+                                   const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
@@ -664,7 +678,9 @@ protected:
 
     static ucs_log_func_rc_t
     detect_reject_error_logger(const char *file, unsigned line, const char *function,
-                               ucs_log_level_t level, const char *message, va_list ap)
+                               ucs_log_level_t level,
+                               const ucs_log_component_config_t *comp_conf,
+                               const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
@@ -679,6 +695,7 @@ protected:
     static ucs_log_func_rc_t
     detect_double_disconnect_error_logger(const char *file, unsigned line,
                                           const char *function, ucs_log_level_t level,
+                                          const ucs_log_component_config_t *comp_conf,
                                           const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
@@ -1068,11 +1085,11 @@ public:
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
-                       uct_cm_ep_server_connect_callback_t connect_cb,
+                       uct_cm_ep_server_conn_notify_callback_t notify_cb,
                        uct_ep_disconnect_cb_t disconnect_cb,
                        void *user_data)
     {
-        server->accept(m_test_cm, conn_request, connect_cb, disconnect_cb,
+        server->accept(m_test_cm, conn_request, notify_cb, disconnect_cb,
                        user_data);
     }
 

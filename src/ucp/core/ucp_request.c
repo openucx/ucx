@@ -311,6 +311,23 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
     return UCS_INPROGRESS;
 }
 
+static UCS_F_ALWAYS_INLINE
+void ucp_request_init_multi_proto(ucp_request_t *req,
+                                  uct_pending_callback_t multi_func,
+                                  const char *multi_func_str)
+{
+    req->send.uct.func = multi_func;
+
+    if (req->flags & (UCP_REQUEST_FLAG_SEND_TAG |
+                      UCP_REQUEST_FLAG_SEND_AM)) {
+        req->send.msg_proto.message_id  = req->send.ep->worker->am_message_id++;
+        req->send.msg_proto.am_bw_index = 1;
+    }
+
+    req->send.pending_lane = UCP_NULL_LANE;
+    UCS_PROFILE_REQUEST_EVENT(req, multi_func_str, req->send.length);
+}
+
 ucs_status_t
 ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                        size_t zcopy_thresh, size_t zcopy_max, size_t dt_count,
@@ -329,21 +346,12 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
     } else if (length < zcopy_thresh) {
         /* bcopy */
         ucp_request_send_state_reset(req, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
-        if (length <= msg_config->max_bcopy - proto->only_hdr_size) {
-            req->send.uct.func   = proto->bcopy_single;
+        if (length <= (msg_config->max_bcopy - proto->only_hdr_size)) {
+            req->send.uct.func = proto->bcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
         } else {
-            req->send.uct.func        = proto->bcopy_multi;
-            
-            if (req->flags & UCP_REQUEST_FLAG_SEND_AM) {
-                req->send.am.message_id = req->send.ep->worker->am_message_id++;
-            } else if (req->flags & UCP_REQUEST_FLAG_SEND_TAG) {
-                req->send.tag.message_id  = req->send.ep->worker->am_message_id++;
-                req->send.tag.am_bw_index = 1;
-            }
-            
-            req->send.pending_lane    = UCP_NULL_LANE;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_multi", req->send.length);
+            ucp_request_init_multi_proto(req, proto->bcopy_multi,
+                                         "start_bcopy_multi");
         }
         return UCS_OK;
     } else if (length < zcopy_max) {
@@ -369,19 +377,10 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         }
 
         if (multi) {
-            req->send.uct.func        = proto->zcopy_multi;
-            
-            if (req->flags & UCP_REQUEST_FLAG_SEND_AM) {
-                req->send.am.message_id = req->send.ep->worker->am_message_id++;
-            } else if (req->flags & UCP_REQUEST_FLAG_SEND_TAG) {
-                req->send.tag.message_id  = req->send.ep->worker->am_message_id++;
-                req->send.tag.am_bw_index = 1;
-            } 
-
-            req->send.pending_lane    = UCP_NULL_LANE;
-            UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_multi", req->send.length);
+            ucp_request_init_multi_proto(req, proto->zcopy_multi,
+                                         "start_zcopy_multi");
         } else {
-            req->send.uct.func   = proto->zcopy_single;
+            req->send.uct.func = proto->zcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
         }
         return UCS_OK;

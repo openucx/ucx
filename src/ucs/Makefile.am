@@ -33,6 +33,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/strided_alloc.h \
 	datastruct/string_buffer.h \
 	datastruct/string_set.h \
+	debug/log_def.h \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
@@ -94,6 +95,7 @@ noinst_HEADERS = \
 	sys/module.h \
 	sys/sys.h \
 	sys/iovec.h \
+	sys/iovec.inl \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \

@@ -172,6 +172,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_rdma_iface_t)
     ucs_mpool_cleanup(&self->free_desc, 1);
 }
 
+extern ucs_class_t UCS_CLASS_DECL_NAME(uct_ugni_rdma_iface_t);
+
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_rdma_iface_t, uct_iface_t);
 
 static uct_iface_ops_t uct_ugni_aries_rdma_iface_ops = {

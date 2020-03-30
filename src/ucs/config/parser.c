@@ -331,6 +331,17 @@ void ucs_config_help_enum(char *buf, size_t max, const void *arg)
     __print_table_values(arg, buf, max);
 }
 
+ucs_status_t ucs_config_clone_log_comp(const void *src, void *dst, const void *arg)
+{
+    const ucs_log_component_config_t *src_comp = src;
+    ucs_log_component_config_t       *dst_comp = dst;
+
+    dst_comp->log_level = src_comp->log_level;
+    ucs_strncpy_safe(dst_comp->name, src_comp->name, sizeof(dst_comp->name));
+
+    return UCS_OK;
+}
+
 int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 {
     char *str = strdup(buf);
@@ -688,17 +699,17 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
     ucs_config_array_field_t *field = dest;
     void *temp_field;
     const ucs_config_array_t *array = arg;
-    char *dup, *token, *saveptr;
+    char *str_dup, *token, *saveptr;
     int ret;
     unsigned i;
 
-    dup = strdup(buf);
-    if (dup == NULL) {
+    str_dup = strdup(buf);
+    if (str_dup == NULL) {
         return 0;
     }
 
     saveptr = NULL;
-    token = strtok_r(dup, ",", &saveptr);
+    token = strtok_r(str_dup, ",", &saveptr);
     temp_field = ucs_calloc(UCS_CONFIG_ARRAY_MAX, array->elem_size, "config array");
     i = 0;
     while (token != NULL) {
@@ -706,7 +717,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
                                  array->parser.arg);
         if (!ret) {
             ucs_free(temp_field);
-            free(dup);
+            free(str_dup);
             return 0;
         }
 
@@ -719,7 +730,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 
     field->data = temp_field;
     field->count = i;
-    free(dup);
+    free(str_dup);
     return 1;
 }
 

@@ -85,7 +85,7 @@ enum {
 
 static struct ibv_mr * UCS_F_MAYBE_UNUSED
 ibv_reg_dm_mr(struct ibv_pd *pd, struct ibv_dm *dm,
-              uint64_t dm_offset, size_t length, unsigned int access)
+              uint64_t dm_offset, size_t length, unsigned int access_flags)
 {
     struct ibv_exp_reg_mr_in mr_in = {};
     mr_in.pd        = pd;

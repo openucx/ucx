@@ -22,4 +22,4 @@ AS_IF([test "x$enable_cma" != xno],
 )
 
 AM_CONDITIONAL([HAVE_CMA], [test "x$cma_happy" != xno])
-AC_CONFIG_FILES([src/uct/sm/cma/Makefile])
+AC_CONFIG_FILES([src/uct/sm/scopy/cma/Makefile])

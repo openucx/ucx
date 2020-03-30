@@ -182,7 +182,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
     /* pack all addresses */
     status = ucp_address_pack(ep->worker,
                               ucp_wireup_is_ep_needed(ep) ? ep : NULL,
-                              tl_bitmap, UCP_ADDRESS_PACK_FLAG_ALL,
+                              tl_bitmap, UCP_ADDRESS_PACK_FLAGS_ALL,
                               lanes2remote, &req->send.length, &address);
     if (status != UCS_OK) {
         ucs_free(req);
@@ -252,6 +252,9 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
         address_index      = addr_indices[lane];
         address            = &remote_address->address_list[address_index];
         ep_addr_index      = ep_addr_indexes[address_index]++;
+        ucs_assertv(ep_addr_index < address->num_ep_addrs,
+                    "ep_addr_index=%u num_ep_addrs=%u",
+                    ep_addr_index, address->num_ep_addrs);
         remote_lane        = address->ep_addrs[ep_addr_index].lane;
         lanes2remote[lane] = remote_lane;
 
@@ -355,7 +358,7 @@ ucp_wireup_init_lanes_by_request(ucp_worker_h worker, ucp_ep_h ep,
                                  const ucp_unpacked_address_t *remote_address,
                                  unsigned *addr_indices)
 {
-    ucs_status_t status = ucp_wireup_init_lanes(ep, ep_init_flags,
+    ucs_status_t status = ucp_wireup_init_lanes(ep, ep_init_flags, UINT64_MAX,
                                                 remote_address, addr_indices);
     if (status == UCS_OK) {
         return UCS_OK;
@@ -643,7 +646,8 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    status = ucp_address_unpack(worker, msg + 1, UINT64_MAX, &remote_address);
+    status = ucp_address_unpack(worker, msg + 1, UCP_ADDRESS_PACK_FLAGS_ALL,
+                                &remote_address);
     if (status != UCS_OK) {
         ucs_error("failed to unpack address: %s", ucs_status_string(status));
         goto out;
@@ -701,7 +705,7 @@ static uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
 
 ucs_status_t
 ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
-                        ucp_lane_index_t lane,
+                        ucp_lane_index_t lane, unsigned path_index,
                         const ucp_unpacked_address_t *remote_address,
                         unsigned addr_index)
 {
@@ -737,12 +741,14 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
             /* create an endpoint connected to the remote interface */
             ucs_trace("ep %p: connect uct_ep[%d] to addr[%d]", ep, lane,
                       addr_index);
-            uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE    |
-                                       UCT_EP_PARAM_FIELD_DEV_ADDR |
-                                       UCT_EP_PARAM_FIELD_IFACE_ADDR;
+            uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE      |
+                                       UCT_EP_PARAM_FIELD_DEV_ADDR   |
+                                       UCT_EP_PARAM_FIELD_IFACE_ADDR |
+                                       UCT_EP_PARAM_FIELD_PATH_INDEX;
             uct_ep_params.iface      = wiface->iface;
             uct_ep_params.dev_addr   = remote_address->address_list[addr_index].dev_addr;
             uct_ep_params.iface_addr = remote_address->address_list[addr_index].iface_addr;
+            uct_ep_params.path_index = path_index;
             status = uct_ep_create(&uct_ep_params, &uct_ep);
             if (status != UCS_OK) {
                 /* coverity[leaked_storage] */
@@ -786,8 +792,9 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
                                              UCP_EP_INIT_CM_WIREUP_SERVER)) &&
                           (lane == ucp_ep_get_wireup_msg_lane(ep));
             status = ucp_wireup_ep_connect(ep->uct_eps[lane], ep_init_flags,
-                                           rsc_index, connect_aux,
-                                           remote_address);
+                                           rsc_index,
+                                           ucp_ep_get_path_index(ep, lane),
+                                           connect_aux, remote_address);
             if (status != UCS_OK) {
                 return status;
             }
@@ -945,10 +952,12 @@ ucp_wireup_get_reachable_mds(ucp_worker_h worker,
 }
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
+                                   uint64_t local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices)
 {
     ucp_worker_h worker = ep->worker;
+    uint64_t tl_bitmap  = local_tl_bitmap & worker->context->tl_bitmap;
     ucp_ep_config_key_t key;
     ucp_ep_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
@@ -956,14 +965,15 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     char str[32];
     ucp_wireup_ep_t *cm_wireup_ep;
 
+    ucs_assert(tl_bitmap != 0);
+
     ucs_trace("ep %p: initialize lanes", ep);
 
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
-    status = ucp_wireup_select_lanes(ep, ep_init_flags,
-                                     worker->context->tl_bitmap, remote_address,
-                                     addr_indices, &key);
+    status = ucp_wireup_select_lanes(ep, ep_init_flags, tl_bitmap,
+                                     remote_address, addr_indices, &key);
     if (status != UCS_OK) {
         return status;
     }
@@ -1019,6 +1029,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         }
 
         status = ucp_wireup_connect_lane(ep, ep_init_flags, lane,
+                                         key.lanes[lane].path_index,
                                          remote_address, addr_indices[lane]);
         if (status != UCS_OK) {
             return status;
@@ -1183,7 +1194,9 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     char *p, *end;
     ucp_rsc_index_t tl;
 
-    status = ucp_address_unpack(worker, msg + 1, ~UCP_ADDRESS_PACK_FLAG_TRACE,
+    status = ucp_address_unpack(worker, msg + 1,
+                                UCP_ADDRESS_PACK_FLAGS_ALL |
+                                UCP_ADDRESS_PACK_FLAG_NO_TRACE,
                                 &unpacked_address);
     if (status != UCS_OK) {
         strncpy(unpacked_address.name, "<malformed address>", UCP_WORKER_NAME_MAX);

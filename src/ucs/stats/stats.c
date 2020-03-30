@@ -141,41 +141,44 @@ static void ucs_stats_free_class(ucs_stats_class_t *cls)
 
 static ucs_stats_class_t *ucs_stats_dup_class(ucs_stats_class_t *cls)
 {
-    ucs_stats_class_t *dup;
+    ucs_stats_class_t *class_dup;
 
-    dup = ucs_calloc(1, sizeof(*cls) + sizeof(*cls->counter_names) * cls->num_counters,
-                     "ucs_stats_class_dup");
-    if (!dup) {
+    class_dup = ucs_calloc(1, sizeof(*cls) + sizeof(*cls->counter_names) * cls->num_counters,
+                           "ucs_stats_class_dup");
+    if (!class_dup) {
         ucs_error("failed to allocate statistics class");
         goto err;
     }
 
-    dup->name = ucs_strdup(cls->name, "ucs_stats_class_t name");
-    if (!dup->name) {
+    class_dup->name = ucs_strdup(cls->name, "ucs_stats_class_t name");
+    if (!class_dup->name) {
         ucs_error("failed to allocate statistics class name");
         goto err_free;
     }
 
-    for (dup->num_counters = 0; dup->num_counters < cls->num_counters; dup->num_counters++) {
-        dup->counter_names[dup->num_counters] = ucs_strdup(cls->counter_names[dup->num_counters],
-                                                           "ucs_stats_class_t counter");
-        if (!dup->counter_names[dup->num_counters]) {
+    for (class_dup->num_counters = 0;
+         class_dup->num_counters < cls->num_counters;
+         class_dup->num_counters++) {
+        class_dup->counter_names[class_dup->num_counters] =
+            ucs_strdup(cls->counter_names[class_dup->num_counters],
+                       "ucs_stats_class_t counter");
+        if (!class_dup->counter_names[class_dup->num_counters]) {
             ucs_error("failed to allocate statistics counter name");
             goto err_free;
         }
     }
 
-    return dup;
+    return class_dup;
 
 err_free:
-    ucs_stats_free_class(dup);
+    ucs_stats_free_class(class_dup);
 err:
     return NULL;
 }
 
 static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
 {
-    ucs_stats_class_t *dup;
+    ucs_stats_class_t *class_dup;
     khiter_t iter;
     int r;
 
@@ -184,15 +187,15 @@ static ucs_stats_class_t *ucs_stats_get_class(ucs_stats_class_t *cls)
         return kh_val(&ucs_stats_context.cls, iter);
     }
 
-    dup = ucs_stats_dup_class(cls);
-    if (dup == NULL) {
+    class_dup = ucs_stats_dup_class(cls);
+    if (class_dup == NULL) {
         return NULL;
     }
 
-    iter = kh_put(ucs_stats_cls, &ucs_stats_context.cls, dup->name, &r);
+    iter = kh_put(ucs_stats_cls, &ucs_stats_context.cls, class_dup->name, &r);
     ucs_assert_always(r != 0); /* initialize a previously empty hash entry */
-    kh_val(&ucs_stats_context.cls, iter) = dup;
-    return dup;
+    kh_val(&ucs_stats_context.cls, iter) = class_dup;
+    return class_dup;
 }
 
 static void ucs_stats_node_remove(ucs_stats_node_t *node, int make_inactive)

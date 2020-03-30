@@ -16,7 +16,7 @@
 #include <ucs/arch/generic/cpu.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>
-#if __ARM_NEON
+#ifdef __ARM_NEON
 #include <arm_neon.h>
 #endif
 
@@ -82,6 +82,11 @@ typedef struct ucs_aarch64_cpuid {
  * Get ARM CPU identifier and version
  */
 void ucs_aarch64_cpuid(ucs_aarch64_cpuid_t *cpuid);
+
+
+#if defined(HAVE_AARCH64_THUNDERX2)
+extern void *__memcpy_thunderx2(void *, const void *, size_t);
+#endif
 
 
 #if HAVE_HW_TIMER
@@ -201,7 +206,6 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
 {
 #if defined(HAVE_AARCH64_THUNDERX2)
-    extern void *__memcpy_thunderx2(void *, const void *, size_t);
     return __memcpy_thunderx2(dst, src,len);
 #else
     return memcpy(dst, src, len);
@@ -212,7 +216,6 @@ static UCS_F_ALWAYS_INLINE void
 ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
 {
 #if defined(HAVE_AARCH64_THUNDERX2)
-    extern void *__memcpy_thunderx2(void *, const void *, size_t);
     __memcpy_thunderx2(dst, src,len);
 #else
     memcpy(dst, src, len);

@@ -13,6 +13,9 @@
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_verbs) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5)
 
+#define UCT_INSTANTIATE_RC_DC_TEST_CASE(_test_case) \
+    UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
 void test_rc::init()
 {
@@ -144,19 +147,64 @@ public:
         m_max_get_zcopy = 4096;
         modify_config("RC_MAX_GET_ZCOPY",
                       ucs::to_string(m_max_get_zcopy).c_str());
-        modify_config("RC_TX_CQ_LEN", "32");
+
+        modify_config("RC_TX_QUEUE_LEN", "32");
+        modify_config("RC_TM_ENABLE", "y", true);
 
         m_comp.count = 300000; // some big value to avoid func invocation
         m_comp.func  = NULL;
     }
 
     void init() {
+#if ENABLE_STATS
+        stats_activate();
+#endif
         test_rc::init();
-        check_skip_test();
     }
+
+#if ENABLE_STATS
+    void cleanup() {
+        uct_test::cleanup();
+        stats_restore();
+    }
+
+    uint64_t get_no_reads_stat_counter(entity *e) {
+        uct_rc_iface_t *iface = ucs_derived_of(e->iface(), uct_rc_iface_t);
+
+        return UCS_STATS_GET_COUNTER(iface->stats, UCT_RC_IFACE_STAT_NO_READS);
+    }
+#endif
 
     unsigned reads_available(entity *e) {
         return rc_iface(e)->tx.reads_available;
+    }
+
+    void post_max_reads(entity *e, const mapped_buffer &sendbuf,
+                        const mapped_buffer &recvbuf) {
+        ucs_status_t status, status_exp;
+
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(), e->iface_attr().cap.get.max_iov);
+
+        for (unsigned i = 0; i <= m_num_get_ops; ++i) {
+            if (i % 2) {
+                status = uct_ep_get_zcopy(e->ep(0), iov, iovcnt, recvbuf.addr(),
+                                          recvbuf.rkey(), &m_comp);
+            } else {
+                status = uct_ep_get_bcopy(e->ep(0), (uct_unpack_callback_t)memcpy,
+                                          sendbuf.ptr(), sendbuf.length(),
+                                          recvbuf.addr(), recvbuf.rkey(), &m_comp);
+            }
+            status_exp = (i == m_num_get_ops) ? UCS_ERR_NO_RESOURCE :
+                                                UCS_INPROGRESS;
+            EXPECT_EQ(status_exp, status);
+        }
+
+        EXPECT_EQ(0u, reads_available(e));
+    }
+
+    static size_t empty_pack_cb(void *dest, void *arg) {
+        return 0ul;
     }
 
 protected:
@@ -172,24 +220,11 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_ops_limit,
     mapped_buffer sendbuf(1024, 0ul, *m_e1);
     mapped_buffer recvbuf(1024, 0ul, *m_e2);
 
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                            sendbuf.memh(), m_e1->iface_attr().cap.get.max_iov);
+    post_max_reads(m_e1, sendbuf, recvbuf);
 
-    ucs_status_t status_b, status_z, status_exp;
-
-
-    for (unsigned i = 0; i <= m_num_get_ops;) {
-       status_z = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, recvbuf.addr(),
-                                  recvbuf.rkey(), &m_comp);
-       status_b = uct_ep_get_bcopy(m_e1->ep(0), (uct_unpack_callback_t)memcpy,
-                                   sendbuf.ptr(), sendbuf.length(),
-                                   recvbuf.addr(), recvbuf.rkey(), &m_comp);
-       i += 2;
-       status_exp = (i > m_num_get_ops) ? UCS_ERR_NO_RESOURCE : UCS_INPROGRESS;
-       EXPECT_EQ(status_exp, status_z);
-       EXPECT_EQ(status_exp, status_b);
-    }
-    EXPECT_EQ(0u, reads_available(m_e1));
+#if ENABLE_STATS
+    EXPECT_GT(get_no_reads_stat_counter(m_e1), 0ul);
+#endif
 
     // Check that it is possible to add to pending if get returns NO_RESOURCE
     // due to lack of get credits
@@ -261,11 +296,90 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
                               &m_comp);
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
     EXPECT_EQ(max_get_ops, reads_available(m_e1));
+#if ENABLE_STATS
+    EXPECT_EQ(get_no_reads_stat_counter(m_e1), 0ul);
+#endif
 
     flush();
 }
 
-UCT_INSTANTIATE_RC_TEST_CASE(test_rc_get_limit)
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, check_rma_ops,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_BCOPY |
+                                 UCT_IFACE_FLAG_PUT_SHORT |
+                                 UCT_IFACE_FLAG_PUT_BCOPY |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_AM_SHORT  |
+                                 UCT_IFACE_FLAG_AM_BCOPY  |
+                                 UCT_IFACE_FLAG_AM_ZCOPY))
+
+{
+    mapped_buffer sendbuf(1024, 0ul, *m_e1);
+    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+
+    post_max_reads(m_e1, sendbuf, recvbuf);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), 1, sendbuf.memh(), 1);
+    uct_ep_h ep = m_e1->ep(0);
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_short(ep, NULL, 0, 0, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_bcopy(ep, NULL, NULL, 0, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_zcopy(ep, iov, iovcnt, 0, 0,
+                                                    NULL));
+
+    if (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64)) {
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64));
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP64));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, 0));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0,
+                                        NULL));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic_cswap64(ep, 0, 0, 0, 0, NULL, NULL));
+    }
+
+    if (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP32)) {
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32));
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, 0));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0,
+                                        NULL));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic_cswap32(ep, 0, 0, 0, 0, NULL, NULL));
+    }
+
+    EXPECT_UCS_OK(uct_ep_am_short(ep, 0, 0, NULL, 0));
+    EXPECT_EQ(0l, uct_ep_am_bcopy(ep, 0, empty_pack_cb, NULL, 0));
+    EXPECT_FALSE(UCS_STATUS_IS_ERR(uct_ep_am_zcopy(ep, 0, NULL, 0, iov, iovcnt,
+                                                   0, NULL)));
+
+    if (check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)) {
+        // we do not have partial tag offload support
+        ASSERT_TRUE(check_caps(UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+                               UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                               UCT_IFACE_FLAG_TAG_RNDV_ZCOPY));
+
+        EXPECT_UCS_OK(uct_ep_tag_eager_short(ep, 0ul, NULL, 0));
+        EXPECT_EQ(0l, uct_ep_tag_eager_bcopy(ep, 0ul, 0ul, empty_pack_cb,
+                                             NULL, 0));
+        EXPECT_FALSE(UCS_STATUS_IS_ERR(uct_ep_tag_eager_zcopy(ep, 0ul, 0ul, iov,
+                                                              iovcnt, 0u,
+                                                              NULL)));
+        void *rndv_op = uct_ep_tag_rndv_zcopy(ep, 0ul, NULL, 0u, iov, iovcnt,
+                                              0u, NULL);
+        EXPECT_FALSE(UCS_PTR_IS_ERR(rndv_op));
+        EXPECT_UCS_OK(uct_ep_tag_rndv_cancel(ep, rndv_op));
+        EXPECT_UCS_OK(uct_ep_tag_rndv_request(ep, 0ul, NULL, 0u, 0u));
+    }
+
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+}
+
+UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_get_limit)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
 
@@ -422,7 +536,7 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
     send_am_and_flush(m_e1, wnd);
 
     m_e2->destroy_ep(0);
-    ASSERT_TRUE(rc_iface(m_e2)->tx.arbiter.current == NULL);
+    ASSERT_TRUE(ucs_arbiter_is_empty(&rc_iface(m_e2)->tx.arbiter));
 }
 
 /* Check that user callback passed to uct_ep_pending_purge is not

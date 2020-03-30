@@ -485,12 +485,12 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
     return status;
 }
 
-void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove)
+void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int rem)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
     int old_events         = ep->events;
-    int new_events         = (ep->events | add) & ~remove;
+    int new_events         = (ep->events | add) & ~rem;
     ucs_status_t status;
 
     if (new_events != ep->events) {
@@ -877,7 +877,7 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
     unsigned handled       = 0;
     uct_tcp_am_hdr_t *hdr;
     size_t recv_length;
-    size_t remainder;
+    size_t remaining;
 
     ucs_trace_func("ep=%p", ep);
 
@@ -912,13 +912,13 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
 
     /* Parse received active messages */
     while (uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
-        remainder = ep->rx.length - ep->rx.offset;
-        if (remainder < sizeof(*hdr)) {
+        remaining = ep->rx.length - ep->rx.offset;
+        if (remaining < sizeof(*hdr)) {
             /* Move the partially received hdr to the beginning of the buffer */
             memmove(ep->rx.buf, UCS_PTR_BYTE_OFFSET(ep->rx.buf, ep->rx.offset),
-                    remainder);
+                    remaining);
             ep->rx.offset = 0;
-            ep->rx.length = remainder;
+            ep->rx.length = remaining;
             handled++;
             goto out;
         }
@@ -929,7 +929,7 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
                     ep, uct_tcp_ep_cm_state[ep->conn_state].name, hdr->length,
                     (iface->config.rx_seg_size - sizeof(*hdr)));
 
-        if (remainder < (sizeof(*hdr) + hdr->length)) {
+        if (remaining < (sizeof(*hdr) + hdr->length)) {
             handled++;
             goto out;
         }
@@ -1060,8 +1060,13 @@ static unsigned uct_tcp_ep_progress_magic_number_rx(uct_tcp_ep_t *ep)
     prev_length = ep->rx.length;
     recv_length = sizeof(magic_number) - ep->rx.length;
 
-    if (!uct_tcp_ep_recv(ep, recv_length) ||
-        (ep->rx.length < sizeof(magic_number))) {
+    if (!uct_tcp_ep_recv(ep, recv_length)) {
+        /* Do not touch EP here as it could be destroyed during
+         * socket error handling */
+        return 0;
+    }
+
+    if (ep->rx.length < sizeof(magic_number)) {
         return ((ep->rx.length - prev_length) > 0);
     }
 
@@ -1351,6 +1356,8 @@ uct_tcp_ep_prepare_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep, uint8_t am_id
                          size_t *zcopy_payload_p, uct_tcp_ep_zcopy_tx_t **ctx_p)
 {
     uct_tcp_am_hdr_t *hdr = NULL;
+    size_t io_vec_cnt;
+    ucs_iov_iter_t uct_iov_iter;
     uct_tcp_ep_zcopy_tx_t *ctx;
     ucs_status_t status;
 
@@ -1381,10 +1388,12 @@ uct_tcp_ep_prepare_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep, uint8_t am_id
     }
 
     /* User-defined payload */
-    ctx->iov_cnt += uct_iovec_fill_iov(&ctx->iov[ctx->iov_cnt], iov,
-                                       iovcnt, zcopy_payload_p);
-
-    *ctx_p = ctx;
+    ucs_iov_iter_init(&uct_iov_iter);
+    io_vec_cnt       = iovcnt; 
+    *zcopy_payload_p = uct_iov_to_iovec(&ctx->iov[ctx->iov_cnt], &io_vec_cnt,
+                                        iov, iovcnt, SIZE_MAX, &uct_iov_iter);
+    *ctx_p           = ctx;
+    ctx->iov_cnt    += io_vec_cnt;
 
     return UCS_OK;
 }

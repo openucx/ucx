@@ -63,6 +63,8 @@ public:
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
                      int ep_idx = 0, int do_set_ep = 1);
 
+        bool verify_client_address(struct sockaddr_storage *client_address);
+
         ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request);
 
         void* modify_ep(const ucp_ep_params_t& ep_params, int worker_idx = 0,
