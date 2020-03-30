@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/sys/compiler.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/config/parser.h>

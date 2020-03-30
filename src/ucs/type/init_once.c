@@ -4,6 +4,9 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include <ucs/type/init_once.h>
 #include <ucs/debug/assert.h>

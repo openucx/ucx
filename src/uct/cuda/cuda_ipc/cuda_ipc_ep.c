@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "cuda_ipc_ep.h"
 #include "cuda_ipc_iface.h"
 #include "cuda_ipc_md.h"

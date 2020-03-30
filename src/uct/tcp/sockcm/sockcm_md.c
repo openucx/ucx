@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "sockcm_md.h"
 
 #define UCT_SOCKCM_NAME              "sockcm"
