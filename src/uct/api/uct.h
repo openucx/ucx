@@ -1269,7 +1269,9 @@ typedef struct uct_md_mem_attr {
  * Return attributes such as memory type, and system device for the
  * given pointer of specific length.
  *
- * @param [in]     md          Memory domain to allocate memory on.
+ * @param [in]     md          Memory domain to run the query on. This function
+ *                             returns an error if the md does not recognize the
+ *                             pointer.
  * @param [in]     address     The address of the pointer. Must be non-NULL.
  * @param [in]     length      Length of the memory region to examine.
  *                             Must be nonzero.
