@@ -189,10 +189,10 @@ static size_t ucp_stream_pack_am_first_dt(void *dest, void *arg)
     size_t              length;
 
     hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
-    length      = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
+    length      = ucs_min(ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr),
+                          req->send.length);
 
     ucs_assert(req->send.state.dt.offset == 0);
-    ucs_assert(req->send.length > length);
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                                       req->send.mem_type, hdr + 1, req->send.buffer,
                                       &req->send.state.dt, length);

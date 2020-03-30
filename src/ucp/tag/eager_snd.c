@@ -32,8 +32,6 @@ ucp_tag_pack_eager_common(ucp_request_t *req, void *dest,
     packed_length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                                 req->send.mem_type, dest, req->send.buffer,
                                 &req->send.state.dt, length);
-    ucs_assert((single && (packed_length == req->send.length)) ||
-               (packed_length < req->send.length));
     return packed_length + hdr_length;
 }
 
@@ -71,6 +69,7 @@ static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
 
     length               = ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
                            sizeof(*hdr);
+    length               = ucs_min(length, req->send.length);
     hdr->super.super.tag = req->send.msg_proto.tag.tag;
     hdr->total_len       = req->send.length;
     hdr->msg_id          = req->send.msg_proto.message_id;
@@ -89,6 +88,7 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
     length                     = ucp_ep_get_max_bcopy(req->send.ep,
                                                       req->send.lane) -
                                  sizeof(*hdr);
+    length                     = ucs_min(length, req->send.length);
     hdr->super.super.super.tag = req->send.msg_proto.tag.tag;
     hdr->super.total_len       = req->send.length;
     hdr->req.ep_ptr            = ucp_request_get_dest_ep_ptr(req);

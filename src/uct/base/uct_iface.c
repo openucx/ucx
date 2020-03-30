@@ -361,7 +361,7 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     ops->ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy;
     ops->ep_pending_purge    = uct_ep_failed_purge;
     ops->ep_flush            = (uct_ep_flush_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_fence            = (uct_ep_fence_func_t)ucs_empty_function_return_ep_timeout;
