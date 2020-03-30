@@ -675,9 +675,6 @@ public:
         entity *e = reinterpret_cast<entity *>(arg);
         e->disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
     }
-
-private:
-    ucp_ep_params_t m_server_ep_params;
 };
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, empty,
