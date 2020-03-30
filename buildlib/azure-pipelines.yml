@@ -185,4 +185,8 @@ stages:
       parameters:
         name: gpu
         demands: ucx_gpu -equals yes
+    - template: tests.yml
+      parameters:
+        name: new
+        demands: ucx_new -equals yes
 
