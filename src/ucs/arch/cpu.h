@@ -58,6 +58,7 @@ typedef enum ucs_cpu_vendor {
     UCS_CPU_VENDOR_AMD,
     UCS_CPU_VENDOR_GENERIC_ARM,
     UCS_CPU_VENDOR_GENERIC_PPC,
+    UCS_CPU_VENDOR_FUJITSU_ARM,
     UCS_CPU_VENDOR_LAST
 } ucs_cpu_vendor_t;
 
@@ -142,6 +143,13 @@ static inline void ucs_clear_cache(void *start, void *end)
  * @return Memory copy bandwidth estimation based on CPU used.
  */
 double ucs_cpu_get_memcpy_bw();
+
+
+static inline int ucs_cpu_prefer_relaxed_order()
+{
+    return ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM;
+}
+
 
 END_C_DECLS
 
