@@ -1037,6 +1037,14 @@ void uct_test::entity::destroy_ep(unsigned index) {
     m_eps[index].reset();
 }
 
+void uct_test::entity::revoke_ep(unsigned index) {
+    if (!m_eps[index]) {
+        UCS_TEST_ABORT("ep[" << index << "] does not exist");
+    }
+
+    m_eps[index].revoke();
+}
+
 void uct_test::entity::destroy_eps() {
     for (unsigned index = 0; index < m_eps.size(); ++index) {
         if (!m_eps[index]) {

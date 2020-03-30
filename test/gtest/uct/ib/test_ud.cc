@@ -771,6 +771,8 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
     connect();
     EXPECT_UCS_OK(tx(m_e1));
     short_progress_loop();
+
+    /* m_e1::ep[0] has to be revoked at the end of the testing */
     uct_ep_destroy(m_e1->ep(0));
     /* ep destroy should try to flush outstanding packets */
     short_progress_loop();
@@ -784,17 +786,26 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
     ud_ep1 = ucs_derived_of(ep, uct_ud_ep_t);
     EXPECT_EQ(1U, ud_ep1->ep_id);
     uct_ep_destroy(ep);
+
+    /* revoke m_e1::ep[0] as it was destroyed manually */
+    m_e1->revoke_ep(0);
 }
 
 UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_passive,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     connect();
+
+    /* m_e2::ep[0] has to be revoked at the end of the testing */
     uct_ep_destroy(m_e2->ep(0));
+
     /* destroyed ep must still accept data */
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(ep_flush_b(m_e1));
 
     validate_flush();
+
+    /* revoke m_e2::ep[0] as it was destroyed manually */
+    m_e2->revoke_ep(0);
 }
 
 UCS_TEST_P(test_ud, ep_destroy_creq) {
@@ -807,7 +818,7 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
 
-    uct_ep_destroy(m_e1->ep(0));
+    m_e1->destroy_ep(0);
 
     /* check that ep id are not reused on both sides */
     ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
