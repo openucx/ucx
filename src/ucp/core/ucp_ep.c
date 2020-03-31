@@ -43,7 +43,7 @@ extern const ucp_request_send_proto_t ucp_stream_am_proto;
 extern const ucp_request_send_proto_t ucp_am_proto;
 extern const ucp_request_send_proto_t ucp_am_reply_proto;
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucp_ep_stats_class = {
     .name           = "ucp_ep",
     .num_counters   = UCP_EP_STAT_LAST,

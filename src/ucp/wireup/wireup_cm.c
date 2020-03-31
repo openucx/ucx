@@ -283,7 +283,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     rsc_index = ucs_ffs64(tl_bitmap);
     dev_index = context->tl_rscs[rsc_index].dev_index;
 
-#if ENABLE_ASSERT
+#ifdef ENABLE_ASSERT
     ucs_for_each_bit(rsc_index, tl_bitmap) {
         ucs_assert(dev_index == context->tl_rscs[rsc_index].dev_index);
     }

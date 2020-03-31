@@ -707,7 +707,7 @@ UCS_TEST_P(test_dc_fc_deadlock, basic, "DC_NUM_DCI=1")
 UCT_DC_INSTANTIATE_TEST_CASE(test_dc_fc_deadlock)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 class test_dc_flow_control_stats : public test_rc_flow_control_stats {
 public:

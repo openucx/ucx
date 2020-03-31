@@ -19,7 +19,7 @@
 #include <ucs/debug/debug.h>
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ep_stats_class = {
     .name = "uct_ep",
     .num_counters = UCT_EP_STAT_LAST,

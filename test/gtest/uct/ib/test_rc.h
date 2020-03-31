@@ -141,7 +141,7 @@ protected:
 };
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 class test_rc_flow_control_stats : public test_rc_flow_control {
 public:
     void init() {

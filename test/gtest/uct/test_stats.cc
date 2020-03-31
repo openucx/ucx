@@ -14,7 +14,7 @@ extern "C" {
 #include "uct_test.h"
 #include "uct_p2p_test.h"
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 #define EXPECT_STAT(_side, _uct_obj, _stat, _exp_val) \
     do { \

@@ -14,7 +14,7 @@ extern "C" {
 #include <pthread.h>
 #include <fstream>
 
-#if HAVE_PROFILING
+#ifdef HAVE_PROFILING
 
 class scoped_profile {
 public:

@@ -205,7 +205,7 @@ ucs_status_t uct_listener_reject(uct_listener_h listener,
 }
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_cm_stats_class = {
     .name           = "rdmacm_cm",
     .num_counters   = 0

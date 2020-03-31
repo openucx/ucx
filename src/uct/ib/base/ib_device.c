@@ -52,7 +52,7 @@ KHASH_IMPL(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*, 1,
            uct_ib_kh_ah_hash_func, uct_ib_kh_ah_hash_equal)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_DEVICE_STAT_LAST,

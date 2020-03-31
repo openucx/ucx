@@ -121,7 +121,7 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 };
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_iface_stats_class = {
     .name = "rc_iface",
     .num_counters = UCT_RC_IFACE_STAT_LAST,

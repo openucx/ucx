@@ -156,13 +156,13 @@ public:
     }
 
     void init() {
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
         stats_activate();
 #endif
         test_rc::init();
     }
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     void cleanup() {
         uct_test::cleanup();
         stats_restore();
@@ -222,7 +222,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_ops_limit,
 
     post_max_reads(m_e1, sendbuf, recvbuf);
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     EXPECT_GT(get_no_reads_stat_counter(m_e1), 0ul);
 #endif
 
@@ -296,7 +296,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
                               &m_comp);
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
     EXPECT_EQ(max_get_ops, reads_available(m_e1));
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     EXPECT_EQ(get_no_reads_stat_counter(m_e1), 0ul);
 #endif
 
@@ -559,7 +559,7 @@ UCS_TEST_P(test_rc_flow_control, fc_disabled_flush)
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 void test_rc_flow_control_stats::test_general(int wnd, int soft_thresh,
                                               int hard_thresh)
