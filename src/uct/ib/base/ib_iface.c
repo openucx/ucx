@@ -1380,7 +1380,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    *fd_p  = iface->comp_channel->fd;
+    *fd_p                 = iface->comp_channel->fd;
     return UCS_OK;
 }
 
