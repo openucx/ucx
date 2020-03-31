@@ -455,7 +455,8 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                 continue;
             }
 
-            uct_invoke_completion(uct_ud_comp_desc(skb)->comp, UCS_OK);
+            uct_ud_iface_dispatch_comp(iface, uct_ud_comp_desc(skb)->comp,
+                                       UCS_OK);
         }
 
         skb->flags = 0; /* reset also ACK_REQ flag */
