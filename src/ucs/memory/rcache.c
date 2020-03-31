@@ -4,6 +4,9 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>

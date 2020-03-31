@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ugni_udt_iface.h"
 #include "ugni_udt_ep.h"
 #include <uct/ugni/base/ugni_device.h>

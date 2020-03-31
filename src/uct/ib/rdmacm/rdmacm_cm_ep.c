@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rdmacm_cm_ep.h"
 #include "rdmacm_cm.h"
 #include <ucs/arch/bitops.h>

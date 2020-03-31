@@ -7,6 +7,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ugni_device.h"
 #include "ugni_md.h"
 #include "ugni_iface.h"

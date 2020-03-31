@@ -3,6 +3,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rocm_gdr_md.h"
 
 #include <uct/rocm/base/rocm_base.h>

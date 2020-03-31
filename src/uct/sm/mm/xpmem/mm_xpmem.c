@@ -5,6 +5,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "xpmem.h"
 
 #include <uct/sm/mm/base/mm_md.h>

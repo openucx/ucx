@@ -4,6 +4,9 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include "rc_mlx5.inl"
 

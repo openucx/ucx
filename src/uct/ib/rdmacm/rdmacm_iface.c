@@ -3,6 +3,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rdmacm_iface.h"
 #include "rdmacm_ep.h"
 #include <uct/base/uct_worker.h>
