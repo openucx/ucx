@@ -1224,11 +1224,11 @@ struct uct_md_attr {
  */
 enum uct_md_mem_attr_field {
     UCT_MD_MEM_ATTR_FIELD_MEM_TYPE = UCS_BIT(0), /**< Indicate if memory type
-                                                      is populated. Eg: CPU/GPU */
+                                                      is populated. E.g. CPU/GPU */
     UCT_MD_MEM_ATTR_FIELD_SYS_DEV  = UCS_BIT(1)  /**< Indicate if details of
                                                       system device backing
-                                                      the pointer is populated.
-                                                      Eg: NUMA, GPU, etc */
+                                                      the pointer are populated.
+                                                      E.g. NUMA/GPU */
 };
 
 
@@ -1237,8 +1237,8 @@ enum uct_md_mem_attr_field {
  * @brief  Memory domain attributes.
  *
  * This structure defines the attributes of a memory pointer which may
- * include memory type of the pointer, the system device that backs the
- * pointer depending on the bit fields populated in field_mask.
+ * include the memory type of the pointer, and the system device that backs
+ * the pointer depending on the bit fields populated in field_mask.
  */
 typedef struct uct_md_mem_attr {
     /**
@@ -1251,7 +1251,7 @@ typedef struct uct_md_mem_attr {
     uint64_t          field_mask;
 
     /**
-     * Is the type CPU memory or GPU memory, etc
+     * The type of memory. E.g. CPU/GPU memory or some other valid type
      */
     ucs_memory_type_t mem_type;
 
