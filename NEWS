@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.8.0-rc1 (TBD)
+## 1.8.0-rc2 (TBD)
 ### Features:
 #### UCX Core
 - Improved detection for DEVX support
@@ -22,6 +22,8 @@
 - Added XPMEM-based rendezvous protocol for shared memory
 - Added support shared memory communication between containers on same machine
 - Added support for multi-threaded RDMA memory registration for large regions
+- Added new test cases to Azure CI
+
 #### UCX Java (API Preview)
 - Added APIs for stream send/recv, tag probe, and connect request handle
 - Added Java package (automatically published) to Maven central
@@ -36,6 +38,9 @@
 - Fixes in RDMA CM flows 
 - Multiple fixes in TCP transport
 - Multiple fixes in documentation
+- Fixes in transport lane selection logic
+- Fixes in Java jar build
+- Fixes in socket connection manager for Nvidia DGX-2 platform
 
 ## 1.7.0 (January 19, 2020)
 ### Features:
