@@ -90,16 +90,23 @@ uct_ud_skb_set_zcopy_desc(uct_ud_send_skb_t *skb, const uct_iov_t *iov,
 {
     uct_ud_zcopy_desc_t *zdesc;
     size_t iov_it_length;
+    uct_ud_iov_t *ud_iov;
     size_t iov_it;
 
     skb->flags        |= UCT_UD_SEND_SKB_FLAG_ZCOPY;
     zdesc              = uct_ud_zcopy_desc(skb);
-    zdesc->iovcnt      = iovcnt;
+    zdesc->iovcnt      = 0;
     for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
         iov_it_length = uct_iov_get_length(iov + iov_it);
+        if (iov_it_length == 0) {
+            continue;
+        }
+
         ucs_assert(iov_it_length <= UINT16_MAX);
-        zdesc->iov[iov_it].buffer = iov[iov_it].buffer;
-        zdesc->iov[iov_it].length = iov_it_length;
+        ud_iov         = &zdesc->iov[zdesc->iovcnt++];
+        ud_iov->buffer = iov[iov_it].buffer;
+        ud_iov->lkey   = uct_ib_memh_get_lkey(iov[iov_it].memh);
+        ud_iov->length = iov_it_length;
     }
     if (comp != NULL) {
         skb->flags        |= UCT_UD_SEND_SKB_FLAG_COMP;

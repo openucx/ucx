@@ -959,3 +959,9 @@ void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
 
     uct_base_iface_progress_enable(tl_iface, flags);
 }
+
+void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
+                                  int is_async)
+{
+    /* Unimplemented for now */
+}

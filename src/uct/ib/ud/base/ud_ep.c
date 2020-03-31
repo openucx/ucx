@@ -929,7 +929,7 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     return skb;
 }
 
-static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
+static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep, int *ctl_flags_p)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ud_send_skb_t *skb, *sent_skb;
@@ -969,6 +969,9 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
 
     skb = uct_ud_iface_resend_skb_get(iface);
     ucs_assert_always(skb != NULL);
+    if (skb == ucs_unaligned_ptr(&iface->tx.skb_inl.super)) {
+        *ctl_flags_p |= UCT_UD_IFACE_SEND_CTL_FLAG_INLINE;
+    }
 
     ep->resend.pos = ucs_queue_iter_next(resend_pos);
     ep->resend.psn = sent_skb->neth->psn;
@@ -1010,28 +1013,32 @@ static uct_ud_send_skb_t *uct_ud_ep_resend(uct_ud_ep_t *ep)
 static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
 {
     uct_ud_send_skb_t *skb;
-    int flag = 0;
+    int is_creq_crep = 0;
+    int ctl_flags    = 0;
 
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
         skb = uct_ud_ep_prepare_creq(ep);
         if (skb) {
-            flag = 1;
+            is_creq_crep = 1;
+            ctl_flags   |= UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED;
             uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_SENT);
             uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
         }
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREP)) {
         skb = uct_ud_ep_prepare_crep(ep);
         if (skb) {
-            flag = 1;
+            is_creq_crep = 1;
+            ctl_flags   |= UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED;
             uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREP_SENT);
             uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREP);
         }
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_RESEND)) {
-        skb =  uct_ud_ep_resend(ep);
+        skb =  uct_ud_ep_resend(ep, &ctl_flags);
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK)) {
         if (uct_ud_ep_is_connected(ep)) {
             if (iface->config.max_inline >= sizeof(uct_ud_neth_t)) {
-                skb = ucs_unaligned_ptr(&iface->tx.skb_inl.super);
+                skb        = ucs_unaligned_ptr(&iface->tx.skb_inl.super);
+                ctl_flags |= UCT_UD_IFACE_SEND_CTL_FLAG_INLINE;
             } else {
                 skb      = uct_ud_iface_resend_skb_get(iface);
                 skb->len = sizeof(uct_ud_neth_t);
@@ -1046,7 +1053,8 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK);
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
         if (iface->config.max_inline >= sizeof(uct_ud_neth_t)) {
-            skb = ucs_unaligned_ptr(&iface->tx.skb_inl.super);
+            skb        = ucs_unaligned_ptr(&iface->tx.skb_inl.super);
+            ctl_flags |= UCT_UD_IFACE_SEND_CTL_FLAG_INLINE;
         } else {
             skb      = uct_ud_iface_resend_skb_get(iface);
             skb->len = sizeof(uct_ud_neth_t);
@@ -1065,8 +1073,9 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
     }
 
     VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
-    ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->tx_skb(ep, skb, flag);
-    if (flag) {
+    ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t)->send_ctl(ep, skb, NULL,
+                                                                   0, ctl_flags);
+    if (is_creq_crep) {
         /* creq and crep allocate real skb, it must be put on window like
          * a regular packet to ensure a retransmission.
          */

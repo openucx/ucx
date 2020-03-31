@@ -40,14 +40,17 @@ typedef struct {
 } uct_ud_mlx5_iface_t;
 
 
-static inline unsigned uct_ud_mlx5_tx_moderation(uct_ud_mlx5_iface_t *iface)
+static UCS_F_ALWAYS_INLINE unsigned
+uct_ud_mlx5_tx_moderation(uct_ud_mlx5_iface_t *iface, uint8_t ce_se)
 {
-    if (iface->super.tx.unsignaled >= UCT_UD_TX_MODERATION) {
+    if ((ce_se & MLX5_WQE_CTRL_CQ_UPDATE) ||
+        (iface->super.tx.unsignaled >= (UCT_UD_TX_MODERATION - 1))) {
         iface->super.tx.unsignaled = 0;
-        return MLX5_WQE_CTRL_CQ_UPDATE;
+        return ce_se | MLX5_WQE_CTRL_CQ_UPDATE;
     }
+
     iface->super.tx.unsignaled++;
-    return 0;
+    return ce_se;
 }
 
 #endif
