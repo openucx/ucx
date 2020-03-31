@@ -31,6 +31,15 @@ ucs_config_field_t uct_scopy_iface_config_table[] = {
      "of GET/PUT Zcopy operations",
      ucs_offsetof(uct_scopy_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+    /* TX_QUOTA=1 is used by default in order to make iface progress more
+     * lightweight and not be blocked for a long time (CMA/KNEM write/read
+     * operations are blocking). The blocking iface progress for a long time
+     * is harmful for the many-to-one (GET operation) and one-to-many (PUT
+     * operation) patterns. */
+    {"TX_QUOTA", "1",
+     "How many TX segments can be dispatched during iface progress",
+     ucs_offsetof(uct_scopy_iface_config_t, tx_quota), UCS_CONFIG_TYPE_UINT},
+
     UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, "send",
                                   ucs_offsetof(uct_scopy_iface_config_t, tx_mpool), ""),
 
@@ -87,6 +96,7 @@ UCS_CLASS_INIT_FUNC(uct_scopy_iface_t, uct_scopy_iface_ops_t *ops, uct_md_h md,
     self->outstanding     = 0;
     self->config.max_iov  = ucs_min(config->max_iov, ucs_iov_get_max());
     self->config.seg_size = config->seg_size;
+    self->config.tx_quota = config->tx_quota;
 
     elem_size             = sizeof(uct_scopy_tx_t) +
                             self->config.max_iov * sizeof(uct_iov_t);

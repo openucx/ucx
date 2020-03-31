@@ -134,6 +134,10 @@ ucs_arbiter_cb_result_t uct_scopy_ep_progress_tx(ucs_arbiter_t *arbiter,
     ucs_status_t status      = UCS_OK;
     size_t seg_size;
 
+    if (*count == iface->config.tx_quota) {
+        return UCS_ARBITER_CB_RESULT_STOP;
+    }
+
     if (tx->op != UCT_SCOPY_TX_FLUSH_COMP) {
         ucs_assert((tx->op == UCT_SCOPY_TX_GET_ZCOPY) ||
                    (tx->op == UCT_SCOPY_TX_PUT_ZCOPY));
@@ -143,6 +147,10 @@ ucs_arbiter_cb_result_t uct_scopy_ep_progress_tx(ucs_arbiter_t *arbiter,
                              tx->rkey, tx->op);
         if (!UCS_STATUS_IS_ERR(status)) {
             (*count)++;
+            ucs_assertv(*count <= iface->config.tx_quota,
+                        "count=%u vs quota=%u",
+                        *count, iface->config.tx_quota);
+
             tx->remote_addr += seg_size;
             uct_scopy_trace_data(tx);
 
