@@ -388,7 +388,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
          * (otherwise it will be dispatched by tx progress) */
         if (cur_wnd <= 0) {
             ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
-            ucs_arbiter_dispatch(&iface->tx.arbiter, 1,
+            ucs_arbiter_dispatch(&iface->tx.arbiter, UINT_MAX, 1,
                                  uct_rc_ep_process_pending, NULL);
         }
         if  (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {

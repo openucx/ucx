@@ -179,7 +179,8 @@ static unsigned uct_ugni_smsg_progress(void *arg)
 
     /* have a go a processing the pending queue */
 
-    ucs_arbiter_dispatch(&iface->super.arbiter, iface->config.smsg_max_credit,
+    ucs_arbiter_dispatch(&iface->super.arbiter, UINT_MAX,
+                         iface->config.smsg_max_credit,
                          uct_ugni_ep_process_pending, NULL);
     return count - 2;
 }

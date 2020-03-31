@@ -396,8 +396,8 @@ uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
         return;
     }
 
-    ucs_arbiter_dispatch(&iface->tx.pending_q, 1, uct_ud_ep_do_pending,
-                         (void *)is_async);
+    ucs_arbiter_dispatch(&iface->tx.pending_q, UINT_MAX, 1,
+                         uct_ud_ep_do_pending, (void*)is_async);
 }
 
 static UCS_F_ALWAYS_INLINE int

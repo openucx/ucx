@@ -201,11 +201,13 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
     UCS_ARBITER_GROUP_ARBITER_SET(group, arbiter);
 }
 
-void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
+void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter,
+                                   unsigned per_arbiter, unsigned per_group,
                                    ucs_arbiter_callback_t cb, void *cb_arg)
 {
     ucs_arbiter_elem_t *group_head, *group_tail, *next_elem;
     ucs_arbiter_cb_result_t result;
+    unsigned arbiter_dispatch_count;
     unsigned group_dispatch_count;
     ucs_arbiter_group_t *group;
     UCS_LIST_HEAD(resched_list);
@@ -213,7 +215,9 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
 
     ucs_assert(!ucs_list_is_empty(&arbiter->list));
 
-    for (;;) {
+    arbiter_dispatch_count = 0;
+
+    do {
         group_head = ucs_list_extract_head(&arbiter->list, ucs_arbiter_elem_t,
                                            list);
         ucs_assert(group_head != NULL);
@@ -246,6 +250,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
             UCS_ARBITER_GROUP_GUARD_EXIT(group);
             ucs_trace_poll("dispatch result: %d", result);
             ++group_dispatch_count;
+            ++arbiter_dispatch_count;
 
             if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
                 group_tail = group->tail;
@@ -289,7 +294,8 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                     break;
                 }
             }
-        } while (group_dispatch_count < per_group);
+        } while ((group_dispatch_count < per_group) &&
+                 (arbiter_dispatch_count < per_arbiter));
 
         if (sched_group) {
             /* the group could be scheduled again from dispatch callback */
@@ -298,7 +304,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
         } else if (ucs_list_is_empty(&arbiter->list)) {
             break;
         }
-    }
+    } while (arbiter_dispatch_count < per_arbiter);
 
 out:
     ucs_list_splice_tail(&arbiter->list, &resched_list);

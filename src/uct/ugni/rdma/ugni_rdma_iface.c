@@ -158,7 +158,8 @@ unsigned uct_ugni_progress(void *arg)
         ++count;
     }
     /* have a go a processing the pending queue */
-    ucs_arbiter_dispatch(&iface->arbiter, 1, uct_ugni_ep_process_pending, NULL);
+    ucs_arbiter_dispatch(&iface->arbiter, UINT_MAX, 1,
+                         uct_ugni_ep_process_pending, NULL);
     return count;
 }
 

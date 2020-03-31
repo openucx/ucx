@@ -139,7 +139,8 @@ unsigned uct_ugni_udt_progress(void *arg)
     uct_ugni_udt_iface_t * iface = (uct_ugni_udt_iface_t *)arg;
 
     uct_ugni_enter_async(&iface->super);
-    ucs_arbiter_dispatch(&iface->super.arbiter, 1, uct_ugni_udt_ep_process_pending, NULL);
+    ucs_arbiter_dispatch(&iface->super.arbiter, UINT_MAX, 1,
+                         uct_ugni_udt_ep_process_pending, NULL);
     uct_ugni_leave_async(&iface->super);
     return 0;
 }

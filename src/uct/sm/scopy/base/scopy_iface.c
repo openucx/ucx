@@ -115,7 +115,8 @@ unsigned uct_scopy_iface_progress(uct_iface_h tl_iface)
     uct_scopy_iface_t *iface = ucs_derived_of(tl_iface, uct_scopy_iface_t);
     unsigned count           = 0;
 
-    ucs_arbiter_dispatch(&iface->arbiter, 1, uct_scopy_ep_progress_tx, &count);
+    ucs_arbiter_dispatch(&iface->arbiter, 1, 1,
+                         uct_scopy_ep_progress_tx, &count);
     return count;
 }
 

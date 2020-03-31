@@ -339,8 +339,8 @@ static unsigned uct_mm_iface_progress(uct_iface_h tl_iface)
     uct_mm_iface_fifo_window_adjust(iface, total_count);
 
     /* progress the pending sends (if there are any) */
-    ucs_arbiter_dispatch(&iface->arbiter, 1, uct_mm_ep_process_pending,
-                         &total_count);
+    ucs_arbiter_dispatch(&iface->arbiter, UINT_MAX, 1,
+                         uct_mm_ep_process_pending, &total_count);
 
     return total_count;
 }

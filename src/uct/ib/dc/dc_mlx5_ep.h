@@ -307,10 +307,10 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface)
          */
         if (uct_dc_mlx5_iface_dci_can_alloc(iface) &&
             !uct_dc_mlx5_iface_is_dci_rand(iface)) {
-            ucs_arbiter_dispatch(uct_dc_mlx5_iface_dci_waitq(iface), 1,
+            ucs_arbiter_dispatch(uct_dc_mlx5_iface_dci_waitq(iface), UINT_MAX, 1,
                                  uct_dc_mlx5_iface_dci_do_pending_wait, NULL);
         }
-        ucs_arbiter_dispatch(uct_dc_mlx5_iface_tx_waitq(iface), 1,
+        ucs_arbiter_dispatch(uct_dc_mlx5_iface_tx_waitq(iface), UINT_MAX, 1,
                              iface->tx.pend_cb, NULL);
 
     } while (ucs_unlikely(!ucs_arbiter_is_empty(uct_dc_mlx5_iface_dci_waitq(iface)) &&

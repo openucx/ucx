@@ -241,7 +241,8 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
 
 
 /* Internal function */
-void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
+void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter,
+                                   unsigned per_arbiter, unsigned per_group,
                                    ucs_arbiter_callback_t cb, void *cb_arg);
 
 
@@ -385,24 +386,28 @@ ucs_arbiter_group_push_head_elem(ucs_arbiter_t *arbiter,
 
 
 /**
- * Dispatch work elements in the arbiter. For every group, up to per_group work
+ * Dispatch work elements in the arbiter, up to per_arbiter elements can be
+ * dispatched during the dispatching. For every group, up to per_group work
  * elements are dispatched, as long as the callback returns REMOVE_ELEM or
  * NEXT_GROUP. Then, the same is done for the next group, until either the
  * arbiter becomes empty or the callback returns STOP. If a group is either out
  * of elements, or its callback returns REMOVE_GROUP, it will be removed until
  * ucs_arbiter_group_schedule() is used to put it back on the arbiter.
  *
- * @param [in]  arbiter    Arbiter object to dispatch work on.
- * @param [in]  per_group  How many elements to dispatch from each group.
- * @param [in]  cb         User-defined callback to be called for each element.
- * @param [in]  cb_arg     Last argument for the callback.
+ * @param [in]  arbiter     Arbiter object to dispatch work on.
+ * @param [in]  per_arbiter How many elements to dispatch during the dispatching.
+ * @param [in]  per_group   How many elements to dispatch from each group.
+ * @param [in]  cb          User-defined callback to be called for each element.
+ * @param [in]  cb_arg      Last argument for the callback.
  */
 static inline void
-ucs_arbiter_dispatch(ucs_arbiter_t *arbiter, unsigned per_group,
+ucs_arbiter_dispatch(ucs_arbiter_t *arbiter,
+                     unsigned per_arbiter, unsigned per_group,
                      ucs_arbiter_callback_t cb, void *cb_arg)
 {
     if (ucs_unlikely(!ucs_arbiter_is_empty(arbiter))) {
-        ucs_arbiter_dispatch_nonempty(arbiter, per_group, cb, cb_arg);
+        ucs_arbiter_dispatch_nonempty(arbiter, per_arbiter,
+                                      per_group, cb, cb_arg);
     }
 }
 
