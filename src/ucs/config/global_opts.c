@@ -237,7 +237,7 @@ void ucs_global_opts_init()
     ucs_status_t status;
 
     status = ucs_config_parser_fill_opts(&ucs_global_opts, ucs_global_opts_table,
-                                         NULL, NULL, 1);
+                                         UCS_DEFAULT_ENV_PREFIX, NULL, 1);
     if (status != UCS_OK) {
         ucs_fatal("failed to parse global configuration - aborting");
     }
@@ -268,5 +268,6 @@ void ucs_global_opts_release()
 void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags)
 {
     ucs_config_parser_print_opts(stream, "Global configuration", &ucs_global_opts,
-                                 ucs_global_opts_table, NULL, print_flags);
+                                 ucs_global_opts_table, NULL,
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags);
 }

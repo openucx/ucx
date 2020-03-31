@@ -1128,7 +1128,7 @@ struct ucp_tag_recv_info {
  *
  * @param [in]  env_prefix    If non-NULL, the routine searches for the
  *                            environment variables that start with
- *                            @e UCX_<env_prefix>_ prefix.
+ *                            @e \<env_prefix\>_UCX_ prefix.
  *                            Otherwise, the routine searches for the
  *                            environment variables that start with
  *                            @e UCX_ prefix.

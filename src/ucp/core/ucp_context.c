@@ -310,6 +310,8 @@ const char *ucp_feature_str[] = {
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
 {
+    unsigned full_prefix_len = sizeof(UCS_DEFAULT_ENV_PREFIX) + 1;
+    unsigned env_prefix_len  = 0;
     ucp_config_t *config;
     ucs_status_t status;
 
@@ -319,16 +321,37 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
         goto err;
     }
 
-    status = ucs_config_parser_fill_opts(config, ucp_config_table, env_prefix,
-                                         NULL, 0);
+    if (env_prefix != NULL) {
+        env_prefix_len   = strlen(env_prefix);
+        full_prefix_len += env_prefix_len;
+    }
+
+    config->env_prefix = ucs_malloc(full_prefix_len, "ucp config");
+    if (config->env_prefix == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_config;
+    }
+
+    if (env_prefix_len != 0) {
+        ucs_snprintf_zero(config->env_prefix, full_prefix_len, "%s_%s",
+                          env_prefix, UCS_DEFAULT_ENV_PREFIX);
+    } else {
+        ucs_snprintf_zero(config->env_prefix, full_prefix_len, "%s",
+                          UCS_DEFAULT_ENV_PREFIX);
+    }
+
+    status = ucs_config_parser_fill_opts(config, ucp_config_table,
+                                         config->env_prefix, NULL, 0);
     if (status != UCS_OK) {
-        goto err_free;
+        goto err_free_prefix;
     }
 
     *config_p = config;
     return UCS_OK;
 
-err_free:
+err_free_prefix:
+    ucs_free(config->env_prefix);
+err_free_config:
     ucs_free(config);
 err:
     return status;
@@ -337,6 +360,7 @@ err:
 void ucp_config_release(ucp_config_t *config)
 {
     ucs_config_parser_release_opts(config, ucp_config_table);
+    ucs_free(config->env_prefix);
     ucs_free(config);
 }
 
@@ -349,8 +373,8 @@ ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
 void ucp_config_print(const ucp_config_t *config, FILE *stream,
                       const char *title, ucs_config_print_flags_t print_flags)
 {
-    ucs_config_parser_print_opts(stream, title, config, ucp_config_table, NULL,
-                                 print_flags);
+    ucs_config_parser_print_opts(stream, title, config, ucp_config_table,
+                                 NULL, UCS_DEFAULT_ENV_PREFIX, print_flags);
 }
 
 /* Search str in the array. If str_suffix is specified, search for
@@ -1367,11 +1391,18 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
      * routines */
     UCP_THREAD_LOCK_INIT(&context->mt_lock);
 
+    /* save environment prefix to later notify user for unused variables */
+    context->config.env_prefix = ucs_strdup(config->env_prefix, "ucp config");
+    if (context->config.env_prefix == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
     /* Get allocation alignment from configuration, make sure it's valid */
     if (config->alloc_prio.count == 0) {
         ucs_error("No allocation methods specified - aborting");
         status = UCS_ERR_INVALID_PARAM;
-        goto err;
+        goto err_free_env_prefix;
     }
 
     num_alloc_methods = config->alloc_prio.count;
@@ -1383,7 +1414,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                                                "ucp_alloc_methods");
     if (context->config.alloc_methods == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_free_env_prefix;
     }
 
     /* Parse the allocation methods specified in the configuration */
@@ -1415,7 +1446,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
             if (context->config.alloc_methods[i].method == UCT_ALLOC_METHOD_LAST) {
                 ucs_error("Invalid allocation method: %s", method_name);
                 status = UCS_ERR_INVALID_PARAM;
-                goto err_free;
+                goto err_free_alloc_methods;
             }
         }
     }
@@ -1441,8 +1472,10 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     return UCS_OK;
 
-err_free:
+err_free_alloc_methods:
     ucs_free(context->config.alloc_methods);
+err_free_env_prefix:
+    ucs_free(context->config.env_prefix);
 err:
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
     return status;
@@ -1451,6 +1484,7 @@ err:
 static void ucp_free_config(ucp_context_h context)
 {
     ucs_free(context->config.alloc_methods);
+    ucs_free(context->config.env_prefix);
 }
 
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,

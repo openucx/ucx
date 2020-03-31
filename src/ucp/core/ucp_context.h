@@ -110,6 +110,8 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */
     int                                    warn_invalid_config;
+    /** This config environment prefix */
+    char                                   *env_prefix;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
 };
@@ -227,6 +229,9 @@ typedef struct ucp_context {
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
+        
+        /* Config environment prefix used to create the context */
+        char                      *env_prefix;
 
     } config;
 
