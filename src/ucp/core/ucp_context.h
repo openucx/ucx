@@ -46,6 +46,9 @@ typedef struct ucp_context_config {
     /** The percentage allowed for performance difference between rendezvous
      *  and the eager_zcopy protocol */
     double                                 rndv_perf_diff;
+    /** Maximal allowed ratio between slowest and fastest lane in a multi-lane
+     *  protocol. Lanes slower than the specified ratio will not be used */
+    double                                 multi_lane_max_ratio;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;
     /** Communication scheme in RNDV protocol */

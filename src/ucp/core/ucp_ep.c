@@ -1384,16 +1384,13 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     uct_md_attr_t *md_attr;
     ucs_memory_type_t mem_type;
     ucp_rsc_index_t rsc_index;
-    ucp_lane_index_t lane;
-    size_t it;
-    size_t max_rndv_thresh;
-    size_t max_am_rndv_thresh;
-    size_t min_rndv_thresh;
-    size_t min_am_rndv_thresh;
+    ucp_lane_index_t lane, i;
+    size_t max_rndv_thresh, max_am_rndv_thresh;
+    size_t min_rndv_thresh, min_am_rndv_thresh;
     size_t rma_zcopy_thresh;
+    double rndv_max_bw, scale, bw;
     ucs_status_t status;
-    double rndv_max_bw;
-    int i;
+    size_t it;
 
     memset(config, 0, sizeof(*config));
 
@@ -1471,12 +1468,35 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
         lane      = config->key.rma_bw_lanes[i];
         rsc_index = config->key.lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
+            /* only GET Zcopy RNDV scheme supports multi-rail */
+            bw          = ucp_tl_iface_bandwidth(context,
+                                                 &iface_attr->bandwidth);
+            rndv_max_bw = ucs_max(rndv_max_bw, bw);
+        }
+    }
+
+    for (i = 0; (i < config->key.num_lanes) &&
+                (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
+        lane      = config->key.rma_bw_lanes[i];
+        rsc_index = config->key.lanes[lane].rsc_index;
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
             /* GET Zcopy */
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
+                scale = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
+                        rndv_max_bw;
+                if (scale < (1. / context->config.ext.multi_lane_max_ratio)) {
+                    continue;
+                }
+
                 config->tag.rndv.min_get_zcopy = ucs_max(config->tag.rndv.min_get_zcopy,
                                                          iface_attr->cap.get.min_zcopy);
 
@@ -1484,6 +1504,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                                          iface_attr->cap.get.max_zcopy);
                 ucs_assert(get_zcopy_lane_count < UCP_MAX_LANES);
                 config->tag.rndv.get_zcopy_lanes[get_zcopy_lane_count++] = lane;
+                config->tag.rndv.scale[lane]                             = scale;
             }
 
             /* PUT Zcopy */
@@ -1496,39 +1517,29 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 ucs_assert(put_zcopy_lane_count < UCP_MAX_LANES);
                 config->tag.rndv.put_zcopy_lanes[put_zcopy_lane_count++] = lane;
             }
-
-            rndv_max_bw = ucs_max(rndv_max_bw,
-                                  ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth));
         }
     }
 
     if (get_zcopy_lane_count == 0) {
         /* if there are no RNDV RMA BW lanes that support GET Zcopy, reset
          * min/max values to show that the scheme is unsupported */
-        config->tag.rndv.min_get_zcopy = SIZE_MAX;
-        config->tag.rndv.max_get_zcopy = 0;
+        config->tag.rndv.min_get_zcopy   = SIZE_MAX;
+        config->tag.rndv.max_get_zcopy   = 0;
+        config->tag.rndv.get_zcopy_split = 0;
+    } else {
+        config->tag.rndv.get_zcopy_split = config->tag.rndv.min_get_zcopy <=
+                                           (config->tag.rndv.max_get_zcopy / 2);
     }
 
     if (put_zcopy_lane_count == 0) {
         /* if there are no RNDV RMA BW lanes that support PUT Zcopy, reset
          * min/max values to show that the scheme is unsupported */
-        config->tag.rndv.min_put_zcopy = SIZE_MAX;
-        config->tag.rndv.max_put_zcopy = 0;
-    }
-
-    if (rndv_max_bw > 0) {
-        for (i = 0; (i < config->key.num_lanes) &&
-                    (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
-            lane      = config->key.rma_bw_lanes[i];
-            rsc_index = config->key.lanes[lane].rsc_index;
-
-            if (rsc_index != UCP_NULL_RESOURCE) {
-                iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-                config->tag.rndv.scale[lane] =
-                        ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
-                        rndv_max_bw;
-            }
-        }
+        config->tag.rndv.min_put_zcopy   = SIZE_MAX;
+        config->tag.rndv.max_put_zcopy   = 0;
+        config->tag.rndv.put_zcopy_split = 0;
+    } else {
+        config->tag.rndv.put_zcopy_split = config->tag.rndv.min_put_zcopy <=
+                                           (config->tag.rndv.max_put_zcopy / 2);
     }
 
     /* Rkey ptr */
