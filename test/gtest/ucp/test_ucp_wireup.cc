@@ -656,7 +656,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
     send_nb(sender().ep(), 1000, 1000, sreqs);
 
     ucp_test_base::entity::closing_ep_t ep = sender().disconnect_nb();
-    while (sender().is_ep_closed(ep)) {
+    while (!sender().is_ep_closed(ep)) {
         progress();
     }
 
