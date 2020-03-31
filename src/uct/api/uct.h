@@ -1256,7 +1256,7 @@ typedef struct uct_md_mem_attr {
     ucs_memory_type_t mem_type;
 
     /**
-     * Location of device pointer. eg: NUMA/GPU
+     * Location of device pointer. E.g. NUMA/GPU
      */
     ucs_sys_device_t  sys_dev;
 } uct_md_mem_attr_t;
