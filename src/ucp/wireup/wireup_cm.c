@@ -420,7 +420,6 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     ucs_async_context_t *async = &ucp_ep->worker->async;
 
     UCS_ASYNC_BLOCK(async);
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_COMPLETED);
     if (req->status == UCS_OK) {
         ucs_assert(ucp_ep_is_cm_local_connected(ucp_ep));
         ucp_ep_cm_disconnect_cm_lane(ucp_ep);
