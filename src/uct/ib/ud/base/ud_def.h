@@ -180,7 +180,7 @@ typedef struct uct_ud_ctl_desc {
     ucs_queue_elem_t        queue;       /* Queue element in outstanding queue */
     uint16_t                sn;          /* Sequence number in outstanding queue */
     uct_ud_send_skb_t       *self_skb;   /* Back-pointer to owner skb */
-    uct_ud_send_skb_t       *resent_skb; /* Points to a resent skb in the window.
+    uct_ud_send_skb_t       *resent_skb; /* Points to a re-sent skb in the window.
                                             Can be NULL. */
 } uct_ud_ctl_desc_t;
 
@@ -250,7 +250,7 @@ static inline void uct_ud_neth_set_am_id(uct_ud_neth_t *neth, uint8_t id)
 static inline uct_ud_ctl_desc_t *uct_ud_ctl_desc(uct_ud_send_skb_t *skb)
 {
     ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL);
-    return (uct_ud_ctl_desc_t*)((char *)skb->neth + skb->len);
+    return (uct_ud_ctl_desc_t*)((char*)skb->neth + skb->len);
 }
 
 static inline uct_ud_comp_desc_t *uct_ud_comp_desc(uct_ud_send_skb_t *skb)
@@ -258,13 +258,13 @@ static inline uct_ud_comp_desc_t *uct_ud_comp_desc(uct_ud_send_skb_t *skb)
     ucs_assert(skb->flags & (UCT_UD_SEND_SKB_FLAG_COMP  |
                              UCT_UD_SEND_SKB_FLAG_ERR   |
                              UCT_UD_SEND_SKB_FLAG_CANCEL));
-    return (uct_ud_comp_desc_t*)((char *)skb->neth + skb->len);
+    return (uct_ud_comp_desc_t*)((char*)skb->neth + skb->len);
 }
 
 static inline uct_ud_zcopy_desc_t *uct_ud_zcopy_desc(uct_ud_send_skb_t *skb)
 {
     ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY);
-    return (uct_ud_zcopy_desc_t*)((char *)skb->neth + skb->len);
+    return (uct_ud_zcopy_desc_t*)((char*)skb->neth + skb->len);
 }
 
 
