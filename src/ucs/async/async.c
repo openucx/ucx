@@ -233,15 +233,17 @@ static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler)
 
     mode  = handler->mode;
     async = handler->async;
-    if (async != NULL) {
-        async->last_wakeup = ucs_get_time();
-    }
+
     if (async == NULL) {
         ucs_async_handler_invoke(handler);
-    } else if (ucs_async_method_call(mode, context_try_block, async)) {
+        return UCS_OK;
+    }
+
+    async->last_wakeup = ucs_get_time();
+    if (ucs_async_method_call(mode, context_try_block, async)) {
         ucs_async_handler_invoke(handler);
         ucs_async_method_call(mode, context_unblock, async);
-    } else /* async != NULL */ {
+    } else {
         ucs_trace_async("missed " UCS_ASYNC_HANDLER_FMT ", last_wakeup %lu",
                         UCS_ASYNC_HANDLER_ARG(handler), async->last_wakeup);
         if (ucs_atomic_cswap32(&handler->missed, 0, 1) == 0) {

@@ -26,8 +26,8 @@ ucs_status_t ucs_async_pipe_create(ucs_async_pipe_t *p)
     }
 
     /* Set pipe to non blocking */
-    if (ucs_sys_fcntl_modfl(pipefds[0], O_NONBLOCK, 0) != UCS_OK ||
-        ucs_sys_fcntl_modfl(pipefds[1], O_NONBLOCK, 0) != UCS_OK)
+    if ((ucs_sys_fcntl_modfl(pipefds[0], O_NONBLOCK, 0) != UCS_OK) ||
+        (ucs_sys_fcntl_modfl(pipefds[1], O_NONBLOCK, 0) != UCS_OK))
     {
         goto err_close_pipe;
     }
