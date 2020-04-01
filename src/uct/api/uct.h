@@ -1272,9 +1272,11 @@ typedef struct uct_md_mem_attr {
  * @param [in]     md          Memory domain to run the query on. This function
  *                             returns an error if the md does not recognize the
  *                             pointer.
- * @param [in]     address     The address of the pointer. Must be non-NULL.
+ * @param [in]     address     The address of the pointer. Must be non-NULL
+ *                             else UCS_ERR_INVALID_PARAM error is returned.
  * @param [in]     length      Length of the memory region to examine.
- *                             Must be nonzero.
+ *                             Must be nonzero else UCS_ERR_INVALID_PARAM error
+ *                             is returned.
  * @param [out]    mem_attr    If successful, filled with ptr attributes.
  *
  * @return Error code.
