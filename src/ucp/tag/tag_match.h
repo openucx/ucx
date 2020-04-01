@@ -107,6 +107,8 @@ void ucp_tag_match_cleanup(ucp_tag_match_t *tm);
 
 int ucp_tag_exp_remove(ucp_tag_match_t *tm, ucp_request_t *req);
 
+void ucp_tag_exp_erase(ucp_tag_match_t *tm, ucp_tag_t tag);
+
 int ucp_tag_unexp_is_empty(ucp_tag_match_t *tm);
 
 ucp_request_t*

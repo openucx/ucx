@@ -2204,3 +2204,12 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
+
+ucs_status_ptr_t ucp_worker_tag_cancel(ucp_worker_h worker, ucp_tag_t tag,
+                                       unsigned flags)
+{
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+    ucp_tag_exp_erase(&worker->tm, tag);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+    return NULL;
+}

@@ -85,6 +85,21 @@ int ucp_tag_exp_remove(ucp_tag_match_t *tm, ucp_request_t *req)
     return 0;
 }
 
+void ucp_tag_exp_erase(ucp_tag_match_t *tm, ucp_tag_t tag)
+{
+    ucp_request_queue_t *req_queue = ucp_tag_exp_get_queue_for_tag(tm, tag);
+    ucs_queue_iter_t iter;
+    ucp_request_t *qreq;
+
+    ucs_queue_for_each_safe(qreq, iter, &req_queue->queue, recv.queue) {
+        ucp_tag_offload_try_cancel(qreq->recv.worker, qreq, 0);
+        ucp_tag_exp_delete(qreq, tm, req_queue, iter);
+        if (!(qreq->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
+            ucp_request_complete_tag_recv(qreq, UCS_ERR_CANCELED);
+        }
+    }
+}
+
 static inline uint64_t ucp_tag_exp_req_seq(ucs_queue_iter_t iter)
 {
     return (*iter == NULL) ? ULONG_MAX :
