@@ -396,7 +396,7 @@ build_icc() {
 build_pgi() {
 	echo 1..1 > build_pgi.tap
 	pgi_test_file=$(mktemp ./XXXXXX).c
-	echo "int main() {}" > ${pgi_test_file}
+	echo "int main() {return 0;}" > ${pgi_test_file}
 
 	if module_load pgi/latest && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
 	then
@@ -612,7 +612,9 @@ build_jucx() {
 #
 build_armclang() {
 	echo 1..1 > build_armclang.tap
-	if module_load arm-compiler/latest
+	armclang_test_file=$(mktemp ./XXXXXX).c
+	echo "int main() {return 0;}" > ${armclang_test_file}
+	if module_load arm-compiler/latest && armclang --version && armclang ${armclang_test_file} -o ${armclang_test_file}.out
 	then
 		echo "==== Build with armclang compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
@@ -622,11 +624,13 @@ build_armclang() {
 		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
 		$MAKEP distclean
 		echo "ok 1 - build successful " >> build_armclang.tap
-		module unload arm-compiler/latest
 	else
 		echo "==== Not building with armclang compiler ===="
 		echo "ok 1 - # SKIP because armclang not installed" >> build_armclang.tap
 	fi
+
+	rm -rf ${armclang_test_file} ${armclang_test_file}.out
+	module unload arm-compiler/latest
 }
 
 check_inst_headers() {
