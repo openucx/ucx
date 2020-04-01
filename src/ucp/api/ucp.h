@@ -3058,6 +3058,37 @@ void ucp_request_cancel(ucp_worker_h worker, void *request);
 
 /**
  * @ingroup UCP_COMM
+ * @brief Cancel outstanding communications receive requests matching by @a tag.
+ *
+ * @param [in]  worker       UCP worker.
+ * @param [in]  tag          tag to cancel matching requests.
+ * @param [in]  flags        reserved for future use.
+ *
+ * @return UCS_PTR_STATUS(_ptr) - indicates the status. However, all requests
+ *                                matching @ tab are completed immediately or
+ *                                have been started non blocking cancellation
+ *                                procedure and will be completed in finite time.
+ * @return otherwise        - reserved for future use.
+ *
+ * This routine tries to cancel an outstanding communication receive requests
+ * posted with @ref ucp_tag_receive_nb routine on the same @a worker. After
+ * calling this routine, the requests will be in completed or canceled (but
+ * not both) state regardless of the status of the target endpoint associated
+ * with the communication request. If the request is completed successfully,
+ * the @ref ucp_send_callback_t "send" or @ref ucp_tag_recv_callback_t
+ * "receive" completion callbacks (based on the type of the request) will be
+ * called with the @a status argument of the callback set to UCS_OK, and in a
+ * case it is canceled the @a status argument is set to UCS_ERR_CANCELED. It is
+ * important to note that in order to release the request back to the library
+ * the application is responsible for calling @ref ucp_request_free
+ * "ucp_request_free()".
+ */
+ucs_status_ptr_t ucp_worker_tag_cancel(ucp_worker_h worker, ucp_tag_t tag,
+                                       unsigned flags);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Release UCP data buffer returned by @ref ucp_stream_recv_data_nb.
  *
  * @param [in]  ep        Endpoint @a data received from.
