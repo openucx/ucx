@@ -66,5 +66,52 @@ UCS_TEST_P(test_ucp_tag_cancel, cancel_matched, "RNDV_THRESH=32K") {
     wait_and_validate(sreq2);
 }
 
+UCS_TEST_P(test_ucp_tag_cancel, ucp_worker_tag_cancel) {
+    uint64_t recv_data = 0;
+    std::vector<std::vector<request *> > reqs(10);
+    std::vector<ucp_tag_t> tags(reqs.size());
+
+    /* post 10x10 recvs with 10 different tags */
+    for (size_t i = 0; i < reqs.size(); ++i) {
+        tags[i] = i;
+        reqs[i].push_back(recv_nb(&recv_data, sizeof(recv_data), DATATYPE, i,
+                                  std::numeric_limits<ucp_tag_t>::max()));
+    }
+
+    /* shuffle tags to cancel them in random order */
+    std::random_shuffle(tags.begin(), tags.end());
+
+    for (size_t i = 0; i < tags.size(); ++i) {
+        ucp_tag_t cancel_tag = tags[i];
+        void *status_ptr = ucp_worker_tag_cancel(receiver().worker(),
+                                                 cancel_tag, 0);
+        ASSERT_EQ(NULL,   status_ptr);
+        ASSERT_EQ(UCS_OK, UCS_PTR_STATUS(status_ptr));
+        for (size_t j = 0; j < reqs.size(); ++j) {
+            for (size_t k = reqs[j].size(); k > 0; --k) {
+                const size_t last_idx = k - 1;
+                if (j == cancel_tag) {
+                    wait(reqs[j][last_idx]);
+                    EXPECT_EQ(UCS_ERR_CANCELED, reqs[j][last_idx]->status);
+                    EXPECT_EQ(UCS_ERR_CANCELED,
+                              ucp_request_check_status(reqs[j][last_idx]));
+                    ucp_request_free(reqs[j][last_idx]);
+                    reqs[j].erase(reqs[j].begin() + last_idx);
+                } else {
+                    EXPECT_EQ(UCS_INPROGRESS,
+                              ucp_request_check_status(reqs[j][last_idx]));
+                }
+            }
+
+            if (j == cancel_tag) {
+                EXPECT_TRUE(reqs[j].empty());
+            }
+        }
+    }
+
+    for (size_t j = 0; j < reqs.size(); ++j) {
+        EXPECT_TRUE(reqs[j].empty());
+    }
+}
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_cancel)
