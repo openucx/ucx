@@ -1,8 +1,7 @@
 # See https://aka.ms/yaml
 
 trigger:
-  - master
-  - v*.*.x
+  - none
 pr:
   - master
   - v*.*.x
