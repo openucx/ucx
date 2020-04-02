@@ -1,6 +1,6 @@
 /**
+ * Copyright (C) NVIDIA Corporation. 2020.  ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2018.  ALL RIGHTS RESERVED.
- * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
  * See file LICENSE for terms.
  */
 
@@ -9,6 +9,7 @@
 #endif
 
 #include "cuda_md.h"
+#include "cuda_iface.h"
 
 #include <ucs/sys/module.h>
 #include <ucs/profile/profile.h>
@@ -53,6 +54,60 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
     }
 
     return UCS_ERR_INVALID_ADDR;
+}
+
+static ucs_status_t uct_cuda_base_get_sys_dev(ucs_sys_device_t *sys_dev_p)
+{
+    CUdevice dev;
+    int attrib;
+
+    if (UCS_OK != UCT_CUDADRV_FUNC(cuCtxGetDevice(&dev))) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (UCS_OK != UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&attrib,
+                    CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, dev))) {
+        return UCS_ERR_IO_ERROR;
+    }
+    sys_dev_p->bus_id.domain = (uint16_t)attrib;
+
+    if (UCS_OK != UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&attrib,
+                    CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev))) {
+        return UCS_ERR_IO_ERROR;
+    }
+    sys_dev_p->bus_id.bus = (uint8_t)attrib;
+
+    return UCS_OK;
+
+}
+
+ucs_status_t uct_cuda_base_mem_query(uct_md_h md, const void *addr,
+                                     size_t length,
+                                     uct_md_mem_attr_t *mem_attr_p)
+{
+    ucs_status_t status;
+
+    mem_attr_p->field_mask = 0;
+
+    if (!addr || !length) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_cuda_base_detect_memory_type(md, addr, length, &(mem_attr_p->mem_type));
+    if (UCS_OK == status) {
+        mem_attr_p->field_mask |= UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+
+        status = uct_cuda_base_get_sys_dev(&(mem_attr_p->sys_dev));
+        if (UCS_OK == status) {
+            mem_attr_p->field_mask |= UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+        }
+    }
+
+    /* successful only if both mem_type and sys_dev are both populated */
+    if (UCS_OK != status) {
+        mem_attr_p->field_mask = 0;
+    }
+    return status;
 }
 
 ucs_status_t

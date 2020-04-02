@@ -199,6 +199,26 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     return UCS_ERR_INVALID_ADDR;
 }
 
+ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
+                                     size_t length,
+                                     uct_md_mem_attr_t *mem_attr_p)
+{
+    ucs_status_t status;
+
+    mem_attr_p->field_mask = 0;
+
+    if (!addr || !length) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    status = uct_rocm_base_detect_memory_type(md, addr, length, &(mem_attr_p->mem_type));
+    if (UCS_OK == status) {
+        mem_attr_p->field_mask |= UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+    }
+
+    return status;
+}
+
 UCS_MODULE_INIT() {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_rocm);
     UCS_MODULE_FRAMEWORK_LOAD(uct_rocm, 0);

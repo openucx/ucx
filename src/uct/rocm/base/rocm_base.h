@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) NVIDIA Corporation. 2020.  ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
@@ -29,5 +30,8 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
 ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
                                               size_t length,
                                               ucs_memory_type_t *mem_type_p);
+ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
+                                     size_t length,
+                                     uct_md_mem_attr_t *mem_attr_p);
 
 #endif

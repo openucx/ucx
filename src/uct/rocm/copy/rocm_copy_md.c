@@ -114,6 +114,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack           = uct_rocm_copy_mkey_pack,
     .mem_reg             = uct_rocm_copy_mem_reg,
     .mem_dereg           = uct_rocm_copy_mem_dereg,
+    .mem_query           = uct_rocm_base_mem_query,
     .detect_memory_type  = uct_rocm_base_detect_memory_type
 };
 
