@@ -208,7 +208,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb,
                             ucs_status_t status)
 {
-    uct_ud_comp_desc_t *cdesc = uct_ud_comp_desc(skb);;
+    uct_ud_comp_desc_t *cdesc = uct_ud_comp_desc(skb);
 
     cdesc->status = status;
     ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
@@ -230,6 +230,6 @@ uct_ud_send_skb_complete(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb,
         uct_ud_iface_dispatch_comp(iface, uct_ud_comp_desc(skb)->comp, UCS_OK);
     }
 
-    skb->flags = 0; /* reset also ACK_REQ flag */
+    skb->flags = 0; /* reset all flags to 0 before returning to memory pool */
     ucs_mpool_put_inline(skb);
 }

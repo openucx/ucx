@@ -186,7 +186,7 @@ enum {
 /* TODO: optimize endpoint memory footprint */
 enum {
     UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(0), /* set if the endpoint was disconnected */
-    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1), /* EP is was created as internal */
+    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1), /* EP was created as internal */
 
     /* debug flags */
     UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(3), /* CREQ message was received */
