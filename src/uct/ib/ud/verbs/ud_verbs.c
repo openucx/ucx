@@ -418,7 +418,7 @@ static unsigned uct_ud_verbs_iface_progress(uct_iface_h tl_iface)
     unsigned count;
 
     uct_ud_enter(&iface->super);
-    uct_ud_iface_dispatch_zcopy_comps(&iface->super);
+    uct_ud_iface_dispatch_async_comps(&iface->super);
     status = uct_ud_iface_dispatch_pending_rx(&iface->super);
     if (status == UCS_OK) {
         count = uct_ud_verbs_iface_poll_rx(iface, 0);
