@@ -576,9 +576,10 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_flush              = uct_ud_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_ud_iface_progress_enable,
-    .iface_progress_disable   = uct_base_iface_progress_disable,
+    .iface_progress_disable   = uct_ud_iface_progress_disable,
     .iface_progress           = uct_ud_verbs_iface_progress,
-    .iface_event_fd_get       = uct_ib_iface_event_fd_get,
+    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)
+                                ucs_empty_function_return_unsupported,
     .iface_event_arm          = uct_ud_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
     .iface_query              = uct_ud_verbs_iface_query,

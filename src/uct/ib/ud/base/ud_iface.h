@@ -150,7 +150,6 @@ struct uct_ud_iface {
         ucs_time_t             tick;
         double                 timer_backoff;
         unsigned               timer_sweep_count;
-        unsigned               timer_disable;
     } tx;
     struct {
         ucs_time_t           peer_timeout;
@@ -168,6 +167,9 @@ struct uct_ud_iface {
     struct {
         ucs_time_t                tick;
         int                       timer_id;
+        void                      *event_arg;
+        uct_async_event_cb_t      event_cb;
+        unsigned                  disable;
     } async;
 };
 
@@ -471,6 +473,8 @@ ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 
 void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
+
+void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
                                    uct_ud_ctl_desc_t *cdesc, int is_async);

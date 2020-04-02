@@ -1163,7 +1163,8 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     /* Send control message and save operation on queue. Use signaled-send to
      * make sure user completion will not be delayed indefinitely */
     cdesc->sn = uct_ud_iface_send_ctl(iface, ep, skb, iov, iovcnt,
-                                      UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED,
+                                      UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED |
+                                      UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED,
                                       max_log_sge);
     uct_ud_iface_add_ctl_desc(iface, cdesc);
     ++ep->tx.resend_count;

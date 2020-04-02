@@ -40,8 +40,6 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
                                         UCT_UD_HASH_SIZE,
                                         uct_ud_iface_peer_hash)
 
-static void uct_ud_iface_timer(int timer_id, int events, void *arg);
-
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
 
@@ -308,11 +306,53 @@ err_destroy_qp:
     return UCS_ERR_INVALID_PARAM;
 }
 
+static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
+{
+    uct_ud_iface_ops_t *ops =
+        ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
+    unsigned ev_count;
+
+    if (ucs_unlikely(iface->async.disable)) {
+        return;
+    }
+
+    ev_count = ops->async_progress(iface);
+    if (ev_count > 0) {
+        uct_ud_iface_raise_pending_async_ev(iface);
+    }
+}
+
+static void uct_ud_iface_async_handler(int fd, int events, void *arg)
+{
+    uct_ud_iface_t *iface = arg;
+
+    uct_ud_iface_async_progress(iface);
+
+    /* arm for new solicited events
+     * if user asks to provide notifications for all completion
+     * events by calling uct_iface_event_arm(), RX CQ will be
+     * armed again with solicited flag = 0 */
+    uct_ib_iface_pre_arm(&iface->super);
+    iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 1);
+
+    ucs_assert(iface->async.event_cb != NULL);
+    /* notify user */
+    iface->async.event_cb(iface->async.event_arg, 0);
+}
+
+static void uct_ud_iface_timer(int timer_id, int events, void *arg)
+{
+    uct_ud_iface_t *iface = arg;
+
+    uct_ud_iface_async_progress(iface);
+}
+
 ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
 {
     ucs_async_context_t *async = iface->super.super.worker->async;
     ucs_async_mode_t async_mode = async->mode;
     ucs_status_t status;
+    int event_fd;
 
     status = ucs_twheel_init(&iface->tx.timer, iface->tx.tick / 4,
                              uct_ud_iface_get_time(iface));
@@ -320,11 +360,25 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
         goto err;
     }
 
-    status = ucs_async_add_timer(async_mode, iface->async.tick,
-                                 uct_ud_iface_timer, iface, async,
-                                 &iface->async.timer_id);
+    status = uct_ib_iface_event_fd_get(&iface->super.super.super, &event_fd);
     if (status != UCS_OK) {
         goto err_twheel_cleanup;
+    }
+
+    if (iface->async.event_cb != NULL) {
+        status = ucs_async_set_event_handler(async_mode, event_fd,
+                                             UCS_EVENT_SET_EVREAD |
+                                             UCS_EVENT_SET_EVERR,
+                                             uct_ud_iface_async_handler,
+                                             iface, async);
+        if (status != UCS_OK) {
+            goto err_twheel_cleanup;
+        }
+
+        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 1);
+        if (status != UCS_OK) {
+            goto err_twheel_cleanup;
+        }
     }
 
     return UCS_OK;
@@ -337,9 +391,18 @@ err:
 
 void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
 {
-    uct_base_iface_progress_disable(&iface->super.super.super,
-                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    ucs_async_remove_handler(iface->async.timer_id, 1);
+    ucs_status_t status;
+    int event_fd;
+
+    uct_ud_iface_progress_disable(&iface->super.super.super,
+                                  UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    if (iface->async.event_cb != NULL) {
+        status = uct_ib_iface_event_fd_get(&iface->super.super.super,
+                                           &event_fd);
+        if (status == UCS_OK) {
+            ucs_async_remove_handler(event_fd, 1);
+        }
+    }
 }
 
 /* Calculate real GIDs len. Can be either 16 (RoCEv1 or RoCEv2/IPv6)
@@ -425,7 +488,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;
     self->tx.timer_sweep_count   = 0;
-    self->tx.timer_disable       = 0;
+    self->async.disable          = 0;
 
     self->rx.available           = config->super.rx.queue_len;
     self->rx.quota               = 0;
@@ -469,12 +532,27 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         self->async.tick = ucs_time_from_sec(config->event_timer_tick);
     }
 
+    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB) {
+        self->async.event_cb = params->async_event_cb;
+    } else {
+        self->async.event_cb = NULL;
+    }
+
+    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG) {
+        self->async.event_arg = params->async_event_arg;
+    } else {
+        self->async.event_arg = NULL;
+    }
+
+    self->async.timer_id = 0;
+
     /* Redefine receive desc release callback */
-    self->super.release_desc.cb  = uct_ud_iface_release_desc;
+    self->super.release_desc.cb = uct_ud_iface_release_desc;
 
     UCT_UD_IFACE_HOOK_INIT(self);
 
-    if (uct_ud_iface_create_qp(self, config) != UCS_OK) {
+    status = uct_ud_iface_create_qp(self, config);
+    if (status != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -621,7 +699,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
     iface_attr->cap.event_flags        = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                          UCT_IFACE_FLAG_EVENT_RECV      |
-                                         UCT_IFACE_FLAG_EVENT_FD;
+                                         UCT_IFACE_FLAG_EVENT_ASYNC_CB;
 
     iface_attr->cap.am.max_short       = uct_ib_iface_hdr_size(iface->config.max_inline,
                                                                sizeof(uct_ud_neth_t));
@@ -803,27 +881,6 @@ static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface)
     }
 }
 
-static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
-{
-    unsigned ev_count;
-    uct_ud_iface_ops_t *ops;
-
-    ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
-    ev_count = ops->async_progress(iface);
-    if (ev_count > 0) {
-        uct_ud_iface_raise_pending_async_ev(iface);
-    }
-}
-
-static void uct_ud_iface_timer(int timer_id, int events, void *arg)
-{
-    uct_ud_iface_t *iface = arg;
-
-    uct_ud_enter(iface);
-    uct_ud_iface_async_progress(iface);
-    uct_ud_leave(iface);
-}
-
 void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_ud_iface_t *iface = ucs_container_of(self,
@@ -885,17 +942,54 @@ out:
 
 void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
 {
-    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    uct_ud_iface_t *iface       = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    ucs_async_context_t *async  = iface->super.super.worker->async;
+    ucs_async_mode_t async_mode = async->mode;
+    ucs_status_t status;
+
+    uct_ud_enter(iface);
 
     if (flags & UCT_PROGRESS_RECV) {
-        uct_ud_enter(iface);
         iface->rx.available += iface->rx.quota;
         iface->rx.quota      = 0;
         /* let progress (possibly async) post the missing receives */
-        uct_ud_leave(iface);
     }
 
+    if (iface->async.timer_id == 0) {
+        status = ucs_async_add_timer(async_mode, iface->async.tick,
+                                     uct_ud_iface_timer, iface, async,
+                                     &iface->async.timer_id);
+        if (status != UCS_OK) {
+            ucs_fatal("iface(%p): unable to add iface timer handler - %s",
+                      iface, ucs_status_string(status));
+        }
+        ucs_assert(iface->async.timer_id != 0);
+    }
+
+    uct_ud_leave(iface);
+
     uct_base_iface_progress_enable(tl_iface, flags);
+}
+
+void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    ucs_status_t status;
+
+    uct_ud_enter(iface);
+
+    if (iface->async.timer_id != 0) {
+        status = ucs_async_remove_handler(iface->async.timer_id, 1);
+        if (status != UCS_OK) {
+            ucs_fatal("iface(%p): unable to remove iface timer handler (%d) - %s",
+                      iface, iface->async.timer_id, ucs_status_string(status));
+        }
+        iface->async.timer_id = 0;
+    }
+
+    uct_ud_leave(iface);
+
+    uct_base_iface_progress_disable(tl_iface, flags);
 }
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,

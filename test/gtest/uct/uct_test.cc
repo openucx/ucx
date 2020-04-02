@@ -1470,6 +1470,40 @@ ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
     }
 }
 
+void uct_test::async_event_ctx::signal() {
+    ASSERT_TRUE(aux_pipe_init);
+    ucs_async_pipe_push(&aux_pipe);
+}
+
+bool uct_test::async_event_ctx::wait_for_event(entity &e, int timeout) {
+    if (wakeup_fd.fd == -1) {
+        /* create wakeup */
+        if (e.iface_attr().cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
+            ucs_status_t status =
+                uct_iface_event_fd_get(e.iface(), &wakeup_fd.fd);
+            ASSERT_UCS_OK(status);
+        } else {
+            ucs_status_t status =
+                ucs_async_pipe_create(&aux_pipe);
+            ASSERT_UCS_OK(status);
+            aux_pipe_init = true;
+            wakeup_fd.fd = ucs_async_pipe_rfd(&aux_pipe);
+        }
+    }
+
+    int ret = poll(&wakeup_fd, 1, timeout);
+    EXPECT_TRUE((ret == 0) || (ret == 1));
+    if (ret > 0) {
+        if (e.iface_attr().cap.event_flags &
+            UCT_IFACE_FLAG_EVENT_ASYNC_CB) {
+            ucs_async_pipe_drain(&aux_pipe);
+        }
+        return true;
+    }
+
+    return false;
+}
+
 void test_uct_iface_attrs::init()
 {
     uct_test::init();

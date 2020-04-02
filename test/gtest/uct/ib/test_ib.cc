@@ -10,9 +10,9 @@ test_uct_ib::test_uct_ib() : m_e1(NULL), m_e2(NULL) { }
 
 void test_uct_ib::create_connected_entities() {
     m_e1 = uct_test::create_entity(0);
-    m_entities.push_back(m_e1);
-
     m_e2 = uct_test::create_entity(0);
+    
+    m_entities.push_back(m_e1);
     m_entities.push_back(m_e2);
 
     m_e1->connect(0, *m_e2, 0);
@@ -458,27 +458,16 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
 class test_uct_event_ib : public test_uct_ib {
 public:
     test_uct_event_ib() {
-        length            = 8;
-        wakeup_fd.revents = 0;
-        wakeup_fd.events  = POLLIN;
-        wakeup_fd.fd      = 0;
-        test_ib_hdr       = 0xbeef;
-        m_buf1            = NULL;
-        m_buf2            = NULL;
+        length      = 8;
+        test_ib_hdr = 0xbeef;
+        m_buf1      = NULL;
+        m_buf2      = NULL;
     }
 
     void init() {
-        ucs_status_t status;
-
         test_uct_ib::init();
 
         check_skip_test();
-
-        /* create receiver wakeup */
-        status = uct_iface_event_fd_get(m_e1->iface(), &wakeup_fd.fd);
-        ASSERT_EQ(status, UCS_OK);
-
-        EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
         m_buf1 = new mapped_buffer(length, 0x1, *m_e1);
         m_buf2 = new mapped_buffer(length, 0x2, *m_e2);
@@ -488,6 +477,26 @@ public:
                                  0);
 
         test_uct_event_ib::bcopy_pack_count = 0;
+    }
+
+    /* overload `test_uct_ib` variant to pass the async event handler to
+     * the receive entity */
+    void create_connected_entities() {
+        /* `m_e1` entity is used as a receiver in UCT IB Event tests */
+        m_e1 = uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
+                                       async_event_handler, this);
+        m_e2 = uct_test::create_entity(0);
+
+        m_entities.push_back(m_e1);
+        m_entities.push_back(m_e2);
+
+        m_e1->connect(0, *m_e2, 0);
+        m_e2->connect(0, *m_e1, 0);
+    }
+
+    static void async_event_handler(void *arg, unsigned flags) {
+        test_uct_event_ib *self = static_cast<test_uct_event_ib*>(arg);
+        self->m_async_event_ctx.signal();
     }
 
     static size_t pack_cb(void *dest, void *arg) {
@@ -551,11 +560,11 @@ public:
 protected:
     static const unsigned EVENTS = UCT_EVENT_RECV | UCT_EVENT_SEND_COMP;
 
-    struct pollfd wakeup_fd;
     size_t length;
     uint64_t test_ib_hdr;
     mapped_buffer *m_buf1, *m_buf2;
     static size_t bcopy_pack_count;
+    uct_test::async_event_ctx m_async_event_ctx;
 };
 
 size_t test_uct_event_ib::bcopy_pack_count = 0;
@@ -573,7 +582,7 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
     ASSERT_EQ(status, UCS_OK);
 
     /* check initial state of the fd and [send|recv]_cq */
-    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
+    EXPECT_FALSE(m_async_event_ctx.wait_for_event(*m_e1, 0));
     check_send_cq(m_e1->iface(), 0);
     check_recv_cq(m_e1->iface(), 0);
 
@@ -581,7 +590,9 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
     send_msg_e1_e2();
 
     /* make sure the file descriptor is signaled once */
-    ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
+    EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e1,
+                                                 1000 *
+                                                 ucs::test_time_multiplier()));
 
     status = uct_iface_event_arm(m_e1->iface(), EVENTS);
     ASSERT_EQ(status, UCS_ERR_BUSY);
@@ -608,7 +619,7 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
     ASSERT_EQ(UCS_OK, status);
 
     /* check initial state of the fd and [send|recv]_cq */
-    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
+    EXPECT_FALSE(m_async_event_ctx.wait_for_event(*m_e1, 0));
     check_send_cq(m_e1->iface(), 0);
     check_recv_cq(m_e1->iface(), 0);
 
@@ -625,7 +636,9 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
     }
 
     /* make sure the file descriptor is signaled */
-    ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
+    EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e1,
+                                                 1000 *
+                                                 ucs::test_time_multiplier()));
 
     /* Acknowledge all the requests */
     short_progress_loop();

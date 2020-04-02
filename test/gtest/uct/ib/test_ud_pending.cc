@@ -31,6 +31,8 @@ public:
         req_count = 0;
         me = this;
         m_e1->connect_to_iface(0, *m_e2);
+        disable_async(m_e1);
+        disable_async(m_e2);
         set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
         /* ep is not connected yet */
         EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
@@ -159,8 +161,6 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, err_busy,
 UCS_TEST_SKIP_COND_P(test_ud_pending, connect,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
 {
-    disable_async(m_e1);
-    disable_async(m_e2);
     post_pending_reqs();
     check_pending_reqs(true);
 }
@@ -168,8 +168,6 @@ UCS_TEST_SKIP_COND_P(test_ud_pending, connect,
 UCS_TEST_SKIP_COND_P(test_ud_pending, flush,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT))
 {
-    disable_async(m_e1);
-    disable_async(m_e2);
     post_pending_reqs();
     flush();
     check_pending_reqs(false);
