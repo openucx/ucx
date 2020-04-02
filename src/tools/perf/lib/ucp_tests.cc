@@ -310,12 +310,16 @@ public:
 
         ucx_perf_test_start_clock(&m_perf);
 
+#if _OPENMP
+#pragma omp barrier
+#endif
+
         send_buffer   = m_perf.send_buffer;
         recv_buffer   = m_perf.recv_buffer;
         worker        = m_perf.ucp.worker;
-        ep            = m_perf.ucp.peers[1 - my_index].ep;
-        remote_addr   = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;
-        rkey          = m_perf.ucp.peers[1 - my_index].rkey;
+        ep            = m_perf.ucp.ep;
+        remote_addr   = m_perf.ucp.remote_addr;
+        rkey          = m_perf.ucp.rkey;
         sn            = 0;
         send_length   = length;
         recv_length   = length;
@@ -344,6 +348,11 @@ public:
 
         wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
+
+#if _OPENMP
+#pragma omp barrier
+#endif
+
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
         return UCS_OK;
@@ -372,12 +381,16 @@ public:
 
         ucx_perf_test_start_clock(&m_perf);
 
+#if _OPENMP
+#pragma omp barrier
+#endif
+
         send_buffer   = m_perf.send_buffer;
         recv_buffer   = m_perf.recv_buffer;
         worker        = m_perf.ucp.worker;
-        ep            = m_perf.ucp.peers[1 - my_index].ep;
-        remote_addr   = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;
-        rkey          = m_perf.ucp.peers[1 - my_index].rkey;
+        ep            = m_perf.ucp.ep;
+        remote_addr   = m_perf.ucp.remote_addr;
+        rkey          = m_perf.ucp.rkey;
         sn            = 0;
         send_length   = length;
         recv_length   = length;
@@ -405,6 +418,11 @@ public:
 
         wait_window(m_max_outstanding);
         ucp_worker_flush(m_perf.ucp.worker);
+
+#if _OPENMP
+#pragma omp barrier
+#endif
+
         ucx_perf_get_time(&m_perf);
 
         ucp_perf_barrier(&m_perf);
