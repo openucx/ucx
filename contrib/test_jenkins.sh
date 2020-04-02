@@ -663,6 +663,25 @@ check_make_distcheck() {
 	fi
 }
 
+check_config_h() {
+	echo 1..1 > check_config_h.tap
+
+	srcdir=$PWD/../src
+
+	# Check if all .c files include config.h
+	echo "==== Checking for config.h files in directory $srcdir ===="
+
+	missing=`find $srcdir -name \*.c -o -name \*.cc | xargs grep -LP '\#\s*include\s+"config.h"'`
+	
+	if [ `echo $missing | wc -w` -eq 0 ]
+	then
+		echo "ok 1 - check successful " >> check_config_h.tap
+	else
+		echo "Error: missing include config.h in files: $missing"
+		exit 1
+	fi
+}
+
 run_client_server_app() {
 	test_name=$1
 	test_args=$2
@@ -1559,7 +1578,7 @@ do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
 do_distributed_task 1 4 check_make_distcheck
-
+do_distributed_task 2 4 check_config_h
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
 	run_tests
