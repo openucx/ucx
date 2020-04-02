@@ -112,10 +112,16 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         uct_rc_verbs_txqp_completed(&ep->super.txqp, &ep->txcnt, count);
         iface->super.tx.cq_available += count;
 
+       /* process pending elements prior to CQ entries to avoid out-of-order
+        * transmission in completion callbacks */
+        ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
+                                   &ep->super.arb_group);
+        ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1,
+                             uct_rc_ep_process_pending, NULL);
+
         uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci);
-        ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
     }
-    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
+
     return num_wcs;
 }
 
