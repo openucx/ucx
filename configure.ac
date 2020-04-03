@@ -365,6 +365,7 @@ AC_CONFIG_FILES([
                  test/apps/sockaddr/Makefile
                  test/examples/Makefile
                  test/mpi/Makefile
+                 test/examples/emulate-distribute-storage/Makefile
                  bindings/java/Makefile
                  bindings/java/pom.xml
                  bindings/java/src/main/native/Makefile
