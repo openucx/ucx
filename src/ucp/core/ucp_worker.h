@@ -133,7 +133,7 @@ enum {
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
-                             (_flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) ? \
+                             ((_flags) & UCP_RECV_DESC_FLAG_EAGER_SYNC) ? \
                              UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG : \
                              UCP_WORKER_STAT_TAG_RX_EAGER_MSG, 1);
 
@@ -151,7 +151,7 @@ enum {
 
 #define ucp_worker_mpool_get(_mp) \
     ({ \
-        ucp_mem_desc_t *_rdesc = ucs_mpool_get_inline((_mp)); \
+        ucp_mem_desc_t *_rdesc = ucs_mpool_get_inline(_mp); \
         if (_rdesc != NULL) { \
             VALGRIND_MAKE_MEM_DEFINED(_rdesc, sizeof(*_rdesc)); \
         } \

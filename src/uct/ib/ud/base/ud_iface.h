@@ -135,15 +135,12 @@ struct uct_ud_iface {
     } rx;
     struct {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
-        uct_ud_send_skb_inl_t  skb_inl;
         ucs_mpool_t            mp;
         /* got async events but pending queue was not dispatched */
         uint8_t                async_before_pending;
         int16_t                available;
         unsigned               unsignaled;
-        /* pool of skbs that are reserved for retransmissions */
-        ucs_queue_head_t       resend_skbs;
-        unsigned               resend_skbs_quota;
+        ucs_queue_head_t       outstanding_q;
         ucs_arbiter_t          pending_q;
         ucs_queue_head_t       async_comp_q;
     } tx;
@@ -227,16 +224,7 @@ static UCS_F_ALWAYS_INLINE int uct_ud_iface_has_skbs(uct_ud_iface_t *iface)
     return iface->tx.skb || !ucs_mpool_is_empty(&iface->tx.mp);
 }
 
-
-uct_ud_send_skb_t *uct_ud_iface_resend_skb_get(uct_ud_iface_t *iface);
-
-static inline void
-uct_ud_iface_resend_skb_put(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb)
-{
-    if (skb != ucs_unaligned_ptr(&iface->tx.skb_inl.super)) {
-        ucs_queue_push(&iface->tx.resend_skbs, &skb->queue);
-    }
-}
+uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface);
 
 static inline uct_ib_address_t* uct_ud_creq_ib_addr(uct_ud_ctl_hdr_t *conn_req)
 {
@@ -422,6 +410,21 @@ uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
     }
 }
 
+static UCS_F_ALWAYS_INLINE uint16_t
+uct_ud_iface_send_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
+                      const uct_ud_iov_t *iov, uint16_t iovcnt, int flags)
+{
+    uct_ud_iface_ops_t *ud_ops = ucs_derived_of(iface->super.ops,
+                                                uct_ud_iface_ops_t);
+    return ud_ops->send_ctl(ep, skb, iov, iovcnt, flags);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
+{
+    ucs_queue_push(&iface->tx.outstanding_q, &cdesc->queue);
+}
+
 /* Go over all active eps and remove them. Do it this way because class destructors are not
  * virtual
  */
@@ -458,7 +461,7 @@ uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
 void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface);
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_dispatch_zcopy_comps(uct_ud_iface_t *iface)
+uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface)
 {
     if (ucs_likely(ucs_queue_is_empty(&iface->tx.async_comp_q))) {
         return;

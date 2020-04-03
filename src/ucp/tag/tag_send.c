@@ -308,3 +308,19 @@ out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;
 }
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
+                 (ep, buffer, count, tag, param),
+                 ucp_ep_h ep, const void *buffer, size_t count,
+                 ucp_tag_t tag, const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
+                 (ep, buffer, count, tag, param),
+                 ucp_ep_h ep, const void *buffer, size_t count,
+                 ucp_tag_t tag, const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}

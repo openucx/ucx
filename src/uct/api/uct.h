@@ -1,6 +1,7 @@
 /**
  * @file        uct.h
- * @date        2014-2019
+ * @date        2014-2020
+ * @copyright   NVIDIA Corporation. All rights reserved.
  * @copyright   Mellanox Technologies Ltd. All rights reserved.
  * @copyright   Oak Ridge National Laboratory. All rights received.
  * @copyright   Advanced Micro Devices, Inc. All rights received.
@@ -21,6 +22,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/topo.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -1211,6 +1213,76 @@ struct uct_md_attr {
     size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
     ucs_cpu_set_t            local_cpus;    /**< Mask of CPUs near the resource */
 };
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief UCT MD memory attributes field mask
+ *
+ * The enumeration allows specifying which fields in @ref uct_md_mem_attr_t
+ * are present.
+ */
+enum uct_md_mem_attr_field {
+    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE = UCS_BIT(0), /**< Indicate if memory type
+                                                      is populated. E.g. CPU/GPU */
+    UCT_MD_MEM_ATTR_FIELD_SYS_DEV  = UCS_BIT(1)  /**< Indicate if details of
+                                                      system device backing
+                                                      the pointer are populated.
+                                                      E.g. NUMA/GPU */
+};
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief  Memory domain attributes.
+ *
+ * This structure defines the attributes of a memory pointer which may
+ * include the memory type of the pointer, and the system device that backs
+ * the pointer depending on the bit fields populated in field_mask.
+ */
+typedef struct uct_md_mem_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_md_mem_attr_t. Note that the field mask is
+     * populated upon return from uct_md_mem_query and not set by user.
+     * Subsequent use of members of the structure are valid after ensuring that
+     * relevant bits in the field_mask are set.
+     */
+    uint64_t          field_mask;
+
+    /**
+     * The type of memory. E.g. CPU/GPU memory or some other valid type
+     */
+    ucs_memory_type_t mem_type;
+
+    /**
+     * Location of device pointer. E.g. NUMA/GPU
+     */
+    ucs_sys_device_t  sys_dev;
+} uct_md_mem_attr_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Query attributes of a given pointer
+ *
+ * Return attributes such as memory type, and system device for the
+ * given pointer of specific length.
+ *
+ * @param [in]     md          Memory domain to run the query on. This function
+ *                             returns an error if the md does not recognize the
+ *                             pointer.
+ * @param [in]     address     The address of the pointer. Must be non-NULL
+ *                             else UCS_ERR_INVALID_PARAM error is returned.
+ * @param [in]     length      Length of the memory region to examine.
+ *                             Must be nonzero else UCS_ERR_INVALID_PARAM error
+ *                             is returned.
+ * @param [out]    mem_attr    If successful, filled with ptr attributes.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, const size_t length,
+                              uct_md_mem_attr_t *mem_attr);
 
 
 /**

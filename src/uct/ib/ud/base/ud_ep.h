@@ -185,10 +185,8 @@ enum {
 
 /* TODO: optimize endpoint memory footprint */
 enum {
-    UCT_UD_EP_FLAG_ASYNC_COMPS       = UCS_BIT(0), /* set if there are completions that
-                                                    * were picked by async thread and queued */
-    UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(1), /* set if the endpoint was disconnected */
-    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(2), /* EP is was created as internal */
+    UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(0), /* set if the endpoint was disconnected */
+    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1), /* EP was created as internal */
 
     /* debug flags */
     UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(3), /* CREQ message was received */
@@ -340,29 +338,11 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface,
 
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_neth_ctl_ack(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    neth->psn         = ep->tx.psn;
-    neth->ack_psn     = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
-    neth->packet_type = ep->dest_ep_id;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_ud_neth_ctl_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    neth->psn         = ep->tx.psn;
-    neth->ack_psn     = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
-    neth->packet_type = ep->dest_ep_id|UCT_UD_PACKET_FLAG_ACK_REQ;
-}
-
-static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_init_data(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->psn = ep->tx.psn;
     neth->ack_psn = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
 }
-
-
 
 static inline int uct_ud_ep_compare(uct_ud_ep_t *a, uct_ud_ep_t *b)
 {

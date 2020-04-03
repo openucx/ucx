@@ -171,6 +171,7 @@ protected:
 
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
+        void revoke_ep(unsigned index);
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
         void connect(unsigned index, entity& other, unsigned other_index,

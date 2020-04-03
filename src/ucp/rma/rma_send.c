@@ -270,6 +270,13 @@ out_unlock:
     return ptr_status;
 }
 
+ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t length,
+                             uint64_t remote_addr, ucp_rkey_h rkey,
+                             const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
 ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey)
 {
@@ -323,6 +330,13 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ptr_status;
+}
+
+ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t length,
+                             uint64_t remote_addr, ucp_rkey_h rkey,
+                             const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),

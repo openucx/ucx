@@ -396,7 +396,7 @@ build_icc() {
 build_pgi() {
 	echo 1..1 > build_pgi.tap
 	pgi_test_file=$(mktemp ./XXXXXX).c
-	echo "int main() {}" > ${pgi_test_file}
+	echo "int main() {return 0;}" > ${pgi_test_file}
 
 	if module_load pgi/latest && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
 	then
@@ -612,7 +612,9 @@ build_jucx() {
 #
 build_armclang() {
 	echo 1..1 > build_armclang.tap
-	if module_load arm-compiler/latest
+	armclang_test_file=$(mktemp ./XXXXXX).c
+	echo "int main() {return 0;}" > ${armclang_test_file}
+	if module_load arm-compiler/latest && armclang --version && armclang ${armclang_test_file} -o ${armclang_test_file}.out
 	then
 		echo "==== Build with armclang compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
@@ -622,11 +624,13 @@ build_armclang() {
 		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
 		$MAKEP distclean
 		echo "ok 1 - build successful " >> build_armclang.tap
-		module unload arm-compiler/latest
 	else
 		echo "==== Not building with armclang compiler ===="
 		echo "ok 1 - # SKIP because armclang not installed" >> build_armclang.tap
 	fi
+
+	rm -rf ${armclang_test_file} ${armclang_test_file}.out
+	module unload arm-compiler/latest
 }
 
 check_inst_headers() {
@@ -656,6 +660,25 @@ check_make_distcheck() {
 		$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
 	else
 		echo "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
+	fi
+}
+
+check_config_h() {
+	echo 1..1 > check_config_h.tap
+
+	srcdir=$PWD/../src
+
+	# Check if all .c files include config.h
+	echo "==== Checking for config.h files in directory $srcdir ===="
+
+	missing=`find $srcdir -name \*.c -o -name \*.cc | xargs grep -LP '\#\s*include\s+"config.h"'`
+	
+	if [ `echo $missing | wc -w` -eq 0 ]
+	then
+		echo "ok 1 - check successful " >> check_config_h.tap
+	else
+		echo "Error: missing include config.h in files: $missing"
+		exit 1
 	fi
 }
 
@@ -1555,7 +1578,7 @@ do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
 do_distributed_task 1 4 check_make_distcheck
-
+do_distributed_task 2 4 check_config_h
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
 	run_tests

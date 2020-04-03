@@ -62,6 +62,7 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
         iface->tx.skb = skb;
     }
     VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
+    ucs_assert(skb->flags == 0);
     ucs_prefetch(skb->neth);
     return skb;
 }
@@ -147,19 +148,12 @@ uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     ep->tx.send_time = uct_ud_iface_get_async_time(iface);
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_ud_am_set_neth(uct_ud_neth_t *neth, uct_ud_ep_t *ep, uint8_t id)
-{
-    uct_ud_neth_init_data(ep, neth);
-    uct_ud_neth_set_type_am(ep, neth, id);
-    uct_ud_neth_ack_req(ep, neth);
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
                      uct_ud_send_skb_t **skb_p)
 {
     uct_ud_send_skb_t *skb;
+    uct_ud_neth_t *neth;
 
     UCT_CHECK_AM_ID(id);
 
@@ -179,7 +173,11 @@ uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
                 ep, id, (ep->flags & UCT_UD_EP_FLAG_IN_PENDING),
                 ep->tx.pending.group.tail,
                 &ep->tx.pending.elem);
-    uct_ud_am_set_neth(skb->neth, ep, id);
+
+    neth = skb->neth;
+    uct_ud_neth_init_data(ep, neth);
+    uct_ud_neth_set_type_am(ep, neth, id);
+    uct_ud_neth_ack_req(ep, neth);
 
     *skb_p = skb;
     return UCS_OK;
@@ -204,4 +202,34 @@ uct_ud_iface_dispatch_comp(uct_ud_iface_t *iface, uct_completion_t *comp,
      */
     uct_ud_iface_raise_pending_async_ev(iface);
     uct_invoke_completion(comp, status);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb,
+                            ucs_status_t status)
+{
+    uct_ud_comp_desc_t *cdesc = uct_ud_comp_desc(skb);
+
+    cdesc->status = status;
+    ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_send_skb_complete(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb,
+                         int is_async)
+{
+    if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP)) {
+        if (ucs_unlikely(is_async)) {
+            /* don't call user completion from async context. instead, put
+             * it on a queue which will be progressed from main thread.
+             */
+            uct_ud_iface_add_async_comp(iface, skb, UCS_OK);
+            return;
+        }
+
+        uct_ud_iface_dispatch_comp(iface, uct_ud_comp_desc(skb)->comp, UCS_OK);
+    }
+
+    skb->flags = 0; /* reset all flags to 0 before returning to memory pool */
+    ucs_mpool_put_inline(skb);
 }
