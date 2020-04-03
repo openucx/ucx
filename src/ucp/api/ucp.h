@@ -369,6 +369,19 @@ enum ucp_conn_request_attr_field {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief @ref ucp_tag_recv_cancel_params_t field mask.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref ucp_tag_recv_cancel_params_t are present. It is used to enable backward
+ * compatibility support.
+ */
+enum ucp_tag_recv_cancel_params_field {
+    UCP_TAG_RECV_CANCEL_PARAMS_FIELD_TAG      = UCS_BIT(0),
+    UCP_TAG_RECV_CANCEL_PARAMS_FIELD_TAG_MASK = UCS_BIT(1)
+};
+        
+/**
  * @ingroup UCP_DATATYPE
  * @brief UCP data type classification
  *
@@ -1112,6 +1125,25 @@ struct ucp_tag_recv_info {
     ucp_tag_t                              sender_tag;
     /** The size of the received data */
     size_t                                 length;
+};
+
+
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief parameters of @ref ucp_worker_tag_recv_cancel_all.
+ */
+struct ucp_tag_recv_cancel_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_tag_recv_cancel_params_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                               field_mask;
+    /* Tag for matching requests to canceled */
+    ucp_tag_t                              tag;
+    /* Tag mask to cancel requests by wildcard */
+    ucp_tag_t                              tag_mask;
 };
 
 
@@ -3058,33 +3090,33 @@ void ucp_request_cancel(ucp_worker_h worker, void *request);
 
 /**
  * @ingroup UCP_COMM
- * @brief Cancel outstanding communications receive requests matching by @a tag.
+ * @brief Cancel outstanding communications receive requests matching by
+ *        @a params.
  *
  * @param [in]  worker       UCP worker.
- * @param [in]  tag          tag to cancel matching requests.
- * @param [in]  flags        reserved for future use.
+ * @param [in]  params       parameters for matching requests to cancel.
  *
  * @return UCS_PTR_STATUS(_ptr) - indicates the status. However, all requests
- *                                matching @ tab are completed immediately or
+ *                                matching @a tag are completed immediately or
  *                                have been started non blocking cancellation
  *                                procedure and will be completed in finite time.
- * @return otherwise        - reserved for future use.
+ * @return otherwise            - reserved for future use.
  *
- * This routine tries to cancel an outstanding communication receive requests
- * posted with @ref ucp_tag_receive_nb routine on the same @a worker. After
- * calling this routine, the requests will be in completed or canceled (but
- * not both) state regardless of the status of the target endpoint associated
- * with the communication request. If the request is completed successfully,
- * the @ref ucp_send_callback_t "send" or @ref ucp_tag_recv_callback_t
- * "receive" completion callbacks (based on the type of the request) will be
- * called with the @a status argument of the callback set to UCS_OK, and in a
- * case it is canceled the @a status argument is set to UCS_ERR_CANCELED. It is
- * important to note that in order to release the request back to the library
- * the application is responsible for calling @ref ucp_request_free
- * "ucp_request_free()".
+ * This routine tries to cancel all outstanding communication receive requests
+ * posted with @ref ucp_tag_receive_nb routine on the same @a worker and
+ * matching . After calling this routine, requests will be in completed or
+ * canceled (but not both) state regardless of the status of the target endpoint
+ * associated with the communication request. If the request is completed
+ * successfully, the @ref ucp_tag_recv_callback_t "receive" completion callback
+ * will be called with the @a status argument of the callback set to
+ * @ref UCS_OK, and in a case it is canceled the @a status argument is set to
+ * @ref UCS_ERR_CANCELED. It is important to note that in order to release
+ * requests back to the library the application is responsible for calling
+ * @ref ucp_request_free".
  */
-ucs_status_ptr_t ucp_worker_tag_cancel(ucp_worker_h worker, ucp_tag_t tag,
-                                       unsigned flags);
+ucs_status_ptr_t
+ucp_worker_tag_recv_cancel_all(ucp_worker_h worker,
+                               const ucp_tag_recv_cancel_params_t *params);
 
 
 /**
