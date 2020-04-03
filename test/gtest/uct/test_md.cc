@@ -247,7 +247,7 @@ UCS_TEST_P(test_md, mem_query) {
     uct_md_attr_t md_attr;
     ucs_status_t status;
     uct_md_mem_attr_t mem_attr;
-    int mem_type_id;
+    uint8_t mem_type_id;
     void *address;
 
     status = uct_md_query(md(), &md_attr);
@@ -260,7 +260,7 @@ UCS_TEST_P(test_md, mem_query) {
     ucs_for_each_bit(mem_type_id, md_attr.cap.detect_mem_types) {
         alloc_memory(&address, UCS_KBYTE, NULL,
                      static_cast<ucs_memory_type_t>(mem_type_id));
-        status = uct_md_mem_query(md(), address, 1024, &mem_attr);
+        status = uct_md_mem_query(md(), address, UCS_KBYTE, &mem_attr);
         ASSERT_UCS_OK(status);
         EXPECT_TRUE(mem_attr.mem_type == mem_type_id);
     }
