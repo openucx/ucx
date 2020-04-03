@@ -83,8 +83,13 @@ UCS_TEST_P(test_ucp_tag_cancel, ucp_worker_tag_cancel) {
 
     for (size_t i = 0; i < tags.size(); ++i) {
         ucp_tag_t cancel_tag = tags[i];
-        void *status_ptr = ucp_worker_tag_cancel(receiver().worker(),
-                                                 cancel_tag, 0);
+
+        ucp_tag_recv_cancel_params_t params;
+        params.field_mask = UCP_TAG_RECV_CANCEL_PARAMS_FIELD_TAG;
+        params.tag        = cancel_tag;
+
+        void *status_ptr  = ucp_worker_tag_recv_cancel_all(receiver().worker(),
+                                                           &params);
         ASSERT_EQ(NULL,   status_ptr);
         ASSERT_EQ(UCS_OK, UCS_PTR_STATUS(status_ptr));
         for (size_t j = 0; j < reqs.size(); ++j) {
