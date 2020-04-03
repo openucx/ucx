@@ -190,7 +190,7 @@ uct_ugni_md_open(uct_component_h component,const char *md_name,
         .mem_free           = (void*)ucs_empty_function,
         .mem_reg            = uct_ugni_mem_reg,
         .mem_dereg          = uct_ugni_mem_dereg,
-        .mem_query          = ucs_empty_function_return_unsupported,
+        .mem_query          = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
         .mkey_pack          = uct_ugni_rkey_pack,
         .detect_memory_type = ucs_empty_function_return_unsupported,
     };

@@ -29,7 +29,7 @@ static uct_md_ops_t uct_rdmacm_md_ops = {
     .close                   = uct_rdmacm_md_close,
     .query                   = uct_rdmacm_md_query,
     .is_sockaddr_accessible  = uct_rdmacm_is_sockaddr_accessible,
-    .mem_query               = ucs_empty_function_return_unsupported,
+    .mem_query               = (uct_md_mem_query_func_t)ucs_empty_function_return_unsupported,
     .detect_memory_type      = ucs_empty_function_return_unsupported,
 };
 
