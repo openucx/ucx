@@ -85,19 +85,39 @@ int ucp_tag_exp_remove(ucp_tag_match_t *tm, ucp_request_t *req)
     return 0;
 }
 
-void ucp_tag_exp_erase(ucp_tag_match_t *tm, ucp_tag_t tag)
+static void
+ucp_tag_request_exp_queue_erase(ucp_tag_match_t *tm, ucp_request_queue_t *queue,
+                                ucp_tag_t tag, ucp_tag_t mask)
 {
-    ucp_request_queue_t *req_queue = ucp_tag_exp_get_queue_for_tag(tm, tag);
     ucs_queue_iter_t iter;
-    ucp_request_t *qreq;
+    ucp_request_t *req;
 
-    ucs_queue_for_each_safe(qreq, iter, &req_queue->queue, recv.queue) {
-        ucp_tag_offload_try_cancel(qreq->recv.worker, qreq, 0);
-        ucp_tag_exp_delete(qreq, tm, req_queue, iter);
-        if (!(qreq->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
-            ucp_request_complete_tag_recv(qreq, UCS_ERR_CANCELED);
+    ucs_queue_for_each_safe(req, iter, &queue->queue, recv.queue) {
+        if (!ucp_tag_is_match(tag, req->recv.tag.tag,
+                              mask & req->recv.tag.tag_mask)) {
+            continue;
         }
+
+        ucp_tag_offload_try_cancel(req->recv.worker, req, 0);
+        ucp_tag_exp_delete(req, tm, queue, iter);
+        if (req->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+            continue;
+        }
+
+        ucp_request_complete_tag_recv(req, UCS_ERR_CANCELED);
     }
+}
+
+void ucp_tag_exp_erase(ucp_tag_match_t *tm, ucp_tag_t tag, ucp_tag_t mask)
+{
+    size_t hash_size = ucs_roundup_pow2(UCP_TAG_MATCH_HASH_SIZE);
+    size_t i;
+
+    for (i = 0; i < hash_size; ++i) {
+        ucp_tag_request_exp_queue_erase(tm, &tm->expected.hash[i], tag, mask);
+    }
+
+    ucp_tag_request_exp_queue_erase(tm, &tm->expected.wildcard, tag, mask);
 }
 
 static inline uint64_t ucp_tag_exp_req_seq(ucs_queue_iter_t iter)

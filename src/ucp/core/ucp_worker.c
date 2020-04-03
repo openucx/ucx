@@ -2205,11 +2205,24 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
 
-ucs_status_ptr_t ucp_worker_tag_cancel(ucp_worker_h worker, ucp_tag_t tag,
-                                       unsigned flags)
+ucs_status_ptr_t
+ucp_worker_tag_recv_cancel_all(ucp_worker_h worker,
+                               const ucp_tag_recv_cancel_params_t *params)
 {
+    ucp_tag_t mask = UCP_TAG_MASK_FULL;
+    ucp_tag_t tag;
+
+    if (!(params->field_mask & UCP_TAG_RECV_CANCEL_PARAMS_FIELD_TAG)) {
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
+
+    tag = params->tag;
+    if (params->field_mask & UCP_TAG_RECV_CANCEL_PARAMS_FIELD_TAG_MASK) {
+        mask = params->tag_mask;
+    }
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
-    ucp_tag_exp_erase(&worker->tm, tag);
+    ucp_tag_exp_erase(&worker->tm, tag, mask);
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return NULL;
 }
