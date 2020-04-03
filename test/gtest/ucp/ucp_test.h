@@ -51,7 +51,7 @@ public:
         typedef std::deque<std::pair<ucp_ep_h, void *> > closing_eps_t;
 
     public:
-        typedef closing_eps_t::iterator            closing_ep_t;
+        typedef closing_eps_t::const_pointer closing_ep_t;
 
         typedef enum {
             LISTEN_CB_EP,       /* User's callback accepts ucp_ep_h */
@@ -135,7 +135,7 @@ public:
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
         std::queue<ucp_conn_request_h>  m_conn_reqs;
-        std::deque<std::pair<ucp_ep_h, void *> > m_closing_eps;
+        closing_eps_t                   m_closing_eps;
         size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
         ucs::handle<ucp_ep_params_t*>   m_server_ep_params;

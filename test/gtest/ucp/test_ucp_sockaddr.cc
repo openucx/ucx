@@ -160,8 +160,8 @@ public:
             }
         }
         freeifaddrs(ifaddrs);
-            UCS_TEST_SKIP_R("No interface for testing");
-        }
+        UCS_TEST_SKIP_R("No interface for testing");
+    }
 
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type)
     {

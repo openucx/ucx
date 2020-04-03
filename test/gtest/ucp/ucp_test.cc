@@ -582,29 +582,30 @@ ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
                                      enum ucp_ep_close_mode mode) {
     ucp_ep_h ep = revoke_ep(worker_index, ep_index);
     if (ep == NULL) {
-        return m_closing_eps.end();
+        return NULL;
     }
 
     void *req = ucp_ep_close_nb(ep, mode);
     if (UCS_PTR_IS_PTR(req)) {
         m_closing_eps.push_back(std::make_pair(ep, req));
-        return --m_closing_eps.end();
+        return &m_closing_eps.back();
     }
 
     ASSERT_UCS_OK(UCS_PTR_STATUS(req));
-    return m_closing_eps.end();
+    return NULL;
 }
 
 bool ucp_test_base::entity::is_ep_closed(const closing_ep_t &closing_ep) const {
-    return (closing_ep == m_closing_eps.end()) ||
+    return (closing_ep == NULL) ||
            (ucp_request_check_status(closing_ep->second) != UCS_INPROGRESS);
 }
 
 void ucp_test_base::entity::closed_ep_free(closing_ep_t &closing_ep) {
     ASSERT_TRUE(is_ep_closed(closing_ep));
-    if (closing_ep != m_closing_eps.end()) {
+    if (closing_ep != NULL) {
         ucp_request_free(closing_ep->second);
-        m_closing_eps.erase(closing_ep);
+        m_closing_eps.erase(std::find(m_closing_eps.begin(),
+                                      m_closing_eps.end(), *closing_ep));
     }
 }
 
@@ -619,9 +620,9 @@ void ucp_test_base::entity::close_all_eps(const ucp_test &test, int worker_idx,
     }
 
     while (!m_closing_eps.empty()) {
-        closing_ep_t ep = m_closing_eps.begin();
+        closing_ep_t ep = &m_closing_eps.front();
         while (!is_ep_closed(ep)) {
-            progress(worker_idx);
+            test.progress(worker_idx);
         }
         closed_ep_free(ep);
     }
