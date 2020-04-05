@@ -222,7 +222,8 @@ void ucx_perf_global_init();
 /**
  * Run a UCT performance test.
  */
-ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result);
+ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
+                          ucx_perf_result_t *result);
 
 
 END_C_DECLS

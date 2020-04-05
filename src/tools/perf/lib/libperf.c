@@ -283,7 +283,7 @@ void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
 
 /* Initialize/reset all parameters that could be modified by the warm-up run */
 static void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
-                                          ucx_perf_params_t *params)
+                                          const ucx_perf_params_t *params)
 {
     unsigned i;
 
@@ -306,7 +306,7 @@ static void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
 }
 
 static void ucx_perf_test_init(ucx_perf_context_t *perf,
-                               ucx_perf_params_t *params)
+                               const ucx_perf_params_t *params)
 {
     unsigned group_index;
 
@@ -1300,9 +1300,11 @@ static void ucp_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     ucp_perf_test_destroy_eps(perf, group_size);
 }
 
-static void ucx_perf_set_warmup(ucx_perf_context_t* perf, ucx_perf_params_t* params)
+static void ucx_perf_set_warmup(ucx_perf_context_t *perf,
+                                const ucx_perf_params_t *params)
 {
-    perf->max_iter = ucs_min(params->warmup_iter, ucs_div_round_up(params->max_iter, 10));
+    perf->max_iter = ucs_min(params->warmup_iter,
+                             ucs_div_round_up(params->max_iter, 10));
     perf->report_interval = ULONG_MAX;
 }
 
@@ -1589,7 +1591,8 @@ static struct {
 static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                           ucx_perf_result_t* result);
 
-ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
+ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
+                          ucx_perf_result_t *result)
 {
     ucx_perf_context_t *perf;
     ucs_status_t status;
