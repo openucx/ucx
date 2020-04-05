@@ -752,8 +752,8 @@ public:
 protected:
 
     /* the callback pushes the elem on group2 and schedules it */
-    virtual ucs_arbiter_cb_result_t dispatch(ucs_arbiter_group_t *group,
-                                             ucs_arbiter_elem_t *elem)
+    ucs_arbiter_cb_result_t dispatch(ucs_arbiter_group_t *group,
+                                     ucs_arbiter_elem_t *elem)
     {
         if (m_moved) {
             return UCS_ARBITER_CB_RESULT_STOP;

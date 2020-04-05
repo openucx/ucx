@@ -1136,8 +1136,7 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
 {
     uct_pending_req_t *req      = ucs_container_of(elem, uct_pending_req_t,
                                                    priv);
-    uct_ud_ep_t *ep             = ucs_container_of(group,
-                                                   uct_ud_ep_t,
+    uct_ud_ep_t *ep             = ucs_container_of(group, uct_ud_ep_t,
                                                    tx.pending.group);
     uct_ud_iface_t *iface       = ucs_container_of(arbiter, uct_ud_iface_t,
                                                    tx.pending_q);
