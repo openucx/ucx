@@ -943,14 +943,10 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         break;
     case UCX_PERF_CMD_TAG:
     case UCX_PERF_CMD_TAG_SYNC:
-        ucp_params->features    |= UCP_FEATURE_TAG;
-        ucp_params->field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
-        ucp_params->request_size = sizeof(ucp_perf_request_t);
+        ucp_params->features |= UCP_FEATURE_TAG;
         break;
     case UCX_PERF_CMD_STREAM:
-        ucp_params->features    |= UCP_FEATURE_STREAM;
-        ucp_params->field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
-        ucp_params->request_size = sizeof(ucp_perf_request_t);
+        ucp_params->features |= UCP_FEATURE_STREAM;
         break;
     default:
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
@@ -1504,6 +1500,13 @@ static void uct_perf_cleanup(ucx_perf_context_t *perf)
     ucs_async_context_cleanup(&perf->uct.async);
 }
 
+static void ucp_perf_request_init(void *req)
+{
+    ucp_perf_request_t *request = req;
+
+    request->context = NULL;
+}
+
 static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
 {
     ucp_params_t ucp_params;
@@ -1511,8 +1514,12 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
     ucp_config_t *config;
     ucs_status_t status;
 
-    ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES;
-    ucp_params.features   = 0;
+    ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
+                              UCP_PARAM_FIELD_REQUEST_SIZE |
+                              UCP_PARAM_FIELD_REQUEST_INIT;
+    ucp_params.features     = 0;
+    ucp_params.request_size = sizeof(ucp_perf_request_t);
+    ucp_params.request_init = ucp_perf_request_init;
 
     status = ucp_perf_test_fill_params(&perf->params, &ucp_params);
     if (status != UCS_OK) {
