@@ -240,6 +240,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_ep_h ucp_ep                                    = progress_arg->ucp_ep;
     ucp_worker_h worker                                = ucp_ep->worker;
     ucp_context_h context                              = worker->context;
+    uct_ep_h uct_cm_ep                                 = ucp_ep_get_cm_uct_ep(ucp_ep);
     ucp_wireup_ep_t *wireup_ep;
     ucp_unpacked_address_t addr;
     uint64_t tl_bitmap;
@@ -299,6 +300,11 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     status = ucp_wireup_connect_local(ucp_ep, &addr, NULL);
     if (status != UCS_OK) {
         goto out_unblock;
+    }
+
+    status = uct_cm_client_ep_conn_notify(uct_cm_ep);
+    if (status != UCS_OK) {
+        ucp_ep_cleanup_lanes(ucp_ep);
     }
 
     ucp_wireup_remote_connected(ucp_ep);
