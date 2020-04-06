@@ -952,6 +952,11 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     return request;
 }
 
+ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
 ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep)
 {
     return ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FLUSH);
