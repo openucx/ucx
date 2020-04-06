@@ -304,7 +304,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     status = uct_cm_client_ep_conn_notify(uct_cm_ep);
     if (status != UCS_OK) {
-        ucp_ep_cleanup_lanes(ucp_ep);
+        goto out_unblock;
     }
 
     ucp_wireup_remote_connected(ucp_ep);
