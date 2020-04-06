@@ -3414,7 +3414,7 @@ void ucp_request_cancel(ucp_worker_h worker, void *request);
  * @return otherwise            - reserved for future use.
  *
  * This routine tries to cancel all outstanding communication receive requests
- * posted with @ref ucp_tag_receive_nb routine on the same @a worker and
+ * posted with @ref ucp_tag_recv_nb routine on the same @a worker and
  * matching . After calling this routine, requests will be in completed or
  * canceled (but not both) state regardless of the status of the target endpoint
  * associated with the communication request. If the request is completed
