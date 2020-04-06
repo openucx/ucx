@@ -641,14 +641,31 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
         UCS_TEST_SKIP_R("cannot listen to " + m_test_addr.to_str());
     }
 
-    /* make the client try to connect to a non-existing port on the server side */
-    m_test_addr.set_port(1);
+    UCS_TEST_MESSAGE << "cm : " << (GetParam().variant&TEST_MODIFIER_CM ? "yes" : "no");
 
-    {
+
+    /* make the client try to connect to a non-existing port on the server side */
+
+    struct sockaddr_in in_addr;
+    memset(&in_addr, 0, sizeof(in_addr));
+    in_addr.sin_family = AF_INET;
+    in_addr.sin_port = htons(1);
+    inet_pton(AF_INET, "2.1.3.5", &in_addr.sin_addr);
+
+    m_test_addr.set_sock_addr((struct sockaddr&)in_addr, sizeof(in_addr));
+
+    int i = 1;
+    for (int j = 0; j < 100000; ++j) {
+        UCS_TEST_MESSAGE << "iteration " << i;
+        ++i;
         scoped_log_handler slh(wrap_errors_logger);
         client_ep_connect();
         /* allow for the unreachable event to arrive before restoring errors */
         wait_for_flag(&sender().get_err_num());
+
+        disconnect(sender());
+
+        sender().reset_err();
     }
 
     EXPECT_EQ(1u, sender().get_err_num());
