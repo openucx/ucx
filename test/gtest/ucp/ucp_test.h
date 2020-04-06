@@ -128,8 +128,6 @@ public:
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
-        void add_server_ep_params(const ucp_ep_params_t &params, bool override = false);
-
     protected:
         ucs::handle<ucp_context_h>      m_ucph;
         worker_vec_t                    m_workers;

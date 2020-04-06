@@ -171,7 +171,7 @@ public:
         do {
             status = receiver().listen(cb_type, m_test_addr.get_sock_addr_ptr(),
                                        m_test_addr.get_addr_size(),
-                                       get_ep_params());
+                                       get_server_ep_params());
         } while ((status == UCS_ERR_BUSY) && (ucs_get_time() < deadline));
 
         if (status == UCS_ERR_UNREACHABLE) {
@@ -382,6 +382,10 @@ public:
         ep_params.err_handler.cb   = err_handler_cb;
         ep_params.err_handler.arg  = NULL;
         return ep_params;
+    }
+
+    virtual ucp_ep_params_t get_server_ep_params() {
+        return get_ep_params();
     }
 
     void client_ep_connect()
@@ -633,7 +637,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     ucs_status_t status = receiver().listen(cb_type(),
                                             m_test_addr.get_sock_addr_ptr(),
                                             m_test_addr.get_addr_size(),
-                                            get_ep_params());
+                                            get_server_ep_params());
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("cannot listen to " + m_test_addr.to_str());
     }
@@ -655,19 +659,17 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
 
 class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
 public:
-    void init() {
-        test_ucp_sockaddr::init();
+    virtual ucp_ep_params_t get_server_ep_params() {
+        ucp_ep_params_t params = test_ucp_sockaddr::get_server_ep_params();
 
-        ucp_ep_params_t params;
-        params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                 UCP_EP_PARAM_FIELD_ERR_HANDLER       |
+        params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER        |
                                  UCP_EP_PARAM_FIELD_USER_DATA;
-        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
-        params.err_handler.cb  = err_handler_cb;
-        params.err_handler.arg = NULL;
-        params.user_data       = &receiver();
-
-        receiver().add_server_ep_params(params, true);
+        params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb   = err_handler_cb;
+        params.err_handler.arg  = NULL;
+        params.user_data        = &receiver();
+        return params;
     }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
