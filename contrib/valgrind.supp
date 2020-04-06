@@ -160,11 +160,73 @@
    fun:ibv_get_device_list
 }
 {
-   <insert_a_suppression_name_here>
+   rdma_core_ibv_get_device_list
    Memcheck:Leak
    match-leak-kinds: possible
    fun:calloc
+   ...
    obj:*/libibverbs.so*
    ...
    fun:ibv_get_device_list
+}
+{
+   rdmacm_verbs_open_device
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:verbs_open_device
+   ...
+   fun:rdma_bind_addr
+}
+{
+   uct_ib_iface_prepare_rx_wrs_val
+   Memcheck:Value8
+   fun:uct_ib_iface_prepare_rx_wrs
+}
+{
+   uct_ib_iface_prepare_rx_wrs_cond
+   Memcheck:Cond
+   fun:uct_ib_iface_prepare_rx_wrs
+}
+{
+   uct_ib_iface_recv_desc_hdr
+   Memcheck:Value8
+   fun:uct_ib_iface_recv_desc_hdr
+}
+{
+   mlx4_ibv_post_srq_recv_val
+   Memcheck:Value8
+   obj:*/libmlx4.so*
+   fun:ibv_post_srq_recv
+}
+{
+   mlx4_ibv_post_srq_recv_cond
+   Memcheck:Cond
+   obj:*/libmlx4.so*
+   fun:ibv_post_srq_recv
+}
+{
+   uct_rc_verbs_iface_common_prepost_recvs
+   Memcheck:Cond
+   fun:uct_rc_verbs_iface_common_prepost_recvs
+}
+{
+   uct_rc_verbs_iface_post_recv_always_val
+   Memcheck:Value8
+   fun:uct_rc_verbs_iface_post_recv_always
+}
+{
+   uct_rc_verbs_iface_post_recv_always_cond
+   Memcheck:Cond
+   fun:uct_rc_verbs_iface_post_recv_always
+}
+{
+   uct_rc_verbs_iface_post_recv_common_val
+   Memcheck:Value8
+   fun:uct_rc_verbs_iface_post_recv_common
+}
+{
+   uct_rc_verbs_iface_post_recv_common_cond
+   Memcheck:Cond
+   fun:uct_rc_verbs_iface_post_recv_common
 }
