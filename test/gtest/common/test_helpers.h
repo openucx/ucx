@@ -370,6 +370,10 @@ static inline int rand() {
     return ::rand();
 }
 
+static inline int rand(int max) {
+    return rand() % max;
+}
+
 void fill_random(void *data, size_t size);
 
 /* C can be vector or string */

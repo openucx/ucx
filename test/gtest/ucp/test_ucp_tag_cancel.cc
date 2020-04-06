@@ -78,8 +78,12 @@ UCS_TEST_P(test_ucp_tag_cancel, ucp_worker_tag_cancel) {
                                   std::numeric_limits<ucp_tag_t>::max()));
     }
 
-    /* shuffle tags to cancel them in random order */
-    std::random_shuffle(tags.begin(), tags.end());
+    {
+        /* shuffle tags to cancel them in random order, use custom ucs::rand to
+         * suppress coverity */
+        std::pointer_to_unary_function<int, int> r(ucs::rand);
+        std::random_shuffle(tags.begin(), tags.end(), r);
+    }
 
     for (size_t i = 0; i < tags.size(); ++i) {
         ucp_tag_t cancel_tag = tags[i];
