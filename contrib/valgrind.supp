@@ -223,6 +223,7 @@
 {
    uct_rc_verbs_iface_post_recv_common_val
    Memcheck:Value8
+   ...
    fun:uct_rc_verbs_iface_post_recv_common
 }
 {
