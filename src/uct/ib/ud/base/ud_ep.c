@@ -1278,7 +1278,8 @@ static ucs_arbiter_cb_result_t
 uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                            ucs_arbiter_elem_t *elem, void *arg)
 {
-    uct_ud_ep_t *ep = ucs_container_of(group, uct_ud_ep_t, tx.pending.group);
+    uct_ud_ep_t *ep                 = ucs_container_of(group, uct_ud_ep_t,
+                                                       tx.pending.group);
     uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req;

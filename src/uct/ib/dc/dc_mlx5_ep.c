@@ -1135,11 +1135,11 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
                                         void *arg)
 {
 
-    uct_dc_mlx5_ep_t *ep       = ucs_container_of(group,
-                                                  uct_dc_mlx5_ep_t, arb_group);
+    uct_dc_mlx5_ep_t *ep       = ucs_container_of(group, uct_dc_mlx5_ep_t,
+                                                  arb_group);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
-    int is_only                = ucs_arbiter_elem_is_only(&ep->arb_group, elem);
+    int is_only                = ucs_arbiter_elem_is_only(group, elem);
     ucs_arbiter_cb_result_t res;
 
     res     = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
