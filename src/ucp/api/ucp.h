@@ -3208,7 +3208,7 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
  *                           to read from.
  * @param [in]  rkey         Remote memory key associated with the
  *                           remote memory address.
- * @param [in]  param       Operation parameters, see @ref ucp_request_param_t
+ * @param [in]  param        Operation parameters, see @ref ucp_request_param_t.
  *
  * @return UCS_OK               - The operation was completed immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
@@ -3300,6 +3300,55 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
                     uint64_t value, void *result, size_t op_size,
                     uint64_t remote_addr, ucp_rkey_h rkey,
                     ucp_send_callback_t cb);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Post an atomic fetch operation.
+ *
+ * This routine will post an atomic fetch operation to remote memory.
+ * The remote value is described by the combination of the remote
+ * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
+ * @a rkey.
+ * The routine is non-blocking and therefore returns immediately. However the
+ * actual atomic operation may be delayed. The atomic operation is not considered complete
+ * until the values in remote and local memory are completed.
+ *
+ * @note The user should not modify any part of the @a buffer or @a result after
+ *       this operation is called, until the operation completes.
+ * @note Only ucp_dt_make_config(4) and ucp_dt_make_contig(8) are supported in
+ *       @a param->datatype, see @ref ucp_dt_make_contig
+ *
+ * @param [in] ep          UCP endpoint.
+ * @param [in] opcode      One of @ref ucp_atomic_fetch_op_t.
+ * @param [in] buffer      Address of operand for atomic operation. For
+ *                         @ref UCP_ATOMIC_FETCH_OP_CSWAP operation, this is
+ *                         the value with which the remote memory buffer is
+ *                         compared. For @ref UCP_ATOMIC_FETCH_OP_SWAP operation
+ *                         this is the value to be placed in remote memory.
+ * @param [inout] result   Local memory buffer in which to store the result of
+ *                         the operation. In the case of CSWAP the value in
+ *                         result will be swapped into the @a remote_addr if
+ *                         the condition is true.
+ * @param [in] count       Number of elements in @a buffer and @a result. The
+ *                         size of each element is specified by
+ *                         @ref ucp_request_param_t.datatype
+ * @param [in] remote_addr Remote address to operate on.
+ * @param [in] rkey        Remote key handle for the remote memory address.
+ * @param [in] param       Operation parameters, see @ref ucp_request_param_t.
+ *
+ * @return NULL                 - The operation completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The operation failed.
+ * @return otherwise            - Operation was scheduled and can be
+ *                                completed at some time in the future. The
+ *                                request handle is returned to the application
+ *                                in order to track progress of the operation.
+ */
+ucs_status_ptr_t
+ucp_atomic_fetch_nbx(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
+                     const void *buffer, void *result, size_t count,
+                     uint64_t remote_addr, ucp_rkey_h rkey,
+                     const ucp_request_param_t *param);
 
 
 /**
