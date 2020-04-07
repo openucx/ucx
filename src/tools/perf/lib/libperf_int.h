@@ -25,6 +25,7 @@ BEGIN_C_DECLS
 
 #define TIMING_QUEUE_SIZE    2048
 #define UCT_PERF_TEST_AM_ID  5
+#define ADDR_BUF_SIZE        2048
 
 
 typedef struct ucx_perf_context        ucx_perf_context_t;
@@ -56,7 +57,6 @@ struct ucx_perf_context {
     /* Buffers */
     void                         *send_buffer;
     void                         *recv_buffer;
-    ptrdiff_t                    offset;
 
     /* Measurements */
     double                       start_time_acc;  /* accurate start time */
@@ -110,12 +110,7 @@ struct ucx_perf_context {
 struct ucx_perf_thread_context {
     pthread_t           pt;
     int                 tid;
-    int                 ntid;
-    ucp_worker_h        thread_worker;
-    ucp_ep_h            thread_ep;
-    ucp_rkey_h          thread_rkey;
-    unsigned long       remote_addr;
-    ucs_status_t*       statuses;
+    ucs_status_t        status;
     ucx_perf_context_t  perf;
     ucx_perf_result_t   result;
 };
@@ -173,6 +168,13 @@ static inline void ucx_perf_get_time(ucx_perf_context_t *perf)
     perf->current.time_acc = ucs_get_accurate_time();
 }
 
+static inline void ucx_perf_omp_barrier()
+{
+#if _OPENMP
+#pragma omp barrier
+#endif
+}
+
 static inline void ucx_perf_update(ucx_perf_context_t *perf,
                                    ucx_perf_counter_t iters, size_t bytes)
 {
@@ -196,7 +198,7 @@ static inline void ucx_perf_update(ucx_perf_context_t *perf,
         ucx_perf_get_time(perf);
 
         ucx_perf_calc_result(perf, &result);
-        rte_call(perf, report, &result, perf->params.report_arg, 0);
+        rte_call(perf, report, &result, perf->params.report_arg, 0, 0);
 
         perf->prev = perf->current;
     }

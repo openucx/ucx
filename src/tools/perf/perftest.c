@@ -38,7 +38,7 @@
 #endif
 
 #define MAX_BATCH_FILES         32
-#define MAX_CPUS                64
+#define MAX_CPUS                1024
 #define TL_RESOURCE_NAME_NONE   "<none>"
 #define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCqM:r:T:d:x:A:BUm:"
 
@@ -211,11 +211,11 @@ static int safe_recv(int sock, void *data, size_t size,
 
 static void print_progress(char **test_names, unsigned num_names,
                            const ucx_perf_result_t *result, unsigned flags,
-                           int final, int is_server)
+                           int final, int is_server, int is_multi_thread)
 {
-    static const char *fmt_csv     = "%4.0f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f\n";
-    static const char *fmt_numeric = "%'18.0f %9.3f %9.3f %9.3f %11.2f %10.2f %'11.0f %'11.0f\n";
-    static const char *fmt_plain   = "%18.0f %9.3f %9.3f %9.3f %11.2f %10.2f %11.0f %11.0f\n";
+    static const char *fmt_csv;
+    static const char *fmt_numeric;
+    static const char *fmt_plain;
     unsigned i;
 
     if (!(flags & TEST_FLAG_PRINT_RESULTS) ||
@@ -238,17 +238,36 @@ static void print_progress(char **test_names, unsigned num_names,
     }
 #endif
 
-    printf((flags & TEST_FLAG_PRINT_CSV)   ? fmt_csv :
-           (flags & TEST_FLAG_NUMERIC_FMT) ? fmt_numeric :
-                                             fmt_plain,
-           (double)result->iters,
-           result->latency.typical * 1000000.0,
-           result->latency.moment_average * 1000000.0,
-           result->latency.total_average * 1000000.0,
-           result->bandwidth.moment_average / (1024.0 * 1024.0),
-           result->bandwidth.total_average / (1024.0 * 1024.0),
-           result->msgrate.moment_average,
-           result->msgrate.total_average);
+    if (is_multi_thread && final) {
+        fmt_csv     = "%4.0f,%.3f,%.2f,%.0f\n";
+        fmt_numeric = "%'18.0f %29.3f %22.2f %'24.0f\n";
+        fmt_plain   = "%18.0f %29.3f %22.2f %23.0f\n";
+
+        printf((flags & TEST_FLAG_PRINT_CSV)   ? fmt_csv :
+               (flags & TEST_FLAG_NUMERIC_FMT) ? fmt_numeric :
+                                                 fmt_plain,
+               (double)result->iters,
+               result->latency.total_average * 1000000.0,
+               result->bandwidth.total_average / (1024.0 * 1024.0),
+               result->msgrate.total_average);
+    } else {
+        fmt_csv     = "%4.0f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f\n";
+        fmt_numeric = "%'18.0f %9.3f %9.3f %9.3f %11.2f %10.2f %'11.0f %'11.0f\n";
+        fmt_plain   = "%18.0f %9.3f %9.3f %9.3f %11.2f %10.2f %11.0f %11.0f\n";
+
+        printf((flags & TEST_FLAG_PRINT_CSV)   ? fmt_csv :
+               (flags & TEST_FLAG_NUMERIC_FMT) ? fmt_numeric :
+                                                 fmt_plain,
+               (double)result->iters,
+               result->latency.typical * 1000000.0,
+               result->latency.moment_average * 1000000.0,
+               result->latency.total_average * 1000000.0,
+               result->bandwidth.moment_average / (1024.0 * 1024.0),
+               result->bandwidth.total_average / (1024.0 * 1024.0),
+               result->msgrate.moment_average,
+               result->msgrate.total_average);
+    }
+
     fflush(stdout);
 }
 
@@ -403,7 +422,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -n <iters>     number of iterations to run (%ld)\n", ctx->params.max_iter);
     printf("     -w <iters>     number of warm-up iterations (%zu)\n",
                                 ctx->params.warmup_iter);
-    printf("     -c <cpu>       set affinity to this CPU list (separated by comma) (off)\n");
+    printf("     -c <cpulist>   set affinity to this CPU list (separated by comma) (off)\n");
     printf("     -O <count>     maximal number of uncompleted outstanding sends (%u)\n",
                                 ctx->params.max_outstanding);
     printf("     -i <offset>    distance between consecutive scatter-gather entries (%zu)\n",
@@ -700,8 +719,8 @@ static ucs_status_t parse_test_params(ucx_perf_params_t *params, char opt,
         }
     case 'T':
         params->thread_count = atoi(opt_arg);
-        params->thread_mode = (params->thread_count == 1 ? UCS_THREAD_MODE_SINGLE :
-                               UCS_THREAD_MODE_MULTI);
+        params->thread_mode = (params->thread_count == 1) ? UCS_THREAD_MODE_SINGLE :
+                               UCS_THREAD_MODE_MULTI;
         return UCS_OK;
     case 'A':
         if (!strcmp(opt_arg, "thread") || !strcmp(opt_arg, "thread_spinlock")) {
@@ -782,18 +801,30 @@ static ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
 
 static ucs_status_t parse_cpus(char *opt_arg, struct perftest_context *ctx)
 {
-    char *token;
+    char *endptr, *cpu_list = opt_arg;
+    int cpu;
 
     ctx->num_cpus = 0;
-    token         = strtok(opt_arg, ",");
+    cpu           = strtol(cpu_list, &endptr, 10);
 
-    while((token != NULL) && (ctx->num_cpus < MAX_CPUS)) {
-        ctx->cpus[ctx->num_cpus++] = atoi(token);
-        token = strtok(NULL, ",");
+    while (((*endptr == ',') || (*endptr == '\0')) && (ctx->num_cpus < MAX_CPUS)) {
+        if (cpu < 0) {
+            ucs_error("invalid cpu number detected: (%d)", cpu);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        ctx->cpus[ctx->num_cpus++] = cpu;
+
+        if (*endptr == '\0') {
+            break;
+        }
+
+        cpu_list                   = endptr + 1; /* skip the comma */
+        cpu                        = strtol(cpu_list, &endptr, 10);
     }
 
-    if (ctx->num_cpus == MAX_CPUS) {
-        ucs_error("number of listed cpus exceeds the maximum supportted value (%d)",
+    if (*endptr == ',') {
+        ucs_error("number of listed cpus exceeds the maximum supported value (%d)",
                   MAX_CPUS);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -945,11 +976,11 @@ static void sock_rte_recv(void *rte_group, unsigned src, void *buffer,
 }
 
 static void sock_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                            void *arg, int is_final)
+                            void *arg, int is_final, int is_multi_thread)
 {
     struct perftest_context *ctx = arg;
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
-                   is_final, (ctx->server_addr == NULL ? 1 : 0));
+                   is_final, ((ctx->server_addr == NULL) ? 1 : 0), is_multi_thread);
 }
 
 static ucx_perf_rte_t sock_rte = {
@@ -1231,11 +1262,11 @@ static void mpi_rte_recv(void *rte_group, unsigned src, void *buffer, size_t max
 }
 
 static void mpi_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                           void *arg, int is_final)
+                           void *arg, int is_final, int is_multi_thread)
 {
     struct perftest_context *ctx = arg;
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
-                   is_final, (ctx->server_addr == NULL ? 1 : 0));
+                   is_final, ((ctx->server_addr == NULL) ? 1 : 0), is_multi_thread);
 }
 #elif HAVE_RTE
 static unsigned ext_rte_group_size(void *rte_group)
@@ -1342,11 +1373,11 @@ static void ext_rte_exchange_vec(void *rte_group, void * req)
 }
 
 static void ext_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                           void *arg, int is_final)
+                           void *arg, int is_final, int is_multi_thread)
 {
     struct perftest_context *ctx = arg;
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
-                   is_final, (ctx->server_addr == NULL ? 1 : 0));
+                   is_final, ((ctx->server_addr == NULL) ? 1 : 0), is_multi_thread);
 }
 
 static ucx_perf_rte_t ext_rte = {
@@ -1579,9 +1610,17 @@ int main(int argc, char **argv)
     int provided;
 
     mpi_initialized = !isatty(0) &&
+                      /* Using MPI_THREAD_FUNNELED since ucx_perftest supports
+                       * using multiple threads when only the main one makes
+                       * MPI calls (which is also suitable for a single threaded
+                       * run).
+                       * MPI_THREAD_FUNNELED:
+                       * The process may be multi-threaded, but only the main
+                       * thread will make MPI calls (all MPI calls are funneled
+                       * to the main thread). */
                       (MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided) == 0);
 
-    if ((mpi_initialized) && (provided != MPI_THREAD_FUNNELED)) {
+    if (mpi_initialized && (provided != MPI_THREAD_FUNNELED)) {
         printf("MPI_Init_thread failed to set MPI_THREAD_FUNNELED. (provided = %d)\n",
                provided);
         ret = -1;
