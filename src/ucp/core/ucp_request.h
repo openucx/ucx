@@ -160,20 +160,27 @@ struct ucp_request {
 
                 struct {
                     uint64_t             remote_address; /* address of the sender's data buffer */
-                    uintptr_t            remote_request; /* pointer to the sender's send request */
-                    ucp_request_t       *rreq;           /* receive request on the recv side */
+                    uintptr_t            remote_request; /* pointer to the sender's request */
+                    ucp_request_t        *rreq;          /* receive request on the recv side */
                     ucp_rkey_h           rkey;           /* key for remote send buffer */
                     ucp_lane_map_t       lanes_map;      /* used lanes map */
                     ucp_lane_index_t     lane_count;     /* number of lanes used in transaction */
                 } rndv_get;
 
                 struct {
-                    uint64_t         remote_address; /* address of the receiver's data buffer */
-                    uintptr_t        remote_request; /* pointer to the receiver's receive request */
-                    ucp_request_t    *sreq;          /* send request on the send side */
-                    ucp_rkey_h       rkey;           /* key for remote receive buffer */
-                    uct_rkey_t       uct_rkey;       /* UCT remote key */
+                    uint64_t             remote_address; /* address of the receiver's data buffer */
+                    uintptr_t            remote_request; /* pointer to the receiver's receive request */
+                    ucp_request_t        *sreq;          /* send request on the send side */
+                    ucp_rkey_h           rkey;           /* key for remote receive buffer */
+                    uct_rkey_t           uct_rkey;       /* UCT remote key */
                 } rndv_put;
+
+                struct {
+                    ucs_queue_elem_t     queue_elem;
+                    uintptr_t            remote_request; /* pointer to the sender's request */
+                    ucp_request_t        *rreq;          /* receive request on the recv side */
+                    ucp_rkey_h           rkey;           /* key for remote send buffer */
+                } rkey_ptr;
 
                 struct {
                     uintptr_t         remote_request; /* pointer to the send request on receiver side */

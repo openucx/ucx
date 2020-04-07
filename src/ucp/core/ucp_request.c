@@ -100,6 +100,13 @@ UCS_PROFILE_FUNC_VOID(ucp_request_free, (request), void *request)
     ucp_request_release_common(request, UCP_REQUEST_FLAG_CALLBACK, "free");
 }
 
+UCS_PROFILE_FUNC(void*, ucp_request_alloc,
+                 (worker),
+                 ucp_worker_h worker)
+{
+    return NULL;
+}
+
 UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
                       ucp_worker_h worker, void *request)
 {
