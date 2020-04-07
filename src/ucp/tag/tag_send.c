@@ -113,7 +113,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
         return UCS_STATUS_PTR(status);
     }
 
-    if (enable_zcopy && cb) {
+    if (cb) {
         ucp_request_set_callback(req, send.cb, cb,
                                  send.user_data, user_data);
     }
