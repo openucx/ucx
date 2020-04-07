@@ -48,11 +48,9 @@ public:
         typedef std::vector<ucs::handle<ucp_ep_h, entity *> > ep_vec_t;
         typedef std::vector<std::pair<ucs::handle<ucp_worker_h>,
                                       ep_vec_t> > worker_vec_t;
-        typedef std::deque<std::pair<ucp_ep_h, void *> > closing_eps_t;
+        typedef std::deque<void *> close_ep_reqs_t;
 
     public:
-        typedef closing_eps_t::const_pointer closing_ep_t;
-
         typedef enum {
             LISTEN_CB_EP,       /* User's callback accepts ucp_ep_h */
             LISTEN_CB_CONN,     /* User's callback accepts ucp_conn_request_h */
@@ -81,12 +79,12 @@ public:
 
         void fence(int worker_index = 0) const;
 
-        closing_ep_t disconnect_nb(int worker_index = 0, int ep_index = 0,
-                                   enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
+        void* disconnect_nb(int worker_index = 0, int ep_index = 0,
+                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
 
-        bool is_ep_closed(const closing_ep_t &closing_ep) const;
+        bool is_ep_closed(void *close_req) const;
 
-        void closed_ep_free(closing_ep_t &closing_ep);
+        void close_ep_req_free(void *close_req);
 
         void close_all_eps(const ucp_test &test, int wirker_idx,
                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
@@ -133,7 +131,7 @@ public:
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
         std::queue<ucp_conn_request_h>  m_conn_reqs;
-        closing_eps_t                   m_closing_eps;
+        close_ep_reqs_t                 m_close_ep_reqs;
         size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
         ucs::handle<ucp_ep_params_t*>   m_server_ep_params;

@@ -452,16 +452,15 @@ public:
     }
 
     void one_sided_disconnect(entity &e) {
-        ucp_test_base::entity::closing_ep_t ep = e.disconnect_nb();
-        ucs_time_t deadline                    = ucs_time_from_sec(10.0) +
-                                                 ucs_get_time();
-        while (!e.is_ep_closed(ep) && (ucs_get_time() < deadline)) {
+        void *req           = e.disconnect_nb();
+        ucs_time_t deadline = ucs_time_from_sec(10.0) + ucs_get_time();
+        while (!e.is_ep_closed(req) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
                      async progress is implemented. */
             progress();
         };
 
-        e.closed_ep_free(ep);
+        e.close_ep_req_free(req);
     }
 
     void concurrent_disconnect() {
@@ -471,18 +470,18 @@ public:
         ASSERT_EQ(1, receiver().get_num_workers());
         ASSERT_EQ(1, receiver().get_num_eps());
 
-        ucp_test_base::entity::closing_ep_t sender_ep   = sender().disconnect_nb();
-        ucp_test_base::entity::closing_ep_t receiver_ep = receiver().disconnect_nb();
+        void *sender_ep_close_req   = sender().disconnect_nb();
+        void *receiver_ep_close_req = receiver().disconnect_nb();
 
-        while (!sender().is_ep_closed(sender_ep)) {
+        ucs_time_t deadline = ucs::get_deadline();
+        while ((!sender().is_ep_closed(sender_ep_close_req) ||
+                !receiver().is_ep_closed(receiver_ep_close_req)) &&
+               (ucs_get_time() < deadline)) {
             progress();
         }
-        sender().closed_ep_free(sender_ep);
 
-        while (!receiver().is_ep_closed(receiver_ep)) {
-            progress();
-        }
-        receiver().closed_ep_free(receiver_ep);
+        sender().close_ep_req_free(sender_ep_close_req);
+        receiver().close_ep_req_free(receiver_ep_close_req);
     }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {

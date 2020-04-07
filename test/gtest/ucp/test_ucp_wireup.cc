@@ -655,12 +655,13 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
     std::vector<void*> sreqs;
     send_nb(sender().ep(), 1000, 1000, sreqs);
 
-    ucp_test_base::entity::closing_ep_t ep = sender().disconnect_nb();
-    while (!sender().is_ep_closed(ep)) {
+    void *req = sender().disconnect_nb();
+    ucs_time_t deadline = ucs::get_deadline();
+    while (!sender().is_ep_closed(req) && (ucs_get_time() < deadline)) {
         progress();
     }
 
-    sender().closed_ep_free(ep);
+    sender().close_ep_req_free(req);
 
     recv_b(receiver().worker(), receiver().ep(), 1000, 1000);
     waitall(sreqs);
