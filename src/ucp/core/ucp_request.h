@@ -261,13 +261,14 @@ struct ucp_request {
 
             union {
                 struct {
-                    ucp_tag_t                   tag;       /* Expected tag */
-                    ucp_tag_t                   tag_mask;  /* Expected tag mask */
-                    uint64_t                    sn;        /* Tag match sequence */
-                    ucp_tag_recv_nbx_callback_t cb;        /* Completion callback */
-                    ucp_tag_recv_info_t         info;      /* Completion info to fill */
-                    ssize_t                     remaining; /* How much more data
-                                                            * to be received */
+                    ucp_tag_t                   tag;        /* Expected tag */
+                    ucp_tag_t                   tag_mask;   /* Expected tag mask */
+                    uint64_t                    sn;         /* Tag match sequence */
+                    ucp_tag_recv_nbx_callback_t cb;         /* Completion callback */
+                    void                        *user_data; /* Completion user data */
+                    ucp_tag_recv_info_t         info;       /* Completion info to fill */
+                    ssize_t                     remaining;  /* How much more data
+                                                             * to be received */
 
                     /* Can use union, because rdesc is used in expected flow,
                      * while non_contig_buf is used in unexpected flow only. */
@@ -281,7 +282,6 @@ struct ucp_request {
                     ucp_worker_iface_t      *wiface;    /* Cached iface this request
                                                            is received on. Used in
                                                            tag offload expected callbacks*/
-                    void                    *user_data; /* Completion user data */
                 } tag;
 
                 struct {

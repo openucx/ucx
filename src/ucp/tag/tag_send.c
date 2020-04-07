@@ -237,7 +237,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  ucp_tag_t tag, const ucp_request_param_t *param)
 {
-    ucs_status_t status;
+    ucs_status_t status = UCS_ERR_INVALID_PARAM;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
     uintptr_t datatype;
@@ -257,15 +257,15 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
             ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
             goto out;
         }
+        datatype = ucp_dt_make_contig(1);
+    } else {
+        datatype = param->datatype;
     }
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
-        ret = UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
+        ret = UCS_STATUS_PTR(status);
         goto out;
     }
-
-    datatype = (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
-               param->datatype : ucp_dt_make_contig(1);
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
         req = (ucp_request_t *)param->request - 1;
