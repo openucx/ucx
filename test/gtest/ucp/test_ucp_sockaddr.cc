@@ -789,10 +789,8 @@ protected:
     void compare_buffers(std::string& send_buf, std::string& recv_buf)
     {
         EXPECT_TRUE(send_buf == recv_buf)
-            << "send_buf: '" << send_buf.substr(0, 20) << "..."
-                             << send_buf.substr(send_buf.length() - 20) << "', "
-            << "recv_buf: '" << recv_buf.substr(0, 20) << "..."
-                             << recv_buf.substr(recv_buf.length() - 20) << "'";
+            << "send_buf: '" << ucs::compact_string(send_buf, 20) << "', "
+            << "recv_buf: '" << ucs::compact_string(send_buf, 20) << "'";
     }
 
     void test_tag_send_recv(size_t size, bool is_exp)
