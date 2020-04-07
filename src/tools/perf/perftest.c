@@ -278,7 +278,7 @@ static void print_header(struct perftest_context *ctx)
                 break;
             }
         } else if (test->api == UCX_PERF_API_UCP) {
-            test_api_str = "protocol layer";
+            test_api_str  = "protocol layer";
             test_data_str = "(automatic)"; /* TODO contig/stride/stream */
         } else {
             return;
@@ -611,7 +611,7 @@ static ucs_status_t parse_test_params(perftest_params_t *params, char opt,
                 params->super.api       = test->api;
                 params->super.command   = test->command;
                 params->super.test_type = test->test_type;
-                params->test_id        = i;
+                params->test_id         = i;
                 break;
             }
         }
@@ -1552,8 +1552,8 @@ static ucs_status_t run_test(struct perftest_context *ctx)
 
     /* no batch files, only command line params */
     if (ctx->num_batch_files == 0) {
-        error_prefix = (ctx->flags & TEST_FLAG_PRINT_RESULTS) ? "command line" :
-                       "";
+        error_prefix = (ctx->flags & TEST_FLAG_PRINT_RESULTS) ?
+                       "command line: " : "";
         status       = adjust_test_params(&ctx->params, error_prefix);
         if (status != UCS_OK) {
             return status;
