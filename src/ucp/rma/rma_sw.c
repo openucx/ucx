@@ -42,8 +42,8 @@ static ucs_status_t ucp_rma_sw_progress_put(uct_pending_req_t *self)
     ucs_status_t status;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_PUT,
-                                 ucp_rma_sw_put_pack_cb, req, 0);
+    packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_PUT,
+                                     ucp_rma_sw_put_pack_cb, req, 0);
     if (packed_len > 0) {
         status = UCS_OK;
         ucp_ep_rma_remote_request_sent(ep);
@@ -77,8 +77,9 @@ static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
     ssize_t packed_len;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_GET_REQ,
-                                 ucp_rma_sw_get_req_pack_cb, req, 0);
+    packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane],
+                                     UCP_AM_ID_GET_REQ,
+                                     ucp_rma_sw_get_req_pack_cb, req, 0);
     if (packed_len < 0) {
         status = (ucs_status_t)packed_len;
         if (status != UCS_ERR_NO_RESOURCE) {

@@ -42,9 +42,15 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
     /* If the number of lanes changed since flush operation was submitted, adjust
      * the number of expected completions */
-    if (req->send.flush.num_lanes != ucp_ep_num_lanes(ep)) {
+    if (ucs_unlikely(req->send.flush.num_lanes != ucp_ep_num_lanes(ep))) {
         diff                            = ucp_ep_num_lanes(ep) -
                                           req->send.flush.num_lanes;
+        if (diff < 0) {
+            ucs_fatal("ep %p: unsupported endpoint reconfiguration from %d to %d"
+                      " lanes during flush", ep, req->send.flush.num_lanes,
+                      ucp_ep_num_lanes(ep));
+        }
+
         req->send.state.uct_comp.count += diff;
         req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
         ucs_trace_req("flush req %p: adjusting expected completion count by %d",

@@ -20,14 +20,13 @@
 static UCS_F_ALWAYS_INLINE size_t
 ucp_tag_pack_eager_common(ucp_request_t *req, void *dest,
                           size_t length, size_t hdr_length,
-                          int UCS_V_UNUSED single,
-                          int UCS_V_UNUSED first)
+                          int UCS_V_UNUSED is_first)
 {
     size_t packed_length;
 
     ucs_assert((length + hdr_length) <=
                ucp_ep_get_max_bcopy(req->send.ep, req->send.lane));
-    ucs_assert(!first || (req->send.state.dt.offset == 0));
+    ucs_assert(!is_first || (req->send.state.dt.offset == 0));
 
     packed_length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                                 req->send.mem_type, dest, req->send.buffer,
@@ -43,7 +42,7 @@ static size_t ucp_tag_pack_eager_only_dt(void *dest, void *arg)
     hdr->super.tag = req->send.msg_proto.tag.tag;
 
     return ucp_tag_pack_eager_common(req, hdr + 1, req->send.length,
-                                     sizeof(*hdr), 1, 1);
+                                     sizeof(*hdr), 1);
 }
 
 static size_t ucp_tag_pack_eager_sync_only_dt(void *dest, void *arg)
@@ -56,7 +55,7 @@ static size_t ucp_tag_pack_eager_sync_only_dt(void *dest, void *arg)
     hdr->req.reqptr      = (uintptr_t)req;
 
     return ucp_tag_pack_eager_common(req, hdr + 1, req->send.length,
-                                     sizeof(*hdr), 1, 1);
+                                     sizeof(*hdr), 1);
 }
 
 static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
@@ -74,7 +73,7 @@ static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
     hdr->total_len       = req->send.length;
     hdr->msg_id          = req->send.msg_proto.message_id;
 
-    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0, 1);
+    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 1);
 }
 
 static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
@@ -95,7 +94,7 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
     hdr->super.msg_id          = req->send.msg_proto.message_id;
     hdr->req.reqptr            = (uintptr_t)req;
 
-    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0, 1);
+    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 1);
 }
 
 static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
@@ -110,7 +109,7 @@ static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
     hdr->msg_id = req->send.msg_proto.message_id;
     hdr->offset = req->send.state.dt.offset;
 
-    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0, 0);
+    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0);
 }
 
 /* eager */
