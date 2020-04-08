@@ -732,12 +732,14 @@ static ucs_status_t parse_test_params(perftest_params_t *params, char opt,
 static ucs_status_t adjust_test_params(perftest_params_t *params,
                                        const char *error_prefix)
 {
-    test_type_t *test = &tests[params->test_id];
+    test_type_t *test;
 
     if (params->test_id == TEST_ID_UNDEFINED) {
         ucs_error("%smissing test name", error_prefix);
         return UCS_ERR_INVALID_PARAM;
     }
+
+    test = &tests[params->test_id];
 
     if (params->super.max_outstanding == 0) {
         params->super.max_outstanding = test->window_size;
