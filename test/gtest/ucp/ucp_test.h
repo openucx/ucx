@@ -45,10 +45,10 @@ public:
     };
 
     class entity {
-        typedef std::vector<ucs::handle<ucp_ep_h, entity *> > ep_vec_t;
+        typedef std::vector<ucs::handle<ucp_ep_h, entity*> > ep_vec_t;
         typedef std::vector<std::pair<ucs::handle<ucp_worker_h>,
                                       ep_vec_t> > worker_vec_t;
-        typedef std::deque<void *> close_ep_reqs_t;
+        typedef std::deque<void*> close_ep_reqs_t;
 
     public:
         typedef enum {
@@ -81,8 +81,6 @@ public:
 
         void* disconnect_nb(int worker_index = 0, int ep_index = 0,
                             enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
-
-        bool is_ep_closed(void *close_req) const;
 
         void close_ep_req_free(void *close_req);
 
@@ -144,6 +142,8 @@ public:
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
     };
+
+    static bool is_request_completed(void *req);
 };
 
 /**

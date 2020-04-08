@@ -594,19 +594,16 @@ void *ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
     return NULL;
 }
 
-bool ucp_test_base::entity::is_ep_closed(void *close_req) const {
-    return (close_req == NULL) ||
-           (ucp_request_check_status(close_req) != UCS_INPROGRESS);
-}
-
 void ucp_test_base::entity::close_ep_req_free(void *close_req) {
-    ASSERT_TRUE(is_ep_closed(close_req)) << "free not completed EP close request";
-    ASSERT_TRUE((close_req == NULL) ||
-                (ucp_request_check_status(close_req) == UCS_OK)) << "ucp_ep_close_nb failed";
-
     if (close_req == NULL) {
         return;
     }
+
+    ucs_status_t status = UCS_PTR_IS_ERR(close_req) ? UCS_PTR_STATUS(close_req) :
+                          ucp_request_check_status(close_req);
+    ASSERT_NE(UCS_INPROGRESS, status) << "free not completed EP close request";
+    ASSERT_EQ(UCS_OK,         status) << "ucp_ep_close_nb failed: "
+                                      << ucs_status_string(status);
 
     m_close_ep_reqs.erase(std::find(m_close_ep_reqs.begin(),
                                     m_close_ep_reqs.end(), close_req));
@@ -622,12 +619,15 @@ void ucp_test_base::entity::close_all_eps(const ucp_test &test, int worker_idx,
     ucs_time_t deadline = ucs::get_deadline();
     while (!m_close_ep_reqs.empty() && (ucs_get_time() < deadline)) {
         void *req = m_close_ep_reqs.front();
-        while (!is_ep_closed(req)) {
+        while (!is_request_completed(req)) {
             test.progress(worker_idx);
         }
 
         close_ep_req_free(req);
     }
+
+    EXPECT_TRUE(m_close_ep_reqs.empty()) << m_close_ep_reqs.size()
+                                         << " endpoints were not closed";
 }
 
 void ucp_test_base::entity::destroy_worker(int worker_index) {
@@ -829,6 +829,11 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     } while (status == UCS_INPROGRESS);
     EXPECT_EQ(UCS_OK, status);
     ucp_request_release(req);
+}
+
+bool ucp_test_base::is_request_completed(void *request) {
+    return (request == NULL) ||
+           (ucp_request_check_status(request) != UCS_INPROGRESS);
 }
 
 ucp_test::mapped_buffer::mapped_buffer(size_t size, const entity& entity,

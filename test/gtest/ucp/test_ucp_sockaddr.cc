@@ -454,7 +454,7 @@ public:
     void one_sided_disconnect(entity &e) {
         void *req           = e.disconnect_nb();
         ucs_time_t deadline = ucs_time_from_sec(10.0) + ucs_get_time();
-        while (!e.is_ep_closed(req) && (ucs_get_time() < deadline)) {
+        while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
                      async progress is implemented. */
             progress();
@@ -474,8 +474,8 @@ public:
         void *receiver_ep_close_req = receiver().disconnect_nb();
 
         ucs_time_t deadline = ucs::get_deadline();
-        while ((!sender().is_ep_closed(sender_ep_close_req) ||
-                !receiver().is_ep_closed(receiver_ep_close_req)) &&
+        while ((!is_request_completed(sender_ep_close_req) ||
+                !is_request_completed(receiver_ep_close_req)) &&
                (ucs_get_time() < deadline)) {
             progress();
         }

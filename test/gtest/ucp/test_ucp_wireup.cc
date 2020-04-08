@@ -657,7 +657,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
 
     void *req = sender().disconnect_nb();
     ucs_time_t deadline = ucs::get_deadline();
-    while (!sender().is_ep_closed(req) && (ucs_get_time() < deadline)) {
+    while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
         progress();
     }
 
