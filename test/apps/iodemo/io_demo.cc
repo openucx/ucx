@@ -157,7 +157,8 @@ public:
 
     void handle_io_read_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
         // send data
-        conn->send_data(buffer(), opts().data_size, hdr->sn);
+        assert(opts().data_size == hdr->data_size);
+        conn->send_data(buffer(), hdr->data_size, hdr->sn);
 
         // send response as data
         IoMessage *response = new IoMessage(opts().iomsg_size, IO_COMP, hdr->sn,
@@ -167,7 +168,8 @@ public:
     }
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
-        conn->recv_data(buffer(), opts().data_size, hdr->sn,
+        assert(opts().data_size == hdr->data_size);
+        conn->recv_data(buffer(), hdr->data_size, hdr->sn,
                         new IoWriteResponseCallback(this, conn, hdr->sn));
     }
 
