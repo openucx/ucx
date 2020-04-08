@@ -473,7 +473,8 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr_t *dev_addr,
+ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
+                                           const uct_device_addr_t *dev_addr,
                                            const uct_ep_addr_t *ep_addr)
 {
     uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
@@ -482,12 +483,14 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep, const uct_device_addr
     const uct_rc_ep_address_t *rc_addr = (const uct_rc_ep_address_t*)ep_addr;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
+    enum ibv_mtu path_mtu;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super, ib_addr,
-                                        ep->super.path_index, &ah_attr);
+                                        ep->super.path_index, &ah_attr,
+                                        &path_mtu);
     qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
 
-    return uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr);
+    return uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu);
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)

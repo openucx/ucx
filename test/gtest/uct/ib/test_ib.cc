@@ -84,6 +84,7 @@ public:
         union ibv_gid gid_in, gid_out;
         uct_ib_address_t *ib_addr;
         uint16_t lid_out;
+        enum ibv_mtu mtu;
 
         ib_addr = (uct_ib_address_t*)malloc(uct_ib_iface_address_size(iface));
 
@@ -91,7 +92,7 @@ public:
         gid_in.global.interface_id  = 0xdeadbeef;
         uct_ib_iface_address_pack(iface, &gid_in, lid_in, ib_addr);
 
-        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
+        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out, &mtu);
 
         if (uct_ib_iface_is_roce(iface)) {
             EXPECT_TRUE(iface->config.force_global_addr);
@@ -104,6 +105,7 @@ public:
             EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
         }
 
+        EXPECT_EQ(0, mtu);
         free(ib_addr);
     }
 

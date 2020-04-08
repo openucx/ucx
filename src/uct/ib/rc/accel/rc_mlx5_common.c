@@ -223,7 +223,7 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     ah_attr.port_num      = dev->first_port;
     status = uct_rc_mlx5_iface_common_devx_connect_qp(
             iface, &iface->tm.cmd_wq.super.super,
-            iface->tm.cmd_wq.super.super.qp_num, &ah_attr);
+            iface->tm.cmd_wq.super.super.qp_num, &ah_attr, 0);
     if (status != UCS_OK) {
         goto err_destroy_qp;
     }

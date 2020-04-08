@@ -773,7 +773,8 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
-                                     struct ibv_ah_attr *ah_attr)
+                                     struct ibv_ah_attr *ah_attr,
+                                     enum ibv_mtu path_mtu)
 {
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     struct ibv_exp_qp_attr qp_attr;
@@ -789,7 +790,8 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     qp_attr.qp_state              = IBV_QPS_RTR;
     qp_attr.dest_qp_num           = dest_qp_num;
     qp_attr.rq_psn                = 0;
-    qp_attr.path_mtu              = iface->config.path_mtu;
+    qp_attr.path_mtu              = (path_mtu != 0) ? path_mtu :
+                                    iface->config.path_mtu;
     qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;
     qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
     qp_attr.ah_attr               = *ah_attr;

@@ -66,9 +66,24 @@ enum {
 enum {
     UCT_IB_ADDRESS_PACK_FLAG_ETH           = UCS_BIT(0),
     UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID  = UCS_BIT(1),
-    UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2)
+    UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2),
+    UCT_IB_ADDRESS_PACK_FLAG_MTU           = UCS_BIT(3)
 };
 
+typedef struct uct_ib_address_pack_params {
+    /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
+    uint64_t                          flags;
+    /* GID address to pack. */
+    const union ibv_gid               *gid;
+    /* LID address to pack. */
+    uint16_t                          lid;
+    /* RoCE version to pack in case of an Ethernet link layer, must be valid if
+       UCT_IB_ADDRESS_PACK_FLAG_ETH is set */
+    const uct_ib_roce_version_info_t  *roce_info;
+    /* MTU size as defined in enum ibv_mtu,
+       must be valid if UCT_IB_ADDRESS_PACK_FLAG_MTU is set */
+    enum ibv_mtu                      mtu;
+} uct_ib_address_pack_params_t;
 
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
@@ -337,12 +352,12 @@ int uct_ib_iface_is_ib(uct_ib_iface_t *iface);
 /**
  * Get the expected size of IB packed address.
  *
- * @param [in]  gid        GID address to pack.
- * @param [in]  pack_flags Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx.
+ * @param [in]  params   Address parameters as defined in
+ *                       @ref uct_ib_address_pack_params_t.
  *
  * @return IB address size of the given link scope.
  */
-size_t uct_ib_address_size(const union ibv_gid *gid, unsigned pack_flags);
+size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params);
 
 
 /**
@@ -354,17 +369,13 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
 /**
  * Pack IB address.
  *
- * @param [in]  gid         GID address to pack.
- * @param [in]  lid         LID address to pack.
- * @param [in]  pack_flags  Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx.
- * @param [in]  roce_info   RoCE version to pack in case of an Ethernet link layer.
+ * @param [in]     params   Address parameters as defined in
+ *                          @ref uct_ib_address_pack_params_t.
  * @param [in/out] ib_addr  Filled with packed ib address. Size of the structure
  *                          must be at least what @ref uct_ib_address_size()
  *                          returns for the given scope.
  */
-void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
-                         unsigned pack_flags,
-                         const uct_ib_roce_version_info_t *roce_info,
+void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
                          uct_ib_address_t *ib_addr);
 
 
@@ -389,9 +400,10 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
  * @param [in]  ib_addr    IB address to unpack.
  * @param [out] lid        Filled with address LID, or 0 if not present.
  * @param [out] gid        Filled with address GID, or 0 if not present.
+ * @param [out] mtu        Filled with address path MTU, or 0 if not present.
  */
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
-                           union ibv_gid *gid);
+                           union ibv_gid *gid, enum ibv_mtu *mtu);
 
 
 /**
@@ -475,7 +487,8 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
 void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          const uct_ib_address_t *ib_addr,
                                          unsigned path_index,
-                                         struct ibv_ah_attr *ah_attr);
+                                         struct ibv_ah_attr *ah_attr,
+                                         enum ibv_mtu *path_mtu);
 
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 

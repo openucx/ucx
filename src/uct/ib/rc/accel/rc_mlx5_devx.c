@@ -211,7 +211,8 @@ ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
-                                         struct ibv_ah_attr *ah_attr)
+                                         struct ibv_ah_attr *ah_attr,
+                                         enum ibv_mtu path_mtu)
 {
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
     char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
@@ -229,7 +230,8 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, 14);
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
-    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, iface->super.config.path_mtu);
+    UCT_IB_MLX5DV_SET(qpc, qpc, mtu,
+                      (path_mtu != 0) ? path_mtu : iface->super.config.path_mtu);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
     UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
     if (uct_ib_iface_is_roce(&iface->super.super)) {

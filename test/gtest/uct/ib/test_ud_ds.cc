@@ -67,8 +67,10 @@ unsigned test_ud_ds::N = 1000;
 UCS_TEST_P(test_ud_ds, if_addr) {
     union ibv_gid gid1, gid2;
     uint16_t lid1, lid2;
-    uct_ib_address_unpack(ib_adr1, &lid1, &gid1);
-    uct_ib_address_unpack(ib_adr2, &lid2, &gid2);
+    enum ibv_mtu mtu1, mtu2;
+
+    uct_ib_address_unpack(ib_adr1, &lid1, &gid1, &mtu1);
+    uct_ib_address_unpack(ib_adr2, &lid2, &gid2, &mtu2);
     EXPECT_EQ(lid1, lid2);
     EXPECT_EQ(gid1.global.subnet_prefix, gid2.global.subnet_prefix);
     EXPECT_EQ(gid1.global.interface_id, gid2.global.interface_id);

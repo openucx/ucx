@@ -639,14 +639,16 @@ void uct_rc_mlx5_common_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t
 static ucs_status_t UCS_F_ALWAYS_INLINE
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
-                          struct ibv_ah_attr *ah_attr)
+                          struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
-        return uct_rc_mlx5_iface_common_devx_connect_qp(iface, qp, qp_num, ah_attr);
+        return uct_rc_mlx5_iface_common_devx_connect_qp(iface, qp, qp_num,
+                                                        ah_attr, path_mtu);
     } else {
-        return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num, ah_attr);
+        return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num,
+                                       ah_attr, path_mtu);
     }
 }
 
@@ -659,10 +661,12 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     const uct_rc_mlx5_ep_address_t *rc_addr = (const uct_rc_mlx5_ep_address_t*)ep_addr;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
+    enum ibv_mtu path_mtu;
     ucs_status_t status;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
-                                        ep->super.path_index, &ah_attr);
+                                        ep->super.path_index, &ah_attr,
+                                        &path_mtu);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* For HW TM we need 2 QPs, one of which will be used by the device for
@@ -670,7 +674,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
          * should be posted to the send side of the QP which is owned by device. */
         status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tm_qp,
                                            uct_ib_unpack_uint24(rc_addr->qp_num),
-                                           &ah_attr);
+                                           &ah_attr, path_mtu);
         if (status != UCS_OK) {
             return status;
         }
@@ -682,8 +686,8 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
         qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 
-    status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tx.wq.super,
-                                       qp_num, &ah_attr);
+    status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tx.wq.super, qp_num,
+                                       &ah_attr, path_mtu);
     if (status != UCS_OK) {
         return status;
     }
