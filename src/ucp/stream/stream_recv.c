@@ -345,6 +345,14 @@ out:
     return req;
 }
 
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nbx,
+                 (ep, buffer, count, length, param),
+                 ucp_ep_h ep, void *buffer, size_t count, size_t *length,
+                 const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_proto_t *ep_ext,
                            ucp_stream_am_data_t *am_data, size_t length,
