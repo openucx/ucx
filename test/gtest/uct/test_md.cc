@@ -262,7 +262,6 @@ UCS_TEST_P(test_md, mem_query) {
                      static_cast<ucs_memory_type_t>(mem_type_id));
         status = uct_md_mem_query(md(), address, UCS_KBYTE, &mem_attr);
         ASSERT_UCS_OK(status);
-        ASSERT_NE(mem_attr.field_mask, 0);
         EXPECT_TRUE(mem_attr.field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE);
         EXPECT_TRUE(mem_attr.mem_type == mem_type_id);
     }
