@@ -234,6 +234,7 @@ void UcxContext::progress()
         if (conn->is_disconnected()) {
             _closing_conns.pop_front();
             delete conn;
+            throw UcxError("connection", UCS_ERR_CONNECTION_RESET);
         }
     }
 }
