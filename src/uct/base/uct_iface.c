@@ -557,6 +557,11 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
     return ep->iface->ops.ep_connect_to_ep(ep, dev_addr, ep_addr);
 }
 
+ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep)
+{
+    return ep->iface->ops.cm_ep_conn_notify(ep);
+}
+
 UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)
 {
     self->iface = iface;

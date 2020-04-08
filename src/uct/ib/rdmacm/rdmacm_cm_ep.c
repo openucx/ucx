@@ -97,6 +97,31 @@ ucs_async_context_t *uct_rdmacm_cm_ep_get_async(uct_rdmacm_cm_ep_t *cep)
     return uct_rdmacm_cm_get_async(uct_rdmacm_cm_ep_get_cm(cep));
 }
 
+ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
+{
+    uct_rdmacm_cm_ep_t *cep      = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
+    struct sockaddr *remote_addr = rdma_get_peer_addr(cep->id);
+    uct_rdmacm_cm_t *rdmacm_cm   = uct_rdmacm_cm_ep_get_cm(cep);
+    uct_cm_remote_data_t remote_data;
+    char ep_str[UCT_RDMACM_EP_STRING_LEN];
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+
+    ucs_trace("%s: rdma_establish on client (cm_id %p, rdmacm %p, event_channel=%p)",
+              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+              cep->id, rdmacm_cm, rdmacm_cm->ev_ch);
+
+    if (rdma_establish(cep->id)) {
+        ucs_error("rdma_establish on ep %p (to server addr=%s) failed: %m",
+                  cep, ucs_sockaddr_str(remote_addr, ip_port_str,
+                                        UCS_SOCKADDR_STRING_LEN));
+        remote_data.field_mask = 0;
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 static void uct_rdmacm_cm_ep_destroy_dummy_cq_qp(uct_rdmacm_cm_ep_t *cep)
 {
     int ret;
