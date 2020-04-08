@@ -207,6 +207,16 @@ get_ifaddr() {
 }
 
 get_rdma_device_ip_addr() {
+	if [ ! -r /dev/infiniband/rdma_cm  ]
+	then
+		return
+	fi
+
+	if ! which ibdev2netdev >&/dev/null
+	then
+		return
+	fi
+
 	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
 	if [ -n "$iface" ]
 	then
@@ -838,20 +848,34 @@ run_client_server() {
 }
 
 run_ucp_client_server() {
-	if [ ! -r /dev/infiniband/rdma_cm  ]
-	then
-		return
-	fi
-
-	if ! which ibdev2netdev >&/dev/null
-	then
-		return
-	fi
-
 	echo "==== Running UCP client-server  ===="
 	run_client_server
 
 	rm -f ./ucp_client_server
+}
+
+run_io_demo() {
+	server_ip=$(get_rdma_device_ip_addr)
+	if [ "$server_ip" == "" ]
+	then
+		return
+	fi
+
+	echo "==== Running UCP IO demo  ===="
+
+	test_args="$@"
+	test_name=io_demo
+
+	if [ ! -x ${test_name} ]
+	then
+		$MAKEP -C test/apps/iodemo ${test_name}
+	fi
+
+	export UCX_SOCKADDR_CM_ENABLE=y
+	run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+
+	unset UCX_SOCKADDR_CM_ENABLE
+	make clean
 }
 
 #
@@ -1550,6 +1574,7 @@ run_tests() {
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 2 4 run_ucx_perftest
+	do_distributed_task 1 4 run_io_demo
 	do_distributed_task 3 4 test_profiling
 	do_distributed_task 0 3 test_jucx
 	do_distributed_task 1 4 test_ucs_dlopen
