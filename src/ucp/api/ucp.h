@@ -1151,7 +1151,7 @@ struct ucp_tag_recv_info {
 
 
 /**
- * @ingroup UCP_CONTEXT
+ * @ingroup UCP_WORKER
  * @brief parameters of @ref ucp_worker_tag_recv_cancel_all.
  */
 struct ucp_tag_recv_cancel_params {
@@ -3405,17 +3405,17 @@ void ucp_request_cancel(ucp_worker_h worker, void *request);
  *        @a params.
  *
  * @param [in]  worker       UCP worker.
- * @param [in]  params       parameters for matching requests to cancel.
+ * @param [in]  params       Parameters for matching requests to cancel.
  *
- * @return UCS_PTR_STATUS(_ptr) - indicates the status. However, all requests
- *                                matching @a tag are completed immediately or
+ * @return UCS_PTR_STATUS(_ptr) - Indicates the status. However, all requests
+ *                                matching @a params are completed immediately or
  *                                have been started non blocking cancellation
  *                                procedure and will be completed in finite time.
  * @return otherwise            - reserved for future use.
  *
  * This routine tries to cancel all outstanding communication receive requests
  * posted with @ref ucp_tag_recv_nb routine on the same @a worker and
- * matching . After calling this routine, requests will be in completed or
+ * matching. After calling this routine, requests will be in completed or
  * canceled (but not both) state regardless of the status of the target endpoint
  * associated with the communication request. If the request is completed
  * successfully, the @ref ucp_tag_recv_callback_t "receive" completion callback

@@ -29,7 +29,7 @@ typedef struct ucp_tag_recv_info             ucp_tag_recv_info_t;
 
 
 /**
- * @ingroup UCP_CONTEXT
+ * @ingroup UCP_WORKER
  * @brief parameters of @ref ucp_worker_tag_recv_cancel_all.
  */
 typedef struct ucp_tag_recv_cancel_params    ucp_tag_recv_cancel_params_t;
