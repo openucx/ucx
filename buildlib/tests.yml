@@ -17,6 +17,9 @@ jobs:
           ${{ wid }}:
             worker_id: ${{ wid }}
     steps:
+      # address permissions issue when some files created as read-only
+      - bash: chmod u+rwx ./ -R
+
       - checkout: self
         clean: true
 
