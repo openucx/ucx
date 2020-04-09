@@ -819,8 +819,8 @@ static ucs_status_t parse_cpus(char *opt_arg, struct perftest_context *ctx)
             break;
         }
 
-        cpu_list                   = endptr + 1; /* skip the comma */
-        cpu                        = strtol(cpu_list, &endptr, 10);
+        cpu_list = endptr + 1; /* skip the comma */
+        cpu      = strtol(cpu_list, &endptr, 10);
     }
 
     if (*endptr == ',') {
@@ -980,7 +980,7 @@ static void sock_rte_report(void *rte_group, const ucx_perf_result_t *result,
 {
     struct perftest_context *ctx = arg;
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
-                   is_final, ((ctx->server_addr == NULL) ? 1 : 0), is_multi_thread);
+                   is_final, ctx->server_addr == NULL, is_multi_thread);
 }
 
 static ucx_perf_rte_t sock_rte = {
@@ -1266,7 +1266,7 @@ static void mpi_rte_report(void *rte_group, const ucx_perf_result_t *result,
 {
     struct perftest_context *ctx = arg;
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
-                   is_final, ((ctx->server_addr == NULL) ? 1 : 0), is_multi_thread);
+                   is_final, ctx->server_addr == NULL, is_multi_thread);
 }
 #elif HAVE_RTE
 static unsigned ext_rte_group_size(void *rte_group)
@@ -1377,7 +1377,7 @@ static void ext_rte_report(void *rte_group, const ucx_perf_result_t *result,
 {
     struct perftest_context *ctx = arg;
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
-                   is_final, ((ctx->server_addr == NULL) ? 1 : 0), is_multi_thread);
+                   is_final, ctx->server_addr == NULL, is_multi_thread);
 }
 
 static ucx_perf_rte_t ext_rte = {

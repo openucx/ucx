@@ -1123,8 +1123,9 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf,
 
                 ucp_request_release(req);
             } else if (UCS_PTR_STATUS(req) != UCS_OK) {
-                ucs_warn("failed to close ep %p on thread %d\n",
-                         perf->ucp.tctx[i].perf.ucp.ep, i);
+                ucs_warn("failed to close ep %p on thread %d: %s\n",
+                         perf->ucp.tctx[i].perf.ucp.ep, i,
+                         ucs_status_string(UCS_PTR_STATUS(req)));
             }
         }
     }
@@ -1279,15 +1280,15 @@ static ucs_status_t ucp_perf_test_send_local_data(ucx_perf_context_t *perf,
             goto err_free_workers_vec;
         }
 
-        vec[(i * 3) + 0].iov_base = malloc(sizeof(*info));
-        if (vec[(i * 3) + 0].iov_base == NULL) {
+        vec[i * 3].iov_base = malloc(sizeof(*info));
+        if (vec[i * 3].iov_base == NULL) {
             ucs_error("failed to allocate vec entry for info");
             status = UCS_ERR_NO_MEMORY;
             ucp_worker_destroy(perf->ucp.tctx[i].perf.ucp.worker);
             goto err_free_workers_vec;
         }
 
-        info                       = vec[(i * 3) + (0)].iov_base;
+        info                       = vec[i * 3].iov_base;
         info->ucp.worker_addr_len  = address_length;
         info->ucp.total_wireup_len = sizeof(*info) + address_length + rkey_size;
         info->rkey_size            = rkey_size;
@@ -1311,7 +1312,7 @@ static ucs_status_t ucp_perf_test_send_local_data(ucx_perf_context_t *perf,
     }
 
     for (i = 0; i < thread_count; i++) {
-        free(vec[(i * 3) + 0].iov_base);
+        free(vec[i * 3].iov_base);
         ucp_worker_release_address(perf->ucp.tctx[i].perf.ucp.worker,
                                    vec[(i * 3) + 1].iov_base);
     }
