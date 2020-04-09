@@ -169,16 +169,19 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
+                                      ucs_arbiter_group_t *group,
                                       ucs_arbiter_elem_t *elem,
                                       void *arg);
 
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
+                                        ucs_arbiter_group_t *group,
                                         ucs_arbiter_elem_t *elem,
                                         void *arg);
 
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
+                                         ucs_arbiter_group_t *group,
                                          ucs_arbiter_elem_t *elem,
                                          void *arg);
 

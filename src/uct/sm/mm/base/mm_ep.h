@@ -64,6 +64,7 @@ void uct_mm_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
                              void *arg);
 
 ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_group_t *group,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg);
 

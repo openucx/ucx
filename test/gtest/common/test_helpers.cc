@@ -506,6 +506,15 @@ void *mmap_fixed_address() {
     return (void*)0xff0000000;
 }
 
+std::string compact_string(const std::string &str, size_t length)
+{
+    if (str.length() <= length * 2) {
+        return str;
+    }
+
+    return str.substr(0, length) + "..." + str.substr(str.length() - length);
+}
+
 sock_addr_storage::sock_addr_storage() : m_size(0), m_is_valid(false) {
     memset(&m_storage, 0, sizeof(m_storage));
 }

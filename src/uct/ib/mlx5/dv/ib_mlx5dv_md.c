@@ -710,19 +710,21 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                              ucs_get_page_size(), "zero umem");
     if (ret != 0) {
         ucs_error("failed to allocate zero buffer: %m");
+        status = UCS_ERR_NO_MEMORY;
         goto err_release_dbrec;
     }
 
     md->zero_mem = mlx5dv_devx_umem_reg(dev->ibv_context, md->zero_buf, ucs_get_page_size(), 0);
-    if (!md->zero_mem) {
+    if (md->zero_mem == NULL) {
         ucs_error("mlx5dv_devx_umem_reg() zero umem failed: %m");
+        status = UCS_ERR_IO_ERROR;
         goto err_free_zero_buf;
     }
 
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
-    md->flags |= UCT_IB_MLX5_MD_FLAG_DEVX;
-    md->flags |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
-    *p_md = &md->super;
+    md->flags  |= UCT_IB_MLX5_MD_FLAG_DEVX;
+    md->flags  |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
+    *p_md       = &md->super;
     return status;
 
 err_free_zero_buf:
