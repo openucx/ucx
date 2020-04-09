@@ -304,6 +304,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     uct_ib_address_t   *ib_addr;
     ucs_status_t        status;
     struct ibv_ah_attr  ah_attr;
+    enum ibv_mtu        path_mtu;
 
     /* coverity[result_independent_of_operands] */
     ib_addr = ucs_alloca((size_t)iface->addr_size);
@@ -314,7 +315,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
         return status;
     }
 
-    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, &ah_attr, &path_mtu);
     ah_attr.is_global = iface->config.force_global_addr;
     status = uct_ib_iface_create_ah(iface, &ah_attr, &ah);
     if (status != UCS_OK) {

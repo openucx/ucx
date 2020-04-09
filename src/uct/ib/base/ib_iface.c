@@ -441,7 +441,6 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
     uct_ib_gid_str(&gid, p, endp - p);
     if (mtu != 0) {
         snprintf(p, endp - p, "mtu %zu ", uct_ib_mtu_value(mtu));
-        p += strlen(p);
     }
 
     return buf;
