@@ -171,7 +171,7 @@ public:
         do {
             status = receiver().listen(cb_type, m_test_addr.get_sock_addr_ptr(),
                                        m_test_addr.get_addr_size(),
-                                       get_ep_params());
+                                       get_server_ep_params());
         } while ((status == UCS_ERR_BUSY) && (ucs_get_time() < deadline));
 
         if (status == UCS_ERR_UNREACHABLE) {
@@ -384,6 +384,10 @@ public:
         return ep_params;
     }
 
+    virtual ucp_ep_params_t get_server_ep_params() {
+        return get_ep_params();
+    }
+
     void client_ep_connect()
     {
         ucp_ep_params_t ep_params = get_ep_params();
@@ -448,43 +452,36 @@ public:
     }
 
     void one_sided_disconnect(entity &e) {
-        void *dreq = e.disconnect_nb();
-        if (dreq == NULL) {
-            return;
-        }
-
-        ASSERT_EQ(UCS_INPROGRESS, UCS_PTR_STATUS(dreq));
-
-        ucs_status_t status;
-        ucs_time_t loop_end_limit = ucs_time_from_sec(10.0) + ucs_get_time();
-        do {
+        void *req           = e.disconnect_nb();
+        ucs_time_t deadline = ucs_time_from_sec(10.0) + ucs_get_time();
+        while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
                      async progress is implemented. */
             progress();
-            status = ucp_request_check_status(dreq);
-            if (status != UCS_INPROGRESS) {
-                break;
-            }
-        } while (ucs_get_time() < loop_end_limit);
-        EXPECT_EQ(UCS_OK, status);
-        ucp_request_release(dreq);
+        };
+
+        e.close_ep_req_free(req);
     }
 
     void concurrent_disconnect() {
-        std::vector<void *> reqs;
-
         ASSERT_EQ(2ul, entities().size());
         ASSERT_EQ(1, sender().get_num_workers());
         ASSERT_EQ(1, sender().get_num_eps());
         ASSERT_EQ(1, receiver().get_num_workers());
         ASSERT_EQ(1, receiver().get_num_eps());
 
-        reqs.push_back(sender().disconnect_nb());
-        reqs.push_back(receiver().disconnect_nb());
-        while (!reqs.empty()) {
-            wait(reqs.back());
-            reqs.pop_back();
+        void *sender_ep_close_req   = sender().disconnect_nb();
+        void *receiver_ep_close_req = receiver().disconnect_nb();
+
+        ucs_time_t deadline = ucs::get_deadline();
+        while ((!is_request_completed(sender_ep_close_req) ||
+                !is_request_completed(receiver_ep_close_req)) &&
+               (ucs_get_time() < deadline)) {
+            progress();
         }
+
+        sender().close_ep_req_free(sender_ep_close_req);
+        receiver().close_ep_req_free(receiver_ep_close_req);
     }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
@@ -639,7 +636,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     ucs_status_t status = receiver().listen(cb_type(),
                                             m_test_addr.get_sock_addr_ptr(),
                                             m_test_addr.get_addr_size(),
-                                            get_ep_params());
+                                            get_server_ep_params());
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("cannot listen to " + m_test_addr.to_str());
     }
@@ -659,6 +656,49 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
 
+class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
+public:
+    virtual ucp_ep_params_t get_server_ep_params() {
+        ucp_ep_params_t params = test_ucp_sockaddr::get_server_ep_params();
+
+        params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER        |
+                                 UCP_EP_PARAM_FIELD_USER_DATA;
+        params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb   = err_handler_cb;
+        params.err_handler.arg  = NULL;
+        params.user_data        = &receiver();
+        return params;
+    }
+
+    static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
+        test_ucp_sockaddr::err_handler_cb(arg, ep, status);
+        entity *e = reinterpret_cast<entity *>(arg);
+        e->disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, empty,
+                     no_close_protocol()) {
+    listen_and_communicate(false, 0);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, s2c,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_S2C);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, c2s,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, bidi,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
+UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_destroy_ep_on_err)
 
 class test_ucp_sockaddr_with_wakeup : public test_ucp_sockaddr {
 public:
