@@ -117,7 +117,7 @@ typedef struct uct_ud_iface_ops {
     unsigned                  (*async_progress)(uct_ud_iface_t *iface);
     uint16_t                  (*send_ctl)(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
                                           const uct_ud_iov_t *iov, uint16_t iovcnt,
-                                          int flags);
+                                          int flags, int max_log_sge);
     void                      (*ep_free)(uct_ep_h ep);
     ucs_status_t              (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                            struct ibv_qp **qp_p);
@@ -412,11 +412,12 @@ uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
 
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ud_iface_send_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
-                      const uct_ud_iov_t *iov, uint16_t iovcnt, int flags)
+                      const uct_ud_iov_t *iov, uint16_t iovcnt, int flags,
+                      int max_log_sge)
 {
     uct_ud_iface_ops_t *ud_ops = ucs_derived_of(iface->super.ops,
                                                 uct_ud_iface_ops_t);
-    return ud_ops->send_ctl(ep, skb, iov, iovcnt, flags);
+    return ud_ops->send_ctl(ep, skb, iov, iovcnt, flags, max_log_sge);
 }
 
 static UCS_F_ALWAYS_INLINE void

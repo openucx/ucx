@@ -907,7 +907,7 @@ static void uct_ud_ep_send_creq_crep(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                                      uct_ud_send_skb_t *skb)
 {
     uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
-                          UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED);
+                          UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED, INT_MAX);
     uct_ud_iface_complete_tx_skb(iface, ep, skb);
 }
 
@@ -919,6 +919,7 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     uct_ud_zcopy_desc_t *zdesc;
     uct_ud_iov_t skb_iov, *iov;
     uct_ud_ctl_desc_t *cdesc;
+    int max_log_sge;
     uint16_t iovcnt;
 
     /* check window */
@@ -978,9 +979,10 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
         skb->len = sent_skb->len;
 
         /* set iov pointer to payload */
-        zdesc    = uct_ud_zcopy_desc(sent_skb);
-        iov      = zdesc->iov;
-        iovcnt   = zdesc->iovcnt;
+        zdesc       = uct_ud_zcopy_desc(sent_skb);
+        iov         = zdesc->iov;
+        iovcnt      = zdesc->iovcnt;
+        max_log_sge = UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super);
     } else {
         /* copy neth part only, since we may not have enough room in the control
          * skb for the whole payload + ctl desc, and we also prefer to avoid
@@ -994,6 +996,7 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
         skb_iov.lkey   = sent_skb->lkey;
         iov            = &skb_iov;
         iovcnt         = 1;
+        max_log_sge    = 2;
     }
 
     memcpy(skb->neth, sent_skb->neth, sent_skb->len);
@@ -1023,7 +1026,8 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     /* Send control message and save operation on queue. Use signaled-send to
      * make sure user completion will not be delayed indefinitely */
     cdesc->sn = uct_ud_iface_send_ctl(iface, ep, skb, iov, iovcnt,
-                                      UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED);
+                                      UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED,
+                                      max_log_sge);
     uct_ud_iface_add_ctl_desc(iface, cdesc);
 }
 
@@ -1061,11 +1065,11 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 
     if (is_inline) {
         uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
-                              UCT_UD_IFACE_SEND_CTL_FLAG_INLINE);
+                              UCT_UD_IFACE_SEND_CTL_FLAG_INLINE, 1);
     } else {
         /* if skb is taken from memory pool, release it in send completion */
         cdesc             = uct_ud_ctl_desc(skb);
-        cdesc->sn         = uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0, 0);
+        cdesc->sn         = uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0, 0, 1);
         cdesc->self_skb   = skb;
         cdesc->resent_skb = NULL;
         uct_ud_iface_add_ctl_desc(iface, cdesc);
