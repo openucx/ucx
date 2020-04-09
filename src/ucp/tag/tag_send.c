@@ -51,7 +51,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                  size_t rndv_rma_thresh, size_t rndv_am_thresh,
                  ucp_send_nbx_callback_t cb, void *user_data,
                  const ucp_request_send_proto_t *proto,
-                 int enable_zcopy)
+                 uint64_t op_attr)
 {
     size_t rndv_thresh  = ucp_tag_get_rndv_threshold(req, dt_count,
                                                      msg_config->max_iov,
@@ -61,7 +61,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     ucs_status_t status;
     size_t zcopy_thresh;
 
-    if (enable_zcopy ||
+    if (!(op_attr & UCP_OP_ATTR_FLAG_NO_ZCOPY) ||
         ucs_unlikely(!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
         zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, dt_count,
                                                      rndv_thresh);
@@ -73,7 +73,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                   "buffer=%p length=%zu max_short=%zd rndv_thresh=%zu "
                   "zcopy_thresh=%zu zcopy_enabled=%d",
                   req, req->send.datatype, req->send.buffer, req->send.length,
-                  max_short, rndv_thresh, zcopy_thresh, enable_zcopy);
+                  max_short, rndv_thresh, zcopy_thresh,
+                  !(op_attr & UCP_OP_ATTR_FLAG_NO_ZCOPY));
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
                                     dt_count, msg_config, proto);
@@ -100,24 +101,34 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
 
     /*
      * Start the request.
-     * If it is completed immediately, release the request and return the status.
+     * If it is completed immediately and this completion is allowed,
+     * release the request and return the status.
      * Otherwise, return the request.
      */
     status = ucp_request_send(req, 0);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        ucs_trace_req("releasing send request %p, returning status %s", req,
-                      ucs_status_string(status));
-        if (enable_zcopy) {
+        if (!(op_attr & UCP_OP_ATTR_FLAG_NO_IMM_CMPL)) {
+            /*  immediately completion is allowed */
+            ucs_trace_req("releasing send request %p, returning status %s", req,
+                        ucs_status_string(status));
             ucp_request_put(req);
+            return UCS_STATUS_PTR(status);
+        } else {
+            ucs_trace_req("request %p completed, but immediate completion is "
+                          "prohibited, status %s", req,
+                          ucs_status_string(status));
+            if (cb) {
+                cb(req + 1, status, user_data);
+            }
+            goto out;
         }
-        return UCS_STATUS_PTR(status);
     }
 
     if (cb) {
         ucp_request_set_callback(req, send.cb, cb,
                                  send.user_data, user_data);
     }
-
+out:
     ucs_trace_req("returning send request %p", req);
     return req + 1;
 }
@@ -242,7 +253,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
     ucs_status_ptr_t ret;
     uintptr_t datatype;
     size_t rma_thresh, am_thresh;
-    int enable_zcopy;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
@@ -251,7 +261,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
     ucs_trace_req("send_nbx buffer %p count %zu tag %"PRIx64" to %s",
                   buffer, count, tag, ucp_ep_peer_name(ep));
 
-    if (ucs_likely(!(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE))) {
+    if (ucs_likely(!(param->op_attr_mask &
+                     (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL)))) {
         status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer, count, tag);
         if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
             ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
@@ -259,7 +270,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         }
         datatype = ucp_dt_make_contig(1);
     } else {
-        datatype = param->datatype;
+        datatype = param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE ?
+                   param->datatype : ucp_dt_make_contig(1);
     }
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
@@ -281,11 +293,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_ZCOPY)) {
         rma_thresh   = ucp_ep_config(ep)->tag.rndv_send_nbr.rma_thresh;
         am_thresh    = ucp_ep_config(ep)->tag.rndv_send_nbr.am_thresh;
-        enable_zcopy = 0;
     } else {
         rma_thresh   = ucp_ep_config(ep)->tag.rndv.rma_thresh;
         am_thresh    = ucp_ep_config(ep)->tag.rndv.am_thresh;
-        enable_zcopy = 1;
     }
 
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
@@ -293,7 +303,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
                            param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK ?
                            param->cb.send : NULL,
                            param->user_data,
-                           ucp_ep_config(ep)->tag.proto, enable_zcopy);
+                           ucp_ep_config(ep)->tag.proto, param->op_attr_mask);
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;
@@ -309,7 +319,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
     ucs_status_ptr_t ret;
     uintptr_t datatype;
     size_t rma_thresh, am_thresh;
-    int enable_zcopy;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
@@ -347,11 +356,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
     if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_ZCOPY) {
         rma_thresh   = ucp_ep_config(ep)->tag.rndv_send_nbr.rma_thresh;
         am_thresh    = ucp_ep_config(ep)->tag.rndv_send_nbr.am_thresh;
-        enable_zcopy = 0;
     } else {
         rma_thresh   = ucp_ep_config(ep)->tag.rndv.rma_thresh;
         am_thresh    = ucp_ep_config(ep)->tag.rndv.am_thresh;
-        enable_zcopy = 1;
     }
 
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
@@ -359,7 +366,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                            param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK ?
                            param->cb.send : NULL,
                            param->user_data,
-                           ucp_ep_config(ep)->tag.sync_proto, enable_zcopy);
+                           ucp_ep_config(ep)->tag.sync_proto,
+                           param->op_attr_mask);
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;
