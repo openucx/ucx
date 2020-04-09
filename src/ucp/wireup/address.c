@@ -849,9 +849,13 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     const void *ptr;
     const void *flags_ptr;
 
-    ptr            = buffer;
-    address_header = *(const uint8_t *)ptr;
-    ptr            = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+    /* Initialize the unpacked address to empty */
+    unpacked_address->address_count = 0;
+    unpacked_address->address_list  = NULL;
+
+    ptr                             = buffer;
+    address_header                  = *(const uint8_t *)ptr;
+    ptr                             = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
     /* Check address version */
     address_version = address_header & UCP_ADDRESS_HEADER_VERSION_MASK;
@@ -878,8 +882,6 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
     /* Empty address list */
     if (*(uint8_t*)ptr == UCP_NULL_RESOURCE) {
-        unpacked_address->address_count = 0;
-        unpacked_address->address_list  = NULL;
         return UCS_OK;
     }
 
@@ -913,7 +915,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         } else {
             dev_num_paths = 1;
         }
-        ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+        ptr      = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
         dev_addr = ptr;
         ptr      = UCS_PTR_BYTE_OFFSET(ptr, dev_addr_len);
@@ -943,8 +945,13 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
             last_ep_addr = !(*(uint8_t*)flags_ptr & UCP_ADDRESS_FLAG_HAS_EP_ADDR);
             while (!last_ep_addr) {
-                ucs_assertv_always(address->num_ep_addrs < UCP_MAX_LANES,
-                                   "num_ep_addrs=%u", address->num_ep_addrs);
+                if (address->num_ep_addrs >= UCP_MAX_LANES) {
+                    if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
+                        ucs_error("failed to parse address: number of ep addresses"
+                                "exceeds %d", UCP_MAX_LANES);
+                    }
+                    goto err_free;
+                }
 
                 ep_addr       = &address->ep_addrs[address->num_ep_addrs++];
                 ptr           = ucp_address_unpack_length(worker, flags_ptr, ptr,
@@ -991,5 +998,9 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     unpacked_address->address_count = address - address_list;
     unpacked_address->address_list  = address_list;
     return UCS_OK;
+
+err_free:
+    ucs_free(address_list);
+    return UCS_ERR_INVALID_PARAM;
 }
 

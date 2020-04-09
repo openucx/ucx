@@ -242,10 +242,6 @@ ucp_wireup_init_select_info(ucp_context_h context, double score,
 {
     ucs_assert(score >= 0.0);
 
-    ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%u] : %s score %.2f priority %d",
-              UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
-              addr_index, title, score, priority);
-
     select_info->score      = score;
     select_info->addr_index = addr_index;
     select_info->path_index = 0;
@@ -279,6 +275,7 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
     uct_iface_attr_t *iface_attr;
     uct_md_attr_t *md_attr;
     uint64_t addr_index_map;
+    int is_reachable;
     double score;
     uint8_t priority;
 
@@ -395,6 +392,7 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
             continue;
         }
 
+        is_reachable = 0;
         ucp_unpacked_address_for_each(ae, select_params->address) {
             addr_index = ucp_unpacked_address_index(select_params->address, ae);
             if (!(addr_index_map & UCS_BIT(addr_index)) ||
@@ -408,6 +406,11 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
                                                 &ae->iface_attr);
             priority     = iface_attr->priority + ae->iface_attr.priority;
 
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT "->addr[%u] : %s score %.2f priority %d",
+                      UCT_TL_RESOURCE_DESC_ARG(resource),
+                      addr_index, criteria->title, score, priority);
+            is_reachable = 1;
+
             if (!found || (ucp_score_prio_cmp(score, priority, sinfo.score,
                                               sinfo.priority) > 0)) {
                 ucp_wireup_init_select_info(context, score, addr_index,
@@ -419,7 +422,9 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
 
         /* If a local resource cannot reach any of the remote addresses,
          * generate debug message. */
-        if (!found) {
+        if (!is_reachable) {
+            ucs_trace(UCT_TL_RESOURCE_DESC_FMT" : unreachable ",
+                      UCT_TL_RESOURCE_DESC_ARG(resource));
             snprintf(p, endp - p, UCT_TL_RESOURCE_DESC_FMT" - %s, ",
                      UCT_TL_RESOURCE_DESC_ARG(resource),
                      ucs_status_string(UCS_ERR_UNREACHABLE));
