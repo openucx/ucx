@@ -28,12 +28,13 @@ static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, const uct_ep_params_t *params)
 
 {
     uct_cm_iface_t *iface = ucs_derived_of(params->iface, uct_cm_iface_t);
+    enum ibv_mtu mtu;
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     uct_ib_address_unpack((const uct_ib_address_t*)params->dev_addr, &self->dlid,
-                          &self->dgid);
+                          &self->dgid, &mtu);
     self->dest_service_id = *(const uint32_t*)params->iface_addr;
     return UCS_OK;
 }

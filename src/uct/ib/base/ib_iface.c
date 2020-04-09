@@ -292,6 +292,7 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
     void *ptr = ib_addr + 1;
 
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
+        ucs_assert(params->roce_info != NULL);
         /* RoCE, in this case we don't use the lid, we pack the gid, the RoCE
          * version, address family and set the ETH flag */
         ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH |
@@ -439,6 +440,7 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
         p += strlen(p);
     }
     uct_ib_gid_str(&gid, p, endp - p);
+    p += strlen(p);
     if (mtu != 0) {
         snprintf(p, endp - p, "mtu %zu ", uct_ib_mtu_value(mtu));
     }
