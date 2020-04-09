@@ -308,7 +308,6 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
     } else {
         /* IB, LID */
         ib_addr->flags   = !UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH;
-        ptr              = ib_addr + 1;
         *(uint16_t*)ptr  = params->lid;
         ptr              = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
 
@@ -440,7 +439,10 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
         p += strlen(p);
     }
     uct_ib_gid_str(&gid, p, endp - p);
-//    uct_ib_mtu_t ib_mtu = uct_ib_mtu
+    if (mtu != 0) {
+        snprintf(p, endp - p, "mtu %zu ", uct_ib_mtu_value(mtu));
+        p += strlen(p);
+    }
 
     return buf;
 }

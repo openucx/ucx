@@ -77,11 +77,11 @@ typedef struct uct_ib_address_pack_params {
     const union ibv_gid               *gid;
     /* LID address to pack. */
     uint16_t                          lid;
-    /* RoCE version to pack in case of an Ethernet link layer, must be valid if
-       UCT_IB_ADDRESS_PACK_FLAG_ETH is set */
+    /* RoCE version to pack in case of an Ethernet link layer,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_ETH is set. */
     const uct_ib_roce_version_info_t  *roce_info;
     /* MTU size as defined in enum ibv_mtu,
-       must be valid if UCT_IB_ADDRESS_PACK_FLAG_MTU is set */
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_MTU is set. */
     enum ibv_mtu                      mtu;
 } uct_ib_address_pack_params_t;
 

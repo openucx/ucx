@@ -181,6 +181,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     }
 
     params.gid  = &cm_id->route.addr.addr.ibaddr.dgid;
+    params.lid  = qp_attr.ah_attr.dlid;
     addr_length = uct_ib_address_size(&params);
     dev_addr    = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
