@@ -313,8 +313,8 @@ void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep,
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
 
 ucs_arbiter_cb_result_t
-uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
-                     void *arg);
+uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                     ucs_arbiter_elem_t *elem, void *arg);
 
 void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 

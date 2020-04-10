@@ -1124,6 +1124,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     /* Address scope and size */
     if (uct_ib_iface_is_roce(self) || config->is_global ||
+        uct_ib_grh_required(uct_ib_iface_port_attr(self)) ||
         /* check ADDR_TYPE for backward compatibility */
         (config->addr_type == UCT_IB_ADDRESS_TYPE_SITE_LOCAL) ||
         (config->addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL)) {

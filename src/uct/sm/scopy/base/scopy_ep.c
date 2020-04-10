@@ -121,13 +121,14 @@ ucs_status_t uct_scopy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 }
 
 ucs_arbiter_cb_result_t uct_scopy_ep_progress_tx(ucs_arbiter_t *arbiter,
+                                                 ucs_arbiter_group_t *group,
                                                  ucs_arbiter_elem_t *elem,
                                                  void *arg)
 {
     uct_scopy_iface_t *iface = ucs_container_of(arbiter, uct_scopy_iface_t,
                                                 arbiter);
-    uct_scopy_ep_t *ep       = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                                uct_scopy_ep_t, arb_group);
+    uct_scopy_ep_t *ep       = ucs_container_of(group, uct_scopy_ep_t,
+                                                arb_group);
     uct_scopy_tx_t *tx       = ucs_container_of(elem, uct_scopy_tx_t,
                                                 arb_elem);
     unsigned *count          = (unsigned*)arg;

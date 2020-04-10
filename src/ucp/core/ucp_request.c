@@ -353,6 +353,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
     } else if (length < zcopy_thresh) {
         /* bcopy */
         ucp_request_send_state_reset(req, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
+        ucs_assert(msg_config->max_bcopy >= proto->only_hdr_size);
         if (length <= (msg_config->max_bcopy - proto->only_hdr_size)) {
             req->send.uct.func = proto->bcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);

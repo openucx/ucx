@@ -249,7 +249,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_flush(ep0(), 0, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_get_address(ep0(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_pending_add(ep0(), NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
+    EXPECT_EQ(uct_ep_pending_add(ep0(), NULL, 0), UCS_ERR_BUSY);
     EXPECT_EQ(uct_ep_connect_to_ep(ep0(), NULL, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
 
     EXPECT_GT(m_err_count, 0ul);
