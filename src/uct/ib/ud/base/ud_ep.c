@@ -907,7 +907,7 @@ static void uct_ud_ep_send_creq_crep(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                                      uct_ud_send_skb_t *skb)
 {
     uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
-                          UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED, INT_MAX);
+                          UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED, 1);
     uct_ud_iface_complete_tx_skb(iface, ep, skb);
 }
 
