@@ -61,7 +61,7 @@
 #endif
 
 
-#if HAVE_TL_UGNI
+#ifdef HAVE_TL_UGNI
 #  include <uct/ugni/base/ugni_ep.h>
 #  include <uct/ugni/base/ugni_iface.h>
 #  include <uct/ugni/base/ugni_device.h>
@@ -146,7 +146,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_tcp_ep_t);
         PRINT_SIZE(uct_self_ep_t);
 
-#if HAVE_TL_UGNI
+#ifdef HAVE_TL_UGNI
         PRINT_SIZE(uct_sockaddr_ugni_t);
         PRINT_SIZE(uct_sockaddr_smsg_ugni_t);
         PRINT_SIZE(uct_devaddr_ugni_t);
@@ -240,7 +240,7 @@ void print_type_info(const char * tl_name)
     }
 #endif
 
-#if HAVE_TL_UGNI
+#ifdef HAVE_TL_UGNI
     if (tl_name == NULL || !strcasecmp(tl_name, "ugni")) {
         printf("UGNI:\n");
         PRINT_SIZE(uct_ugni_device_t);

@@ -323,7 +323,7 @@ static ucs_status_t
 uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
     struct ibv_qp *qp;
-#if HAVE_STRUCT_MLX5_SRQ_CMD_QP
+#ifdef HAVE_STRUCT_MLX5_SRQ_CMD_QP
     iface->tm.cmd_wq.super.super.verbs.qp = NULL;
     iface->tm.cmd_wq.super.super.verbs.rd = NULL;
     iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_OBJ_TYPE_LAST;

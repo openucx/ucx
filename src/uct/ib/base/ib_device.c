@@ -224,7 +224,7 @@ static void uct_ib_async_event_handler(int fd, void *arg)
                  ibv_event_type_str(event.event_type), event.element.port_num);
         level = UCS_LOG_LEVEL_WARN;
         break;
-#if HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
+#ifdef HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
     case IBV_EXP_EVENT_DCT_KEY_VIOLATION:
         snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
                  "DCT key violation", event.element.dct->dct_num);
@@ -923,7 +923,7 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
 
 size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
 {
-#if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
+#ifdef HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
     const struct ibv_exp_device_attr *dev_attr = &dev->dev_attr;
     uint32_t required_ud_odp_caps = IBV_EXP_ODP_SUPPORT_SEND;
     uint32_t required_rc_odp_caps = IBV_EXP_ODP_SUPPORT_SEND |

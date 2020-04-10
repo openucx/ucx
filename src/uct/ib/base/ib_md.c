@@ -21,7 +21,7 @@
 #include <ucs/time/time.h>
 #include <ucm/api/ucm.h>
 #include <pthread.h>
-#if HAVE_PTHREAD_NP_H
+#ifdef HAVE_PTHREAD_NP_H
 #include <pthread_np.h>
 #endif
 #include <sys/resource.h>
@@ -150,7 +150,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, ext.enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     {"MAX_INLINE_KLM_LIST", "inf",
      "When posting a UMR, KLM lists shorter or equal to this value will be posted as inline.\n"
      "The actual maximal length is also limited by device capabilities.",
