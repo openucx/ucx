@@ -5,10 +5,12 @@
 # See file LICENSE for terms.
 #
 
+
 #
 # Initialize CFLAGS
 #
 BASE_CFLAGS="-g -Wall -Werror"
+
 
 #
 # Check that C++ is functional.
@@ -31,6 +33,7 @@ AC_DEFUN([CHECK_CXX_COMP],
           AC_LANG_POP([C++])
          ])
 
+
 #
 # Debug mode
 #
@@ -42,6 +45,7 @@ AS_IF([test "x$enable_debug" = xyes],
         [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"
          BASE_CXXFLAGS="-D_DEBUG" $BASE_CXXFLAGS],
         [])
+
 
 #
 # Optimization level
@@ -73,6 +77,7 @@ AC_DEFUN([CHECK_CROSS_COMP], [
          AC_RUN_IFELSE([$1], [$2], [$3],
                        [AC_LINK_IFELSE([$1], [$2], [$3])])
 ])
+
 
 #
 # Check for one specific attribute by compiling with C
@@ -220,6 +225,7 @@ AC_DEFUN([CHECK_COMPILER_FLAG],
                             $5])
 ])
 
+
 #
 # ADD_COMPILER_FLAG_IF_SUPPORTED
 # Usage: ADD_COMPILER_FLAG_IF_SUPPORTED([name], [flag], [program], [if-true], [if-false])
@@ -235,6 +241,7 @@ AC_DEFUN([ADD_COMPILER_FLAG_IF_SUPPORTED],
                              [$5])
 ])
 
+
 #
 # ADD_COMPILER_FLAGS_IF_SUPPORTED
 # Usage: ADD_COMPILER_FLAGS_IF_SUPPORTED([[flag1], [flag2], [flag3]], [program])
@@ -246,6 +253,7 @@ AC_DEFUN([ADD_COMPILER_FLAGS_IF_SUPPORTED],
          m4_foreach([_flag], [$1],
                     [ADD_COMPILER_FLAG_IF_SUPPORTED([_flag], [_flag], [$2], [], [])])
 ])
+
 
 #
 # CHECK_DEPRECATED_DECL_FLAG (flag, variable)
@@ -387,10 +395,12 @@ AS_IF([test "x$enable_frame_pointer" = xyes],
                                       [AS_MESSAGE([compiling with frame pointer is not supported])])],
       [:])
 
+
 #
 # Check for C++ support
 #
 CHECK_CXX_COMP()
+
 
 #
 # Check for C++11 support
@@ -421,6 +431,7 @@ AM_CONDITIONAL([HAVE_CXX11], [test "x$cxx11_happy" != xno])
 #
 AC_MSG_CHECKING([gnu++11 support])
 AC_LANG_PUSH([C++])
+
 SAVE_CXXFLAGS="$CXXFLAGS"
 CXX11FLAGS="-std=gnu++11"
 CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
@@ -438,7 +449,6 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
                   [AC_MSG_RESULT([no])
                    gnuxx11_happy=no])
 CXXFLAGS="$SAVE_CXXFLAGS"
-
 AM_CONDITIONAL([HAVE_GNUXX11], [test "x$gnuxx11_happy" != xno])
 
 AC_CHECK_DECL(_GLIBCXX_NOTHROW, have_glibcxx_nothrow=yes,
@@ -446,6 +456,7 @@ AC_CHECK_DECL(_GLIBCXX_NOTHROW, have_glibcxx_nothrow=yes,
 AM_CONDITIONAL([HAVE_GLIBCXX_NOTHROW], [test "x$have_glibcxx_nothrow" = xyes])
 
 AC_LANG_POP
+
 
 #
 # PGI specific switches
@@ -459,12 +470,19 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[--display_error_number],
                                  [--diag_suppress 1901]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
+
+#
 # Check if "-pedantic" flag is supported
+#
 CHECK_COMPILER_FLAG([-pedantic], [-pedantic],
                     [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                     [CFLAGS_PEDANTIC="$CFLAGS_PEDANTIC -pedantic"],
                     [])
 
+
+#
+# Add strict compilation flags
+#
 ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
                                  [-Wno-unused-parameter],
                                  [-Wno-unused-label],
@@ -476,12 +494,17 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
                                  [-Winvalid-pch]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
+
 #
 # Set C++ optimization/debug flags to be the same as for C
 #
 BASE_CXXFLAGS="$BASE_CFLAGS"
 
-# Add flags supported by C compiler only
+
+#
+# Add strict flags supported by C compiler only
+# NOTE: This must be done after setting BASE_CXXFLAGS
+#
 ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-pointer-sign],
                                  [-Werror-implicit-function-declaration],
                                  [-Wno-format-zero-length],
@@ -489,12 +512,14 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-pointer-sign],
                                  [-Wshadow]],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
+
 AC_SUBST([BASE_CFLAGS])
 AC_SUBST([BASE_CXXFLAGS])
 AC_SUBST([CFLAGS_PEDANTIC])
 
+
 #
-# Set common preprocessor flags
+# Set common C preprocessor flags
 #
 BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
 BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_srcdir}/src"
