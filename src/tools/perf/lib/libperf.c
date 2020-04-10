@@ -50,7 +50,8 @@ typedef struct {
             size_t     ep_addr_len;
         } uct;
         struct {
-            size_t     addr_len;
+            size_t     worker_addr_len;
+            size_t     total_wireup_len;
         } ucp;
     };
     size_t             rkey_size;
@@ -247,8 +248,6 @@ static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
         goto err_free_recv;
     }
 
-    perf->offset = 0;
-
     ucs_debug("allocated memory. Send buffer %p, Recv buffer %p",
               perf->send_buffer, perf->recv_buffer);
     return UCS_OK;
@@ -311,7 +310,6 @@ static void ucx_perf_test_init(ucx_perf_context_t *perf,
     unsigned group_index;
 
     perf->params = *params;
-    perf->offset = 0;
     group_index  = rte_call(perf, group_index);
 
     if (0 == group_index) {
@@ -705,7 +703,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 
 static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 {
-    const size_t buffer_size = 2048;
+    const size_t buffer_size = ADDR_BUF_SIZE;
     ucx_perf_ep_info_t info, *remote_info;
     unsigned group_size, i, group_index;
     uct_device_addr_t *dev_addr;
@@ -1100,36 +1098,33 @@ static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
 static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf,
                                       unsigned group_size)
 {
-    ucs_status_ptr_t    *reqs;
-    ucp_tag_recv_info_t info;
+    unsigned i, thread_count = perf->params.thread_count;
+    ucs_status_ptr_t    *req;
     ucs_status_t        status;
-    unsigned i;
 
-    reqs = calloc(sizeof(*reqs), group_size);
-
-    for (i = 0; i < group_size; ++i) {
-        if (perf->ucp.peers[i].rkey != NULL) {
-            ucp_rkey_destroy(perf->ucp.peers[i].rkey);
+    for (i = 0; i < thread_count; ++i) {
+        if (perf->ucp.tctx[i].perf.ucp.rkey != NULL) {
+            ucp_rkey_destroy(perf->ucp.tctx[i].perf.ucp.rkey);
         }
-        if (perf->ucp.peers[i].ep != NULL) {
-            reqs[i] = ucp_disconnect_nb(perf->ucp.peers[i].ep);
+
+        if (perf->ucp.tctx[i].perf.ucp.ep != NULL) {
+            req = ucp_ep_close_nb(perf->ucp.tctx[i].perf.ucp.ep,
+                                  UCP_EP_CLOSE_MODE_FLUSH);
+
+            if (UCS_PTR_IS_PTR(req)) {
+                do {
+                    ucp_worker_progress(perf->ucp.tctx[i].perf.ucp.worker);
+                    status = ucp_request_check_status(req);
+                } while (status == UCS_INPROGRESS);
+
+                ucp_request_release(req);
+            } else if (UCS_PTR_STATUS(req) != UCS_OK) {
+                ucs_warn("failed to close ep %p on thread %d: %s\n",
+                         perf->ucp.tctx[i].perf.ucp.ep, i,
+                         ucs_status_string(UCS_PTR_STATUS(req)));
+            }
         }
     }
-
-    for (i = 0; i < group_size; ++i) {
-        if (!UCS_PTR_IS_PTR(reqs[i])) {
-            continue;
-        }
-
-        do {
-            ucp_worker_progress(perf->ucp.worker);
-            status = ucp_request_test(reqs[i], &info);
-        } while (status == UCS_INPROGRESS);
-        ucp_request_release(reqs[i]);
-    }
-
-    free(reqs);
-    free(perf->ucp.peers);
 }
 
 static ucs_status_t ucp_perf_test_exchange_status(ucx_perf_context_t *perf,
@@ -1155,129 +1150,223 @@ static ucs_status_t ucp_perf_test_exchange_status(ucx_perf_context_t *perf,
     return collective_status;
 }
 
-static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
-                                                  uint64_t features)
+static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
 {
-    const size_t buffer_size = 2048;
-    ucx_perf_ep_info_t info, *remote_info;
-    unsigned group_size, i, group_index;
-    ucp_address_t *address;
-    size_t address_length = 0;
+    unsigned thread_count = perf->params.thread_count;
+    void *rkey_buffer     = NULL;
+    void *req             = NULL;
+    unsigned group_size, group_index, i;
+    ucx_perf_ep_info_t *remote_info;
     ucp_ep_params_t ep_params;
+    ucp_address_t *address;
     ucs_status_t status;
-    struct iovec vec[3];
-    void *rkey_buffer;
-    void *req = NULL;
+    size_t buffer_size;
     void *buffer;
 
     group_size  = rte_call(perf, group_size);
     group_index = rte_call(perf, group_index);
 
-    status = ucp_worker_get_address(perf->ucp.worker, &address, &address_length);
-    if (status != UCS_OK) {
-        if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("ucp_worker_get_address() failed: %s", ucs_status_string(status));
-        }
-        goto err;
-    }
-
-    info.ucp.addr_len  = address_length;
-    info.recv_buffer   = (uintptr_t)perf->recv_buffer;
-
-    vec[0].iov_base    = &info;
-    vec[0].iov_len     = sizeof(info);
-    vec[1].iov_base    = address;
-    vec[1].iov_len     = address_length;
-
-    if (features & (UCP_FEATURE_RMA|UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
-        status = ucp_rkey_pack(perf->ucp.context, perf->ucp.recv_memh,
-                               &rkey_buffer, &info.rkey_size);
-        if (status != UCS_OK) {
-            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                ucs_error("ucp_rkey_pack() failed: %s", ucs_status_string(status));
-            }
-            ucp_worker_release_address(perf->ucp.worker, address);
-            goto err;
-        }
-
-        vec[2].iov_base = rkey_buffer;
-        vec[2].iov_len  = info.rkey_size;
-        rte_call(perf, post_vec, vec, 3, &req);
-        ucp_rkey_buffer_release(rkey_buffer);
-    } else {
-        info.rkey_size  = 0;
-        rte_call(perf, post_vec, vec, 2, &req);
-    }
-
-    ucp_worker_release_address(perf->ucp.worker, address);
-    rte_call(perf, exchange_vec, req);
-
-    perf->ucp.peers = calloc(group_size, sizeof(*perf->ucp.peers));
-    if (perf->ucp.peers == NULL) {
-        goto err;
-    }
+    ucs_assert(group_size == 2);
+    buffer_size = ADDR_BUF_SIZE * thread_count;
 
     buffer = malloc(buffer_size);
     if (buffer == NULL) {
-        ucs_error("Failed to allocate RTE receive buffer");
+        ucs_error("failed to allocate RTE receive buffer");
         status = UCS_ERR_NO_MEMORY;
-        goto err_destroy_eps;
+        goto err;
     }
 
-    for (i = 0; i < group_size; ++i) {
-        if (i == group_index) {
-            continue;
-        }
+    /* receive the data from the remote peer, extract the address from it
+     * (along with additional wireup info) and create an endpoint to the peer */
+    rte_call(perf, recv, 1 - group_index, buffer, buffer_size, req);
 
-        rte_call(perf, recv, i, buffer, buffer_size, req);
-
-        remote_info = buffer;
-        address     = (ucp_address_t*)(remote_info + 1);
-        rkey_buffer = UCS_PTR_BYTE_OFFSET(address, remote_info->ucp.addr_len);
-        perf->ucp.peers[i].remote_addr = remote_info->recv_buffer;
+    remote_info = buffer;
+    for (i = 0; i < thread_count; i++) {
+        address                                = (ucp_address_t*)(remote_info + 1);
+        rkey_buffer                            = UCS_PTR_BYTE_OFFSET(address,
+                                                                     remote_info->ucp.worker_addr_len);
+        perf->ucp.tctx[i].perf.ucp.remote_addr = remote_info->recv_buffer;
+        perf->ucp.tctx[i].perf.ucp.ep          = NULL;
+        perf->ucp.tctx[i].perf.ucp.rkey        = NULL;
 
         ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address    = address;
 
-        status = ucp_ep_create(perf->ucp.worker, &ep_params, &perf->ucp.peers[i].ep);
+        status = ucp_ep_create(perf->ucp.tctx[i].perf.ucp.worker, &ep_params,
+                               &perf->ucp.tctx[i].perf.ucp.ep);
         if (status != UCS_OK) {
             if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("ucp_ep_create() failed: %s", ucs_status_string(status));
             }
-            goto err_free_buffer;
+            goto err_free_eps_buffer;
         }
 
         if (remote_info->rkey_size > 0) {
-            status = ucp_ep_rkey_unpack(perf->ucp.peers[i].ep, rkey_buffer,
-                                        &perf->ucp.peers[i].rkey);
+            status = ucp_ep_rkey_unpack(perf->ucp.tctx[i].perf.ucp.ep, rkey_buffer,
+                                        &perf->ucp.tctx[i].perf.ucp.rkey);
             if (status != UCS_OK) {
                 if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                     ucs_fatal("ucp_rkey_unpack() failed: %s", ucs_status_string(status));
                 }
-                goto err_free_buffer;
+                goto err_free_eps_buffer;
             }
         } else {
-            perf->ucp.peers[i].rkey = NULL;
+            perf->ucp.tctx[i].perf.ucp.rkey = NULL;
         }
+
+        remote_info = UCS_PTR_BYTE_OFFSET(remote_info,
+                                          remote_info->ucp.total_wireup_len);
     }
 
     free(buffer);
+    return UCS_OK;
 
+err_free_eps_buffer:
+    ucp_perf_test_destroy_eps(perf, group_size);
+    free(buffer);
+err:
+    return status;
+}
+
+static ucs_status_t ucp_perf_test_send_local_data(ucx_perf_context_t *perf,
+                                                  uint64_t features)
+{
+    unsigned i, j, thread_count = perf->params.thread_count;
+    size_t address_length       = 0;
+    void *rkey_buffer           = NULL;
+    void *req                   = NULL;
+    ucx_perf_ep_info_t *info;
+    ucp_address_t *address;
+    ucs_status_t status;
+    struct iovec *vec;
+    size_t rkey_size;
+
+    if (features & (UCP_FEATURE_RMA|UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
+        status = ucp_rkey_pack(perf->ucp.context, perf->ucp.recv_memh,
+                               &rkey_buffer, &rkey_size);
+        if (status != UCS_OK) {
+            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("ucp_rkey_pack() failed: %s", ucs_status_string(status));
+            }
+            goto err;
+        }
+    } else {
+        rkey_size = 0;
+    }
+
+    /* each thread has an iovec with 3 entries to send to the remote peer:
+     * ep_info, worker_address and rkey buffer */
+    vec = calloc(3 * thread_count, sizeof(struct iovec));
+    if (vec == NULL) {
+        ucs_error("failed to allocate iovec");
+        status = UCS_ERR_NO_MEMORY;
+        goto err_rkey_release;
+    }
+
+    /* get the worker address created for every thread and send it to the remote
+     * peer */
+    for (i = 0; i < thread_count; i++) {
+        status = ucp_worker_get_address(perf->ucp.tctx[i].perf.ucp.worker,
+                                        &address, &address_length);
+        if (status != UCS_OK) {
+            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("ucp_worker_get_address() failed: %s",
+                          ucs_status_string(status));
+            }
+            goto err_free_workers_vec;
+        }
+
+        vec[i * 3].iov_base = malloc(sizeof(*info));
+        if (vec[i * 3].iov_base == NULL) {
+            ucs_error("failed to allocate vec entry for info");
+            status = UCS_ERR_NO_MEMORY;
+            ucp_worker_destroy(perf->ucp.tctx[i].perf.ucp.worker);
+            goto err_free_workers_vec;
+        }
+
+        info                       = vec[i * 3].iov_base;
+        info->ucp.worker_addr_len  = address_length;
+        info->ucp.total_wireup_len = sizeof(*info) + address_length + rkey_size;
+        info->rkey_size            = rkey_size;
+        info->recv_buffer          = (uintptr_t)perf->ucp.tctx[i].perf.recv_buffer;
+
+        vec[(i * 3) + 0].iov_len  = sizeof(*info);
+        vec[(i * 3) + 1].iov_base = address;
+        vec[(i * 3) + 1].iov_len  = address_length;
+        vec[(i * 3) + 2].iov_base = rkey_buffer;
+        vec[(i * 3) + 2].iov_len  = info->rkey_size;
+
+        address_length = 0;
+    }
+
+    /* send to the remote peer */
+    rte_call(perf, post_vec, vec, 3 * thread_count, &req);
+    rte_call(perf, exchange_vec, req);
+
+    if (features & (UCP_FEATURE_RMA|UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
+        ucp_rkey_buffer_release(rkey_buffer);
+    }
+
+    for (i = 0; i < thread_count; i++) {
+        free(vec[i * 3].iov_base);
+        ucp_worker_release_address(perf->ucp.tctx[i].perf.ucp.worker,
+                                   vec[(i * 3) + 1].iov_base);
+    }
+
+    free(vec);
+
+    return UCS_OK;
+
+err_free_workers_vec:
+    for (j = 0; j < i; j++) {
+        ucp_worker_destroy(perf->ucp.tctx[i].perf.ucp.worker);
+    }
+    free(vec);
+err_rkey_release:
+    if (features & (UCP_FEATURE_RMA|UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
+        ucp_rkey_buffer_release(rkey_buffer);
+    }
+err:
+    return status;
+}
+
+static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
+                                                  uint64_t features)
+{
+    unsigned group_size, i, thread_count = perf->params.thread_count;
+    ucs_status_t status;
+
+    group_size  = rte_call(perf, group_size);
+
+    /* pack the local endpoints data and send to the remote peer */
+    status = ucp_perf_test_send_local_data(perf, features);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    /* receive remote peer's endpoints' data and connect to them */
+    status = ucp_perf_test_receive_remote_data(perf);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    /* sync status across all processes */
     status = ucp_perf_test_exchange_status(perf, UCS_OK);
     if (status != UCS_OK) {
-        ucp_perf_test_destroy_eps(perf, group_size);
+        goto err_destroy_eps;
     }
 
     /* force wireup completion */
-    status = ucp_worker_flush(perf->ucp.worker);
-    if (status != UCS_OK) {
-        ucs_warn("ucp_worker_flush() failed: %s", ucs_status_string(status));
+    for (i = 0; i < thread_count; i++) {
+        status = ucp_worker_flush(perf->ucp.tctx[i].perf.ucp.worker);
+        if (status != UCS_OK) {
+            ucs_warn("ucp_worker_flush() failed on theread %d: %s",
+                     i, ucs_status_string(status));
+        }
     }
 
     return status;
 
-err_free_buffer:
-    free(buffer);
 err_destroy_eps:
     ucp_perf_test_destroy_eps(perf, group_size);
 err:
@@ -1294,6 +1383,17 @@ static void ucp_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     group_size  = rte_call(perf, group_size);
 
     ucp_perf_test_destroy_eps(perf, group_size);
+}
+
+static void ucp_perf_test_destroy_workers(ucx_perf_context_t *perf)
+{
+    unsigned i;
+
+    for (i = 0; i < perf->params.thread_count; i++) {
+        if (perf->ucp.tctx[i].perf.ucp.worker != NULL) {
+            ucp_worker_destroy(perf->ucp.tctx[i].perf.ucp.worker);
+        }
+    }
 }
 
 static void ucx_perf_set_warmup(ucx_perf_context_t* perf, ucx_perf_params_t* params)
@@ -1397,7 +1497,11 @@ void uct_perf_barrier(ucx_perf_context_t *perf)
 void ucp_perf_barrier(ucx_perf_context_t *perf)
 {
     rte_call(perf, barrier, (void(*)(void*))ucp_worker_progress,
-             (void*)perf->ucp.worker);
+#if _OPENMP
+             (void*)perf->ucp.tctx[omp_get_thread_num()].perf.ucp.worker);
+#else
+             (void*)perf->ucp.tctx[0].perf.ucp.worker);
+#endif
 }
 
 static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
@@ -1513,6 +1617,8 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
     ucp_worker_params_t worker_params;
     ucp_config_t *config;
     ucs_status_t status;
+    unsigned i, thread_count;
+    size_t message_size;
 
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
                               UCP_PARAM_FIELD_REQUEST_SIZE |
@@ -1520,6 +1626,13 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
     ucp_params.features     = 0;
     ucp_params.request_size = sizeof(ucp_perf_request_t);
     ucp_params.request_init = ucp_perf_request_init;
+
+    if (perf->params.thread_count > 1) {
+        /* when there is more than one thread, a ucp_worker would be created for
+         * each. all of them will share the same ucp_context */
+        ucp_params.features          |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+        ucp_params.mt_workers_shared  = 1;
+    }
 
     status = ucp_perf_test_fill_params(&perf->params, &ucp_params);
     if (status != UCS_OK) {
@@ -1537,19 +1650,38 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
         goto err;
     }
 
-    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-    worker_params.thread_mode = perf->params.thread_mode;
-
-    status = ucp_worker_create(perf->ucp.context, &worker_params,
-                               &perf->ucp.worker);
-    if (status != UCS_OK) {
-        goto err_cleanup;
-    }
+    thread_count = perf->params.thread_count;
+    message_size = ucx_perf_get_message_size(&perf->params);
 
     status = ucp_perf_test_alloc_mem(perf);
     if (status != UCS_OK) {
-        ucs_warn("ucp test failed to alocate memory");
-        goto err_destroy_worker;
+        ucs_warn("ucp test failed to allocate memory");
+        goto err_cleanup;
+    }
+
+    perf->ucp.tctx = calloc(thread_count, sizeof(ucx_perf_thread_context_t));
+    if (perf->ucp.tctx == NULL) {
+        ucs_warn("ucp test failed to allocate memory for thread contexts");
+        goto err_free_mem;
+    }
+
+    worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    worker_params.thread_mode = perf->params.thread_mode;
+
+    for (i = 0; i < thread_count; i++) {
+        perf->ucp.tctx[i].tid              = i;
+        perf->ucp.tctx[i].perf             = *perf;
+        /* Doctor the src and dst buffers to make them thread specific */
+        perf->ucp.tctx[i].perf.send_buffer =
+                        UCS_PTR_BYTE_OFFSET(perf->send_buffer, i * message_size);
+        perf->ucp.tctx[i].perf.recv_buffer =
+                        UCS_PTR_BYTE_OFFSET(perf->recv_buffer, i * message_size);
+
+        status = ucp_worker_create(perf->ucp.context, &worker_params,
+                                   &perf->ucp.tctx[i].perf.ucp.worker);
+        if (status != UCS_OK) {
+            goto err_free_tctx_destroy_workers;
+        }
     }
 
     status = ucp_perf_test_setup_endpoints(perf, ucp_params.features);
@@ -1557,15 +1689,16 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
         if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
         }
-        goto err_free_mem;
+        goto err_free_tctx_destroy_workers;
     }
 
     return UCS_OK;
 
+err_free_tctx_destroy_workers:
+    ucp_perf_test_destroy_workers(perf);
+    free(perf->ucp.tctx);
 err_free_mem:
     ucp_perf_test_free_mem(perf);
-err_destroy_worker:
-    ucp_worker_destroy(perf->ucp.worker);
 err_cleanup:
     ucp_cleanup(perf->ucp.context);
 err:
@@ -1577,7 +1710,8 @@ static void ucp_perf_cleanup(ucx_perf_context_t *perf)
     ucp_perf_test_cleanup_endpoints(perf);
     ucp_perf_barrier(perf);
     ucp_perf_test_free_mem(perf);
-    ucp_worker_destroy(perf->ucp.worker);
+    ucp_perf_test_destroy_workers(perf);
+    free(perf->ucp.tctx);
     ucp_cleanup(perf->ucp.context);
 }
 
@@ -1649,7 +1783,14 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
         goto out_free;
     }
 
-    if (UCS_THREAD_MODE_SINGLE == params->thread_mode) {
+    if (params->thread_count == 1) {
+        if (params->api == UCX_PERF_API_UCP) {
+            perf->ucp.worker      = perf->ucp.tctx[0].perf.ucp.worker;
+            perf->ucp.ep          = perf->ucp.tctx[0].perf.ucp.ep;
+            perf->ucp.remote_addr = perf->ucp.tctx[0].perf.ucp.remote_addr;
+            perf->ucp.rkey        = perf->ucp.tctx[0].perf.ucp.rkey;
+        }
+
         if (params->warmup_iter > 0) {
             ucx_perf_set_warmup(perf, params);
             status = ucx_perf_funcs[params->api].run(perf);
@@ -1666,7 +1807,7 @@ ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
         ucx_perf_funcs[params->api].barrier(perf);
         if (status == UCS_OK) {
             ucx_perf_calc_result(perf, result);
-            rte_call(perf, report, result, perf->params.report_arg, 1);
+            rte_call(perf, report, result, perf->params.report_arg, 1, 0);
         }
     } else {
         status = ucx_perf_thread_spawn(perf, result);
@@ -1681,109 +1822,116 @@ out:
 }
 
 #if _OPENMP
-/* multiple threads sharing the same worker/iface */
 
-typedef struct {
-    pthread_t           pt;
-    int                 tid;
-    int                 ntid;
-    ucs_status_t*       statuses;
-    ucx_perf_context_t  perf;
-    ucx_perf_result_t   result;
-} ucx_perf_thread_context_t;
-
-
-static void* ucx_perf_thread_run_test(void* arg)
+static ucs_status_t ucx_perf_thread_run_test(void* arg)
 {
-    ucx_perf_thread_context_t* tctx = (ucx_perf_thread_context_t*) arg;
-    ucx_perf_result_t* result = &tctx->result;
-    ucx_perf_context_t* perf = &tctx->perf;
-    ucx_perf_params_t* params = &perf->params;
-    ucs_status_t* statuses = tctx->statuses;
-    int tid = tctx->tid;
-    int i;
+    ucx_perf_thread_context_t* tctx = (ucx_perf_thread_context_t*) arg; /* a single thread context */
+    ucx_perf_result_t* result       = &tctx->result;
+    ucx_perf_context_t* perf        = &tctx->perf;
+    ucx_perf_params_t* params       = &perf->params;
+    ucs_status_t status;
 
     if (params->warmup_iter > 0) {
         ucx_perf_set_warmup(perf, params);
-        statuses[tid] = ucx_perf_funcs[params->api].run(perf);
+        status = ucx_perf_funcs[params->api].run(perf);
         ucx_perf_funcs[params->api].barrier(perf);
-        for (i = 0; i < tctx->ntid; i++) {
-            if (UCS_OK != statuses[i]) {
-                goto out;
-            }
+        if (UCS_OK != status) {
+            goto out;
         }
         ucx_perf_test_prepare_new_run(perf, params);
     }
 
     /* Run test */
 #pragma omp barrier
-    statuses[tid] = ucx_perf_funcs[params->api].run(perf);
+    status = ucx_perf_funcs[params->api].run(perf);
     ucx_perf_funcs[params->api].barrier(perf);
-    for (i = 0; i < tctx->ntid; i++) {
-        if (UCS_OK != statuses[i]) {
-            goto out;
-        }
-    }
-#pragma omp master
-    {
-        /* Assuming all threads are fairly treated, reporting only tid==0
-            TODO: aggregate reports */
-        ucx_perf_calc_result(perf, result);
-        rte_call(perf, report, result, perf->params.report_arg, 1);
+    if (UCS_OK != status) {
+        goto out;
     }
 
+    ucx_perf_calc_result(perf, result);
+
 out:
-    return &statuses[tid];
+    return status;
+}
+
+static void ucx_perf_thread_report_aggregated_results(ucx_perf_context_t *perf)
+{
+    ucx_perf_thread_context_t* tctx = perf->ucp.tctx;  /* all the thread contexts on perf */
+    unsigned i, thread_count        = perf->params.thread_count;
+    double lat_sum_total_avegare    = 0.0;
+    ucx_perf_result_t agg_result;
+
+    agg_result.iters        = tctx[0].result.iters;
+    agg_result.bytes        = tctx[0].result.bytes;
+    agg_result.elapsed_time = tctx[0].result.elapsed_time;
+
+    agg_result.bandwidth.total_average  = 0.0;
+    agg_result.bandwidth.typical        = 0.0; /* Undefined since used only for latency calculations */
+    agg_result.latency.total_average    = 0.0;
+    agg_result.msgrate.total_average    = 0.0;
+    agg_result.msgrate.typical          = 0.0; /* Undefined since used only for latency calculations */
+
+    /* when running with multiple threads, the moment average value is
+     * undefined since we don't capture the values of the last iteration */
+    agg_result.msgrate.moment_average   = 0.0;
+    agg_result.bandwidth.moment_average = 0.0;
+    agg_result.latency.moment_average   = 0.0;
+    agg_result.latency.typical          = 0.0;
+
+    /* in case of multiple threads, we have to aggregate the results so that the
+     * final output of the result would show the performance numbers that were
+     * collected from all the threads.
+     * BW and message rate values will be the sum of their values from all
+     * the threads, while the latency value is the average latency from the
+     * threads. */
+
+    for (i = 0; i < thread_count; i++) {
+        agg_result.bandwidth.total_average  += tctx[i].result.bandwidth.total_average;
+        agg_result.msgrate.total_average    += tctx[i].result.msgrate.total_average;
+        lat_sum_total_avegare               += tctx[i].result.latency.total_average;
+    }
+
+    agg_result.latency.total_average = lat_sum_total_avegare / thread_count;
+
+    rte_call(perf, report, &agg_result, perf->params.report_arg, 1, 1);
 }
 
 static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                           ucx_perf_result_t* result)
 {
-    ucx_perf_thread_context_t* tctx;
+    ucx_perf_thread_context_t* tctx = perf->ucp.tctx;   /* all the thread contexts on perf */
+    int ti, thread_count            = perf->params.thread_count;
     ucs_status_t* statuses;
-    size_t message_size;
     ucs_status_t status;
-    int ti, nti;
 
-    message_size = ucx_perf_get_message_size(&perf->params);
-    omp_set_num_threads(perf->params.thread_count);
-    nti = perf->params.thread_count;
+    omp_set_num_threads(thread_count);
 
-    tctx     = calloc(nti, sizeof(ucx_perf_thread_context_t));
-    statuses = calloc(nti, sizeof(ucs_status_t));
-    if ((tctx == NULL) || (statuses == NULL)) {
+    statuses = calloc(thread_count, sizeof(ucs_status_t));
+    if (statuses == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto out_free;
+        goto out;
     }
 
 #pragma omp parallel private(ti)
 {
-    ti = omp_get_thread_num();
-    tctx[ti].tid = ti;
-    tctx[ti].ntid = nti;
-    tctx[ti].statuses = statuses;
-    tctx[ti].perf = *perf;
-    /* Doctor the src and dst buffers to make them thread specific */
-    tctx[ti].perf.send_buffer = UCS_PTR_BYTE_OFFSET(tctx[ti].perf.send_buffer,
-                                                    ti * message_size);
-    tctx[ti].perf.recv_buffer = UCS_PTR_BYTE_OFFSET(tctx[ti].perf.recv_buffer,
-                                                    ti * message_size);
-    tctx[ti].perf.offset = ti * message_size;
-    ucx_perf_thread_run_test((void*)&tctx[ti]);
+    ti              = omp_get_thread_num();
+    tctx[ti].status = ucx_perf_thread_run_test((void*)&tctx[ti]);
 }
 
     status = UCS_OK;
-    for (ti = 0; ti < nti; ti++) {
-        if (UCS_OK != statuses[ti]) {
+    for (ti = 0; ti < thread_count; ti++) {
+        if (UCS_OK != tctx[ti].status) {
             ucs_error("Thread %d failed to run test: %s", tctx[ti].tid,
-                      ucs_status_string(statuses[ti]));
-            status = statuses[ti];
+                      ucs_status_string(tctx[ti].status));
+            status = tctx[ti].status;
         }
     }
 
-out_free:
+    ucx_perf_thread_report_aggregated_results(perf);
+
     free(statuses);
-    free(tctx);
+out:
     return status;
 }
 #else

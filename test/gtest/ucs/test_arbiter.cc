@@ -18,6 +18,7 @@ class test_arbiter : public ucs::test {
 protected:
 
     static ucs_arbiter_cb_result_t resched_groups(ucs_arbiter_t *arbitrer,
+                                                  ucs_arbiter_group_t *group,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg)
     {
@@ -119,6 +120,7 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t dispatch_cb(ucs_arbiter_t *arbiter,
+                                               ucs_arbiter_group_t *group,
                                                ucs_arbiter_elem_t *elem,
                                                void *arg)
     {
@@ -127,18 +129,19 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t dispatch_dummy_cb(ucs_arbiter_t *arbiter,
+                                                     ucs_arbiter_group_t *group,
                                                      ucs_arbiter_elem_t *elem,
                                                      void *arg)
     {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
-    ucs_arbiter_cb_result_t desched_group(ucs_arbiter_elem_t *elem)
+    ucs_arbiter_cb_result_t desched_group(ucs_arbiter_group_t *group,
+                                          ucs_arbiter_elem_t *elem)
     {
-        ucs_arbiter_group_t *g = ucs_arbiter_elem_group(elem);
         //ucs_warn("desched group %d", m_count);
         m_count++;
-        ucs_arbiter_group_schedule(&m_arb2, g);
+        ucs_arbiter_group_schedule(&m_arb2, group);
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
 
@@ -149,22 +152,25 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t desched_cb(ucs_arbiter_t *arbiter,
+                                              ucs_arbiter_group_t *group,
                                               ucs_arbiter_elem_t *elem,
                                               void *arg)
     {
         test_arbiter *self = (test_arbiter *)arg;
-        return self->desched_group(elem);
+        return self->desched_group(group, elem);
     }
 
     static ucs_arbiter_cb_result_t remove_cb(ucs_arbiter_t *arbiter,
-                                              ucs_arbiter_elem_t *elem,
-                                              void *arg)
+                                             ucs_arbiter_group_t *group,
+                                             ucs_arbiter_elem_t *elem,
+                                             void *arg)
     {
         test_arbiter *self = (test_arbiter *)arg;
         return self->remove_elem(elem);
     }
 
     static ucs_arbiter_cb_result_t stop_cb(ucs_arbiter_t *arbiter,
+                                           ucs_arbiter_group_t *group,
                                            ucs_arbiter_elem_t *elem,
                                            void *arg)
     {
@@ -172,6 +178,7 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t purge_cb(ucs_arbiter_t *arbiter,
+                                            ucs_arbiter_group_t *group,
                                             ucs_arbiter_elem_t *elem,
                                             void *arg)
     {
@@ -181,6 +188,7 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t count_cb(ucs_arbiter_t *arbiter,
+                                            ucs_arbiter_group_t *group,
                                             ucs_arbiter_elem_t *elem,
                                             void *arg)
     {
@@ -193,6 +201,7 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t purge_cond_cb(ucs_arbiter_t *arbiter,
+                                                 ucs_arbiter_group_t *group,
                                                  ucs_arbiter_elem_t *elem,
                                                  void *arg)
     {
@@ -209,6 +218,7 @@ protected:
 
 
     static ucs_arbiter_cb_result_t purge_dummy_cb(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_group_t *group,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg)
     {
@@ -740,8 +750,11 @@ public:
     }
 
 protected:
-    ucs_arbiter_cb_result_t dispatch(ucs_arbiter_elem_t *elem) {
-        EXPECT_EQ(&m_elem, elem);
+
+    /* the callback pushes the elem on group2 and schedules it */
+    ucs_arbiter_cb_result_t dispatch(ucs_arbiter_group_t *group,
+                                     ucs_arbiter_elem_t *elem)
+    {
         if (m_moved) {
             return UCS_ARBITER_CB_RESULT_STOP;
         } else {
@@ -753,18 +766,20 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t purge_cb(ucs_arbiter_t *arbiter,
+                                            ucs_arbiter_group_t *group,
                                             ucs_arbiter_elem_t *elem, void *arg)
     {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
     static ucs_arbiter_cb_result_t dispatch_cb(ucs_arbiter_t *arbiter,
+                                               ucs_arbiter_group_t *group,
                                                ucs_arbiter_elem_t *elem,
                                                void *arg)
     {
         test_arbiter_resched_from_dispatch *self =
                 reinterpret_cast<test_arbiter_resched_from_dispatch*>(arg);
-        return self->dispatch(elem);
+        return self->dispatch(group, elem);
     }
 
     void check_group_state(ucs_arbiter_group_t *group, bool is_scheduled)

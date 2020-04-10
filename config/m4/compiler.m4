@@ -39,7 +39,8 @@ AC_ARG_ENABLE(debug,
         [],
         [enable_debug=no])
 AS_IF([test "x$enable_debug" = xyes],
-        [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"],
+        [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"
+         BASE_CXXFLAGS="-D_DEBUG" $BASE_CXXFLAGS],
         [])
 
 #
@@ -52,8 +53,10 @@ AC_ARG_ENABLE(compiler-opt,
 AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
       [test "x$enable_compiler_opt" = "xnone"],
           [AS_IF([test "x$enable_debug" = xyes],
-                 [BASE_CFLAGS="-O0 $BASE_CFLAGS"],
-                 [BASE_CFLAGS="-O3 $BASE_CFLAGS"])],
+                 [BASE_CFLAGS="-O0 $BASE_CFLAGS"
+                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"],
+                 [BASE_CFLAGS="-O3 $BASE_CFLAGS"
+                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"])],
       [test "x$enable_compiler_opt" = "xno"], [],
       [BASE_CFLAGS="-O$enable_compiler_opt $BASE_CFLAGS"])
 
@@ -435,8 +438,14 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
                   [AC_MSG_RESULT([no])
                    gnuxx11_happy=no])
 CXXFLAGS="$SAVE_CXXFLAGS"
-AC_LANG_POP
+
 AM_CONDITIONAL([HAVE_GNUXX11], [test "x$gnuxx11_happy" != xno])
+
+AC_CHECK_DECL(_GLIBCXX_NOTHROW, have_glibcxx_nothrow=yes,
+              have_glibcxx_nothrow=no, [[#include <exception>]])
+AM_CONDITIONAL([HAVE_GLIBCXX_NOTHROW], [test "x$have_glibcxx_nothrow" = xyes])
+
+AC_LANG_POP
 
 #
 # PGI specific switches

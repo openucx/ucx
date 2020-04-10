@@ -174,7 +174,7 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
     wait(request, worker_index);
 }
 
-void ucp_test::disconnect(const entity& e) {
+void ucp_test::disconnect(entity& e) {
     bool has_failed_entity = false;
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
          !has_failed_entity && (iter != entities().end()); ++iter) {
@@ -191,13 +191,7 @@ void ucp_test::disconnect(const entity& e) {
             close_mode = UCP_EP_CLOSE_MODE_FLUSH;
         }
 
-        for (int j = 0; j < e.get_num_eps(i); j++) {
-            void *dreq = e.disconnect_nb(i, j, close_mode);
-            if (!UCS_PTR_IS_PTR(dreq)) {
-                ASSERT_UCS_OK(UCS_PTR_STATUS(dreq));
-            }
-            wait(dreq, i);
-        }
+        e.close_all_eps(*this, i, close_mode);
     }
 }
 
@@ -583,13 +577,57 @@ void ucp_test_base::entity::fence(int worker_index) const {
     ASSERT_UCS_OK(status);
 }
 
-void* ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
-                                           enum ucp_ep_close_mode mode) const {
+void *ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
+                                           enum ucp_ep_close_mode mode) {
     ucp_ep_h ep = revoke_ep(worker_index, ep_index);
     if (ep == NULL) {
         return NULL;
     }
-    return ucp_ep_close_nb(ep, mode);
+
+    void *req = ucp_ep_close_nb(ep, mode);
+    if (UCS_PTR_IS_PTR(req)) {
+        m_close_ep_reqs.push_back(req);
+        return req;
+    }
+
+    ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    return NULL;
+}
+
+void ucp_test_base::entity::close_ep_req_free(void *close_req) {
+    if (close_req == NULL) {
+        return;
+    }
+
+    ucs_status_t status = UCS_PTR_IS_ERR(close_req) ? UCS_PTR_STATUS(close_req) :
+                          ucp_request_check_status(close_req);
+    ASSERT_NE(UCS_INPROGRESS, status) << "free not completed EP close request";
+    ASSERT_EQ(UCS_OK,         status) << "ucp_ep_close_nb failed: "
+                                      << ucs_status_string(status);
+
+    m_close_ep_reqs.erase(std::find(m_close_ep_reqs.begin(),
+                                    m_close_ep_reqs.end(), close_req));
+    ucp_request_free(close_req);
+}
+
+void ucp_test_base::entity::close_all_eps(const ucp_test &test, int worker_idx,
+                                          enum ucp_ep_close_mode mode) {
+    for (int j = 0; j < get_num_eps(worker_idx); j++) {
+        disconnect_nb(worker_idx, j, mode);
+    }
+
+    ucs_time_t deadline = ucs::get_deadline();
+    while (!m_close_ep_reqs.empty() && (ucs_get_time() < deadline)) {
+        void *req = m_close_ep_reqs.front();
+        while (!is_request_completed(req)) {
+            test.progress(worker_idx);
+        }
+
+        close_ep_req_free(req);
+    }
+
+    EXPECT_TRUE(m_close_ep_reqs.empty()) << m_close_ep_reqs.size()
+                                         << " endpoints were not closed";
 }
 
 void ucp_test_base::entity::destroy_worker(int worker_index) {
@@ -791,6 +829,11 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     } while (status == UCS_INPROGRESS);
     EXPECT_EQ(UCS_OK, status);
     ucp_request_release(req);
+}
+
+bool ucp_test_base::is_request_completed(void *request) {
+    return (request == NULL) ||
+           (ucp_request_check_status(request) != UCS_INPROGRESS);
 }
 
 ucp_test::mapped_buffer::mapped_buffer(size_t size, const entity& entity,

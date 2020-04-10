@@ -200,6 +200,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_JAVA], [false])
      AM_CONDITIONAL([HAVE_CXX11], [false])
      AM_CONDITIONAL([HAVE_GNUXX11], [false])
+     AM_CONDITIONAL([HAVE_GLIBCXX_NOTHROW], [false])
      AM_CONDITIONAL([HAVE_TCMALLOC], [false])
      AM_CONDITIONAL([ENABLE_EXPERIMENTAL_API], [false])
      AM_CONDITIONAL([INSTALL_DEVEL_HEADERS], [false])
@@ -362,6 +363,7 @@ AC_CONFIG_FILES([
                  src/tools/info/Makefile
                  src/tools/profile/Makefile
                  test/apps/Makefile
+                 test/apps/iodemo/Makefile
                  test/apps/sockaddr/Makefile
                  test/examples/Makefile
                  test/mpi/Makefile

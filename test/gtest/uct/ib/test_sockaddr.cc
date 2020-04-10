@@ -563,6 +563,10 @@ protected:
             EXPECT_EQ(entity::server_priv_data.length() + 1, remote_data->conn_priv_data_length);
             EXPECT_EQ(entity::server_priv_data,
                       std::string(static_cast<const char *>(remote_data->conn_priv_data)));
+
+            status = uct_cm_client_ep_conn_notify(ep);
+            ASSERT_UCS_OK(status);
+
             self->m_cm_state |= TEST_CM_STATE_CLIENT_CONNECTED;
             self->m_client_connect_cb_cnt++;
         }

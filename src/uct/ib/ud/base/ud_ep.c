@@ -218,11 +218,10 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
 }
 
 static ucs_arbiter_cb_result_t
-uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
-                        void *arg)
+uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                            ucs_arbiter_elem_t *elem, void *arg)
 {
-    uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                       uct_ud_ep_t, tx.pending.group);
+    uct_ud_ep_t *ep = ucs_container_of(group, uct_ud_ep_t, tx.pending.group);
     uct_pending_req_t *req;
 
     /* we may have pending op on ep */
@@ -1131,13 +1130,13 @@ uct_ud_ep_ctl_op_next(uct_ud_ep_t *ep)
  * However we can not let pending uct req block control forever.
  */
 ucs_arbiter_cb_result_t
-uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
+uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                     ucs_arbiter_elem_t *elem,
                      void *arg)
 {
     uct_pending_req_t *req      = ucs_container_of(elem, uct_pending_req_t,
                                                    priv);
-    uct_ud_ep_t *ep             = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                                   uct_ud_ep_t,
+    uct_ud_ep_t *ep             = ucs_container_of(group, uct_ud_ep_t,
                                                    tx.pending.group);
     uct_ud_iface_t *iface       = ucs_container_of(arbiter, uct_ud_iface_t,
                                                    tx.pending_q);
@@ -1276,11 +1275,11 @@ add_req:
 }
 
 static ucs_arbiter_cb_result_t
-uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
-                        void *arg)
+uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                           ucs_arbiter_elem_t *elem, void *arg)
 {
-    uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                       uct_ud_ep_t, tx.pending.group);
+    uct_ud_ep_t *ep                 = ucs_container_of(group, uct_ud_ep_t,
+                                                       tx.pending.group);
     uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req;
