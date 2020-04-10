@@ -121,7 +121,7 @@ public:
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)r->context;
 
         test->op_completed();
-        ucp_request_release(request);
+        ucp_request_free(request);
     }
 
     static void tag_recv_cb(void *request, ucs_status_t status,
@@ -130,14 +130,16 @@ public:
         ucp_perf_request_t *r = reinterpret_cast<ucp_perf_request_t*>(request);
         ucp_perf_test_runner *test;
 
-        if (r->context != NULL) {
-            /* if the request is completed during tag_recv_nb(), the context is
-             * still NULL */
-            test = (ucp_perf_test_runner*)r->context;
-            test->op_completed();
-            r->context = NULL;
+        /* if the request is completed during tag_recv_nb(), the context is
+         * still NULL */
+        if (r->context == NULL) {
+            return;
         }
-        ucp_request_release(request);
+
+        test = (ucp_perf_test_runner*)r->context;
+        test->op_completed();
+        r->context = NULL;
+        ucp_request_free(request);
     }
 
     void UCS_F_ALWAYS_INLINE wait_window(unsigned n, bool is_requestor)
@@ -254,6 +256,7 @@ public:
             }
             if (ucp_request_is_completed(request)) {
                 /* request is already completed and callback was called */
+                ucp_request_free(request);
                 return UCS_OK;
             }
             reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
