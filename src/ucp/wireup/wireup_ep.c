@@ -573,7 +573,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
         ucs_trace("sockaddr tl ("UCT_TL_RESOURCE_DESC_FMT") sending partial address: "
                   "(%s transports) (len=%zu) to server. "
                   "total client priv data len: %zu",
-                  context->tl_rscs[sockaddr_rsc].tl_rsc.tl_name, dev_name,
+                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
                   ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
                                     sizeof(aux_tls_str)),
                   address_length, conn_priv_len);

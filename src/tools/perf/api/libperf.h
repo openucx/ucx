@@ -91,6 +91,12 @@ enum {
     UCT_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
 };
 
+
+#define UCT_PERF_TEST_PARAMS_FMT             "%s/%s"
+#define UCT_PERF_TEST_PARAMS_ARG(_params)    (_params)->uct.tl_name, \
+                                             (_params)->uct.dev_name
+
+
 /**
  * Performance counter type.
  */
