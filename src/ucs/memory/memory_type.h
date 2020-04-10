@@ -21,6 +21,7 @@ BEGIN_C_DECLS
 
 
 /*
+ * @ingroup UCS_RESOURCE
  * Memory types
  */
 typedef enum ucs_memory_type {

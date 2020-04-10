@@ -53,6 +53,8 @@ typedef struct ucp_context_config {
     size_t                                 zcopy_thresh;
     /** Communication scheme in RNDV protocol */
     ucp_rndv_mode_t                        rndv_mode;
+    /** RKEY PTR segment size */
+    size_t                                 rkey_ptr_seg_size;
     /** Estimation of bcopy bandwidth */
     double                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */

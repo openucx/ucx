@@ -510,7 +510,7 @@ static unsigned uct_ud_mlx5_iface_progress(uct_iface_h tl_iface)
     unsigned n, count = 0;
 
     uct_ud_enter(&iface->super);
-    uct_ud_iface_dispatch_zcopy_comps(&iface->super);
+    uct_ud_iface_dispatch_async_comps(&iface->super);
 
     status = uct_ud_iface_dispatch_pending_rx(&iface->super);
     if (ucs_likely(status == UCS_OK)) {

@@ -306,6 +306,27 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
 
  /**
  * @ingroup UCP_COMM
+ * @brief Completion callback for non-blocking sends ucp_tag_send_nbx call.
+ *
+ * This callback routine is invoked whenever the @ref ucp_tag_send_nbx
+ * "send operation" is completed. It is important to note that the call-back is
+ * only invoked in a case when the operation cannot be completed in place.
+ *
+ * @param [in]  request   The completed send request.
+ * @param [in]  status    Completion status. If the send operation was completed
+ *                        successfully UCS_OK is returned. If send operation was
+ *                        canceled UCS_ERR_CANCELED is returned.
+ *                        Otherwise, an @ref ucs_status_t "error status" is
+ *                        returned.
+ * @param [in]  user_data User data passed to "user_data" value,
+ *                        see @ref ucp_request_param_t
+ */
+typedef void (*ucp_send_nbx_callback_t)(void *request, ucs_status_t status,
+                                        void *user_data);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Callback to process peer failure.
  *
  * This callback routine is invoked when transport level error detected.
@@ -433,6 +454,33 @@ typedef void (*ucp_stream_recv_callback_t)(void *request, ucs_status_t status,
  */
 typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
                                         ucp_tag_recv_info_t *info);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Completion callback for non-blocking tag receives ucp_tag_recv_nbx call.
+ *
+ * This callback routine is invoked whenever the @ref ucp_tag_recv_nbx
+ * "receive operation" is completed and the data is ready in the receive buffer.
+ *
+ * @param [in]  request   The completed receive request.
+ * @param [in]  status    Completion status. If the send operation was completed
+ *                        successfully UCS_OK is returned. If send operation was
+ *                        canceled UCS_ERR_CANCELED is returned. If the data can
+ *                        not fit into the receive buffer the
+ *                        @ref UCS_ERR_MESSAGE_TRUNCATED error code is returned.
+ *                        Otherwise, an @ref ucs_status_t "error status" is
+ *                        returned.
+ * @param [in]  info      @ref ucp_tag_recv_info_t "Completion information"
+ *                        The @a info descriptor is Valid only if the status is
+ *                        UCS_OK.
+ * @param [in]  user_data User data passed to "user_data" value,
+ *                        see @ref ucp_request_param_t
+ */
+typedef void (*ucp_tag_recv_nbx_callback_t)(void *request, ucs_status_t status,
+                                            const ucp_tag_recv_info_t *tag_info,
+                                            void *user_data);
+
 
 /**
  * @ingroup UCP_WORKER

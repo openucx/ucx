@@ -124,10 +124,14 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
 
     uct_rc_mlx5_common_update_tx_res(&iface->super, &ep->tx.wq, &ep->super.txqp,
                                      hw_ci);
-    uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
 
+    /* process pending elements prior to CQ entries to avoid out-of-order
+     * transmission in completion callbacks */
     ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
-    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
+    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending,
+                         NULL);
+
+    uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
 
     return 1;
 }

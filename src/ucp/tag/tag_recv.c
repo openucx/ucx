@@ -147,7 +147,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);
     msg_id = eagerf_hdr->msg_id;
     status = ucp_tag_recv_request_process_rdesc(req, rdesc, 0);
-    ucs_assert(status == UCS_INPROGRESS);
+    ucs_assert((status == UCS_OK) || (status == UCS_INPROGRESS));
 
     /* process additional fragments */
     ucp_tag_frag_list_process_queue(&worker->tm, req, msg_id
@@ -230,4 +230,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nbx,
+                 (worker, buffer, count, tag, tag_mask, param),
+                 ucp_worker_h worker, void *buffer, size_t count,
+                 ucp_tag_t tag, ucp_tag_t tag_mask,
+                 const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }

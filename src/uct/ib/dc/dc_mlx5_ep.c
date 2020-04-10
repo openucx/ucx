@@ -1070,10 +1070,11 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
  */
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
+                                      ucs_arbiter_group_t *group,
                                       ucs_arbiter_elem_t *elem,
                                       void *arg)
 {
-    uct_dc_mlx5_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem), uct_dc_mlx5_ep_t, arb_group);
+    uct_dc_mlx5_ep_t *ep = ucs_container_of(group, uct_dc_mlx5_ep_t, arb_group);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
@@ -1129,23 +1130,25 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
  */
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
+                                        ucs_arbiter_group_t *group,
                                         ucs_arbiter_elem_t *elem,
                                         void *arg)
 {
 
-    uct_dc_mlx5_ep_t *ep       = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                                  uct_dc_mlx5_ep_t, arb_group);
+    uct_dc_mlx5_ep_t *ep       = ucs_container_of(group, uct_dc_mlx5_ep_t,
+                                                  arb_group);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
+    int is_only                = ucs_arbiter_elem_is_only(group, elem);
     ucs_arbiter_cb_result_t res;
 
-    res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
+    res     = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
     if (res == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
         /* For dcs* policies release dci if this is the last elem in the group
          * and the dci has no outstanding operations. For example pending
          * callback did not send anything. (uct_ep_flush or just return ok)
          */
-        if (ucs_arbiter_elem_is_last(&ep->arb_group, elem)) {
+        if (is_only) {
             uct_dc_mlx5_iface_dci_free(iface, ep);
         }
     }
@@ -1158,6 +1161,7 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
  */
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
+                                         ucs_arbiter_group_t *group,
                                          ucs_arbiter_elem_t *elem,
                                          void *arg)
 {
@@ -1179,7 +1183,7 @@ uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
 }
 
 static ucs_arbiter_cb_result_t
-uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                                 ucs_arbiter_elem_t *elem, void *arg)
 {
     uct_purge_cb_args_t *cb_args = arg;

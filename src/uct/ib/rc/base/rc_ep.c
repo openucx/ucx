@@ -237,6 +237,7 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
 }
 
 ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_group_t *group,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg)
 {
@@ -255,7 +256,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     } else {
-        ep    = ucs_container_of(ucs_arbiter_elem_group(elem), uct_rc_ep_t, arb_group);
+        ep    = ucs_container_of(group, uct_rc_ep_t, arb_group);
         iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
         if (!uct_rc_iface_has_tx_resources(iface)) {
             /* No iface resources */
@@ -270,6 +271,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
 }
 
 static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                          ucs_arbiter_group_t *group,
                                                           ucs_arbiter_elem_t *elem,
                                                           void *arg)
 {
@@ -277,9 +279,8 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t,
                                                        priv);
-    uct_rc_ep_t UCS_V_UNUSED *ep    = ucs_container_of(
-                                          ucs_arbiter_elem_group(elem),
-                                          uct_rc_ep_t, arb_group);
+    uct_rc_ep_t UCS_V_UNUSED *ep    = ucs_container_of(group, uct_rc_ep_t,
+                                                       arb_group);
     uct_rc_fc_request_t *freq;
 
     /* Invoke user's callback only if it is not internal FC message */

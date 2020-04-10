@@ -85,7 +85,8 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             /* Reset the state to the previous one */
             req->send.state.dt = state;
 
-            if (req->send.lane != req->send.pending_lane) {
+            if ((packed_len == UCS_ERR_NO_RESOURCE) &&
+                (req->send.lane != req->send.pending_lane)) {
                 /* switch to new pending lane */
                 pending_adde_res = ucp_request_pending_add(req, &status, 0);
                 if (!pending_adde_res) {

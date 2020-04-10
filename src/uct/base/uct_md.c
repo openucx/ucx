@@ -418,6 +418,12 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
     return md->ops->mem_dereg(md, memh);
 }
 
+ucs_status_t uct_md_mem_query(uct_md_h md, const void *addr, const size_t length,
+                              uct_md_mem_attr_t *mem_attr_p)
+{
+    return md->ops->mem_query(md, addr, length, mem_attr_p);
+}
+
 int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
                                   uct_sockaddr_accessibility_t mode)
 {

@@ -83,8 +83,8 @@ typedef struct {
 } ucp_address_unified_iface_attr_t;
 
 
-#define UCT_ADDRESS_FLAG_ATOMIC32     UCS_BIT(30) /* 32bit atomic operations */
-#define UCT_ADDRESS_FLAG_ATOMIC64     UCS_BIT(31) /* 64bit atomic operations */
+#define UCP_ADDRESS_FLAG_ATOMIC32     UCS_BIT(30) /* 32bit atomic operations */
+#define UCP_ADDRESS_FLAG_ATOMIC64     UCS_BIT(31) /* 64bit atomic operations */
 
 #define UCP_ADDRESS_FLAG_LAST         0x80u  /* Last address in the list */
 #define UCP_ADDRESS_FLAG_HAS_EP_ADDR  0x40u  /* For iface address:
@@ -312,6 +312,50 @@ static void ucp_address_memcheck(ucp_context_h context, void *ptr, size_t size,
     }
 }
 
+static uint32_t ucp_address_pack_flags(uint64_t input_flags,
+                                       uint64_t cap_mask,
+                                       uint8_t output_start_bit)
+{
+    uint32_t result_flags = 0;
+    uint32_t packed_flag;
+    uint8_t cap_index;
+
+    ucs_assert((ucs_popcount(cap_mask) + output_start_bit) < 32);
+    packed_flag = UCS_BIT(output_start_bit);
+
+    ucs_for_each_bit(cap_index, cap_mask) {
+        if (input_flags & UCS_BIT(cap_index)) {
+            result_flags |= packed_flag;
+        }
+
+        packed_flag <<= 1;
+    }
+
+    return result_flags;
+}
+
+static uint64_t ucp_address_unpack_flags(uint32_t input_flags,
+                                         uint64_t cap_mask,
+                                         uint8_t input_start_bit)
+{
+    uint64_t result_flags = 0;
+    uint32_t packed_flag;
+    uint8_t cap_index;
+
+    ucs_assert((ucs_popcount(cap_mask) + input_start_bit) < 32);
+    packed_flag = UCS_BIT(input_start_bit);
+
+    ucs_for_each_bit(cap_index, cap_mask) {
+        if (input_flags & packed_flag) {
+            result_flags |= UCS_BIT(cap_index);
+        }
+
+        packed_flag <<= 1;
+    }
+
+    return result_flags;
+}
+
 static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
                                        ucp_rsc_index_t rsc_index,
                                        const uct_iface_attr_t *iface_attr,
@@ -319,9 +363,6 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
 {
     ucp_address_packed_iface_attr_t  *packed;
     ucp_address_unified_iface_attr_t *unified;
-    uint32_t packed_flag;
-    uint64_t cap_flags;
-    uint64_t bit;
 
     /* check if at least one of bandwidth values is 0 */
     if ((iface_attr->bandwidth.dedicated * iface_attr->bandwidth.shared) != 0) {
@@ -343,35 +384,25 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
         return sizeof(*unified);
     }
 
-    packed    = ptr;
-    cap_flags = iface_attr->cap.flags;
-
+    packed                 = ptr;
     packed->prio_cap_flags = ((uint8_t)iface_attr->priority);
     packed->overhead       = iface_attr->overhead;
     packed->bandwidth      = iface_attr->bandwidth.dedicated - iface_attr->bandwidth.shared;
     packed->lat_ovh        = iface_attr->latency.overhead;
 
-    /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS, to shrink address. */
-    packed_flag = UCS_BIT(8);
-    bit         = 1;
-    while (UCP_ADDRESS_IFACE_FLAGS & ~(bit - 1)) {
-        if (UCP_ADDRESS_IFACE_FLAGS & bit) {
-            if (cap_flags & bit) {
-                packed->prio_cap_flags |= packed_flag;
-            }
-            packed_flag <<= 1;
-        }
-        bit <<= 1;
-    }
+    /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS to shrink address. */
+    packed->prio_cap_flags |=
+        ucp_address_pack_flags(iface_attr->cap.flags,
+                               UCP_ADDRESS_IFACE_FLAGS, 8);
 
     if (enable_atomics) {
         if (ucs_test_all_flags(iface_attr->cap.atomic32.op_flags, UCP_ATOMIC_OP_MASK) &&
             ucs_test_all_flags(iface_attr->cap.atomic32.fop_flags, UCP_ATOMIC_FOP_MASK)) {
-            packed->prio_cap_flags |= UCT_ADDRESS_FLAG_ATOMIC32;
+            packed->prio_cap_flags |= UCP_ADDRESS_FLAG_ATOMIC32;
         }
         if (ucs_test_all_flags(iface_attr->cap.atomic64.op_flags, UCP_ATOMIC_OP_MASK) &&
             ucs_test_all_flags(iface_attr->cap.atomic64.fop_flags, UCP_ATOMIC_FOP_MASK)) {
-            packed->prio_cap_flags |= UCT_ADDRESS_FLAG_ATOMIC64;
+            packed->prio_cap_flags |= UCP_ADDRESS_FLAG_ATOMIC64;
         }
     }
 
@@ -386,9 +417,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     const ucp_address_packed_iface_attr_t *packed;
     const ucp_address_unified_iface_attr_t *unified;
     ucp_worker_iface_t *wiface;
-    uint32_t packed_flag;
     ucp_rsc_index_t rsc_idx;
-    uint64_t bit;
 
     if (ucp_worker_unified_mode(worker)) {
         /* Address contains resources index and iface latency overhead
@@ -424,23 +453,16 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     iface_attr->bandwidth.shared    = ucs_max(0.0, -packed->bandwidth);
     iface_attr->lat_ovh             = packed->lat_ovh;
 
-    packed_flag = UCS_BIT(8);
-    bit         = 1;
-    while (UCP_ADDRESS_IFACE_FLAGS & ~(bit - 1)) {
-        if (UCP_ADDRESS_IFACE_FLAGS & bit) {
-            if (packed->prio_cap_flags & packed_flag) {
-                iface_attr->cap_flags |= bit;
-            }
-            packed_flag <<= 1;
-        }
-        bit <<= 1;
-    }
+    /* Unpack iface flags */
+    iface_attr->cap_flags =
+        ucp_address_unpack_flags(packed->prio_cap_flags,
+                                 UCP_ADDRESS_IFACE_FLAGS, 8);
 
-    if (packed->prio_cap_flags & UCT_ADDRESS_FLAG_ATOMIC32) {
+    if (packed->prio_cap_flags & UCP_ADDRESS_FLAG_ATOMIC32) {
         iface_attr->atomic.atomic32.op_flags  |= UCP_ATOMIC_OP_MASK;
         iface_attr->atomic.atomic32.fop_flags |= UCP_ATOMIC_FOP_MASK;
     }
-    if (packed->prio_cap_flags & UCT_ADDRESS_FLAG_ATOMIC64) {
+    if (packed->prio_cap_flags & UCP_ADDRESS_FLAG_ATOMIC64) {
         iface_attr->atomic.atomic64.op_flags  |= UCP_ATOMIC_OP_MASK;
         iface_attr->atomic.atomic64.fop_flags |= UCP_ATOMIC_FOP_MASK;
     }
@@ -992,4 +1014,3 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     unpacked_address->address_list  = address_list;
     return UCS_OK;
 }
-

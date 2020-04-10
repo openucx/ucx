@@ -36,6 +36,16 @@ void ucs_arbiter_group_cleanup(ucs_arbiter_group_t *group)
     ucs_assert_always(ucs_arbiter_group_is_empty(group));
 }
 
+static inline int ucs_arbiter_group_head_is_scheduled(ucs_arbiter_elem_t *head)
+{
+    return head->list.next != NULL;
+}
+
+static inline void ucs_arbiter_group_head_reset(ucs_arbiter_elem_t *head)
+{
+    head->list.next = NULL; /* Not scheduled yet */
+}
+
 void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
                                         ucs_arbiter_elem_t *elem)
 {
@@ -125,7 +135,7 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
         /* Can't touch the element after cb is called if it gets removed. But it
          * can be reused later as well, so it's next should be NULL. */
         ptr->next = NULL;
-        result    = cb(arbiter, ptr, cb_arg);
+        result    = cb(arbiter, group, ptr, cb_arg);
 
         if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
             if (ptr == head) {
@@ -205,6 +215,21 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
     UCS_ARBITER_GROUP_ARBITER_SET(group, arbiter);
 }
 
+void ucs_arbiter_group_desched_nonempty(ucs_arbiter_t *arbiter,
+                                        ucs_arbiter_group_t *group)
+{
+    ucs_arbiter_elem_t *head = group->tail->next;
+
+    if (!ucs_arbiter_group_head_is_scheduled(head)) {
+        return;
+    }
+
+    UCS_ARBITER_GROUP_ARBITER_CHECK(group, arbiter);
+    UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
+    ucs_list_del(&head->list);
+    ucs_arbiter_group_head_reset(head);
+}
+
 void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                                    ucs_arbiter_callback_t cb, void *cb_arg)
 {
@@ -246,7 +271,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
 
             ucs_trace_poll("dispatching arbiter element %p", group_head);
             UCS_ARBITER_GROUP_GUARD_ENTER(group);
-            result = cb(arbiter, group_head, cb_arg);
+            result = cb(arbiter, group, group_head, cb_arg);
             UCS_ARBITER_GROUP_GUARD_EXIT(group);
             ucs_trace_poll("dispatch result: %d", result);
             ++group_dispatch_count;

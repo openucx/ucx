@@ -265,6 +265,11 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    0
 #endif
 
+#if HAVE_DECL_IBV_QPF_GRH_REQUIRED
+#  define uct_ib_grh_required(_attr)                ((_attr)->flags & IBV_QPF_GRH_REQUIRED)
+#else
+#  define uct_ib_grh_required(_attr)                0
+#endif
 
 typedef uint8_t uct_ib_uint24_t[3];
 

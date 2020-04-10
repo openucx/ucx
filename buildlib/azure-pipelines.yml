@@ -1,158 +1,24 @@
 # See https://aka.ms/yaml
+# This pipeline to be run on direct pushes and merges
 
+pr: none
 trigger:
-  - master
-  - v*.*.x
-pr:
   - master
   - v*.*.x
 
 resources:
   containers:
-    - container: centos7
-      image: ucfconsort.azurecr.io/ucx/centos7:1
-      endpoint: ucfconsort_registry
     - container: fedora
       image: ucfconsort.azurecr.io/ucx/fedora:1
       endpoint: ucfconsort_registry
 
 stages:
-  - stage: Codestyle
-    jobs:
-      # Check that commit title matches code style guidelines
-      - job: commit_title
-        displayName: commit title
-        steps:
-          - checkout: self
-            clean: true
-
-          - bash: |
-              set -eE
-              range="remotes/origin/$(System.PullRequest.TargetBranch)..$(Build.SourceVersion)"
-              ok=1
-              for sha1 in `git log $range --format="%h"`
-              do
-                  title=`git log -1 --format="%s" $sha1`
-                  if echo $title | grep -qP '^Merge |^[0-9A-Z/_]*: \w'
-                  then
-                      echo "Good commit title: '$title'"
-                  else
-                      echo "Bad commit title: '$title'"
-                      ok=0
-                  fi
-              done
-              if [ $ok -ne 1 ]
-              then
-                 url="https://github.com/openucx/ucx/wiki/Guidance-for-contributors#general-guidelines"
-                 echo "##vso[task.logissue type=error]Bad commit title(s), see $url for more info."
-                 echo "##vso[task.complete result=Failed;]"
-              fi
-            condition: eq(variables['Build.Reason'], 'PullRequest')
-
   - stage: Build
     jobs:
-      - job: static_checks
-        displayName: Static checks
-        container: fedora
-        steps:
-          - checkout: self
-            clean: true
-
-          - bash: ./autogen.sh
-            displayName: Setup autotools
-
-          - bash: |
-              set -eE
-              mkdir build && cd build
-              clang --version
-              gcc --version
-              cppcheck --version
-              ../contrib/configure-release
-            displayName: Configure
-
-          - bash: |
-              set -eE
-
-              cd build
-
-              export PATH="`csclng --print-path-to-wrap`:`cscppc --print-path-to-wrap`:`cswrap --print-path-to-wrap`:$PATH"
-              make -j`nproc` 2>&1 | tee compile.log
-            displayName: Build
-
-          - bash: |
-              set -eE
-
-              cd build
-
-              cs_errors="cs.err"
-              cslinker --quiet compile.log \
-                | csgrep --mode=json --path $(dirname $PWD) --strip-path-prefix $(dirname $PWD) \
-                | csgrep --mode=json --invert-match --path 'conftest.c' \
-                | csgrep --mode=grep --invert-match --event "internal warning" --prune-events=1 \
-                > $cs_errors
-
-              if [ -s $cs_errors ]; then
-                echo "static checkers found errors:"
-                cat $cs_errors
-                echo "##vso[task.logissue type=error]static checkers found errors"
-                echo "##vso[task.complete result=Failed;]"
-              else
-                echo "No errors reported by static checkers"
-              fi
-            displayName: cstools reports
-
-      # Perform test builds on relevant distributions.
-      - job: Distros
-        displayName: Build for
-        strategy:
-          matrix:
-            centos7:
-              CONTAINER: centos7
-              CONFIGURE_OPTS:
-        container: $[ variables['CONTAINER'] ]
-        steps:
-          - checkout: self
-            clean: true
-
-          - bash: ./autogen.sh
-            displayName: Setup autotools
-
-          - bash: |
-              set -eE
-              mkdir build && cd build
-              ../configure $(CONFIGURE_OPTS)
-            displayName: Configure
-
-          - bash: |
-              set -eE
-              cd build
-              gcc -v
-              make -s -j `nproc`
-            displayName: Build for $(CONTAINER)
-
-      # Test RPM build
-      - job: build_rpm
-        displayName: build tarball and source rpm
-        container: fedora
-        steps:
-          - checkout: self
-            clean: true
-
-          - bash: ./autogen.sh
-            displayName: Setup autotools
-
-          - bash: |
-              set -eE
-              gcc --version
-              ./contrib/configure-release
-              ./contrib/buildrpm.sh -s -t -b
-            displayName: Build tarball
-
       # Publish JUCX to maven central
       - job: publish_jucx
         displayName: Publish JUCX SNAPSHOT artifact to maven central
         container: fedora
-        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
         steps:
           - checkout: self
             clean: true
@@ -169,24 +35,3 @@ stages:
           - template: jucx-publish.yml
             parameters:
               target: publish-snapshot
-
-  - stage: Tests
-    dependsOn: [Codestyle]
-    jobs:
-    - template: tests.yml
-      parameters:
-        name: althca
-        demands: ucx_althca -equals yes
-    - template: tests.yml
-      parameters:
-        name: legacy
-        demands: ucx_legacy -equals yes
-    - template: tests.yml
-      parameters:
-        name: gpu
-        demands: ucx_gpu -equals yes
-    - template: tests.yml
-      parameters:
-        name: new
-        demands: ucx_new -equals yes
-
