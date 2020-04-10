@@ -1617,15 +1617,14 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
     unsigned i, thread_count;
     size_t message_size;
 
-    ucp_params.field_mask        = UCP_PARAM_FIELD_FEATURES;
+    ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES;
+    ucp_params.features   = 0;
 
     if (perf->params.thread_count > 1) {
         /* when there is more than one thread, a ucp_worker would be created for
          * each. all of them will share the same ucp_context */
-        ucp_params.features          = UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+        ucp_params.field_mask       |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
         ucp_params.mt_workers_shared = 1;
-    } else {
-        ucp_params.features          = 0;
     }
 
     status = ucp_perf_test_fill_params(&perf->params, &ucp_params);
