@@ -923,12 +923,13 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     uint16_t iovcnt;
 
     /* check window */
-    resend_pos = (void*)ep->resend.pos;
-    sent_skb   = ucs_queue_iter_elem(sent_skb, resend_pos, queue);
-    if (sent_skb == NULL) {
+    resend_pos = ep->resend.pos;
+    if (ucs_queue_iter_end(&ep->tx.window, resend_pos)) {
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
         return;
     }
+
+    sent_skb = ucs_queue_iter_elem(sent_skb, resend_pos, queue);
 
     ucs_assert(((uintptr_t)sent_skb % UCT_UD_SKB_ALIGN) == 0);
     if (UCT_UD_PSN_COMPARE(sent_skb->neth->psn, >=, ep->tx.max_psn)) {
@@ -971,7 +972,6 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
      */
     skb                = uct_ud_iface_ctl_skb_get(iface);
     sent_skb->flags   |= UCT_UD_SEND_SKB_FLAG_RESENDING;
-    skb->neth->ack_psn = ep->rx.acked_psn;
     ep->resend.psn     = sent_skb->neth->psn;
 
     if (sent_skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY) {
@@ -999,10 +999,11 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
         max_log_sge    = 2;
     }
 
-    memcpy(skb->neth, sent_skb->neth, sent_skb->len);
-    cdesc             = uct_ud_ctl_desc(skb);
-    cdesc->self_skb   = skb;
-    cdesc->resent_skb = sent_skb;
+    memcpy(skb->neth, sent_skb->neth, skb->len);
+    skb->neth->ack_psn = ep->rx.acked_psn;
+    cdesc              = uct_ud_ctl_desc(skb);
+    cdesc->self_skb    = skb;
+    cdesc->resent_skb  = sent_skb;
 
     /* force ack request on every Nth packet or on first packet in resend window */
     if ((skb->neth->psn % UCT_UD_RESENDS_PER_ACK) == 0 ||
