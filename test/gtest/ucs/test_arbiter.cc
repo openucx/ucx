@@ -794,7 +794,6 @@ protected:
     ucs_arbiter_group_t m_group1, m_group2;
     ucs_arbiter_elem_t  m_elem;
     bool                m_moved;
-    bool                m_is_only;
 };
 
 /* from the arbiter dispatch callback, reschedule the element on another group,
@@ -839,7 +838,7 @@ private:
 
     void reset_counters();
 
-    void add_new_elem(arb_group_t *group, bool schedule);
+    void add_new_elem(arb_group_t *group);
 
     void do_test(unsigned iteration_num, unsigned num_groups,
                  unsigned elems_per_group, unsigned dispatch_per_group);
@@ -872,15 +871,12 @@ void test_arbiter_random_resched::reset_counters()
     m_num_resched      = 0;
 }
 
-void test_arbiter_random_resched::add_new_elem(arb_group_t *group, bool schedule)
+void test_arbiter_random_resched::add_new_elem(arb_group_t *group)
 {
     ucs_arbiter_elem_t *elem = new ucs_arbiter_elem_t;
 
     ucs_arbiter_elem_init(elem);
     ucs_arbiter_group_push_elem(&group->super, elem);
-    if (schedule) {
-        ucs_arbiter_group_schedule(&m_arb, &group->super);
-    }
     ++group->num_elems;
     ++m_num_added;
 }
@@ -905,9 +901,10 @@ test_arbiter_random_resched::dispatch(ucs_arbiter_group_t *_group,
          * Must remove elements with higher probability than adding to avoid
          * infinite loop.
          */
-        if ((m_groups.size() > 1) && (ucs::rand() % 4) == 0) {
+        if ((m_groups.size() > 1) && ((ucs::rand() % 4) == 0)) {
             /* push the removed element to a random group which is not the
-             * current group */
+             * current group. We skip the current group by doing ++, it would not
+             * exceed array size because we randomize on (array_size - 1) */
             new_group = &m_groups[ucs::rand() % (m_groups.size() - 1)];
             if (new_group >= group) {
                ++new_group;
@@ -957,13 +954,9 @@ void test_arbiter_random_resched::do_test(unsigned iteration_num,
 {
     arb_group_t* group;
 
-    unsigned seed = ucs::rand() % 10000;
-    ucs::srand(seed);
-
     UCS_TEST_MESSAGE << "Iteration " << iteration_num << ": "
                      << num_groups << " m_groups, "
-                     << elems_per_group << " elements each,"
-                     << " random seed: " << seed;
+                     << elems_per_group << " elements each";
 
     /* Add elements and groups */
     m_groups.resize(num_groups);
@@ -973,9 +966,8 @@ void test_arbiter_random_resched::do_test(unsigned iteration_num,
         group->num_elems = 0;
 
         for (unsigned i = 0; i < elems_per_group; ++i) {
-            add_new_elem(group, false);
+            add_new_elem(group);
         }
-
         ucs_arbiter_group_schedule(&m_arb, &group->super);
 
         /* Test arbiter helper functions */
