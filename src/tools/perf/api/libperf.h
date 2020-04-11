@@ -91,6 +91,12 @@ enum {
     UCT_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
 };
 
+
+#define UCT_PERF_TEST_PARAMS_FMT             "%s/%s"
+#define UCT_PERF_TEST_PARAMS_ARG(_params)    (_params)->uct.tl_name, \
+                                             (_params)->uct.dev_name
+
+
 /**
  * Performance counter type.
  */
@@ -223,7 +229,8 @@ void ucx_perf_global_init();
 /**
  * Run a UCT performance test.
  */
-ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result);
+ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
+                          ucx_perf_result_t *result);
 
 
 END_C_DECLS

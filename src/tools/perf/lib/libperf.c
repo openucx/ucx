@@ -23,23 +23,23 @@
 #include <omp.h>
 #endif /* _OPENMP */
 
-#define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _params, _status)        \
-    _status = __get_atomic_flag((_size), (_op32), (_op64), (_op));                \
-    if (_status != UCS_OK) {                                                      \
-        ucs_error("%s/%s does not support atomic %s for message size %zu bytes",  \
-                  (_params)->uct.tl_name, (_params)->uct.dev_name,                \
-                  (_msg)[_op], (_size));                                          \
-        return _status;                                                           \
+#define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _params, _status) \
+    _status = __get_atomic_flag((_size), (_op32), (_op64), (_op)); \
+    if (_status != UCS_OK) { \
+        ucs_error(UCT_PERF_TEST_PARAMS_FMT" does not support atomic %s for " \
+                  "message size %zu bytes", UCT_PERF_TEST_PARAMS_ARG(_params), \
+                  (_msg)[_op], (_size)); \
+        return _status; \
     }
 
-#define ATOMIC_OP_CHECK(_size, _attr, _required, _params, _msg)                   \
-    if (!ucs_test_all_flags(_attr, _required)) {                                  \
-        if ((_params)->flags & UCX_PERF_TEST_FLAG_VERBOSE) {                      \
-            ucs_error("%s/%s does not support required "#_size"-bit atomic: %s",  \
-                      (_params)->uct.tl_name, (_params)->uct.dev_name,            \
-                      (_msg)[ucs_ffs64(~(_attr) & (_required))]);                 \
-        }                                                                         \
-        return UCS_ERR_UNSUPPORTED;                                               \
+#define ATOMIC_OP_CHECK(_size, _attr, _required, _params, _msg) \
+    if (!ucs_test_all_flags(_attr, _required)) { \
+        if ((_params)->flags & UCX_PERF_TEST_FLAG_VERBOSE) { \
+            ucs_error(UCT_PERF_TEST_PARAMS_FMT" does not support required " \
+                      #_size"-bit atomic: %s", UCT_PERF_TEST_PARAMS_ARG(_params), \
+                      (_msg)[ucs_ffs64(~(_attr) & (_required))]); \
+        } \
+        return UCS_ERR_UNSUPPORTED; \
     }
 
 typedef struct {
@@ -282,7 +282,7 @@ void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
 
 /* Initialize/reset all parameters that could be modified by the warm-up run */
 static void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
-                                          ucx_perf_params_t *params)
+                                          const ucx_perf_params_t *params)
 {
     unsigned i;
 
@@ -305,7 +305,7 @@ static void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
 }
 
 static void ucx_perf_test_init(ucx_perf_context_t *perf,
-                               ucx_perf_params_t *params)
+                               const ucx_perf_params_t *params)
 {
     unsigned group_index;
 
@@ -488,9 +488,9 @@ static ucs_status_t uct_perf_test_check_md_support(ucx_perf_params_t *params,
     if (!(md_attr->cap.access_mem_type == mem_type) &&
         !(md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("Unsupported memory type %s by %s/%s",
+            ucs_error("Unsupported memory type %s by "UCT_PERF_TEST_PARAMS_FMT,
                       ucs_memory_type_names[mem_type],
-                      params->uct.tl_name, params->uct.dev_name);
+                      UCT_PERF_TEST_PARAMS_ARG(params));
             return UCS_ERR_INVALID_PARAM;
         }
     }
@@ -519,8 +519,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 
     status = uct_iface_query(iface, &attr);
     if (status != UCS_OK) {
-        ucs_error("uct_iface_query(%s/%s) failed: %s",
-                  params->uct.tl_name, params->uct.dev_name,
+        ucs_error("uct_iface_query("UCT_PERF_TEST_PARAMS_FMT") failed: %s",
+                  UCT_PERF_TEST_PARAMS_ARG(params),
                   ucs_status_string(status));
         return status;
     }
@@ -599,8 +599,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
     if (!(atomic_op32 | atomic_op64 | atomic_fop32 | atomic_fop64) &&
         (!ucs_test_all_flags(attr.cap.flags, required_flags) || !required_flags)) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("%s/%s does not support operation %s",
-                      params->uct.tl_name, params->uct.dev_name,
+            ucs_error(UCT_PERF_TEST_PARAMS_FMT" does not support operation %s",
+                      UCT_PERF_TEST_PARAMS_ARG(params),
                       perf_iface_ops[ucs_ffs64(~attr.cap.flags & required_flags)]);
         }
         return UCS_ERR_UNSUPPORTED;
@@ -1396,9 +1396,11 @@ static void ucp_perf_test_destroy_workers(ucx_perf_context_t *perf)
     }
 }
 
-static void ucx_perf_set_warmup(ucx_perf_context_t* perf, ucx_perf_params_t* params)
+static void ucx_perf_set_warmup(ucx_perf_context_t* perf,
+                                const ucx_perf_params_t* params)
 {
-    perf->max_iter = ucs_min(params->warmup_iter, ucs_div_round_up(params->max_iter, 10));
+    perf->max_iter = ucs_min(params->warmup_iter,
+                             ucs_div_round_up(params->max_iter, 10));
     perf->report_interval = ULONG_MAX;
 }
 
@@ -1478,8 +1480,8 @@ static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
         }
     }
 
-    ucs_error("Cannot use transport %s on device %s", perf->params.uct.tl_name,
-              perf->params.uct.dev_name);
+    ucs_error("Cannot use "UCT_PERF_TEST_PARAMS_FMT,
+              UCT_PERF_TEST_PARAMS_ARG(&perf->params));
     status = UCS_ERR_NO_DEVICE;
 
 out_release_components_list:
@@ -1730,7 +1732,8 @@ static struct {
 static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
                                           ucx_perf_result_t* result);
 
-ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result)
+ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
+                          ucx_perf_result_t *result)
 {
     ucx_perf_context_t *perf;
     ucs_status_t status;
