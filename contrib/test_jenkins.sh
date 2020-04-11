@@ -692,6 +692,38 @@ check_config_h() {
 	fi
 }
 
+#
+# Expands a CPU list such as "0-3,17" to "0 1 2 3 17" (each cpu in a new line)
+#
+expand_cpulist() {
+	cpulist=$1
+	tokens=$(echo ${cpulist} | tr ',' ' ')
+	for token in ${tokens}
+	do
+		# if there is no '-', first and last would be equal
+		first=$(echo ${token} | cut -d'-' -f1)
+		last=$( echo ${token} | cut -d'-' -f2)
+
+		for ((cpu=${first};cpu<=${last};++cpu))
+		do
+			echo ${cpu}
+		done
+	done
+}
+
+#
+# Get the N'th CPU that the current process can run on
+#
+slice_affinity() {
+	n=$1
+
+	# get affinity mask of the current process
+	compact_cpulist=$($AFFINITY bash -c 'taskset -cp $$' | cut -d: -f2)
+	cpulist=$(expand_cpulist ${compact_cpulist})
+
+	echo "${cpulist}" | head -n $((n + 1)) | tail -1
+}
+
 run_client_server_app() {
 	test_name=$1
 	test_args=$2
@@ -702,7 +734,10 @@ run_client_server_app() {
 	server_port=$((10000 + EXECUTOR_NUMBER))
 	server_port_arg="-p $server_port"
 
-	$AFFINITY ${test_name} ${test_args} ${server_port_arg} &
+	affinity_server=$(slice_affinity 0)
+	affinity_client=$(slice_affinity 1)
+
+	taskset -c $affinity_server ${test_name} ${test_args} ${server_port_arg} &
 	server_pid=$!
 
 	sleep 15
@@ -712,7 +747,7 @@ run_client_server_app() {
 		set +Ee
 	fi
 
-	$AFFINITY ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
+	taskset -c $affinity_client ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
 	client_pid=$!
 
 	wait ${client_pid}
