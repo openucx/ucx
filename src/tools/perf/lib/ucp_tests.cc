@@ -121,6 +121,7 @@ public:
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)r->context;
 
         test->op_completed();
+        r->context = NULL;
         ucp_request_free(request);
     }
 
