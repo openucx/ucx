@@ -928,7 +928,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
 
 int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev)
 {
-    return uct_ib_device_is_port_roce(dev, iface->config.port_num) &&
+    return uct_ib_iface_is_roce(iface) &&
            (iface->gid_info.roce_info.ver == UCT_IB_DEVICE_ROCE_V2);
 }
 
@@ -938,7 +938,7 @@ ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
 {
     uint8_t port_num = iface->config.port_num;
 
-    ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
+    ucs_assert(uct_ib_iface_is_roce(iface));
 
     if (md_config_index == UCS_ULUNITS_AUTO) {
         return uct_ib_device_select_gid(dev, port_num, &iface->gid_info);
@@ -958,7 +958,7 @@ static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
     ucs_status_t status;
 
     /* Fill the gid index and the RoCE version */
-    if (uct_ib_device_is_port_roce(dev, port_num)) {
+    if (uct_ib_iface_is_roce(iface)) {
         status = uct_ib_iface_init_roce_gid_info(iface, dev, md_config_index);
         if (status != UCS_OK) {
             goto out;

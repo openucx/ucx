@@ -514,7 +514,7 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
     ucs_status_t status;
 
     status = uct_ib_mlx5_iface_get_res_domain(iface, qp);
-    if (status) {
+    if (status != UCS_OK) {
         return status;
     }
 

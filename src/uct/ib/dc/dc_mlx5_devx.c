@@ -95,7 +95,7 @@ uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2init, sizeof(in_2init),
                                         out_2init, sizeof(out_2init));
-    if (status) {
+    if (status != UCS_OK) {
         return status;
     }
 
@@ -113,7 +113,7 @@ uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),
                                         out_2rtr, sizeof(out_2rtr));
-    if (status) {
+    if (status != UCS_OK) {
         return status;
     }
 
