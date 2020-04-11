@@ -752,12 +752,13 @@ public:
 protected:
 
     /* the callback pushes the elem on group2 and schedules it */
-    ucs_arbiter_cb_result_t dispatch(ucs_arbiter_group_t *group,
-                                     ucs_arbiter_elem_t *elem)
+    virtual ucs_arbiter_cb_result_t dispatch(ucs_arbiter_group_t *group,
+                                             ucs_arbiter_elem_t *elem)
     {
         if (m_moved) {
             return UCS_ARBITER_CB_RESULT_STOP;
         } else {
+            EXPECT_EQ(&m_elem, elem);
             ucs_arbiter_group_push_elem(&m_group2, elem);
             ucs_arbiter_group_schedule(&m_arb, &m_group2);
             m_moved = true;
@@ -779,6 +780,7 @@ protected:
     {
         test_arbiter_resched_from_dispatch *self =
                 reinterpret_cast<test_arbiter_resched_from_dispatch*>(arg);
+        EXPECT_EQ(&self->m_arb, arbiter);
         return self->dispatch(group, elem);
     }
 
@@ -815,4 +817,212 @@ UCS_TEST_F(test_arbiter_resched_from_dispatch, remove_and_resched) {
     check_group_state(&m_group2, true);
 
     ucs_arbiter_group_purge(&m_arb, &m_group2, purge_cb, NULL);
+}
+
+class test_arbiter_random_resched : public test_arbiter_resched_from_dispatch {
+public:
+    test_arbiter_random_resched();
+
+protected:
+    virtual ucs_arbiter_cb_result_t dispatch(ucs_arbiter_group_t *_group,
+                                             ucs_arbiter_elem_t *elem);
+
+    void do_test_loop(unsigned num_groups, unsigned elems_per_group,
+                      unsigned dispatch_per_group);
+
+private:
+    typedef struct {
+        ucs_arbiter_group_t  super;
+        unsigned             num_elems;
+    } arb_group_t;
+
+    void reset_counters();
+
+    void add_new_elem(arb_group_t *group);
+
+    void do_test(unsigned iteration_num, unsigned num_groups,
+                 unsigned elems_per_group, unsigned dispatch_per_group);
+
+    std::vector<arb_group_t> m_groups;
+    unsigned                 m_num_dispatch;
+    unsigned                 m_num_only;
+    unsigned                 m_num_added;
+    unsigned                 m_num_removed;
+    unsigned                 m_num_push_another;
+    unsigned                 m_num_next_group;
+    unsigned                 m_num_desched;
+    unsigned                 m_num_resched;
+};
+
+test_arbiter_random_resched::test_arbiter_random_resched()
+{
+    reset_counters();
+}
+
+void test_arbiter_random_resched::reset_counters()
+{
+    m_num_dispatch     = 0;
+    m_num_only         = 0;
+    m_num_added        = 0;
+    m_num_removed      = 0;
+    m_num_push_another = 0;
+    m_num_next_group   = 0;
+    m_num_desched      = 0;
+    m_num_resched      = 0;
+}
+
+void test_arbiter_random_resched::add_new_elem(arb_group_t *group)
+{
+    ucs_arbiter_elem_t *elem = new ucs_arbiter_elem_t;
+
+    ucs_arbiter_elem_init(elem);
+    ucs_arbiter_group_push_elem(&group->super, elem);
+    ++group->num_elems;
+    ++m_num_added;
+}
+
+ucs_arbiter_cb_result_t
+test_arbiter_random_resched::dispatch(ucs_arbiter_group_t *_group,
+                                      ucs_arbiter_elem_t *elem)
+{
+    arb_group_t *group = ucs_derived_of(_group, arb_group_t);
+    arb_group_t *new_group;
+
+    ++m_num_dispatch;
+
+    /* Test ucs_arbiter_elem_is_only() */
+    if (group->num_elems == 1) {
+        ++m_num_only;
+        EXPECT_TRUE(ucs_arbiter_elem_is_only(&group->super, elem));
+    }
+
+    if (ucs::rand() % 2) {
+        /* Remove the current element.
+         * Must remove elements with higher probability than adding to avoid
+         * infinite loop.
+         */
+        if ((m_groups.size() > 1) && ((ucs::rand() % 4) == 0)) {
+            /* push the removed element to a random group which is not the
+             * current group. We skip the current group by doing ++, it would not
+             * exceed array size because we randomize on (array_size - 1) */
+            new_group = &m_groups[ucs::rand() % (m_groups.size() - 1)];
+            if (new_group >= group) {
+               ++new_group;
+            }
+
+            ucs_arbiter_group_push_elem(&new_group->super, elem);
+
+            /* schedule the new group if it's now the current one */
+            ++m_num_push_another;
+            ucs_arbiter_group_schedule(&m_arb, &new_group->super);
+
+            ++new_group->num_elems;
+        } else {
+            /* Element is removed permanently, so invalidate and delete it */
+            ++m_num_removed;
+            memset(elem, 0xBB, sizeof(*elem));
+            delete elem;
+        }
+        --group->num_elems;
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    } else {
+        /* Don't remove the current element, do some other random group action
+         * instead.
+         */
+        int action = ucs::rand() % 3;
+        switch (action) {
+        case 0:
+            ++m_num_next_group;
+            return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+        case 1:
+            /* Reschedule the group on same arbiter to keep it going */
+            ucs_arbiter_group_schedule(&m_arb, &group->super);
+            ++m_num_desched;
+            return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+        case 2:
+        default:
+            ++m_num_resched;
+            return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+        }
+    }
+}
+
+void test_arbiter_random_resched::do_test(unsigned iteration_num,
+                                          unsigned num_groups,
+                                          unsigned elems_per_group,
+                                          unsigned dispatch_per_group)
+{
+    arb_group_t* group;
+
+    UCS_TEST_MESSAGE << "Iteration " << iteration_num << ": "
+                     << num_groups << " m_groups, "
+                     << elems_per_group << " elements each";
+
+    /* Add elements and groups */
+    m_groups.resize(num_groups);
+    for (unsigned group_index = 0; group_index < num_groups; ++group_index) {
+        group = &m_groups[group_index];
+        ucs_arbiter_group_init(&group->super);
+        group->num_elems = 0;
+
+        for (unsigned i = 0; i < elems_per_group; ++i) {
+            add_new_elem(group);
+        }
+        ucs_arbiter_group_schedule(&m_arb, &group->super);
+
+        /* Test arbiter helper functions */
+        if (elems_per_group == 0) {
+            EXPECT_TRUE(ucs_arbiter_group_is_empty(&group->super));
+        }
+    }
+
+    EXPECT_EQ(num_groups * elems_per_group, m_num_added);
+
+    /* Dispatch arbiter until it becomes empty */
+    do {
+        ucs_arbiter_dispatch(&m_arb, dispatch_per_group, dispatch_cb,
+                             reinterpret_cast<void*>(this));
+    } while (!ucs_arbiter_is_empty(&m_arb));
+
+    /* Show counters */
+    UCS_TEST_MESSAGE << " added: " << m_num_added
+                     << " removed: " << m_num_removed;
+    UCS_TEST_MESSAGE << " dispatch: " << m_num_dispatch
+                     << " only: " << m_num_only
+                     << " push another: " << m_num_push_another;
+    UCS_TEST_MESSAGE << " desched: " << m_num_desched
+                     << " resched: " << m_num_resched
+                     << " next_group: " << m_num_next_group;
+
+    /* Check counters */
+    EXPECT_EQ(m_num_added, m_num_removed);
+
+    /* Make sure all is removed */
+    for (unsigned group_index = 0; group_index < num_groups; ++group_index) {
+        group = &m_groups[group_index];
+        EXPECT_EQ(0u, group->num_elems);
+        EXPECT_TRUE(ucs_arbiter_group_is_empty(&group->super));
+    }
+}
+
+void test_arbiter_random_resched::do_test_loop(unsigned num_groups,
+                                               unsigned elems_per_group,
+                                               unsigned dispatch_per_group)
+{
+    for (unsigned i = 0; i < 5; ++i) {
+        reset_counters();
+        do_test(i, num_groups, elems_per_group, dispatch_per_group);
+    }
+}
+
+UCS_TEST_F(test_arbiter_random_resched, one_elem_one_group) {
+    do_test_loop(1, 1, 1);
+}
+
+UCS_TEST_F(test_arbiter_random_resched, one_elem_many_groups) {
+    do_test_loop(42, 1, 1);
+}
+
+UCS_TEST_F(test_arbiter_random_resched, many_elems_many_groups) {
+    do_test_loop(42, 10, 4);
 }

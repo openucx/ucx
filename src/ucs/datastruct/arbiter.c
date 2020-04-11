@@ -335,8 +335,9 @@ out:
 
 void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream)
 {
+    static const int max_groups = 100;
     ucs_arbiter_elem_t *group_head, *elem;
-    int first;
+    int count;
 
     fprintf(stream, "-------\n");
     if (ucs_list_is_empty(&arbiter->list)) {
@@ -344,12 +345,11 @@ void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream)
         goto out;
     }
 
-    first = 1;
+    count = 0;
     ucs_list_for_each(group_head, &arbiter->list, list) {
         elem = group_head;
-        if (first) {
+        if (ucs_list_head(&arbiter->list, ucs_arbiter_elem_t, list) == group_head) {
             fprintf(stream, "=> ");
-            first = 0;
         } else {
             fprintf(stream, " * ");
         }
@@ -366,6 +366,12 @@ void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream)
             elem = elem->next;
         } while (elem != group_head);
         fprintf(stream, "\n");
+        ++count;
+        if (count > max_groups) {
+            fprintf(stream, "more than %d groups - not printing any more\n",
+                    max_groups);
+            break;
+        }
     }
 
 out:
