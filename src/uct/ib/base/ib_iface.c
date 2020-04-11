@@ -933,10 +933,10 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev)
 }
 
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             uct_ib_device_t *dev,
                                              size_t md_config_index)
 {
-    uint8_t port_num = iface->config.port_num;
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uint8_t port_num     = iface->config.port_num;
 
     ucs_assert(uct_ib_iface_is_roce(iface));
 
@@ -950,16 +950,14 @@ ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
-                                               uct_ib_device_t *dev,
                                                size_t md_config_index)
 {
-    uint8_t port_num = iface->config.port_num;
     uct_ib_device_gid_info_t *gid_info = &iface->gid_info;
     ucs_status_t status;
 
     /* Fill the gid index and the RoCE version */
     if (uct_ib_iface_is_roce(iface)) {
-        status = uct_ib_iface_init_roce_gid_info(iface, dev, md_config_index);
+        status = uct_ib_iface_init_roce_gid_info(iface, md_config_index);
         if (status != UCS_OK) {
             goto out;
         }
@@ -973,8 +971,9 @@ static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
     }
 
     /* Fill the gid */
-    status = uct_ib_device_query_gid(dev, port_num, gid_info->gid_index,
-                                     &gid_info->gid);
+    status = uct_ib_device_query_gid(uct_ib_iface_device(iface),
+                                     iface->config.port_num,
+                                     gid_info->gid_index, &gid_info->gid);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1059,7 +1058,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    status = uct_ib_iface_init_gid_info(self, dev, ib_md->config.gid_index);
+    status = uct_ib_iface_init_gid_info(self, ib_md->config.gid_index);
     if (status != UCS_OK) {
         goto err;
     }
