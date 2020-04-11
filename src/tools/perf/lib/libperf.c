@@ -941,14 +941,10 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         break;
     case UCX_PERF_CMD_TAG:
     case UCX_PERF_CMD_TAG_SYNC:
-        ucp_params->features    |= UCP_FEATURE_TAG;
-        ucp_params->field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
-        ucp_params->request_size = sizeof(ucp_perf_request_t);
+        ucp_params->features |= UCP_FEATURE_TAG;
         break;
     case UCX_PERF_CMD_STREAM:
-        ucp_params->features    |= UCP_FEATURE_STREAM;
-        ucp_params->field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
-        ucp_params->request_size = sizeof(ucp_perf_request_t);
+        ucp_params->features |= UCP_FEATURE_STREAM;
         break;
     default:
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
@@ -1610,6 +1606,13 @@ static void uct_perf_cleanup(ucx_perf_context_t *perf)
     ucs_async_context_cleanup(&perf->uct.async);
 }
 
+static void ucp_perf_request_init(void *req)
+{
+    ucp_perf_request_t *request = req;
+
+    request->context = NULL;
+}
+
 static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
 {
     ucp_params_t ucp_params;
@@ -1619,14 +1622,18 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
     unsigned i, thread_count;
     size_t message_size;
 
-    ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES;
-    ucp_params.features   = 0;
+    ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
+                              UCP_PARAM_FIELD_REQUEST_SIZE |
+                              UCP_PARAM_FIELD_REQUEST_INIT;
+    ucp_params.features     = 0;
+    ucp_params.request_size = sizeof(ucp_perf_request_t);
+    ucp_params.request_init = ucp_perf_request_init;
 
     if (perf->params.thread_count > 1) {
         /* when there is more than one thread, a ucp_worker would be created for
          * each. all of them will share the same ucp_context */
-        ucp_params.field_mask       |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
-        ucp_params.mt_workers_shared = 1;
+        ucp_params.features          |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+        ucp_params.mt_workers_shared  = 1;
     }
 
     status = ucp_perf_test_fill_params(&perf->params, &ucp_params);
