@@ -99,13 +99,6 @@ void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
     ucs_list_replace(&head->list, &elem->list);
 }
 
-static inline void
-ucs_arbiter_group_head_desched(ucs_arbiter_elem_t *head)
-{
-    ucs_assert(ucs_arbiter_group_head_is_scheduled(head));
-    ucs_list_del(&head->list);
-}
-
 void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
                              ucs_arbiter_group_t *group,
                              ucs_arbiter_callback_t cb, void *cb_arg)
