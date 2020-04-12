@@ -964,7 +964,7 @@ run_ucx_perftest() {
 			dev=$ucx_dev
 		else
 			opt_transports="-x rc_verbs"
-			tls="rc_verbs"
+			tls="rc_v"
 			dev=$ucx_dev
 		fi
 
