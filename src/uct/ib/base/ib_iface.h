@@ -420,11 +420,9 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev);
  * Select the IB gid index and RoCE version to use for a RoCE port.
  *
  * @param iface                 IB interface
- * @param dev                   IB device.
  * @param md_config_index       Gid index from the md configuration.
  */
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             uct_ib_device_t *dev,
                                              size_t md_config_index);
 
 
