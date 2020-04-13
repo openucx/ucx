@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "cma_md.h"
 #include "cma_iface.h"
 #include "cma_ep.h"

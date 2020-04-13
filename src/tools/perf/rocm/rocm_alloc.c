@@ -1,8 +1,13 @@
 /**
  * Copyright (C) Advanced Micro Devices, Inc. 2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include <tools/perf/lib/libperf_int.h>
 

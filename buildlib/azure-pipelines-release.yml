@@ -1,4 +1,5 @@
 # See https://aka.ms/yaml
+# This pipeline to be run on tags creation
 
 pr: none
 trigger:

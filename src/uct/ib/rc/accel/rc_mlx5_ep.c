@@ -4,10 +4,15 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rc_mlx5.h"
 #if HAVE_DECL_IBV_CMD_MODIFY_QP
-#include <infiniband/driver.h>
+#  include <infiniband/driver.h>
 #endif
+
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/exp/ib_exp.h>
 #include <ucs/arch/cpu.h>

@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ib_device.h"
 #include "ib_md.h"
 
@@ -48,7 +52,7 @@ KHASH_IMPL(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*, 1,
            uct_ib_kh_ah_hash_func, uct_ib_kh_ah_hash_equal)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_DEVICE_STAT_LAST,
@@ -489,7 +493,7 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num)) {
         status = uct_ib_device_query_gid(dev, port_num,
                                          uct_ib_device_get_ib_gid_index(md), &gid);
-        if (status) {
+        if (status != UCS_OK) {
             return status;
         }
 

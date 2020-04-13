@@ -39,7 +39,7 @@ typedef enum ucp_worker_event_fd_op {
     UCP_WORKER_EPFD_OP_DEL
 } ucp_worker_event_fd_op_t;
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
     .name           = "tag_offload",
     .num_counters   = UCP_WORKER_STAT_TAG_OFFLOAD_LAST,
@@ -1697,6 +1697,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->num_active_ifaces = 0;
     worker->num_ifaces        = 0;
     worker->am_message_id     = ucs_generate_uuid(0);
+    worker->rkey_ptr_cb_id    = UCS_CALLBACKQ_ID_NULL;
+    ucs_queue_head_init(&worker->rkey_ptr_reqs);
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
@@ -1820,7 +1822,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     /* At this point all UCT memory domains and interfaces are already created
      * so warn about unused environment variables.
      */
-    ucs_config_parser_warn_unused_env_vars_once();
+    ucs_config_parser_warn_unused_env_vars_once(context->config.env_prefix);
 
     *worker_p = worker;
     return UCS_OK;

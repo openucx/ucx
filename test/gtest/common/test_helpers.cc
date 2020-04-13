@@ -382,14 +382,14 @@ scoped_setenv::~scoped_setenv() {
 }
 
 ucx_env_cleanup::ucx_env_cleanup() {
-    const size_t prefix_len = strlen(UCS_CONFIG_PREFIX);
+    const size_t prefix_len = strlen(UCS_DEFAULT_ENV_PREFIX);
     char **envp;
 
     for (envp = environ; *envp != NULL; ++envp) {
         std::string env_var = *envp;
 
         if ((env_var.find("=") != std::string::npos) &&
-            (env_var.find(UCS_CONFIG_PREFIX, 0, prefix_len) != std::string::npos)) {
+            (env_var.find(UCS_DEFAULT_ENV_PREFIX, 0, prefix_len) != std::string::npos)) {
             ucx_env_storage.push_back(env_var);
         }
     }
@@ -504,6 +504,15 @@ uint16_t get_port() {
 
 void *mmap_fixed_address() {
     return (void*)0xff0000000;
+}
+
+std::string compact_string(const std::string &str, size_t length)
+{
+    if (str.length() <= length * 2) {
+        return str;
+    }
+
+    return str.substr(0, length) + "..." + str.substr(str.length() - length);
 }
 
 sock_addr_storage::sock_addr_storage() : m_size(0), m_is_valid(false) {

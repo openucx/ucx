@@ -4,6 +4,9 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include "rc_mlx5.inl"
 
@@ -168,7 +171,7 @@ UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(32)
 UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(64)
 
 #if IBV_HW_TM
-#  if ENABLE_STATS
+#  ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
     .name = "tag",
     .num_counters = UCT_RC_MLX5_STAT_TAG_LAST,

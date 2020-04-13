@@ -680,7 +680,7 @@ ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep,
                   "\"net.core.netdev_max_backlog\", "
                   "\"net.ipv4.tcp_max_syn_backlog\" to the maximum value "
                   "on the remote node or increase %s%s%s (=%u)",
-                  UCS_CONFIG_PREFIX, UCT_TCP_CONFIG_PREFIX,
+                  UCS_DEFAULT_ENV_PREFIX, UCT_TCP_CONFIG_PREFIX,
                   UCT_TCP_CONFIG_MAX_CONN_RETRIES,
                   iface->config.max_conn_retries);
     }

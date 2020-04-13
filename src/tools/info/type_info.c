@@ -222,7 +222,6 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_ud_iface_config_t);
         PRINT_SIZE(uct_ud_ep_pending_op_t);
         PRINT_SIZE(uct_ud_send_skb_t);
-        PRINT_SIZE(uct_ud_send_skb_inl_t);
         PRINT_SIZE(uct_ud_recv_skb_t);
 
         PRINT_SIZE(uct_rc_iface_send_desc_t);

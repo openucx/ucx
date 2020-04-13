@@ -1144,7 +1144,7 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
             if (ucs_config_is_deprecated_field(field)) {
                 if (added && !ignore_errors) {
                     ucs_warn("%s is deprecated (set %s%s=n to suppress this warning)",
-                             buf, UCS_CONFIG_PREFIX,
+                             buf, UCS_DEFAULT_ENV_PREFIX,
                              UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
                 }
             } else {
@@ -1169,13 +1169,38 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
     return UCS_OK;
 }
 
+/* Find if env_prefix consists of multiple prefixes and returns pointer
+ * to rightmost in this case, otherwise returns NULL
+ */ 
+static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
+                                                     const char **sub_prefix_p)
+{
+    size_t len;
+
+    /* env_prefix always has "_" at the end and we want to find the last but one
+     * "_" in the env_prefix */
+    len = strlen(env_prefix);
+    if (len < 2) {
+        ucs_error("Invalid value of env_prefix: '%s'", env_prefix);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    len -= 2;
+    while ((len > 0) && (env_prefix[len - 1] != '_')) {
+        len -= 1;
+    }
+    *sub_prefix_p = (len > 0) ? (env_prefix + len): NULL;
+
+    return UCS_OK;
+}
+
 ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
                                          const char *env_prefix,
                                          const char *table_prefix,
                                          int ignore_errors)
 {
+    const char   *sub_prefix = NULL;
     ucs_status_t status;
-    char prefix[128];
 
     /* Set default values */
     status = ucs_config_parser_set_default_values(opts, fields);
@@ -1183,21 +1208,26 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
         goto err;
     }
 
-    /* Apply environment variables */
-    status = ucs_config_apply_env_vars(opts, fields, UCS_CONFIG_PREFIX,
-                                       table_prefix, 1, ignore_errors);
+    ucs_assert(env_prefix != NULL);
+    status = ucs_config_parser_get_sub_prefix(env_prefix, &sub_prefix);
     if (status != UCS_OK) {
-        goto err_free;
+        goto err;
     }
 
-    /* Apply environment variables with custom prefix */
-    if ((env_prefix != NULL) && (strlen(env_prefix) > 0)) {
-        snprintf(prefix, sizeof(prefix), "%s%s_", UCS_CONFIG_PREFIX, env_prefix);
-        status = ucs_config_apply_env_vars(opts, fields, prefix, table_prefix,
+    /* Apply environment variables */
+    if (sub_prefix != NULL) {
+        status = ucs_config_apply_env_vars(opts, fields, sub_prefix, table_prefix,
                                            1, ignore_errors);
         if (status != UCS_OK) {
             goto err_free;
         }
+    }
+
+    /* Apply environment variables with custom prefix */
+    status = ucs_config_apply_env_vars(opts, fields, env_prefix, table_prefix,
+                                        1, ignore_errors);
+    if (status != UCS_OK) {
+        goto err_free;
     }
 
     return UCS_OK;
@@ -1406,7 +1436,7 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
 static void
 ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                                     const ucs_config_field_t *fields,
-                                    unsigned flags, const char *env_prefix,
+                                    unsigned flags, const char *prefix,
                                     ucs_list_link_t *prefix_list)
 {
     const ucs_config_field_t *field, *aliased_field;
@@ -1437,7 +1467,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
             ucs_config_parser_print_opts_recurs(stream,
                                                 UCS_PTR_BYTE_OFFSET(opts, field->offset),
                                                 field->parser.arg, flags,
-                                                env_prefix, prefix_list);
+                                                prefix, prefix_list);
 
             if (inner_prefix.prefix != NULL) {
                 ucs_list_del(&inner_prefix.list);
@@ -1455,11 +1485,11 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
 
                 ucs_config_parser_print_field(stream,
                                               UCS_PTR_BYTE_OFFSET(opts, alias_table_offset),
-                                              env_prefix, prefix_list,
+                                              prefix, prefix_list,
                                               field->name, aliased_field,
                                               flags, "%-*s %s%s%s",
                                               UCS_CONFIG_PARSER_DOCSTR_WIDTH,
-                                              "alias of:", env_prefix,
+                                              "alias of:", prefix,
                                               head->prefix,
                                               aliased_field->name);
             }
@@ -1468,7 +1498,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
                 !(flags & UCS_CONFIG_PRINT_HIDDEN)) {
                 continue;
             }
-            ucs_config_parser_print_field(stream, opts, env_prefix, prefix_list,
+            ucs_config_parser_print_field(stream, opts, prefix, prefix_list,
                                           field->name, field, flags, NULL);
         }
     }
@@ -1476,7 +1506,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
 
 void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
                                   ucs_config_field_t *fields, const char *table_prefix,
-                                  ucs_config_print_flags_t flags)
+                                  const char *prefix, ucs_config_print_flags_t flags)
 {
     ucs_config_parser_prefix_t table_prefix_elem;
     UCS_LIST_HEAD(prefix_list);
@@ -1493,7 +1523,7 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
         table_prefix_elem.prefix = table_prefix ? table_prefix : "";
         ucs_list_add_tail(&prefix_list, &table_prefix_elem.list);
         ucs_config_parser_print_opts_recurs(stream, opts, fields, flags,
-                                            UCS_CONFIG_PREFIX, &prefix_list);
+                                            prefix, &prefix_list);
     }
 
     if (flags & UCS_CONFIG_PRINT_HEADER) {
@@ -1501,7 +1531,8 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
     }
 }
 
-void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t flags)
+void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
+                                      ucs_config_print_flags_t flags)
 {
     const ucs_config_global_list_entry_t *entry;
     ucs_status_t status;
@@ -1521,7 +1552,7 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
             continue;
         }
 
-        status = ucs_config_parser_fill_opts(opts, entry->table, NULL,
+        status = ucs_config_parser_fill_opts(opts, entry->table, prefix,
                                              entry->prefix, 0);
         if (status != UCS_OK) {
             ucs_free(opts);
@@ -1530,25 +1561,14 @@ void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t fla
 
         snprintf(title, sizeof(title), "%s configuration", entry->name);
         ucs_config_parser_print_opts(stream, title, opts, entry->table,
-                                     entry->prefix, flags);
+                                     entry->prefix, prefix, flags);
 
         ucs_config_parser_release_opts(opts, entry->table);
         ucs_free(opts);
     }
 }
 
-void ucs_config_parser_warn_unused_env_vars_once()
-{
-    static uint32_t warn_once = 1;
-
-    if (!ucs_atomic_cswap32(&warn_once, 1, 0)) {
-        return;
-    }
-
-    ucs_config_parser_warn_unused_env_vars();
-}
-
-void ucs_config_parser_warn_unused_env_vars()
+static void ucs_config_parser_warn_unused_env_vars(const char *prefix)
 {
     char unused_env_vars_names[40];
     int num_unused_vars;
@@ -1567,7 +1587,7 @@ void ucs_config_parser_warn_unused_env_vars()
 
     pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
-    prefix_len      = strlen(UCS_CONFIG_PREFIX);
+    prefix_len      = strlen(prefix);
     p               = unused_env_vars_names;
     endp            = p + sizeof(unused_env_vars_names) - 1;
     *endp           = '\0';
@@ -1581,7 +1601,7 @@ void ucs_config_parser_warn_unused_env_vars()
         }
 
         var_name = strtok_r(envstr, "=", &saveptr);
-        if (!var_name || strncmp(var_name, UCS_CONFIG_PREFIX, prefix_len)) {
+        if (!var_name || strncmp(var_name, prefix, prefix_len)) {
             ucs_free(envstr);
             continue; /* Not UCX */
         }
@@ -1607,11 +1627,44 @@ void ucs_config_parser_warn_unused_env_vars()
         }
         ucs_warn("unused env variable%s:%s%s (set %s%s=n to suppress this warning)",
                  (num_unused_vars > 1) ? "s" : "", unused_env_vars_names,
-                 truncated ? "..." : "", UCS_CONFIG_PREFIX,
+                 truncated ? "..." : "", UCS_DEFAULT_ENV_PREFIX,
                  UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
     }
 
     pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
+}
+
+void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix)
+{
+    const char   *sub_prefix = NULL;
+    int          added;
+    ucs_status_t status;
+
+    /* Although env_prefix is not real environment variable put it
+     * into table anyway to save prefixes which was already checked.
+     * Need to save both env_prefix and base_prefix */
+    ucs_config_parser_mark_env_var_used(env_prefix, &added);
+    if (!added) {
+        return;
+    }
+
+    ucs_config_parser_warn_unused_env_vars(env_prefix);
+ 
+    status = ucs_config_parser_get_sub_prefix(env_prefix, &sub_prefix);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    if (sub_prefix == NULL) {
+        return;
+    }
+
+    ucs_config_parser_mark_env_var_used(sub_prefix, &added);
+    if (!added) {
+        return;
+    }
+
+    ucs_config_parser_warn_unused_env_vars(sub_prefix);
 }
 
 size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,

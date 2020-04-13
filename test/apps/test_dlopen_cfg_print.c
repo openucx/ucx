@@ -30,7 +30,7 @@ static void* do_dlopen_or_exit(const char *filename)
 
 int main(int argc, char **argv)
 {
-    typedef void (*print_all_opts_func_t)(FILE*, int);
+    typedef void (*print_all_opts_func_t)(FILE*, const char *, int);
 
     const char *ucs_filename = QUOTE(UCS_LIB_PATH);
     const char *uct_filename = QUOTE(UCT_LIB_PATH);
@@ -48,7 +48,7 @@ int main(int argc, char **argv)
     /* print all config table, to force going over the global list in ucs */
     print_all_opts_func_t print_all_opts =
         (print_all_opts_func_t)dlsym(ucs_handle, "ucs_config_parser_print_all_opts");
-    print_all_opts(stdout, 0);
+    print_all_opts(stdout, "TEST_", 0);
     dlclose(ucs_handle);
 
     printf("done\n");

@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "gdr_copy_ep.h"
 #include "gdr_copy_md.h"
 #include "gdr_copy_iface.h"

@@ -35,7 +35,7 @@ typedef struct ucs_ptr_array {
     ucs_ptr_array_elem_t     *start;
     unsigned                 freelist;
     unsigned                 size;
-#if ENABLE_MEMTRACK
+#ifdef ENABLE_MEMTRACK
     char                     name[64];
 #endif
 } ucs_ptr_array_t;

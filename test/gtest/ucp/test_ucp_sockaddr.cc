@@ -72,6 +72,21 @@ public:
         skip_loopback();
     }
 
+    static void
+    enum_test_params_with_modifier(const ucp_params_t& ctx_params,
+                                      const std::string& name,
+                                      const std::string& test_case_name,
+                                      const std::string& tls,
+                                      std::vector<ucp_test_param> &result,
+                                      unsigned modifier)
+    {
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     modifier, result, SINGLE_THREAD);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     modifier | TEST_MODIFIER_MT, result,
+                                     MULTI_THREAD_WORKER);
+    }
+
     static std::vector<ucp_test_param>
     enum_test_params(const ucp_params_t& ctx_params,
                      const std::string& name,
@@ -81,29 +96,14 @@ public:
         std::vector<ucp_test_param> result =
             ucp_test::enum_test_params(ctx_params, name, test_case_name, tls);
 
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     CONN_REQ_TAG, result);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     CONN_REQ_TAG | TEST_MODIFIER_MT, result,
-                                     MULTI_THREAD_WORKER);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     CONN_REQ_TAG | TEST_MODIFIER_CM, result);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     CONN_REQ_TAG | TEST_MODIFIER_MT |
-                                     TEST_MODIFIER_CM, result,
-                                     MULTI_THREAD_WORKER);
-
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     CONN_REQ_STREAM, result);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     CONN_REQ_STREAM | TEST_MODIFIER_MT, result,
-                                     MULTI_THREAD_WORKER);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     CONN_REQ_STREAM | TEST_MODIFIER_CM, result);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     CONN_REQ_STREAM | TEST_MODIFIER_MT |
-                                     TEST_MODIFIER_CM, result,
-                                     MULTI_THREAD_WORKER);
+        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
+                                       result, CONN_REQ_TAG);
+        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
+                                       result, CONN_REQ_TAG | TEST_MODIFIER_CM);
+        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
+                                       result, CONN_REQ_STREAM);
+        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
+                                       result, CONN_REQ_STREAM | TEST_MODIFIER_CM);
         return result;
     }
 
@@ -171,7 +171,7 @@ public:
         do {
             status = receiver().listen(cb_type, m_test_addr.get_sock_addr_ptr(),
                                        m_test_addr.get_addr_size(),
-                                       get_ep_params());
+                                       get_server_ep_params());
         } while ((status == UCS_ERR_BUSY) && (ucs_get_time() < deadline));
 
         if (status == UCS_ERR_UNREACHABLE) {
@@ -384,6 +384,10 @@ public:
         return ep_params;
     }
 
+    virtual ucp_ep_params_t get_server_ep_params() {
+        return get_ep_params();
+    }
+
     void client_ep_connect()
     {
         ucp_ep_params_t ep_params = get_ep_params();
@@ -448,43 +452,36 @@ public:
     }
 
     void one_sided_disconnect(entity &e) {
-        void *dreq = e.disconnect_nb();
-        if (dreq == NULL) {
-            return;
-        }
-
-        ASSERT_EQ(UCS_INPROGRESS, UCS_PTR_STATUS(dreq));
-
-        ucs_status_t status;
-        ucs_time_t loop_end_limit = ucs_time_from_sec(10.0) + ucs_get_time();
-        do {
+        void *req           = e.disconnect_nb();
+        ucs_time_t deadline = ucs_time_from_sec(10.0) + ucs_get_time();
+        while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
                      async progress is implemented. */
             progress();
-            status = ucp_request_check_status(dreq);
-            if (status != UCS_INPROGRESS) {
-                break;
-            }
-        } while (ucs_get_time() < loop_end_limit);
-        EXPECT_EQ(UCS_OK, status);
-        ucp_request_release(dreq);
+        };
+
+        e.close_ep_req_free(req);
     }
 
     void concurrent_disconnect() {
-        std::vector<void *> reqs;
-
         ASSERT_EQ(2ul, entities().size());
         ASSERT_EQ(1, sender().get_num_workers());
         ASSERT_EQ(1, sender().get_num_eps());
         ASSERT_EQ(1, receiver().get_num_workers());
         ASSERT_EQ(1, receiver().get_num_eps());
 
-        reqs.push_back(sender().disconnect_nb());
-        reqs.push_back(receiver().disconnect_nb());
-        while (!reqs.empty()) {
-            wait(reqs.back());
-            reqs.pop_back();
+        void *sender_ep_close_req   = sender().disconnect_nb();
+        void *receiver_ep_close_req = receiver().disconnect_nb();
+
+        ucs_time_t deadline = ucs::get_deadline();
+        while ((!is_request_completed(sender_ep_close_req) ||
+                !is_request_completed(receiver_ep_close_req)) &&
+               (ucs_get_time() < deadline)) {
+            progress();
         }
+
+        sender().close_ep_req_free(sender_ep_close_req);
+        receiver().close_ep_req_free(receiver_ep_close_req);
     }
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
@@ -519,12 +516,12 @@ protected:
 
     send_recv_type_t send_recv_type() const {
         switch (GetParam().variant & TEST_MODIFIER_MASK) {
-            case CONN_REQ_STREAM:
-                return SEND_RECV_STREAM;
-            case CONN_REQ_TAG:
-                /* fallthrough */
-            default:
-                return SEND_RECV_TAG;
+        case CONN_REQ_STREAM:
+            return SEND_RECV_STREAM;
+        case CONN_REQ_TAG:
+            /* fallthrough */
+        default:
+            return SEND_RECV_TAG;
         }
     }
 
@@ -639,7 +636,7 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     ucs_status_t status = receiver().listen(cb_type(),
                                             m_test_addr.get_sock_addr_ptr(),
                                             m_test_addr.get_addr_size(),
-                                            get_ep_params());
+                                            get_server_ep_params());
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("cannot listen to " + m_test_addr.to_str());
     }
@@ -659,6 +656,49 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
 
+class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
+public:
+    virtual ucp_ep_params_t get_server_ep_params() {
+        ucp_ep_params_t params = test_ucp_sockaddr::get_server_ep_params();
+
+        params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER        |
+                                 UCP_EP_PARAM_FIELD_USER_DATA;
+        params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb   = err_handler_cb;
+        params.err_handler.arg  = NULL;
+        params.user_data        = &receiver();
+        return params;
+    }
+
+    static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
+        test_ucp_sockaddr::err_handler_cb(arg, ep, status);
+        entity *e = reinterpret_cast<entity *>(arg);
+        e->disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
+    }
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, empty,
+                     no_close_protocol()) {
+    listen_and_communicate(false, 0);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, s2c,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_S2C);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, c2s,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, bidi,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
+UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_destroy_ep_on_err)
 
 class test_ucp_sockaddr_with_wakeup : public test_ucp_sockaddr {
 public:
@@ -735,3 +775,282 @@ UCS_TEST_P(test_ucp_sockaddr_with_rma_atomic, wireup) {
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_rma_atomic)
+
+
+class test_ucp_sockaddr_protocols : public test_ucp_sockaddr {
+public:
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
+        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
+        params.features    |= UCP_FEATURE_RMA;
+        /* Atomics not supported for now because need to emulate the case
+         * of using different device than the one selected by default on the
+         * worker for atomic operations */
+        return params;
+    }
+
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params,
+                     const std::string& name,
+                     const std::string& test_case_name,
+                     const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
+                                       result, TEST_MODIFIER_CM);
+        return result;
+    }
+
+    virtual void init() {
+        test_ucp_sockaddr::init();
+        start_listener(cb_type());
+        client_ep_connect();
+    }
+
+    void get_nb(std::string& send_buf, std::string& recv_buf, ucp_rkey_h rkey,
+                std::vector<void*>& reqs)
+    {
+         reqs.push_back(ucp_get_nb(sender().ep(), &send_buf[0], send_buf.size(),
+                                   (uintptr_t)&recv_buf[0], rkey, scomplete_cb));
+    }
+
+    void put_nb(std::string& send_buf, std::string& recv_buf, ucp_rkey_h rkey,
+                std::vector<void*>& reqs)
+    {
+        reqs.push_back(ucp_put_nb(sender().ep(), &send_buf[0], send_buf.size(),
+                                  (uintptr_t)&recv_buf[0], rkey, scomplete_cb));
+        reqs.push_back(ucp_ep_flush_nb(sender().ep(), 0, scomplete_cb));
+    }
+
+protected:
+    typedef void (test_ucp_sockaddr_protocols::*rma_nb_func_t)(
+                    std::string&, std::string&, ucp_rkey_h, std::vector<void*>&);
+
+    void compare_buffers(std::string& send_buf, std::string& recv_buf)
+    {
+        EXPECT_TRUE(send_buf == recv_buf)
+            << "send_buf: '" << ucs::compact_string(send_buf, 20) << "', "
+            << "recv_buf: '" << ucs::compact_string(send_buf, 20) << "'";
+    }
+
+    void test_tag_send_recv(size_t size, bool is_exp)
+    {
+        std::string send_buf(size, 'x');
+        std::string recv_buf(size, 'y');
+
+        void *rreq, *sreq;
+
+        if (is_exp) {
+            rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
+                                   ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
+            sreq = ucp_tag_send_nb(sender().ep(), &send_buf[0], size,
+                                   ucp_dt_make_contig(1), 0, scomplete_cb);
+        } else {
+            sreq = ucp_tag_send_nb(sender().ep(), &send_buf[0], size,
+                                   ucp_dt_make_contig(1), 0, scomplete_cb);
+            short_progress_loop();
+            rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
+                                   ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
+        }
+
+        wait(sreq);
+        wait(rreq);
+
+        compare_buffers(send_buf, recv_buf);
+    }
+
+    void wait_for_server_ep()
+    {
+        if (!test_ucp_sockaddr::wait_for_server_ep(false)) {
+            UCS_TEST_ABORT("server endpoint is not created");
+        }
+    }
+
+    void test_stream_send_recv(size_t size, bool is_exp)
+    {
+        std::string send_buf(size, 'x');
+        std::string recv_buf(size, 'y');
+        size_t recv_length;
+        void *rreq, *sreq;
+
+        if (is_exp) {
+            wait_for_server_ep();
+            rreq = ucp_stream_recv_nb(receiver().ep(), &recv_buf[0], size,
+                                      ucp_dt_make_contig(1), rstream_complete_cb,
+                                      &recv_length, UCP_STREAM_RECV_FLAG_WAITALL);
+            sreq = ucp_stream_send_nb(sender().ep(), &send_buf[0], size,
+                                      ucp_dt_make_contig(1), scomplete_cb, 0);
+        } else {
+            sreq = ucp_stream_send_nb(sender().ep(), &send_buf[0], size,
+                                   ucp_dt_make_contig(1), scomplete_cb, 0);
+            short_progress_loop();
+            wait_for_server_ep();
+            rreq = ucp_stream_recv_nb(receiver().ep(), &recv_buf[0], size,
+                                      ucp_dt_make_contig(1), rstream_complete_cb,
+                                      &recv_length, UCP_STREAM_RECV_FLAG_WAITALL);
+        }
+
+        wait(sreq);
+        wait(rreq);
+
+        compare_buffers(send_buf, recv_buf);
+    }
+
+    void register_mem(entity* initiator, entity* target, void *buffer,
+                      size_t length, ucp_mem_h *memh_p, ucp_rkey_h *rkey_p)
+    {
+        ucp_mem_map_params_t params = {0};
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = buffer;
+        params.length     = length;
+
+        ucs_status_t status = ucp_mem_map(target->ucph(), &params, memh_p);
+        ASSERT_UCS_OK(status);
+
+        void *rkey_buffer;
+        size_t rkey_buffer_size;
+        status = ucp_rkey_pack(target->ucph(), *memh_p, &rkey_buffer,
+                               &rkey_buffer_size);
+        ASSERT_UCS_OK(status);
+
+        status = ucp_ep_rkey_unpack(initiator->ep(), rkey_buffer, rkey_p);
+        ASSERT_UCS_OK(status);
+
+        ucp_rkey_buffer_release(rkey_buffer);
+    }
+
+    void test_rma(size_t size, rma_nb_func_t rma_func)
+    {
+        std::string send_buf(size, 'x');
+        std::string recv_buf(size, 'y');
+
+        ucp_mem_h memh;
+        ucp_rkey_h rkey;
+
+        register_mem(&sender(), &receiver(), &recv_buf[0], size, &memh, &rkey);
+
+        std::vector<void*> reqs;
+        (this->*rma_func)(send_buf, recv_buf, rkey, reqs);
+
+        while (!reqs.empty()) {
+            wait(reqs.back());
+            reqs.pop_back();
+        }
+
+        compare_buffers(send_buf, recv_buf);
+
+        ucp_rkey_destroy(rkey);
+        ucs_status_t status = ucp_mem_unmap(receiver().ucph(), memh);
+        ASSERT_UCS_OK(status);
+    }
+
+};
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_4k_exp,
+           "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(4 * UCS_KBYTE, true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_64k_exp,
+           "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(64 * UCS_KBYTE, true);
+}
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_rndv_exp, "RNDV_THRESH=10k")
+{
+    test_tag_send_recv(64 * UCS_KBYTE, true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_4k_unexp,
+           "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(4 * UCS_KBYTE, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_64k_unexp,
+           "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(64 * UCS_KBYTE, false);
+}
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_rndv_unexp, "RNDV_THRESH=10k")
+{
+    test_tag_send_recv(64 * UCS_KBYTE, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, stream_bcopy_4k_exp, "ZCOPY_THRESH=inf")
+{
+    test_stream_send_recv(4 * UCS_KBYTE, true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, stream_bcopy_4k_unexp,
+           "ZCOPY_THRESH=inf")
+{
+    test_stream_send_recv(4 * UCS_KBYTE, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, stream_bcopy_64k_exp, "ZCOPY_THRESH=inf")
+{
+    test_stream_send_recv(64 * UCS_KBYTE, true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, stream_bcopy_64k_unexp,
+           "ZCOPY_THRESH=inf")
+{
+    test_stream_send_recv(64 * UCS_KBYTE, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, stream_zcopy_64k_exp, "ZCOPY_THRESH=2k")
+{
+    test_stream_send_recv(64 * UCS_KBYTE, true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, stream_zcopy_64k_unexp,
+           "ZCOPY_THRESH=2k")
+{
+    test_stream_send_recv(64 * UCS_KBYTE, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, get_bcopy_small)
+{
+    test_rma(8, &test_ucp_sockaddr_protocols::get_nb);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, get_bcopy, "ZCOPY_THRESH=inf")
+{
+    test_rma(64 * UCS_KBYTE, &test_ucp_sockaddr_protocols::get_nb);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, get_zcopy, "ZCOPY_THRESH=10k")
+{
+    test_rma(64 * UCS_KBYTE, &test_ucp_sockaddr_protocols::get_nb);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, put_bcopy_small)
+{
+    test_rma(8, &test_ucp_sockaddr_protocols::put_nb);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, put_bcopy, "ZCOPY_THRESH=inf")
+{
+    test_rma(64 * UCS_KBYTE, &test_ucp_sockaddr_protocols::put_nb);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, put_zcopy, "ZCOPY_THRESH=10k")
+{
+    test_rma(64 * UCS_KBYTE, &test_ucp_sockaddr_protocols::put_nb);
+}
+
+/* Only IB transports support CM for now
+ * For DC case, allow fallback to UD if DC is not supported
+ */
+#define UCP_INSTANTIATE_CM_TEST_CASE(_test_case) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcudx, "dc_x,ud") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,    "ud_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,   "ud_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,    "rc_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,   "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ib,    "ib")
+
+UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols)

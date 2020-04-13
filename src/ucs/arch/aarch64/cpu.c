@@ -6,6 +6,10 @@
 
 #if defined(__aarch64__)
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/arch/cpu.h>
 #include <stdio.h>
 

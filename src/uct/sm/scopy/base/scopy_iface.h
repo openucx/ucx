@@ -29,8 +29,9 @@ typedef struct uct_scopy_iface_config {
     size_t                        max_iov;    /* Maximum supported IOVs */
     size_t                        seg_size;   /* Segment size that is used to perfrom
                                                * data transfer for RMA operations */
+    unsigned                      tx_quota;   /* How many TX segments can be dispatched
+                                               * during iface progress */
     uct_iface_mpool_config_t      tx_mpool;   /* TX memory pool configuration */
-    
 } uct_scopy_iface_config_t;
 
 
@@ -47,6 +48,8 @@ typedef struct uct_scopy_iface {
         size_t                    seg_size;    /* Maximal size of the segments
                                                 * that has to be used in GET/PUT
                                                 * Zcopy transfers */
+        unsigned                  tx_quota;    /* How many TX segments can be dispatched
+                                                * during iface progress */
     } config;
 } uct_scopy_iface_t;
 

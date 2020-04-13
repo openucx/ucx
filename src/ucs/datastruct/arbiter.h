@@ -136,6 +136,7 @@ typedef enum {
  * @return According to @ref ucs_arbiter_cb_result_t.
  */
 typedef ucs_arbiter_cb_result_t (*ucs_arbiter_callback_t)(ucs_arbiter_t *arbiter,
+                                                          ucs_arbiter_group_t *group,
                                                           ucs_arbiter_elem_t *elem,
                                                           void *arg);
 
@@ -241,13 +242,13 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
 
 
 /* Internal function */
-void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
-                                   ucs_arbiter_callback_t cb, void *cb_arg);
+void ucs_arbiter_group_desched_nonempty(ucs_arbiter_t *arbiter,
+                                        ucs_arbiter_group_t *group);
 
 
 /* Internal function */
-void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
-                                    ucs_arbiter_elem_t *head);
+void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
+                                   ucs_arbiter_callback_t cb, void *cb_arg);
 
 
 /**
@@ -269,6 +270,7 @@ static inline int ucs_arbiter_group_is_empty(ucs_arbiter_group_t *group)
     return group->tail == NULL;
 }
 
+
 /**
  * Schedule a group for arbitration. If the group is already there, the operation
  * will have no effect.
@@ -286,28 +288,6 @@ static inline void ucs_arbiter_group_schedule(ucs_arbiter_t *arbiter,
 
 
 /**
- * Reset the group head element and mark it as not-scheduled.
- *
- * @param [in]  head    Group head element to reset.
- */
-static inline void ucs_arbiter_group_head_reset(ucs_arbiter_elem_t *head)
-{
-    head->list.next = NULL; /* Not scheduled yet */
-}
-
-
-/**
- * Return whether the group head element is scheduled on the arbiter.
- *
- * @param [in]  head    Group head element to check.
- */
-static inline int ucs_arbiter_group_head_is_scheduled(ucs_arbiter_elem_t *head)
-{
-    return head->list.next != NULL;
-}
-
-
-/**
  * Deschedule already scheduled group. If the group is not scheduled, the operation
  * will have no effect
  *
@@ -317,18 +297,8 @@ static inline int ucs_arbiter_group_head_is_scheduled(ucs_arbiter_elem_t *head)
 static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
                                              ucs_arbiter_group_t *group)
 {
-    ucs_arbiter_elem_t *head;
-
-    if (ucs_likely(ucs_arbiter_group_is_empty(group))) {
-        return; /* Group is empty - means it's not scheduled */
-    }
-
-    head = group->tail->next;
-    if (ucs_arbiter_group_head_is_scheduled(head)) {
-        UCS_ARBITER_GROUP_ARBITER_CHECK(group, arbiter);
-        UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
-        ucs_list_del(&head->list);
-        ucs_arbiter_group_head_reset(head);
+    if (ucs_unlikely(!ucs_arbiter_group_is_empty(group))) {
+        ucs_arbiter_group_desched_nonempty(arbiter, group);
     }
 }
 
@@ -408,30 +378,12 @@ ucs_arbiter_dispatch(ucs_arbiter_t *arbiter, unsigned per_group,
 
 
 /**
- * @return Group the element belongs to.
- */
-static inline ucs_arbiter_group_t* ucs_arbiter_elem_group(ucs_arbiter_elem_t *elem)
-{
-    return elem->group;
-}
-
-
-/**
- * @return true if element is the last one in the group
- */
-static inline int
-ucs_arbiter_elem_is_last(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
-{
-    return group->tail == elem;
-}
-
-/**
  * @return true if element is the only one in the group
  */
 static inline int
 ucs_arbiter_elem_is_only(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
 {
-    return ucs_arbiter_elem_is_last(group, elem) && (elem->next == elem);
+    return (group->tail == elem) && ((elem->next == elem) || (elem->next == NULL));
 }
 
 #endif

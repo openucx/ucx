@@ -34,6 +34,13 @@ enum {
     UCT_UD_IFACE_STAT_LAST
 };
 
+/* flags for uct_ud_iface_send_ctl() */
+enum {
+    UCT_UD_IFACE_SEND_CTL_FLAG_INLINE    = UCS_BIT(0),
+    UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED = UCS_BIT(1),
+    UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED  = UCS_BIT(2)
+};
+
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */
 
 typedef struct uct_ud_iface_config {
@@ -108,8 +115,9 @@ static inline ucs_status_t uct_ud_iface_null_hook(uct_ud_iface_t *iface,
 typedef struct uct_ud_iface_ops {
     uct_ib_iface_ops_t        super;
     unsigned                  (*async_progress)(uct_ud_iface_t *iface);
-    void                      (*tx_skb)(uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
-                                        int solicited);
+    uint16_t                  (*send_ctl)(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
+                                          const uct_ud_iov_t *iov, uint16_t iovcnt,
+                                          int flags, int max_log_sge);
     void                      (*ep_free)(uct_ep_h ep);
     ucs_status_t              (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                            struct ibv_qp **qp_p);
@@ -127,15 +135,12 @@ struct uct_ud_iface {
     } rx;
     struct {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
-        uct_ud_send_skb_inl_t  skb_inl;
         ucs_mpool_t            mp;
         /* got async events but pending queue was not dispatched */
         uint8_t                async_before_pending;
         int16_t                available;
         unsigned               unsignaled;
-        /* pool of skbs that are reserved for retransmissions */
-        ucs_queue_head_t       resend_skbs;
-        unsigned               resend_skbs_quota;
+        ucs_queue_head_t       outstanding_q;
         ucs_arbiter_t          pending_q;
         ucs_queue_head_t       async_comp_q;
     } tx;
@@ -219,16 +224,7 @@ static UCS_F_ALWAYS_INLINE int uct_ud_iface_has_skbs(uct_ud_iface_t *iface)
     return iface->tx.skb || !ucs_mpool_is_empty(&iface->tx.mp);
 }
 
-
-uct_ud_send_skb_t *uct_ud_iface_resend_skb_get(uct_ud_iface_t *iface);
-
-static inline void
-uct_ud_iface_resend_skb_put(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb)
-{
-    if (skb != ucs_unaligned_ptr(&iface->tx.skb_inl.super)) {
-        ucs_queue_push(&iface->tx.resend_skbs, &skb->queue);
-    }
-}
+uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface);
 
 static inline uct_ib_address_t* uct_ud_creq_ib_addr(uct_ud_ctl_hdr_t *conn_req)
 {
@@ -414,6 +410,22 @@ uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
     }
 }
 
+static UCS_F_ALWAYS_INLINE uint16_t
+uct_ud_iface_send_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
+                      const uct_ud_iov_t *iov, uint16_t iovcnt, int flags,
+                      int max_log_sge)
+{
+    uct_ud_iface_ops_t *ud_ops = ucs_derived_of(iface->super.ops,
+                                                uct_ud_iface_ops_t);
+    return ud_ops->send_ctl(ep, skb, iov, iovcnt, flags, max_log_sge);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
+{
+    ucs_queue_push(&iface->tx.outstanding_q, &cdesc->queue);
+}
+
 /* Go over all active eps and remove them. Do it this way because class destructors are not
  * virtual
  */
@@ -435,6 +447,9 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 
 void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
 
+void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
+                                  int is_async);
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
 {
@@ -447,7 +462,7 @@ uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
 void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface);
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_dispatch_zcopy_comps(uct_ud_iface_t *iface)
+uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface)
 {
     if (ucs_likely(ucs_queue_is_empty(&iface->tx.async_comp_q))) {
         return;

@@ -297,6 +297,12 @@ uint16_t get_port();
 void *mmap_fixed_address();
 
 
+/*
+ * Returns a compacted string with just head and tail, e.g "xxx...yyy"
+ */
+std::string compact_string(const std::string &str, size_t length);
+
+
 /**
  * Return the IP address of the given interface address.
  */
@@ -368,6 +374,11 @@ std::ostream& operator<<(std::ostream& os, const std::vector<char>& vec);
 static inline int rand() {
     /* coverity[dont_call] */
     return ::rand();
+}
+
+static inline void srand(unsigned seed) {
+    /* coverity[dont_call] */
+    return ::srand(seed);
 }
 
 void fill_random(void *data, size_t size);

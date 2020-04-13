@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "knem_md.h"
 #include "knem_iface.h"
 #include "knem_ep.h"

@@ -3,6 +3,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "scopy_iface.h"
 #include "scopy_ep.h"
 
@@ -117,18 +121,23 @@ ucs_status_t uct_scopy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 }
 
 ucs_arbiter_cb_result_t uct_scopy_ep_progress_tx(ucs_arbiter_t *arbiter,
+                                                 ucs_arbiter_group_t *group,
                                                  ucs_arbiter_elem_t *elem,
                                                  void *arg)
 {
     uct_scopy_iface_t *iface = ucs_container_of(arbiter, uct_scopy_iface_t,
                                                 arbiter);
-    uct_scopy_ep_t *ep       = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                                uct_scopy_ep_t, arb_group);
+    uct_scopy_ep_t *ep       = ucs_container_of(group, uct_scopy_ep_t,
+                                                arb_group);
     uct_scopy_tx_t *tx       = ucs_container_of(elem, uct_scopy_tx_t,
                                                 arb_elem);
     unsigned *count          = (unsigned*)arg;
     ucs_status_t status      = UCS_OK;
     size_t seg_size;
+
+    if (*count == iface->config.tx_quota) {
+        return UCS_ARBITER_CB_RESULT_STOP;
+    }
 
     if (tx->op != UCT_SCOPY_TX_FLUSH_COMP) {
         ucs_assert((tx->op == UCT_SCOPY_TX_GET_ZCOPY) ||
@@ -139,6 +148,10 @@ ucs_arbiter_cb_result_t uct_scopy_ep_progress_tx(ucs_arbiter_t *arbiter,
                              tx->rkey, tx->op);
         if (!UCS_STATUS_IS_ERR(status)) {
             (*count)++;
+            ucs_assertv(*count <= iface->config.tx_quota,
+                        "count=%u vs quota=%u",
+                        *count, iface->config.tx_quota);
+
             tx->remote_addr += seg_size;
             uct_scopy_trace_data(tx);
 

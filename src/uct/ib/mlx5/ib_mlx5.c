@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ib_mlx5.h"
 #include "ib_mlx5.inl"
 #include "ib_mlx5_log.h"

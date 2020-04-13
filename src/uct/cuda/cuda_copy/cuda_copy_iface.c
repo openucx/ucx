@@ -3,6 +3,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "cuda_copy_iface.h"
 #include "cuda_copy_md.h"
 #include "cuda_copy_ep.h"

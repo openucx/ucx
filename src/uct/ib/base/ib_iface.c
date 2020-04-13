@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ib_iface.h"
 #include "ib_log.h"
 
@@ -163,7 +167,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "to the port link layer:\n"
    " RoCE       - "UCS_PP_MAKE_STRING(UCT_IB_DEV_MAX_PORTS) " for LAG port, otherwise - 1.\n"
    " InfiniBand - As the number of path bits enabled by fabric's LMC value and selected\n"
-   "              by "UCS_CONFIG_PREFIX UCT_IB_CONFIG_PREFIX"LID_PATH_BITS configuration.",
+   "              by "UCS_DEFAULT_ENV_PREFIX UCT_IB_CONFIG_PREFIX"LID_PATH_BITS configuration.",
    ucs_offsetof(uct_ib_iface_config_t, num_paths), UCS_CONFIG_TYPE_ULUNITS},
 
   {"ROCE_PATH_FACTOR", "1",
@@ -924,17 +928,17 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
 
 int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev)
 {
-    return uct_ib_device_is_port_roce(dev, iface->config.port_num) &&
+    return uct_ib_iface_is_roce(iface) &&
            (iface->gid_info.roce_info.ver == UCT_IB_DEVICE_ROCE_V2);
 }
 
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             uct_ib_device_t *dev,
                                              size_t md_config_index)
 {
-    uint8_t port_num = iface->config.port_num;
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uint8_t port_num     = iface->config.port_num;
 
-    ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
+    ucs_assert(uct_ib_iface_is_roce(iface));
 
     if (md_config_index == UCS_ULUNITS_AUTO) {
         return uct_ib_device_select_gid(dev, port_num, &iface->gid_info);
@@ -946,16 +950,14 @@ ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
-                                               uct_ib_device_t *dev,
                                                size_t md_config_index)
 {
-    uint8_t port_num = iface->config.port_num;
     uct_ib_device_gid_info_t *gid_info = &iface->gid_info;
     ucs_status_t status;
 
     /* Fill the gid index and the RoCE version */
-    if (uct_ib_device_is_port_roce(dev, port_num)) {
-        status = uct_ib_iface_init_roce_gid_info(iface, dev, md_config_index);
+    if (uct_ib_iface_is_roce(iface)) {
+        status = uct_ib_iface_init_roce_gid_info(iface, md_config_index);
         if (status != UCS_OK) {
             goto out;
         }
@@ -969,8 +971,9 @@ static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
     }
 
     /* Fill the gid */
-    status = uct_ib_device_query_gid(dev, port_num, gid_info->gid_index,
-                                     &gid_info->gid);
+    status = uct_ib_device_query_gid(uct_ib_iface_device(iface),
+                                     iface->config.port_num,
+                                     gid_info->gid_index, &gid_info->gid);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1055,7 +1058,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    status = uct_ib_iface_init_gid_info(self, dev, ib_md->config.gid_index);
+    status = uct_ib_iface_init_gid_info(self, ib_md->config.gid_index);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1120,6 +1123,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     /* Address scope and size */
     if (uct_ib_iface_is_roce(self) || config->is_global ||
+        uct_ib_grh_required(uct_ib_iface_port_attr(self)) ||
         /* check ADDR_TYPE for backward compatibility */
         (config->addr_type == UCT_IB_ADDRESS_TYPE_SITE_LOCAL) ||
         (config->addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL)) {

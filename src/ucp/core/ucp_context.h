@@ -46,10 +46,15 @@ typedef struct ucp_context_config {
     /** The percentage allowed for performance difference between rendezvous
      *  and the eager_zcopy protocol */
     double                                 rndv_perf_diff;
+    /** Maximal allowed ratio between slowest and fastest lane in a multi-lane
+     *  protocol. Lanes slower than the specified ratio will not be used */
+    double                                 multi_lane_max_ratio;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;
     /** Communication scheme in RNDV protocol */
     ucp_rndv_mode_t                        rndv_mode;
+    /** RKEY PTR segment size */
+    size_t                                 rkey_ptr_seg_size;
     /** Estimation of bcopy bandwidth */
     double                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */
@@ -110,6 +115,8 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */
     int                                    warn_invalid_config;
+    /** This config environment prefix */
+    char                                   *env_prefix;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
 };
@@ -227,6 +234,9 @@ typedef struct ucp_context {
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
+        
+        /* Config environment prefix used to create the context */
+        char                      *env_prefix;
 
     } config;
 

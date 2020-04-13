@@ -7,6 +7,10 @@
 
 #if defined(__x86_64__)
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>

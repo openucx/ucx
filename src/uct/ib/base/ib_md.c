@@ -192,7 +192,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
     {NULL}
 };
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_md_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_MD_STAT_LAST,
@@ -1482,6 +1482,12 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     md->super.ops       = &uct_ib_md_ops;
     md->super.component = &uct_ib_component;
 
+    if ((md->config.mr_relaxed_order == UCS_CONFIG_ON) && !IBV_ACCESS_RELAXED_ORDERING) {
+        ucs_warn("relaxed order memory access requested but not supported");
+    } else if (md->config.mr_relaxed_order == UCS_CONFIG_AUTO) {
+        md->config.mr_relaxed_order = UCS_CONFIG_OFF;
+    }
+
     if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
         md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
     }
@@ -1610,12 +1616,6 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     status = uct_ib_md_parse_device_config(md, md_config);
     if (status != UCS_OK) {
         goto err_free_context;
-    }
-
-    if ((md->config.mr_relaxed_order == UCS_CONFIG_ON) && !IBV_ACCESS_RELAXED_ORDERING) {
-        ucs_warn("relaxed order memory access requested but not supported");
-    } else if (md->config.mr_relaxed_order == UCS_CONFIG_AUTO) {
-        md->config.mr_relaxed_order = UCS_CONFIG_OFF;
     }
 
     status = uct_ib_md_open_common(md, ibv_device, md_config);
