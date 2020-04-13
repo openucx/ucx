@@ -10,9 +10,9 @@ test_uct_ib::test_uct_ib() : m_e1(NULL), m_e2(NULL) { }
 
 void test_uct_ib::create_connected_entities() {
     m_e1 = uct_test::create_entity(0);
-    m_e2 = uct_test::create_entity(0);
-
     m_entities.push_back(m_e1);
+
+    m_e2 = uct_test::create_entity(0);
     m_entities.push_back(m_e2);
 
     m_e1->connect(0, *m_e2, 0);
@@ -81,43 +81,58 @@ public:
     void test_address_pack(uint64_t subnet_prefix) {
         uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
         static const uint16_t lid_in = 0x1ee7;
-        union ibv_gid gid_in, gid_out;
+        union ibv_gid gid_in;
         uct_ib_address_t *ib_addr;
-        uint16_t lid_out;
-        enum ibv_mtu mtu;
-        uint8_t gid_index;
         size_t address_size;
 
         gid_in.global.subnet_prefix = subnet_prefix;
         gid_in.global.interface_id  = 0xdeadbeef;
 
-        uct_ib_address_pack_params_t params;
-        params.flags     = uct_ib_iface_address_pack_flags(iface);
-        params.gid       = &gid_in;
-        params.lid       = lid_in;
-        params.roce_info = &iface->gid_info.roce_info;
+        uct_ib_address_pack_params_t pack_params;
+        pack_params.flags     = uct_ib_iface_address_pack_flags(iface);
+        pack_params.gid       = gid_in;
+        pack_params.lid       = lid_in;
+        pack_params.roce_info = iface->gid_info.roce_info;
         /* to suppress gcc 4.3.4 warning */
-        params.path_mtu  = (enum ibv_mtu)0;
-        params.gid_index = std::numeric_limits<uint8_t>::max();
-        address_size     = uct_ib_address_size(&params);
-        ib_addr          = (uct_ib_address_t*)malloc(address_size);
+        pack_params.path_mtu  = (enum ibv_mtu)0;
+        pack_params.gid_index = std::numeric_limits<uint8_t>::max();
+        pack_params.pkey      = iface->pkey;
+        address_size          = uct_ib_address_size(&pack_params);
+        ib_addr               = (uct_ib_address_t*)malloc(address_size);
+        uct_ib_address_pack(&pack_params, ib_addr);
 
-        uct_ib_address_pack(&params, ib_addr);
-        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out, &gid_index, &mtu);
+        uct_ib_address_pack_params_t unpack_params;
+        uct_ib_address_unpack(ib_addr, &unpack_params);
 
         if (uct_ib_iface_is_roce(iface)) {
             EXPECT_TRUE(iface->config.force_global_addr);
+            EXPECT_TRUE((unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) != 0);
+            EXPECT_EQ(iface->gid_info.roce_info.addr_family,
+                      unpack_params.roce_info.addr_family);
+            EXPECT_EQ(iface->gid_info.roce_info.ver,
+                      unpack_params.roce_info.ver);
         } else {
-            EXPECT_EQ(lid_in, lid_out);
+            EXPECT_EQ(lid_in, unpack_params.lid);
         }
 
-        if (ib_config()->is_global) {
-            EXPECT_EQ(gid_in.global.subnet_prefix, gid_out.global.subnet_prefix);
-            EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
+        if (ib_config()->is_global &&
+            !(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH)) {
+            EXPECT_TRUE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX);
+            EXPECT_EQ(gid_in.global.subnet_prefix, unpack_params.gid.global.subnet_prefix);
+
+            EXPECT_TRUE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID);
+            EXPECT_EQ(gid_in.global.interface_id, unpack_params.gid.global.interface_id);
         }
 
-        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU,  mtu);
-        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, gid_index);
+        EXPECT_TRUE(!(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU));
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params.path_mtu);
+
+        EXPECT_TRUE(!(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX));
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, unpack_params.gid_index);
+
+        EXPECT_TRUE((unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) != 0);
+        EXPECT_EQ(iface->pkey, unpack_params.pkey);
+
         free(ib_addr);
     }
 

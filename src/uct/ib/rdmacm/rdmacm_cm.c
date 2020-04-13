@@ -182,14 +182,14 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
          * that the remote peer is reachable to the local one */
         roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
         roce_info.addr_family = 0;
-        params.roce_info      = &roce_info;
+        params.roce_info      = roce_info;
         params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_ETH;
     } else {
         params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
                                 UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
     }
 
-    params.gid  = &cm_id->route.addr.addr.ibaddr.dgid;
+    params.gid  = cm_id->route.addr.addr.ibaddr.dgid;
     params.lid  = qp_attr.ah_attr.dlid;
     addr_length = uct_ib_address_size(&params);
     dev_addr    = ucs_malloc(addr_length, "IB device address");
