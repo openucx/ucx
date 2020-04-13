@@ -208,14 +208,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nbx,
     datatype = (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
                param->datatype : ucp_dt_make_contig(1);
 
-    if (ucs_likely(!(param->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST))) {
-        req = ucp_request_get(worker);
-        if (ucs_unlikely(req == NULL)) {
-            ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-            goto out;
-        }
-    } else {
-        req = (ucp_request_t*)param->request - 1;
+    req = ucp_tag_match_get_request(worker, param);
+    if (UCS_PTR_IS_ERR(req)) {
+        goto out;
     }
 
     rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nb");

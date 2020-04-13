@@ -71,12 +71,12 @@
         } \
     }
 
-#define ucp_request_set_callback(_req, _cb, _value, _data, _cb_value) \
+#define ucp_request_set_callback(_req, _cb, _cb_value, _data, _data_value) \
     { \
-        (_req)->_cb    = _value; \
-        (_req)->_data  = _cb_value; \
+        (_req)->_cb    = _cb_value; \
+        (_req)->_data  = _data_value; \
         (_req)->flags |= UCP_REQUEST_FLAG_CALLBACK; \
-        ucs_trace_data("request %p %s set to %p", _req, #_cb, _value); \
+        ucs_trace_data("request %p %s set to %p", _req, #_cb, _cb_value); \
     }
 
 

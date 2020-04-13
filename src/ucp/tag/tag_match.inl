@@ -395,4 +395,17 @@ ucp_tag_frag_hash_init_exp(ucp_tag_frag_match_t *frag_list, ucp_request_t *req)
     ucs_assert(!ucp_tag_frag_match_is_unexp(frag_list));
 }
 
+static UCS_F_ALWAYS_INLINE ucp_request_t*
+ucp_tag_match_get_request(ucp_worker_t *worker, const ucp_request_param_t *param)
+{
+    ucp_request_t *req;
+
+    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
+        req = ucp_request_get(worker);
+        return (req != NULL) ? req : UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+    }
+
+    return (ucp_request_t *)param->request - 1;
+}
+
 #endif
