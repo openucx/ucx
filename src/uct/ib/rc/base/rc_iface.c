@@ -785,13 +785,14 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     long qp_attr_mask;
     int ret;
 
+    ucs_assert(path_mtu != 0);
+
     memset(&qp_attr, 0, sizeof(qp_attr));
 
     qp_attr.qp_state              = IBV_QPS_RTR;
     qp_attr.dest_qp_num           = dest_qp_num;
     qp_attr.rq_psn                = 0;
-    qp_attr.path_mtu              = (path_mtu != 0) ? path_mtu :
-                                    iface->config.path_mtu;
+    qp_attr.path_mtu              = path_mtu;
     qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;
     qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
     qp_attr.ah_attr               = *ah_attr;

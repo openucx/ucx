@@ -279,7 +279,7 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
         }
     }
 
-    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_MTU) {
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
         size += sizeof(uint8_t);
     }
 
@@ -305,7 +305,7 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
 
         /* uint8_t raw[16]; */
         memcpy(ptr, params->gid->raw, sizeof(params->gid->raw));
-        ptr = UCS_PTR_BYTE_OFFSET(ptr, sizeof(params->gid->raw));
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, params->gid->raw);
     } else {
         /* IB, LID */
         ib_addr->flags   = !UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH;
@@ -335,10 +335,10 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
         }
     }
 
-    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_MTU) {
-        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_MTU;
-        ucs_assert(params->mtu < UINT8_MAX);
-        *(uint8_t*)ptr = (uint8_t)params->mtu;
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
+        ucs_assert((int)params->path_mtu < UINT8_MAX);
+        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_PATH_MTU;
+        *(uint8_t*)ptr  = (uint8_t)params->path_mtu;
     }
 }
 
@@ -359,7 +359,7 @@ static unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
 
 size_t uct_ib_iface_address_size(uct_ib_iface_t *iface)
 {
-    uct_ib_address_pack_params_t params = {0};
+    uct_ib_address_pack_params_t params;
 
     params.flags     = uct_ib_iface_address_pack_flags(iface);
     params.gid       = &iface->gid_info.gid;
@@ -370,7 +370,7 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface)
 void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
                                uint16_t lid, uct_ib_address_t *ib_addr)
 {
-    uct_ib_address_pack_params_t params = {0};
+    uct_ib_address_pack_params_t params;
 
     params.flags     = uct_ib_iface_address_pack_flags(iface);
     params.gid       = gid;
@@ -380,12 +380,12 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
 }
 
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
-                           union ibv_gid *gid, enum ibv_mtu *mtu)
+                           union ibv_gid *gid, enum ibv_mtu *path_mtu)
 {
     const void *ptr = ib_addr + 1;
 
-    *lid = 0;
-    *mtu = 0;
+    *lid      = 0;
+    *path_mtu = 0;
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) {
         /* uint8_t raw[16]; */
@@ -396,7 +396,7 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
         gid->global.interface_id  = 0;
 
         /* If the link layer is not ETHERNET, then it is IB and a lid must be present */
-        *lid = *(uint16_t*)ptr;
+        *lid = *(const uint16_t*)ptr;
         ptr  = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
 
         if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
@@ -418,8 +418,8 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
         }
     }
 
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_MTU) {
-        *mtu = *(uint8_t*)ptr;
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_PATH_MTU) {
+        *path_mtu = *(const uint8_t*)ptr;
     }
 }
 

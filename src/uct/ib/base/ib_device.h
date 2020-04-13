@@ -96,8 +96,8 @@ enum {
     UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(3),
     /* Used for IB link layer */
     UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(4),
-    /* Defines active MTU size */
-    UCT_IB_ADDRESS_FLAG_MTU            = UCS_BIT(5),
+    /* Defines path MTU size */
+    UCT_IB_ADDRESS_FLAG_PATH_MTU            = UCS_BIT(5),
     UCT_IB_ADDRESS_FLAG_LAST           = UCS_BIT(6)
 };
 

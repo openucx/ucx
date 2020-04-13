@@ -643,6 +643,7 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
 
+    ucs_assert(path_mtu != 0);
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_rc_mlx5_iface_common_devx_connect_qp(iface, qp, qp_num,
                                                         ah_attr, path_mtu);
@@ -667,6 +668,9 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                         ep->super.path_index, &ah_attr,
                                         &path_mtu);
+    if (path_mtu == 0) {
+        path_mtu = iface->super.config.path_mtu;
+    }
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* For HW TM we need 2 QPs, one of which will be used by the device for

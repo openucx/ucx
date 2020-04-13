@@ -67,8 +67,9 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_ETH           = UCS_BIT(0),
     UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID  = UCS_BIT(1),
     UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2),
-    UCT_IB_ADDRESS_PACK_FLAG_MTU           = UCS_BIT(3)
+    UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU      = UCS_BIT(3)
 };
+
 
 typedef struct uct_ib_address_pack_params {
     /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
@@ -80,10 +81,11 @@ typedef struct uct_ib_address_pack_params {
     /* RoCE version to pack in case of an Ethernet link layer,
        must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_ETH is set. */
     const uct_ib_roce_version_info_t  *roce_info;
-    /* MTU size as defined in enum ibv_mtu,
-       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_MTU is set. */
-    enum ibv_mtu                      mtu;
+    /* path MTU size as defined in enum ibv_mtu,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU is set. */
+    enum ibv_mtu                      path_mtu;
 } uct_ib_address_pack_params_t;
+
 
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
@@ -400,10 +402,10 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
  * @param [in]  ib_addr    IB address to unpack.
  * @param [out] lid        Filled with address LID, or 0 if not present.
  * @param [out] gid        Filled with address GID, or 0 if not present.
- * @param [out] mtu        Filled with address path MTU, or 0 if not present.
+ * @param [out] path_mtu   Filled with address path MTU, or 0 if not present.
  */
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
-                           union ibv_gid *gid, enum ibv_mtu *mtu);
+                           union ibv_gid *gid, enum ibv_mtu *path_mtu);
 
 
 /**

@@ -162,8 +162,9 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
                            sizeof(qp_attr.ah_attr.grh.dgid)));
     }
 
-    params.flags |= UCT_IB_ADDRESS_PACK_FLAG_MTU;
-    params.mtu    = qp_attr.path_mtu;
+    ucs_assert_always(qp_attr.path_mtu != 0);
+    params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
+    params.path_mtu = qp_attr.path_mtu;
 
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
         /* Ethernet address */
