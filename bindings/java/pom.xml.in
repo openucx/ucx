@@ -52,6 +52,42 @@
     <skipCopy>false</skipCopy>
   </properties>
 
+  <profiles>
+      <profile>
+        <id>jdk8</id>
+        <activation>
+          <jdk>1.8</jdk>
+        </activation>
+        <build>
+          <plugins>
+            <plugin>
+              <artifactId>maven-compiler-plugin</artifactId>
+              <configuration>
+                <source>1.8</source>
+                <target>1.8</target>
+              </configuration>
+            </plugin>
+          </plugins>
+        </build>
+      </profile>
+      <profile>
+        <id>jdk9</id>
+        <activation>
+          <jdk>[1.9,)</jdk>
+        </activation>
+        <build>
+          <plugins>
+            <plugin>
+              <artifactId>maven-compiler-plugin</artifactId>
+              <configuration>
+                <release>8</release>
+              </configuration>
+            </plugin>
+          </plugins>
+        </build>
+      </profile>
+    </profiles>
+
   <issueManagement>
     <system>Github</system>
     <url>https://github.com/openucx/ucx/issues</url>
@@ -210,14 +246,12 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.1</version>
+        <version>3.8.1</version>
         <configuration>
           <compilerArgs>
             <arg>-h</arg>
             <arg>${native.dir}</arg>
           </compilerArgs>
-          <source>1.8</source>
-          <target>1.8</target>
           <includes>
             <include>${sources}</include>
           </includes>

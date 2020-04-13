@@ -1654,8 +1654,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                              max_am_rndv_thresh);
         } else {
             /* Stub endpoint */
-            config->am.max_bcopy = UCP_MIN_BCOPY;
-        }
+            config->am.max_bcopy        = UCP_MIN_BCOPY;
+            config->tag.eager.max_bcopy = UCP_MIN_BCOPY;
+       }
     }
 
     memset(&config->rma, 0, sizeof(config->rma));
@@ -1725,8 +1726,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 rma_config->max_get_bcopy = ucs_min(iface_attr->cap.get.max_bcopy,
                                                     rma_config->get_zcopy_thresh);
             }
-        } else {
-            rma_config->max_put_bcopy = UCP_MIN_BCOPY; /* Stub endpoint */
         }
     }
 

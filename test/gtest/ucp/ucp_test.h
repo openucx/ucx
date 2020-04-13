@@ -34,6 +34,8 @@ struct ucp_test_param {
     int                       thread_type;
 };
 
+class ucp_test; // forward declaration
+
 class ucp_test_base : public ucs::test_base {
 public:
     enum {
@@ -43,9 +45,10 @@ public:
     };
 
     class entity {
-        typedef std::vector<ucs::handle<ucp_ep_h, entity *> > ep_vec_t;
+        typedef std::vector<ucs::handle<ucp_ep_h, entity*> > ep_vec_t;
         typedef std::vector<std::pair<ucs::handle<ucp_worker_h>,
                                       ep_vec_t> > worker_vec_t;
+        typedef std::deque<void*> close_ep_reqs_t;
 
     public:
         typedef enum {
@@ -77,7 +80,12 @@ public:
         void fence(int worker_index = 0) const;
 
         void* disconnect_nb(int worker_index = 0, int ep_index = 0,
-                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH) const;
+                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
+
+        void close_ep_req_free(void *close_req);
+
+        void close_all_eps(const ucp_test &test, int wirker_idx,
+                           enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
 
         void destroy_worker(int worker_index = 0);
 
@@ -121,6 +129,7 @@ public:
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
         std::queue<ucp_conn_request_h>  m_conn_reqs;
+        close_ep_reqs_t                 m_close_ep_reqs;
         size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
         ucs::handle<ucp_ep_params_t*>   m_server_ep_params;
@@ -133,6 +142,8 @@ public:
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
     };
+
+    static bool is_request_completed(void *req);
 };
 
 /**
@@ -199,7 +210,7 @@ protected:
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
     void flush_worker(const entity &e, int worker_index = 0);
-    void disconnect(const entity& entity);
+    void disconnect(entity& entity);
     void wait(void *req, int worker_index = 0);
     void set_ucp_config(ucp_config_t *config);
     int max_connections();

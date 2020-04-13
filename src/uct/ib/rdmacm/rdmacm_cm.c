@@ -301,13 +301,6 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
     uct_rdmacm_cm_ep_client_connect_cb(cep, &remote_data,
                                        (ucs_status_t)hdr->status);
     ucs_free(dev_addr);
-
-    if (rdma_establish(event->id)) {
-        ucs_error("rdma_establish on ep %p (to server addr=%s) failed: %m",
-                  cep, ucs_sockaddr_str(remote_addr, ip_port_str,
-                                        UCS_SOCKADDR_STRING_LEN));
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
-    }
 }
 
 static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
@@ -489,6 +482,7 @@ static uct_cm_ops_t uct_rdmacm_cm_ops = {
 static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
     .ep_disconnect            = uct_rdmacm_cm_ep_disconnect,
+    .cm_ep_conn_notify        = uct_rdmacm_cm_ep_conn_notify,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_cm_ep_t),
     .ep_put_short             = (uct_ep_put_short_func_t)ucs_empty_function_return_unsupported,
     .ep_put_bcopy             = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_unsupported,

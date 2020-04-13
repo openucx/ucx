@@ -1697,6 +1697,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->num_active_ifaces = 0;
     worker->num_ifaces        = 0;
     worker->am_message_id     = ucs_generate_uuid(0);
+    worker->rkey_ptr_cb_id    = UCS_CALLBACKQ_ID_NULL;
+    ucs_queue_head_init(&worker->rkey_ptr_reqs);
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);

@@ -493,7 +493,7 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num)) {
         status = uct_ib_device_query_gid(dev, port_num,
                                          uct_ib_device_get_ib_gid_index(md), &gid);
-        if (status) {
+        if (status != UCS_OK) {
             return status;
         }
 

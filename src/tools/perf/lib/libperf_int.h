@@ -25,12 +25,13 @@ BEGIN_C_DECLS
 
 #define TIMING_QUEUE_SIZE    2048
 #define UCT_PERF_TEST_AM_ID  5
+#define ADDR_BUF_SIZE        2048
 
 
-typedef struct ucx_perf_context  ucx_perf_context_t;
-typedef struct uct_peer          uct_peer_t;
-typedef struct ucp_peer          ucp_peer_t;
-typedef struct ucp_perf_request  ucp_perf_request_t;
+typedef struct ucx_perf_context        ucx_perf_context_t;
+typedef struct uct_peer                uct_peer_t;
+typedef struct ucp_perf_request        ucp_perf_request_t;
+typedef struct ucx_perf_thread_context ucx_perf_thread_context_t;
 
 
 struct ucx_perf_allocator {
@@ -56,7 +57,6 @@ struct ucx_perf_context {
     /* Buffers */
     void                         *send_buffer;
     void                         *recv_buffer;
-    ptrdiff_t                    offset;
 
     /* Measurements */
     double                       start_time_acc;  /* accurate start time */
@@ -92,15 +92,27 @@ struct ucx_perf_context {
         } uct;
 
         struct {
-            ucp_context_h        context;
-            ucp_worker_h         worker;
-            ucp_peer_t           *peers;
-            ucp_mem_h            send_memh;
-            ucp_mem_h            recv_memh;
-            ucp_dt_iov_t         *send_iov;
-            ucp_dt_iov_t         *recv_iov;
+            ucp_context_h              context;
+            ucx_perf_thread_context_t* tctx;
+            ucp_worker_h               worker;
+            ucp_ep_h                   ep;
+            ucp_rkey_h                 rkey;
+            unsigned long              remote_addr;
+            ucp_mem_h                  send_memh;
+            ucp_mem_h                  recv_memh;
+            ucp_dt_iov_t               *send_iov;
+            ucp_dt_iov_t               *recv_iov;
         } ucp;
     };
+};
+
+
+struct ucx_perf_thread_context {
+    pthread_t           pt;
+    int                 tid;
+    ucs_status_t        status;
+    ucx_perf_context_t  perf;
+    ucx_perf_result_t   result;
 };
 
 
@@ -108,13 +120,6 @@ struct uct_peer {
     uct_ep_h                     ep;
     unsigned long                remote_addr;
     uct_rkey_bundle_t            rkey;
-};
-
-
-struct ucp_peer {
-    ucp_ep_h                     ep;
-    unsigned long                remote_addr;
-    ucp_rkey_h                   rkey;
 };
 
 
@@ -163,6 +168,13 @@ static inline void ucx_perf_get_time(ucx_perf_context_t *perf)
     perf->current.time_acc = ucs_get_accurate_time();
 }
 
+static inline void ucx_perf_omp_barrier()
+{
+#if _OPENMP
+#pragma omp barrier
+#endif
+}
+
 static inline void ucx_perf_update(ucx_perf_context_t *perf,
                                    ucx_perf_counter_t iters, size_t bytes)
 {
@@ -185,18 +197,8 @@ static inline void ucx_perf_update(ucx_perf_context_t *perf,
     if (perf->current.time - perf->prev.time >= perf->report_interval) {
         ucx_perf_get_time(perf);
 
-        /* Disable all other threads' report generation and output.
-         * The master clause cannot be used here as the unit test
-         * uct_test_perf runs on single pthreads with no parallel region,
-         * using that clause will result in undefined behavior.
-         */
-#if _OPENMP
-        if (omp_get_thread_num() == 0)
-#endif /* _OPENMP */
-        {
-            ucx_perf_calc_result(perf, &result);
-            rte_call(perf, report, &result, perf->params.report_arg, 0);
-        }
+        ucx_perf_calc_result(perf, &result);
+        rte_call(perf, report, &result, perf->params.report_arg, 0, 0);
 
         perf->prev = perf->current;
     }

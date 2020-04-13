@@ -218,11 +218,10 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
 }
 
 static ucs_arbiter_cb_result_t
-uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
-                        void *arg)
+uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                            ucs_arbiter_elem_t *elem, void *arg)
 {
-    uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                       uct_ud_ep_t, tx.pending.group);
+    uct_ud_ep_t *ep = ucs_container_of(group, uct_ud_ep_t, tx.pending.group);
     uct_pending_req_t *req;
 
     /* we may have pending op on ep */
@@ -908,7 +907,7 @@ static void uct_ud_ep_send_creq_crep(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                                      uct_ud_send_skb_t *skb)
 {
     uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
-                          UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED);
+                          UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED, 1);
     uct_ud_iface_complete_tx_skb(iface, ep, skb);
 }
 
@@ -920,15 +919,17 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     uct_ud_zcopy_desc_t *zdesc;
     uct_ud_iov_t skb_iov, *iov;
     uct_ud_ctl_desc_t *cdesc;
+    int max_log_sge;
     uint16_t iovcnt;
 
     /* check window */
-    resend_pos = (void*)ep->resend.pos;
-    sent_skb   = ucs_queue_iter_elem(sent_skb, resend_pos, queue);
-    if (sent_skb == NULL) {
+    resend_pos = ep->resend.pos;
+    if (ucs_queue_iter_end(&ep->tx.window, resend_pos)) {
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
         return;
     }
+
+    sent_skb = ucs_queue_iter_elem(sent_skb, resend_pos, queue);
 
     ucs_assert(((uintptr_t)sent_skb % UCT_UD_SKB_ALIGN) == 0);
     if (UCT_UD_PSN_COMPARE(sent_skb->neth->psn, >=, ep->tx.max_psn)) {
@@ -971,7 +972,6 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
      */
     skb                = uct_ud_iface_ctl_skb_get(iface);
     sent_skb->flags   |= UCT_UD_SEND_SKB_FLAG_RESENDING;
-    skb->neth->ack_psn = ep->rx.acked_psn;
     ep->resend.psn     = sent_skb->neth->psn;
 
     if (sent_skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY) {
@@ -979,9 +979,10 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
         skb->len = sent_skb->len;
 
         /* set iov pointer to payload */
-        zdesc    = uct_ud_zcopy_desc(sent_skb);
-        iov      = zdesc->iov;
-        iovcnt   = zdesc->iovcnt;
+        zdesc       = uct_ud_zcopy_desc(sent_skb);
+        iov         = zdesc->iov;
+        iovcnt      = zdesc->iovcnt;
+        max_log_sge = UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super);
     } else {
         /* copy neth part only, since we may not have enough room in the control
          * skb for the whole payload + ctl desc, and we also prefer to avoid
@@ -995,12 +996,14 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
         skb_iov.lkey   = sent_skb->lkey;
         iov            = &skb_iov;
         iovcnt         = 1;
+        max_log_sge    = 2;
     }
 
-    memcpy(skb->neth, sent_skb->neth, sent_skb->len);
-    cdesc             = uct_ud_ctl_desc(skb);
-    cdesc->self_skb   = skb;
-    cdesc->resent_skb = sent_skb;
+    memcpy(skb->neth, sent_skb->neth, skb->len);
+    skb->neth->ack_psn = ep->rx.acked_psn;
+    cdesc              = uct_ud_ctl_desc(skb);
+    cdesc->self_skb    = skb;
+    cdesc->resent_skb  = sent_skb;
 
     /* force ack request on every Nth packet or on first packet in resend window */
     if ((skb->neth->psn % UCT_UD_RESENDS_PER_ACK) == 0 ||
@@ -1024,7 +1027,8 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     /* Send control message and save operation on queue. Use signaled-send to
      * make sure user completion will not be delayed indefinitely */
     cdesc->sn = uct_ud_iface_send_ctl(iface, ep, skb, iov, iovcnt,
-                                      UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED);
+                                      UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED,
+                                      max_log_sge);
     uct_ud_iface_add_ctl_desc(iface, cdesc);
 }
 
@@ -1062,11 +1066,11 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 
     if (is_inline) {
         uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
-                              UCT_UD_IFACE_SEND_CTL_FLAG_INLINE);
+                              UCT_UD_IFACE_SEND_CTL_FLAG_INLINE, 1);
     } else {
         /* if skb is taken from memory pool, release it in send completion */
         cdesc             = uct_ud_ctl_desc(skb);
-        cdesc->sn         = uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0, 0);
+        cdesc->sn         = uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0, 0, 1);
         cdesc->self_skb   = skb;
         cdesc->resent_skb = NULL;
         uct_ud_iface_add_ctl_desc(iface, cdesc);
@@ -1131,13 +1135,13 @@ uct_ud_ep_ctl_op_next(uct_ud_ep_t *ep)
  * However we can not let pending uct req block control forever.
  */
 ucs_arbiter_cb_result_t
-uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
+uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                     ucs_arbiter_elem_t *elem,
                      void *arg)
 {
     uct_pending_req_t *req      = ucs_container_of(elem, uct_pending_req_t,
                                                    priv);
-    uct_ud_ep_t *ep             = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                                   uct_ud_ep_t,
+    uct_ud_ep_t *ep             = ucs_container_of(group, uct_ud_ep_t,
                                                    tx.pending.group);
     uct_ud_iface_t *iface       = ucs_container_of(arbiter, uct_ud_iface_t,
                                                    tx.pending_q);
@@ -1276,11 +1280,11 @@ add_req:
 }
 
 static ucs_arbiter_cb_result_t
-uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
-                        void *arg)
+uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                           ucs_arbiter_elem_t *elem, void *arg)
 {
-    uct_ud_ep_t *ep = ucs_container_of(ucs_arbiter_elem_group(elem),
-                                       uct_ud_ep_t, tx.pending.group);
+    uct_ud_ep_t *ep                 = ucs_container_of(group, uct_ud_ep_t,
+                                                       tx.pending.group);
     uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req;

@@ -162,6 +162,10 @@ static ucs_config_field_t ucp_config_table[] = {
    " auto      - runtime automatically chooses optimal scheme to use.\n",
    ucs_offsetof(ucp_config_t, ctx.rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
 
+  {"RKEY_PTR_SEG_SIZE", "512k",
+   "Segment size that is used to perform data transfer when doing RKEY PTR progress",
+   ucs_offsetof(ucp_config_t, ctx.rkey_ptr_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"ZCOPY_THRESH", "auto",
    "Threshold for switching from buffer copy to zero copy protocol",
    ucs_offsetof(ucp_config_t, ctx.zcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},

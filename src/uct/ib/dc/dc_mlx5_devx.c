@@ -95,7 +95,7 @@ uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2init, sizeof(in_2init),
                                         out_2init, sizeof(out_2init));
-    if (status) {
+    if (status != UCS_OK) {
         return status;
     }
 
@@ -109,11 +109,17 @@ uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
     UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
-    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl, iface->super.super.super.config.sl);
+    if (uct_ib_iface_is_roce(&iface->super.super.super)) {
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio,
+                          iface->super.super.super.config.sl);
+    } else {
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
+                          iface->super.super.super.config.sl);
+    }
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),
                                         out_2rtr, sizeof(out_2rtr));
-    if (status) {
+    if (status != UCS_OK) {
         return status;
     }
 
