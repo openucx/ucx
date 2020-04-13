@@ -142,7 +142,6 @@ typedef enum uct_rc_fence_mode {
 /* Common configuration used for rc verbs, rcx and dc transports */
 typedef struct uct_rc_iface_common_config {
     uct_ib_iface_config_t    super;
-    uct_ib_mtu_t             path_mtu;
     unsigned                 max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
@@ -243,7 +242,6 @@ struct uct_rc_iface {
         uint8_t              rnr_retry;
         uint8_t              retry_cnt;
         uint8_t              max_rd_atomic;
-        enum ibv_mtu         path_mtu;
         /* Enable out-of-order RDMA data placement */
         uint8_t              ooo_rw;
 #if UCS_ENABLE_ASSERT

@@ -147,6 +147,9 @@ struct uct_ib_iface_config {
 
     /* Multiple resource domains */
     int                     enable_res_domain;
+
+    /* Path MTU size */
+    uct_ib_mtu_t            path_mtu;
 };
 
 
@@ -230,6 +233,7 @@ struct uct_ib_iface {
         uint8_t               enable_res_domain;   /* Disable multiple resource domains */
         uint8_t               qp_type;
         uint8_t               force_global_addr;
+        enum ibv_mtu          path_mtu;
     } config;
 
     uct_ib_iface_ops_t        *ops;

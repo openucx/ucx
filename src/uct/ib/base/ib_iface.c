@@ -192,6 +192,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, enable_res_domain), UCS_CONFIG_TYPE_BOOL},
 #endif
 
+  {"PATH_MTU", "default",
+   "Path MTU. \"default\" will select the best MTU for the device.",
+   ucs_offsetof(uct_ib_iface_config_t, path_mtu),
+                UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
 
   {NULL}
 };
@@ -376,6 +380,7 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
     params.gid       = gid;
     params.lid       = lid;
     params.roce_info = &iface->gid_info.roce_info;
+    params.path_mtu  = 0; /* to suppress gcc 4.3.4 warning */
     uct_ib_address_pack(&params, ib_addr);
 }
 
@@ -597,6 +602,10 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH));
 
     uct_ib_address_unpack(ib_addr, &lid, &gid, path_mtu);
+    if (*path_mtu == 0) {
+        *path_mtu = iface->config.path_mtu;
+    }
+
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, path_index,
                                            ah_attr);
 }
@@ -1018,6 +1027,29 @@ out:
     return status;
 }
 
+static void uct_ib_iface_set_path_mtu(uct_ib_iface_t *iface,
+                                      const uct_ib_iface_config_t *config)
+{
+    enum ibv_mtu port_mtu = uct_ib_iface_port_attr(iface)->active_mtu;
+    uct_ib_device_t *dev  = uct_ib_iface_device(iface);
+
+    /* MTU is set by user configuration */
+    if (config->path_mtu != UCT_IB_MTU_DEFAULT) {
+        iface->config.path_mtu = (enum ibv_mtu)(config->path_mtu +
+                                                (IBV_MTU_512 - UCT_IB_MTU_512));
+    } else if ((port_mtu > IBV_MTU_2048) &&
+               (IBV_DEV_ATTR(dev, vendor_id) == 0x02c9) &&
+               ((IBV_DEV_ATTR(dev, vendor_part_id) == 4099) ||
+                (IBV_DEV_ATTR(dev, vendor_part_id) == 4100) ||
+                (IBV_DEV_ATTR(dev, vendor_part_id) == 4103) ||
+                (IBV_DEV_ATTR(dev, vendor_part_id) == 4104))) {
+        /* On some devices optimal path_mtu is 2048 */
+        iface->config.path_mtu = IBV_MTU_2048;
+    } else {
+        iface->config.path_mtu = port_mtu;
+    }
+}
+
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_ib_iface_config_t *config,
@@ -1083,6 +1115,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.enable_res_domain  = config->enable_res_domain;
     self->config.qp_type            = init_attr->qp_type;
+    uct_ib_iface_set_path_mtu(self, config);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("IB transports do not support multi-threaded worker");

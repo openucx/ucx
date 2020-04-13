@@ -414,7 +414,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     /* Move QP to the RTR state */
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
-    attr.path_mtu                   = iface->super.super.config.path_mtu;
+    attr.path_mtu                   = iface->super.super.super.config.path_mtu;
     attr.ah_attr.is_global          = iface->super.super.super.config.force_global_addr;
     attr.ah_attr.sl                 = iface->super.super.super.config.sl;
     /* ib_core expects valied ah_attr::port_num when IBV_QP_AV is set */
@@ -502,7 +502,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     }
 
     attr.qp_state                  = IBV_QPS_RTR;
-    attr.path_mtu                  = iface->super.super.config.path_mtu;
+    attr.path_mtu                  = iface->super.super.super.config.path_mtu;
     attr.min_rnr_timer             = iface->super.super.config.min_rnr_timer;
     attr.ah_attr.is_global         = iface->super.super.super.config.force_global_addr;
     attr.ah_attr.grh.hop_limit     = iface->super.super.super.config.hop_limit;
@@ -607,7 +607,7 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
             struct ibv_exp_srq_dc_offload_params dc_op = {};
 
             dc_op.timeout    = rc_iface->config.timeout;
-            dc_op.path_mtu   = rc_iface->config.path_mtu;
+            dc_op.path_mtu   = rc_iface->super.config.path_mtu;
             dc_op.pkey_index = rc_iface->super.pkey_index;
             dc_op.sl         = rc_iface->super.config.sl;
             dc_op.dct_key    = UCT_IB_KEY;
@@ -671,7 +671,7 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     init_attr.srq              = iface->super.rx.srq.verbs.srq;
     init_attr.dc_key           = UCT_IB_KEY;
     init_attr.port             = iface->super.super.super.config.port_num;
-    init_attr.mtu              = iface->super.super.config.path_mtu;
+    init_attr.mtu              = iface->super.super.super.config.path_mtu;
     init_attr.access_flags     = IBV_EXP_ACCESS_REMOTE_WRITE |
                                  IBV_EXP_ACCESS_REMOTE_READ |
                                  IBV_EXP_ACCESS_REMOTE_ATOMIC;
@@ -724,7 +724,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                              "DCI QP 0x", dci->txwq.super.qp_num);
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
-    attr.path_mtu                   = iface->super.super.config.path_mtu;
+    attr.path_mtu                   = iface->super.super.super.config.path_mtu;
     attr.ah_attr.is_global          = iface->super.super.super.config.force_global_addr;
     attr.ah_attr.sl                 = iface->super.super.super.config.sl;
     attr_mask                       = IBV_EXP_QP_STATE     |

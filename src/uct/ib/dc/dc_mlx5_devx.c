@@ -55,7 +55,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
 
     UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak, iface->super.super.config.min_rnr_timer);
     UCT_IB_MLX5DV_SET(dctc, dctc, tclass, iface->super.super.super.config.traffic_class);
-    UCT_IB_MLX5DV_SET(dctc, dctc, mtu, iface->super.super.config.path_mtu);
+    UCT_IB_MLX5DV_SET(dctc, dctc, mtu, iface->super.super.super.config.path_mtu);
     UCT_IB_MLX5DV_SET(dctc, dctc, my_addr_index, iface->super.super.super.gid_info.gid_index);
     UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, iface->super.super.super.config.hop_limit);
 
@@ -105,7 +105,7 @@ uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
-    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, iface->super.super.config.path_mtu);
+    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, iface->super.super.super.config.path_mtu);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
     UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
@@ -139,7 +139,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
     int ret;
 
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, pkey_table_index, iface->super.super.super.pkey_index);
-    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, mtu, iface->super.super.config.path_mtu);
+    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, mtu, iface->super.super.super.config.path_mtu);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, sl, iface->super.super.super.config.sl);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, reverse_sl, iface->super.super.super.config.sl);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, cnak_reverse_sl, iface->super.super.super.config.sl);
