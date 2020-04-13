@@ -11,7 +11,7 @@
 #  include "config.h"
 #endif
 
-#if HAVE_MLX5_HW && defined (HAVE_VERBS_EXP_H)
+#if defined (HAVE_MLX5_HW) && defined (HAVE_VERBS_EXP_H)
 void uct_ib_exp_qp_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr);
 #else
 static inline void uct_ib_exp_qp_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr) { }
