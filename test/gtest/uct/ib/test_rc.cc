@@ -634,7 +634,7 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control_stats)
 
 #endif
 
-#if HAVE_MLX5_HW
+#ifdef HAVE_MLX5_HW
 extern "C" {
 #include <uct/ib/rc/accel/rc_mlx5_common.h>
 }
@@ -662,7 +662,7 @@ test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
 {
     attr_map_t iov_map;
 
-#if HAVE_MLX5_HW
+#ifdef HAVE_MLX5_HW
     // For RMA iovs can use all WQE space, remainig from control and
     // remote address segments (and AV if relevant)
     size_t rma_iov = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -

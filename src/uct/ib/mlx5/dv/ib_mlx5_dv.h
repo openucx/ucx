@@ -16,7 +16,7 @@
 
 typedef struct {
     struct mlx5dv_obj  dv;
-#if HAVE_IBV_EXP_DM
+#ifdef HAVE_IBV_EXP_DM
     struct {
         struct ibv_exp_dm   *in;
         struct mlx5dv_dm    *out;
@@ -67,7 +67,7 @@ void *uct_dv_get_info_uar0(void *uar);
 /*
  * DM backports
  */
-#if HAVE_IBV_EXP_DM
+#ifdef HAVE_IBV_EXP_DM
 #  define ibv_dm            ibv_exp_dm
 #  define ibv_alloc_dm_attr ibv_exp_alloc_dm_attr
 #  define ibv_alloc_dm      ibv_exp_alloc_dm

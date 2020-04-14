@@ -19,7 +19,7 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
     int ret;
 
     ret = mlx5dv_init_obj(&obj->dv, type);
-#if HAVE_IBV_EXP_DM
+#ifdef HAVE_IBV_EXP_DM
     if (!ret && (type & MLX5DV_OBJ_DM)) {
         ret = uct_ib_mlx5_get_dm_info(obj->dv_dm.in, obj->dv_dm.out);
     }
@@ -305,7 +305,7 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
     *av = *(dah.av);
     av->dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
 }
-#elif !HAVE_INFINIBAND_MLX5_HW_H
+#elif !defined (HAVE_INFINIBAND_MLX5_HW_H)
 void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
 {
     ucs_bug("MLX5DV_OBJ_AH not supported");

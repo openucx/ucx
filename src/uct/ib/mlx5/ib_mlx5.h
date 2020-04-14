@@ -72,7 +72,7 @@
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
 
-#if HAVE_STRUCT_MLX5_WQE_AV_BASE
+#ifdef HAVE_STRUCT_MLX5_WQE_AV_BASE
 
 #  define mlx5_av_base(_av)         (&(_av)->base)
 #  define mlx5_av_grh(_av)          (&(_av)->grh_sec)
@@ -103,7 +103,7 @@ struct mlx5_grh_av {
 
 #endif
 
-#if !(HAVE_DECL_MLX5_WQE_CTRL_SOLICITED)
+#ifndef MLX5_WQE_CTRL_SOLICITED
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
@@ -284,7 +284,7 @@ typedef struct uct_ib_mlx5_devx_uar {
 /* resource domain */
 typedef struct uct_ib_mlx5_res_domain {
     uct_worker_tl_data_t        super;
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain   *ibv_domain;
 #elif HAVE_DECL_IBV_ALLOC_TD
     struct ibv_td               *td;
@@ -301,7 +301,7 @@ typedef struct uct_ib_mlx5_qp {
         struct {
             union {
                 struct ibv_qp          *qp;
-#if HAVE_DC_EXP
+#ifdef HAVE_DC_EXP
                 struct ibv_exp_dct     *dct;
 #endif
             };
@@ -434,7 +434,7 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
  */
 static inline uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
 {
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
         return 0;
     }
