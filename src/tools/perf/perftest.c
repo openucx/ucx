@@ -425,7 +425,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -O <count>     maximal number of uncompleted outstanding sends\n");
     printf("     -i <offset>    distance between consecutive scatter-gather entries (%zu)\n",
                                 ctx->params.super.iov_stride);
-    printf("     -T <threads>   number of threads in the test (%d), if >1 implies \"-M multi\"\n",
+    printf("     -T <threads>   number of threads in the test (%d)\n",
                                 ctx->params.super.thread_count);
     printf("     -B             register memory with NONBLOCK flag\n");
     printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
@@ -721,9 +721,6 @@ static ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         }
     case 'T':
         params->super.thread_count = atoi(opt_arg);
-        params->super.thread_mode  = (params->super.thread_count == 1) ?
-                                     UCS_THREAD_MODE_SINGLE :
-                                     UCS_THREAD_MODE_MULTI;
         return UCS_OK;
     case 'A':
         if (!strcmp(opt_arg, "thread") || !strcmp(opt_arg, "thread_spinlock")) {
