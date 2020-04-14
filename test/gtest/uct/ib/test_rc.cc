@@ -379,6 +379,23 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, check_rma_ops,
     EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
 }
 
+// Check that outstanding get ops purged gracefully when ep is closed.
+// Also check that get resources taken by those ops are released.
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_BCOPY))
+{
+    mapped_buffer sendbuf(128, 0ul, *m_e1);
+    mapped_buffer recvbuf(128, 0ul, *m_e2);
+
+    post_max_reads(m_e1, sendbuf, recvbuf);
+
+    scoped_log_handler hide_warn(hide_warns_logger);
+    m_e1->destroy_eps();
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+}
+
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_get_limit)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
