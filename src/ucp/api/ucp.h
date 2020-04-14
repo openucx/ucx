@@ -2634,6 +2634,15 @@ ucs_status_ptr_t ucp_tag_send_sync_nb(ucp_ep_h ep, const void *buffer, size_t co
  *
  * @note The user should not modify any part of the @a buffer after this
  *       operation is called, until the operation completes.
+ * @note The argument @a param->op_attr_mask should be OR combination of
+ *       flags UCP_OP_ATTR_FIELD_REQUEST, UCP_OP_ATTR_FIELD_CALLBACK,
+ *       UCP_OP_ATTR_FIELD_DATATYPE, UCP_OP_ATTR_FLAG_NO_IMM_CMPL,
+ *       UCP_OP_ATTR_FLAG_NO_ZCOPY and UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL.
+ * @note Combination of flags
+ *       UCP_OP_ATTR_FLAG_NO_IMM_CMPL | UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL is not
+ *       allowed, error will be returned.
+ * @note Values of @a param argument may be processed if corresponding flag is
+ *       set in @a param->op_attr_mask: request, cb.send, datatype and user_data
  *
  * @param [in]  ep          Destination endpoint handle.
  * @param [in]  buffer      Pointer to the message buffer (payload).
@@ -2666,6 +2675,15 @@ ucs_status_ptr_t ucp_tag_send_nbx(ucp_ep_h ep, const void *buffer, size_t count,
  * @note Returns @ref UCS_ERR_UNSUPPORTED if @ref UCP_ERR_HANDLING_MODE_PEER is
  *       enabled. This is a temporary implementation-related constraint that
  *       will be addressed in future releases.
+ * @note The user should not modify any part of the @a buffer after this
+ *       operation is called, until the operation completes.
+ * @note The argument @a param->op_attr_mask should be OR combination of
+ *       flags UCP_OP_ATTR_FIELD_REQUEST, UCP_OP_ATTR_FIELD_CALLBACK,
+ *       UCP_OP_ATTR_FIELD_DATATYPE and UCP_OP_ATTR_FLAG_NO_ZCOPY.
+ * @note Flags UCP_OP_ATTR_FLAG_NO_IMM_CMPL and UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL
+ *       are not supported, error will be returned.
+ * @note Values of @a param argument may be processed if corresponding flag is
+ *       set in @a param->op_attr_mask: request, cb.send, datatype and user_data
  *
  * @param [in]  ep          Destination endpoint handle.
  * @param [in]  buffer      Pointer to the message buffer (payload).
@@ -2861,6 +2879,13 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
  *
  * @note This routine cannot return UCS_OK. It always returns a request
  *       handle or an error.
+ * @note The argument @a param->op_attr_mask should be OR combination of
+ *       flags UCP_OP_ATTR_FIELD_REQUEST, UCP_OP_ATTR_FIELD_CALLBACK and
+ *       UCP_OP_ATTR_FIELD_DATATYPE.
+ * @note Flags UCP_OP_ATTR_FLAG_NO_IMM_CMPL and UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL
+ *       are not supported, error will be returned.
+ * @note Values of @a param argument may be processed if corresponding flag is
+ *       set in @a param->op_attr_mask: request, cb.recv, datatype and user_data
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
  * @param [in]  buffer      Pointer to the buffer to receive the data to.
@@ -3069,6 +3094,10 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  *
  * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
  * in order to guarantee re-usability of the source address @e buffer.
+ * @note The argument @a param->op_attr_mask should be OR combination of
+ *       flags UCP_OP_ATTR_FIELD_REQUEST and UCP_OP_ATTR_FIELD_CALLBACK.
+ * @note Values of @a param argument may be processed if corresponding flag is
+ *       set in @a param->op_attr_mask: request, cb.send and user_data
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local source address.
@@ -3189,6 +3218,13 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
  *
  * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
  * in order to guarantee re-usability of the source address @e buffer.
+ * @note The argument @a param->op_attr_mask should be OR combination of
+ *       flags UCP_OP_ATTR_FIELD_REQUEST and UCP_OP_ATTR_FIELD_CALLBACK.
+ * @note Combination of flags
+ *       UCP_OP_ATTR_FLAG_NO_IMM_CMPL | UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL is not
+ *       allowed, error will be returned.
+ * @note Values of @a param argument may be processed if corresponding flag is
+ *       set in @a param->op_attr_mask: request, cb.send and user_data
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local destination address.
