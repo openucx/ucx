@@ -118,7 +118,6 @@ struct ucp_request {
             size_t                  length;     /* Total length, in bytes */
             ucs_memory_type_t       mem_type;   /* Memory type */
             ucp_send_nbx_callback_t cb;         /* Completion callback */
-            void                    *user_data; /* Completion user data */
 
             union {
                 ucp_wireup_msg_t  wireup;
@@ -265,7 +264,6 @@ struct ucp_request {
                     ucp_tag_t                   tag_mask;   /* Expected tag mask */
                     uint64_t                    sn;         /* Tag match sequence */
                     ucp_tag_recv_nbx_callback_t cb;         /* Completion callback */
-                    void                        *user_data; /* Completion user data */
                     ucp_tag_recv_info_t         info;       /* Completion info to fill */
                     ssize_t                     remaining;  /* How much more data
                                                              * to be received */
@@ -305,6 +303,8 @@ struct ucp_request {
             ucp_ep_ext_gen_t      *next_ep; /* Next endpoint to flush */
         } flush_worker;
     };
+
+    void                          *user_data; /* Completion user data */
 };
 
 

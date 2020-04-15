@@ -71,12 +71,13 @@
         } \
     }
 
-#define ucp_request_set_callback(_req, _cb, _cb_value, _data, _data_value) \
+#define ucp_request_set_callback(_req, _cb, _cb_value, _user_data) \
     { \
-        (_req)->_cb    = _cb_value; \
-        (_req)->_data  = _data_value; \
-        (_req)->flags |= UCP_REQUEST_FLAG_CALLBACK; \
-        ucs_trace_data("request %p %s set to %p", _req, #_cb, _cb_value); \
+        (_req)->_cb       = _cb_value; \
+        (_req)->user_data = _user_data; \
+        (_req)->flags    |= UCP_REQUEST_FLAG_CALLBACK; \
+        ucs_trace_data("request %p %s set to %p, user data: %p", \
+                      _req, #_cb, _cb_value, _user_data); \
     }
 
 
@@ -95,7 +96,7 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_send", status);
-    ucp_request_complete(req, send.cb, status, req->send.user_data);
+    ucp_request_complete(req, send.cb, status, req->user_data);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -108,7 +109,7 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
     ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info,
-                         req->recv.tag.user_data);
+                         req->user_data);
 }
 
 static UCS_F_ALWAYS_INLINE void

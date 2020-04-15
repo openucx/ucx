@@ -78,7 +78,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         ucp_recv_desc_release(rdesc);
 
         if (req_flags & UCP_REQUEST_FLAG_CALLBACK) {
-            cb(req + 1, status, &req->recv.tag.info, req->recv.tag.user_data);
+            cb(req + 1, status, &req->recv.tag.info, user_data);
         }
         ucp_tag_recv_request_completed(req, status, &req->recv.tag.info,
                                        debug_name);
@@ -105,7 +105,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
     req->recv.tag.cb        = cb;
-    req->recv.tag.user_data = user_data;
+    req->user_data          = user_data;
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         req->recv.tag.info.sender_tag = 0;
     }
@@ -208,10 +208,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nbx,
     datatype = (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
                param->datatype : ucp_dt_make_contig(1);
 
-    req = ucp_tag_match_get_request(worker, param);
-    if (UCS_PTR_IS_ERR(req)) {
-        goto out;
-    }
+    ucp_tag_match_get_request(worker, param, req,
+                              {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                               goto out;});
 
     rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nb");
     ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask, req,

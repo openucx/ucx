@@ -118,7 +118,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
         if (!(param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL)) {
             /*  immediately completion is allowed */
             ucs_trace_req("releasing send request %p, returning status %s", req,
-                        ucs_status_string(status));
+                          ucs_status_string(status));
             if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
                 ucp_request_put(req);
             }
@@ -135,9 +135,9 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     }
 
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-        ucp_request_set_callback(req, send.cb, param->cb.send,
-                                 send.user_data, param->user_data);
+        ucp_request_set_callback(req, send.cb, param->cb.send, param->user_data);
     }
+
 out:
     ucs_trace_req("returning send request %p", req);
     return req + 1;
@@ -288,10 +288,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         goto out;
     }
 
-    req = ucp_tag_match_get_request(ep->worker, param);
-    if (UCS_PTR_IS_ERR(req)) {
-        goto out;
-    }
+    ucp_tag_match_get_request(ep->worker, param, req,
+                              {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                               goto out;});
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag, 0);
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
@@ -332,10 +331,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
         goto out;
     }
 
-    req = ucp_tag_match_get_request(ep->worker, param);
-    if (UCS_PTR_IS_ERR(req)) {
-        goto out;
-    }
+    ucp_tag_match_get_request(ep->worker, param, req,
+                              {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                               goto out;});
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag,
                           UCP_REQUEST_FLAG_SYNC);

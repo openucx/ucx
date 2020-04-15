@@ -402,8 +402,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
         return UCS_STATUS_PTR(status);
     }
 
-    ucp_request_set_callback(req, send.cb, (ucp_send_nbx_callback_t)cb,
-                             send.user_data, NULL);
+    ucp_request_set_callback(req, send.cb, (ucp_send_nbx_callback_t)cb, NULL);
     
     return req + 1;
 }
