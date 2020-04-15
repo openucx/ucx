@@ -386,7 +386,7 @@ ucs_arbiter_dispatch(ucs_arbiter_t *arbiter, unsigned per_group,
  * @return true if element is the only one in the group
  */
 static inline int
-ucs_arbiter_elem_is_only(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
+ucs_arbiter_elem_is_only(ucs_arbiter_elem_t *elem)
 {
     return elem->next == elem;
 }

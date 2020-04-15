@@ -130,7 +130,7 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
         ptr       = next;
         next      = ptr->next;
         /* Can't touch the element after cb is called if it gets removed. But it
-         * can be reused later as well, so it's next should be NULL. */
+         * can be reused later as well, so it's group should be NULL. */
         ucs_arbiter_elem_init(ptr);
         result    = cb(arbiter, group, ptr, cb_arg);
 
@@ -244,7 +244,6 @@ static inline void
 ucs_arbiter_remove_and_reset_if_scheduled(ucs_arbiter_elem_t *elem)
 {
     if (ucs_unlikely(ucs_arbiter_group_head_is_scheduled(elem))) {
-         /* removing scheduled head of empty list */
          ucs_list_del(&elem->list);
          ucs_arbiter_group_head_reset(elem);
      }
@@ -256,6 +255,7 @@ ucs_arbiter_group_head_replace(ucs_arbiter_group_t *group,
                                ucs_arbiter_elem_t *new_group_head)
 {
     /* check if this is really the group head */
+    ucs_assert(!ucs_arbiter_group_is_empty(group));
     ucs_assert(group->tail->next == group_head);
 
     if (group_head->next == group_head) {
@@ -323,12 +323,11 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
             ucs_trace_poll("dispatch result: %d", result);
             ++group_dispatch_count;
 
-            /* should not push to head */
+            /* recursive push to head (during dispatch) is not allowed */
             ucs_assert(group->tail->next == &dummy);
 
             /* element is not removed */
             if (ucs_unlikely(result != UCS_ARBITER_CB_RESULT_REMOVE_ELEM)) {
-
                 /* restore group pointer */
                 ucs_arbiter_elem_set_scheduled(group_head, group);
 

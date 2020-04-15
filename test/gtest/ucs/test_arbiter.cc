@@ -322,7 +322,7 @@ UCS_TEST_F(test_arbiter, purge_cond) {
 
         for (int j = 0; j < num_elems; ++j) {
             arb_elem *e = new arb_elem;
-            if (ucs::rand() % 2) {
+            if ((ucs::rand() % 2) == 0) {
                 e->release = true;
                 ++purged_count[i];
             } else {
@@ -901,18 +901,18 @@ test_arbiter_random_resched::dispatch(ucs_arbiter_group_t *_group,
     /* Test ucs_arbiter_elem_is_only() */
     if (group->num_elems == 1) {
         ++m_num_only;
-        EXPECT_TRUE(ucs_arbiter_elem_is_only(&group->super, elem));
+        EXPECT_TRUE(ucs_arbiter_elem_is_only(elem));
     }
 
     /* Randomly add few more elements to same group */
     while ((ucs::rand() % 4) == 0) {
         add_new_elem(group);
-        if (ucs::rand() % 2) {
+        if ((ucs::rand() % 2) == 0) {
             ucs_arbiter_group_schedule(&m_arb, &group->super);
         }
     }
 
-    if (ucs::rand() % 2) {
+    if ((ucs::rand() % 2) == 0) {
         /* Remove the current element.
          * Must remove elements with higher probability than adding to avoid
          * infinite loop.
@@ -925,7 +925,7 @@ test_arbiter_random_resched::dispatch(ucs_arbiter_group_t *_group,
 
             if (new_group == group) {
                 ++m_num_push_self;
-                if (ucs::rand() % 2) {
+                if ((ucs::rand() % 2) == 0) {
                     ucs_arbiter_group_schedule(&m_arb, &new_group->super);
                 }
             } else {
