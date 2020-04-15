@@ -11,6 +11,7 @@ import os
 import re
 import commands
 from distutils.version import LooseVersion
+from optparse import OptionParser
 
 
 #expected AM transport selections per given number of eps
@@ -79,6 +80,13 @@ am_tls =  {
     "mlx5_override"   : mlx5_am_override
 }
 
+def exec_cmd(cmd):
+    if options.verbose:
+        print cmd
+
+    return commands.getstatusoutput(cmd)
+
+
 def find_am_transport(dev, neps, override = 0) :
 
     os.putenv("UCX_TLS", "ib")
@@ -87,7 +95,7 @@ def find_am_transport(dev, neps, override = 0) :
     if (override):
         os.putenv("UCX_NUM_EPS", "2")
 
-    status, output = commands.getstatusoutput(ucx_info + ucx_info_args + str(neps) + " | grep am")
+    status, output = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep am")
 
     os.unsetenv("UCX_TLS")
     os.unsetenv("UCX_NET_DEVICES")
@@ -107,7 +115,7 @@ def test_fallback_from_rc(dev, neps) :
     os.putenv("UCX_TLS", "ib")
     os.putenv("UCX_NET_DEVICES", dev)
 
-    status,output = commands.getstatusoutput(ucx_info + ucx_info_args + str(neps) + " | grep rc")
+    status,output = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep rc")
 
     os.unsetenv("UCX_TLS")
     os.unsetenv("UCX_NET_DEVICES")
@@ -118,8 +126,9 @@ def test_fallback_from_rc(dev, neps) :
 
     os.putenv("UCX_TLS", "rc,ud,tcp")
 
-    status,output_rc = commands.getstatusoutput(ucx_info + ucx_info_args + str(neps) + " | grep rc")
-    status,output_tcp = commands.getstatusoutput(ucx_info + ucx_info_args + str(neps) + " | grep tcp")
+    status,output_rc = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep rc")
+
+    status,output_tcp = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep tcp")
 
     if output_rc != "" or output_tcp != "":
         print "RC/TCP transports must not be used when estimated number of EPs = " + str(neps)
@@ -127,27 +136,37 @@ def test_fallback_from_rc(dev, neps) :
 
     os.unsetenv("UCX_TLS")
 
-if len(sys.argv) > 1:
-    bin_prefix = sys.argv[1] + "/bin"
-else:
+parser = OptionParser()
+parser.add_option("-p", "--prefix", metavar="PATH", help = "root UCX directory")
+parser.add_option("-v", "--verbose", action="store_true", \
+                  help = "verbose output", default=False)
+(options, args) = parser.parse_args()
+
+if options.prefix == None:
     bin_prefix = "./src/tools/info"
+else:
+    bin_prefix = options.prefix + "/bin"
+
+if not (os.path.isdir(bin_prefix)):
+    parser.print_help()
+    exit(1)
 
 ucx_info = bin_prefix + "/ucx_info"
 ucx_info_args = " -e -u t -n "
 
-status, output = commands.getstatusoutput(ucx_info + " -c | grep -e \"UCX_RC_.*_MAX_NUM_EPS\"")
+status, output = exec_cmd(ucx_info + " -c | grep -e \"UCX_RC_.*_MAX_NUM_EPS\"")
 match = re.findall(r'\S+=(\d+)', output)
 if match:
     rc_max_num_eps = int(max(match))
 else:
     rc_max_num_eps = 0
 
-status, output = commands.getstatusoutput("ibv_devinfo  -l | tail -n +2 | sed -e 's/^[ \t]*//' | head -n -1 ")
+status, output = exec_cmd("ibv_devinfo  -l | tail -n +2 | sed -e 's/^[ \t]*//' | head -n -1 ")
 dev_list = output.splitlines()
 port = "1"
 
 for dev in sorted(dev_list):
-    status, dev_attrs = commands.getstatusoutput("ibv_devinfo -d " + dev + " -i " + port)
+    status, dev_attrs = exec_cmd("ibv_devinfo -d " + dev + " -i " + port)
     if dev_attrs.find("PORT_ACTIVE") == -1:
         continue
 
