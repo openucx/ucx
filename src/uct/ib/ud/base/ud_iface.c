@@ -105,8 +105,9 @@ uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface,
     union ibv_gid dgid;
     uint16_t dlid;
     enum ibv_mtu mtu;
+    uint8_t gid_index;
 
-    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid, &mtu);
+    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid, &gid_index, &mtu);
     return uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
 }
 
@@ -157,8 +158,9 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
     uct_ud_ep_t *cep;
     uint16_t dlid;
     enum ibv_mtu mtu;
+    uint8_t gid_index;
 
-    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid, &mtu);
+    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid, &gid_index, &mtu);
     peer = uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
     if (peer == NULL) {
         peer = malloc(sizeof *peer);

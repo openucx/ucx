@@ -137,6 +137,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     size_t addr_length;
     int qp_attr_mask;
     char dev_name[UCT_DEVICE_NAME_MAX];
+    char ah_attr_str[128];
     uct_ib_roce_version_info_t roce_info;
 
     /* get the qp attributes in order to modify the qp state.
@@ -160,8 +161,12 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         ucs_assert(!memcmp(&cm_id->route.addr.addr.ibaddr.dgid,
                            &qp_attr.ah_attr.grh.dgid,
                            sizeof(qp_attr.ah_attr.grh.dgid)));
+        params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
+        params.gid_index = qp_attr.ah_attr.grh.sgid_index;
     }
 
+    ucs_debug("ah_attr %s", uct_ib_ah_attr_str(ah_attr_str, sizeof(ah_attr_str),
+                                               &qp_attr.ah_attr));
     ucs_assert_always(qp_attr.path_mtu != 0);
     params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
     params.path_mtu = qp_attr.path_mtu;

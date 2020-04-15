@@ -85,6 +85,7 @@ public:
         uct_ib_address_t *ib_addr;
         uint16_t lid_out;
         enum ibv_mtu mtu;
+        uint8_t gid_index;
 
         ib_addr = (uct_ib_address_t*)malloc(uct_ib_iface_address_size(iface));
 
@@ -92,7 +93,7 @@ public:
         gid_in.global.interface_id  = 0xdeadbeef;
         uct_ib_iface_address_pack(iface, &gid_in, lid_in, ib_addr);
 
-        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out, &mtu);
+        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out, &gid_index, &mtu);
 
         if (uct_ib_iface_is_roce(iface)) {
             EXPECT_TRUE(iface->config.force_global_addr);
@@ -106,6 +107,7 @@ public:
         }
 
         EXPECT_EQ(0, mtu);
+        EXPECT_EQ(std::numeric_limits<uint8_t>::max(), gid_index);
         free(ib_addr);
     }
 
@@ -121,7 +123,9 @@ public:
         gid.global.subnet_prefix = subnet_prefix ?: iface->gid_info.gid.global.subnet_prefix;
         gid.global.interface_id  = 0xdeadbeef;
 
-        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, 0, &ah_attr);
+        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid,
+                                               iface->gid_info.gid_index, 0,
+                                               &ah_attr);
 
         if (uct_ib_iface_is_roce(iface)) {
             /* in case of roce, should be global */
