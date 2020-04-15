@@ -603,7 +603,9 @@ static inline uct_ib_mlx5_dbrec_t *uct_ib_mlx5_get_dbrec(uct_ib_mlx5_md_t *md)
     dbrec = (uct_ib_mlx5_dbrec_t *)ucs_mpool_get_inline(&md->dbrec_pool);
     ucs_recursive_spin_unlock(&md->dbrec_lock);
     if (dbrec != NULL) {
-        dbrec->md = md;
+        dbrec->db[MLX5_SND_DBR] = 0;
+        dbrec->db[MLX5_RCV_DBR] = 0;
+        dbrec->md               = md;
     }
 
     return dbrec;
