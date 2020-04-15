@@ -120,8 +120,8 @@ try_load_cuda_env() {
 }
 
 unload_cuda_env() {
-	module unload $CUDA_MODULE
-	module unload $GDRCOPY_MODULE
+	module unload $CUDA_MODULE || true
+	module unload $GDRCOPY_MODULE || true
 }
 
 #
@@ -397,7 +397,7 @@ build_icc() {
 		echo "==== Not building with Intel compiler ===="
 		echo "ok 1 - # SKIP because Intel compiler not installed" >> build_icc.tap
 	fi
-	module unload intel/ics
+	module unload intel/ics || true
 }
 
 #
@@ -426,7 +426,7 @@ build_pgi() {
 	fi
 
 	rm -rf ${pgi_test_file} ${pgi_test_file}.out
-	module unload pgi/latest
+	module unload pgi/latest || true
 }
 
 #
@@ -475,7 +475,7 @@ build_ugni() {
 	$MAKE  distcheck
 	$MAKEP distclean
 
-	module unload dev/cray-ugni
+	module unload dev/cray-ugni || true
 	echo "ok 1 - build successful " >> build_ugni.tap
 }
 
@@ -640,7 +640,7 @@ build_armclang() {
 	fi
 
 	rm -rf ${armclang_test_file} ${armclang_test_file}.out
-	module unload arm-compiler/latest
+	module unload arm-compiler/latest || true
 }
 
 check_inst_headers() {
