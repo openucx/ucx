@@ -576,7 +576,7 @@ static void ucs_stats_open_dest()
         status = ucs_open_output_stream(ucs_global_opts.stats_dest,
                                         UCS_LOG_LEVEL_ERROR,
                                         &ucs_stats_context.stream,
-                                        &need_close, &next_token);
+                                        &need_close, &next_token, NULL);
         if (status != UCS_OK) {
             goto out_free;
         }

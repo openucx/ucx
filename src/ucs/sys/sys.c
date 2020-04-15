@@ -289,7 +289,7 @@ uint64_t ucs_generate_uuid(uint64_t seed)
 ucs_status_t
 ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
                        FILE **p_fstream, int *p_need_close,
-                       const char **p_next_token)
+                       const char **p_next_token, char **p_filename)
 {
     FILE *output_stream;
     char filename[256];
@@ -297,7 +297,10 @@ ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
     const char *p;
     size_t len;
 
-    *p_next_token = config_str;
+    *p_next_token   = config_str;
+    if (p_filename != NULL) {
+        *p_filename = NULL;
+    }
 
     len = strcspn(config_str, ":");
     if (!strncmp(config_str, "stdout", len)) {
@@ -325,6 +328,16 @@ ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
             ucs_log(err_log_level, "failed to open '%s' for writing: %m",
                     filename);
             return UCS_ERR_IO_ERROR;
+        }
+
+        if (p_filename != NULL) {
+            *p_filename = ucs_strdup(filename, "filename");
+            if (*p_filename == NULL) {
+                ucs_log(err_log_level, "failed to allocate filename for '%s'",
+                        filename);
+                fclose(output_stream);
+                return UCS_ERR_NO_MEMORY;
+            }
         }
 
         *p_fstream    = output_stream;

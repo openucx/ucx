@@ -33,6 +33,12 @@ typedef struct {
     /* Log file */
     char                       *log_file;
 
+    /* Maximal log file size */
+    size_t                     log_file_size;
+
+    /* Maximal backup log files count that could be created by log infrastructure */
+    unsigned                   log_file_rotate;
+
     /* Size of log buffer for one message */
     size_t                     log_buffer_size;
 

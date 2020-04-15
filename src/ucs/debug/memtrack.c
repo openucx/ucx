@@ -320,7 +320,7 @@ static void ucs_memtrack_generate_report()
 
     status = ucs_open_output_stream(ucs_global_opts.memtrack_dest,
                                     UCS_LOG_LEVEL_ERROR, &output_stream,
-                                    &need_close, &next_token);
+                                    &need_close, &next_token, NULL);
     if (status != UCS_OK) {
         return;
     }
