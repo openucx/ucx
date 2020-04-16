@@ -699,4 +699,11 @@ std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs() {
     return result;
 }
 
+void skip_on_address_sanitizer()
+{
+#ifdef __SANITIZE_ADDRESS__
+    UCS_TEST_SKIP_R("Address sanitizer");
+#endif
+}
+
 } // ucs

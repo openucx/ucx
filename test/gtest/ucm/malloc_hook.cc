@@ -212,6 +212,8 @@ protected:
         ucs_status_t status;
         mmap_event<malloc_hook> event(this);
 
+        ucs::skip_on_address_sanitizer();
+
         m_got_event = 0;
         ucm_malloc_state_reset(128 * 1024, 128 * 1024);
         malloc_trim(0);
