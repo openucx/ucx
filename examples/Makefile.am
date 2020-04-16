@@ -6,11 +6,11 @@
 #
 
 examplesdir = $(pkgdatadir)/examples
-dist_examples_DATA = \
+dist_examples_DATA =  \
 	ucx_hello_world.h \
 	ucp_hello_world.c \
 	uct_hello_world.c \
-	ucx_profiling.c \
+	ucx_profiling.c   \
 	ucp_client_server.c
 
 if HAVE_CUDA
@@ -37,7 +37,7 @@ installcheck-local:
 
 if HAVE_EXAMPLES
 
-noinst_PROGRAMS = \
+bin_PROGRAMS = \
 	ucp_hello_world \
 	uct_hello_world \
 	ucx_profiling \

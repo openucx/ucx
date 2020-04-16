@@ -773,7 +773,7 @@ run_hello() {
 
 	if [ ! -x ${test_name} ]
 	then
-		$MAKEP -C test/examples ${test_name}
+		$MAKEP -C examples ${test_name}
 	fi
 
 	# set smaller timeouts so the test will complete faster
@@ -791,7 +791,7 @@ run_hello() {
 		error_emulation=0
 	fi
 
-	run_client_server_app "./test/examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
+	run_client_server_app "./examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
 
 	if [[ ${test_args} == *"-e"* ]]
 	then
