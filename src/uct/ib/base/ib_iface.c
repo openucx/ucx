@@ -390,8 +390,9 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
     params.gid       = gid;
     params.lid       = lid;
     params.roce_info = &iface->gid_info.roce_info;
-    params.path_mtu  = 0; /* to suppress gcc 4.3.4 warning */
-    params.path_mtu  = UINT8_MAX;
+    /* to suppress gcc 4.3.4 warning */
+    params.path_mtu  = 0;
+    params.gid_index = UINT8_MAX;
     uct_ib_address_pack(&params, ib_addr);
 }
 
@@ -617,7 +618,8 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
         ah_attr->is_global      = 0;
     }
 
-    ucs_info("ah_attr %s", uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
+    ucs_debug("iface %p: ah_attr %s", iface,
+              uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
 }
 
 void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,

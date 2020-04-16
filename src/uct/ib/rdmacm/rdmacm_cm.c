@@ -165,8 +165,9 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         params.gid_index = qp_attr.ah_attr.grh.sgid_index;
     }
 
-    ucs_debug("ah_attr %s", uct_ib_ah_attr_str(ah_attr_str, sizeof(ah_attr_str),
-                                               &qp_attr.ah_attr));
+    ucs_debug("cm_id %p: ah_attr %s", cm_id,
+              uct_ib_ah_attr_str(ah_attr_str, sizeof(ah_attr_str),
+                                 &qp_attr.ah_attr));
     ucs_assert_always(qp_attr.path_mtu != 0);
     params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
     params.path_mtu = qp_attr.path_mtu;
