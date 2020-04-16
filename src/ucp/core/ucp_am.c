@@ -53,21 +53,24 @@ UCS_PROFILE_FUNC_VOID(ucp_am_data_release,
         ucs_free(rdesc);
         return;
     } else if (rdesc->flags & UCP_RECV_DESC_FLAG_AM_HDR) {
-        desc = rdesc;
-        rdesc = UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucp_am_hdr_t));
+        desc   = rdesc;
+        rdesc  = UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucp_am_hdr_t));
         *rdesc = *desc;
     } else if (rdesc->flags & UCP_RECV_DESC_FLAG_AM_REPLY) {
-        desc = rdesc;
-        rdesc = UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucp_am_reply_hdr_t));
+        desc   = rdesc;
+        rdesc  = UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucp_am_reply_hdr_t));
         *rdesc = *desc;
-    } 
+    }
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
     ucp_recv_desc_release(rdesc);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
                  (worker, id, cb, arg, flags),
-                 ucp_worker_h worker, uint16_t id, 
-                 ucp_am_callback_t cb, void *arg, 
+                 ucp_worker_h worker, uint16_t id,
+                 ucp_am_callback_t cb, void *arg,
                  uint32_t flags)
 {
     size_t num_entries;
@@ -75,21 +78,25 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_ERR_INVALID_PARAM);
 
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
     if (id >= worker->am_cb_array_len) {
         num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
-        worker->am_cbs = ucs_realloc(worker->am_cbs, num_entries * 
+        worker->am_cbs = ucs_realloc(worker->am_cbs, num_entries *
                                      sizeof(ucp_worker_am_entry_t),
                                      "UCP AM callback array");
-        memset(worker->am_cbs + worker->am_cb_array_len, 
+        memset(worker->am_cbs + worker->am_cb_array_len,
                0, (num_entries - worker->am_cb_array_len)
                * sizeof(ucp_worker_am_entry_t));
-        
+
         worker->am_cb_array_len = num_entries;
     }
 
     worker->am_cbs[id].cb      = cb;
     worker->am_cbs[id].context = arg;
     worker->am_cbs[id].flags   = flags;
+
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return UCS_OK;
 }
