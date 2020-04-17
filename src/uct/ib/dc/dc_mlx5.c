@@ -304,7 +304,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
                                                 uct_dc_dci_t *dci)
 {
     uct_ib_iface_t *ib_iface           = &iface->super.super.super;
-    uct_ib_qp_attr_t attr              = {};
+    uct_ib_mlx5_qp_attr_t attr         = {};
     ucs_status_t status;
 #if HAVE_DC_DV
     uct_ib_device_t *dev               = uct_ib_iface_device(ib_iface);
@@ -319,13 +319,13 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
         return status;
     }
 
-    uct_ib_iface_fill_attr(ib_iface, &attr);
-    attr.ibv.cap.max_recv_sge           = 0;
+    uct_ib_iface_fill_attr(ib_iface, &attr.super);
+    attr.super.ibv.cap.max_recv_sge     = 0;
 
     dv_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
     dv_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCI;
     dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
-    qp = mlx5dv_create_qp(dev->ibv_context, &attr.ibv, &dv_attr);
+    qp = mlx5dv_create_qp(dev->ibv_context, &attr.super.ibv, &dv_attr);
     if (qp == NULL) {
         ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT", DCI): failed: %m",
                   UCT_IB_IFACE_ARG(ib_iface));
@@ -374,7 +374,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     }
 
     uct_rc_txqp_available_set(&dci->txqp, dci->txwq.bb_max);
-    *cap = attr.ibv.cap;
+    *cap = attr.super.ibv.cap;
     return UCS_OK;
 
 err:

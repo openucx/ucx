@@ -277,7 +277,7 @@ void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp)
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
-                                         uct_ib_qp_attr_t *attr)
+                                         uct_ib_mlx5_qp_attr_t *attr)
 {
     ucs_status_t status;
 
@@ -286,8 +286,8 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
         return status;
     }
 
-    uct_ib_exp_qp_fill_attr(iface, attr);
-    status = uct_ib_iface_create_qp(iface, attr, &qp->verbs.qp);
+    uct_ib_exp_qp_fill_attr(iface, &attr->super);
+    status = uct_ib_iface_create_qp(iface, &attr->super, &qp->verbs.qp);
     if (status != UCS_OK) {
         return status;
     }

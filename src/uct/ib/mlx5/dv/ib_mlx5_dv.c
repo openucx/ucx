@@ -37,7 +37,7 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
-                                        uct_ib_qp_attr_t *attr)
+                                        uct_ib_mlx5_qp_attr_t *attr)
 {
     uct_ib_mlx5_md_t *md   = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev   = &md->super.dev;
@@ -57,7 +57,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     void *qpc;
     int ret;
 
-    uct_ib_iface_fill_attr(iface, attr);
+    uct_ib_iface_fill_attr(iface, &attr->super);
 
     uar = uct_worker_tl_data_get(iface->super.worker,
                                  UCT_IB_MLX5_DEVX_UAR_KEY,
@@ -74,12 +74,12 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                sizeof(struct mlx5_wqe_umr_ctrl_seg) +
                sizeof(struct mlx5_wqe_mkey_context_seg) +
                ucs_max(sizeof(struct mlx5_wqe_umr_klm_seg), 64) +
-               ucs_max(attr->cap.max_send_sge * sizeof(struct mlx5_wqe_data_seg),
+               ucs_max(attr->super.cap.max_send_sge * sizeof(struct mlx5_wqe_data_seg),
                        ucs_align_up(sizeof(struct mlx5_wqe_inl_data_seg) +
-                                    attr->cap.max_inline_data, 16));
-    len_tx = ucs_roundup_pow2_or0(attr->cap.max_send_wr * wqe_size);
+                                    attr->super.cap.max_inline_data, 16));
+    len_tx = ucs_roundup_pow2_or0(attr->super.cap.max_send_wr * wqe_size);
     max_tx = len_tx / MLX5_SEND_WQE_BB;
-    max_rx = ucs_roundup_pow2_or0(attr->cap.max_recv_wr);
+    max_rx = ucs_roundup_pow2_or0(attr->super.cap.max_recv_wr);
     len    = len_tx + max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
 
     if (tx != NULL) {
@@ -104,13 +104,13 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err_free_mem;
     }
 
-    dv.pd.in  = attr->ibv.pd;
+    dv.pd.in  = attr->super.ibv.pd;
     dv.pd.out = &dvpd;
-    dv.cq.in  = attr->ibv.send_cq;
+    dv.cq.in  = attr->super.ibv.send_cq;
     dv.cq.out = &dvscq;
     dvflags   = MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ;
     mlx5dv_init_obj(&dv, dvflags);
-    dv.cq.in  = attr->ibv.recv_cq;
+    dv.cq.in  = attr->super.ibv.recv_cq;
     dv.cq.out = &dvrcq;
     mlx5dv_init_obj(&dv, MLX5DV_OBJ_CQ);
 
@@ -120,16 +120,16 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, pd, dvpd.pdn);
     UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, uar->uar->page_id);
-    ucs_assert((attr->srq == NULL) || (attr->srq_num != 0));
-    UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, !!attr->srq_num);
-    UCT_IB_MLX5DV_SET(qpc, qpc, srqn_rmpn_xrqn, attr->srq_num);
+    ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
+    UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, !!attr->super.srq_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, srqn_rmpn_xrqn, attr->super.srq_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_snd, dvscq.cqn);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, dvrcq.cqn);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_sq_size, ucs_ilog2_or0(max_tx));
     UCT_IB_MLX5DV_SET(qpc, qpc, log_rq_size, ucs_ilog2_or0(max_rx));
     UCT_IB_MLX5DV_SET(qpc, qpc, cs_req, UCT_IB_MLX5_QPC_CS_REQ_UP_TO_64B);
     UCT_IB_MLX5DV_SET(qpc, qpc, cs_res,
-                      uct_ib_mlx5_qpc_cs_res(attr->max_inl_resp));
+                      uct_ib_mlx5_qpc_cs_res(attr->super.max_inl_resp));
     UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
     UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
 
@@ -157,7 +157,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, opcode, UCT_IB_MLX5_CMD_OP_RST2INIT_QP);
     UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, qp->qp_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
-    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, attr->port);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, attr->super.port);
     UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
 
     ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2init, sizeof(in_2init),
@@ -170,8 +170,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     qp->type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
 
-    attr->cap.max_send_wr = max_tx;
-    attr->cap.max_recv_wr = max_rx;
+    attr->super.cap.max_send_wr = max_tx;
+    attr->super.cap.max_recv_wr = max_rx;
 
     if (tx != NULL) {
         tx->reg    = &uar->super;

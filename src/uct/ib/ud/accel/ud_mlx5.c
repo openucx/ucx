@@ -709,14 +709,17 @@ static void uct_ud_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
 }
 
 static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
-                                                uct_ib_qp_attr_t *attr,
+                                                uct_ib_qp_attr_t *ib_attr,
                                                 struct ibv_qp **qp_p)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
     uct_ib_mlx5_qp_t *qp = &iface->tx.wq.super;
+    uct_ib_mlx5_qp_attr_t attr = {};
     ucs_status_t status;
 
-    status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, attr);
+    attr.super     = *ib_attr;
+
+    status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, &attr);
     if (status != UCS_OK) {
         return status;
     }

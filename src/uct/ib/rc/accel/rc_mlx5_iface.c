@@ -250,7 +250,7 @@ static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
 ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uct_ib_mlx5_txwq_t *txwq,
-                                         uct_ib_qp_attr_t *attr)
+                                         uct_ib_mlx5_qp_attr_t *attr)
 {
     uct_ib_iface_t *ib_iface           = &iface->super.super;
     ucs_status_t status;
@@ -269,12 +269,12 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
-    uct_ib_iface_fill_attr(ib_iface, attr);
+    uct_ib_iface_fill_attr(ib_iface, &attr->super);
 #if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
     dv_attr.comp_mask    = MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
     dv_attr.create_flags = MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
 #endif
-    qp->verbs.qp = mlx5dv_create_qp(dev->ibv_context, &attr->ibv, &dv_attr);
+    qp->verbs.qp = mlx5dv_create_qp(dev->ibv_context, &attr->super.ibv, &dv_attr);
     if (qp->verbs.qp == NULL) {
         ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT"): failed: %m",
                   UCT_IB_IFACE_ARG(ib_iface));
@@ -295,7 +295,7 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
         goto err_destory_qp;
     }
 
-    if (attr->cap.max_send_wr) {
+    if (attr->super.cap.max_send_wr) {
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
                                        iface->tx.mmio_mode, txwq,
                                        qp->verbs.qp);
