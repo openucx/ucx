@@ -1073,6 +1073,7 @@ static void uct_ib_iface_set_path_mtu(uct_ib_iface_t *iface,
 
     /* MTU is set by user configuration */
     if (config->path_mtu != UCT_IB_MTU_DEFAULT) {
+        /* cast from uct_ib_mtu_t to ibv_mtu */
         iface->config.path_mtu = (enum ibv_mtu)(config->path_mtu +
                                                 (IBV_MTU_512 - UCT_IB_MTU_512));
     } else if ((port_mtu > IBV_MTU_2048) &&

@@ -86,9 +86,9 @@ enum {
  * Flags which specify which address fields are present
  */
 enum {
-    /* GID index */
+    /* GID index, used for both ETH or IB link layer.  */
     UCT_IB_ADDRESS_FLAG_GID_INDEX      = UCS_BIT(0),
-    /* Defines path MTU size */
+    /* Defines path MTU size, used for both ETH or IB link layer. */
     UCT_IB_ADDRESS_FLAG_PATH_MTU       = UCS_BIT(1),
 
     /* If set - ETH link layer, else- IB link layer */
@@ -96,15 +96,15 @@ enum {
 
     /* Used for ETH link layer */
     UCT_IB_ADDRESS_FLAG_ROCE_IPV6      = UCS_BIT(3),
-    /* NOTE: In case of ETH link layer following bits are used to pack RoCE version */
+    /* Used for ETH link layer, following bits are used to pack RoCE version */
     UCT_IB_ADDRESS_FLAG_ETH_LAST       = UCS_BIT(4),
 
     /* Used for IB link layer */
-    UCT_IB_ADDRESS_FLAG_SUBNET16       = UCS_BIT(4),
+    UCT_IB_ADDRESS_FLAG_SUBNET16       = UCS_BIT(3),
     /* Used for IB link layer */
-    UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(5),
+    UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(4),
     /* Used for IB link layer */
-    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6),
+    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(5),
 };
 
 

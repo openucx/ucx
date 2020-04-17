@@ -85,7 +85,8 @@ typedef struct uct_ib_address_pack_params {
     /* path MTU size as defined in enum ibv_mtu,
        must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU is set. */
     enum ibv_mtu                      path_mtu;
-    /* GID index */
+    /* GID index,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX is set. */
     uint8_t                           gid_index;
 } uct_ib_address_pack_params_t;
 
