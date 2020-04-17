@@ -300,10 +300,14 @@ public:
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
 
         dummy_ib_iface.config.port_num = m_port;
+        dummy_ib_iface.super.md        = &ib_md->super;
+
+        ASSERT_EQ(&ib_md->dev, uct_ib_iface_device(&dummy_ib_iface));
+
         /* uct_ib_iface_init_roce_gid_info() requires only the port from the
          * ib_iface so we can use a dummy one here.
          * this function will set the gid_index in the dummy ib_iface. */
-        status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface, &ib_md->dev,
+        status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface,
                                                  md_config->ext.gid_index);
         ASSERT_UCS_OK(status);
 

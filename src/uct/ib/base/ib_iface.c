@@ -186,7 +186,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "\"auto\" option selects a first valid pkey value with full membership.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
   {"RESOURCE_DOMAIN", "y",
    "Enable multiple resource domains (experimental).",
    ucs_offsetof(uct_ib_iface_config_t, enable_res_domain), UCS_CONFIG_TYPE_BOOL},
@@ -928,17 +928,17 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
 
 int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev)
 {
-    return uct_ib_device_is_port_roce(dev, iface->config.port_num) &&
+    return uct_ib_iface_is_roce(iface) &&
            (iface->gid_info.roce_info.ver == UCT_IB_DEVICE_ROCE_V2);
 }
 
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             uct_ib_device_t *dev,
                                              size_t md_config_index)
 {
-    uint8_t port_num = iface->config.port_num;
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uint8_t port_num     = iface->config.port_num;
 
-    ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
+    ucs_assert(uct_ib_iface_is_roce(iface));
 
     if (md_config_index == UCS_ULUNITS_AUTO) {
         return uct_ib_device_select_gid(dev, port_num, &iface->gid_info);
@@ -950,16 +950,14 @@ ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
 }
 
 static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
-                                               uct_ib_device_t *dev,
                                                size_t md_config_index)
 {
-    uint8_t port_num = iface->config.port_num;
     uct_ib_device_gid_info_t *gid_info = &iface->gid_info;
     ucs_status_t status;
 
     /* Fill the gid index and the RoCE version */
-    if (uct_ib_device_is_port_roce(dev, port_num)) {
-        status = uct_ib_iface_init_roce_gid_info(iface, dev, md_config_index);
+    if (uct_ib_iface_is_roce(iface)) {
+        status = uct_ib_iface_init_roce_gid_info(iface, md_config_index);
         if (status != UCS_OK) {
             goto out;
         }
@@ -973,8 +971,9 @@ static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
     }
 
     /* Fill the gid */
-    status = uct_ib_device_query_gid(dev, port_num, gid_info->gid_index,
-                                     &gid_info->gid);
+    status = uct_ib_device_query_gid(uct_ib_iface_device(iface),
+                                     iface->config.port_num,
+                                     gid_info->gid_index, &gid_info->gid);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1059,7 +1058,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    status = uct_ib_iface_init_gid_info(self, dev, ib_md->config.gid_index);
+    status = uct_ib_iface_init_gid_info(self, ib_md->config.gid_index);
     if (status != UCS_OK) {
         goto err;
     }

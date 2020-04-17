@@ -42,7 +42,7 @@
 #  include <uct/ib/rc/base/rc_iface.h>
 #  include <uct/ib/rc/base/rc_ep.h>
 #  include <uct/ib/rc/verbs/rc_verbs.h>
-#  if HAVE_MLX5_HW
+#  ifdef HAVE_MLX5_HW
 #    include <uct/ib/rc/accel/rc_mlx5.h>
 #  endif
 #endif
@@ -55,13 +55,13 @@
 #if HAVE_TL_UD
 #  include <uct/ib/ud/base/ud_def.h>
 #  include <uct/ib/ud/verbs/ud_verbs.h>
-#  if HAVE_MLX5_HW_UD
+#  ifdef HAVE_MLX5_HW_UD
 #    include <uct/ib/ud/accel/ud_mlx5.h>
 #  endif
 #endif
 
 
-#if HAVE_TL_UGNI
+#ifdef HAVE_TL_UGNI
 #  include <uct/ugni/base/ugni_ep.h>
 #  include <uct/ugni/base/ugni_iface.h>
 #  include <uct/ugni/base/ugni_device.h>
@@ -146,7 +146,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(uct_tcp_ep_t);
         PRINT_SIZE(uct_self_ep_t);
 
-#if HAVE_TL_UGNI
+#ifdef HAVE_TL_UGNI
         PRINT_SIZE(uct_sockaddr_ugni_t);
         PRINT_SIZE(uct_sockaddr_smsg_ugni_t);
         PRINT_SIZE(uct_devaddr_ugni_t);
@@ -187,7 +187,7 @@ void print_type_info(const char * tl_name)
             PRINT_SIZE(uct_rc_verbs_iface_t);
         }
 
-#if HAVE_MLX5_HW
+#ifdef HAVE_MLX5_HW
         if (tl_name == NULL || !strcasecmp(tl_name, "rc_mlx5")) {
             PRINT_SIZE(uct_rc_mlx5_am_short_hdr_t);
             PRINT_SIZE(uct_rc_mlx5_ep_t);
@@ -230,7 +230,7 @@ void print_type_info(const char * tl_name)
             PRINT_SIZE(uct_ud_verbs_iface_t);
         }
 
-#if HAVE_MLX5_HW_UD
+#ifdef HAVE_MLX5_HW_UD
         if (tl_name == NULL || !strcasecmp(tl_name, "ud_mlx5")) {
             PRINT_SIZE(uct_ud_mlx5_ep_t);
             PRINT_SIZE(uct_ud_mlx5_iface_t);
@@ -240,7 +240,7 @@ void print_type_info(const char * tl_name)
     }
 #endif
 
-#if HAVE_TL_UGNI
+#ifdef HAVE_TL_UGNI
     if (tl_name == NULL || !strcasecmp(tl_name, "ugni")) {
         printf("UGNI:\n");
         PRINT_SIZE(uct_ugni_device_t);

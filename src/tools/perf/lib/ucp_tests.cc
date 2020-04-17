@@ -98,23 +98,6 @@ public:
         ucp_worker_progress(m_perf.ucp.worker);
     }
 
-    ucs_status_t UCS_F_ALWAYS_INLINE wait(void *request, bool is_requestor)
-    {
-        if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
-            return UCS_PTR_STATUS(request);
-        }
-
-        while (!ucp_request_is_completed(request)) {
-            if (is_requestor) {
-                progress_requestor();
-            } else {
-                progress_responder();
-            }
-        }
-        ucp_request_release(request);
-        return UCS_OK;
-    }
-
     ssize_t UCS_F_ALWAYS_INLINE wait_stream_recv(void *request)
     {
         size_t       length;
@@ -133,17 +116,41 @@ public:
 
     static void send_cb(void *request, ucs_status_t status)
     {
-        ucp_perf_request_t *r = reinterpret_cast<ucp_perf_request_t*>(request);
-        ucp_perf_test_runner *sender = (ucp_perf_test_runner*)r->context;
+        ucp_perf_request_t *r      = reinterpret_cast<ucp_perf_request_t*>(
+                                          request);
+        ucp_perf_test_runner *test = (ucp_perf_test_runner*)r->context;
 
-        sender->send_completed();
-        ucp_request_release(request);
+        test->op_completed();
+        r->context = NULL;
+        ucp_request_free(request);
     }
 
-    void UCS_F_ALWAYS_INLINE wait_window(unsigned n)
+    static void tag_recv_cb(void *request, ucs_status_t status,
+                            ucp_tag_recv_info_t *info)
+    {
+        ucp_perf_request_t *r = reinterpret_cast<ucp_perf_request_t*>(request);
+        ucp_perf_test_runner *test;
+
+        /* if the request is completed during tag_recv_nb(), the context is
+         * still NULL */
+        if (r->context == NULL) {
+            return;
+        }
+
+        test = (ucp_perf_test_runner*)r->context;
+        test->op_completed();
+        r->context = NULL;
+        ucp_request_free(request);
+    }
+
+    void UCS_F_ALWAYS_INLINE wait_window(unsigned n, bool is_requestor)
     {
         while (m_outstanding >= (m_max_outstanding - n + 1)) {
-            progress_requestor();
+            if (is_requestor) {
+                progress_requestor();
+            } else {
+                progress_responder();
+            }
         }
     }
 
@@ -158,7 +165,7 @@ public:
         case UCX_PERF_CMD_TAG:
         case UCX_PERF_CMD_TAG_SYNC:
         case UCX_PERF_CMD_STREAM:
-            wait_window(1);
+            wait_window(1, true);
             /* coverity[switch_selector_expr_is_constant] */
             switch (CMD) {
             case UCX_PERF_CMD_TAG:
@@ -181,7 +188,7 @@ public:
                 return UCS_PTR_STATUS(request);
             }
             reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
-            send_started();
+            op_started();
             return UCS_OK;
         case UCX_PERF_CMD_PUT:
             *((uint8_t*)buffer + length - 1) = sn;
@@ -236,6 +243,7 @@ public:
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
         case UCX_PERF_CMD_TAG_SYNC:
+            wait_window(1, false);
             if (FLAGS & UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE) {
                 ucp_tag_recv_info_t tag_info;
                 while (ucp_tag_probe_nb(worker, TAG, TAG_MASK, 0, &tag_info) == NULL) {
@@ -243,8 +251,18 @@ public:
                 }
             }
             request = ucp_tag_recv_nb(worker, buffer, length, datatype, TAG, TAG_MASK,
-                                      (ucp_tag_recv_callback_t)ucs_empty_function);
-            return wait(request, false);
+                                      tag_recv_cb);
+            if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
+                return UCS_PTR_STATUS(request);
+            }
+            if (ucp_request_is_completed(request)) {
+                /* request is already completed and callback was called */
+                ucp_request_free(request);
+                return UCS_OK;
+            }
+            reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
+            op_started();
+            return UCS_OK;
         case UCX_PERF_CMD_PUT:
             /* coverity[switch_selector_expr_is_constant] */
             switch (TYPE) {
@@ -314,12 +332,14 @@ public:
 
         ucx_perf_test_start_clock(&m_perf);
 
+        ucx_perf_omp_barrier();
+
         send_buffer   = m_perf.send_buffer;
         recv_buffer   = m_perf.recv_buffer;
         worker        = m_perf.ucp.worker;
-        ep            = m_perf.ucp.peers[1 - my_index].ep;
-        remote_addr   = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;
-        rkey          = m_perf.ucp.peers[1 - my_index].rkey;
+        ep            = m_perf.ucp.ep;
+        remote_addr   = m_perf.ucp.remote_addr;
+        rkey          = m_perf.ucp.rkey;
         sn            = 0;
         send_length   = length;
         recv_length   = length;
@@ -346,8 +366,11 @@ public:
             }
         }
 
-        wait_window(m_max_outstanding);
+        wait_window(m_max_outstanding, true);
         ucp_worker_flush(m_perf.ucp.worker);
+
+        ucx_perf_omp_barrier();
+
         ucx_perf_get_time(&m_perf);
         ucp_perf_barrier(&m_perf);
         return UCS_OK;
@@ -376,12 +399,14 @@ public:
 
         ucx_perf_test_start_clock(&m_perf);
 
+        ucx_perf_omp_barrier();
+
         send_buffer   = m_perf.send_buffer;
         recv_buffer   = m_perf.recv_buffer;
         worker        = m_perf.ucp.worker;
-        ep            = m_perf.ucp.peers[1 - my_index].ep;
-        remote_addr   = m_perf.ucp.peers[1 - my_index].remote_addr + m_perf.offset;
-        rkey          = m_perf.ucp.peers[1 - my_index].rkey;
+        ep            = m_perf.ucp.ep;
+        remote_addr   = m_perf.ucp.remote_addr;
+        rkey          = m_perf.ucp.rkey;
         sn            = 0;
         send_length   = length;
         recv_length   = length;
@@ -407,8 +432,11 @@ public:
             }
         }
 
-        wait_window(m_max_outstanding);
+        wait_window(m_max_outstanding, true);
         ucp_worker_flush(m_perf.ucp.worker);
+
+        ucx_perf_omp_barrier();
+
         ucx_perf_get_time(&m_perf);
 
         ucp_perf_barrier(&m_perf);
@@ -478,12 +506,12 @@ private:
         return UCS_OK;
     }
 
-    void UCS_F_ALWAYS_INLINE send_started()
+    void UCS_F_ALWAYS_INLINE op_started()
     {
         ++m_outstanding;
     }
 
-    void UCS_F_ALWAYS_INLINE send_completed()
+    void UCS_F_ALWAYS_INLINE op_completed()
     {
         --m_outstanding;
     }

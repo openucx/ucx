@@ -10,9 +10,9 @@ extern "C" {
   #include <ucs/debug/debug.h>
 }
 
-#include <string.h>    /* memset */
 #include <arpa/inet.h> /* inet_addr */
-#include <pthread.h>   /* pthread_yield */
+#include <locale.h>    /* setlocale */
+#include <string.h>    /* memset */
 
 
 static JavaVM *jvm_global;
@@ -27,6 +27,7 @@ static jclass ucp_tag_msg_cls;
 static jmethodID ucp_tag_msg_cls_constructor;
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
+    setlocale(LC_NUMERIC, "C");
     ucs_debug_disable_signals();
     jvm_global = jvm;
     JNIEnv* env;

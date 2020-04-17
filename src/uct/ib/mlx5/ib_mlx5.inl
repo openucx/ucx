@@ -23,7 +23,7 @@ uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned cqe_index, unsigned mask)
 static UCS_F_ALWAYS_INLINE int
 uct_ib_mlx5_cqe_stride_index(struct mlx5_cqe64* cqe)
 {
-#if HAVE_STRUCT_MLX5_CQE64_IB_STRIDE_INDEX
+#ifdef HAVE_STRUCT_MLX5_CQE64_IB_STRIDE_INDEX
     return ntohs(cqe->ib_stride_index);
 #else
     uint16_t *stride = (uint16_t*)&cqe->rsvd20[2];
@@ -514,7 +514,7 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
     ucs_status_t status;
 
     status = uct_ib_mlx5_iface_get_res_domain(iface, qp);
-    if (status) {
+    if (status != UCS_OK) {
         return status;
     }
 
@@ -530,7 +530,7 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
     }
 #endif
 
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     attr->ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
     attr->ibv.res_domain      = qp->verbs.rd->ibv_domain;
 #endif

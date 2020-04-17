@@ -149,7 +149,7 @@ static int
 uct_ib_mlx5_res_domain_cmp(uct_ib_mlx5_res_domain_t *res_domain,
                            uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     return res_domain->ibv_domain->context == md->dev.ibv_context;
 #elif HAVE_DECL_IBV_ALLOC_TD
     return res_domain->pd->context == md->dev.ibv_context;
@@ -162,7 +162,7 @@ static ucs_status_t
 uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
                             uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain_init_attr attr;
 
     attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL |
@@ -221,7 +221,7 @@ uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
 
 static void uct_ib_mlx5_res_domain_cleanup(uct_ib_mlx5_res_domain_t *res_domain)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_destroy_res_domain_attr attr;
     int ret;
 
