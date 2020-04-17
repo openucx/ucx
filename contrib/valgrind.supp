@@ -175,8 +175,6 @@
    match-leak-kinds: possible
    ...
    fun:verbs_open_device
-   ...
-   fun:rdma_bind_addr
 }
 {
    uct_ib_iface_prepare_rx_wrs_val
