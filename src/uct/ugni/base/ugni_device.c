@@ -420,7 +420,9 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
 
     fh = fopen ("/proc/sys/kernel/pid_max", "r");
     if (NULL != fh) {
-        if (fscanf (fh, "%d", &pid_max));
+        if (fscanf (fh, "%d", &pid_max) != 1) {
+            ucs_debug("cound not read pid_max, using default");
+        }
         fclose (fh);
     }
 
