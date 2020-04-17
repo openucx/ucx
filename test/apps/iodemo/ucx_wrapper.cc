@@ -74,7 +74,7 @@ void UcxCallback::operator()()
 }
 
 UcxContext::UcxContext(size_t iomsg_size, bool verbose) :
-    _listener(NULL), _iomsg_buffer(iomsg_size, '\0'), _verbose_os(verbose)
+    _iomsg_buffer(iomsg_size, '\0'), _verbose(verbose)
 {
     /* Create context */
     ucp_params_t ucp_params;
@@ -120,23 +120,6 @@ void UcxContext::cleanup_conns()
     }
 }
 
-void UcxContext::cleanup_listener()
-{
-    if (_listener) {
-        while (!_conn_requests.empty()) {
-            assert(_listener);
-            verbose_os() << "reject connection request " << _conn_requests.front()
-                         << std::endl;
-            ucp_listener_reject(_listener, _conn_requests.front());
-            _conn_requests.pop_front();
-        }
-
-        ucp_listener_destroy(_listener);
-    } else {
-        assert(_conn_requests.empty());
-    }
-}
-
 void UcxContext::cleanup_worker()
 {
     ucp_request_cancel(_worker, _iomsg_recv_request);
@@ -152,13 +135,80 @@ void UcxContext::cleanup_worker()
 
 UcxContext::~UcxContext()
 {
-    cleanup_conns();
-    cleanup_listener();
+    stop();
     cleanup_worker();
     ucp_cleanup(_context);
 }
 
-void UcxContext::listen(const struct sockaddr* saddr, size_t addrlen)
+void UcxContext::run()
+{
+}
+
+void UcxContext::stop()
+{
+    cleanup_conns();
+}
+
+UcxServer::UcxServer(int port_num, size_t iomsg_size, bool verbose)
+    : UcxContext(iomsg_size, verbose), _port_num(port_num), _listener(NULL)
+{
+}
+
+UcxServer::~UcxServer()
+{
+    stop();
+    assert(_listener == NULL);
+    assert(_conn_requests.empty());
+}
+
+void UcxServer::run()
+{
+    struct sockaddr_in listen_addr;
+    memset(&listen_addr, 0, sizeof(listen_addr));
+    listen_addr.sin_family      = AF_INET;
+    listen_addr.sin_addr.s_addr = INADDR_ANY;
+    listen_addr.sin_port        = htons(_port_num);
+
+    listen((const struct sockaddr*)&listen_addr, sizeof(listen_addr));
+
+    for (;;) {
+        try {
+            progress();
+        } catch (const std::exception &e) {
+            std::cerr << e.what();
+        }
+    }
+}
+
+void UcxServer::stop()
+{
+    cleanup_listener();
+    UcxContext::stop();
+}
+
+void UcxServer::progress()
+{
+    process_conn_request();
+    UcxContext::progress();
+}
+
+void UcxServer::process_conn_request()
+{
+    if (_conn_requests.empty()) {
+        return;
+    }
+
+    ucp_conn_request_h conn_req = _conn_requests.front();
+    _conn_requests.pop_front();
+    UcxConnection *conn = new UcxConnection(*this, get_next_conn_id(), conn_req);
+    try {
+        add_connection(conn);
+    } catch (const UcxError& e) {
+        log() << e.what();
+    }
+}
+
+void UcxServer::listen(const struct sockaddr* saddr, size_t addrlen)
 {
     ucp_listener_params_t listener_params;
 
@@ -169,7 +219,7 @@ void UcxContext::listen(const struct sockaddr* saddr, size_t addrlen)
     listener_params.conn_handler.cb    = connect_callback;
     listener_params.conn_handler.arg   = reinterpret_cast<void*>(this);
 
-    ucs_status_t status = ucp_listener_create(_worker, &listener_params,
+    ucs_status_t status = ucp_listener_create(worker(), &listener_params,
                                               &_listener);
     if (status != UCS_OK) {
         throw UcxError("ucp_listener_create", status);
@@ -179,18 +229,38 @@ void UcxContext::listen(const struct sockaddr* saddr, size_t addrlen)
           << " on " << sockaddr_str(saddr, addrlen) << std::endl;
 }
 
-UcxConnection* UcxContext::connect(const struct sockaddr* saddr, size_t addrlen)
+void UcxServer::connect_callback(ucp_conn_request_h conn_req, void *arg)
 {
-    UcxConnection *conn = new UcxConnection(*this, get_next_conn_id(), saddr,
-                                            addrlen);
-    add_connection(conn);
-    return conn;
+    UcxServer *self = reinterpret_cast<UcxServer*>(arg);
+    log() << "got new connection request " << conn_req << std::endl;
+    self->_conn_requests.push_back(conn_req);
+}
+
+void UcxServer::cleanup_listener()
+{
+    if (_listener) {
+        while (!_conn_requests.empty()) {
+            assert(_listener);
+            verbose_ostream(verbose())
+                << "reject connection request " << _conn_requests.front()
+                << std::endl;
+            ucp_listener_reject(_listener, _conn_requests.front());
+            _conn_requests.pop_front();
+        }
+
+        ucp_listener_destroy(_listener);
+        _listener = NULL;
+    } else {
+        assert(_conn_requests.empty());
+    }
 }
 
 void UcxContext::disconnect(UcxConnection* conn)
 {
-    verbose_os() << "closing connection " << conn << " with id = " << conn->id()
-                 << std::endl;
+    verbose_ostream(_verbose)
+        << "closing connection " << conn << " with id = " << conn->id()
+        << std::endl;
+
     remove_connection(conn);
     conn->disconnect();
     if (!conn->is_disconnected()) {
@@ -200,8 +270,10 @@ void UcxContext::disconnect(UcxConnection* conn)
 
 void UcxContext::on_disconnect(UcxConnection* conn) _GLIBCXX_NOTHROW
 {
-    verbose_os() << "closing connection " << conn << " with id = " << conn->id()
-                 << std::endl;
+    verbose_ostream(_verbose)
+        << "closing connection " << conn << " with id = " << conn->id()
+        << std::endl;
+
     remove_connection(conn);
     conn->on_disconnect();
     if (!conn->is_disconnected()) {
@@ -226,8 +298,6 @@ void UcxContext::progress()
         request_release(_iomsg_recv_request);
         post_recv();
     }
-
-    process_conn_request();
 
     if (!_closing_conns.empty()) {
         UcxConnection *conn = _closing_conns.front();
@@ -290,22 +360,6 @@ void UcxContext::iomsg_recv_callback(void *request, ucs_status_t status,
     r->conn_id   = (info->sender_tag & ~IOMSG_TAG) >> 32;
 }
 
-void UcxContext::process_conn_request()
-{
-    if (_conn_requests.empty()) {
-        return;
-    }
-
-    ucp_conn_request_h conn_req = _conn_requests.front();
-    _conn_requests.pop_front();
-    UcxConnection *conn = new UcxConnection(*this, get_next_conn_id(), conn_req);
-    try {
-        add_connection(conn);
-    } catch (const UcxError& e) {
-        log() << e.what();
-    }
-}
-
 void UcxContext::process_failed_connection(UcxConnection *conn)
 {
     log() << "closing failed connection " << conn << std::endl;
@@ -361,11 +415,32 @@ void UcxContext::request_release(void *request)
     ucp_request_free(request);
 }
 
-void UcxContext::connect_callback(ucp_conn_request_h conn_req, void *arg)
+UcxClient::UcxClient(size_t iomsg_size, bool verbose)
+    : UcxContext(iomsg_size, verbose)
 {
-    UcxContext *self = reinterpret_cast<UcxContext*>(arg);
-    log() << "got new connection request " << conn_req << std::endl;
-    self->_conn_requests.push_back(conn_req);
+}
+
+UcxClient::~UcxClient()
+{
+    stop();
+}
+
+void UcxClient::run()
+{
+    UcxContext::run();
+}
+
+void UcxClient::stop()
+{
+    UcxContext::stop();
+}
+
+UcxConnection* UcxClient::connect(const struct sockaddr* saddr, size_t addrlen)
+{
+    UcxConnection *conn = new UcxConnection(*this, get_next_conn_id(), saddr,
+                                            addrlen);
+    add_connection(conn);
+    return conn;
 }
 
 void UcxConnection::send_io_message(const void *buffer, size_t length,

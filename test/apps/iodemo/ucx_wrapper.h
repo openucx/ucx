@@ -81,19 +81,21 @@ public:
 
 
 class UcxContext {
+    typedef std::map<uint32_t, UcxConnection*> conn_map_t;
+
 public:
     UcxContext(size_t iomsg_size, bool verbose);
     virtual ~UcxContext();
 
-    void listen(const struct sockaddr* saddr, size_t addrlen);
+    virtual void run();
 
-    UcxConnection* connect(const struct sockaddr* saddr, size_t addrlen);
+    virtual void stop();
 
     void disconnect(UcxConnection* conn);
 
     virtual void on_disconnect(UcxConnection* conn) _GLIBCXX_NOTHROW;
 
-    void progress();
+    virtual void progress();
 
     void request_wait(const char *what, void *request);
 
@@ -109,9 +111,14 @@ public:
 
     ucp_worker_h worker() const;
 
-    inline verbose_ostream& verbose_os();
+    inline bool verbose() const {
+        return _verbose;
+    }
 
 protected:
+    static uint32_t get_next_conn_id();
+    void add_connection(UcxConnection *conn);
+    void remove_connection(UcxConnection *conn);
     virtual void process_failed_connection(UcxConnection *conn);
 
 private:
@@ -122,42 +129,51 @@ private:
     static void iomsg_recv_callback(void *request, ucs_status_t status,
                                     ucp_tag_recv_info *info);
 
-    void process_conn_request();
-
     void process_io_message();
-
-    void add_connection(UcxConnection *conn);
-
-    void remove_connection(UcxConnection *conn);
-
-    static uint32_t get_next_conn_id();
 
     static void request_init(void *request);
 
     static void request_reset(ucx_request *r);
 
-    static void connect_callback(ucp_conn_request_h conn_req, void *arg);
-
-    typedef std::map<uint32_t, UcxConnection*> conn_map_t;
-
     void cleanup_conns();
-    void cleanup_listener();
     void cleanup_worker();
 
     ucp_context_h                  _context;
     ucp_worker_h                   _worker;
-    ucp_listener_h                 _listener;
     conn_map_t                     _conns;
     ucx_request*                   _iomsg_recv_request;
     std::string                    _iomsg_buffer;
-    std::deque<ucp_conn_request_h> _conn_requests;
     std::deque<UcxConnection *>    _closing_conns;
-    verbose_ostream                _verbose_os;
+    const bool                     _verbose;
 };
 
-verbose_ostream& UcxContext::verbose_os() {
-    return _verbose_os;
-}
+class UcxClient : protected UcxContext {
+public:
+    UcxClient(size_t iomsg_size, bool verbose);
+    ~UcxClient();
+    virtual void run();
+    virtual void stop();
+    UcxConnection* connect(const struct sockaddr* saddr, size_t addrlen);
+};
+
+class UcxServer : protected UcxContext {
+public:
+    UcxServer(int port_num, size_t iomsg_size, bool verbose);
+    ~UcxServer();
+    virtual void run();
+    virtual void stop();
+    virtual void progress();
+
+private:
+    void listen(const struct sockaddr* saddr, size_t addrlen);
+    static void connect_callback(ucp_conn_request_h conn_req, void *arg);
+    void process_conn_request();
+    void cleanup_listener();
+
+    const int                      _port_num;
+    ucp_listener_h                 _listener;
+    std::deque<ucp_conn_request_h> _conn_requests;
+};
 
 class UcxConnection {
 public:

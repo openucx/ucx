@@ -45,7 +45,7 @@ typedef struct {
 } options_t;
 
 
-class P2pDemoCommon : protected UcxContext {
+class P2pDemoCommon {
 protected:
     /* IO request header */
     typedef struct {
@@ -82,14 +82,7 @@ protected:
         void *_buffer;
     };
 
-    P2pDemoCommon(const options_t& test_opts) :
-        UcxContext(test_opts.iomsg_size, test_opts.verbose),
-        _test_opts(test_opts) {
-
-        _data_buffer.resize(opts().data_size + ALIGNMENT);
-        uintptr_t ptr = (uintptr_t)&_data_buffer[0];
-        _padding = ((ptr + ALIGNMENT - 1) & ~(ALIGNMENT - 1)) - ptr;
-    }
+    P2pDemoCommon(const options_t& test_opts);
 
     const options_t& opts() const {
         return _test_opts;
@@ -102,8 +95,9 @@ protected:
     void send_io_message(UcxConnection *conn, io_op_t op, uint32_t sn) {
         IoMessage *m = new IoMessage(opts().iomsg_size, op, sn,
                                      opts().data_size);
-        verbose_os() << "sending IO " << io_op_names[op] << ", sn " << sn
-                     << " data size " << opts().data_size << std::endl;
+        verbose_ostream(_test_opts.verbose)
+            << "sending IO " << io_op_names[op] << ", sn " << sn
+            << " data size " << opts().data_size << std::endl;
         conn->send_io_message(m->buffer(), opts().iomsg_size, m);
     }
 
@@ -113,8 +107,16 @@ private:
     size_t          _padding;
 };
 
+P2pDemoCommon::P2pDemoCommon(const options_t& test_opts) :
+    _test_opts(test_opts)
+{
+    _data_buffer.resize(opts().data_size + ALIGNMENT);
+    uintptr_t ptr = reinterpret_cast<uintptr_t>(&_data_buffer[0]);
+    _padding = ((ptr + ALIGNMENT - 1) & ~(ALIGNMENT - 1)) - ptr;
+}
 
-class DemoServer : private P2pDemoCommon {
+
+class DemoServer : private UcxServer, private P2pDemoCommon {
 public:
     // sends an IO response when done
     class IoWriteResponseCallback : public UcxCallback {
@@ -135,24 +137,14 @@ public:
         uint32_t        _sn;
     };
 
-    DemoServer(const options_t& test_opts) : P2pDemoCommon(test_opts) {
+    DemoServer(const options_t& test_opts);
+
+    virtual void run() {
+        UcxServer::run();
     }
 
-    void run() {
-        struct sockaddr_in listen_addr;
-        memset(&listen_addr, 0, sizeof(listen_addr));
-        listen_addr.sin_family      = AF_INET;
-        listen_addr.sin_addr.s_addr = INADDR_ANY;
-        listen_addr.sin_port        = htons(opts().port_num);
-
-        listen((const struct sockaddr*)&listen_addr, sizeof(listen_addr));
-        for (;;) {
-            try {
-                progress();
-            } catch (const std::exception &e) {
-                std::cerr << e.what();
-            }
-        }
+    virtual void stop() {
+        UcxServer::stop();
     }
 
     void handle_io_read_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
@@ -176,9 +168,9 @@ public:
     virtual void dispatch_io_message(UcxConnection* conn, const void *buffer) {
         const iomsg_hdr_t *hdr = reinterpret_cast<const iomsg_hdr_t*>(buffer);
 
-        verbose_os() << "got io message " << io_op_names[hdr->op] << " sn "
-                     << hdr->sn << " data size " << hdr->data_size << " conn "
-                     << conn << std::endl;
+        verbose_ostream(opts().verbose)
+            << "got io message " << io_op_names[hdr->op] << " sn " << hdr->sn
+            << " data size " << hdr->data_size << " conn " << conn << std::endl;
 
         if (hdr->op == IO_READ) {
             handle_io_read_request(conn, hdr);
@@ -188,8 +180,13 @@ public:
     }
 };
 
+DemoServer::DemoServer(const options_t& test_opts)
+    : UcxServer(test_opts.port_num, test_opts.iomsg_size, test_opts.verbose),
+      P2pDemoCommon(test_opts)
+{
+}
 
-class DemoClient : private P2pDemoCommon {
+class DemoClient : private UcxClient, private P2pDemoCommon {
 public:
     class IoReadResponseCallback : public UcxCallback {
     public:
@@ -221,10 +218,7 @@ public:
         void* _buffer;
     };
 
-    DemoClient(const options_t& test_opts) :
-        P2pDemoCommon(test_opts),
-        _num_sent(0), _num_completed(0) {
-    }
+    DemoClient(const options_t& test_opts);
 
     void do_io_read(UcxConnection *conn, uint32_t sn) {
         ++_num_sent;
@@ -238,17 +232,18 @@ public:
     void do_io_write(UcxConnection *conn, uint32_t sn) {
         ++_num_sent;
         send_io_message(conn, IO_WRITE, sn);
-        verbose_os() << "sending data " << buffer() << " size "
-                     << opts().data_size << " sn " << sn << std::endl;
+        verbose_ostream(opts().verbose)
+            << "sending data " << buffer() << " size " << opts().data_size
+            << " sn " << sn << std::endl;
         conn->send_data(buffer(), opts().data_size, sn);
     }
 
     virtual void dispatch_io_message(UcxConnection* conn, const void *buffer) {
         const iomsg_hdr_t *hdr = reinterpret_cast<const iomsg_hdr_t*>(buffer);
 
-        verbose_os() << "got io message " << io_op_names[hdr->op] << " sn "
-                     << hdr->sn << " data size " << hdr->data_size
-                     << " conn " << conn << std::endl;
+        verbose_ostream(opts().verbose)
+            << "got io message " << io_op_names[hdr->op] << " sn " << hdr->sn
+            << " data size " << hdr->data_size << " conn " << conn << std::endl;
 
         if (hdr->op == IO_COMP) {
             ++_num_completed;
@@ -263,7 +258,7 @@ public:
             _num_completed = _num_sent;
         }
 
-        P2pDemoCommon::on_disconnect(conn);
+        UcxContext::on_disconnect(conn);
     }
 
     void wait_for_responses(long max_outstanding) {
@@ -279,8 +274,8 @@ public:
         connect_addr.sin_port   = htons(opts().port_num);
         inet_pton(AF_INET, opts().server_addr, &connect_addr.sin_addr);
 
-        return UcxContext::connect((const struct sockaddr*)&connect_addr,
-                                   sizeof(connect_addr));
+        return UcxClient::connect((const struct sockaddr*)&connect_addr,
+                                  sizeof(connect_addr));
     }
 
     static double get_time() {
@@ -302,14 +297,17 @@ public:
         std::cout<< std::endl;
     }
 
-    void run() {
+    virtual void run() {
+        UcxClient::run();
+
         UcxConnection* conn = connect();
 
         double prev_time = get_time();
         long   prev_iter = 0;
 
         for (long i = 0; i < opts().iter_count; ++i) {
-            verbose_os() << " <<<< iteration " << i << " >>>>" << std::endl;
+            verbose_ostream(opts().verbose)
+                << " <<<< iteration " << i << " >>>>" << std::endl;
 
             wait_for_responses(opts().window_size - 1);
             switch (opts().operation) {
@@ -341,10 +339,24 @@ public:
         disconnect(conn);
     }
 
+    virtual void stop() {
+        while (_num_completed < _num_sent) {
+            progress();
+        }
+
+        UcxClient::stop();
+    }
+
 private:
     long         _num_sent;
     long         _num_completed;
 };
+
+DemoClient::DemoClient(const options_t& test_opts)
+    : UcxClient(test_opts.iomsg_size, test_opts.verbose),
+      P2pDemoCommon(test_opts), _num_sent(0), _num_completed(0)
+{
+}
 
 static int parse_args(int argc, char **argv, options_t* test_opts)
 {
@@ -433,8 +445,8 @@ int main(int argc, char **argv)
     }
 
     if (test_opts.server_addr == NULL) {
+        DemoServer server(test_opts);
         try {
-            DemoServer server(test_opts);
             server.run();
             ret = 0;
         } catch (const std::exception &e) {
@@ -442,15 +454,20 @@ int main(int argc, char **argv)
             ret = -1;
         }
     } else {
+        DemoClient client(test_opts);
         for (unsigned i = 0; i < test_opts.client_iter; ++i) {
             try {
-                DemoClient client(test_opts);
+                if (test_opts.client_iter > 1) {
+                    std::cout << "Run client iteration " << i << std::endl;
+                }
                 client.run();
                 ret = 0;
             } catch (const std::exception &e) {
                 std::cerr << e.what();
                 ret = -1;
             }
+
+            client.stop();
         }
     }
 
