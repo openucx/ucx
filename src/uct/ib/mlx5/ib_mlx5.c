@@ -413,29 +413,6 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 #endif
 }
 
-ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
-                                        uct_ib_mlx5_md_t *md,
-                                        uct_ib_mlx5_txwq_t *txwq,
-                                        uct_ib_mlx5_mmio_mode_t mode)
-{
-    uct_ib_mlx5_devx_uar_t *uar;
-
-    uar = uct_worker_tl_data_get(worker,
-                                 UCT_IB_MLX5_DEVX_UAR_KEY,
-                                 uct_ib_mlx5_devx_uar_t,
-                                 uct_ib_mlx5_devx_uar_cmp,
-                                 uct_ib_mlx5_devx_uar_init,
-                                 md, mode);
-    if (UCS_PTR_IS_ERR(uar)) {
-        return UCS_PTR_STATUS(uar);
-    }
-
-    txwq->reg        = &uar->super;
-    txwq->super.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
-
-    return UCS_OK;
-}
-
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 {
     txwq->curr       = txwq->qstart;

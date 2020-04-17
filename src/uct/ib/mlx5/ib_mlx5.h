@@ -516,11 +516,6 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
 
-ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
-                                        uct_ib_mlx5_md_t *md,
-                                        uct_ib_mlx5_txwq_t *txwq,
-                                        uct_ib_mlx5_mmio_mode_t mode);
-
 void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq);
 
 /**
