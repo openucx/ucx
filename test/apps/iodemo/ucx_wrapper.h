@@ -64,7 +64,7 @@ private:
 class UcxCallback {
 public:
     virtual ~UcxCallback();
-    virtual void operator()();
+    virtual void operator()(ucs_status_t status);
 };
 
 
