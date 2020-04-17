@@ -50,6 +50,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out)]         = {};
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
     char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
+    uct_ib_mlx5_mmio_mode_t mmio_mode;
     uct_ib_mlx5_devx_uar_t *uar;
     int max_tx, max_rx, len_tx, len;
     int wqe_size;
@@ -59,12 +60,18 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     uct_ib_iface_fill_attr(iface, &attr->super);
 
+    status = uct_ib_mlx5_get_mmio_mode(iface->super.worker, attr->mmio_mode,
+                                       UCT_IB_MLX5_BF_REG_SIZE, &mmio_mode);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     uar = uct_worker_tl_data_get(iface->super.worker,
                                  UCT_IB_MLX5_DEVX_UAR_KEY,
                                  uct_ib_mlx5_devx_uar_t,
                                  uct_ib_mlx5_devx_uar_cmp,
                                  uct_ib_mlx5_devx_uar_init,
-                                 md, UCT_IB_MLX5_MMIO_MODE_BF_POST);
+                                 md, mmio_mode);
     if (UCS_PTR_IS_ERR(uar)) {
         status = UCS_PTR_STATUS(uar);
         goto err;

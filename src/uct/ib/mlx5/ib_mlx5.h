@@ -295,6 +295,7 @@ typedef struct uct_ib_mlx5_res_domain {
 
 typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_qp_attr_t            super;
+    uct_ib_mlx5_mmio_mode_t     mmio_mode;
 } uct_ib_mlx5_qp_attr_t;
 
 
@@ -322,7 +323,6 @@ typedef struct uct_ib_mlx5_qp {
 #endif
     };
 } uct_ib_mlx5_qp_t;
-
 
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
@@ -502,6 +502,12 @@ ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited);
  */
 void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
                                   struct mlx5_cqe64 *cqe);
+
+ucs_status_t
+uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
+                          uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
+                          unsigned bf_size,
+                          uct_ib_mlx5_mmio_mode_t *mmio_mode);
 
 /**
  * Initialize txwq structure.
