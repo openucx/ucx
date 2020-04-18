@@ -168,7 +168,7 @@ uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
      */
     ucs_assertv((ep->flags & UCT_UD_EP_FLAG_IN_PENDING) ||
                 ucs_arbiter_group_is_empty(&ep->tx.pending.group) ||
-                ucs_arbiter_elem_is_only(&ep->tx.pending.group, &ep->tx.pending.elem),
+                ucs_arbiter_elem_is_only(&ep->tx.pending.elem),
                 "out-of-order send detected for ep %p am %d ep_pending %d arbelem %p",
                 ep, id, (ep->flags & UCT_UD_EP_FLAG_IN_PENDING),
                 &ep->tx.pending.elem);

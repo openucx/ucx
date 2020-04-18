@@ -1087,10 +1087,10 @@ enum {
     UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B  = 0x2
 };
 
-static inline unsigned uct_ib_mlx5_qpc_cs_res(unsigned size)
+static inline unsigned uct_ib_mlx5_qpc_cs_res(unsigned size, int dc)
 {
     return (size > 32) ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B :
-                  size ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_32B :
+         (size && !dc) ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_32B :
                          UCT_IB_MLX5_QPC_CS_RES_DISABLE;
 }
 

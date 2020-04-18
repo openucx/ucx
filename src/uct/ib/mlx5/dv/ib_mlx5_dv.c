@@ -136,7 +136,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, log_rq_size, ucs_ilog2_or0(max_rx));
     UCT_IB_MLX5DV_SET(qpc, qpc, cs_req, UCT_IB_MLX5_QPC_CS_REQ_UP_TO_64B);
     UCT_IB_MLX5DV_SET(qpc, qpc, cs_res,
-                      uct_ib_mlx5_qpc_cs_res(attr->super.max_inl_resp));
+                      uct_ib_mlx5_qpc_cs_res(attr->super.max_inl_resp, 0));
     UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
     UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
 
@@ -186,6 +186,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         tx->qend   = UCS_PTR_BYTE_OFFSET(qp->devx.wq_buf, len_tx);
         tx->dbrec  = &qp->devx.dbrec->db[MLX5_SND_DBR];
         tx->bb_max = max_tx - 2 * UCT_IB_MLX5_MAX_BB;
+        ucs_assert(*tx->dbrec == 0);
         uct_ib_mlx5_txwq_reset(tx);
     } else {
         uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);

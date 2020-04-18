@@ -187,7 +187,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
 
     {"PCI_RELAXED_ORDERING", "auto",
      "Enable relaxed ordering for PCIe transactions to improve performance on some systems.",
-     ucs_offsetof(uct_ib_md_config_t, ext.mr_relaxed_order), UCS_CONFIG_TYPE_ON_OFF_AUTO},
+     ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {NULL}
 };
@@ -591,7 +591,7 @@ static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
         access_flags |= IBV_ACCESS_ON_DEMAND;
     }
 
-    if (md->config.mr_relaxed_order == UCS_CONFIG_ON) {
+    if (md->relaxed_order) {
         access_flags |= IBV_ACCESS_RELAXED_ORDERING;
     }
 
@@ -1482,10 +1482,16 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     md->super.ops       = &uct_ib_md_ops;
     md->super.component = &uct_ib_component;
 
-    if ((md->config.mr_relaxed_order == UCS_CONFIG_ON) && !IBV_ACCESS_RELAXED_ORDERING) {
-        ucs_warn("relaxed order memory access requested but not supported");
-    } else if (md->config.mr_relaxed_order == UCS_CONFIG_AUTO) {
-        md->config.mr_relaxed_order = UCS_CONFIG_OFF;
+    if (md_config->mr_relaxed_order == UCS_CONFIG_ON) {
+        if (IBV_ACCESS_RELAXED_ORDERING) {
+            md->relaxed_order = 1;
+        } else {
+            ucs_warn("relaxed order memory access requested but not supported");
+        }
+    } else if (md_config->mr_relaxed_order == UCS_CONFIG_AUTO) {
+        if (ucs_cpu_prefer_relaxed_order()) {
+            md->relaxed_order = 1;
+        }
     }
 
     if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {

@@ -71,8 +71,8 @@ protected:
             &ops,
             reinterpret_cast<void*>(this)
         };
-        UCS_TEST_CREATE_HANDLE(ucs_rcache_t*, m_rcache, ucs_rcache_destroy,
-                               ucs_rcache_create, &params, "test", ucs_stats_get_root());
+        UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucs_rcache_t*, m_rcache, ucs_rcache_destroy,
+                                            ucs_rcache_create, &params, "test", ucs_stats_get_root());
     }
 
     virtual void cleanup() {
