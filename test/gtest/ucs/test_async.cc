@@ -249,8 +249,7 @@ public:
 protected:
     static const int      COUNT           = 40;
     static const unsigned SLEEP_USEC      = 1000;
-    static const int      EVENT_RETRIES   = 10;
-    static const int      TIMER_RETRIES   = 100;
+    static const int      NUM_RETRIES     = 100;
     static const int      TIMER_EXP_COUNT = COUNT / 4;
 
     void suspend(double scale = 1.0) {
@@ -280,6 +279,20 @@ protected:
             suspend(scale);
         }
     }
+
+    template<typename E>
+    void expect_count_GE(E& event, int value) {
+        for (int retry = 0; retry < NUM_RETRIES; ++retry) {
+             suspend_and_poll(&event, COUNT);
+             if (event.count() >= value) {
+                  return;
+             }
+             UCS_TEST_MESSAGE << "retry " << (retry + 1);
+         }
+         EXPECT_GE(event.count(), value) << "after " << int(NUM_RETRIES)
+                                         << " retries";
+    }
+
 };
 
 template<typename LOCAL>
@@ -372,24 +385,15 @@ private:
     LOCAL*                         m_ev[NUM_THREADS];
 };
 
-
 UCS_TEST_P(test_async, global_event) {
     global_event ge(GetParam());
     ge.push_event();
-    suspend_and_poll(&ge, COUNT);
-    EXPECT_GE(ge.count(), 1);
+    expect_count_GE(ge, 1);
 }
 
 UCS_TEST_P(test_async, global_timer) {
     global_timer gt(GetParam());
-    for (int i = 0; i < TIMER_RETRIES; ++i) {
-        suspend_and_poll(&gt, COUNT * 4);
-        if (gt.count() >= COUNT) {
-             break;
-        }
-        UCS_TEST_MESSAGE << "retry " << (i + 1);
-    }
-    EXPECT_GE(gt.count(), int(COUNT));
+    expect_count_GE(gt, COUNT);
 }
 
 UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
@@ -454,39 +458,25 @@ UCS_TEST_P(test_async, many_timers) {
 
 UCS_TEST_P(test_async, ctx_event) {
     local_event le(GetParam());
-    for (int retry = 0; retry < EVENT_RETRIES; ++retry) {
-        le.push_event();
-        suspend_and_poll(&le, COUNT);
-        if (le.count() >= 1) {
-            break;
-        }
-        UCS_TEST_MESSAGE << "retry " << (retry + 1);
-    }
-    EXPECT_GE(le.count(), 1);
+    le.push_event();
+    expect_count_GE(le, 1);
 }
 
 UCS_TEST_P(test_async, ctx_timer) {
     local_timer lt(GetParam());
-    for (int i = 0; i < TIMER_RETRIES; ++i) {
-        suspend_and_poll(&lt, COUNT * 4);
-        if (lt.count() >= TIMER_EXP_COUNT) {
-            break;
-        }
-        UCS_TEST_MESSAGE << "retry " << (i + 1);
-    }
-    EXPECT_GE(lt.count(), int(TIMER_EXP_COUNT));
+    expect_count_GE(lt, TIMER_EXP_COUNT);
 }
 
 UCS_TEST_P(test_async, two_timers) {
     local_timer lt1(GetParam());
     local_timer lt2(GetParam());
-    for (int i = 0; i < TIMER_RETRIES; ++i) {
+    for (int retry = 0; retry < NUM_RETRIES; ++retry) {
         suspend_and_poll2(&lt1, &lt2, COUNT * 4);
         if ((lt1.count() >= TIMER_EXP_COUNT) &&
             (lt2.count() >= TIMER_EXP_COUNT)) {
              break;
         }
-        UCS_TEST_MESSAGE << "retry " << (i + 1);
+        UCS_TEST_MESSAGE << "retry " << (retry + 1);
     }
     EXPECT_GE(lt1.count(), int(TIMER_EXP_COUNT));
     EXPECT_GE(lt2.count(), int(TIMER_EXP_COUNT));
@@ -496,7 +486,7 @@ UCS_TEST_P(test_async, ctx_event_block) {
     local_event le(GetParam());
     int count = 0;
 
-    for (int i = 0; i < EVENT_RETRIES; ++i) {
+    for (int retry = 0; retry < NUM_RETRIES; ++retry) {
         le.block();
         count = le.count();
         le.push_event();
@@ -508,7 +498,7 @@ UCS_TEST_P(test_async, ctx_event_block) {
         if (le.count() > count) {
             break;
         }
-        UCS_TEST_MESSAGE << "retry " << (i + 1);
+        UCS_TEST_MESSAGE << "retry " << (retry + 1);
     }
     EXPECT_GT(le.count(), count);
 }
@@ -550,7 +540,7 @@ UCS_TEST_P(test_async, ctx_timer_block) {
     local_timer lt(GetParam());
     int count = 0;
 
-    for (int i = 0; i < TIMER_RETRIES; ++i) {
+    for (int retry = 0; retry < NUM_RETRIES; ++retry) {
         lt.block();
         count = lt.count();
         suspend_and_poll(&lt, COUNT);
@@ -561,7 +551,7 @@ UCS_TEST_P(test_async, ctx_timer_block) {
         if (lt.count() > count) {
             break;
         }
-        UCS_TEST_MESSAGE << "retry " << (i + 1);
+        UCS_TEST_MESSAGE << "retry " << (retry + 1);
     }
     EXPECT_GT(lt.count(), count); /* Timer could expire again after unblock */
 }
@@ -571,8 +561,7 @@ UCS_TEST_P(test_async, modify_event) {
     int count;
 
     le.push_event();
-    suspend_and_poll(&le, COUNT);
-    EXPECT_GE(le.count(), 1);
+    expect_count_GE(le, 1);
 
     ucs_async_modify_handler(le.event_id(), 0);
     sleep(1);
@@ -585,14 +574,7 @@ UCS_TEST_P(test_async, modify_event) {
     ucs_async_modify_handler(le.event_id(), UCS_EVENT_SET_EVREAD);
     count = le.count();
     le.push_event();
-    for (int i = 0; i < TIMER_RETRIES; ++i) {
-        suspend_and_poll(&le, 1);
-        if (le.count() > count) {
-            break;
-        }
-        UCS_TEST_MESSAGE << "retry " << (i + 1);
-    }
-    EXPECT_GT(le.count(), count);
+    expect_count_GE(le, count + 1);
 
     ucs_async_modify_handler(le.event_id(), 0);
     sleep(1);
@@ -648,7 +630,7 @@ UCS_TEST_P(test_async, remove_sync) {
      */
     local_timer le(GetParam());
 
-    for (int i = 0; i < EVENT_RETRIES; ++i) {
+    for (int retry = 0; retry < NUM_RETRIES; ++retry) {
         local_timer_long_handler lt(GetParam(), SLEEP_USEC * 2);
         suspend_and_poll(&lt, 1);
         lt.unset_handler(true);
@@ -672,11 +654,8 @@ protected:
 
 UCS_TEST_P(test_async, timer_unset_from_handler) {
     local_timer_remove_handler lt(GetParam());
-    ucs_time_t deadline = ucs_get_time() + ucs_time_from_sec(10.0);
-    do {
-        suspend_and_poll(&lt, 1);
-    } while ((lt.count() == 0) && (ucs_get_time() < deadline));
-    EXPECT_GE(lt.count(), 1);
+
+    expect_count_GE(lt, 1);
     suspend_and_poll(&lt, COUNT);
     EXPECT_LE(lt.count(), 5); /* timer could fire multiple times before we remove it */
     int count = lt.count();
@@ -706,14 +685,8 @@ protected:
         local_event_remove_handler le(GetParam(), sync);
 
         for (int iter = 0; iter < 5; ++iter) {
-            for (int retry = 0; retry < EVENT_RETRIES; ++retry) {
-                le.push_event();
-                suspend_and_poll(&le, COUNT);
-                if (le.count() >= 1) {
-                    break;
-                }
-                UCS_TEST_MESSAGE << "retry " << (retry + 1);
-            }
+            le.push_event();
+            expect_count_GE(le, 1);
             EXPECT_EQ(1, le.count());
         }
     }
@@ -807,7 +780,7 @@ UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread,
 UCS_TEST_P(test_async_timer_mt, multithread) {
     const int exp_min_count = (int)(COUNT * 0.10);
     int min_count = 0;
-    for (int r = 0; r < TIMER_RETRIES; ++r) {
+    for (int retry = 0; retry < NUM_RETRIES; ++retry) {
         spawn();
         suspend(2 * COUNT);
         stop();
