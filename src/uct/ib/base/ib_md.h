@@ -83,8 +83,6 @@ typedef struct uct_ib_md_ext_config {
     size_t                   min_mt_reg;   /**< Multi-threaded registration threshold */
     size_t                   mt_reg_chunk; /**< Multi-threaded registration chunk */
     int                      mt_reg_bind;  /**< Multi-threaded registration bind to core */
-
-    ucs_on_off_auto_value_t  mr_relaxed_order; /**< Allow reorder memory accesses */
 } uct_ib_md_ext_config_t;
 
 
@@ -115,6 +113,7 @@ typedef struct uct_ib_md {
     int                      check_subnet_filter;
     uint64_t                 subnet_filter;
     double                   pci_bw;
+    int                      relaxed_order;
 } uct_ib_md_t;
 
 
@@ -143,6 +142,7 @@ typedef struct uct_ib_md_config {
 
     unsigned                 devx;         /**< DEVX support */
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
+    ucs_on_off_auto_value_t  mr_relaxed_order; /**< Allow reorder memory accesses */
 } uct_ib_md_config_t;
 
 /**
