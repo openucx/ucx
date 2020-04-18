@@ -170,13 +170,11 @@
    fun:ibv_get_device_list
 }
 {
-   rdmacm_verbs_open_device
+   verbs_open_device
    Memcheck:Leak
    match-leak-kinds: possible
    ...
    fun:verbs_open_device
-   ...
-   fun:rdma_bind_addr
 }
 {
    uct_ib_iface_prepare_rx_wrs_val
