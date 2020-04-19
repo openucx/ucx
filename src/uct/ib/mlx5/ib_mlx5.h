@@ -293,6 +293,12 @@ typedef struct uct_ib_mlx5_res_domain {
 } uct_ib_mlx5_res_domain_t;
 
 
+typedef struct uct_ib_mlx5_qp_attr {
+    uct_ib_qp_attr_t            super;
+    uct_ib_mlx5_mmio_mode_t     mmio_mode;
+} uct_ib_mlx5_qp_attr_t;
+
+
 /* MLX5 QP wrapper */
 typedef struct uct_ib_mlx5_qp {
     uct_ib_mlx5_obj_type_t             type;
@@ -317,7 +323,6 @@ typedef struct uct_ib_mlx5_qp {
 #endif
     };
 } uct_ib_mlx5_qp_t;
-
 
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
@@ -465,7 +470,7 @@ void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp);
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
-                                         uct_ib_qp_attr_t *attr);
+                                         uct_ib_mlx5_qp_attr_t *attr);
 
 /**
  * Create CQ with DV
@@ -498,17 +503,18 @@ ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited);
 void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
                                   struct mlx5_cqe64 *cqe);
 
+ucs_status_t
+uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
+                          uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
+                          unsigned bf_size,
+                          uct_ib_mlx5_mmio_mode_t *mmio_mode);
+
 /**
  * Initialize txwq structure.
  */
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
-
-ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
-                                        uct_ib_mlx5_md_t *md,
-                                        uct_ib_mlx5_txwq_t *txwq,
-                                        uct_ib_mlx5_mmio_mode_t mode);
 
 void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq);
 
@@ -556,7 +562,7 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar);
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
-                                        uct_ib_qp_attr_t *attr);
+                                        uct_ib_mlx5_qp_attr_t *attr);
 
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                                         const void *in, size_t inlen,
@@ -573,7 +579,7 @@ static inline ucs_status_t
 uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                            uct_ib_mlx5_qp_t *qp,
                            uct_ib_mlx5_txwq_t *tx,
-                           uct_ib_qp_attr_t *attr)
+                           uct_ib_mlx5_qp_attr_t *attr)
 {
     return UCS_ERR_UNSUPPORTED;
 }

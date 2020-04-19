@@ -48,16 +48,4 @@ UCS_TEST_P(test_devx, dbrec)
     ucs_mpool_put_inline(dbrec);
 }
 
-UCS_TEST_P(test_devx, uar)
-{
-    uct_ib_mlx5_txwq_t txwq;
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_txwq_init_devx(worker(), md(), &txwq,
-                                        UCT_IB_MLX5_MMIO_MODE_BF_POST);
-    ASSERT_UCS_OK(status);
-    ASSERT_TRUE(txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_DEVX);
-    uct_ib_mlx5_txwq_cleanup(&txwq);
-}
-
 UCT_INSTANTIATE_IB_TEST_CASE(test_devx);
