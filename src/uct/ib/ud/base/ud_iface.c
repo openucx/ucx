@@ -468,7 +468,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_ptr_array_init(&self->eps, 0, "ud_eps");
+    ucs_ptr_array_init(&self->eps, "ud_eps");
     uct_ud_iface_cep_init(self);
 
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
@@ -689,15 +689,14 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
 void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    uint32_t prev_gen;
-    ep->ep_id = ucs_ptr_array_insert(&iface->eps, ep, &prev_gen);
+    ep->ep_id = ucs_ptr_array_insert(&iface->eps, ep);
 }
 
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     if (ep->ep_id != UCT_UD_EP_NULL_ID) {
         ucs_trace("iface(%p) remove ep: %p id %d", iface, ep, ep->ep_id);
-        ucs_ptr_array_remove(&iface->eps, ep->ep_id, 0);
+        ucs_ptr_array_remove(&iface->eps, ep->ep_id);
     }
 }
 
@@ -710,7 +709,7 @@ void uct_ud_iface_replace_ep(uct_ud_iface_t *iface,
     p = ucs_ptr_array_replace(&iface->eps, old_ep->ep_id, new_ep);
     ucs_assert_always(p == (void *)old_ep);
     ucs_trace("replace_ep: old(%p) id=%d new(%p) id=%d", old_ep, old_ep->ep_id, new_ep, new_ep->ep_id);
-    ucs_ptr_array_remove(&iface->eps, new_ep->ep_id, 0);
+    ucs_ptr_array_remove(&iface->eps, new_ep->ep_id);
 }
 
 uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface)

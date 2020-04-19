@@ -701,7 +701,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
                                                        uct_rc_mlx5_iface_common_t);
 
     uint32_t op_index = (uint32_t)((uint64_t)op);
-    ucs_ptr_array_remove(&iface->tm.rndv_comps, op_index, 0);
+    ucs_ptr_array_remove(&iface->tm.rndv_comps, op_index);
     return UCS_OK;
 }
 

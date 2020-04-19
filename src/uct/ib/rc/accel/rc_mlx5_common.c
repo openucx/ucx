@@ -776,7 +776,7 @@ void uct_rc_mlx5_init_rx_tm_common(uct_rc_mlx5_iface_common_t *iface,
     /* Init ptr array to store completions of RNDV operations. Index in
      * ptr_array is used as operation ID and is passed in "app_context"
      * of TM header. */
-    ucs_ptr_array_init(&iface->tm.rndv_comps, 0, "rm_rndv_completions");
+    ucs_ptr_array_init(&iface->tm.rndv_comps, "rm_rndv_completions");
 
     /* Set of addresses posted to the HW. Used to avoid posting of the same
      * address more than once. */
