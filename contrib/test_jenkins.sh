@@ -1564,7 +1564,7 @@ run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
 
-	../test/apps/test_ucx_tls.py $ucx_inst
+	../test/apps/test_ucx_tls.py -p $ucx_inst
 
 	if [ $? -ne 0 ]; then
 		echo "not ok 1" >> ucx_tl_check.tap
