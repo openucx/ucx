@@ -755,10 +755,6 @@ int ucp_test_base::entity::get_num_eps(int worker_index) const {
     return m_workers[worker_index].second.size();
 }
 
-void ucp_test_base::entity::reset_err() {
-    m_err_cntr = 0;
-}
-
 void ucp_test_base::entity::add_err(ucs_status_t status) {
     switch (status) {
     case UCS_ERR_REJECTED:

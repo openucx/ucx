@@ -357,10 +357,6 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
         }
 
         log_level = UCS_LOG_LEVEL_DEBUG;
-    } else if (event->event == RDMA_CM_EVENT_ROUTE_ERROR ||
-            event->event == RDMA_CM_EVENT_ADDR_ERROR) {
-        status = UCS_ERR_UNREACHABLE;
-        log_level = UCS_LOG_LEVEL_ERROR;
     } else {
         status    = UCS_ERR_IO_ERROR;
         log_level = UCS_LOG_LEVEL_ERROR;

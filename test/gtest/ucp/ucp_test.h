@@ -110,8 +110,6 @@ public:
 
         int get_num_eps(int worker_index = 0) const;
 
-        void reset_err();
-
         void add_err(ucs_status_t status);
 
         const size_t &get_err_num_rejected() const;
