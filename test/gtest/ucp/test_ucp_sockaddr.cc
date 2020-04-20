@@ -463,15 +463,15 @@ public:
         e.close_ep_req_free(req);
     }
 
-    void concurrent_disconnect() {
+    void concurrent_disconnect(enum ucp_ep_close_mode mode) {
         ASSERT_EQ(2ul, entities().size());
         ASSERT_EQ(1, sender().get_num_workers());
         ASSERT_EQ(1, sender().get_num_eps());
         ASSERT_EQ(1, receiver().get_num_workers());
         ASSERT_EQ(1, receiver().get_num_eps());
 
-        void *sender_ep_close_req   = sender().disconnect_nb();
-        void *receiver_ep_close_req = receiver().disconnect_nb();
+        void *sender_ep_close_req   = sender().disconnect_nb(0, 0, mode);
+        void *receiver_ep_close_req = receiver().disconnect_nb(0, 0, mode);
 
         ucs_time_t deadline = ucs::get_deadline();
         while ((!is_request_completed(sender_ep_close_req) ||
@@ -576,24 +576,47 @@ UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_bidi) {
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect,
                      no_close_protocol()) {
     listen_and_communicate(false, 0);
-    concurrent_disconnect();
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_c2s,
                      no_close_protocol()) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
-    concurrent_disconnect();
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_s2c,
                      no_close_protocol()) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
-    concurrent_disconnect();
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    concurrent_disconnect();
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_force,
+                     no_close_protocol()) {
+    listen_and_communicate(false, 0);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_force_c2s,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_force_s2c,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_S2C);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+}
+
+UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_force_bidi) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
