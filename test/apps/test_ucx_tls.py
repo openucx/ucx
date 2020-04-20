@@ -84,8 +84,12 @@ def exec_cmd(cmd):
     if options.verbose:
         print cmd
 
-    return commands.getstatusoutput(cmd)
+    status, output = commands.getstatusoutput(cmd)
+    if options.verbose:
+        print "return code " + str(status)
+        print output
 
+    return status, output
 
 def find_am_transport(dev, neps, override = 0) :
 
@@ -148,6 +152,7 @@ else:
     bin_prefix = options.prefix + "/bin"
 
 if not (os.path.isdir(bin_prefix)):
+    print "directory \"" + bin_prefix + "\" does not exist"
     parser.print_help()
     exit(1)
 
