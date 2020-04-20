@@ -24,7 +24,7 @@
  * and small enough to fit L1 cache. */
 #define UCP_TAG_MATCH_HASH_SIZE     1021
 
-#define ucp_tag_match_get_request(_worker, _param, _req, _failed) \
+#define ucp_tag_match_request_get(_worker, _param, _req, _failed) \
     if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
         _req = ucp_request_get(_worker); \
         if (ucs_unlikely((_req) == NULL)) { \

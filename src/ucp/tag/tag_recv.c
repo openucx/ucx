@@ -100,7 +100,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
             ucp_request_put(req);
         }
 
-        return UCS_OK;
+        return UCS_STATUS_PTR(UCS_OK);
     }
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
@@ -236,13 +236,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nbx,
     datatype = (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
                param->datatype : ucp_dt_make_contig(1);
 
-    ucp_tag_match_get_request(worker, param, req,
+    ucp_tag_match_request_get(worker, param, req,
                               {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                goto out;});
 
-    rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nb");
+    rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nbx");
     ret   = ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask, req,
-                                rdesc, param, "recv_nb");
+                                rdesc, param, "recv_nbx");
 
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
