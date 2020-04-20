@@ -83,26 +83,20 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 
         if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
-            if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-                param->cb.recv(req + 1, status, &req->recv.tag.info, param->user_data);
-            }
-
+            ucp_tag_match_cb(param, req, recv, &req->recv.tag.info);
             ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
                           debug_name, req, req + 1, req->recv.tag.info.sender_tag,
                           req->recv.tag.info.length,
                           ucs_status_string(status));
-
             return req + 1;
         }
 
-        UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
-        if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
-            ucp_request_put(req);
-        }
-
+        ucp_tag_match_request_put(param, req);
         return UCS_STATUS_PTR(UCS_OK);
     }
 
+    /* TODO: allocate request only in case if flag
+     * UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL is not set */
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
         if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
             ucp_request_put(req);
@@ -129,8 +123,11 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                                                      req->recv.length);
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
-    req->recv.tag.cb        = param->cb.recv;
-    req->user_data          = param->user_data;
+    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
+        req->recv.tag.cb    = param->cb.recv;
+        req->user_data      = param->user_data;
+    }
+
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         req->recv.tag.info.sender_tag = 0;
     }

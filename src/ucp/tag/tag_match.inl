@@ -24,6 +24,7 @@
  * and small enough to fit L1 cache. */
 #define UCP_TAG_MATCH_HASH_SIZE     1021
 
+
 #define ucp_tag_match_request_get(_worker, _param, _req, _failed) \
     if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
         _req = ucp_request_get(_worker); \
@@ -32,6 +33,18 @@
         } \
     } else { \
         _req = ((ucp_request_t*)(_param)->request) - 1; \
+    }
+
+
+#define ucp_tag_match_request_put(_param, _req) \
+    if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
+        ucp_request_put(_req); \
+    }
+
+
+#define ucp_tag_match_cb(_param, _req, _cb, ...) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
+        param->cb._cb(req + 1, status, ##__VA_ARGS__, param->user_data); \
     }
 
 

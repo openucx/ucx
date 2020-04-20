@@ -119,17 +119,13 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
             /*  immediate completion is allowed */
             ucs_trace_req("releasing send request %p, returning status %s", req,
                           ucs_status_string(status));
-            if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
-                ucp_request_put(req);
-            }
+            ucp_tag_match_request_put(param, req);
             return UCS_STATUS_PTR(status);
         } else {
             ucs_trace_req("request %p completed, but immediate completion is "
                           "prohibited, status %s", req,
                           ucs_status_string(status));
-            if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-                param->cb.send(req + 1, status, param->user_data);
-            }
+            ucp_tag_match_cb(param, req, send);
             goto out;
         }
     }

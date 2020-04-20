@@ -104,8 +104,9 @@ enum {
  * Request in progress.
  */
 struct ucp_request {
-    ucs_status_t                  status;  /* Operation status */
-    uint32_t                      flags;   /* Request flags */
+    ucs_status_t                  status;     /* Operation status */
+    uint32_t                      flags;      /* Request flags */
+    void                          *user_data; /* Completion user data */
 
     union {
 
@@ -303,8 +304,6 @@ struct ucp_request {
             ucp_ep_ext_gen_t      *next_ep; /* Next endpoint to flush */
         } flush_worker;
     };
-
-    void                          *user_data; /* Completion user data */
 };
 
 
