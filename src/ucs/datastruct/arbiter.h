@@ -195,7 +195,7 @@ void ucs_arbiter_group_cleanup(ucs_arbiter_group_t *group);
  */
 static inline void ucs_arbiter_elem_init(ucs_arbiter_elem_t *elem)
 {
-    elem->next = NULL;
+    elem->group = NULL;
 }
 
 
@@ -231,6 +231,12 @@ void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
  */
 void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                              ucs_arbiter_callback_t cb, void *cb_arg);
+
+
+/**
+ * @return Number of elements in the group
+ */
+size_t ucs_arbiter_group_num_elems(ucs_arbiter_group_t *group);
 
 
 void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream);
@@ -306,11 +312,10 @@ static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
 /**
  * @return Whether the element is queued in an arbiter group.
  *         (an element can't be queued more than once)
- *
  */
 static inline int ucs_arbiter_elem_is_scheduled(ucs_arbiter_elem_t *elem)
 {
-    return elem->next != NULL;
+    return elem->group != NULL;
 }
 
 
@@ -381,9 +386,9 @@ ucs_arbiter_dispatch(ucs_arbiter_t *arbiter, unsigned per_group,
  * @return true if element is the only one in the group
  */
 static inline int
-ucs_arbiter_elem_is_only(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
+ucs_arbiter_elem_is_only(ucs_arbiter_elem_t *elem)
 {
-    return (group->tail == elem) && ((elem->next == elem) || (elem->next == NULL));
+    return elem->next == elem;
 }
 
 #endif

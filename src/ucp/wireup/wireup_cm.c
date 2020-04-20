@@ -426,7 +426,20 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     ucs_async_context_t *async = &ucp_ep->worker->async;
 
     UCS_ASYNC_BLOCK(async);
-    ucp_ep_cm_disconnect_cm_lane(ucp_ep);
+    if (req->status == UCS_OK) {
+        ucs_assert(ucp_ep_is_cm_local_connected(ucp_ep));
+        ucp_ep_cm_disconnect_cm_lane(ucp_ep);
+    } else if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        ucs_assert(!ucp_ep_is_cm_local_connected(ucp_ep));
+    } else {
+        /* ucp_ep_close(force) is called from err callback which was invoked
+           on remote connection reset
+           TODO: remove this case when IB flush cancel is fixed (#4743),
+                 moving QP to err state should move UCP EP to error state,
+                 then ucp_worker_set_ep_failed disconnects CM lane */
+        ucs_assert(req->status == UCS_ERR_CANCELED);
+    }
+
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
     ucp_request_put(req);
     UCS_ASYNC_UNBLOCK(async);

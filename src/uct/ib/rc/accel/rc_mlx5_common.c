@@ -197,18 +197,19 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
                                            uct_ib_mlx5_md_t);
     uct_ib_device_t *dev  = &md->super.dev;
     struct ibv_ah_attr ah_attr = {};
-    uct_ib_qp_attr_t attr = {};
+    uct_ib_mlx5_qp_attr_t attr = {};
     ucs_status_t status;
 
     ucs_assert(iface->tm.cmd_wq.super.super.type == UCT_IB_MLX5_OBJ_TYPE_LAST);
 
-    attr.cap.max_send_wr  = iface->tm.cmd_qp_len;
-    attr.cap.max_send_sge = 1;
-    attr.ibv.pd           = md->super.pd;
-    attr.ibv.send_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
-    attr.ibv.recv_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
-    attr.srq_num          = iface->rx.srq.srq_num;
-    attr.port             = dev->first_port;
+    attr.super.cap.max_send_wr  = iface->tm.cmd_qp_len;
+    attr.super.cap.max_send_sge = 1;
+    attr.super.ibv.pd           = md->super.pd;
+    attr.super.ibv.send_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
+    attr.super.ibv.recv_cq      = iface->super.super.cq[UCT_IB_DIR_RX];
+    attr.super.srq_num          = iface->rx.srq.srq_num;
+    attr.super.port             = dev->first_port;
+    attr.mmio_mode              = iface->tx.mmio_mode;
     status = uct_ib_mlx5_devx_create_qp(&iface->super.super,
                                         &iface->tm.cmd_wq.super.super,
                                         &iface->tm.cmd_wq.super,
@@ -219,7 +220,7 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 
     ah_attr.is_global     = 1;
     ah_attr.grh.dgid      = iface->super.super.gid_info.gid;
-    ah_attr.dlid          = uct_ib_device_port_attr(dev, attr.port)->lid;
+    ah_attr.dlid          = uct_ib_device_port_attr(dev, attr.super.port)->lid;
     ah_attr.port_num      = dev->first_port;
     status = uct_rc_mlx5_iface_common_devx_connect_qp(
             iface, &iface->tm.cmd_wq.super.super,
@@ -324,7 +325,7 @@ static ucs_status_t
 uct_rc_mlx5_get_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 {
     struct ibv_qp *qp;
-#if HAVE_STRUCT_MLX5_SRQ_CMD_QP
+#ifdef HAVE_STRUCT_MLX5_SRQ_CMD_QP
     iface->tm.cmd_wq.super.super.verbs.qp = NULL;
     iface->tm.cmd_wq.super.super.verbs.rd = NULL;
     iface->tm.cmd_wq.super.super.type     = UCT_IB_MLX5_OBJ_TYPE_LAST;
@@ -444,23 +445,23 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 }
 
 void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
-                                 uct_ib_qp_attr_t *qp_attr,
+                                 uct_ib_mlx5_qp_attr_t *qp_attr,
                                  unsigned max_send_wr,
                                  uct_ib_mlx5_srq_t *srq)
 {
     switch (srq->type) {
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
-        uct_rc_iface_fill_attr(&iface->super, qp_attr, max_send_wr,
+        uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr,
                                srq->verbs.srq);
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
-        uct_rc_iface_fill_attr(&iface->super, qp_attr, max_send_wr, NULL);
+        uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr, NULL);
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
 
-    qp_attr->srq_num = srq->srq_num;
+    qp_attr->super.srq_num = srq->srq_num;
 }
 
 static ucs_status_t

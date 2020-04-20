@@ -108,7 +108,7 @@ uct_ud_mlx5_ep_get_next_wqe(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
 
 static uint16_t uct_ud_mlx5_ep_send_ctl(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
                                         const uct_ud_iov_t *iov, uint16_t iovcnt,
-                                        int flags)
+                                        int flags, int max_log_sge)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ud_ep->super.super.iface,
                                                 uct_ud_mlx5_iface_t);
@@ -162,7 +162,7 @@ static uint16_t uct_ud_mlx5_ep_send_ctl(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *s
     }
 
     uct_ud_mlx5_post_send(iface, ep, ce_se, ctrl, wqe_size, skb->neth,
-                          UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
+                          max_log_sge);
     return sn;
 }
 
@@ -628,7 +628,7 @@ uct_ud_mlx5_ep_create_connected(uct_iface_h iface_h,
     }
 
     if (status == UCS_OK) {
-        uct_ud_mlx5_ep_send_ctl(&ep->super, skb, NULL, 0, 1);
+        uct_ud_mlx5_ep_send_ctl(&ep->super, skb, NULL, 0, 1, 1);
         uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
         ep->super.flags |= UCT_UD_EP_FLAG_CREQ_SENT;
     }
@@ -709,14 +709,18 @@ static void uct_ud_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
 }
 
 static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
-                                                uct_ib_qp_attr_t *attr,
+                                                uct_ib_qp_attr_t *ib_attr,
                                                 struct ibv_qp **qp_p)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
     uct_ib_mlx5_qp_t *qp = &iface->tx.wq.super;
+    uct_ib_mlx5_qp_attr_t attr = {};
     ucs_status_t status;
 
-    status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, attr);
+    attr.super     = *ib_attr;
+    attr.mmio_mode = UCT_IB_MLX5_MMIO_MODE_LAST;
+
+    status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, &attr);
     if (status != UCS_OK) {
         return status;
     }

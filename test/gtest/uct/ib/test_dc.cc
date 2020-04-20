@@ -233,10 +233,8 @@ UCS_TEST_P(test_dc, dcs_multi) {
  */ 
 UCS_TEST_P(test_dc, dcs_ep_destroy) {
 
-    ucs_status_t status;
     uct_dc_mlx5_ep_t *ep;
     uct_dc_mlx5_iface_t *iface;
-
 
     ucs_log_push_handler(log_ep_destroy);
     UCS_TEST_SCOPE_EXIT() { ucs_log_pop_handler(); } UCS_TEST_SCOPE_EXIT_END
@@ -246,8 +244,7 @@ UCS_TEST_P(test_dc, dcs_ep_destroy) {
     iface = dc_iface(m_e1);
     n_warnings = 0;
     EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
-    status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
-    EXPECT_UCS_OK(status);
+    send_am_messages(m_e1, 2, UCS_OK);
     /* dci 0 must be assigned to the ep */
     EXPECT_EQ(iface->tx.dcis_stack[0], ep->dci);
     EXPECT_EQ(1, iface->tx.stack_top);

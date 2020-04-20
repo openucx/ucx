@@ -91,8 +91,16 @@ public:
 
         gid_in.global.subnet_prefix = subnet_prefix;
         gid_in.global.interface_id  = 0xdeadbeef;
-        uct_ib_iface_address_pack(iface, &gid_in, lid_in, ib_addr);
 
+        uct_ib_address_pack_params_t params;
+        params.flags     = uct_ib_iface_address_pack_flags(iface);
+        params.gid       = &gid_in;
+        params.lid       = lid_in;
+        params.roce_info = &iface->gid_info.roce_info;
+        /* to suppress gcc 4.3.4 warning */
+        params.path_mtu  = (enum ibv_mtu)0;
+        params.gid_index = std::numeric_limits<uint8_t>::max();
+        uct_ib_address_pack(&params, ib_addr);
         uct_ib_address_unpack(ib_addr, &lid_out, &gid_out, &gid_index, &mtu);
 
         if (uct_ib_iface_is_roce(iface)) {
@@ -306,10 +314,14 @@ public:
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
 
         dummy_ib_iface.config.port_num = m_port;
+        dummy_ib_iface.super.md        = &ib_md->super;
+
+        ASSERT_EQ(&ib_md->dev, uct_ib_iface_device(&dummy_ib_iface));
+
         /* uct_ib_iface_init_roce_gid_info() requires only the port from the
          * ib_iface so we can use a dummy one here.
          * this function will set the gid_index in the dummy ib_iface. */
-        status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface, &ib_md->dev,
+        status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface,
                                                  md_config->ext.gid_index);
         ASSERT_UCS_OK(status);
 

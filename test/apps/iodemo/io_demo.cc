@@ -70,7 +70,7 @@ protected:
             free(_buffer);
         }
 
-        virtual void operator()() {
+        virtual void operator()(ucs_status_t status) {
             delete this;
         }
 
@@ -124,8 +124,10 @@ public:
             _server(server), _conn(conn), _sn(sn) {
         }
 
-        virtual void operator()() {
-            _server->send_io_message(_conn, IO_COMP, _sn);
+        virtual void operator()(ucs_status_t status) {
+            if (status == UCS_OK) {
+                _server->send_io_message(_conn, IO_COMP, _sn);
+            }
             delete this;
         }
 
@@ -157,7 +159,8 @@ public:
 
     void handle_io_read_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
         // send data
-        conn->send_data(buffer(), opts().data_size, hdr->sn);
+        assert(opts().data_size >= hdr->data_size);
+        conn->send_data(buffer(), hdr->data_size, hdr->sn);
 
         // send response as data
         IoMessage *response = new IoMessage(opts().iomsg_size, IO_COMP, hdr->sn,
@@ -167,7 +170,8 @@ public:
     }
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
-        conn->recv_data(buffer(), opts().data_size, hdr->sn,
+        assert(opts().data_size >= hdr->data_size);
+        conn->recv_data(buffer(), hdr->data_size, hdr->sn,
                         new IoWriteResponseCallback(this, conn, hdr->sn));
     }
 
@@ -199,7 +203,7 @@ public:
             free(_buffer);
         }
 
-        virtual void operator()() {
+        virtual void operator()(ucs_status_t status) {
             /* wait data and response completion */
             if (++_counter < 2) {
                 return;
