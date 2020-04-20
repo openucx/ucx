@@ -519,13 +519,15 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
         /* if the EP is local connected, need to flush it from main thread first */
         ucp_ep_cm_remote_disconnect_progress(ucp_ep);
         ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
-    } else {
+    } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
         /* if the EP is not local connected, the EP has been closed and flushed,
          * CM lane is disconnected, complete close request and destroy EP */
-        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
         close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
+    } else {
+        /* Ignore close event on failed ep */
+        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FAILED);
     }
 
     UCS_ASYNC_UNBLOCK(async);
