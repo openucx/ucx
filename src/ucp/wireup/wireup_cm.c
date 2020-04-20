@@ -231,6 +231,14 @@ out:
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 
+static void
+ucp_cm_client_connect_prog_arg_free(ucp_cm_client_connect_progress_arg_t *arg)
+{
+    ucs_free(arg->sa_data);
+    ucs_free(arg->dev_addr);
+    ucs_free(arg);
+}
+
 /*
  * The main thread progress part of connection establishment on client side
  */
@@ -314,9 +322,7 @@ out_unblock:
 out_free_addr:
     ucs_free(addr.address_list);
 out:
-    ucs_free(progress_arg->sa_data);
-    ucs_free(progress_arg->dev_addr);
-    ucs_free(progress_arg);
+    ucp_cm_client_connect_prog_arg_free(progress_arg);
 
     if (status != UCS_OK) {
         ucp_worker_set_ep_failed(worker, ucp_ep, &wireup_ep->super.super,
@@ -941,10 +947,19 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
 
 static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
-    if ((elem->cb == ucp_ep_cm_disconnect_progress)        ||
-        (elem->cb == ucp_ep_cm_remote_disconnect_progress) ||
-        (elem->cb == ucp_cm_client_connect_progress)       ||
-        (elem->cb == ucp_cm_server_conn_notify_progress)) {
+    ucp_cm_client_connect_progress_arg_t *client_connect_arg;
+
+    if (elem->cb == ucp_cm_client_connect_progress) {
+        client_connect_arg = elem->arg;
+        if (client_connect_arg->ucp_ep == arg) {
+            ucp_cm_client_connect_prog_arg_free(client_connect_arg);
+            return 1;
+        } else {
+            return 0;
+        }
+    } else if ((elem->cb == ucp_ep_cm_disconnect_progress)        ||
+               (elem->cb == ucp_ep_cm_remote_disconnect_progress) ||
+               (elem->cb == ucp_cm_server_conn_notify_progress)) {
         return arg == elem->arg;
     } else {
         return 0;
