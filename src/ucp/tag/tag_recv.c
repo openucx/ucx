@@ -19,21 +19,6 @@
 #include <ucs/datastruct/queue.h>
 
 
-static UCS_F_ALWAYS_INLINE void
-ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
-                               ucp_tag_recv_info_t *info, const char *function)
-{
-    ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
-                  function, req, req + 1, info->sender_tag, info->length,
-                  ucs_status_string(status));
-
-    req->status = status;
-    if ((req->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) {
-        ucp_request_put(req);
-    }
-    UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                     uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
