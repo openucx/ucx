@@ -1095,8 +1095,7 @@ static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
     perf->allocator->ucp_free(perf, perf->send_buffer, perf->ucp.send_memh);
 }
 
-static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf,
-                                      unsigned group_size)
+static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf)
 {
     unsigned i, thread_count = perf->params.thread_count;
     ucs_status_ptr_t    *req;
@@ -1166,7 +1165,12 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
     group_size  = rte_call(perf, group_size);
     group_index = rte_call(perf, group_index);
 
-    ucs_assert(group_size == 2);
+    if (group_size != 2) {
+        ucs_error("perftest requires group size to be exactly 2 "
+                  "(actual group size: %u)", group_size);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     buffer_size = ADDR_BUF_SIZE * thread_count;
 
     buffer = malloc(buffer_size);
@@ -1174,6 +1178,12 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
         ucs_error("failed to allocate RTE receive buffer");
         status = UCS_ERR_NO_MEMORY;
         goto err;
+    }
+
+    /* Initialize all endpoints and rkeys to NULL to handle error flow */
+    for (i = 0; i < thread_count; i++) {
+        perf->ucp.tctx[i].perf.ucp.ep   = NULL;
+        perf->ucp.tctx[i].perf.ucp.rkey = NULL;
     }
 
     /* receive the data from the remote peer, extract the address from it
@@ -1186,8 +1196,6 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
         rkey_buffer                            = UCS_PTR_BYTE_OFFSET(address,
                                                                      remote_info->ucp.worker_addr_len);
         perf->ucp.tctx[i].perf.ucp.remote_addr = remote_info->recv_buffer;
-        perf->ucp.tctx[i].perf.ucp.ep          = NULL;
-        perf->ucp.tctx[i].perf.ucp.rkey        = NULL;
 
         ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address    = address;
@@ -1222,7 +1230,7 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
     return UCS_OK;
 
 err_free_eps_buffer:
-    ucp_perf_test_destroy_eps(perf, group_size);
+    ucp_perf_test_destroy_eps(perf);
     free(buffer);
 err:
     return status;
@@ -1333,10 +1341,8 @@ err:
 static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
                                                   uint64_t features)
 {
-    unsigned group_size, i, thread_count = perf->params.thread_count;
     ucs_status_t status;
-
-    group_size  = rte_call(perf, group_size);
+    unsigned i;
 
     /* pack the local endpoints data and send to the remote peer */
     status = ucp_perf_test_send_local_data(perf, features);
@@ -1357,7 +1363,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     }
 
     /* force wireup completion */
-    for (i = 0; i < thread_count; i++) {
+    for (i = 0; i < perf->params.thread_count; i++) {
         status = ucp_worker_flush(perf->ucp.tctx[i].perf.ucp.worker);
         if (status != UCS_OK) {
             ucs_warn("ucp_worker_flush() failed on theread %d: %s",
@@ -1368,7 +1374,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     return status;
 
 err_destroy_eps:
-    ucp_perf_test_destroy_eps(perf, group_size);
+    ucp_perf_test_destroy_eps(perf);
 err:
     (void)ucp_perf_test_exchange_status(perf, status);
     return status;
@@ -1376,13 +1382,8 @@ err:
 
 static void ucp_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 {
-    unsigned group_size;
-
     ucp_perf_barrier(perf);
-
-    group_size  = rte_call(perf, group_size);
-
-    ucp_perf_test_destroy_eps(perf, group_size);
+    ucp_perf_test_destroy_eps(perf);
 }
 
 static void ucp_perf_test_destroy_workers(ucx_perf_context_t *perf)

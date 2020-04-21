@@ -338,7 +338,18 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx
     }
 }
 
-static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+static UCS_F_ALWAYS_INLINE void
+ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+{
+    iface->tx.stack_top--;
+    iface->tx.dcis_stack[iface->tx.stack_top] = dci;
+#if UCS_ENABLE_ASSERT
+    iface->tx.dcis[dci].flags = 0;
+#endif
+}
+
+static UCS_F_ALWAYS_INLINE void
+ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 {
     uct_dc_mlx5_ep_t *ep;
 
@@ -349,6 +360,13 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
     ep = uct_dc_mlx5_ep_from_dci(iface, dci);
 
     ucs_assert(iface->tx.stack_top > 0);
+
+    if (ucs_unlikely(ep == NULL)) {
+        if (!uct_dc_mlx5_iface_dci_has_outstanding(iface, dci)) {
+            uct_dc_mlx5_iface_dci_release(iface, dci);
+        }
+        return;
+    }
 
     if (uct_dc_mlx5_iface_dci_has_outstanding(iface, dci)) {
         if (iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) {
@@ -366,15 +384,8 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
         ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group);
         return;
     }
-    iface->tx.stack_top--;
-    iface->tx.dcis_stack[iface->tx.stack_top] = dci;
-#if UCS_ENABLE_ASSERT
-    iface->tx.dcis[dci].flags = 0;
-#endif
 
-    if (ucs_unlikely(ep == NULL)) {
-        return;
-    }
+    uct_dc_mlx5_iface_dci_release(iface, dci);
 
     ucs_assert(uct_dc_mlx5_ep_from_dci(iface, dci)->dci != UCT_DC_MLX5_EP_NO_DCI);
     ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
@@ -420,15 +431,11 @@ static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface, uct_dc
         return;
     }
 
-    iface->tx.stack_top--;
-    iface->tx.dcis_stack[iface->tx.stack_top] = dci;
-    iface->tx.dcis[dci].ep                    = NULL;
-#if UCS_ENABLE_ASSERT
-    iface->tx.dcis[ep->dci].flags             = 0;
-#endif
+    uct_dc_mlx5_iface_dci_release(iface, dci);
 
-    ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
-    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
+    iface->tx.dcis[dci].ep = NULL;
+    ep->dci                = UCT_DC_MLX5_EP_NO_DCI;
+    ep->flags             &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

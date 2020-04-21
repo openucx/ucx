@@ -23,7 +23,7 @@ typedef struct {
 typedef struct uct_ib_mlx5_mem {
     uct_ib_mem_t               super;
     struct ibv_mr              *mr;
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     union {
         struct ibv_mr          *atomic_mr;
         uct_ib_mlx5_ksm_data_t *ksm_data;
@@ -86,7 +86,7 @@ uct_ib_mlx5_mem_prefetch(uct_ib_md_t *md, uct_ib_mem_t *ib_memh, void *addr,
 
 static ucs_status_t uct_ib_mlx5_exp_md_umr_qp_create(uct_ib_mlx5_md_t *md)
 {
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     struct ibv_exp_qp_init_attr qp_init_attr;
     struct ibv_qp_attr qp_attr;
     uint8_t port_num;
@@ -212,7 +212,7 @@ err:
 #endif
 }
 
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
 static ucs_status_t
 uct_ib_mlx5_exp_reg_indirect_mr(uct_ib_mlx5_md_t *md,
                                 void *addr, size_t length,
@@ -386,7 +386,7 @@ uct_ib_mlx5_md_is_ksm_supported(uct_ib_mlx5_md_t *md)
 static ucs_status_t uct_ib_mlx5_exp_reg_atomic_key(uct_ib_md_t *ibmd,
                                                    uct_ib_mem_t *ib_memh)
 {
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
     off_t offset = uct_ib_md_atomic_offset(uct_ib_mlx5_md_get_atomic_mr_id(md));
@@ -476,7 +476,7 @@ err:
 static ucs_status_t uct_ib_mlx5_exp_dereg_atomic_key(uct_ib_md_t *ibmd,
                                                      uct_ib_mem_t *ib_memh)
 {
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     int ret;
 
@@ -701,7 +701,7 @@ err:
 
 void uct_ib_mlx5_exp_md_cleanup(uct_ib_md_t *ibmd)
 {
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
 
     if (md->umr_qp != NULL) {
