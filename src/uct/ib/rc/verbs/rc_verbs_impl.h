@@ -12,8 +12,6 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 
-ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status);
-
 static inline void
 uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
                          uct_rc_iface_t *iface, int signaled)

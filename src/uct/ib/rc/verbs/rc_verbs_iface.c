@@ -72,6 +72,7 @@ static ucs_status_t uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface,
                              &iface->super.super, status);
 }
 
+static UCS_F_ALWAYS_INLINE
 ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
 {
     switch (status)
@@ -99,8 +100,8 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     UCT_RC_VERBS_IFACE_FOREACH_TXWQE(&iface->super, i, wc, num_wcs) {
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
-        if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
-            status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
+        status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
+        if (ucs_unlikely((status != UCS_OK) || (ep == NULL))) {
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
                                                    status);
             continue;
@@ -119,7 +120,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1,
                              uct_rc_ep_process_pending, NULL);
 
-        uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci);
+        uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci, status);
     }
 
     return num_wcs;

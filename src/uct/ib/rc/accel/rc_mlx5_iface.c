@@ -99,9 +99,11 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
     uct_rc_mlx5_ep_t *ep;
     unsigned qp_num;
     uint16_t hw_ci;
+    ucs_status_t status;
 
-    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX]);
-    if (cqe == NULL) {
+    status = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX],
+                                 &cqe);
+    if (status == UCS_ERR_NO_PROGRESS) {
         return 0;
     }
 
@@ -131,7 +133,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
     ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending,
                          NULL);
 
-    uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
+    uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci, status);
 
     return 1;
 }

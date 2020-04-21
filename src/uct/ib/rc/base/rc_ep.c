@@ -176,7 +176,8 @@ uct_rc_op_release_iface_resources(uct_rc_iface_send_op_t *op, int is_get_zcopy)
     ++iface->tx.reads_available;
 }
 
-void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
+void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp,
+                                 ucs_status_t status)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
@@ -185,12 +186,13 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
 
     uct_rc_op_release_iface_resources(op, 0);
-    uct_invoke_completion(desc->super.user_comp, UCS_OK);
+    uct_invoke_completion(desc->super.user_comp, status);
     ucs_mpool_put(desc);
 }
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
-                                               const void *resp)
+                                               const void *resp,
+                                               ucs_status_t status)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
 
@@ -202,23 +204,25 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
 }
 
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
-                                            const void *resp)
+                                            const void *resp,
+                                            ucs_status_t status)
 {
     uct_rc_op_release_iface_resources(op, 1);
-    uct_rc_ep_send_op_completion_handler(op, resp);
+    uct_rc_ep_send_op_completion_handler(op, resp, status);
 }
 
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
-                                          const void *resp)
+                                          const void *resp, ucs_status_t status)
 {
-    uct_invoke_completion(op->user_comp, UCS_OK);
+    uct_invoke_completion(op->user_comp, status);
     uct_rc_iface_put_send_op(op);
 }
 
 void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
-                                           const void *resp)
+                                           const void *resp,
+                                           ucs_status_t status)
 {
-    uct_invoke_completion(op->user_comp, UCS_OK);
+    uct_invoke_completion(op->user_comp, status);
     ucs_mpool_put(op);
 }
 
@@ -423,7 +427,8 @@ ucs_status_t uct_rc_ep_check_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 
 #define UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(_num_bits, _is_be) \
     void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(_num_bits, _is_be) \
-            (uct_rc_iface_send_op_t *op, const void *resp) \
+            (uct_rc_iface_send_op_t *op, const void *resp, \
+             ucs_status_t status) \
     { \
         uct_rc_iface_send_desc_t *desc = \
             ucs_derived_of(op, uct_rc_iface_send_desc_t); \
@@ -439,7 +444,7 @@ ucs_status_t uct_rc_ep_check_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
             *dest = *value; \
         } \
         \
-        uct_invoke_completion(desc->super.user_comp, UCS_OK); \
+        uct_invoke_completion(desc->super.user_comp, status); \
         ucs_mpool_put(desc); \
   }
 
@@ -448,9 +453,10 @@ UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(32, 1);
 UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(64, 0);
 UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC(64, 1);
 
-void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
+void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp,
+                                ucs_status_t status)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
-    uct_invoke_completion(desc->super.user_comp, UCS_OK);
+    uct_invoke_completion(desc->super.user_comp, status);
     ucs_mpool_put(desc);
 }

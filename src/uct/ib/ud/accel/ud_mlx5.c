@@ -432,6 +432,7 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     void *packet;
     unsigned count;
     ptrdiff_t rx_hdr_offset;
+    ucs_status_t status;
 
     ci            = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
     packet        = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
@@ -439,8 +440,9 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     rx_hdr_offset = iface->super.super.config.rx_hdr_offset;
     desc          = UCS_PTR_BYTE_OFFSET(packet, -rx_hdr_offset);
 
-    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_RX]);
-    if (cqe == NULL) {
+    status = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_RX],
+                                 &cqe);
+    if (status == UCS_ERR_NO_PROGRESS) {
         count = 0;
         goto out;
     }
@@ -486,9 +488,11 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface, int is_async)
 {
     struct mlx5_cqe64 *cqe;
     uint16_t hw_ci;
+    ucs_status_t status;
 
-    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX]);
-    if (cqe == NULL) {
+    status = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX],
+                                 &cqe);
+    if (status == UCS_ERR_NO_PROGRESS) {
         return 0;
     }
 

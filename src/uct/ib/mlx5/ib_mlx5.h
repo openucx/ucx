@@ -500,8 +500,9 @@ ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited);
 /**
  * Check for completion with error.
  */
-void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
-                                  struct mlx5_cqe64 *cqe);
+ucs_status_t uct_ib_mlx5_check_completion(uct_ib_iface_t *iface,
+                                          uct_ib_mlx5_cq_t *cq,
+                                          struct mlx5_cqe64 *cqe);
 
 ucs_status_t
 uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,

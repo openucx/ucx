@@ -148,7 +148,8 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
 #define UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(_bits) \
     void \
     uct_rc_mlx5_common_atomic##_bits##_le_handler(uct_rc_iface_send_op_t *op, \
-                                                  const void *resp) \
+                                                  const void *resp, \
+                                                  ucs_status_t status) \
     { \
         uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t); \
         uint##_bits##_t *dest        = desc->super.buffer; \
@@ -163,7 +164,7 @@ void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
             *dest = be64toh(*value); /* response in CQE as 64-bit value */ \
         } \
         \
-        uct_invoke_completion(desc->super.user_comp, UCS_OK); \
+        uct_invoke_completion(desc->super.user_comp, status); \
         ucs_mpool_put(desc); \
     }
 

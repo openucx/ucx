@@ -205,12 +205,14 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     uint32_t qp_num;
     uint16_t hw_ci;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
+    ucs_status_t status;
 
-    cqe = uct_ib_mlx5_poll_cq(&iface->super.super.super,
-                              &iface->super.cq[UCT_IB_DIR_TX]);
-    if (cqe == NULL) {
-        return 0;
+    status = uct_ib_mlx5_poll_cq(&iface->super.super.super,
+                              &iface->super.cq[UCT_IB_DIR_TX], &cqe);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status != UCS_ERR_NO_PROGRESS;
     }
+
     UCS_STATS_UPDATE_COUNTER(iface->super.super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
 
     ucs_memory_cpu_load_fence();
@@ -232,7 +234,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
      * avoid out-of-order transmission in completion
      * callbacks */
     uct_dc_mlx5_iface_progress_pending(iface);
-    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
+    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci, status);
     return 1;
 }
 
