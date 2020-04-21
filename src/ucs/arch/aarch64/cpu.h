@@ -119,6 +119,13 @@ static inline ucs_cpu_model_t ucs_arch_get_cpu_model()
 
 static inline ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
 {
+    ucs_aarch64_cpuid_t cpuid;
+    ucs_aarch64_cpuid(&cpuid);
+
+    if ((cpuid.implementer == 0x46) && (cpuid.architecture == 8)) {
+        return UCS_CPU_VENDOR_FUJITSU_ARM;
+    }
+
     return UCS_CPU_VENDOR_GENERIC_ARM;
 }
 

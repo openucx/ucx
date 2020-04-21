@@ -46,14 +46,19 @@ static inline void ucs_arbiter_group_head_reset(ucs_arbiter_elem_t *head)
     head->list.next = NULL; /* Not scheduled yet */
 }
 
+static inline void ucs_arbiter_elem_set_scheduled(ucs_arbiter_elem_t *elem,
+                                                  ucs_arbiter_group_t *group)
+{
+    elem->group = group;
+}
+
 void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
                                         ucs_arbiter_elem_t *elem)
 {
     ucs_arbiter_elem_t *tail = group->tail;
 
-    UCS_ARBITER_GROUP_GUARD_CHECK(group);
-
     if (tail == NULL) {
+        /* group is empty */
         ucs_arbiter_group_head_reset(elem);
         elem->next = elem;        /* Connect to itself */
     } else {
@@ -61,8 +66,8 @@ void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
         tail->next = elem;        /* Point previous element to new one */
     }
 
-    elem->group = group;  /* Always point to group */
     group->tail = elem;   /* Update group tail */
+    ucs_arbiter_elem_set_scheduled(elem, group);
 }
 
 void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
@@ -74,8 +79,8 @@ void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
 
     UCS_ARBITER_GROUP_GUARD_CHECK(group);
 
-    elem->group = group;      /* Always point to group */
     ucs_arbiter_group_head_reset(elem);
+    ucs_arbiter_elem_set_scheduled(elem, group);
 
     if (tail == NULL) {
         elem->next  = elem;   /* Connect to itself */
@@ -92,14 +97,6 @@ void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
     }
 
     ucs_list_replace(&head->list, &elem->list);
-}
-
-void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
-                                    ucs_arbiter_elem_t *head)
-{
-    if (ucs_arbiter_group_head_is_scheduled(head)) {
-        ucs_list_del(&head->list);
-    }
 }
 
 void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
@@ -133,8 +130,8 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
         ptr       = next;
         next      = ptr->next;
         /* Can't touch the element after cb is called if it gets removed. But it
-         * can be reused later as well, so it's next should be NULL. */
-        ptr->next = NULL;
+         * can be reused later as well, so it's group should be NULL. */
+        ucs_arbiter_elem_init(ptr);
         result    = cb(arbiter, group, ptr, cb_arg);
 
         if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
@@ -158,8 +155,8 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
             prev->next = next;
         } else {
             /* keep the element */
-            ptr->next = next; /* Restore next pointer */
-            prev      = ptr;
+            ucs_arbiter_elem_set_scheduled(ptr, group);
+            prev       = ptr;
         }
     } while (ptr != tail);
 
@@ -173,6 +170,25 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter,
         ucs_arbiter_group_head_reset(head);
     }
 }
+
+size_t ucs_arbiter_group_num_elems(ucs_arbiter_group_t *group)
+{
+    ucs_arbiter_elem_t *elem = group->tail;
+    size_t num_elems;
+
+    if (elem == NULL) {
+        return 0;
+    }
+
+    num_elems = 0;
+    do {
+        ++num_elems;
+        elem = elem->next;
+    } while (elem != group->tail);
+
+    return num_elems;
+}
+
 
 int ucs_arbiter_group_is_scheduled(ucs_arbiter_group_t *group)
 {
@@ -204,13 +220,7 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
     ucs_assert(tail != NULL);
     head = tail->next;
 
-    if (head == NULL) {
-        /* It means that 1 element group is scheduled during dispatch.
-         * Restore next pointer.
-         */
-        head = tail;
-    }
-
+    ucs_assert(head != NULL);
     ucs_arbiter_schedule_head_if_not_scheduled(arbiter, head);
     UCS_ARBITER_GROUP_ARBITER_SET(group, arbiter);
 }
@@ -230,19 +240,47 @@ void ucs_arbiter_group_desched_nonempty(ucs_arbiter_t *arbiter,
     ucs_arbiter_group_head_reset(head);
 }
 
+static inline void
+ucs_arbiter_remove_and_reset_if_scheduled(ucs_arbiter_elem_t *elem)
+{
+    if (ucs_unlikely(ucs_arbiter_group_head_is_scheduled(elem))) {
+         ucs_list_del(&elem->list);
+         ucs_arbiter_group_head_reset(elem);
+     }
+}
+
+static inline void
+ucs_arbiter_group_head_replace(ucs_arbiter_group_t *group,
+                               ucs_arbiter_elem_t *group_head,
+                               ucs_arbiter_elem_t *new_group_head)
+{
+    /* check if this is really the group head */
+    ucs_assert(!ucs_arbiter_group_is_empty(group));
+    ucs_assert(group->tail->next == group_head);
+
+    if (group_head->next == group_head) {
+        group->tail          = new_group_head;
+    } else {
+        new_group_head->next = group_head->next;
+    }
+    group->tail->next = new_group_head;
+}
+
 void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                                    ucs_arbiter_callback_t cb, void *cb_arg)
 {
-    ucs_arbiter_elem_t *group_head, *group_tail, *next_elem;
+    ucs_arbiter_elem_t *group_head;
     ucs_arbiter_cb_result_t result;
     unsigned group_dispatch_count;
     ucs_arbiter_group_t *group;
     UCS_LIST_HEAD(resched_list);
-    int sched_group;
+    ucs_arbiter_elem_t dummy;
 
     ucs_assert(!ucs_list_is_empty(&arbiter->list));
 
-    for (;;) {
+    ucs_arbiter_group_head_reset(&dummy);
+
+    do {
         group_head = ucs_list_extract_head(&arbiter->list, ucs_arbiter_elem_t,
                                            list);
         ucs_assert(group_head != NULL);
@@ -254,21 +292,30 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
         ucs_arbiter_group_head_reset(group_head);
 
         group_dispatch_count = 0;
-        sched_group          = 1;
         group                = group_head->group;
+        dummy.group          = group;
         UCS_ARBITER_GROUP_GUARD_CHECK(group);
 
-        do {
-            /* zero pointer to next elem here because:
+        for (;;) {
+            ucs_assert(group_head->group   == group);
+            ucs_assert(dummy.group         == group);
+            ucs_assert(group_dispatch_count < per_group);
+
+            /* reset the dispatched element here because:
              * 1. if the element is removed from the arbiter it must be kept in
              *    initialized state otherwise push will fail
-             * 2. we can't zero the pointer after calling the callback because
+             * 2. we can't reset the element after calling the callback because
              *    the callback could release the element.
              */
-            next_elem        = group_head->next;
-            group_head->next = NULL;
-            ucs_assert(group_head->group == group);
+            ucs_arbiter_elem_init(group_head);
+            ucs_assert(!ucs_arbiter_group_head_is_scheduled(group_head));
 
+            /* replace group head by a dummy element, to allow scheduling more
+             * elements on this group from the dispatch callback.
+             */
+            ucs_arbiter_group_head_replace(group, group_head, &dummy);
+
+            /* dispatch the element */
             ucs_trace_poll("dispatching arbiter element %p", group_head);
             UCS_ARBITER_GROUP_GUARD_ENTER(group);
             result = cb(arbiter, group, group_head, cb_arg);
@@ -276,58 +323,80 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
             ucs_trace_poll("dispatch result: %d", result);
             ++group_dispatch_count;
 
-            if (result == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
-                group_tail = group->tail;
-                if (group_head == group_tail) {
-                    /* Last element */
-                    group->tail = NULL; /* Group is empty now */
-                    sched_group = 0;
-                    group_head  = NULL; /* for debugging */
+            /* recursive push to head (during dispatch) is not allowed */
+            ucs_assert(group->tail->next == &dummy);
+
+            /* element is not removed */
+            if (ucs_unlikely(result != UCS_ARBITER_CB_RESULT_REMOVE_ELEM)) {
+                /* restore group pointer */
+                ucs_arbiter_elem_set_scheduled(group_head, group);
+
+                /* the head should not move, since dummy replaces it */
+                ucs_assert(!ucs_arbiter_group_head_is_scheduled(group_head));
+
+                /* replace dummy element by group_head */
+                ucs_arbiter_group_head_replace(group, &dummy, group_head);
+
+                if (result == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) {
+                    /* take over a recursively scheduled group */
+                    if (ucs_unlikely(ucs_arbiter_group_head_is_scheduled(&dummy))) {
+                        ucs_list_replace(&dummy.list, &group_head->list);
+                        ucs_arbiter_group_head_reset(&dummy);
+                    }
                     UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
-                    break;
                 } else {
-                    /* Not last element */
-                    ucs_assert(group_head == group_tail->next);
-                    ucs_assert(group_head != next_elem);
-                    group_head       = next_elem;  /* Update group head */
-                    group_tail->next = group_head; /* Tail points to new head */
-                    ucs_arbiter_group_head_reset(group_head);
-                }
-            } else {
-                /* element is not removed, restore next pointer */
-                group_head->next = next_elem;
+                    /* remove a recursively scheduled group, give priority
+                     * to the original order */
+                    ucs_arbiter_remove_and_reset_if_scheduled(&dummy);
 
-                /* group must still be active */
-                ucs_assert(sched_group == 1);
-
-                if (result == UCS_ARBITER_CB_RESULT_STOP) {
-                    /* exit the outmost loop and make sure that next dispatch()
-                     * will continue from the current group */
-                    ucs_list_add_head(&arbiter->list, &group_head->list);
-                    goto out;
-                } else if (result != UCS_ARBITER_CB_RESULT_NEXT_GROUP) {
-                    /* resched/desched must avoid adding the group to the arbiter */
-                    sched_group = 0;
-                    if (result == UCS_ARBITER_CB_RESULT_DESCHED_GROUP) {
-                        UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
+                    if (result == UCS_ARBITER_CB_RESULT_NEXT_GROUP) {
+                        /* add to arbiter tail */
+                        ucs_list_add_tail(&arbiter->list, &group_head->list);
                     } else if (result == UCS_ARBITER_CB_RESULT_RESCHED_GROUP) {
+                        /* add to resched list */
                         ucs_list_add_tail(&resched_list, &group_head->list);
+                    } else if (result == UCS_ARBITER_CB_RESULT_STOP) {
+                        /* exit the outmost loop and make sure that next dispatch()
+                         * will continue from the current group */
+                        ucs_list_add_head(&arbiter->list, &group_head->list);
+                        goto out;
                     } else {
                         ucs_bug("unexpected return value from arbiter callback");
                     }
-                    break;
                 }
-            }
-        } while (group_dispatch_count < per_group);
 
-        if (sched_group) {
-            /* the group could be scheduled again from dispatch callback */
-            ucs_arbiter_schedule_head_if_not_scheduled(arbiter, group_head);
-            ucs_assert(!ucs_list_is_empty(&arbiter->list));
-        } else if (ucs_list_is_empty(&arbiter->list)) {
-            break;
+                break;
+            }
+
+            /* last element removed */
+            if (dummy.next == &dummy) {
+                group->tail = NULL; /* group is empty now */
+                group_head  = NULL; /* for debugging */
+                ucs_arbiter_remove_and_reset_if_scheduled(&dummy);
+                UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
+                break;
+            }
+
+            /* non-last element removed */
+            group_head        = dummy.next;  /* Update group head */
+            group->tail->next = group_head;  /* Tail points to new head */
+
+            if (ucs_unlikely(ucs_arbiter_group_head_is_scheduled(&dummy))) {
+                /* take over a recursively scheduled group */
+                ucs_list_replace(&dummy.list, &group_head->list);
+                ucs_arbiter_group_head_reset(&dummy);
+                /* the group is already scheduled, continue to next group */
+                break;
+            } else if (group_dispatch_count >= per_group) {
+                /* add to arbiter tail and continue to next group */
+                ucs_list_add_tail(&arbiter->list, &group_head->list);
+                break;
+            }
+
+            /* continue with new group head */
+            ucs_arbiter_group_head_reset(group_head);
         }
-    }
+    } while (!ucs_list_is_empty(&arbiter->list));
 
 out:
     ucs_list_splice_tail(&arbiter->list, &resched_list);

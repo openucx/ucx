@@ -52,7 +52,7 @@ typedef enum {
 
 enum {
     UCT_IB_QPT_UNKNOWN,
-#if HAVE_DC_EXP
+#ifdef HAVE_DC_EXP
     UCT_IB_QPT_DCI = IBV_EXP_QPT_DC_INI,
 #elif HAVE_DC_DV
     UCT_IB_QPT_DCI = IBV_QPT_DRIVER,
@@ -346,6 +346,12 @@ size_t uct_ib_address_size(const union ibv_gid *gid, unsigned pack_flags);
 
 
 /**
+ * @return IB address packing flags of the given iface.
+ */
+unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface);
+
+
+/**
  * @return IB address size of the given iface.
  */
 size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
@@ -373,14 +379,11 @@ void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
  * Pack the IB address of the given iface.
  *
  * @param [in]  iface      Iface whose IB address to pack.
- * @param [in]  gid        GID address to pack.
- * @param [in]  lid        LID address to pack.
  * @param [in/out] ib_addr Filled with packed ib address. Size of the structure
  *                         must be at least what @ref uct_ib_address_size()
  *                         returns for the given scope.
  */
-void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
-                               uint16_t lid, uct_ib_address_t *ib_addr);
+void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr);
 
 
 /**

@@ -322,7 +322,7 @@ UCS_TEST_F(test_arbiter, purge_cond) {
 
         for (int j = 0; j < num_elems; ++j) {
             arb_elem *e = new arb_elem;
-            if (ucs::rand() % 2) {
+            if ((ucs::rand() % 2) == 0) {
                 e->release = true;
                 ++purged_count[i];
             } else {
@@ -848,6 +848,7 @@ private:
     unsigned                 m_num_only;
     unsigned                 m_num_added;
     unsigned                 m_num_removed;
+    unsigned                 m_num_push_self;
     unsigned                 m_num_push_another;
     unsigned                 m_num_next_group;
     unsigned                 m_num_desched;
@@ -865,6 +866,7 @@ void test_arbiter_random_resched::reset_counters()
     m_num_only         = 0;
     m_num_added        = 0;
     m_num_removed      = 0;
+    m_num_push_self    = 0;
     m_num_push_another = 0;
     m_num_next_group   = 0;
     m_num_desched      = 0;
@@ -890,31 +892,47 @@ test_arbiter_random_resched::dispatch(ucs_arbiter_group_t *_group,
 
     ++m_num_dispatch;
 
+    /* Test ucs_arbiter_group_num_elems() */
+    EXPECT_EQ(group->num_elems, ucs_arbiter_group_num_elems(&group->super));
+
+    /* We should be able to reschedule this group to another place */
+    EXPECT_FALSE(ucs_arbiter_group_is_scheduled(&group->super));
+
     /* Test ucs_arbiter_elem_is_only() */
     if (group->num_elems == 1) {
         ++m_num_only;
-        EXPECT_TRUE(ucs_arbiter_elem_is_only(&group->super, elem));
+        EXPECT_TRUE(ucs_arbiter_elem_is_only(elem));
     }
 
-    if (ucs::rand() % 2) {
+    /* Randomly add few more elements to same group */
+    while ((ucs::rand() % 4) == 0) {
+        add_new_elem(group);
+        if ((ucs::rand() % 2) == 0) {
+            ucs_arbiter_group_schedule(&m_arb, &group->super);
+        }
+    }
+
+    if ((ucs::rand() % 2) == 0) {
         /* Remove the current element.
          * Must remove elements with higher probability than adding to avoid
          * infinite loop.
          */
-        if ((m_groups.size() > 1) && ((ucs::rand() % 4) == 0)) {
-            /* push the removed element to a random group which is not the
-             * current group. We skip the current group by doing ++, it would not
-             * exceed array size because we randomize on (array_size - 1) */
-            new_group = &m_groups[ucs::rand() % (m_groups.size() - 1)];
-            if (new_group >= group) {
-               ++new_group;
-            }
-
+        if ((ucs::rand() % 4) == 0) {
+            /* push the removed element to a random group. It could be either
+             * the current group or a new group, both cases should work. */
+            new_group = &m_groups[ucs::rand() % m_groups.size()];
             ucs_arbiter_group_push_elem(&new_group->super, elem);
 
-            /* schedule the new group if it's now the current one */
-            ++m_num_push_another;
-            ucs_arbiter_group_schedule(&m_arb, &new_group->super);
+            if (new_group == group) {
+                ++m_num_push_self;
+                if ((ucs::rand() % 2) == 0) {
+                    ucs_arbiter_group_schedule(&m_arb, &new_group->super);
+                }
+            } else {
+                /* schedule the new group if it's now the current one */
+                ++m_num_push_another;
+                ucs_arbiter_group_schedule(&m_arb, &new_group->super);
+            }
 
             ++new_group->num_elems;
         } else {
@@ -971,6 +989,7 @@ void test_arbiter_random_resched::do_test(unsigned iteration_num,
         ucs_arbiter_group_schedule(&m_arb, &group->super);
 
         /* Test arbiter helper functions */
+        EXPECT_EQ(elems_per_group, ucs_arbiter_group_num_elems(&group->super));
         if (elems_per_group == 0) {
             EXPECT_TRUE(ucs_arbiter_group_is_empty(&group->super));
         }
@@ -989,6 +1008,7 @@ void test_arbiter_random_resched::do_test(unsigned iteration_num,
                      << " removed: " << m_num_removed;
     UCS_TEST_MESSAGE << " dispatch: " << m_num_dispatch
                      << " only: " << m_num_only
+                     << " push self: " << m_num_push_self
                      << " push another: " << m_num_push_another;
     UCS_TEST_MESSAGE << " desched: " << m_num_desched
                      << " resched: " << m_num_resched

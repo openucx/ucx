@@ -186,7 +186,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "\"auto\" option selects a first valid pkey value with full membership.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
   {"RESOURCE_DOMAIN", "y",
    "Enable multiple resource domains (experimental).",
    ucs_offsetof(uct_ib_iface_config_t, enable_res_domain), UCS_CONFIG_TYPE_BOOL},
@@ -305,16 +305,15 @@ void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
     }
 
     /* IB, LID */
-    ib_addr->flags   = !UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH;
-    ptr              = ib_addr + 1;
-    *(uint16_t*)ptr  = lid;
-    ptr              = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
+    ib_addr->flags  = !UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH;
+    *(uint16_t*)ptr = lid;
+    ptr             = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
 
     if (pack_flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) {
         /* Pack GUID */
-        ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_IF_ID;
-        *(uint64_t*) ptr = gid->global.interface_id;
-        ptr              = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint64_t));
+        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_IF_ID;
+        *(uint64_t*)ptr = gid->global.interface_id;
+        ptr             = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint64_t));
     }
 
     if (pack_flags & UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX) {
@@ -331,7 +330,7 @@ void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
     }
 }
 
-static unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
+unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
 {
     if (uct_ib_iface_is_roce(iface)) {
         /* pack Ethernet address */
@@ -352,10 +351,12 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface)
                                uct_ib_iface_address_pack_flags(iface));
 }
 
-void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
-                               uint16_t lid, uct_ib_address_t *ib_addr)
+void uct_ib_iface_address_pack(uct_ib_iface_t *iface,
+                               uct_ib_address_t *ib_addr)
 {
-    uct_ib_address_pack(gid, lid, uct_ib_iface_address_pack_flags(iface),
+    uct_ib_address_pack(&iface->gid_info.gid,
+                        uct_ib_iface_port_attr(iface)->lid,
+                        uct_ib_iface_address_pack_flags(iface),
                         &iface->gid_info.roce_info, ib_addr);
 }
 
@@ -418,10 +419,10 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr)
 {
-    uct_ib_iface_t   *iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
 
-    uct_ib_iface_address_pack(iface, &iface->gid_info.gid, uct_ib_iface_port_attr(iface)->lid,
-                              (void*)dev_addr);
+    uct_ib_iface_address_pack(iface, (void*)dev_addr);
+
     return UCS_OK;
 }
 

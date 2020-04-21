@@ -72,7 +72,7 @@
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
 
-#if HAVE_STRUCT_MLX5_WQE_AV_BASE
+#ifdef HAVE_STRUCT_MLX5_WQE_AV_BASE
 
 #  define mlx5_av_base(_av)         (&(_av)->base)
 #  define mlx5_av_grh(_av)          (&(_av)->grh_sec)
@@ -103,7 +103,7 @@ struct mlx5_grh_av {
 
 #endif
 
-#if !(HAVE_DECL_MLX5_WQE_CTRL_SOLICITED)
+#ifndef MLX5_WQE_CTRL_SOLICITED
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
@@ -284,13 +284,19 @@ typedef struct uct_ib_mlx5_devx_uar {
 /* resource domain */
 typedef struct uct_ib_mlx5_res_domain {
     uct_worker_tl_data_t        super;
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain   *ibv_domain;
 #elif HAVE_DECL_IBV_ALLOC_TD
     struct ibv_td               *td;
     struct ibv_pd               *pd;
 #endif
 } uct_ib_mlx5_res_domain_t;
+
+
+typedef struct uct_ib_mlx5_qp_attr {
+    uct_ib_qp_attr_t            super;
+    uct_ib_mlx5_mmio_mode_t     mmio_mode;
+} uct_ib_mlx5_qp_attr_t;
 
 
 /* MLX5 QP wrapper */
@@ -301,7 +307,7 @@ typedef struct uct_ib_mlx5_qp {
         struct {
             union {
                 struct ibv_qp          *qp;
-#if HAVE_DC_EXP
+#ifdef HAVE_DC_EXP
                 struct ibv_exp_dct     *dct;
 #endif
             };
@@ -317,7 +323,6 @@ typedef struct uct_ib_mlx5_qp {
 #endif
     };
 } uct_ib_mlx5_qp_t;
-
 
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
@@ -434,7 +439,7 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
  */
 static inline uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
 {
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
         return 0;
     }
@@ -465,7 +470,7 @@ void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp);
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
-                                         uct_ib_qp_attr_t *attr);
+                                         uct_ib_mlx5_qp_attr_t *attr);
 
 /**
  * Create CQ with DV
@@ -498,17 +503,18 @@ ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited);
 void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
                                   struct mlx5_cqe64 *cqe);
 
+ucs_status_t
+uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
+                          uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
+                          unsigned bf_size,
+                          uct_ib_mlx5_mmio_mode_t *mmio_mode);
+
 /**
  * Initialize txwq structure.
  */
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
-
-ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
-                                        uct_ib_mlx5_md_t *md,
-                                        uct_ib_mlx5_txwq_t *txwq,
-                                        uct_ib_mlx5_mmio_mode_t mode);
 
 void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq);
 
@@ -556,7 +562,7 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar);
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
-                                        uct_ib_qp_attr_t *attr);
+                                        uct_ib_mlx5_qp_attr_t *attr);
 
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                                         const void *in, size_t inlen,
@@ -573,7 +579,7 @@ static inline ucs_status_t
 uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                            uct_ib_mlx5_qp_t *qp,
                            uct_ib_mlx5_txwq_t *tx,
-                           uct_ib_qp_attr_t *attr)
+                           uct_ib_mlx5_qp_attr_t *attr)
 {
     return UCS_ERR_UNSUPPORTED;
 }
@@ -603,7 +609,9 @@ static inline uct_ib_mlx5_dbrec_t *uct_ib_mlx5_get_dbrec(uct_ib_mlx5_md_t *md)
     dbrec = (uct_ib_mlx5_dbrec_t *)ucs_mpool_get_inline(&md->dbrec_pool);
     ucs_recursive_spin_unlock(&md->dbrec_lock);
     if (dbrec != NULL) {
-        dbrec->md = md;
+        dbrec->db[MLX5_SND_DBR] = 0;
+        dbrec->db[MLX5_RCV_DBR] = 0;
+        dbrec->md               = md;
     }
 
     return dbrec;

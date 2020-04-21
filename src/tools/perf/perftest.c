@@ -31,9 +31,9 @@
 #include <sys/types.h>
 #include <sys/poll.h>
 #include <locale.h>
-#if HAVE_MPI
+#if defined (HAVE_MPI)
 #  include <mpi.h>
-#elif HAVE_RTE
+#elif defined (HAVE_RTE)
 #   include<rte.h>
 #endif
 
@@ -389,17 +389,17 @@ static void usage(const struct perftest_context *ctx, const char *program)
     test_type_t *test;
     int UCS_V_UNUSED rank;
 
-#if HAVE_MPI
+#ifdef HAVE_MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (ctx->mpi && (rank != 0)) {
         return;
     }
 #endif
 
-#if HAVE_MPI
+#if defined (HAVE_MPI)
     printf("  Note: test can be also launched as an MPI application\n");
     printf("\n");
-#elif HAVE_RTE
+#elif defined (HAVE_RTE)
     printf("  Note: this test can be also launched as an libRTE application\n");
     printf("\n");
 #endif
@@ -425,14 +425,14 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -O <count>     maximal number of uncompleted outstanding sends\n");
     printf("     -i <offset>    distance between consecutive scatter-gather entries (%zu)\n",
                                 ctx->params.super.iov_stride);
-    printf("     -T <threads>   number of threads in the test (%d), if >1 implies \"-M multi\"\n",
+    printf("     -T <threads>   number of threads in the test (%d)\n",
                                 ctx->params.super.thread_count);
     printf("     -B             register memory with NONBLOCK flag\n");
     printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
     printf("                    file is a test to run, first word is test name, the rest of\n");
     printf("                    the line is command-line arguments for the test.\n");
     printf("     -p <port>      TCP port to use for data exchange (%d)\n", ctx->port);
-#if HAVE_MPI
+#ifdef HAVE_MPI
     printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
     printf("     -h             show this help message\n");
@@ -721,9 +721,6 @@ static ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         }
     case 'T':
         params->super.thread_count = atoi(opt_arg);
-        params->super.thread_mode  = (params->super.thread_count == 1) ?
-                                     UCS_THREAD_MODE_SINGLE :
-                                     UCS_THREAD_MODE_MULTI;
         return UCS_OK;
     case 'A':
         if (!strcmp(opt_arg, "thread") || !strcmp(opt_arg, "thread_spinlock")) {
@@ -912,7 +909,7 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized
             }
             break;
         case 'P':
-#if HAVE_MPI
+#ifdef HAVE_MPI
             ctx->mpi = atoi(optarg) && mpi_initialized;
             break;
 #endif
@@ -1165,7 +1162,7 @@ static ucs_status_t cleanup_sock_rte(struct perftest_context *ctx)
     return UCS_OK;
 }
 
-#if HAVE_MPI
+#if defined (HAVE_MPI)
 static unsigned mpi_rte_group_size(void *rte_group)
 {
     int size;
@@ -1301,7 +1298,7 @@ static void mpi_rte_report(void *rte_group, const ucx_perf_result_t *result,
     print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
                    is_final, ctx->server_addr == NULL, is_multi_thread);
 }
-#elif HAVE_RTE
+#elif defined (HAVE_RTE)
 static unsigned ext_rte_group_size(void *rte_group)
 {
     rte_group_t group = (rte_group_t)rte_group;
@@ -1428,7 +1425,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 {
     ucs_trace_func("");
 
-#if HAVE_MPI
+#if defined (HAVE_MPI)
     static ucx_perf_rte_t mpi_rte = {
         .group_size    = mpi_rte_group_size,
         .group_index   = mpi_rte_group_index,
@@ -1455,7 +1452,10 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->params.super.rte_group  = NULL;
     ctx->params.super.rte        = &mpi_rte;
     ctx->params.super.report_arg = ctx;
-#elif HAVE_RTE
+#elif defined (HAVE_RTE)
+    ctx->params.rte_group         = NULL;
+    ctx->params.rte               = &mpi_rte;
+    ctx->params.report_arg        = ctx;
     rte_group_t group;
 
     rte_init(NULL, NULL, &group);
@@ -1472,7 +1472,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 
 static ucs_status_t cleanup_mpi_rte(struct perftest_context *ctx)
 {
-#if HAVE_RTE
+#ifdef HAVE_RTE
     rte_finalize();
 #endif
     return UCS_OK;
@@ -1652,7 +1652,7 @@ int main(int argc, char **argv)
     int mpi_rte;
     int ret;
 
-#if HAVE_MPI
+#ifdef HAVE_MPI
     int provided;
 
     mpi_initialized = !isatty(0) &&
@@ -1691,7 +1691,7 @@ int main(int argc, char **argv)
     if (ctx.mpi) {
         mpi_rte = 1;
     } else {
-#if HAVE_RTE
+#ifdef HAVE_RTE
         mpi_rte = 1;
 #else
         mpi_rte = 0;
@@ -1730,7 +1730,7 @@ out_msg_size_list:
 out:
 #endif
     if (mpi_initialized) {
-#if HAVE_MPI
+#ifdef HAVE_MPI
         MPI_Finalize();
 #endif
     }
