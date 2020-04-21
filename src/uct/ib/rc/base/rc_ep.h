@@ -219,19 +219,23 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                            void *data, size_t length, size_t valid_length,
                            char *buffer, size_t max);
 
-void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
+void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp,
+                                 ucs_status_t status);
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
-                                               const void *resp);
+                                               const void *resp, ucs_status_t);
 
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
-                                            const void *resp);
+                                            const void *resp,
+                                            ucs_status_t status);
 
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
-                                          const void *resp);
+                                          const void *resp,
+                                          ucs_status_t status);
 
 void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
-                                           const void *resp);
+                                           const void *resp,
+                                           ucs_status_t status);
 
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags);
@@ -259,13 +263,17 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
 ucs_status_t uct_rc_ep_check_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op,
-                                                   const void *resp);
+                                                   const void *resp,
+                                                   ucs_status_t status);
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 1)(uct_rc_iface_send_op_t *op,
-                                                   const void *resp);
+                                                   const void *resp,
+                                                   ucs_status_t status);
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 0)(uct_rc_iface_send_op_t *op,
-                                                   const void *resp);
+                                                   const void *resp,
+                                                   ucs_status_t status);
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 1)(uct_rc_iface_send_op_t *op,
-                                                   const void *resp);
+                                                   const void *resp,
+                                                   ucs_status_t status);
 
 ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               uint32_t qp_num
@@ -373,25 +381,29 @@ uct_rc_txqp_add_flush_comp(uct_rc_iface_t *iface, uct_base_ep_t *ep,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp)
+uct_rc_txqp_completion_op(uct_rc_iface_send_op_t *op, const void *resp,
+                          ucs_status_t status)
 {
-    ucs_trace_poll("complete op %p sn %d handler %s", op, op->sn,
-                   ucs_debug_get_symbol_name((void*)op->handler));
+    ucs_trace_poll("complete op %p sn %d handler %s status %s", op, op->sn,
+                   ucs_debug_get_symbol_name((void*)op->handler),
+                   ucs_status_string(status));
     ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_INUSE);
     op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
-    op->handler(op, resp);
+    op->handler(op, resp, status);
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn)
+uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn,
+                            ucs_status_t status)
 {
     uct_rc_iface_send_op_t *op;
 
     ucs_trace_poll("txqp %p complete ops up to sn %d", txqp, sn);
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        uct_rc_txqp_completion_op(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1);
+        uct_rc_txqp_completion_op(op, ucs_derived_of(op, uct_rc_iface_send_desc_t) + 1,
+                                  status);
     }
 }
 
@@ -404,7 +416,7 @@ uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         ucs_assert(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY));
-        uct_rc_txqp_completion_op(op, resp);
+        uct_rc_txqp_completion_op(op, resp, UCS_OK);
     }
 }
 

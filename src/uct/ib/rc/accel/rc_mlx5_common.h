@@ -98,7 +98,8 @@
 #define UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(_bits) \
     void \
     uct_rc_mlx5_common_atomic##_bits##_le_handler(uct_rc_iface_send_op_t *op, \
-                                                  const void *resp);
+                                                  const void *resp, \
+                                                  ucs_status_t status);
 
 UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(32)
 UCT_RC_MLX5_DECLARE_ATOMIC_LE_HANDLER(64)

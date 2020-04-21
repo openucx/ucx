@@ -110,7 +110,8 @@ enum {
 };
 
 
-typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op, const void *resp);
+typedef void (*uct_rc_send_handler_t)(uct_rc_iface_send_op_t *op,
+                                      const void *resp, ucs_status_t status);
 
 
 /**
@@ -328,7 +329,8 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh);
 
-void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
+void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp,
+                                ucs_status_t status);
 
 /**
  * Creates an RC or DCI QP
