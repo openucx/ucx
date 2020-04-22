@@ -268,12 +268,14 @@ protected:
         }
     }
 
-    void suspend_and_poll2(async_poll *p1, async_poll *p2, double scale = 1.0) {
+    template<typename E>
+    void suspend_and_poll(std::vector<E> &p, double scale = 1.0) {
         if (GetParam() == UCS_ASYNC_MODE_POLL) {
             for (double t = 0; t < scale; t += 1.0) {
                 suspend();
-                p1->poll();
-                p2->poll();
+                for (size_t i = 0; i < p.size(); i++) {
+                    p[i]->poll();
+                }
             }
         } else {
             suspend(scale);
@@ -283,16 +285,41 @@ protected:
     template<typename E>
     void expect_count_GE(E& event, int value) {
         for (int retry = 0; retry < NUM_RETRIES; ++retry) {
-             suspend_and_poll(&event, COUNT);
-             if (event.count() >= value) {
-                  return;
-             }
-             UCS_TEST_MESSAGE << "retry " << (retry + 1);
-         }
-         EXPECT_GE(event.count(), value) << "after " << int(NUM_RETRIES)
-                                         << " retries";
+            suspend_and_poll(&event, COUNT);
+            if (event.count() >= value) {
+                return;
+            }
+            UCS_TEST_MESSAGE << "retry " << (retry + 1);
+        }
+        EXPECT_GE(event.count(), value) << "after " << int(NUM_RETRIES)
+                                        << " retries";
     }
 
+    /* `events` is a copy of caller's vector, because is is being modified
+     * in the loop to remove the event that are already passed the test */
+    template<typename E>
+    void expect_count_GE(std::vector<E> events, int value) {
+        for (int retry = 0; retry < NUM_RETRIES; ++retry) {
+            suspend_and_poll(events, COUNT);
+            for (size_t i = 0; i < events.size(); i++) {
+                if (events[i]->count() >= value) {
+                    events.erase(events.begin() + i);
+                }
+            }
+
+            if (events.empty()) {
+                break;
+            }
+
+            UCS_TEST_MESSAGE << "retry " << (retry + 1);
+        }
+
+        while (!events.empty()) {
+            EXPECT_GE(events.back()->count(), value) << "after " << int(NUM_RETRIES)
+                                                     << " retries";
+            events.pop_back();
+        }
+    }
 };
 
 template<typename LOCAL>
@@ -467,19 +494,19 @@ UCS_TEST_P(test_async, ctx_timer) {
     expect_count_GE(lt, TIMER_EXP_COUNT);
 }
 
-UCS_TEST_P(test_async, two_timers) {
-    local_timer lt1(GetParam());
-    local_timer lt2(GetParam());
-    for (int retry = 0; retry < NUM_RETRIES; ++retry) {
-        suspend_and_poll2(&lt1, &lt2, COUNT * 4);
-        if ((lt1.count() >= TIMER_EXP_COUNT) &&
-            (lt2.count() >= TIMER_EXP_COUNT)) {
-             break;
-        }
-        UCS_TEST_MESSAGE << "retry " << (retry + 1);
+UCS_TEST_P(test_async, many_timers_exp) {
+    std::vector<local_timer*> lts;
+    for (unsigned i = 0; i < 450 / ucs::test_time_multiplier(); i++) {
+        lts.push_back(new local_timer(GetParam()));
     }
-    EXPECT_GE(lt1.count(), int(TIMER_EXP_COUNT));
-    EXPECT_GE(lt2.count(), int(TIMER_EXP_COUNT));
+
+    expect_count_GE(lts, TIMER_EXP_COUNT);
+
+    while (!lts.empty()) {
+        local_timer *lt = lts.back();
+        lts.pop_back();
+        delete lt;
+    }
 }
 
 UCS_TEST_P(test_async, ctx_event_block) {

@@ -90,7 +90,7 @@ UCS_TEST_F(test_time, timerq) {
         counter2 = 0;
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-            ucs_timerq_for_each_expired(timer, &timerq, current_time, {
+            ucs_timerq_for_each_expired(NULL, timer, &timerq, current_time, {
                 if (timer->id == TIMER_ID_1) ++counter1;
                 if (timer->id == TIMER_ID_2) ++counter2;
             })
@@ -107,7 +107,7 @@ UCS_TEST_F(test_time, timerq) {
         ASSERT_UCS_OK(status);
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-            ucs_timerq_for_each_expired(timer, &timerq, current_time, {
+            ucs_timerq_for_each_expired(NULL, timer, &timerq, current_time, {
                 if (timer->id == TIMER_ID_1) ++counter1;
                 if (timer->id == TIMER_ID_2) ++counter2;
             })
@@ -125,7 +125,7 @@ UCS_TEST_F(test_time, timerq) {
         counter2 = 0;
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-            ucs_timerq_for_each_expired(timer, &timerq, current_time, {
+            ucs_timerq_for_each_expired(NULL, timer, &timerq, current_time, {
                 if (timer->id == TIMER_ID_1) ++counter1;
                 if (timer->id == TIMER_ID_2) ++counter2;
             })
@@ -134,12 +134,84 @@ UCS_TEST_F(test_time, timerq) {
         EXPECT_NEAR(test_time / interval2, counter2, 1);
 
         status = ucs_timerq_remove(&timerq, TIMER_ID_1);
-        ASSERT_UCS_OK(status);
+        EXPECT_UCS_OK(status);
         status = ucs_timerq_remove(&timerq, TIMER_ID_2);
-        ASSERT_UCS_OK(status);
+        EXPECT_UCS_OK(status);
+
+        /*
+         * Check that can use the array of timer IDs acquired from
+         * timerq after the timers were removed
+         */
+        ucs_timerq_add(&timerq, TIMER_ID_1, interval1);
+        ucs_timerq_add(&timerq, TIMER_ID_2, interval2);
+
+        size_t timerq_size = ucs_timerq_size(&timerq);
+        EXPECT_EQ(2lu, timerq_size);
+        int *timer_ids = NULL, *mem = NULL;
+        unsigned count = 0;
+        counter1 = 0;
+        counter2 = 0;
+        for (;;) {
+            ++count;
+            ++current_time;
+            ucs_timerq_for_each_expired(&mem, timer, &timerq, current_time, {
+                if (mem != NULL) {
+                    EXPECT_EQ(1u, count);
+                    timer_ids = mem;
+                    memset(timer_ids, 0, timerq_size * sizeof(*timer_ids));
+                    mem = NULL;
+                }
+
+                EXPECT_TRUE(timer_ids != NULL);
+                if (timer_ids != NULL) {
+                    if (timer->id == TIMER_ID_1) {
+                        timer_ids[0] = TIMER_ID_1;
+                        ++counter1;
+                    }
+
+                    if (timer->id == TIMER_ID_2) {
+                        timer_ids[1] = TIMER_ID_2;
+                        ++counter2;
+                    }
+                }
+            })
+
+            EXPECT_TRUE(timer_ids != NULL);
+            if (timer_ids == NULL) {
+                break;
+            }
+
+            if ((timer_ids[0] == TIMER_ID_1) && (timer_ids[1] == TIMER_ID_2)) {
+                break;
+            }
+        }
+        EXPECT_NEAR(count / interval1, counter1, 1);
+        EXPECT_NEAR(count / interval2, counter2, 1);
+
+        status = ucs_timerq_remove(&timerq, TIMER_ID_1);
+        EXPECT_UCS_OK(status);
+        status = ucs_timerq_remove(&timerq, TIMER_ID_2);
+        EXPECT_UCS_OK(status);
+
+        bool found_id1 = false, found_id2 = false;
+
+        if (timer_ids != NULL) {
+            for (size_t i = 0; i < timerq_size; i++) {
+                if (TIMER_ID_1 == timer_ids[i]) {
+                    found_id1 = true;
+                }
+
+                if (TIMER_ID_2 == timer_ids[i]) {
+                    found_id2 = true;
+                }
+            }
+        }
+
+        EXPECT_TRUE(found_id1);
+        EXPECT_TRUE(found_id2);
+
+        ucs_timerq_release_timer_ids_mem(&timerq, timer_ids);
 
         ucs_timerq_cleanup(&timerq);
     }
 }
-
-

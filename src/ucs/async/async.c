@@ -283,21 +283,18 @@ ucs_status_t ucs_async_dispatch_handlers(int *events, size_t count)
 ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
                                        ucs_time_t current_time)
 {
-    size_t max_timers, num_timers = 0;
+    size_t num_timers = 0;
     int *expired_timers;
     ucs_timer_t *timer;
+    ucs_status_t status;
 
-    max_timers     = ucs_max(1, ucs_timerq_size(timerq));
-    expired_timers = ucs_alloca(max_timers * sizeof(*expired_timers));
-
-    ucs_timerq_for_each_expired(timer, timerq, current_time, {
+    ucs_timerq_for_each_expired(&expired_timers, timer, timerq, current_time, {
         expired_timers[num_timers++] = timer->id;
-        if (num_timers >= max_timers) {
-            break; /* Keep timers which we don't have room for in the queue */
-        }
     })
 
-    return ucs_async_dispatch_handlers(expired_timers, num_timers);
+    status = ucs_async_dispatch_handlers(expired_timers, num_timers);
+    ucs_timerq_release_timer_ids_mem(timerq, expired_timers);
+    return status;
 }
 
 ucs_status_t ucs_async_context_init(ucs_async_context_t *async, ucs_async_mode_t mode)
@@ -610,28 +607,45 @@ void __ucs_async_poll_missed(ucs_async_context_t *async)
 
 void ucs_async_poll(ucs_async_context_t *async)
 {
+    /* how many halders could be allocated by ucs_alloca() */
+    const static size_t max_alloca_handlers = UCS_ALLOCA_MAX_SIZE /
+                                              sizeof(ucs_async_handler_t*);
     ucs_async_handler_t **handlers, *handler;
-    size_t i, n;
+    size_t i, num_handlers, max_num_handlers;
 
     ucs_trace_poll("async=%p", async);
 
     pthread_rwlock_rdlock(&ucs_async_global_context.handlers_lock);
-    handlers = ucs_alloca(kh_size(&ucs_async_global_context.handlers) * sizeof(*handlers));
-    n = 0;
+    max_num_handlers = kh_size(&ucs_async_global_context.handlers);
+    if (max_num_handlers > max_alloca_handlers) {
+        handlers = ucs_calloc(max_num_handlers, sizeof(*handlers),
+                              "async handlers");
+        if (handlers == NULL) {
+            ucs_fatal("unable to allocate memory for async handlers");
+        }
+    } else {
+        handlers = ucs_alloca(max_num_handlers * sizeof(*handlers));
+    }
+
+    num_handlers = 0;
     kh_foreach_value(&ucs_async_global_context.handlers, handler, {
         if (((async == NULL) || (async == handler->async)) &&  /* Async context match */
             ((handler->async == NULL) || (handler->async->poll_block == 0)) && /* Not blocked */
             handler->events) /* Non-empty event set */
         {
             ucs_async_handler_hold(handler);
-            handlers[n++] = handler;
+            handlers[num_handlers++] = handler;
         }
     });
     pthread_rwlock_unlock(&ucs_async_global_context.handlers_lock);
 
-    for (i = 0; i < n; ++i) {
+    for (i = 0; i < num_handlers; ++i) {
         ucs_async_handler_dispatch(handlers[i]);
         ucs_async_handler_put(handlers[i]);
+    }
+
+    if (max_num_handlers > max_alloca_handlers) {
+        ucs_free(handlers);
     }
 }
 

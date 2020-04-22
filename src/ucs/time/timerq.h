@@ -23,9 +23,10 @@ typedef struct ucs_timer {
 
 typedef struct ucs_timer_queue {
     ucs_recursive_spinlock_t   lock;
-    ucs_time_t                 min_interval; /* Expiration of next timer */
-    ucs_timer_t                *timers;      /* Array of timers */
-    unsigned                   num_timers;   /* Number of timers */
+    ucs_time_t                 min_interval;   /* Expiration of next timer */
+    ucs_timer_t                *timers;        /* Array of timers */
+    int                        *timer_ids_mem; /* Array of timers IDs */
+    unsigned                   num_timers;     /* Number of timers */
 } ucs_timer_queue_t;
 
 
@@ -90,8 +91,33 @@ static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
 
 
 /**
+ * Acquires the array with timer IDs.
+ *
+ * @param timerq     Time queue where the array of timer IDs was allocated.
+ * @param timer_ids  Pointer to the array of timer IDs.
+ *
+ * @return 1 - if user's requirement was satisfied, 0 - if user's requirement
+ *         wasn't satisfied
+ */
+int ucs_timerq_acquire_timer_ids_mem(ucs_timer_queue_t *timerq,
+                                     int **timer_ids_p);
+
+
+/**
+ * Releases the array with timer IDs.
+ *
+ * @param timerq     Time queue where the array of timer IDs was allocated.
+ * @param timer_ids  The array of timer IDs.
+ */
+void ucs_timerq_release_timer_ids_mem(ucs_timer_queue_t *timerq,
+                                      int *timer_ids);
+
+
+/**
  * Go through the expired timers in the timer queue.
  *
+ * @param _timer_ids_p  User's pointer to be assigned with a pointer to the
+ *                      auxiliary memory for timer IDs array.
  * @param _timer        Variable to be assigned with a pointer to the timer.
  * @param _timerq       Timer queue to dispatch timers on.
  * @param _current_time Current time to dispatch the timers for.
@@ -99,18 +125,20 @@ static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
  * @note Timers which expired between calls to this function will also be dispatched.
  * @note There is no guarantee on the order of dispatching.
  */
-#define ucs_timerq_for_each_expired(_timer, _timerq, _current_time, _code) \
+#define ucs_timerq_for_each_expired(_timer_ids_p, _timer, _timerq, _current_time, _code) \
     { \
         ucs_time_t __current_time = _current_time; \
         ucs_recursive_spin_lock(&(_timerq)->lock); /* Grab lock */ \
-        for (_timer = (_timerq)->timers; \
-             _timer != (_timerq)->timers + (_timerq)->num_timers; \
-             ++_timer) \
-        { \
-            if (__current_time >= (_timer)->expiration) { \
-                /* Update expiration time */ \
-                (_timer)->expiration = __current_time + (_timer)->interval; \
-                _code; \
+        if (ucs_timerq_acquire_timer_ids_mem(_timerq, _timer_ids_p)) {  \
+            for (_timer = (_timerq)->timers; \
+                 _timer != ((_timerq)->timers + (_timerq)->num_timers); \
+                 ++_timer) \
+            { \
+                if (__current_time >= (_timer)->expiration) { \
+                    /* Update expiration time */ \
+                    (_timer)->expiration = __current_time + (_timer)->interval; \
+                    _code; \
+                } \
             } \
         } \
         ucs_recursive_spin_unlock(&(_timerq)->lock); /* Release lock  */ \
