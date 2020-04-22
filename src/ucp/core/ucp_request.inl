@@ -108,6 +108,18 @@
     }
 
 
+#define ucp_request_imm_cmpl_param(_param, _req, _status, _cb, ...) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) { \
+        ucp_request_cb_param(_param, _req, _cb, ##__VA_ARGS__); \
+        ucs_trace_req("request %p completed, but immediate completion is " \
+                      "prohibited, status %s", _req, \
+                      ucs_status_string(_status)); \
+        return (_req) + 1; \
+    } \
+    ucp_request_put_param(_param, _req); \
+    return UCS_STATUS_PTR(_status);
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {

@@ -67,25 +67,14 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->flags |= UCP_REQUEST_FLAG_COMPLETED;
         UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 
-        if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
-            ucp_request_cb_param(param, req, recv, &req->recv.tag.info);
-            ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
-                          debug_name, req, req + 1, req->recv.tag.info.sender_tag,
-                          req->recv.tag.info.length,
-                          ucs_status_string(status));
-            return req + 1;
-        }
-
-        ucp_request_put_param(param, req);
-        return UCS_STATUS_PTR(UCS_OK);
+        ucp_request_imm_cmpl_param(param, req, status, recv,
+                                   &req->recv.tag.info);
     }
 
     /* TODO: allocate request only in case if flag
      * UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL is not set */
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
-        if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
-            ucp_request_put(req);
-        }
+        ucp_request_put_param(param, req);
         return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
     }
 
