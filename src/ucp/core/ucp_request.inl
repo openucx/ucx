@@ -81,6 +81,33 @@
     }
 
 
+#define ucp_request_get_param(_worker, _param, _failed) \
+    ({ \
+        ucp_request_t *__req; \
+        if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
+            __req = ucp_request_get(_worker); \
+            if (ucs_unlikely((__req) == NULL)) { \
+                _failed; \
+            } \
+        } else { \
+            __req = ((ucp_request_t*)(_param)->request) - 1; \
+        } \
+        __req; \
+    })
+
+
+#define ucp_request_put_param(_param, _req) \
+    if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
+        ucp_request_put(_req); \
+    }
+
+
+#define ucp_request_cb_param(_param, _req, _cb, ...) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
+        param->cb._cb(req + 1, status, ##__VA_ARGS__, param->user_data); \
+    }
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {

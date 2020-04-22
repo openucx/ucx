@@ -119,15 +119,15 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
             /*  immediate completion is allowed */
             ucs_trace_req("releasing send request %p, returning status %s", req,
                           ucs_status_string(status));
-            ucp_tag_match_request_put(param, req);
+            ucp_request_put_param(param, req);
             return UCS_STATUS_PTR(status);
-        } else {
-            ucs_trace_req("request %p completed, but immediate completion is "
-                          "prohibited, status %s", req,
-                          ucs_status_string(status));
-            ucp_tag_match_cb(param, req, send);
-            goto out;
         }
+
+        ucs_trace_req("request %p completed, but immediate completion is "
+                      "prohibited, status %s", req,
+                      ucs_status_string(status));
+        ucp_request_cb_param(param, req, send);
+        goto out;
     }
 
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
@@ -283,9 +283,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         goto out;
     }
 
-    ucp_tag_match_request_get(ep->worker, param, req,
-                              {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                               goto out;});
+    req = ucp_request_get_param(ep->worker, param,
+                                {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                 goto out;});
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag, 0);
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
@@ -326,9 +326,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
         goto out;
     }
 
-    ucp_tag_match_request_get(ep->worker, param, req,
-                              {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                               goto out;});
+    req = ucp_request_get_param(ep->worker, param,
+                                {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                 goto out;});
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag,
                           UCP_REQUEST_FLAG_SYNC);

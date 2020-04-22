@@ -68,7 +68,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 
         if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
-            ucp_tag_match_cb(param, req, recv, &req->recv.tag.info);
+            ucp_request_cb_param(param, req, recv, &req->recv.tag.info);
             ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
                           debug_name, req, req + 1, req->recv.tag.info.sender_tag,
                           req->recv.tag.info.length,
@@ -76,7 +76,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
             return req + 1;
         }
 
-        ucp_tag_match_request_put(param, req);
+        ucp_request_put_param(param, req);
         return UCS_STATUS_PTR(UCS_OK);
     }
 
@@ -218,9 +218,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nbx,
     datatype = (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
                param->datatype : ucp_dt_make_contig(1);
 
-    ucp_tag_match_request_get(worker, param, req,
-                              {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                               goto out;});
+    req = ucp_request_get_param(worker, param,
+                                {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                 goto out;});
 
     rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nbx");
     ret   = ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask, req,
