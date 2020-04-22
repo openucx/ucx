@@ -44,10 +44,13 @@ enum {
     UCP_REQUEST_FLAG_STREAM_RECV_WAITALL  = UCS_BIT(12),
     UCP_REQUEST_FLAG_SEND_AM              = UCS_BIT(13),
     UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
+    UCP_REQUEST_FLAG_SEND_RNDV            = UCS_BIT(15),
+    UCP_REQUEST_FLAG_RNDV_RTS_SENT        = UCS_BIT(16),
+    UCP_REQUEST_FLAG_CANCELED             = UCS_BIT(17),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(16),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17),
-    UCP_REQUEST_DEBUG_RNDV_FRAG           = UCS_BIT(18)
+    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(29),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(30),
+    UCP_REQUEST_DEBUG_RNDV_FRAG           = UCS_BIT(31)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0,
@@ -243,7 +246,12 @@ struct ucp_request {
             ucp_lane_index_t      pending_lane; /* Lane on which request was moved
                                                  * to pending state */
             ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
-            uct_pending_req_t     uct;      /* UCT pending request */
+
+            union {
+                uct_pending_req_t     uct;      /* UCT pending request */
+                ucs_list_link_t       list;     /* UCP list */
+            };
+
             ucp_mem_desc_t        *mdesc;
         } send;
 

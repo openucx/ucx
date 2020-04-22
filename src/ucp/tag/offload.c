@@ -200,6 +200,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         dummy_rts->sreq.reqptr      = rndv_hdr->reqptr;
         dummy_rts->address          = remote_addr;
         dummy_rts->size             = length;
+        dummy_rts->status           = UCS_OK;
 
         ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index),
                              UCS_MEMORY_TYPE_HOST, dummy_rts + 1, uct_rkeys);

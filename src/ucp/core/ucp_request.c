@@ -13,6 +13,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/proto/proto_am.h>
+#include <ucp/tag/rndv.h>
 
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug.h>
@@ -127,6 +128,13 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
         }
 
         UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+
+        return;
+    }
+
+    if (req->flags & UCP_REQUEST_FLAG_SEND_RNDV) {
+        ucp_tag_rndv_cancel(req);
+        return;
     }
 }
 

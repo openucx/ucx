@@ -912,6 +912,8 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
+    ucp_ep_complete_rndv_reqs(ep);
+
     ep->flags |= UCP_EP_FLAG_CLOSED;
     request = ucp_ep_flush_internal(ep,
                                     (mode == UCP_EP_CLOSE_MODE_FLUSH) ?

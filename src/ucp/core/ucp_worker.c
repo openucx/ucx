@@ -1703,6 +1703,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
     ucp_ep_match_init(&worker->ep_match_ctx);
+    ucs_list_head_init(&worker->rndv_reqs_list);
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {

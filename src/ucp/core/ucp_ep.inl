@@ -11,6 +11,7 @@
 #include "ucp_ep.h"
 #include "ucp_worker.h"
 #include "ucp_context.h"
+#include "ucp_request.h"
 
 #include <ucp/wireup/wireup.h>
 #include <ucs/arch/bitops.h>
