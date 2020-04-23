@@ -37,6 +37,20 @@ typedef ssize_t (*ucs_socket_iov_func_t)(int fd, const struct msghdr *msg,
                                          int flags);
 
 
+void ucs_close_fd(int *fd_p)
+{
+    if (*fd_p == -1) {
+        return;
+    }
+
+    if (close(*fd_p) < 0) {
+        ucs_warn("failed to close fd %d: %m", *fd_p);
+        return;
+    }
+
+    *fd_p = -1;
+}
+
 int ucs_netif_flags_is_active(unsigned int flags)
 {
     return (flags & IFF_UP) && (flags & IFF_RUNNING) && !(flags & IFF_LOOPBACK);
@@ -65,7 +79,7 @@ ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
     status = UCS_OK;
 
 out_close_fd:
-    close(fd);
+    ucs_close_fd(&fd);
 out:
     return status;
 }
@@ -283,6 +297,29 @@ int ucs_socket_is_connected(int fd)
     return 1;
 }
 
+ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
+                                        size_t sockopt_rcvbuf)
+{
+    ucs_status_t status;
+
+    if (sockopt_sndbuf != UCS_MEMUNITS_AUTO) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_SNDBUF,
+                                   (const void*)&sockopt_sndbuf, sizeof(int));
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (sockopt_rcvbuf != UCS_MEMUNITS_AUTO) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_RCVBUF,
+                                   (const void*)&sockopt_rcvbuf, sizeof(int));
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
 
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
                                     int backlog, int *listen_fd)
@@ -333,7 +370,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
     return UCS_OK;
 
 err_close_socket:
-    close(fd);
+    ucs_close_fd(&fd);
 err:
     return status;
 }

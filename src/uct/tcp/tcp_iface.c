@@ -61,7 +61,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
   {UCT_TCP_CONFIG_MAX_CONN_RETRIES, "25",
-   "How many connection establishment attmepts should be done if dropped "
+   "How many connection establishment attempts should be done if dropped "
    "connection was detected due to lack of system resources",
    ucs_offsetof(uct_tcp_iface_config_t, max_conn_retries), UCS_CONFIG_TYPE_UINT},
 
@@ -70,13 +70,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "option usually provides better performance",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_nodelay), UCS_CONFIG_TYPE_BOOL},
 
-  {"SNDBUF", "auto",
-   "Socket send buffer size",
-   ucs_offsetof(uct_tcp_iface_config_t, sockopt_sndbuf), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"RCVBUF", "auto",
-   "Socket receive buffer size",
-   ucs_offsetof(uct_tcp_iface_config_t, sockopt_rcvbuf), UCS_CONFIG_TYPE_MEMUNITS},
+  UCT_TCP_SEND_RECV_BUF_FIELDS(ucs_offsetof(uct_tcp_iface_config_t, sockopt)),
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
@@ -298,25 +292,8 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
         return status;
     }
 
-    if (iface->sockopt.sndbuf != UCS_MEMUNITS_AUTO) {
-        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_SNDBUF,
-                                   (const void*)&iface->sockopt.sndbuf,
-                                   sizeof(int));
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    if (iface->sockopt.rcvbuf != UCS_MEMUNITS_AUTO) {
-        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_RCVBUF,
-                                   (const void*)&iface->sockopt.rcvbuf,
-                                   sizeof(int));
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    return UCS_OK;
+    return ucs_socket_set_buffer_size(fd, iface->sockopt.sndbuf,
+                                      iface->sockopt.rcvbuf);
 }
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
@@ -468,8 +445,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.max_poll          = config->max_poll;
     self->config.max_conn_retries  = config->max_conn_retries;
     self->sockopt.nodelay          = config->sockopt_nodelay;
-    self->sockopt.sndbuf           = config->sockopt_sndbuf;
-    self->sockopt.rcvbuf           = config->sockopt_rcvbuf;
+    self->sockopt.sndbuf           = config->sockopt.sndbuf;
+    self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
+
     ucs_list_head_init(&self->ep_list);
     kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
 

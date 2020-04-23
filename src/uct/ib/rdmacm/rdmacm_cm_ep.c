@@ -273,7 +273,11 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
     ucs_status_t status;
 
     cep->flags |= UCT_RDMACM_CM_EP_ON_CLIENT;
-    cep->super.client.connect_cb = params->sockaddr_connect_cb.client;
+
+    status = uct_cm_ep_client_set_connect_cb(params, &cep->super);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     ucs_trace("%s: rdma_create_id on client (rdmacm %p, event_channel=%p)",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
@@ -338,9 +342,13 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                   event->id, event->listen_id->channel, cm, cm->ev_ch);
     }
 
-    cep->super.server.notify_cb = params->sockaddr_connect_cb.server;
-    cep->id                     = event->id;
-    cep->id->context            = cep;
+    status = uct_cm_ep_server_set_notify_cb(params, &cep->super);
+    if (status != UCS_OK) {
+        goto err_server_cb;
+    }
+
+    cep->id          = event->id;
+    cep->id->context = cep;
 
     memset(&conn_param, 0, sizeof(conn_param));
     conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +

@@ -63,6 +63,7 @@ ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
     ucs_status_t status = UCS_OK;
     ssize_t ret;
 
+    /* TODO don't invoke if the cb is NULL */
     ret = cep->priv_pack_cb(arg, pack_args, priv_data);
     if (ret < 0) {
         ucs_assert(ret > UCS_ERR_LAST);
@@ -82,11 +83,51 @@ out:
     return status;
 }
 
+ucs_status_t uct_cm_ep_client_set_connect_cb(const uct_ep_params_t *params,
+                                             uct_cm_base_ep_t *cep)
+{
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB)) {
+        cep->client.connect_cb = NULL;
+        return UCS_OK;
+    }
+
+    if (params->sockaddr_connect_cb.client == NULL) {
+        ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB is set but client's"
+                  "connect callback is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    cep->client.connect_cb = params->sockaddr_connect_cb.client;
+    return UCS_OK;
+}
+
+ucs_status_t uct_cm_ep_server_set_notify_cb(const uct_ep_params_t *params,
+                                            uct_cm_base_ep_t *cep)
+{
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB)) {
+        cep->server.notify_cb = NULL;
+        return UCS_OK;
+    }
+
+    if (params->sockaddr_connect_cb.client == NULL) {
+        ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB is set but server's"
+                  "notify callback is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    cep->server.notify_cb = params->sockaddr_connect_cb.server;
+    return UCS_OK;
+}
+
 void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,
                                  ucs_status_t status)
 {
     uct_cm_ep_client_connect_args_t connect_args;
+
+    if (cep->client.connect_cb == NULL) {
+        return;
+    }
 
     connect_args.field_mask  = UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_REMOTE_DATA |
                                UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS;
@@ -100,10 +141,29 @@ void uct_cm_ep_server_conn_notify_cb(uct_cm_base_ep_t *cep, ucs_status_t status)
 {
     uct_cm_ep_server_conn_notify_args_t notify_args;
 
+    if (cep->server.notify_cb == NULL) {
+        return;
+    }
+
     notify_args.field_mask = UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS;
     notify_args.status     = status;
 
     cep->server.notify_cb(&cep->super.super, cep->user_data, &notify_args);
+}
+
+void uct_cm_set_common_data(uct_cm_base_ep_t *ep, const uct_ep_params_t *params)
+{
+    ep->priv_pack_cb  = (params->field_mask &
+                         UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
+                        params->sockaddr_pack_cb : NULL;
+
+    ep->disconnect_cb = (params->field_mask &
+                         UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB) ?
+                        params->disconnect_cb : NULL;
+
+    ep->user_data     = (params->field_mask &
+                         UCT_EP_PARAM_FIELD_USER_DATA) ?
+                        params->user_data : NULL;
 }
 
 ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
@@ -144,15 +204,7 @@ UCS_CLASS_INIT_FUNC(uct_cm_base_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &params->cm->iface);
 
-    self->priv_pack_cb      = (params->field_mask &
-                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB) ?
-                              params->sockaddr_pack_cb : NULL;
-    self->disconnect_cb     = (params->field_mask &
-                               UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB) ?
-                              params->disconnect_cb : NULL;
-    self->user_data         = (params->field_mask &
-                               UCT_EP_PARAM_FIELD_USER_DATA) ?
-                              params->user_data : NULL;
+    uct_cm_set_common_data(self, params);
 
     return UCS_OK;
 }

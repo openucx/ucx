@@ -8,32 +8,17 @@
 
 
 typedef enum uct_tcp_sockcm_ep_state {
-    UCT_TCP_SOCKCM_EP_ON_SERVER     = UCS_BIT(0),  /* ep is on the server side */
-    UCT_TCP_SOCKCM_EP_ON_CLIENT     = UCS_BIT(1),  /* ep is on the client side */
-    UCT_TCP_SOCKCM_EP_CONNECTED     = UCS_BIT(2),  /* connect()/accept()
-                                                      completed successfully */
-    UCT_TCP_SOCKCM_EP_SENDING       = UCS_BIT(3),  /* ep is sending data */
-    UCT_TCP_SOCKCM_EP_DATA_SENT     = UCS_BIT(4),  /* ep finished sending the data */
-    UCT_TCP_SOCKCM_EP_RECEIVING     = UCS_BIT(5),  /* ep so receiving data */
-    UCT_TCP_SOCKCM_EP_DATA_RECEIVED = UCS_BIT(6),  /* ep finished receviing the data */
-
-    /* a connected ep is sending data */
-    UCT_TCP_SOCKCM_EP_CONN_SENDING  =  UCT_TCP_SOCKCM_EP_CONNECTED |
-                                       UCT_TCP_SOCKCM_EP_SENDING,
-
-    /* a connected ep completed the data sending */
-    UCT_TCP_SOCKCM_EP_CONN_SENT     =  UCT_TCP_SOCKCM_EP_CONNECTED |
-                                       UCT_TCP_SOCKCM_EP_SENDING   |
-                                       UCT_TCP_SOCKCM_EP_DATA_SENT,
-
-    /* a connected ep is is receiving data */
-    UCT_TCP_SOCKCM_EP_CONN_RECEIVING = UCT_TCP_SOCKCM_EP_CONNECTED |
-                                       UCT_TCP_SOCKCM_EP_RECEIVING,
-
-    /* a connected ep completed the data receiving */
-    UCT_TCP_SOCKCM_EP_CONN_RECEIVED  = UCT_TCP_SOCKCM_EP_CONNECTED |
-                                       UCT_TCP_SOCKCM_EP_RECEIVING |
-                                       UCT_TCP_SOCKCM_EP_DATA_RECEIVED
+    UCT_TCP_SOCKCM_EP_ON_SERVER                   = UCS_BIT(0),  /* ep is on the server side */
+    UCT_TCP_SOCKCM_EP_ON_CLIENT                   = UCS_BIT(1),  /* ep is on the client side */
+    UCT_TCP_SOCKCM_EP_SERVER_CREATED              = UCS_BIT(2),  /* server's ep after call to uct_ep_create */
+    UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED            = UCS_BIT(3),  /* ep packed its private data */
+    UCT_TCP_SOCKCM_EP_HDR_RECEIVED                = UCS_BIT(4),  /* ep received the header of a new message */
+    UCT_TCP_SOCKCM_EP_DATA_SENT                   = UCS_BIT(5),  /* ep finished sending the data */
+    UCT_TCP_SOCKCM_EP_DATA_RECEIVED               = UCS_BIT(6),  /* ep finished receiving the data */
+    UCT_TCP_SOCKCM_EP_CLIENT_CONNECTED_CB_INVOKED = UCS_BIT(7),  /* ep invoked the connect_cb on the client side */
+    UCT_TCP_SOCKCM_EP_SERVER_NOTIFY_CB_INVOKED    = UCS_BIT(8),  /* ep invoked the notify_cb on the server side */
+    UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_CALLED        = UCS_BIT(9),  /* ep on the client called notify API call */
+    UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_SENT          = UCS_BIT(10)  /* ep on the client sent the notify message to the server */
 } uct_tcp_sockcm_ep_state_t;
 
 
@@ -61,12 +46,10 @@ ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h* e
 
 ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags);
 
-ucs_status_t uct_tcp_sockcm_ep_send_priv_data(uct_tcp_sockcm_ep_t *cep);
-
-ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep);
+ucs_status_t uct_tcp_sockcm_ep_send(uct_tcp_sockcm_ep_t *cep);
 
 ucs_status_t uct_tcp_sockcm_ep_recv(uct_tcp_sockcm_ep_t *cep);
 
-ucs_status_t uct_tcp_sockcm_ep_progress_recv(uct_tcp_sockcm_ep_t *cep);
+ucs_status_t uct_tcp_sockcm_ep_set_sockopt(uct_tcp_sockcm_ep_t *ep);
 
-size_t uct_tcp_sockcm_ep_get_priv_data_len(uct_tcp_sockcm_ep_t *cep);
+ucs_status_t uct_tcp_sockcm_cm_ep_conn_notify(uct_ep_h ep);

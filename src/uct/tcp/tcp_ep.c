@@ -122,14 +122,6 @@ static void uct_tcp_ep_addr_init(struct sockaddr_in *sock_addr,
     }
 }
 
-static void uct_tcp_ep_close_fd(int *fd_p)
-{
-    if (*fd_p != -1) {
-        close(*fd_p);
-        *fd_p = -1;
-    }
-}
-
 unsigned uct_tcp_ep_is_self(const uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -160,7 +152,7 @@ static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
         uct_tcp_ep_mod_events(ep, 0, ep->events);
     }
 
-    uct_tcp_ep_close_fd(&ep->fd);
+    ucs_close_fd(&ep->fd);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
@@ -410,7 +402,7 @@ err_close_fd:
     /* fd has to be valid in case of valid EP has been
      * passed to this function */
     ucs_assert((*ep_p == NULL) || (fd != -1));
-    uct_tcp_ep_close_fd(&fd);
+    ucs_close_fd(&fd);
     return status;
 }
 
@@ -564,7 +556,7 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep,
         }
 
         uct_tcp_ep_mod_events(ep, 0, ep->events);
-        uct_tcp_ep_close_fd(&ep->fd);
+        ucs_close_fd(&ep->fd);
     } else if ((ep->ctx_caps == 0) ||
                (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX))) {
         /* If the EP supports RX only or no capabilities set, destroy it */
@@ -667,7 +659,7 @@ ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep,
         (uct_tcp_ep_is_conn_closed_by_peer(io_status) ||
          (io_status == UCS_ERR_TIMED_OUT))) {
         uct_tcp_ep_mod_events(ep, 0, ep->events);
-        uct_tcp_ep_close_fd(&ep->fd);
+        ucs_close_fd(&ep->fd);
 
         uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
 
