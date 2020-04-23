@@ -409,7 +409,7 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     return sizeof(*packed);
 }
 
-static int
+static ucs_status_t
 ucp_address_unpack_iface_attr(ucp_worker_t *worker,
                               ucp_address_iface_attr_t *iface_attr,
                               const void *ptr, unsigned unpack_flags,
