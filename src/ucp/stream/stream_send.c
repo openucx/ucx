@@ -76,7 +76,7 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
         return UCS_STATUS_PTR(status);
     }
 
-    ucp_request_set_callback(req, send.cb, cb)
+    ucp_request_set_callback(req, send.cb, (ucp_send_nbx_callback_t)cb, NULL);
     ucs_trace_req("returning send request %p", req);
     return req + 1;
 }

@@ -71,12 +71,53 @@
         } \
     }
 
-#define ucp_request_set_callback(_req, _cb, _value) \
+#define ucp_request_set_callback(_req, _cb, _cb_value, _user_data) \
     { \
-        (_req)->_cb    = _value; \
-        (_req)->flags |= UCP_REQUEST_FLAG_CALLBACK; \
-        ucs_trace_data("request %p %s set to %p", _req, #_cb, _value); \
+        (_req)->_cb       = _cb_value; \
+        (_req)->user_data = _user_data; \
+        (_req)->flags    |= UCP_REQUEST_FLAG_CALLBACK; \
+        ucs_trace_data("request %p %s set to %p, user data: %p", \
+                      _req, #_cb, _cb_value, _user_data); \
     }
+
+
+#define ucp_request_get_param(_worker, _param, _failed) \
+    ({ \
+        ucp_request_t *__req; \
+        if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
+            __req = ucp_request_get(_worker); \
+            if (ucs_unlikely((__req) == NULL)) { \
+                _failed; \
+            } \
+        } else { \
+            __req = ((ucp_request_t*)(_param)->request) - 1; \
+        } \
+        __req; \
+    })
+
+
+#define ucp_request_put_param(_param, _req) \
+    if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
+        ucp_request_put(_req); \
+    }
+
+
+#define ucp_request_cb_param(_param, _req, _cb, ...) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
+        param->cb._cb(req + 1, status, ##__VA_ARGS__, param->user_data); \
+    }
+
+
+#define ucp_request_imm_cmpl_param(_param, _req, _status, _cb, ...) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) { \
+        ucp_request_cb_param(_param, _req, _cb, ##__VA_ARGS__); \
+        ucs_trace_req("request %p completed, but immediate completion is " \
+                      "prohibited, status %s", _req, \
+                      ucs_status_string(_status)); \
+        return (_req) + 1; \
+    } \
+    ucp_request_put_param(_param, _req); \
+    return UCS_STATUS_PTR(_status);
 
 
 static UCS_F_ALWAYS_INLINE void
@@ -94,7 +135,7 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_send", status);
-    ucp_request_complete(req, send.cb, status);
+    ucp_request_complete(req, send.cb, status, req->user_data);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -106,7 +147,8 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
                   req->recv.tag.info.sender_tag, req->recv.tag.info.length,
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
-    ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info);
+    ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info,
+                         req->user_data);
 }
 
 static UCS_F_ALWAYS_INLINE void
