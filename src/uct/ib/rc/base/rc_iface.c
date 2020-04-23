@@ -188,9 +188,10 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_GET_ZCOPY       |
                                   UCT_IFACE_FLAG_PENDING         |
                                   UCT_IFACE_FLAG_CONNECT_TO_EP   |
-                                  UCT_IFACE_FLAG_CB_SYNC         |
-                                  UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                  UCT_IFACE_FLAG_EVENT_RECV;
+                                  UCT_IFACE_FLAG_CB_SYNC;
+    iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                  UCT_IFACE_FLAG_EVENT_RECV      |
+                                  UCT_IFACE_FLAG_EVENT_FD;
 
     if (uct_ib_device_has_pci_atomics(dev)) {
         if (dev->pci_fadd_arg_sizes & sizeof(uint64_t)) {

@@ -408,19 +408,38 @@ typedef enum uct_atomic_op {
                                                        and it may also be invoked when uct_worker_progress()
                                                        is called. */
 
-        /* Event notification */
-#define UCT_IFACE_FLAG_EVENT_SEND_COMP UCS_BIT(46) /**< Event notification of send completion is
-                                                        supported */
-#define UCT_IFACE_FLAG_EVENT_RECV      UCS_BIT(47) /**< Event notification of tag and active message
-                                                        receive is supported */
-#define UCT_IFACE_FLAG_EVENT_RECV_SIG  UCS_BIT(48) /**< Event notification of signaled tag and active
-                                                        message is supported */
-
         /* Tag matching operations */
 #define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(50) /**< Hardware tag matching short eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_ZCOPY UCS_BIT(52) /**< Hardware tag matching zcopy eager support */
 #define UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  UCS_BIT(53) /**< Hardware tag matching rendezvous zcopy support */
+/**
+ * @}
+ */
+
+
+/**
+ * @defgroup UCT_RESOURCE_IFACE_EVENT_CAP   UCT interface for asynchronous event capabilities
+ * @ingroup UCT_RESOURCE
+ *
+ * @brief List of capabilities supported by UCT iface event API
+ *
+ * The definition list presents a full list of operations and capabilities
+ * supported by UCT iface event.
+ * @{
+   */
+        /* Event types */
+#define UCT_IFACE_FLAG_EVENT_SEND_COMP UCS_BIT(0) /**< Event notification of send completion is
+                                                       supported */
+#define UCT_IFACE_FLAG_EVENT_RECV      UCS_BIT(1) /**< Event notification of tag and active message
+                                                       receive is supported */
+#define UCT_IFACE_FLAG_EVENT_RECV_SIG  UCS_BIT(2) /**< Event notification of signaled tag and active
+                                                       message is supported */
+        /* Event notification mechanisms */
+#define UCT_IFACE_FLAG_EVENT_FD        UCS_BIT(3) /**< Event notification through File Descriptor
+                                                       is supported */
+#define UCT_IFACE_FLAG_EVENT_ASYNC_CB  UCS_BIT(4) /**< Event notification through asynchronous
+                                                       callback invocation is supported */
 /**
  * @}
  */
@@ -605,7 +624,13 @@ enum uct_iface_params_field {
     UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG    = UCS_BIT(11),
 
     /** Enables @ref uct_iface_params_t::rndv_cb */
-    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     = UCS_BIT(12)
+    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     = UCS_BIT(12),
+
+    /** Enables @ref uct_iface_params_t::async_event_arg */
+    UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG   = UCS_BIT(13),
+
+    /** Enables @ref uct_iface_params_t::async_event_cb */
+    UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB    = UCS_BIT(14)
 };
 
 /**
@@ -912,6 +937,7 @@ struct uct_iface_attr {
         } atomic32, atomic64;            /**< Attributes for atomic operations */
 
         uint64_t             flags;      /**< Flags from @ref UCT_RESOURCE_IFACE_CAP */
+        uint64_t             event_flags;/**< Flags from @ref UCT_RESOURCE_IFACE_EVENT_CAP */
     } cap;                               /**< Interface capabilities */
 
     size_t                   device_addr_len;/**< Size of device address */
@@ -1012,6 +1038,13 @@ struct uct_iface_params {
     void                                         *rndv_arg;
     /** Callback for tag matching unexpected rndv messages */
     uct_tag_unexp_rndv_cb_t                      rndv_cb;
+
+    void                                         *async_event_arg;
+    /** Callback for asynchronous event handling. The callback will be
+     * invoked from UCT transport when there are new events to be
+     * read by user if the iface has @ref UCT_IFACE_FLAG_EVENT_ASYNC_CB
+     * capability */
+    uct_async_event_cb_t                         async_event_cb;
 };
 
 

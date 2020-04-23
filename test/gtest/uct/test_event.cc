@@ -13,7 +13,7 @@ extern "C" {
 #include <common/test.h>
 #include "uct_test.h"
 
-class test_uct_event_fd : public uct_test {
+class test_uct_event : public uct_test {
 public:
     void init() {
         uct_test::init();
@@ -83,9 +83,9 @@ protected:
     static int m_am_count;
 };
 
-int test_uct_event_fd::m_am_count = 0;
+int test_uct_event::m_am_count = 0;
 
-void test_uct_event_fd::test_recv_am(unsigned arm_flags, unsigned send_flags)
+void test_uct_event::test_recv_am(unsigned arm_flags, unsigned send_flags)
 {
     uint64_t send_data = 0xdeadbeef;
     int am_send_count = 0;
@@ -152,20 +152,20 @@ void test_uct_event_fd::test_recv_am(unsigned arm_flags, unsigned send_flags)
     free(recv_buffer);
 }
 
-UCS_TEST_SKIP_COND_P(test_uct_event_fd, am,
-                     !check_caps(UCT_IFACE_FLAG_EVENT_RECV |
-                                 UCT_IFACE_FLAG_CB_SYNC    |
-                                 UCT_IFACE_FLAG_AM_BCOPY))
+UCS_TEST_SKIP_COND_P(test_uct_event, am,
+                     !check_caps(UCT_IFACE_FLAG_CB_SYNC |
+                                 UCT_IFACE_FLAG_AM_BCOPY) ||
+                     !check_event_caps(UCT_IFACE_FLAG_EVENT_RECV))
 {
     test_recv_am(UCT_EVENT_RECV, 0);
 }
 
-UCS_TEST_SKIP_COND_P(test_uct_event_fd, sig_am,
-                     !check_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG |
-                                 UCT_IFACE_FLAG_CB_SYNC        |
-                                 UCT_IFACE_FLAG_AM_BCOPY))
+UCS_TEST_SKIP_COND_P(test_uct_event, sig_am,
+                     !check_caps(UCT_IFACE_FLAG_CB_SYNC |
+                                 UCT_IFACE_FLAG_AM_BCOPY) ||
+                     !check_event_caps(UCT_IFACE_FLAG_EVENT_RECV_SIG))
 {
     test_recv_am(UCT_EVENT_RECV_SIG, UCT_SEND_FLAG_SIGNALED);
 }
 
-UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_event_fd);
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_event);

@@ -95,9 +95,10 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
                                           UCT_IFACE_FLAG_PENDING                |
                                           UCT_IFACE_FLAG_GET_ZCOPY              |
-                                          UCT_IFACE_FLAG_PUT_ZCOPY              |
-                                          UCT_IFACE_FLAG_EVENT_SEND_COMP        |
-                                          UCT_IFACE_FLAG_EVENT_RECV;
+                                          UCT_IFACE_FLAG_PUT_ZCOPY;
+    iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                          UCT_IFACE_FLAG_EVENT_RECV      |
+                                          UCT_IFACE_FLAG_EVENT_FD;
 
     iface_attr->cap.put.max_short       = 0;
     iface_attr->cap.put.max_bcopy       = 0;

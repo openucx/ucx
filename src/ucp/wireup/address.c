@@ -61,7 +61,13 @@ typedef struct {
     float            overhead;
     float            bandwidth;
     float            lat_ovh;
-    uint32_t         prio_cap_flags; /* 8 lsb: prio, 22 msb: cap flags, 2 hsb: amo */
+    uint32_t         prio_cap_flags; /* 8 lsb : prio
+                                      * 22 msb:
+                                      *        - iface flags
+                                      *        - iface event flags
+                                      * 2 hsb :
+                                      *        - amo32
+                                      *        - amo64 */
 } ucp_address_packed_iface_attr_t;
 
 
@@ -390,10 +396,21 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     packed->bandwidth      = iface_attr->bandwidth.dedicated - iface_attr->bandwidth.shared;
     packed->lat_ovh        = iface_attr->latency.overhead;
 
-    /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS to shrink address. */
+    ucs_assert((ucs_popcount(UCP_ADDRESS_IFACE_FLAGS) +
+                ucs_popcount(UCP_ADDRESS_IFACE_EVENT_FLAGS)) <= 22);
+
+    /* Keep only the bits defined by UCP_ADDRESS_IFACE_FLAGS
+     * to shrink address. */
     packed->prio_cap_flags |=
         ucp_address_pack_flags(iface_attr->cap.flags,
                                UCP_ADDRESS_IFACE_FLAGS, 8);
+
+    /* Keep only the bits defined by UCP_ADDRESS_IFACE_EVENT_FLAGS
+     * to shrink address. */
+    packed->prio_cap_flags |=
+        ucp_address_pack_flags(iface_attr->cap.event_flags,
+                               UCP_ADDRESS_IFACE_EVENT_FLAGS,
+                               8 + ucs_popcount(UCP_ADDRESS_IFACE_FLAGS));
 
     if (enable_atomics) {
         if (ucs_test_all_flags(iface_attr->cap.atomic32.op_flags, UCP_ATOMIC_OP_MASK) &&
@@ -430,11 +447,12 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
                            rsc_idx, worker->context->tl_bitmap);
 
         /* Just take the rest of iface attrs from the local resource. */
-        wiface                = ucp_worker_iface(worker, rsc_idx);
-        iface_attr->cap_flags = wiface->attr.cap.flags;
-        iface_attr->priority  = wiface->attr.priority;
-        iface_attr->overhead  = wiface->attr.overhead;
-        iface_attr->bandwidth = wiface->attr.bandwidth;
+        wiface                  = ucp_worker_iface(worker, rsc_idx);
+        iface_attr->cap_flags   = wiface->attr.cap.flags;
+        iface_attr->event_flags = wiface->attr.cap.event_flags;
+        iface_attr->priority    = wiface->attr.priority;
+        iface_attr->overhead    = wiface->attr.overhead;
+        iface_attr->bandwidth   = wiface->attr.bandwidth;
         if (signbit(unified->lat_ovh)) {
             iface_attr->atomic.atomic32.op_flags  = wiface->attr.cap.atomic32.op_flags;
             iface_attr->atomic.atomic32.fop_flags = wiface->attr.cap.atomic32.fop_flags;
@@ -446,7 +464,6 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     }
 
     packed                          = ptr;
-    iface_attr->cap_flags           = 0;
     iface_attr->priority            = packed->prio_cap_flags & UCS_MASK(8);
     iface_attr->overhead            = packed->overhead;
     iface_attr->bandwidth.dedicated = ucs_max(0.0, packed->bandwidth);
@@ -458,10 +475,19 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         ucp_address_unpack_flags(packed->prio_cap_flags,
                                  UCP_ADDRESS_IFACE_FLAGS, 8);
 
+    /* Unpack iface event flags */
+    iface_attr->event_flags =
+        ucp_address_unpack_flags(packed->prio_cap_flags,
+                                 UCP_ADDRESS_IFACE_EVENT_FLAGS,
+                                 8 + ucs_popcount(UCP_ADDRESS_IFACE_FLAGS));
+
+    /* Unpack iface 32-bit atomic operations */
     if (packed->prio_cap_flags & UCP_ADDRESS_FLAG_ATOMIC32) {
         iface_attr->atomic.atomic32.op_flags  |= UCP_ATOMIC_OP_MASK;
         iface_attr->atomic.atomic32.fop_flags |= UCP_ATOMIC_FOP_MASK;
     }
+    
+    /* Unpack iface 64-bit atomic operations */
     if (packed->prio_cap_flags & UCP_ADDRESS_FLAG_ATOMIC64) {
         iface_attr->atomic.atomic64.op_flags  |= UCP_ATOMIC_OP_MASK;
         iface_attr->atomic.atomic64.fop_flags |= UCP_ATOMIC_FOP_MASK;
@@ -996,10 +1022,12 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
             if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                 ucs_trace("unpack addr[%d] : eps %u md_flags 0x%"PRIx64
-                          " tl_flags 0x%"PRIx64" bw %e + %e/n ovh %e "
-                          "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
+                          " tl_iface_flags 0x%"PRIx64" tl_event_flags 0x%"PRIx64
+                          " bw %e + %e/n ovh %e lat_ovh %e dev_priority %d a32 "
+                          "0x%lx/0x%lx a64 0x%lx/0x%lx",
                           (int)(address - address_list), address->num_ep_addrs,
                           address->md_flags, address->iface_attr.cap_flags,
+                          address->iface_attr.event_flags,
                           address->iface_attr.bandwidth.dedicated,
                           address->iface_attr.bandwidth.shared,
                           address->iface_attr.overhead,
