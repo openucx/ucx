@@ -26,7 +26,6 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/hlist.h \
 	datastruct/khash.h \
 	datastruct/linear_func.h \
-	datastruct/list_types.h \
 	datastruct/list.h \
 	datastruct/mpool.h \
 	datastruct/pgtable.h \
