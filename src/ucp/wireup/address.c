@@ -957,7 +957,6 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                     ucs_error("failed to parse address: number of addresses"
                               "exceeds %d", UCP_MAX_RESOURCES);
                 }
-                status = UCS_ERR_INVALID_PARAM;
                 goto err_free;
             }
 
