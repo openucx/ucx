@@ -10,7 +10,6 @@ dist_examples_DATA =  \
 	ucx_hello_world.h \
 	ucp_hello_world.c \
 	uct_hello_world.c \
-	ucx_profiling.c   \
 	ucp_client_server.c
 
 if HAVE_CUDA
@@ -32,15 +31,13 @@ installcheck-local:
 	$(CC) -o uct_hello_world   $(examplesdir)/uct_hello_world.c   -luct $(EXAMPLE_CCLD_FLAGS)
 	$(CC) -o ucp_hello_world   $(examplesdir)/ucp_hello_world.c   -lucp $(EXAMPLE_CCLD_FLAGS)
 	$(CC) -o ucp_client_server $(examplesdir)/ucp_client_server.c -lucp $(EXAMPLE_CCLD_FLAGS)
-	$(CC) -o ucx_profiling     $(examplesdir)/ucx_profiling.c     -lm   $(EXAMPLE_CCLD_FLAGS)
-	$(RM) *.o uct_hello_world ucp_hello_world ucp_client_server ucx_profiling
+	$(RM) *.o uct_hello_world ucp_hello_world ucp_client_server
 
 if HAVE_EXAMPLES
 
 bin_PROGRAMS = \
 	ucp_hello_world \
 	uct_hello_world \
-	ucx_profiling \
 	ucp_client_server
 
 ucp_hello_world_SOURCES  = ucp_hello_world.c
@@ -62,11 +59,5 @@ ucp_client_server_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_PEDANTIC)
 ucp_client_server_CPPFLAGS = $(BASE_CPPFLAGS)
 ucp_client_server_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                              $(top_builddir)/src/ucp/libucp.la
-
-ucx_profiling_SOURCES  = ucx_profiling.c
-ucx_profiling_CFLAGS   = $(BASE_CFLAGS)
-ucx_profiling_CPPFLAGS = $(BASE_CPPFLAGS)
-ucx_profiling_LDADD    = $(top_builddir)/src/ucs/libucs.la
-ucx_profiling_LDFLAGS  = -lm
 
 endif

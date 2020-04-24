@@ -366,6 +366,7 @@ AC_CONFIG_FILES([
                  test/apps/Makefile
                  test/apps/iodemo/Makefile
                  test/apps/sockaddr/Makefile
+                 test/apps/profiling/Makefile
                  test/mpi/Makefile
                  bindings/java/Makefile
                  bindings/java/pom.xml

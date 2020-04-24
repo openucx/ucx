@@ -6,7 +6,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS =
+SUBDIRS = profiling
 
 if HAVE_GLIBCXX_NOTHROW
 SUBDIRS += iodemo

@@ -1144,6 +1144,12 @@ run_mpi_tests() {
 	fi
 }
 
+build_ucx_profiling() {
+	# compile the profiling example code
+	gcc -o ucx_profiling ../test/apps/profiling/ucx_profiling.c \
+		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+}
+
 #
 # Test profiling infrastructure
 #
@@ -1154,10 +1160,9 @@ test_profiling() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
+	$MAKEP install
 
-	# compile the profiling example code
-	gcc -o ucx_profiling ${ucx_inst}/share/ucx/examples/ucx_profiling.c \
-		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+	build_ucx_profiling
 
 	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./ucx_profiling
 
@@ -1171,6 +1176,9 @@ test_ucs_load() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
+	$MAKEP install
+
+	build_ucx_profiling
 
 	# Make sure UCS library constructor does not call socket()
 	echo "==== Running UCS library loading test ===="
