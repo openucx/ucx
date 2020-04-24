@@ -4,7 +4,7 @@
 * See file LICENSE for terms.
 */
 
-#include "ucx_hello_world.h"
+#include "hello_world_util.h"
 #include <limits.h>
 
 #include <uct/api/uct.h>
