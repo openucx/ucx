@@ -953,7 +953,6 @@ static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
             return 0;
         }
     } else if ((elem->cb == ucp_ep_cm_disconnect_progress)        ||
-               (elem->cb == ucp_ep_cm_remote_disconnect_progress) ||
                (elem->cb == ucp_cm_server_conn_notify_progress)) {
         return arg == elem->arg;
     } else {
