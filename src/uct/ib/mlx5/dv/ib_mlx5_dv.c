@@ -41,7 +41,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 {
     uct_ib_mlx5_md_t *md   = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev   = &md->super.dev;
-    ucs_status_t status    = UCS_ERR_NO_MEMORY;
+    ucs_status_t status;
     struct mlx5dv_pd dvpd  = {};
     struct mlx5dv_cq dvscq = {};
     struct mlx5dv_cq dvrcq = {};
@@ -94,12 +94,14 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                  "qp umem");
         if (ret != 0) {
             ucs_error("failed to allocate QP buffer of %d bytes: %m", len);
+            status = UCS_ERR_NO_MEMORY;
             goto err_uar;
         }
 
         qp->devx.mem = mlx5dv_devx_umem_reg(dev->ibv_context, qp->devx.wq_buf, len, 0);
         if (!qp->devx.mem) {
             ucs_error("mlx5dv_devx_umem_reg() failed: %m");
+            status = UCS_ERR_NO_MEMORY;
             goto err_free_buf;
         }
     } else {
@@ -108,6 +110,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     qp->devx.dbrec = uct_ib_mlx5_get_dbrec(md);
     if (!qp->devx.dbrec) {
+        status = UCS_ERR_NO_MEMORY;
         goto err_free_mem;
     }
 
@@ -149,13 +152,12 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem->umem_id);
     }
 
-    status = UCS_ERR_IO_ERROR;
-
     qp->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
                                           out, sizeof(out));
     if (!qp->devx.obj) {
         ucs_error("mlx5dv_devx_obj_create(QP) failed, syndrome %x: %m",
                   UCT_IB_MLX5DV_GET(create_qp_out, out, syndrome));
+        status = UCS_ERR_IO_ERROR;
         goto err_free_db;
     }
 
@@ -173,6 +175,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     if (ret) {
         ucs_error("mlx5dv_devx_obj_modify(2INIT_QP) failed, syndrome %x: %m",
                   UCT_IB_MLX5DV_GET(rst2init_qp_out, out_2init, syndrome));
+        status = UCS_ERR_IO_ERROR;
         goto err_free;
     }
 
