@@ -194,7 +194,11 @@ get_active_ib_devices() {
 # Get list of active IP interfaces
 #
 get_active_ip_ifaces() {
-	echo $(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	device_list=$(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	for netdev in ${device_list}
+	do
+		(ip addr show ${netdev} | grep -q 'inet ') && echo ${netdev} || true
+	done
 }
 
 #
