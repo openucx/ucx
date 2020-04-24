@@ -474,7 +474,7 @@ ucp_am_handler_common(ucp_worker_h worker, void *hdr_end, size_t hdr_size,
 
     if (ucs_unlikely((am_id >= worker->am_cb_array_len) ||
                      (worker->am_cbs[am_id].cb == NULL))) {
-        ucs_warn("UCP Active Message was received with id : %u, but there "
+        ucs_warn("UCP Active Message was received with id : %u, but there"
                  " is no registered callback for that id", am_id);
         return UCS_OK;
     }
