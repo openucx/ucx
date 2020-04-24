@@ -273,7 +273,7 @@ void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp)
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
-                                         uct_ib_qp_attr_t *attr)
+                                         uct_ib_mlx5_qp_attr_t *attr)
 {
     ucs_status_t status;
 
@@ -282,8 +282,8 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
         return status;
     }
 
-    uct_ib_exp_qp_fill_attr(iface, attr);
-    status = uct_ib_iface_create_qp(iface, attr, &qp->verbs.qp);
+    uct_ib_exp_qp_fill_attr(iface, &attr->super);
+    status = uct_ib_iface_create_qp(iface, &attr->super, &qp->verbs.qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -444,6 +444,32 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
     memset(txwq->qstart, 0, UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
 }
 
+ucs_status_t
+uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
+                          uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
+                          unsigned bf_size,
+                          uct_ib_mlx5_mmio_mode_t *mmio_mode)
+{
+    ucs_assert(cfg_mmio_mode < UCT_IB_MLX5_MMIO_MODE_LAST);
+
+    if (cfg_mmio_mode != UCT_IB_MLX5_MMIO_MODE_AUTO) {
+        *mmio_mode = cfg_mmio_mode;
+    } else if (bf_size > 0) {
+        if (worker->thread_mode == UCS_THREAD_MODE_SINGLE) {
+            *mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST;
+        } else if (worker->thread_mode == UCS_THREAD_MODE_SERIALIZED) {
+            *mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST_MT;
+        } else {
+            ucs_error("unsupported thread mode for mlx5: %d", worker->thread_mode);
+            return UCS_ERR_UNSUPPORTED;
+        }
+    } else {
+        *mmio_mode = UCT_IB_MLX5_MMIO_MODE_DB;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq,
@@ -472,19 +498,10 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (cfg_mmio_mode != UCT_IB_MLX5_MMIO_MODE_AUTO) {
-        mmio_mode = cfg_mmio_mode;
-    } else if (qp_info.dv.bf.size > 0) {
-        if (worker->thread_mode == UCS_THREAD_MODE_SINGLE) {
-            mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST;
-        } else if (worker->thread_mode == UCS_THREAD_MODE_SERIALIZED) {
-            mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST_MT;
-        } else {
-            ucs_error("unsupported thread mode for mlx5: %d", worker->thread_mode);
-            return UCS_ERR_UNSUPPORTED;
-        }
-    } else {
-        mmio_mode = UCT_IB_MLX5_MMIO_MODE_DB;
+    status = uct_ib_mlx5_get_mmio_mode(worker, cfg_mmio_mode,
+                                       qp_info.dv.bf.size, &mmio_mode);
+    if (status != UCS_OK) {
+        return status;
     }
 
     ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d] mmio_mode %s",
