@@ -1,0 +1,181 @@
+/*
+ * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
+
+#ifndef UCS_HLIST_H_
+#define UCS_HLIST_H_
+
+#include "list.h"
+
+
+BEGIN_C_DECLS
+
+/*
+ * Detached-head circular list: unlike the basic double-linked list, the head
+ * element is separate from the list, and it points to first element, or NULL if
+ * the list is empty.
+ *  It reduces the size of list head from 2 pointers to 1 pointer, but adds some
+ * overhead to basic list operations.
+ */
+
+
+/**
+ * List element of a detached-head list.
+ */
+typedef struct ucs_hlist_link {
+    ucs_list_link_t list;
+} ucs_hlist_link_t;
+
+
+/*
+ * Head of a circular detached-head list.
+ */
+typedef struct ucs_hlist_head {
+    ucs_hlist_link_t *ptr;
+} ucs_hlist_head_t;
+
+
+/**
+ * Initialize a detached-head list.
+ *
+ * @param [in] head   List head to initialize.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_hlist_head_init(ucs_hlist_head_t *head)
+{
+    head->ptr = NULL;
+}
+
+
+/**
+ * Check if a detached-head list is empty.
+ *
+ * @param [in] head   List head to check.
+ *
+ * @return Whether the list is empty.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucs_hlist_is_empty(const ucs_hlist_head_t *head)
+{
+    return head->ptr == NULL;
+}
+
+
+/**
+ * Common function to add elements to the list head or tail.
+ *
+ * @param [in] head              List head to add to.
+ * @param [in] elem              Element to add.
+ * @param [in] set_head_to_elem  Whether to set the list head to the newly added
+ *                               element.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_hlist_add_common(ucs_hlist_head_t *head, ucs_hlist_link_t *elem,
+                     int set_head_to_elem)
+{
+    if (head->ptr == NULL) {
+        head->ptr = elem;
+        ucs_list_head_init(&elem->list);
+    } else {
+        ucs_list_insert_before(&head->ptr->list, &elem->list);
+        if (set_head_to_elem) {
+            head->ptr = elem;
+        }
+    }
+}
+
+
+/**
+ * Add element to the beginning of a detached-head list.
+ *
+ * @param [in] head  List head to add to.
+ * @param [in] elem  Element to add.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_hlist_add_head(ucs_hlist_head_t *head, ucs_hlist_link_t *elem)
+{
+    ucs_hlist_add_common(head, elem, 1);
+}
+
+
+/**
+ * Add element to the end of a detached-head list.
+ *
+ * @param [in] head  List head to add to.
+ * @param [in] elem  Element to add.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_hlist_add_tail(ucs_hlist_head_t *head, ucs_hlist_link_t *elem)
+{
+    ucs_hlist_add_common(head, elem, 0);
+}
+
+
+/**
+ * Remove an element from a detached-head list.
+ *
+ * @param [in] head  List head to remove from.
+ * @param [in] elem  Element to remove.
+ *
+ * @note If the element is not present in the list, this function has undefined
+ *       behavior.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_hlist_del(ucs_hlist_head_t *head, ucs_hlist_link_t *elem)
+{
+    if (ucs_list_is_empty(&elem->list)) {
+        /* remove elem if it's not the only one in the list */
+        head->ptr = NULL;
+    } else {
+        if (head->ptr == elem) {
+            /* removing head of non-empty list, point to next elem */
+            head->ptr = ucs_list_next(&elem->list, ucs_hlist_link_t, list);
+        }
+        ucs_list_del(&elem->list);
+    }
+}
+
+
+/**
+ * Remove the first element from a detached-head list, and return it.
+ *
+ * @param [in] head  List head to remove from.
+ *
+ * @return The former list head element, or NULL if the list is empty.
+ */
+static UCS_F_ALWAYS_INLINE ucs_hlist_link_t*
+ucs_hlist_extract_head(ucs_hlist_head_t *head)
+{
+    ucs_hlist_link_t *elem;
+
+    if (head->ptr == NULL) {
+        return NULL;
+    }
+
+    elem = head->ptr;
+    ucs_hlist_del(head, elem); // TOOD optimize by assuming elem=head->ptr
+    return elem;
+}
+
+
+/**
+ * Iterate over detached-head list, while removing the head element, until the
+ * list becomes empty.
+ *
+ * @param _elem     Variable to hold the current list element
+ * @param _head     Pointer to list head.
+ * @param _memeber  Struct member inside '_elem' which is the list element.
+ */
+#define ucs_hlist_for_each_extract(_elem, _head, _member) \
+    for (_elem = ucs_container_of(ucs_hlist_extract_head(_head), \
+                                  typeof(*_elem), _member); \
+         &(_elem)->_member != NULL; \
+         _elem = ucs_container_of(ucs_hlist_extract_head(_head), \
+                                  typeof(*_elem), _member))
+
+
+END_C_DECLS
+
+#endif

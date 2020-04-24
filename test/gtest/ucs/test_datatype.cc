@@ -7,6 +7,7 @@
 #include <common/test.h>
 extern "C" {
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/hlist.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/time/time.h>
@@ -21,8 +22,10 @@ class test_datatype : public ucs::test {
 typedef struct {
     int               i;
     ucs_list_link_t   list;
+    ucs_hlist_link_t  hlist;
     ucs_queue_elem_t  queue;
 } elem_t;
+
 
 UCS_TEST_F(test_datatype, list_basic) {
 
@@ -82,6 +85,43 @@ UCS_TEST_F(test_datatype, list_splice) {
         EXPECT_EQ(i, iter->i);
         ++i;
     }
+}
+
+UCS_TEST_F(test_datatype, hlist_basic) {
+    ucs_hlist_head_t head;
+    elem_t elem1, elem2, elem3;
+    elem_t *elem;
+
+    elem1.i = 1;
+    elem2.i = 2;
+    elem3.i = 3;
+
+    /* initialize list, should be empty */
+    ucs_hlist_head_init(&head);
+    EXPECT_TRUE(ucs_hlist_is_empty(&head));
+
+    /* add one element to head */
+    ucs_hlist_add_head(&head, &elem1.hlist);
+    EXPECT_FALSE(ucs_hlist_is_empty(&head));
+
+    ucs_hlist_del(&head, &elem1.hlist);
+    EXPECT_TRUE(ucs_hlist_is_empty(&head));
+
+    /* add 3 elements */
+    ucs_hlist_add_tail(&head, &elem2.hlist);
+    ucs_hlist_add_head(&head, &elem1.hlist);
+    ucs_hlist_add_tail(&head, &elem3.hlist);
+
+    std::vector<int> v;
+    ucs_hlist_for_each_extract(elem, &head, hlist) {
+        v.push_back(elem->i);
+    }
+    ASSERT_EQ(3ul, v.size()) << v[3];
+
+    EXPECT_EQ(1, v[0]);
+    EXPECT_EQ(2, v[1]);
+    EXPECT_EQ(3, v[2]);
+    EXPECT_TRUE(ucs_hlist_is_empty(&head));
 }
 
 UCS_TEST_F(test_datatype, queue) {
