@@ -2097,6 +2097,12 @@ uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
 {
+    if (ep->flags & UCP_EP_FLAG_ERR_HANDLER_INVOKED) {
+        return;
+    }
+
+    ep->flags |= UCP_EP_FLAG_ERR_HANDLER_INVOKED;
+
     /* Do not invoke error handler if it's not enabled */
     if ((ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
         /* error callback is not set */

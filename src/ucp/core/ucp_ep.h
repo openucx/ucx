@@ -52,6 +52,10 @@ enum {
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
     UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
                                                         close_req is valid */
+    UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* EP was invalidated for any user ops
+                                                        excepting close, but all posted ops
+                                                        might be able to be completed successfully,
+                                                        err callback has been invoked if set. */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */

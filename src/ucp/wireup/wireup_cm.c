@@ -325,6 +325,7 @@ out:
     ucp_cm_client_connect_prog_arg_free(progress_arg);
 
     if (status != UCS_OK) {
+        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         ucp_worker_set_ep_failed(worker, ucp_ep, &wireup_ep->super.super,
                                  ucp_ep_get_cm_lane(ucp_ep), status);
     }
@@ -438,12 +439,15 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     } else if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         ucs_assert(!ucp_ep_is_cm_local_connected(ucp_ep));
     } else {
-        /* ucp_ep_close(force) is called from err callback which was invoked
-           on remote connection reset
-           TODO: remove this case when IB flush cancel is fixed (#4743),
-                 moving QP to err state should move UCP EP to error state,
-                 then ucp_worker_set_ep_failed disconnects CM lane */
-        ucs_assert(req->status == UCS_ERR_CANCELED);
+        /* 1) ucp_ep_close(force) is called from err callback which was invoked
+              on remote connection reset
+              TODO: remove this case when IB flush cancel is fixed (#4743),
+                    moving QP to err state should move UCP EP to error state,
+                    then ucp_worker_set_ep_failed disconnects CM lane
+           2) transport err is also possible on flush
+         */
+        ucs_assert((req->status == UCS_ERR_CANCELED) ||
+                   (req->status == UCS_ERR_ENDPOINT_TIMEOUT));
     }
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
@@ -457,7 +461,7 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
     void *req;
     ucs_status_t status;
 
-    ucs_trace("ep %p: flags %xu cm_remote_disconnect_progress", ucp_ep,
+    ucs_trace("ep %p: flags 0x%x cm_remote_disconnect_progress", ucp_ep,
               ucp_ep->flags);
 
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) != NULL);
@@ -521,7 +525,10 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
 
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
-    if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        /* ignore close event on failed ep */
+        ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
+    } else if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
         /* if the EP is local connected, need to flush it from main thread first */
         ucp_ep_cm_remote_disconnect_progress(ucp_ep);
         ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
@@ -839,19 +846,6 @@ static void ucp_cm_server_conn_notify_cb(uct_ep_h ep, void *arg,
                                           ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                           &prog_id);
         ucp_worker_signal_internal(ucp_ep->worker);
-    } else if (status == UCS_ERR_CONNECTION_RESET) {
-        /* remote side initiated disconnect before local side has completed
-         * connection establishment, so:
-         * 1) establish connection to complete any pending requests from wireup
-         *    lane
-         * 2) handle disconnect same way as close protocol
-         * 3) TODO: remove (1) when the EP can be moved to err state to block
-         *          new send operations but still able to flush transport lanes */
-        uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                          ucp_cm_server_conn_notify_progress,
-                                          ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                          &prog_id);
-        ucp_cm_disconnect_cb(ep, ucp_ep);
     } else {
         /* if reject is arrived on server side, then UCT does something wrong */
         ucs_assert(status != UCS_ERR_REJECTED);
@@ -918,6 +912,7 @@ void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
     ucs_assert_always(uct_cm_ep != NULL);
     /* No reason to try disconnect twice */
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
+    ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
 
     ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
     /* this will invoke @ref ucp_cm_disconnect_cb on remote side */
