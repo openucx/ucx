@@ -602,8 +602,10 @@ void ucp_test_base::entity::close_ep_req_free(void *close_req) {
     ucs_status_t status = UCS_PTR_IS_ERR(close_req) ? UCS_PTR_STATUS(close_req) :
                           ucp_request_check_status(close_req);
     ASSERT_NE(UCS_INPROGRESS, status) << "free not completed EP close request";
-    ASSERT_EQ(UCS_OK,         status) << "ucp_ep_close_nb failed: "
-                                      << ucs_status_string(status);
+    if (status != UCS_OK) {
+        UCS_TEST_MESSAGE << "ucp_ep_close_nb completed with status "
+                         << ucs_status_string(status);
+    }
 
     m_close_ep_reqs.erase(std::find(m_close_ep_reqs.begin(),
                                     m_close_ep_reqs.end(), close_req));
@@ -763,6 +765,8 @@ void ucp_test_base::entity::add_err(ucs_status_t status) {
     default:
         ++m_err_cntr;
     }
+
+    EXPECT_EQ(1ul, m_err_cntr) << "error callback is called more than once";
 }
 
 const size_t &ucp_test_base::entity::get_err_num_rejected() const {
