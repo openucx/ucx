@@ -80,14 +80,9 @@ enum {
     UCP_RECV_DESC_FLAG_EAGER_LAST     = UCS_BIT(5), /* Last fragment of eager tag message.
                                                        Used by tag offload protocol. */
     UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(6), /* Rendezvous request */
-    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(7), /* Descriptor was allocated with malloc
+    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(7)  /* Descriptor was allocated with malloc
                                                        and must be freed, not returned to the
-                                                       memory pool */
-    UCP_RECV_DESC_FLAG_AM_HDR         = UCS_BIT(8), /* Descriptor was orignally allocated by
-                                                       uct and the ucp level am header must
-                                                       be accounted for when releasing
-                                                       descriptors */
-    UCP_RECV_DESC_FLAG_AM_REPLY       = UCS_BIT(9)  /* AM that needed a reply */
+                                                       memory pool or UCT */
 };
 
 

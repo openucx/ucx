@@ -553,7 +553,7 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
                    int data_offset, unsigned am_flags, uint16_t hdr_len,
-                   uint16_t rdesc_flags, uint16_t priv_length,
+                   uint16_t rdesc_flags, int16_t priv_length,
                    ucp_recv_desc_t **rdesc_p)
 {
     ucp_recv_desc_t *rdesc;

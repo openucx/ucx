@@ -42,24 +42,14 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
     }
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_am_data_release,
-                      (worker, data),
+UCS_PROFILE_FUNC_VOID(ucp_am_data_release, (worker, data),
                       ucp_worker_h worker, void *data)
 {
     ucp_recv_desc_t *rdesc = (ucp_recv_desc_t *)data - 1;
-    ucp_recv_desc_t *desc;
 
-    if (rdesc->flags & UCP_RECV_DESC_FLAG_MALLOC) {
+    if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
         ucs_free(rdesc);
         return;
-    } else if (rdesc->flags & UCP_RECV_DESC_FLAG_AM_HDR) {
-        desc   = rdesc;
-        rdesc  = UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucp_am_hdr_t));
-        *rdesc = *desc;
-    } else if (rdesc->flags & UCP_RECV_DESC_FLAG_AM_REPLY) {
-        desc   = rdesc;
-        rdesc  = UCS_PTR_BYTE_OFFSET(rdesc, -sizeof(ucp_am_reply_hdr_t));
-        *rdesc = *desc;
     }
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -474,61 +464,47 @@ out:
     return ret;
 }
 
-static ucs_status_t
-ucp_am_handler_common(ucp_worker_h worker, void *hdr_end,
-                      size_t hdr_size, size_t args_length,
-                      ucp_ep_h reply_ep, uint16_t am_id, 
-                      uint16_t desc_flag, unsigned am_flags) 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_handler_common(ucp_worker_h worker, void *hdr_end, size_t hdr_size,
+                      size_t total_length, ucp_ep_h reply_ep, uint16_t am_id,
+                      unsigned am_flags)
 {
     ucp_recv_desc_t *desc = NULL;
-    uint16_t recv_flags = 0;
     ucs_status_t status;
 
     if (ucs_unlikely((am_id >= worker->am_cb_array_len) ||
                      (worker->am_cbs[am_id].cb == NULL))) {
-        ucs_warn("UCP Active Message was received with id : %u, but there" 
-                 "is no registered callback for that id", am_id);
+        ucs_warn("UCP Active Message was received with id : %u, but there "
+                 " is no registered callback for that id", am_id);
         return UCS_OK;
     }
 
-    if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
-        recv_flags |= desc_flag;
-    }
-
-    /* TODO find way to do this without rewriting header if 
-     * UCT_CB_PARAM_FLAG_DESC flag is set
-     */
-    status = ucp_recv_desc_init(worker, hdr_end, hdr_size + args_length,
-                                0, am_flags, 0,
-                                recv_flags, 0, &desc);
+    status = ucp_recv_desc_init(worker, hdr_end, total_length, 0, am_flags,
+                                hdr_size, 0, -hdr_size, &desc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucs_error("worker %p  could not allocate descriptor for active message"
-                  "on callback : %u", worker, am_id);
-        return status;
+                  " on callback : %u", worker, am_id);
+        return UCS_OK;
     }
-
     ucs_assert(desc != NULL);
 
     status = worker->am_cbs[am_id].cb(worker->am_cbs[am_id].context,
                                       desc + 1,
-                                      args_length,
+                                      total_length - hdr_size,
                                       reply_ep,
                                       UCP_CB_PARAM_FLAG_DATA);
     if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
         return status;
     }
-    
+
     if (status == UCS_OK) {
         ucp_recv_desc_release(desc);
-        return UCS_OK;
-    } else if (status == UCS_INPROGRESS) {
-        return UCS_OK;
-    } 
+    }
 
-    return status;
+    return UCS_OK;
 }
 
-static ucs_status_t 
+static ucs_status_t
 ucp_am_handler_reply(void *am_arg, void *am_data, size_t am_length,
                      unsigned am_flags)
 {
@@ -538,14 +514,12 @@ ucp_am_handler_reply(void *am_arg, void *am_data, size_t am_length,
     ucp_ep_h reply_ep;
 
     reply_ep = ucp_worker_get_ep_by_ptr(worker, hdr->ep_ptr);
- 
-    return ucp_am_handler_common(worker, hdr + 1, sizeof(*hdr),
-                                 am_length - sizeof(*hdr), reply_ep,
-                                 am_id, UCP_RECV_DESC_FLAG_AM_REPLY, 
-                                 am_flags);
+
+    return ucp_am_handler_common(worker, hdr + 1, sizeof(*hdr), am_length,
+                                 reply_ep, am_id, am_flags);
 }
 
-static ucs_status_t 
+static ucs_status_t
 ucp_am_handler(void *am_arg, void *am_data, size_t am_length,
                unsigned am_flags)
 {
@@ -553,10 +527,8 @@ ucp_am_handler(void *am_arg, void *am_data, size_t am_length,
     ucp_am_hdr_t *hdr     = (ucp_am_hdr_t *)am_data;
     uint16_t am_id        = hdr->am_hdr.am_id;
 
-    return ucp_am_handler_common(worker, hdr + 1, sizeof(*hdr),
-                                 am_length - sizeof(*hdr), NULL,
-                                 am_id, UCP_RECV_DESC_FLAG_AM_HDR, 
-                                 am_flags);    
+    return ucp_am_handler_common(worker, hdr + 1, sizeof(*hdr), am_length,
+                                 NULL, am_id, am_flags);
 }
 
 static ucp_am_unfinished_t *
