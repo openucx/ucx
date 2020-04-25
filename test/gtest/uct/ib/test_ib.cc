@@ -85,11 +85,17 @@ public:
         uct_ib_address_t *ib_addr;
         uint16_t lid_out;
 
-        ib_addr = (uct_ib_address_t*)malloc(uct_ib_iface_address_size(iface));
-
         gid_in.global.subnet_prefix = subnet_prefix;
         gid_in.global.interface_id  = 0xdeadbeef;
-        uct_ib_iface_address_pack(iface, &gid_in, lid_in, ib_addr);
+
+        ib_addr = (uct_ib_address_t*)malloc(
+                      uct_ib_address_size(&gid_in,
+                                          uct_ib_iface_address_pack_flags(iface)));
+        ASSERT_TRUE(ib_addr != NULL);
+
+        uct_ib_address_pack(&gid_in, lid_in,
+                            uct_ib_iface_address_pack_flags(iface),
+                            &iface->gid_info.roce_info, ib_addr);
 
         uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
 
@@ -300,10 +306,14 @@ public:
         ib_md = ucs_derived_of(uct_md, uct_ib_md_t);
 
         dummy_ib_iface.config.port_num = m_port;
+        dummy_ib_iface.super.md        = &ib_md->super;
+
+        ASSERT_EQ(&ib_md->dev, uct_ib_iface_device(&dummy_ib_iface));
+
         /* uct_ib_iface_init_roce_gid_info() requires only the port from the
          * ib_iface so we can use a dummy one here.
          * this function will set the gid_index in the dummy ib_iface. */
-        status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface, &ib_md->dev,
+        status = uct_ib_iface_init_roce_gid_info(&dummy_ib_iface,
                                                  md_config->ext.gid_index);
         ASSERT_UCS_OK(status);
 
@@ -437,14 +447,7 @@ public:
 
         test_uct_ib::init();
 
-        try {
-            check_caps_skip(UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_CB_SYNC |
-                            UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                            UCT_IFACE_FLAG_EVENT_RECV);
-        } catch (...) {
-            test_uct_ib::cleanup();
-            throw;
-        }
+        check_skip_test();
 
         /* create receiver wakeup */
         status = uct_iface_event_fd_get(m_e1->iface(), &wakeup_fd.fd);
@@ -533,7 +536,11 @@ protected:
 size_t test_uct_event_ib::bcopy_pack_count = 0;
 
 
-UCS_TEST_P(test_uct_event_ib, tx_cq)
+UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY |
+                                 UCT_IFACE_FLAG_CB_SYNC) ||
+                     !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                       UCT_IFACE_FLAG_EVENT_RECV))
 {
     ucs_status_t status;
 
@@ -562,7 +569,12 @@ UCS_TEST_P(test_uct_event_ib, tx_cq)
 }
 
 
-UCS_TEST_P(test_uct_event_ib, txrx_cq)
+UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY |
+                                 UCT_IFACE_FLAG_CB_SYNC   |
+                                 UCT_IFACE_FLAG_AM_SHORT) ||
+                     !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                       UCT_IFACE_FLAG_EVENT_RECV))
 {
     const size_t msg_count = 1;
     ucs_status_t status;

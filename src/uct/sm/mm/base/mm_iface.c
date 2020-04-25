@@ -161,9 +161,10 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_AM_BCOPY            |
                                           UCT_IFACE_FLAG_PENDING             |
                                           UCT_IFACE_FLAG_CB_SYNC             |
-                                          UCT_IFACE_FLAG_EVENT_SEND_COMP     |
-                                          UCT_IFACE_FLAG_EVENT_RECV_SIG      |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP     |
+                                          UCT_IFACE_FLAG_EVENT_RECV_SIG      |
+                                          UCT_IFACE_FLAG_EVENT_FD;
 
     iface_attr->cap.atomic32.op_flags   =
     iface_attr->cap.atomic64.op_flags   = UCS_BIT(UCT_ATOMIC_OP_ADD)         |

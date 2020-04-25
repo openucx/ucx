@@ -62,7 +62,7 @@ public:
 
     bool send_am_or_add_pending(uint64_t *send_data, uint64_t header,
                                 unsigned idx, pending_send_request_t *preq) {
-        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1);
+        ucs_time_t loop_end_limit = ucs::get_deadline();
         ucs_status_t status, status_pend;
 
         do {
@@ -74,7 +74,7 @@ public:
                                               pending_alloc(*send_data, idx);
                 status_pend                 = uct_ep_pending_add(m_e1->ep(idx),
                                                                  &req->uct, 0);
-                if (status == UCS_ERR_BUSY) { /* retry */
+                if (status_pend == UCS_ERR_BUSY) { /* retry */
                     if (preq == NULL) {
                         pending_delete(req);
                     }

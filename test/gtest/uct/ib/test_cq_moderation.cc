@@ -164,14 +164,12 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_cq_moderation, send_period,
-                     !check_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                 UCT_IFACE_FLAG_EVENT_RECV)) {
+                     !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP)) {
     run_test(m_sender->iface());
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_cq_moderation, recv_period,
-                     !check_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                 UCT_IFACE_FLAG_EVENT_RECV)) {
+                     !check_event_caps(UCT_IFACE_FLAG_EVENT_RECV)) {
     run_test(m_receiver->iface());
 }
 

@@ -7,7 +7,7 @@
 #  include "config.h"
 #endif
 
-#if HAVE_INFINIBAND_MLX5_HW_H
+#ifdef HAVE_INFINIBAND_MLX5_HW_H
 
 #include "ib_mlx5_hw.h"
 
@@ -173,7 +173,7 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t obj_type)
                 ucs_container_of(obj->dv.srq.out, uct_ib_mlx5dv_srq_t, dv));
     }
 
-#if HAVE_IBV_EXP_DM
+#ifdef HAVE_IBV_EXP_DM
     if (!ret && (obj_type & MLX5DV_OBJ_DM)) {
         ret = uct_ib_mlx5_get_dm_info(obj->dv_dm.in, obj->dv_dm.out);
     }
@@ -208,7 +208,7 @@ void uct_ib_mlx5_get_av(struct ibv_ah *ah, struct mlx5_wqe_av *av)
 
 struct ibv_qp *uct_dv_get_cmd_qp(struct ibv_srq *srq)
 {
-#if HAVE_STRUCT_MLX5_SRQ_CMD_QP
+#ifdef HAVE_STRUCT_MLX5_SRQ_CMD_QP
     struct mlx5_srq *msrq;
 
     if (srq->handle == LEGACY_XRC_SRQ_HANDLE) {

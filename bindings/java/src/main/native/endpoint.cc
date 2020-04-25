@@ -8,8 +8,6 @@
 
 #include <string.h>    /* memset */
 
-#include <ucp/core/ucp_ep.inl> /* ucp_ep_peer_name */
-
 
 static void error_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
@@ -130,8 +128,8 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_putNonBlockingNative(JNIEnv *env, jclass c
     ucs_status_ptr_t request = ucp_put_nb((ucp_ep_h)ep_ptr, (void *)laddr, size, raddr,
                                           (ucp_rkey_h)rkey_ptr, jucx_request_callback);
 
-    ucs_trace_req("JUCX: put_nb request %p to %s, of size: %zu, raddr: %zu",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size, raddr);
+    ucs_trace_req("JUCX: put_nb request %p, of size: %zu, raddr: %zu",
+                  request, size, raddr);
     return process_request(request, callback);
 }
 
@@ -158,8 +156,8 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass c
     ucs_status_ptr_t request = ucp_get_nb((ucp_ep_h)ep_ptr, (void *)laddr, size,
                                           raddr, (ucp_rkey_h)rkey_ptr, jucx_request_callback);
 
-    ucs_trace_req("JUCX: get_nb request %p to %s, raddr: %zu, size: %zu, result address: %zu",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), raddr, size, laddr);
+    ucs_trace_req("JUCX: get_nb request %p, raddr: %zu, size: %zu, result address: %zu",
+                  request, raddr, size, laddr);
     return process_request(request, callback);
 }
 
@@ -186,8 +184,8 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, j
     ucs_status_ptr_t request = ucp_tag_send_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
                                                ucp_dt_make_contig(1), tag, jucx_request_callback);
 
-    ucs_trace_req("JUCX: send_tag_nb request %p to %s, size: %zu, tag: %ld",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size, tag);
+    ucs_trace_req("JUCX: send_tag_nb request %p, size: %zu, tag: %ld",
+                  request, size, tag);
     return process_request(request, callback);
 }
 
@@ -199,8 +197,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamNonBlockingNative(JNIEnv *env, j
     ucs_status_ptr_t request = ucp_stream_send_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
                                                   ucp_dt_make_contig(1), jucx_request_callback, 0);
 
-    ucs_trace_req("JUCX: send_stream_nb request %p to %s, size: %zu",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size);
+    ucs_trace_req("JUCX: send_stream_nb request %p, size: %zu", request, size);
     return process_request(request, callback);
 }
 
@@ -215,8 +212,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamNonBlockingNative(JNIEnv *env, j
                                                   ucp_dt_make_contig(1), stream_recv_callback,
                                                   &rlength, flags);
 
-    ucs_trace_req("JUCX: recv_stream_nb request %p to %s, size: %zu",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size);
+    ucs_trace_req("JUCX: recv_stream_nb request %p, size: %zu", request, size);
 
     if (request == NULL) {
         // If request completed immidiately.

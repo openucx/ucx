@@ -112,7 +112,7 @@ void test_perf::rte::exchange_vec(void *rte_group, void * req)
 }
 
 void test_perf::rte::report(void *rte_group, const ucx_perf_result_t *result,
-                            void *arg, int is_final)
+                            void *arg, int is_final, int is_multi_thread)
 {
 }
 

@@ -194,7 +194,11 @@ get_active_ib_devices() {
 # Get list of active IP interfaces
 #
 get_active_ip_ifaces() {
-	echo $(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	device_list=$(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	for netdev in ${device_list}
+	do
+		(ip addr show ${netdev} | grep -q 'inet ') && echo ${netdev} || true
+	done
 }
 
 #
@@ -692,6 +696,38 @@ check_config_h() {
 	fi
 }
 
+#
+# Expands a CPU list such as "0-3,17" to "0 1 2 3 17" (each cpu in a new line)
+#
+expand_cpulist() {
+	cpulist=$1
+	tokens=$(echo ${cpulist} | tr ',' ' ')
+	for token in ${tokens}
+	do
+		# if there is no '-', first and last would be equal
+		first=$(echo ${token} | cut -d'-' -f1)
+		last=$( echo ${token} | cut -d'-' -f2)
+
+		for ((cpu=${first};cpu<=${last};++cpu))
+		do
+			echo ${cpu}
+		done
+	done
+}
+
+#
+# Get the N'th CPU that the current process can run on
+#
+slice_affinity() {
+	n=$1
+
+	# get affinity mask of the current process
+	compact_cpulist=$($AFFINITY bash -c 'taskset -cp $$' | cut -d: -f2)
+	cpulist=$(expand_cpulist ${compact_cpulist})
+
+	echo "${cpulist}" | head -n $((n + 1)) | tail -1
+}
+
 run_client_server_app() {
 	test_name=$1
 	test_args=$2
@@ -702,7 +738,10 @@ run_client_server_app() {
 	server_port=$((10000 + EXECUTOR_NUMBER))
 	server_port_arg="-p $server_port"
 
-	$AFFINITY ${test_name} ${test_args} ${server_port_arg} &
+	affinity_server=$(slice_affinity 0)
+	affinity_client=$(slice_affinity 1)
+
+	taskset -c $affinity_server ${test_name} ${test_args} ${server_port_arg} &
 	server_pid=$!
 
 	sleep 15
@@ -712,7 +751,7 @@ run_client_server_app() {
 		set +Ee
 	fi
 
-	$AFFINITY ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
+	taskset -c $affinity_client ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
 	client_pid=$!
 
 	wait ${client_pid}
@@ -738,7 +777,7 @@ run_hello() {
 
 	if [ ! -x ${test_name} ]
 	then
-		$MAKEP -C test/examples ${test_name}
+		$MAKEP -C examples ${test_name}
 	fi
 
 	# set smaller timeouts so the test will complete faster
@@ -756,7 +795,7 @@ run_hello() {
 		error_emulation=0
 	fi
 
-	run_client_server_app "./test/examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
+	run_client_server_app "./examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
 
 	if [[ ${test_args} == *"-e"* ]]
 	then
@@ -929,7 +968,7 @@ run_ucx_perftest() {
 			dev=$ucx_dev
 		else
 			opt_transports="-x rc_verbs"
-			tls="rc_verbs"
+			tls="rc_v"
 			dev=$ucx_dev
 		fi
 
@@ -938,8 +977,12 @@ run_ucx_perftest() {
 		then
 			# Run UCT performance test
 			$MPIRUN -np 2 $AFFINITY $ucx_perftest $uct_test_args -d $ucx_dev $opt_transports
+
 			# Run UCP performance test
 			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
+
+			# Run UCP performance test with 2 threads
+			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args -T 2
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
@@ -947,8 +990,12 @@ run_ucx_perftest() {
 			# Run UCT performance test
 			run_client_server_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}" \
 								"$(hostname)" 0 0
+
 			# Run UCP performance test
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+
+			# Run UCP performance test with 2 threads
+			run_client_server_app "$ucx_perftest" "$ucp_test_args -T 2" "$(hostname)" 0 0
 
 			unset UCX_NET_DEVICES
 			unset UCX_TLS
@@ -1101,6 +1148,12 @@ run_mpi_tests() {
 	fi
 }
 
+build_ucx_profiling() {
+	# compile the profiling example code
+	gcc -o ucx_profiling ../test/apps/profiling/ucx_profiling.c \
+		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+}
+
 #
 # Test profiling infrastructure
 #
@@ -1111,10 +1164,9 @@ test_profiling() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
+	$MAKEP install
 
-	# compile the profiling example code
-	gcc -o ucx_profiling ${ucx_inst}/share/ucx/examples/ucx_profiling.c \
-		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+	build_ucx_profiling
 
 	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./ucx_profiling
 
@@ -1128,6 +1180,9 @@ test_ucs_load() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
+	$MAKEP install
+
+	build_ucx_profiling
 
 	# Make sure UCS library constructor does not call socket()
 	echo "==== Running UCS library loading test ===="
@@ -1521,7 +1576,7 @@ run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
 
-	../test/apps/test_ucx_tls.py $ucx_inst
+	../test/apps/test_ucx_tls.py -p $ucx_inst
 
 	if [ $? -ne 0 ]; then
 		echo "not ok 1" >> ucx_tl_check.tap

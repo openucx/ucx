@@ -91,6 +91,12 @@ enum {
     UCT_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
 };
 
+
+#define UCT_PERF_TEST_PARAMS_FMT             "%s/%s"
+#define UCT_PERF_TEST_PARAMS_ARG(_params)    (_params)->uct.tl_name, \
+                                             (_params)->uct.dev_name
+
+
 /**
  * Performance counter type.
  */
@@ -131,7 +137,8 @@ typedef void (*ucx_perf_rte_recv_func_t)(void *rte_group, unsigned src,
 typedef void (*ucx_perf_rte_exchange_vec_func_t)(void *rte_group, void *req);
 typedef void (*ucx_perf_rte_report_func_t)(void *rte_group,
                                            const ucx_perf_result_t *result,
-                                           void *arg, int is_final);
+                                           void *arg, int is_final,
+                                           int is_multi_thread);
 
 /**
  * RTE used to bring-up the test
@@ -222,7 +229,8 @@ void ucx_perf_global_init();
 /**
  * Run a UCT performance test.
  */
-ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result);
+ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
+                          ucx_perf_result_t *result);
 
 
 END_C_DECLS

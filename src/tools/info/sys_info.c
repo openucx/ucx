@@ -37,7 +37,8 @@ static const char* cpu_vendor_names[] = {
     [UCS_CPU_VENDOR_INTEL]            = "Intel",
     [UCS_CPU_VENDOR_AMD]              = "AMD",
     [UCS_CPU_VENDOR_GENERIC_ARM]      = "Generic ARM",
-    [UCS_CPU_VENDOR_GENERIC_PPC]      = "Generic PPC"
+    [UCS_CPU_VENDOR_GENERIC_PPC]      = "Generic PPC",
+    [UCS_CPU_VENDOR_FUJITSU_ARM]      = "Fujitsu ARM"
 };
 
 static double measure_memcpy_bandwidth(size_t size)

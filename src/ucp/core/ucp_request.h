@@ -104,20 +104,21 @@ enum {
  * Request in progress.
  */
 struct ucp_request {
-    ucs_status_t                  status;  /* Operation status */
-    uint32_t                      flags;   /* Request flags */
+    ucs_status_t                  status;     /* Operation status */
+    uint32_t                      flags;      /* Request flags */
+    void                          *user_data; /* Completion user data */
 
     union {
 
         /* "send" part - used for tag_send, am_send, stream_send, put, get, and atomic
          * operations */
         struct {
-            ucp_ep_h              ep;
-            void                  *buffer;  /* Send buffer */
-            ucp_datatype_t        datatype; /* Send type */
-            size_t                length;   /* Total length, in bytes */
-            ucs_memory_type_t     mem_type; /* Memory type */
-            ucp_send_callback_t   cb;       /* Completion callback */
+            ucp_ep_h                ep;
+            void                    *buffer;    /* Send buffer */
+            ucp_datatype_t          datatype;   /* Send type */
+            size_t                  length;     /* Total length, in bytes */
+            ucs_memory_type_t       mem_type;   /* Memory type */
+            ucp_send_nbx_callback_t cb;         /* Completion callback */
 
             union {
                 ucp_wireup_msg_t  wireup;
@@ -260,12 +261,13 @@ struct ucp_request {
 
             union {
                 struct {
-                    ucp_tag_t               tag;      /* Expected tag */
-                    ucp_tag_t               tag_mask; /* Expected tag mask */
-                    uint64_t                sn;       /* Tag match sequence */
-                    ucp_tag_recv_callback_t cb;       /* Completion callback */
-                    ucp_tag_recv_info_t     info;     /* Completion info to fill */
-                    ssize_t                 remaining; /* How much more data to be received */
+                    ucp_tag_t                   tag;        /* Expected tag */
+                    ucp_tag_t                   tag_mask;   /* Expected tag mask */
+                    uint64_t                    sn;         /* Tag match sequence */
+                    ucp_tag_recv_nbx_callback_t cb;         /* Completion callback */
+                    ucp_tag_recv_info_t         info;       /* Completion info to fill */
+                    ssize_t                     remaining;  /* How much more data
+                                                             * to be received */
 
                     /* Can use union, because rdesc is used in expected flow,
                      * while non_contig_buf is used in unexpected flow only. */
@@ -276,9 +278,9 @@ struct ucp_request {
                                                                 non-contig unexpected
                                                                 message in tag offload flow. */
                     };
-                    ucp_worker_iface_t      *wiface;  /* Cached iface this request
-                                                         is received on. Used in
-                                                         tag offload expected callbacks*/
+                    ucp_worker_iface_t      *wiface;    /* Cached iface this request
+                                                           is received on. Used in
+                                                           tag offload expected callbacks*/
                 } tag;
 
                 struct {

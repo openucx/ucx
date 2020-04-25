@@ -144,7 +144,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 /*
  * On-demand paging support
  */
-#if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
+#ifdef HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
 #  define IBV_EXP_HAVE_ODP(_attr)                   ((_attr)->odp_caps.general_odp_caps & IBV_EXP_ODP_SUPPORT)
 #  define IBV_EXP_ODP_CAPS(_attr, _xport)           ((_attr)->odp_caps.per_transport_caps._xport##_odp_caps)
 #else
@@ -153,7 +153,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #endif
 
 #if HAVE_ODP
-#  if HAVE_VERBS_EXP_H
+#  ifdef HAVE_VERBS_EXP_H
 #    define IBV_ACCESS_ON_DEMAND        IBV_EXP_ACCESS_ON_DEMAND
 #    define ibv_reg_mr_func_name        "ibv_exp_reg_mr"
 #  else
@@ -165,7 +165,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #endif
 
 #if HAVE_ODP_IMPLICIT
-#  if HAVE_VERBS_EXP_H
+#  ifdef HAVE_VERBS_EXP_H
 #    define UCT_IB_HAVE_ODP_IMPLICIT(_attr)         ((_attr)->odp_caps.general_odp_caps & IBV_EXP_ODP_SUPPORT_IMPLICIT)
 #  else
 #    define UCT_IB_HAVE_ODP_IMPLICIT(_attr)         ((_attr)->odp_caps.general_caps & IBV_ODP_SUPPORT_IMPLICIT)

@@ -379,6 +379,39 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, check_rma_ops,
     EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
 }
 
+// Check that outstanding get ops purged gracefully when ep is closed.
+// Also check that get resources taken by those ops are released.
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_BCOPY))
+{
+    mapped_buffer sendbuf(128, 0ul, *m_e1);
+    mapped_buffer recvbuf(128, 0ul, *m_e2);
+
+    post_max_reads(m_e1, sendbuf, recvbuf);
+
+    scoped_log_handler hide_warn(hide_warns_logger);
+
+    unsigned flags      = UCT_FLUSH_FLAG_CANCEL;
+    ucs_time_t deadline = ucs::get_deadline();
+    ucs_status_t status;
+    do {
+        ASSERT_EQ(1ul, m_e1->num_eps());
+        status = uct_ep_flush(m_e1->ep(0), flags, NULL);
+        progress();
+        if (flags & UCT_FLUSH_FLAG_CANCEL) {
+            ASSERT_UCS_OK_OR_INPROGRESS(status);
+            flags = UCT_FLUSH_FLAG_LOCAL;
+            continue;
+        }
+    } while (((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) &&
+             (ucs_get_time() < deadline));
+
+    m_e1->destroy_eps();
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+}
+
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_get_limit)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
@@ -617,7 +650,7 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control_stats)
 
 #endif
 
-#if HAVE_MLX5_HW
+#ifdef HAVE_MLX5_HW
 extern "C" {
 #include <uct/ib/rc/accel/rc_mlx5_common.h>
 }
@@ -645,7 +678,7 @@ test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
 {
     attr_map_t iov_map;
 
-#if HAVE_MLX5_HW
+#ifdef HAVE_MLX5_HW
     // For RMA iovs can use all WQE space, remainig from control and
     // remote address segments (and AV if relevant)
     size_t rma_iov = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -

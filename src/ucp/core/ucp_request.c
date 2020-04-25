@@ -328,7 +328,7 @@ void ucp_request_init_multi_proto(ucp_request_t *req,
     if (req->flags & (UCP_REQUEST_FLAG_SEND_TAG |
                       UCP_REQUEST_FLAG_SEND_AM)) {
         req->send.msg_proto.message_id  = req->send.ep->worker->am_message_id++;
-        req->send.msg_proto.am_bw_index = 1;
+        req->send.msg_proto.am_bw_index = 0;
     }
 
     req->send.pending_lane = UCP_NULL_LANE;

@@ -69,7 +69,7 @@ private:
     ucs_status_t _status;
 };
 
-void UcxCallback::operator()()
+void UcxCallback::operator()(ucs_status_t status)
 {
 }
 
@@ -513,6 +513,10 @@ void UcxConnection::ep_close(enum ucp_ep_close_mode mode)
 void UcxConnection::send_common(const void *buffer, size_t length, ucp_tag_t tag,
                                 UcxCallback* callback)
 {
+    if (_ep == NULL) {
+        return;
+    }
+
     ucs_status_ptr_t ptr_status = ucp_tag_send_nb(_ep, buffer, length,
                                                   ucp_dt_make_contig(1), tag,
                                                   common_request_callback);
@@ -533,7 +537,7 @@ void UcxConnection::common_request_callback(void *request, ucs_status_t status)
     ucx_request *r = reinterpret_cast<ucx_request*>(request);
     if (r->callback) {
         // already processed by send function
-        (*r->callback)();
+        (*r->callback)(status);
         UcxContext::request_release(r);
     } else {
         // not yet processed by send function
@@ -552,18 +556,22 @@ void UcxConnection::process_request(const char *what,
                                     ucs_status_ptr_t ptr_status,
                                     UcxCallback* callback)
 {
+    ucs_status_t status;
+
     if (ptr_status == NULL) {
-        (*callback)();
+        (*callback)(UCS_OK);
     } else if (UCS_PTR_IS_ERR(ptr_status)) {
-        log() << what << "failed with status"
-              << ucs_status_string(UCS_PTR_STATUS(ptr_status)) << std::endl;
-        throw UcxError(what, UCS_PTR_STATUS(ptr_status));
+        status = UCS_PTR_STATUS(ptr_status);
+        log() << what << "failed with status" << ucs_status_string(status)
+              << std::endl;
+        (*callback)(status);
+        throw UcxError(what, status);
     } else {
         // pointer to request
         ucx_request *r = reinterpret_cast<ucx_request*>(ptr_status);
         if (r->completed) {
             // already completed by callback
-            (*callback)();
+            (*callback)(r->status);
             UcxContext::request_release(r);
         } else {
             // will be completed by callback

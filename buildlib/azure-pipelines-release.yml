@@ -9,8 +9,8 @@ trigger:
 
 resources:
   containers:
-    - container: fedora
-      image: ucfconsort.azurecr.io/ucx/fedora:1
+    - container: centos7
+      image: ucfconsort.azurecr.io/ucx/centos7:1
       endpoint: ucfconsort_registry
 
 stages:

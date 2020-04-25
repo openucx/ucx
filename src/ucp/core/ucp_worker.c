@@ -328,15 +328,28 @@ static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
     }
 }
 
-static void ucp_worker_iface_disarm(ucp_worker_iface_t *wiface)
+static UCS_F_ALWAYS_INLINE
+int ucp_worker_iface_get_event_fd(const ucp_worker_iface_t *wiface)
+{
+    ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD);
+    return wiface->event_fd;
+}
+
+static UCS_F_ALWAYS_INLINE
+void ucp_worker_iface_event_fd_ctl(ucp_worker_iface_t *wiface,
+                                   ucp_worker_event_fd_op_t op)
 {
     ucs_status_t status;
 
+    status = ucp_worker_wakeup_ctl_fd(wiface->worker, op,
+                                      ucp_worker_iface_get_event_fd(wiface));
+    ucs_assert_always(status == UCS_OK);
+}
+
+static void ucp_worker_iface_disarm(ucp_worker_iface_t *wiface)
+{
     if (wiface->flags & UCP_WORKER_IFACE_FLAG_ON_ARM_LIST) {
-        status = ucp_worker_wakeup_ctl_fd(wiface->worker,
-                                          UCP_WORKER_EPFD_OP_DEL,
-                                          wiface->event_fd);
-        ucs_assert_always(status == UCS_OK);
+        ucp_worker_iface_event_fd_ctl(wiface, UCP_WORKER_EPFD_OP_DEL);
         ucs_list_del(&wiface->arm_list);
         wiface->flags &= ~UCP_WORKER_IFACE_FLAG_ON_ARM_LIST;
     }
@@ -602,7 +615,6 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
 {
     ucp_worker_h worker = wiface->worker;
-    ucs_status_t status;
 
     ucs_trace("activate iface %p acount=%u aifaces=%u", wiface->iface,
               wiface->activate_count, worker->num_active_ifaces);
@@ -618,10 +630,8 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
     ucp_worker_set_am_handlers(wiface, 0);
 
     /* Add to user wakeup */
-    if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
-        status = ucp_worker_wakeup_ctl_fd(worker, UCP_WORKER_EPFD_OP_ADD,
-                                          wiface->event_fd);
-        ucs_assert_always(status == UCS_OK);
+    if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
+        ucp_worker_iface_event_fd_ctl(wiface, UCP_WORKER_EPFD_OP_ADD);
         wiface->flags |= UCP_WORKER_IFACE_FLAG_ON_ARM_LIST;
         ucs_list_add_tail(&worker->arm_ifaces, &wiface->arm_list);
     }
@@ -660,18 +670,20 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
         return UCS_OK;
     } else if (*progress_count == 0) {
         /* Arm the interface to wait for next event */
-        ucs_assert(wiface->attr.cap.flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS);
+        ucs_assert(wiface->attr.cap.event_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS);
         status = uct_iface_event_arm(wiface->iface,
                                      UCP_WORKER_UCT_RECV_EVENT_ARM_FLAGS);
         if (status == UCS_OK) {
             ucs_trace("armed iface %p", wiface->iface);
 
-            /* re-enable events, which were disabled by ucp_suspended_iface_event() */
-            status = ucs_async_modify_handler(wiface->event_fd,
-                                              UCS_EVENT_SET_EVREAD);
-            if (status != UCS_OK) {
-                ucs_fatal("failed to modify %d event handler to UCS_EVENT_SET_EVREAD: %s",
-                          wiface->event_fd, ucs_status_string(status));
+            if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
+                /* re-enable events, which were disabled by ucp_suspended_iface_event() */
+                status = ucs_async_modify_handler(wiface->event_fd,
+                                                  UCS_EVENT_SET_EVREAD);
+                if (status != UCS_OK) {
+                    ucs_fatal("failed to modify %d event handler to UCS_EVENT_SET_EVREAD: %s",
+                              wiface->event_fd, ucs_status_string(status));
+                }
             }
 
             return UCS_OK;
@@ -790,25 +802,44 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface)
     UCS_ASYNC_UNBLOCK(&wiface->worker->async);
 }
 
-void ucp_worker_iface_event(int fd, void *arg)
+static UCS_F_ALWAYS_INLINE void
+ucp_worker_iface_event_common(ucp_worker_iface_t *wiface)
 {
-    ucp_worker_iface_t *wiface = arg;
     ucp_worker_h worker = wiface->worker;
-    ucs_status_t status;
-
-    ucs_trace_func("fd=%d iface=%p", fd, wiface->iface);
-
-    status = ucs_async_modify_handler(wiface->event_fd, 0);
-    if (status != UCS_OK) {
-        ucs_fatal("failed to modify %d event handler to <empty>: %s",
-                  wiface->event_fd, ucs_status_string(status));
-    }
 
     /* Do more work on the main thread */
     ucp_worker_iface_check_events(wiface, 0);
 
-    /* Signal user wakeup, to report the first message on the interface */
+    /* Signal user wakeup to report the first message on the interface */
     ucp_worker_signal_internal(worker);
+}
+
+static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
+{
+    ucp_worker_iface_t *wiface = arg;
+
+    ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
+    ucs_trace_func("async_cb for iface=%p", wiface->iface);
+
+    ucp_worker_iface_event_common(wiface);
+}
+
+static void ucp_worker_iface_async_fd_event(int fd, void *arg)
+{
+    ucp_worker_iface_t *wiface = arg;
+    int event_fd               = ucp_worker_iface_get_event_fd(wiface);;
+    ucs_status_t status;
+
+    ucs_assertv(fd == event_fd, "fd=%d vs wiface::event_fd=%d", fd, event_fd);
+    ucs_trace_func("fd=%d iface=%p", event_fd, wiface->iface);
+
+    status = ucs_async_modify_handler(event_fd, 0);
+    if (status != UCS_OK) {
+        ucs_fatal("failed to modify %d event handler to <empty>: %s",
+                  event_fd, ucs_status_string(status));
+    }
+
+    ucp_worker_iface_event_common(wiface);
 }
 
 static void ucp_worker_uct_iface_close(ucp_worker_iface_t *wiface)
@@ -1122,6 +1153,11 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                       UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB;
     }
 
+    iface_params->async_event_arg   = wiface;
+    iface_params->async_event_cb    = ucp_worker_iface_async_cb_event;
+    iface_params->field_mask       |= UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG |
+                                      UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB;
+
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, iface_params, iface_config,
                             &wiface->iface);
@@ -1163,7 +1199,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     ucs_assert(wiface != NULL);
 
     /* Set wake-up handlers */
-    if (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS) {
+    if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
         status = uct_iface_event_fd_get(wiface->iface, &wiface->event_fd);
         if (status != UCS_OK) {
             goto out_close_iface;
@@ -1171,7 +1207,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
         /* Register event handler without actual events so we could modify it later. */
         status = ucs_async_set_event_handler(worker->async.mode, wiface->event_fd,
-                                             0, ucp_worker_iface_event, wiface,
+                                             0, ucp_worker_iface_async_fd_event, wiface,
                                              &worker->async);
         if (status != UCS_OK) {
             ucs_fatal("failed to register event handler: %s",
@@ -1191,7 +1227,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
 
         if (context->config.ext.adaptive_progress &&
-            (wiface->attr.cap.flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS))
+            (wiface->attr.cap.event_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS))
         {
             ucp_worker_iface_deactivate(wiface, 1);
         } else {
@@ -1219,7 +1255,7 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
     ucp_worker_iface_disarm(wiface);
 
     if ((wiface->event_fd != -1) &&
-        (wiface->attr.cap.flags & UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS)) {
+        (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD)) {
         status = ucs_async_remove_handler(wiface->event_fd, 1);
         if (status != UCS_OK) {
             ucs_warn("failed to remove event handler for fd %d: %s",
@@ -2096,7 +2132,7 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
         pfd = ucs_alloca(sizeof(*pfd) * worker->context->num_tls);
         nfds = 0;
         ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
-            pfd[nfds].fd     = wiface->event_fd;
+            pfd[nfds].fd     = ucp_worker_iface_get_event_fd(wiface);
             pfd[nfds].events = POLLIN;
             ++nfds;
         }

@@ -36,11 +36,13 @@ enum {
  * Criteria for transport selection.
  */
 typedef struct {
-    const char  *title;            /* Name of the criteria for debugging */
-    uint64_t    local_md_flags;    /* Required local MD flags */
-    uint64_t    remote_md_flags;   /* Required remote MD flags */
-    uint64_t    local_iface_flags; /* Required local interface flags */
-    uint64_t    remote_iface_flags;/* Required remote interface flags */
+    const char  *title;             /* Name of the criteria for debugging */
+    uint64_t    local_md_flags;     /* Required local MD flags */
+    uint64_t    remote_md_flags;    /* Required remote MD flags */
+    uint64_t    local_iface_flags;  /* Required local interface flags */
+    uint64_t    remote_iface_flags; /* Required remote interface flags */
+    uint64_t    local_event_flags;  /* Required local event flags */
+    uint64_t    remote_event_flags; /* Required remote event flags */
 
     /**
      * Calculates score of a potential transport.

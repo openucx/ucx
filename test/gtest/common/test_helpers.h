@@ -376,6 +376,11 @@ static inline int rand() {
     return ::rand();
 }
 
+static inline void srand(unsigned seed) {
+    /* coverity[dont_call] */
+    return ::srand(seed);
+}
+
 void fill_random(void *data, size_t size);
 
 /* C can be vector or string */
