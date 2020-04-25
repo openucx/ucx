@@ -55,7 +55,7 @@ and run a simple client/server example:
     $ ./contrib/configure-release --prefix=$PWD/install
     $ make -j8 install
 
-    $ gcc test/examples/ucp_client_server.c -lucp -lucs -o ucp_client_server \
+    $ gcc examples/ucp_client_server.c -lucp -lucs -o ucp_client_server \
           -Iinstall/include -Linstall/lib
     $ export LD_LIBRARY_PATH=$PWD/instal/lib
     $ ./ucp_client_server &
@@ -72,7 +72,7 @@ Documentation
 *************
 
 *  API doc: `HTML <https://openucx.github.io/ucx/api/v{VERSION}/html/index.html>`_ `PDF <https://openucx.github.io/ucx/api/v{VERSION}/ucx-v{VERSION}.pdf>`_
-* `Examples <https://github.com/openucx/ucx/tree/v{VERSION}.x/test/examples>`_
+* `Examples <https://github.com/openucx/ucx/tree/v{VERSION}.x/examples>`_
 
 
 Projects using UCX
