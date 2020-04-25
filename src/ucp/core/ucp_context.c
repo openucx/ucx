@@ -1012,8 +1012,8 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
     }
 }
 
-static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
-                                        const ucp_config_t *config)
+static ucs_status_t ucp_fill_sockaddr_prio_list(ucp_context_h context,
+                                                const ucp_config_t *config)
 {
     const char **sockaddr_tl_names = (const char**)config->sockaddr_cm_tls.cm_tls;
     unsigned num_sockaddr_tls      = config->sockaddr_cm_tls.count;
@@ -1031,6 +1031,13 @@ static void ucp_fill_sockaddr_prio_list(ucp_context_h context,
                                     num_sockaddr_tls);
     ucp_fill_sockaddr_cms_prio_list(context, sockaddr_tl_names,
                                     num_sockaddr_tls, sockaddr_cm_enable);
+    if ((context->config.ext.sockaddr_cm_enable == UCS_YES) &&
+        (context->config.num_cm_cmpts == 0)) {
+        ucs_error("UCX_SOCKADDR_CM_ENABLE is set to yes but none of the available components supports SOCKADDR_CM");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t ucp_check_resources(ucp_context_h context,
@@ -1286,9 +1293,11 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     }
 
     ucp_fill_sockaddr_aux_tls_config(context, config);
-    ucp_fill_sockaddr_prio_list(context, config);
+    status = ucp_fill_sockaddr_prio_list(context, config);
+    if (status != UCS_OK) {
+        goto err_free_resources;
+    }
 
-    ucs_assert(status == UCS_OK);
     goto out_release_components;
 
 err_free_resources:
