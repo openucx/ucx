@@ -41,7 +41,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 {
     uct_ib_mlx5_md_t *md   = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev   = &md->super.dev;
-    ucs_status_t status;
     struct mlx5dv_pd dvpd  = {};
     struct mlx5dv_cq dvscq = {};
     struct mlx5dv_cq dvrcq = {};
@@ -51,8 +50,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
     char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
     uct_ib_mlx5_mmio_mode_t mmio_mode;
-    uct_ib_mlx5_devx_uar_t *uar;
     int max_tx, max_rx, len_tx, len;
+    uct_ib_mlx5_devx_uar_t *uar;
+    ucs_status_t status;
     int wqe_size;
     int dvflags;
     void *qpc;
