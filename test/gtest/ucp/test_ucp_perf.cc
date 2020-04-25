@@ -67,7 +67,7 @@ const test_perf::test_spec test_ucp_perf::tests[] =
 
   { "tag sync mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI,
-    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 200000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.05, 100.0, 0},
 
   { "tag wild mr", "Mpps",
