@@ -187,7 +187,7 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
  */
 #define ucs_hlist_for_each_extract(_elem, _head, _member) \
     for (_elem = ucs_list_extract_head_elem(_head, typeof(*(_elem)), _member); \
-         &(_elem)->_member != NULL; \
+         _elem != ucs_container_of(NULL, typeof(*_elem), _member); \
          _elem = ucs_list_extract_head_elem(_head, typeof(*(_elem)), _member))
 
 
