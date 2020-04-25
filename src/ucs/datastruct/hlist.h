@@ -9,19 +9,22 @@
 
 #include "list.h"
 
+#include <stddef.h>
+
 
 BEGIN_C_DECLS
 
-/*
+/**
  * Detached-head circular list: unlike the basic double-linked list, the head
  * element is separate from the list, and it points to first element, or NULL if
  * the list is empty.
- *  It reduces the size of list head from 2 pointers to 1 pointer, but adds some
+ * It reduces the size of list head from 2 pointers to 1 pointer, and allows
+ * storing the head element inside a reallocating hash table, but adds some
  * overhead to basic list operations.
  */
 
 
-/**
+/***
  * List element of a detached-head list.
  */
 typedef struct ucs_hlist_link {
@@ -29,7 +32,7 @@ typedef struct ucs_hlist_link {
 } ucs_hlist_link_t;
 
 
-/*
+/**
  * Head of a circular detached-head list.
  */
 typedef struct ucs_hlist_head {
@@ -126,7 +129,9 @@ static UCS_F_ALWAYS_INLINE void
 ucs_hlist_del(ucs_hlist_head_t *head, ucs_hlist_link_t *elem)
 {
     if (ucs_list_is_empty(&elem->list)) {
-        /* remove elem if it's not the only one in the list */
+        /* Remove elem if it's not the only one in the list.
+         * We assume here that head->ptr == elem, but cannot assert() to avoid
+         * dependency of assert.h */
         head->ptr = NULL;
     } else {
         if (head->ptr == elem) {
@@ -161,19 +166,29 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
 
 
 /**
+ * Remove the first element from a detached-head list, and return its containing
+ * type.
+ *
+ * @param _head    List head to remove from.
+ * @param _type    Type of the structure containing list element.
+ * @param _member  List element inside the containing structure.
+ */
+#define ucs_list_extract_head_elem(_head, _type, _member) \
+    ucs_container_of(ucs_hlist_extract_head(_head), _type, _member)
+
+
+/**
  * Iterate over detached-head list, while removing the head element, until the
  * list becomes empty.
  *
  * @param _elem     Variable to hold the current list element
  * @param _head     Pointer to list head.
- * @param _memeber  Struct member inside '_elem' which is the list element.
+ * @param _member   List element inside the containing structure.
  */
 #define ucs_hlist_for_each_extract(_elem, _head, _member) \
-    for (_elem = ucs_container_of(ucs_hlist_extract_head(_head), \
-                                  typeof(*_elem), _member); \
+    for (_elem = ucs_list_extract_head_elem(_head, typeof(*(_elem)), _member); \
          &(_elem)->_member != NULL; \
-         _elem = ucs_container_of(ucs_hlist_extract_head(_head), \
-                                  typeof(*_elem), _member))
+         _elem = ucs_list_extract_head_elem(_head, typeof(*(_elem)), _member))
 
 
 END_C_DECLS

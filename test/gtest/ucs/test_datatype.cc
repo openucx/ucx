@@ -88,8 +88,8 @@ UCS_TEST_F(test_datatype, list_splice) {
 }
 
 UCS_TEST_F(test_datatype, hlist_basic) {
-    ucs_hlist_head_t head;
     elem_t elem1, elem2, elem3;
+    ucs_hlist_head_t head;
     elem_t *elem;
 
     elem1.i = 1;
@@ -106,6 +106,15 @@ UCS_TEST_F(test_datatype, hlist_basic) {
 
     ucs_hlist_del(&head, &elem1.hlist);
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
+
+    /* when list is empty, extract_head should return NULL */
+    ucs_hlist_link_t *helem = ucs_hlist_extract_head(&head);
+    EXPECT_TRUE(helem == NULL);
+
+    /* add one element to head and extract it */
+    ucs_hlist_add_head(&head, &elem1.hlist);
+    elem = ucs_list_extract_head_elem(&head, elem_t, hlist);
+    EXPECT_EQ(&elem1, elem);
 
     /* add 3 elements */
     ucs_hlist_add_tail(&head, &elem2.hlist);
