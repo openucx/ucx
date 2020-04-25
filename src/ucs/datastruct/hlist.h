@@ -166,6 +166,57 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
 
 
 /**
+ * Get list head element as the containing type, assuming the list is not empty.
+ *
+ * @param _head    List head.
+ * @param _type    Containing structure type.
+ * @param _member  List element inside the containing structure.
+ *
+ * @note If the list is empty this macro has undefined behavior.
+ */
+#define ucs_hlist_head_elem(_head, _type, _member) \
+    ucs_container_of((_head)->ptr, _type, _member)
+
+
+/**
+ * Get list next element as the containing type.
+ *
+ * @param _elem    List element.
+ * @param _type    Containing structure type.
+ * @param _member  List element inside the containing structure.
+ */
+#define ucs_hlist_next_elem(_elem, _member) \
+    ucs_container_of(ucs_list_next(&(_elem)->_member.list, ucs_hlist_link_t, \
+                                   list), \
+                     typeof(*_elem), _member)
+
+
+/**
+ * Iterate over detached-head list.
+ *
+ * @param _elem     Variable to hold the current list element
+ * @param _head     Pointer to list head.
+ * @param _member   List element inside the containing structure.
+ *
+ * @note The iteration is implemented by first setting the element to NULL, then
+ * inside 'for' loop condition (which is done before each iteration), we advance
+ * the element pointer and check for end condition: in the first iteration,
+ * when elem is NULL, we check that the list is not empty. For subsequent
+ * iterations, we check that elem has not reached the list head yet.
+ */
+#define ucs_hlist_for_each(_elem, _head, _member) \
+    for (_elem = NULL; \
+         (_elem == NULL) ? \
+             /* first iteration: check _head->ptr != NULL */ \
+             ((_elem = ucs_hlist_head_elem(_head, typeof(*_elem), _member)) != \
+                     ucs_container_of(NULL, typeof(*(_elem)), _member)) : \
+             /* rest of iterations: check _elem != _head->ptr */ \
+             ((_elem = ucs_hlist_next_elem(_elem, _member)) != \
+                     ucs_hlist_head_elem(_head, typeof(*_elem), _member)); \
+         )
+
+
+/**
  * Remove the first element from a detached-head list, and return its containing
  * type.
  *
