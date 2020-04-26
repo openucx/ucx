@@ -538,6 +538,9 @@ ucp_am_handler_reply(void *am_arg, void *am_data, size_t am_length,
     ucp_ep_h reply_ep;
 
     reply_ep = ucp_worker_get_ep_by_ptr(worker, hdr->ep_ptr);
+    if (reply_ep == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
  
     return ucp_am_handler_common(worker, hdr + 1, sizeof(*hdr),
                                  am_length - sizeof(*hdr), reply_ep,
@@ -612,12 +615,18 @@ ucp_am_long_handler_common(void *am_arg, void *am_data, size_t am_length,
 {
     ucp_worker_h worker         = (ucp_worker_h)am_arg;
     ucp_am_long_hdr_t *long_hdr = (ucp_am_long_hdr_t *)am_data;
-    ucp_ep_h ep                 = ucp_worker_get_ep_by_ptr(worker, 
-                                                           long_hdr->ep);
-    ucp_ep_ext_proto_t *ep_ext  = ucp_ep_ext_proto(ep);
+    ucp_ep_ext_proto_t *ep_ext;
     ucp_recv_desc_t *all_data;
     size_t left;
+    ucp_ep_h ep;
     ucp_am_unfinished_t *unfinished;
+
+    ep = ucp_worker_get_ep_by_ptr(worker, long_hdr->ep);
+    if (ep == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    ep_ext = ucp_ep_ext_proto(ep);
 
     if (ucs_unlikely((long_hdr->am_id >= worker->am_cb_array_len) ||
                      (worker->am_cbs[long_hdr->am_id].cb == NULL))) {
@@ -679,11 +688,14 @@ ucp_am_long_handler_reply(void *am_arg, void *am_data, size_t am_length,
 { 
     ucp_worker_h worker         = (ucp_worker_h)am_arg;
     ucp_am_long_hdr_t *long_hdr = (ucp_am_long_hdr_t *)am_data;
-    ucp_ep_h ep                 = ucp_worker_get_ep_by_ptr(worker, 
-                                                           long_hdr->ep);
+    ucp_ep_h ep;
+
+    ep = ucp_worker_get_ep_by_ptr(worker, long_hdr->ep);
+    if (ep == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
     
-    return ucp_am_long_handler_common(am_arg, am_data, am_length, am_flags,
-                                      ep);
+    return ucp_am_long_handler_common(am_arg, am_data, am_length, am_flags, ep);
 }
 
 static ucs_status_t

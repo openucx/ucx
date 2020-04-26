@@ -199,10 +199,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
-    ucp_ep_h ep                      = ucp_worker_get_ep_by_ptr(worker,
-                                                                atomicreqh->req.ep_ptr);
     ucp_rsc_index_t amo_rsc_idx      = ucs_ffs64_safe(worker->atomic_tls);
     ucp_request_t *req;
+    ucp_ep_h ep;
+
+    ep = ucp_worker_get_ep_by_ptr(worker, atomicreqh->req.ep_ptr);
+    if (ep == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
 
     if (ucs_unlikely((amo_rsc_idx != UCP_MAX_RESOURCES) &&
                      (ucp_worker_iface_get_attr(worker,
