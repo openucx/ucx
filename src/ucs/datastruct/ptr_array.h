@@ -18,13 +18,13 @@
  *
  *         64                 32               1   0
  *          +-----------------+----------------+---+
- * free:    |     size_free   |  next index    | 1 |
+ * free:    |     free_ahead  |  next index    | 1 |
  *          +-----------------+----------------+---+
  * used:    |           user pointer           | 0 |
  *          +-----------------+----------------+---+
  *
  *
- * size_free indicates the number of consecutive free elements ahead.
+ * free_ahead is the number of consecutive free elements ahead.
  *
  * The remove / insert algorithm works as follows:
  * On remove of an index: If start[index+1] is free ==> 
@@ -61,11 +61,11 @@ typedef struct ucs_ptr_array {
 /* Flags added to lower bits of the value */
 #define UCS_PTR_ARRAY_FLAG_FREE    ((unsigned long)0x01)  /* Slot is free */
 
-#define UCS_PTR_ARRAY_SIZE_FREE_SHIFT 32
-#define UCS_PTR_ARRAY_SIZE_FREE_MASK  (((ucs_ptr_array_elem_t)-1) & ~UCS_MASK(UCS_PTR_ARRAY_SIZE_FREE_SHIFT))
-#define UCS_PTR_ARRAY_NEXT_SHIFT      1
-#define UCS_PTR_ARRAY_NEXT_MASK       (UCS_MASK(UCS_PTR_ARRAY_SIZE_FREE_SHIFT) & ~UCS_MASK(UCS_PTR_ARRAY_NEXT_SHIFT))
-#define UCS_PTR_ARRAY_SENTINEL        (UCS_PTR_ARRAY_NEXT_MASK >> UCS_PTR_ARRAY_NEXT_SHIFT)
+#define UCS_PTR_ARRAY_FREE_AHEAD_SHIFT 32
+#define UCS_PTR_ARRAY_FREE_AHEAD_MASK  (((ucs_ptr_array_elem_t)-1) & ~UCS_MASK(UCS_PTR_ARRAY_FREE_AHEAD_SHIFT))
+#define UCS_PTR_ARRAY_NEXT_SHIFT       1
+#define UCS_PTR_ARRAY_NEXT_MASK        (UCS_MASK(UCS_PTR_ARRAY_FREE_AHEAD_SHIFT) & ~UCS_MASK(UCS_PTR_ARRAY_NEXT_SHIFT))
+#define UCS_PTR_ARRAY_SENTINEL         (UCS_PTR_ARRAY_NEXT_MASK >> UCS_PTR_ARRAY_NEXT_SHIFT)
 
 #define __ucs_ptr_array_is_free(_elem) \
     ((uintptr_t)(_elem) & UCS_PTR_ARRAY_FLAG_FREE)
@@ -176,7 +176,7 @@ __ucs_ptr_array_for_each_get_step_size(ucs_ptr_array_t *ptr_array,
     ucs_ptr_array_elem_t elem = ptr_array->start[element_index];
 
     if (ucs_unlikely(__ucs_ptr_array_is_free((ucs_ptr_array_elem_t)elem))) {
-       size_elem = (elem >> UCS_PTR_ARRAY_SIZE_FREE_SHIFT);
+       size_elem = (elem >> UCS_PTR_ARRAY_FREE_AHEAD_SHIFT);
     } else {
        size_elem = 1;
     }

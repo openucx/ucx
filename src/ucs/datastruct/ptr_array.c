@@ -21,28 +21,28 @@
 #define UCS_PTR_ARRAY_INITIAL_SIZE  8
 
 
-UCS_F_ALWAYS_INLINE int
+static UCS_F_ALWAYS_INLINE int
 ucs_ptr_array_is_free(ucs_ptr_array_t *ptr_array, unsigned element_index)
 {
     return (element_index < ptr_array->size) &&
             __ucs_ptr_array_is_free(ptr_array->start[element_index]);
 }
 
-UCS_F_ALWAYS_INLINE uint32_t
+static UCS_F_ALWAYS_INLINE uint32_t
 ucs_ptr_array_size_free_get_free_ahead(ucs_ptr_array_elem_t elem)
 {
     ucs_assert(__ucs_ptr_array_is_free(elem));
-    return elem >> UCS_PTR_ARRAY_SIZE_FREE_SHIFT;
+    return elem >> UCS_PTR_ARRAY_FREE_AHEAD_SHIFT;
 }
 
-UCS_F_ALWAYS_INLINE unsigned
+static UCS_F_ALWAYS_INLINE unsigned
 ucs_ptr_array_freelist_get_next(ucs_ptr_array_elem_t elem)
 {
     ucs_assert(__ucs_ptr_array_is_free(elem));
     return (elem & UCS_PTR_ARRAY_NEXT_MASK) >> UCS_PTR_ARRAY_NEXT_SHIFT;
 }
 
-UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE void
 ucs_ptr_array_freelist_set_next(ucs_ptr_array_elem_t *elem, unsigned next)
 {
     ucs_assert(next <= UCS_PTR_ARRAY_NEXT_MASK);
@@ -54,20 +54,20 @@ ucs_ptr_array_freelist_set_next(ucs_ptr_array_elem_t *elem, unsigned next)
  * Sets all values of a free ptr array element
  *
  * @param [in/out] elem       Pointer to a free element in the ptr array.
- * @param [in]     size_free  Number of free consecutive elements ahead.
+ * @param [in]     free_ahead Number of free consecutive elements ahead.
  * @param [in]     next       Pointer to the next element in the ptr array.
  *
  * Complexity: O(1)
  */
-UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE void
 ucs_ptr_array_freelist_element_set(ucs_ptr_array_elem_t *elem,
-                                   uint32_t size_free,
+                                   uint32_t free_ahead,
                                    unsigned next)
 {
     ucs_assert(next <= UCS_PTR_ARRAY_NEXT_MASK);
 
     *elem = UCS_PTR_ARRAY_FLAG_FREE |
-            (((ucs_ptr_array_elem_t)size_free) << UCS_PTR_ARRAY_SIZE_FREE_SHIFT) |
+            (((ucs_ptr_array_elem_t)free_ahead) << UCS_PTR_ARRAY_FREE_AHEAD_SHIFT) |
             (((ucs_ptr_array_elem_t)next) << UCS_PTR_ARRAY_NEXT_SHIFT);
 }
 
@@ -153,7 +153,7 @@ static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array UCS_MEMTRACK_ARG)
 
     /* Link all new array items */
     for (i = curr_size; i < new_size; ++i) {
-        ucs_ptr_array_freelist_element_set(&new_array[i], (new_size - i),
+        ucs_ptr_array_freelist_element_set(&new_array[i], new_size - i,
                                            i + 1);
     }
     ucs_ptr_array_freelist_set_next(&new_array[new_size - 1], UCS_PTR_ARRAY_SENTINEL);
