@@ -350,7 +350,7 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
     ucs_assert(reqhdr->reqptr != 0);
     req = ucp_proto_ssend_ack_request_alloc(worker, reqhdr->ep_ptr);
     if (req == NULL) {
-        ucs_fatal("could not allocate request");
+        return;
     }
 
     req->send.proto.am_id          = UCP_AM_ID_EAGER_SYNC_ACK;

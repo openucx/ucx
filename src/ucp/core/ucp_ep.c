@@ -141,7 +141,9 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
 
     ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
     kh_put(ucp_worker_ep_ptrs, &worker->ep_ptrs, (uintptr_t)ep, &ret);
-    ucs_assertv(ret > 0, "ret=%d", ret);
+    if (ret == 0) {
+        ucs_warn("failed to add ep %p to worker (%p) ep ptrs hash", ep, worker);
+    }
 
     *ep_p = ep;
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
@@ -163,7 +165,9 @@ void ucp_ep_delete(ucp_ep_h ep)
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
 
     iter = kh_get(ucp_worker_ep_ptrs, &ep->worker->ep_ptrs, (uintptr_t)ep);
-    ucs_assertv(iter != kh_end(&ep->worker->ep_ptrs), "worker=%p", ep->worker);
+    if (iter == kh_end(&ep->worker->ep_ptrs)) {
+        ucs_warn("ep %p does not exist on worker %p", ep, ep->worker);
+    }
     kh_del(ucp_worker_ep_ptrs, &ep->worker->ep_ptrs, iter);
 
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
