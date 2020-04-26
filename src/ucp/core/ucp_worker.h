@@ -311,8 +311,8 @@ static inline const char* ucp_worker_get_name(ucp_worker_h worker)
 static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
                                                 uintptr_t ep_ptr)
 {
-    khiter_t iter;
     ucp_ep_h ep = (ucp_ep_h)ep_ptr;
+    khiter_t iter;
 
     iter = kh_get(ucp_worker_ep_ptrs, &worker->ep_ptrs, ep_ptr);
     if (iter == kh_end(&worker->ep_ptrs)) {
