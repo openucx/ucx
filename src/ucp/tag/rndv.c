@@ -913,6 +913,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     /* rreq is the receive request on the receiver's side */
     rreq->recv.tag.info.sender_tag = rndv_rts_hdr->super.tag;
     rreq->recv.tag.info.length     = rndv_rts_hdr->size;
+    rreq->flags                   |= UCP_REQUEST_FLAG_RNDV_MATCHED;
 
     /* the internal send request allocated on receiver side (to perform a "get"
      * operation, send "ATS" and "RTR") */
@@ -927,6 +928,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     rndv_req->flags             = 0;
     rndv_req->send.mdesc        = NULL;
     rndv_req->send.pending_lane = UCP_NULL_LANE;
+    rreq->recv.tag.rndv_req     = rndv_req;
 
     ucp_trace_req(rreq,
                   "rndv matched remote {address 0x%"PRIx64" size %zu sreq 0x%lx}"
@@ -1017,9 +1019,6 @@ static void ucp_rndv_unexp_cancel(ucp_worker_h worker,
 
     ucp_recv_desc_t *rdesc;
     ucs_list_link_t *list;
-
-    ucs_warn("rndv cancel remote request 0x%lx ep 0x%lx",
-             rndv_rts_hdr->sreq.reqptr, rndv_rts_hdr->sreq.ep_ptr);
 
     list = ucp_tag_unexp_get_list_for_tag(&worker->tm, rndv_rts_hdr->super.tag);
     ucs_list_for_each(rdesc, list, tag_list[UCP_RDESC_HASH_LIST]) {

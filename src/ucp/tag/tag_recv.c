@@ -104,6 +104,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
     req->recv.tag.cb        = cb;
+    req->recv.tag.rndv_req  = NULL;
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         req->recv.tag.info.sender_tag = 0;
     }
@@ -150,7 +151,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     ucs_assert((status == UCS_OK) || (status == UCS_INPROGRESS));
 
     /* process additional fragments */
-    ucp_tag_frag_list_process_queue(&worker->tm, req, msg_id
+    ucp_tag_frag_list_process_queue(&worker->tm, req, msg_id, eagerf_hdr->super.ep_ptr
                                     UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
 }
 

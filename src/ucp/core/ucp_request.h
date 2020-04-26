@@ -47,6 +47,7 @@ enum {
     UCP_REQUEST_FLAG_SEND_RNDV            = UCS_BIT(15),
     UCP_REQUEST_FLAG_RNDV_RTS_SENT        = UCS_BIT(16),
     UCP_REQUEST_FLAG_CANCELED             = UCS_BIT(17),
+    UCP_REQUEST_FLAG_RNDV_MATCHED         = UCS_BIT(18),
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(29),
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(30),
@@ -287,7 +288,9 @@ struct ucp_request {
                     ucp_worker_iface_t      *wiface;  /* Cached iface this request
                                                          is received on. Used in
                                                          tag offload expected callbacks*/
-                } tag;
+                    ucp_request_t           *rndv_req; /* pointer to rndv get reqeust */
+                    uintptr_t               ep_ptr;    /* ep of partial expected request */
+               } tag;
 
                 struct {
                     ucp_request_t           *rreq;    /* recv request on recv side */

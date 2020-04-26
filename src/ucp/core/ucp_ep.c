@@ -30,6 +30,8 @@
 #include <ucs/sys/sock.h>
 #include <string.h>
 
+#include <ucp/tag/tag_match.inl>
+
 
 typedef struct {
     double reg_growth;
@@ -772,6 +774,73 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     }
 }
 
+static void ucp_ep_cleanup_unexp(ucp_ep_h ep)
+{
+    ucp_tag_match_t *tm = &ep->worker->tm;
+    const ucp_rndv_rts_hdr_t *rndv_rts_hdr;
+    const ucp_eager_middle_hdr_t *eager_mid_hdr;
+    const ucp_eager_hdr_t *eager_hdr;
+    ucp_recv_desc_t *rdesc, *tmp;
+    ucp_tag_frag_match_t *matchq;
+    ucp_request_t *rreq;
+    uint64_t msg_id;
+    khiter_t iter;
+
+    ucs_debug("cleanup ep %p", ep);
+
+    /* remove from unexpected queue */
+    ucs_list_for_each_safe(rdesc, tmp, &tm->unexpected.all,
+                           tag_list[UCP_RDESC_ALL_LIST]) {
+        if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV) {
+            rndv_rts_hdr = (const void*)(rdesc + 1);
+            if (rndv_rts_hdr->sreq.ep_ptr != (uintptr_t)ep) {
+                /* rndv not matched */
+                continue;
+            }
+        } else {
+            eager_hdr = (const void*)(rdesc + 1);
+            if ((uintptr_t)ep != eager_hdr->ep_ptr) {
+                /* rndv not matched */
+                continue;
+            }
+        }
+
+        ucs_debug("releasing unexpected rdesc %p", rdesc);
+        ucp_tag_unexp_remove(rdesc);
+        ucp_recv_desc_release(rdesc);
+    }
+
+    /* remove from fragments hash */
+    kh_foreach_key(&tm->frag_hash, msg_id, {
+        iter   = kh_get(ucp_tag_frag_hash, &tm->frag_hash, msg_id);
+        matchq = &kh_val(&tm->frag_hash, iter);
+        if (!ucp_tag_frag_match_is_unexp(matchq)) {
+            rreq = matchq->exp_req;
+            if (rreq->recv.tag.ep_ptr == (uintptr_t)ep) {
+                ucs_debug("completing req %p", rreq);
+                ucp_request_complete_tag_recv(rreq, UCS_ERR_CANCELED);
+            }
+            continue;
+        }
+
+        rdesc = ucs_queue_head_elem_non_empty(&matchq->unexp_q, ucp_recv_desc_t,
+                                              tag_frag_queue);
+        ucs_assert(!(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV));
+        eager_mid_hdr = (void*)(rdesc + 1);
+        if (eager_mid_hdr->ep_ptr != (uintptr_t)ep) {
+            continue;
+        }
+
+        ucs_queue_for_each_extract(rdesc, &matchq->unexp_q, tag_frag_queue, 1) {
+            ucs_debug("releasing unexpected rdesc %p", rdesc);
+            ucp_recv_desc_release(rdesc);
+        }
+
+        kh_del(ucp_tag_frag_hash, &tm->frag_hash, iter);
+    });
+
+}
+
 /* Must be called with async lock held */
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
@@ -799,6 +868,9 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
         ucs_trace("not destroying ep %p because of connection from remote", ep);
         return;
     }
+
+    ucp_ep_cleanup_unexp(ep);
+    ucp_ep_complete_rndv_reqs(ep);
 
     ucp_ep_match_remove_ep(&ep->worker->ep_match_ctx, ep);
     ucp_ep_destroy_internal(ep);
@@ -911,8 +983,6 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
-
-    ucp_ep_complete_rndv_reqs(ep);
 
     ep->flags |= UCP_EP_FLAG_CLOSED;
     request = ucp_ep_flush_internal(ep,
