@@ -84,10 +84,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "enough will be sent inline.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_inline), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TX_INLINE_RESP", "32",
+  {"TX_INLINE_RESP", "0",
    "Bytes to reserve in send WQE for inline response. Responses which are small\n"
    "enough, such as of atomic operations and small reads, will be received inline.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.inl_resp), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_TX]), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_MIN_SGE", "3",
    "Number of SG entries to reserve in the send WQE.",
@@ -132,7 +132,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Number of bytes to request for inline receive. If the maximal supported size\n"
    "is smaller, it will be used instead. If it is possible to support a larger\n"
    "size than requested with the same hardware resources, it will be used instead.",
-   ucs_offsetof(uct_ib_iface_config_t, rx.inl), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_RX]), UCS_CONFIG_TYPE_MEMUNITS},
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 0, "receive",
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
@@ -749,82 +749,93 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
     qp = ibv_create_qp(uct_ib_iface_md(iface)->pd, &attr->ibv);
 #endif
     if (qp == NULL) {
-        ucs_error("iface=%p: failed to create %s QP TX wr:%d sge:%d inl:%d RX wr:%d sge:%d inl %d: %m",
+        ucs_error("iface=%p: failed to create %s QP "
+                  "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d: %m",
                   iface, uct_ib_qp_type_str(attr->qp_type),
-                  attr->cap.max_send_wr, attr->cap.max_send_sge, attr->cap.max_inline_data,
-                  attr->cap.max_recv_wr, attr->cap.max_recv_sge, attr->max_inl_recv);
+                  attr->cap.max_send_wr, attr->cap.max_send_sge,
+                  attr->cap.max_inline_data, attr->max_inl_cqe[UCT_IB_DIR_TX],
+                  attr->cap.max_recv_wr, attr->cap.max_recv_sge,
+                  attr->max_inl_cqe[UCT_IB_DIR_RX]);
         return UCS_ERR_IO_ERROR;
     }
 
     attr->cap  = attr->ibv.cap;
     *qp_p      = qp;
 
-    ucs_debug("iface=%p: created %s QP 0x%x on %s:%d TX wr:%d sge:%d inl:%d RX wr:%d sge:%d inl %d",
+    ucs_debug("iface=%p: created %s QP 0x%x on %s:%d "
+              "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
               iface, uct_ib_qp_type_str(attr->qp_type), qp->qp_num,
               uct_ib_device_name(dev), iface->config.port_num,
-              attr->cap.max_send_wr, attr->cap.max_send_sge, attr->cap.max_inline_data,
-              attr->cap.max_recv_wr, attr->cap.max_recv_sge, attr->max_inl_recv);
+              attr->cap.max_send_wr, attr->cap.max_send_sge,
+              attr->cap.max_inline_data, attr->max_inl_cqe[UCT_IB_DIR_TX],
+              attr->cap.max_recv_wr, attr->cap.max_recv_sge,
+              attr->max_inl_cqe[UCT_IB_DIR_RX]);
 
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
-                                    struct ibv_comp_channel *channel,
-                                    int comp_vector, int ignore_overrun,
-                                    size_t *inl, struct ibv_cq **cq_p)
+ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                    const uct_ib_iface_init_attr_t *init_attr,
+                                    int preferred_cpu, size_t inl)
 {
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
     struct ibv_cq *cq;
 #if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
     struct ibv_cq_init_attr_ex cq_attr = {};
 
-    cq_attr.cqe = cqe;
-    cq_attr.channel = channel;
-    cq_attr.comp_vector = comp_vector;
-    if (ignore_overrun) {
+    cq_attr.cqe         = init_attr->cq_len[dir];
+    cq_attr.channel     = iface->comp_channel;
+    cq_attr.comp_vector = preferred_cpu;
+    if (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN) {
         cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
-        cq_attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
+        cq_attr.flags     = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
     }
 
-    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(context, &cq_attr));
+    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(dev->ibv_context, &cq_attr));
     if (!cq && (errno == ENOSYS))
 #endif
     {
-        *inl = 0;
-        cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+        iface->config.max_inl_cqe[dir] = 0;
+        cq = ibv_create_cq(dev->ibv_context, init_attr->cq_len[dir], NULL,
+                           iface->comp_channel, preferred_cpu);
     }
 
     if (!cq) {
-        ucs_error("ibv_create_cq(cqe=%d) failed: %m", cqe);
+        ucs_error("ibv_create_cq(cqe=%d) failed: %m", init_attr->cq_len[dir]);
         return UCS_ERR_IO_ERROR;
     }
 
-    *cq_p = cq;
+    iface->cq[dir]                 = cq;
+    iface->config.max_inl_cqe[dir] = inl;
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
-                                           size_t *inl, int preferred_cpu,
-                                           int flags, struct ibv_cq **cq_p)
+static ucs_status_t
+uct_ib_iface_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                       const uct_ib_iface_init_attr_t *init_attr,
+                       const uct_ib_iface_config_t *config,
+                       int preferred_cpu)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
     ucs_status_t status;
+    size_t inl                          = config->inl[dir];
 #if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+    uct_ib_device_t *dev                = uct_ib_iface_device(iface);
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
+    size_t cqe_size                     = 64;
+    int env_var_added                   = 0;
     const char *cqe_size_env_value;
-    size_t cqe_size = 64;
     size_t cqe_size_min;
     char cqe_size_buf[32];
-    int env_var_added = 0;
     int ret;
 
-    cqe_size_min       = (*inl > 32) ? 128 : 64;
+    cqe_size_min       = (inl > 32) ? 128 : 64;
     cqe_size_env_value = getenv(cqe_size_env_var);
 
     if (cqe_size_env_value != NULL) {
         cqe_size = atol(cqe_size_env_value);
         if (cqe_size < cqe_size_min) {
             ucs_error("%s is set to %zu, but at least %zu is required (inl: %zu)",
-                      cqe_size_env_var, cqe_size, cqe_size_min, *inl);
+                      cqe_size_env_var, cqe_size, cqe_size_min, inl);
             return UCS_ERR_INVALID_PARAM;
         }
     } else {
@@ -842,9 +853,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
         env_var_added = 1;
     }
 #endif
-    status = iface->ops->create_cq(dev->ibv_context, cq_length,
-                                   iface->comp_channel, preferred_cpu,
-                                   flags & UCT_IB_CQ_IGNORE_OVERRUN, inl, cq_p);
+    status = iface->ops->create_cq(iface, dir, init_attr, preferred_cpu, inl);
     if (status != UCS_OK) {
         goto out_unsetenv;
     }
@@ -853,7 +862,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
 
 out_unsetenv:
 #if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
-    *inl = cqe_size / 2;
+    iface->config.max_inl_cqe[dir] = cqe_size / 2;
     if (env_var_added) {
         /* if we created a new environment variable, remove it */
         ret = ibv_exp_unsetenv(dev->ibv_context, cqe_size_env_var);
@@ -997,7 +1006,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     int preferred_cpu;
     ucs_status_t status;
     uint8_t port_num;
-    size_t inl;
 
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
         return UCS_ERR_UNSUPPORTED;
@@ -1090,15 +1098,11 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_comp_channel;
     }
 
-    inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, init_attr->tx_cq_len, &inl,
-                                    preferred_cpu, init_attr->flags,
-                                    &self->cq[UCT_IB_DIR_TX]);
+    status = uct_ib_iface_create_cq(self, UCT_IB_DIR_TX, init_attr,
+                                    config, preferred_cpu);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
-    ucs_assert_always(inl <= UINT8_MAX);
-    self->config.max_inl_resp = inl;
 
     status = uct_ib_iface_set_moderation(self->cq[UCT_IB_DIR_TX],
                                          config->tx.cq_moderation_count,
@@ -1107,10 +1111,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_send_cq;
     }
 
-    inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, init_attr->rx_cq_len, &inl,
-                                    preferred_cpu, init_attr->flags,
-                                    &self->cq[UCT_IB_DIR_RX]);
+    status = uct_ib_iface_create_cq(self, UCT_IB_DIR_RX, init_attr,
+                                    config, preferred_cpu);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
     }
