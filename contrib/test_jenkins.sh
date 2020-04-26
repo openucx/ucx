@@ -104,6 +104,14 @@ module_load() {
 }
 
 #
+# Safe unload for env modules (even if it doesn't exist)
+#
+module_unload() {
+	module=$1
+	module unload "${module}" || true
+}
+
+#
 # try load cuda modules if nvidia driver is installed
 #
 try_load_cuda_env() {
@@ -120,8 +128,8 @@ try_load_cuda_env() {
 }
 
 unload_cuda_env() {
-	module unload $CUDA_MODULE || true
-	module unload $GDRCOPY_MODULE || true
+	module_unload $CUDA_MODULE
+	module_unload $GDRCOPY_MODULE
 }
 
 #
@@ -401,7 +409,7 @@ build_icc() {
 		echo "==== Not building with Intel compiler ===="
 		echo "ok 1 - # SKIP because Intel compiler not installed" >> build_icc.tap
 	fi
-	module unload intel/ics || true
+	module_unload intel/ics
 }
 
 #
@@ -430,7 +438,7 @@ build_pgi() {
 	fi
 
 	rm -rf ${pgi_test_file} ${pgi_test_file}.out
-	module unload pgi/latest || true
+	module_unload pgi/latest
 }
 
 #
@@ -479,7 +487,7 @@ build_ugni() {
 	$MAKE  distcheck
 	$MAKEP distclean
 
-	module unload dev/cray-ugni || true
+	module_unload dev/cray-ugni
 	echo "ok 1 - build successful " >> build_ugni.tap
 }
 
@@ -644,7 +652,7 @@ build_armclang() {
 	fi
 
 	rm -rf ${armclang_test_file} ${armclang_test_file}.out
-	module unload arm-compiler/latest || true
+	module_unload arm-compiler/latest
 }
 
 check_inst_headers() {
@@ -686,7 +694,7 @@ check_config_h() {
 	echo "==== Checking for config.h files in directory $srcdir ===="
 
 	missing=`find $srcdir -name \*.c -o -name \*.cc | xargs grep -LP '\#\s*include\s+"config.h"'`
-	
+
 	if [ `echo $missing | wc -w` -eq 0 ]
 	then
 		echo "ok 1 - check successful " >> check_config_h.tap
