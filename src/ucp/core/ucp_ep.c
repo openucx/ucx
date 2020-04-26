@@ -163,10 +163,11 @@ void ucp_ep_delete(ucp_ep_h ep)
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
 
     iter = kh_get(ucp_worker_ep_ptrs, &ep->worker->ep_ptrs, (uintptr_t)ep);
-    if (iter == kh_end(&ep->worker->ep_ptrs)) {
+    if (iter != kh_end(&ep->worker->ep_ptrs)) {
+        kh_del(ucp_worker_ep_ptrs, &ep->worker->ep_ptrs, iter);
+    } else {
         ucs_warn("ep %p does not exist on worker %p", ep, ep->worker);
     }
-    kh_del(ucp_worker_ep_ptrs, &ep->worker->ep_ptrs, iter);
 
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
