@@ -923,8 +923,12 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
         goto out;
     }
 
-    rndv_req->send.ep           = ucp_worker_get_ep_by_ptr(worker,
-                                                           rndv_rts_hdr->sreq.ep_ptr);
+    rndv_req->send.ep = ucp_worker_get_ep_by_ptr(worker, rndv_rts_hdr->sreq.ep_ptr);
+    if (rndv_req->send.ep == NULL) {
+        ucp_request_put(rndv_req);
+        goto out;
+    }
+
     rndv_req->flags             = 0;
     rndv_req->send.mdesc        = NULL;
     rndv_req->send.pending_lane = UCP_NULL_LANE;

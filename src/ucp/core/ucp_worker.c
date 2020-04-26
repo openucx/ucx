@@ -1706,6 +1706,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
+    kh_init_inplace(ucp_worker_ep_ptrs, &worker->ep_ptrs);
     ucp_ep_match_init(&worker->ep_match_ctx);
     ucs_list_head_init(&worker->rndv_reqs_list);
 
@@ -1853,6 +1854,7 @@ err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
+    kh_destroy_inplace(ucp_worker_ep_ptrs, &worker->ep_ptrs);
     ucs_free(worker);
     return status;
 }
@@ -1900,6 +1902,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
+    kh_destroy_inplace(ucp_worker_ep_ptrs, &worker->ep_ptrs);
     ucp_ep_match_cleanup(&worker->ep_match_ctx);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
