@@ -205,7 +205,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 
     ep = ucp_worker_get_ep_by_ptr(worker, atomicreqh->req.ep_ptr);
     if (ep == NULL) {
-        return UCS_ERR_NO_ELEM;
+        return UCS_OK;
     }
 
     if (ucs_unlikely((amo_rsc_idx != UCP_MAX_RESOURCES) &&

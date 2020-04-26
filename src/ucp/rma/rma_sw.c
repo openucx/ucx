@@ -154,7 +154,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
 
     ep = ucp_worker_get_ep_by_ptr(worker, puth->ep_ptr);
     if (ep == NULL) {
-        return UCS_ERR_NO_ELEM;
+        return UCS_OK;
     }
 
     ucp_rma_sw_send_cmpl(ep);

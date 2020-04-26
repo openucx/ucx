@@ -539,7 +539,7 @@ ucp_am_handler_reply(void *am_arg, void *am_data, size_t am_length,
 
     reply_ep = ucp_worker_get_ep_by_ptr(worker, hdr->ep_ptr);
     if (reply_ep == NULL) {
-        return UCS_ERR_NO_ELEM;
+        return UCS_OK;
     }
  
     return ucp_am_handler_common(worker, hdr + 1, sizeof(*hdr),
@@ -623,7 +623,7 @@ ucp_am_long_handler_common(void *am_arg, void *am_data, size_t am_length,
 
     ep = ucp_worker_get_ep_by_ptr(worker, long_hdr->ep);
     if (ep == NULL) {
-        return UCS_ERR_NO_ELEM;
+        return UCS_OK;
     }
 
     ep_ext = ucp_ep_ext_proto(ep);
@@ -692,7 +692,7 @@ ucp_am_long_handler_reply(void *am_arg, void *am_data, size_t am_length,
 
     ep = ucp_worker_get_ep_by_ptr(worker, long_hdr->ep);
     if (ep == NULL) {
-        return UCS_ERR_NO_ELEM;
+        return UCS_OK;
     }
     
     return ucp_am_long_handler_common(am_arg, am_data, am_length, am_flags, ep);
