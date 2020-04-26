@@ -473,6 +473,10 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
         ucp_ep_invoke_err_cb(ucp_ep, key.status);
     }
 
+    if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+        ucp_ep_local_disconnect_progress(ucp_ep_ext_gen(ucp_ep)->close_req.req);
+    }
+
     ucs_free(err_handle_arg);
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
