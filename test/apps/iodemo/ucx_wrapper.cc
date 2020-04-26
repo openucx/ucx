@@ -67,7 +67,9 @@ UcxContext::~UcxContext()
     destroy_connections();
     destroy_listener();
     destroy_worker();
-    ucp_cleanup(_context);
+    if (_context) {
+        ucp_cleanup(_context);
+    }
 }
 
 bool UcxContext::init()
@@ -351,8 +353,15 @@ void UcxContext::destroy_listener()
 
 void UcxContext::destroy_worker()
 {
-    ucp_request_cancel(_worker, _iomsg_recv_request);
-    wait_completion(_iomsg_recv_request);
+    if (!_worker) {
+        return;
+    }
+
+    if (_iomsg_recv_request != NULL) {
+        ucp_request_cancel(_worker, _iomsg_recv_request);
+        wait_completion(_iomsg_recv_request);
+    }
+
     ucp_worker_destroy(_worker);
 }
 
@@ -391,7 +400,7 @@ UcxConnection::~UcxConnection()
                         " uncompleted requests";
     }
     while (!_all_requests.empty()) {
-        _context.progress();
+        ucp_worker_progress(_context.worker());
     }
 
     UCX_CONN_LOG << "released";
@@ -625,10 +634,11 @@ void UcxConnection::handle_connection_error(ucs_status_t status)
 
 void UcxConnection::ep_close(enum ucp_ep_close_mode mode)
 {
+    static const char *mode_str[] = {"force", "flush"};
     assert(_ep);
     assert(!_close_request);
 
-    UCX_CONN_LOG << "closing ep " << _ep;
+    UCX_CONN_LOG << "closing ep " << _ep << " mode " << mode_str[mode];
     _close_request = ucp_ep_close_nb(_ep, mode);
     _ep            = NULL;
 }
