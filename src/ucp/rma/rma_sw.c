@@ -148,9 +148,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
 {
     ucp_put_hdr_t *puth = data;
     ucp_worker_h worker = arg;
+    ucp_ep_h ep;
 
     memcpy((void*)puth->address, puth + 1, length - sizeof(*puth));
-    ucp_rma_sw_send_cmpl(ucp_worker_get_ep_by_ptr(worker, puth->ep_ptr));
+
+    ep = ucp_worker_get_ep_by_ptr(worker, puth->ep_ptr);
+    if (ep == NULL) {
+        return UCS_OK;
+    }
+
+    ucp_rma_sw_send_cmpl(ep);
     return UCS_OK;
 }
 
@@ -159,7 +166,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flag
 {
     ucp_cmpl_hdr_t *putackh = data;
     ucp_worker_h worker     = arg;
-    ucp_ep_h ep             = ucp_worker_get_ep_by_ptr(worker, putackh->ep_ptr);
+    ucp_ep_h ep;
+
+    ep = ucp_worker_get_ep_by_ptr(worker, putackh->ep_ptr);
+    if (ep == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
 
     ucp_ep_rma_remote_request_completed(ep);
     return UCS_OK;
@@ -211,9 +223,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
 {
     ucp_get_req_hdr_t *getreqh = data;
     ucp_worker_h worker        = arg;
-    ucp_ep_h ep                = ucp_worker_get_ep_by_ptr(worker,
-                                                          getreqh->req.ep_ptr);
     ucp_request_t *req;
+    ucp_ep_h ep;
+
+    ep = ucp_worker_get_ep_by_ptr(worker, getreqh->req.ep_ptr);
+    if (ep == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
 
     req = ucp_request_get(worker);
     if (req == NULL) {

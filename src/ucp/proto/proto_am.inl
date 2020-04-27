@@ -471,11 +471,17 @@ ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, uintptr_t ep_ptr)
 
     req = ucp_request_get(worker);
     if (req == NULL) {
+        ucs_error("could not allocate request");
         return NULL;
     }
 
     req->flags              = 0;
     req->send.ep            = ucp_worker_get_ep_by_ptr(worker, ep_ptr);
+    if (req->send.ep == NULL) {
+        ucp_request_put(req);
+        return NULL;
+    }
+
     req->send.uct.func      = ucp_proto_progress_am_single;
     req->send.proto.comp_cb = ucp_request_put;
     req->send.proto.status  = UCS_OK;

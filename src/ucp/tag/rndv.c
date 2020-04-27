@@ -835,6 +835,12 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
     rreq->recv.tag.info.sender_tag = rndv_rts_hdr->super.tag;
     rreq->recv.tag.info.length     = rndv_rts_hdr->size;
 
+    ep = ucp_worker_get_ep_by_ptr(worker, rndv_rts_hdr->sreq.ep_ptr);
+    if (ep == NULL) {
+        ucp_request_complete_tag_recv(rreq, UCS_ERR_CANCELED);
+        goto out;
+    }
+
     /* the internal send request allocated on receiver side (to perform a "get"
      * operation, send "ATS" and "RTR") */
     rndv_req = ucp_request_get(worker);
@@ -843,8 +849,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
         goto out;
     }
 
-    rndv_req->send.ep           = ucp_worker_get_ep_by_ptr(worker,
-                                                           rndv_rts_hdr->sreq.ep_ptr);
+    rndv_req->send.ep           = ep;
     rndv_req->flags             = 0;
     rndv_req->send.mdesc        = NULL;
     rndv_req->send.pending_lane = UCP_NULL_LANE;

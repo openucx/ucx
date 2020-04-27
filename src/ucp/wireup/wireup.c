@@ -385,6 +385,9 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     /* wireup pre_request for a specific ep */
     ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
+    if (ep == NULL) {
+        return;
+    }
     ucs_assert(ep->flags & UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR);
 
     ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
@@ -428,6 +431,10 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     if (msg->dest_ep_ptr != 0) {
         /* wireup request for a specific ep */
         ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
+        if (ep == NULL) {
+            return;
+        }
+
         ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
         if (!(ep->flags & UCP_EP_FLAG_LISTENER)) {
             /* Reset flush state only if it's not a client-server wireup on
@@ -572,6 +579,9 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     int ack;
 
     ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
+    if (ep == NULL) {
+        return;
+    }
 
     ucs_assert(msg->type == UCP_WIREUP_MSG_REPLY);
     ucs_assert((!(ep->flags & UCP_EP_FLAG_LISTENER)));
@@ -618,6 +628,9 @@ void ucp_wireup_process_ack(ucp_worker_h worker, const ucp_wireup_msg_t *msg)
     ucp_ep_h ep;
 
     ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
+    if (ep == NULL) {
+        return;
+    }
 
     ucs_assert(msg->type == UCP_WIREUP_MSG_ACK);
     ucs_trace("ep %p: got wireup ack", ep);

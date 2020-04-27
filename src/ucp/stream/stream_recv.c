@@ -478,7 +478,11 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_assert(am_length >= sizeof(ucp_stream_am_hdr_t));
 
-    ep     = ucp_worker_get_ep_by_ptr(worker, data->hdr.ep_ptr);
+    ep = ucp_worker_get_ep_by_ptr(worker, data->hdr.ep_ptr);
+    if (ep == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
+
     ep_ext = ucp_ep_ext_proto(ep);
 
     if (ucs_unlikely(ep->flags & UCP_EP_FLAG_CLOSED)) {

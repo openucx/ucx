@@ -89,6 +89,7 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     ucp_ep_config_key_t key;
     ucp_lane_index_t lane;
     ucp_ep_h ep;
+    int ret;
 
     ep = ucs_strided_alloc_get(&worker->ep_alloc, "ucp_ep");
     if (ep == NULL) {
@@ -137,6 +138,11 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     }
 
     ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    kh_put(ucp_worker_ep_ptrs, &worker->ep_ptrs, (uintptr_t)ep, &ret);
+    if (ret == 0) {
+        ucs_warn("failed to add ep %p to worker (%p) ep ptrs hash", ep, worker);
+    }
+
     *ep_p = ep;
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
     return UCS_OK;
@@ -149,10 +155,20 @@ err:
 
 void ucp_ep_delete(ucp_ep_h ep)
 {
+    khiter_t iter;
+
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
+
+    iter = kh_get(ucp_worker_ep_ptrs, &ep->worker->ep_ptrs, (uintptr_t)ep);
+    if (iter != kh_end(&ep->worker->ep_ptrs)) {
+        kh_del(ucp_worker_ep_ptrs, &ep->worker->ep_ptrs, iter);
+    } else {
+        ucs_warn("ep %p does not exist on worker %p", ep, ep->worker);
+    }
+
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
 

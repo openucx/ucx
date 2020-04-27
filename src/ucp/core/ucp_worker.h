@@ -198,6 +198,8 @@ typedef struct ucp_worker_am_entry {
     uint32_t              flags;
 } ucp_worker_am_entry_t;
 
+KHASH_SET_INIT_INT64(ucp_worker_ep_ptrs)
+
 /**
  * UCP worker (thread context).
  */
@@ -226,6 +228,9 @@ typedef struct ucp_worker {
     ucs_strided_alloc_t           ep_alloc;      /* Endpoint allocator */
     ucs_list_link_t               stream_ready_eps; /* List of EPs with received stream data */
     ucs_list_link_t               all_eps;       /* List of all endpoints */
+
+    khash_t(ucp_worker_ep_ptrs)   ep_ptrs;
+
     ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            **ifaces;      /* Array of pointers to interfaces,
                                                     one for each resource */
@@ -306,6 +311,13 @@ static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
                                                 uintptr_t ep_ptr)
 {
     ucp_ep_h ep = (ucp_ep_h)ep_ptr;
+    khiter_t iter;
+
+    iter = kh_get(ucp_worker_ep_ptrs, &worker->ep_ptrs, ep_ptr);
+    if (iter == kh_end(&worker->ep_ptrs)) {
+        ucs_debug("ep %p does not exist on worker %p", (void*)ep_ptr, worker);
+        return NULL;
+    }
 
     ucs_assert(ep != NULL);
     ucs_assertv(ep->worker == worker, "worker=%p ep=%p ep->worker=%p", worker,

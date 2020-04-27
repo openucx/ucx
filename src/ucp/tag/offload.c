@@ -735,7 +735,7 @@ void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
 
     req = ucp_proto_ssend_ack_request_alloc(worker, ep_ptr);
     if (req == NULL) {
-        ucs_fatal("could not allocate request");
+        return;
     }
 
     req->send.proto.am_id      = UCP_AM_ID_OFFLOAD_SYNC_ACK;
