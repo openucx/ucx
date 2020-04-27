@@ -831,25 +831,26 @@ static void ucp_ep_cleanup_unexp(ucp_ep_h ep)
         iter   = kh_get(ucp_tag_frag_hash, &tm->frag_hash, msg_id);
         matchq = &kh_val(&tm->frag_hash, iter);
         if (!ucp_tag_frag_match_is_unexp(matchq)) {
+            /* remove receive request from expected hash */
             rreq = matchq->exp_req;
             if (rreq->recv.tag.ep_ptr == (uintptr_t)ep) {
                 ucs_debug("completing req %p", rreq);
                 ucp_request_complete_tag_recv(rreq, UCS_ERR_CANCELED);
             }
-            continue;
-        }
+        } else {
+            /* remove receive fragments from unexpected matchq */
+            rdesc = ucs_queue_head_elem_non_empty(&matchq->unexp_q, ucp_recv_desc_t,
+                                                  tag_frag_queue);
+            ucs_assert(!(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV));
+            eager_mid_hdr = (void*)(rdesc + 1);
+            if (eager_mid_hdr->ep_ptr != (uintptr_t)ep) {
+                continue;
+            }
 
-        rdesc = ucs_queue_head_elem_non_empty(&matchq->unexp_q, ucp_recv_desc_t,
-                                              tag_frag_queue);
-        ucs_assert(!(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV));
-        eager_mid_hdr = (void*)(rdesc + 1);
-        if (eager_mid_hdr->ep_ptr != (uintptr_t)ep) {
-            continue;
-        }
-
-        ucs_queue_for_each_extract(rdesc, &matchq->unexp_q, tag_frag_queue, 1) {
-            ucs_debug("releasing unexpected rdesc %p", rdesc);
-            ucp_recv_desc_release(rdesc);
+            ucs_queue_for_each_extract(rdesc, &matchq->unexp_q, tag_frag_queue, 1) {
+                ucs_debug("releasing unexpected rdesc %p", rdesc);
+                ucp_recv_desc_release(rdesc);
+            }
         }
 
         kh_del(ucp_tag_frag_hash, &tm->frag_hash, iter);
