@@ -29,7 +29,7 @@ AS_IF([test "x$with_java" != xno],
                             AC_CHECK_PROG(READLINK, readlink, yes)
                             AS_IF([test "x${READLINK}" = xyes],
                                   [
-                                   AC_SUBST([JAVA], [$(readlink -f $(type -P java))])
+                                   AC_SUBST([JAVA], [$(readlink -f $(type -P javac))])
                                    AC_SUBST([JAVA_HOME], [${JAVA%*/jre*}])
                                    AC_MSG_WARN([Please set JAVA_HOME=$JAVA_HOME])
                                   ],
