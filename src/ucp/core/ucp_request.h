@@ -122,6 +122,7 @@ struct ucp_request {
             size_t                length;   /* Total length, in bytes */
             ucs_memory_type_t     mem_type; /* Memory type */
             ucp_send_callback_t   cb;       /* Completion callback */
+            uint64_t              rndv_req_id;
 
             union {
                 ucp_wireup_msg_t  wireup;

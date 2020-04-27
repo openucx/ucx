@@ -199,6 +199,7 @@ typedef struct ucp_worker_am_entry {
 } ucp_worker_am_entry_t;
 
 KHASH_SET_INIT_INT64(ucp_worker_ep_ptrs)
+KHASH_MAP_INIT_INT64(ucp_worker_rndv_req_ptrs, uintptr_t)
 
 /**
  * UCP worker (thread context).
@@ -230,6 +231,8 @@ typedef struct ucp_worker {
     ucs_list_link_t               all_eps;       /* List of all endpoints */
 
     khash_t(ucp_worker_ep_ptrs)   ep_ptrs;
+    khash_t(ucp_worker_rndv_req_ptrs) rndv_req_ptrs;
+    uint64_t                          rndv_req_id;
 
     ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            **ifaces;      /* Array of pointers to interfaces,

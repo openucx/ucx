@@ -26,6 +26,7 @@ typedef struct {
 typedef struct {
     uint64_t                  reqptr;
     ucs_status_t              status;
+    uint8_t                   flags;
 } UCS_S_PACKED ucp_reply_hdr_t;
 
 
