@@ -398,6 +398,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     ucp_lane_index_t failed_lane                = err_handle_arg->failed_lane;
     ucp_lane_index_t lane;
     ucp_ep_config_key_t key;
+    ucp_request_t *close_req;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -474,7 +475,12 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     }
 
     if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
-        ucp_ep_local_disconnect_progress(ucp_ep_ext_gen(ucp_ep)->close_req.req);
+        /* Promote close operation to CANCEL in case of transport error, since
+         * the disconnect event may never arrive.
+         */
+        close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
+        close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
+        ucp_ep_local_disconnect_progress(close_req);
     }
 
     ucs_free(err_handle_arg);
