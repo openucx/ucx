@@ -1243,10 +1243,8 @@ enum uct_md_mem_attr_field {
 typedef struct uct_md_mem_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_md_mem_attr_t. Note that the field mask is
-     * populated upon return from uct_md_mem_query and not set by user.
-     * Subsequent use of members of the structure are valid after ensuring that
-     * relevant bits in the field_mask are set.
+     * @ref uct_md_mem_attr_t. The field mask is populated by the
+     * user. Fields not specified will be ignored by uct_md_mem_query
      */
     uint64_t          field_mask;
 
@@ -1267,19 +1265,20 @@ typedef struct uct_md_mem_attr {
  * @brief Query attributes of a given pointer
  *
  * Return attributes such as memory type, and system device for the
- * given pointer of specific length.
+ * given pointer of specific length depending on fields requested in mem_attr.
  *
- * @param [in]     md          Memory domain to run the query on. This function
- *                             returns an error if the md does not recognize the
- *                             pointer.
+ * @param [in]     md          Memory domain to run the query on.
  * @param [in]     address     The address of the pointer. Must be non-NULL
  *                             else UCS_ERR_INVALID_PARAM error is returned.
  * @param [in]     length      Length of the memory region to examine.
  *                             Must be nonzero else UCS_ERR_INVALID_PARAM error
  *                             is returned.
- * @param [out]    mem_attr    If successful, filled with ptr attributes.
+ * @param [in/out] mem_attr    MD attribute param specifying fields of interest.
+ *                             If successful, filled with ptr attributes.
  *
- * @return Error code.
+ * @return This function returns an appropriate error code if the md does not
+ *         recognize the pointer or if all of the requested fields in mem_attr
+ *         cannot be populated.
  */
 ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, const size_t length,
                               uct_md_mem_attr_t *mem_attr);
