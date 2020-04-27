@@ -56,7 +56,6 @@ static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
     ucp_request_send_generic_dt_finish(sreq);
     ucp_request_send_buffer_dereg(sreq);
     if (sreq->flags & UCP_REQUEST_FLAG_CANCELED) {
-        ucs_warn("cancel-completing rnv request %p", sreq);
         ucs_list_del(&sreq->send.list);
     }
     ucp_request_complete_send(sreq, status);
