@@ -35,6 +35,7 @@ static ucs_status_t uct_rocm_gdr_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_ROCM;
     md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.detect_mem_attr  = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_rocm_gdr_key_t);
