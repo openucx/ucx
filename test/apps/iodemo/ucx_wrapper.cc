@@ -217,16 +217,30 @@ const std::string UcxContext::sockaddr_str(const struct sockaddr* saddr,
                                            size_t addrlen)
 {
     char buf[128];
+    int port;
 
     if (saddr->sa_family != AF_INET) {
         return "<unknown address family>";
     }
 
-    struct sockaddr_in in_addr = {0};
-    memcpy(&in_addr, saddr, addrlen);
-    inet_ntop(AF_INET, &in_addr.sin_addr, buf, sizeof(buf));
-    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), ":%d",
-             ntohs(in_addr.sin_port));
+    struct sockaddr_storage addr = {0};
+    memcpy(&addr, saddr, addrlen);
+    switch (addr.ss_family) {
+    case AF_INET:
+        inet_ntop(AF_INET, &((struct sockaddr_in*)&addr)->sin_addr,
+                  buf, sizeof(buf));
+        port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
+        break;
+    case AF_INET6:
+        inet_ntop(AF_INET, &((struct sockaddr_in6*)&addr)->sin6_addr,
+                  buf, sizeof(buf));
+        port = ntohs(((struct sockaddr_in6*)&addr)->sin6_port);
+        break;
+    default:
+        return "<invalid address>";
+    }
+
+    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), ":%d", port);
     return buf;
 }
 
