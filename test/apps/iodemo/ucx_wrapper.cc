@@ -594,6 +594,8 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
                                     stream_send_callback, 0);
     if (!_context.wait_completion(sreq, 10)) {
         UCX_CONN_LOG << "failed to send remote connection id";
+        ucp_request_cancel(_context.worker(), rreq);
+        ucp_request_release(rreq);
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
         return false;
     }
