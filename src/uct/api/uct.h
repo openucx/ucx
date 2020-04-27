@@ -1275,7 +1275,7 @@ typedef struct uct_md_mem_attr {
  * @param [in]     length      Length of the memory region to examine.
  *                             Must be nonzero else UCS_ERR_INVALID_PARAM error
  *                             is returned.
- * @param [in/out] mem_attr    MD attribute param specifying fields of interest.
+ * @param [in,out] mem_attr    MD attribute param specifying fields of interest.
  *                             If successful, filled with ptr attributes.
  *
  * @return This function returns an appropriate error code if the md does not
