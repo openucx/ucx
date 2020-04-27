@@ -312,7 +312,7 @@ public:
 
             timersub(&tv_curr, &tv_start, &tv_diff);
             double elapsed = tv_diff.tv_sec + (tv_diff.tv_usec * 1e-6);
-            if (elapsed > _test_opts.client_timeout) {
+            if (elapsed > _test_opts.client_timeout * 10) {
                 LOG << "timeout waiting for " << (_num_sent - _num_completed)
                     << " replies";
                 _error_flag = true;

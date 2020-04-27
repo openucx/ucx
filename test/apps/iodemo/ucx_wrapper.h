@@ -124,7 +124,7 @@ private:
 
     void progress_failed_connections();
 
-    bool wait_completion(ucs_status_ptr_t status_ptr);
+    bool wait_completion(ucs_status_ptr_t status_ptr, double timeout = 1e6);
 
     void recv_io_message();
 

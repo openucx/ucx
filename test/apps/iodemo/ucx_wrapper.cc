@@ -8,6 +8,7 @@
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/time.h>
 #include <string.h>
 #include <assert.h>
 
@@ -277,19 +278,29 @@ void UcxContext::progress_failed_connections()
     }
 }
 
-bool UcxContext::wait_completion(ucs_status_ptr_t status_ptr)
+bool UcxContext::wait_completion(ucs_status_ptr_t status_ptr, double timeout)
 {
     if (status_ptr == NULL) {
         return true;
     } else if (UCS_PTR_IS_PTR(status_ptr)) {
         ucx_request *request = (ucx_request*)UCS_STATUS_PTR(status_ptr);
         ucs_status_t status;
+        struct timeval tv_start;
+        gettimeofday(&tv_start, NULL);
         do {
+            struct timeval tv_current, elapsed;
+            gettimeofday(&tv_current, NULL);
+            timersub(&tv_current, &tv_start, &elapsed);
+            if (elapsed.tv_sec + (elapsed.tv_usec * 1e-6) > timeout) {
+                status = UCS_ERR_TIMED_OUT;
+                break;
+            }
+
             ucp_worker_progress(_worker);
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
         request_release(request);
-        return !UCS_STATUS_IS_ERR(status);
+        return status == UCS_OK;
         // TODO print error?
     } else {
         assert(UCS_PTR_IS_ERR(status_ptr));
@@ -380,7 +391,7 @@ UcxConnection::~UcxConnection()
 {
     // if _ep is NULL, connection was closed and removed by error handler
     if (_ep) {
-        disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+        disconnect(UCP_EP_CLOSE_MODE_FORCE);
     }
 
     if (_close_request) {
@@ -567,11 +578,16 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     // send local connection id
     void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
                                     stream_send_callback, 0);
-    _context.wait_completion(sreq);
+    if (!_context.wait_completion(sreq, 10)) {
+        UCX_CONN_LOG << "failed to send remote connection id";
+        ep_close(UCP_EP_CLOSE_MODE_FORCE);
+        return false;
+    }
 
-    if (!_context.wait_completion(rreq)) {
+    // wait to complete receiving remote connection id
+    if (!_context.wait_completion(rreq, 10)) {
         UCX_CONN_LOG << "failed to receive remote connection id";
-        ep_close(UCP_EP_CLOSE_MODE_FLUSH);
+        ep_close(UCP_EP_CLOSE_MODE_FORCE);
         return false;
     }
 
@@ -623,7 +639,11 @@ void UcxConnection::disconnect(enum ucp_ep_close_mode mode)
 void UcxConnection::ep_close(enum ucp_ep_close_mode mode)
 {
     static const char *mode_str[] = {"force", "flush"};
-    assert(_ep);
+    if (!_ep) {
+        /* already closed */
+        return;
+    }
+
     assert(!_close_request);
 
     UCX_CONN_LOG << "closing ep " << _ep << " mode " << mode_str[mode];
