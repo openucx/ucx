@@ -211,11 +211,13 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = uct_rocm_base_detect_memory_type(md, addr, length, &mem_attr_p->mem_type);
-    if (UCS_OK == status) {
-        mem_attr_p->field_mask |= UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
-    } else {
-        ucs_warn("unable to query mem_type for %p", (void*) addr);
+    if (mem_attr_p->field_mask |= UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+        status = uct_rocm_base_detect_memory_type(md, addr, length,
+                                                  &mem_attr_p->mem_type);
+        if (UCS_OK != status) {
+            ucs_warn("unable to query mem_type for %p", (void*) addr);
+            return status;
+        }
     }
 
     return UCS_OK;

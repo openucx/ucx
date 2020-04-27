@@ -69,12 +69,14 @@ static ucs_status_t uct_cuda_base_get_sys_dev(ucs_sys_device_t *sys_dev_p)
                     CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, dev))) {
         return UCS_ERR_IO_ERROR;
     }
+
     sys_dev_p->bus_id.domain = (uint16_t)attrib;
 
     if (UCS_OK != UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&attrib,
                     CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev))) {
         return UCS_ERR_IO_ERROR;
     }
+
     sys_dev_p->bus_id.bus = (uint8_t)attrib;
 
     return UCS_OK;
@@ -86,24 +88,25 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h md, const void *addr,
 {
     ucs_status_t status;
 
-    mem_attr_p->field_mask = 0;
-
     if ((addr == NULL) || (length == 0)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
-    status = uct_cuda_base_detect_memory_type(md, addr, length, &mem_attr_p->mem_type);
-    if (UCS_OK == status) {
-        mem_attr_p->field_mask |= UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
-    } else {
-        ucs_warn("unable to query mem_type for %p", (void*) addr);
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+        status = uct_cuda_base_detect_memory_type(md, addr, length,
+                                                  &mem_attr_p->mem_type);
+        if (UCS_OK != status) {
+            ucs_warn("unable to query mem_type for %p", (void*) addr);
+            return status;
+        }
     }
 
-    status = uct_cuda_base_get_sys_dev(&mem_attr_p->sys_dev);
-    if (UCS_OK == status) {
-        mem_attr_p->field_mask |= UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
-    } else {
-        ucs_warn("unable to query sys_dev for %p", (void*) addr);
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+        status = uct_cuda_base_get_sys_dev(&mem_attr_p->sys_dev);
+        if (UCS_OK != status) {
+            ucs_warn("unable to query sys_dev for %p", (void*) addr);
+            return status;
+        }
     }
 
     return UCS_OK;
