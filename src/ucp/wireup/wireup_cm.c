@@ -432,12 +432,15 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     } else if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         ucs_assert(!ucp_ep_is_cm_local_connected(ucp_ep));
     } else {
-        /* ucp_ep_close(force) is called from err callback which was invoked
-           on remote connection reset
-           TODO: remove this case when IB flush cancel is fixed (#4743),
-                 moving QP to err state should move UCP EP to error state,
-                 then ucp_worker_set_ep_failed disconnects CM lane */
-        ucs_assert(req->status == UCS_ERR_CANCELED);
+        /* 1) ucp_ep_close(force) is called from err callback which was invoked
+              on remote connection reset
+              TODO: remove this case when IB flush cancel is fixed (#4743),
+                    moving QP to err state should move UCP EP to error state,
+                    then ucp_worker_set_ep_failed disconnects CM lane
+           2) transport level error is possible in case of > 1 lane
+         */
+        ucs_assert((req->status == UCS_ERR_CANCELED) ||
+                   (req->status == UCS_ERR_ENDPOINT_TIMEOUT));
     }
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
