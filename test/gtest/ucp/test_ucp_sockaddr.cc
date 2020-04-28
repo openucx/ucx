@@ -453,11 +453,25 @@ public:
 
     void one_sided_disconnect(entity &e) {
         void *req           = e.disconnect_nb();
-        ucs_time_t deadline = ucs_time_from_sec(10.0) + ucs_get_time();
+        ucs_time_t deadline = ucs::get_deadline();
         while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
-            /* TODO: replace the progress() with e().progress() when
-                     async progress is implemented. */
             progress();
+        };
+
+        if (UCS_PTR_IS_PTR(req)) {
+            EXPECT_EQ(UCS_OK, ucp_request_check_status(req));
+        } else {
+            EXPECT_EQ(NULL, req);
+        }
+
+        e.close_ep_req_free(req);
+    }
+
+    void true_one_sided_disconnect(entity &e) {
+        void *req           = e.disconnect_nb();
+        ucs_time_t deadline = ucs::get_deadline();
+        while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
+            e.progress();
         };
 
         e.close_ep_req_free(req);
@@ -491,12 +505,13 @@ public:
          * and from transports where the worker address is too long but ud/ud_x
          * are not present, or ud/ud_x are present but their addresses are too
          * long as well, in addition we can get disconnect events during test
-         * teardown.
+         * teardown or transport errors.
          */
         switch (status) {
         case UCS_ERR_REJECTED:
         case UCS_ERR_UNREACHABLE:
         case UCS_ERR_CONNECTION_RESET:
+        case UCS_ERR_ENDPOINT_TIMEOUT:
             UCS_TEST_MESSAGE << "ignoring error " <<ucs_status_string(status)
                              << " on endpoint " << ep;
             return;
@@ -658,6 +673,13 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
 
 class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
 public:
+    test_ucp_sockaddr_destroy_ep_on_err() {
+        /* Set small TL timeouts to reduce testing time */
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",       "10ms"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT",   "10ms"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT",   "2"));
+    }
+
     virtual ucp_ep_params_t get_server_ep_params() {
         ucp_ep_params_t params = test_ucp_sockaddr::get_server_ep_params();
 
@@ -676,6 +698,8 @@ public:
         entity *e = reinterpret_cast<entity *>(arg);
         e->disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
     }
+private:
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, empty,
@@ -696,6 +720,54 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, c2s,
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, bidi,
                      no_close_protocol()) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err,
+                     c_onesided_disconnect_c2s_timout, no_close_protocol(),
+                     "SOCKADDR_CM_CLOSE_TIMEOUT=1s") {
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+    true_one_sided_disconnect(sender());
+    short_progress_loop();
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err,
+                     c_onesided_disconnect_s2c_timeout, no_close_protocol(),
+                     "SOCKADDR_CM_CLOSE_TIMEOUT=1s") {
+    listen_and_communicate(false, SEND_DIRECTION_S2C);
+    true_one_sided_disconnect(sender());
+    short_progress_loop();
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err,
+                     c_onesided_disconnect_bidi_timeout, no_close_protocol(),
+                     "SOCKADDR_CM_CLOSE_TIMEOUT=1s") {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    true_one_sided_disconnect(sender());
+    short_progress_loop();
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err,
+                     s_onesided_disconnect_c2s_timout, no_close_protocol(),
+                     "SOCKADDR_CM_CLOSE_TIMEOUT=1s") {
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+    true_one_sided_disconnect(receiver());
+    short_progress_loop();
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err,
+                     s_onesided_disconnect_s2c_timeout, no_close_protocol(),
+                     "SOCKADDR_CM_CLOSE_TIMEOUT=1s") {
+    listen_and_communicate(false, SEND_DIRECTION_S2C);
+    true_one_sided_disconnect(receiver());
+    short_progress_loop();
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err,
+                     s_onesided_disconnect_bidi_timeout,
+                     no_close_protocol(), "SOCKADDR_CM_CLOSE_TIMEOUT=1s") {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    true_one_sided_disconnect(receiver());
+    short_progress_loop();
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_destroy_ep_on_err)
