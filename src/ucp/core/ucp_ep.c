@@ -807,32 +807,79 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 unsigned ucp_ep_local_disconnect_progress(void *arg)
 {
     ucp_request_t *req         = arg;
-    ucp_ep_h ep                = req->send.ep;
-    ucs_async_context_t *async = &ep->worker->async; /* ep becomes invalid */
+    ucs_async_context_t *async = &req->send.ep->worker->async;
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
     UCS_ASYNC_BLOCK(async);
-    ucs_debug("ep %p: disconnected with request %p, %s", ep, req,
-              ucs_status_string(req->status));
-    ucp_ep_disconnected(ep, req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL);
+    if (req->send.ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+        ucp_ep_close_request_complete(req, req->status);
+    } else {
+        ucp_ep_disconnected(req->send.ep,
+                            req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL);
+        ucp_request_complete_send(req, req->status);
+    }
     UCS_ASYNC_UNBLOCK(async);
 
-    /* Complete send request from here, to avoid releasing the request while
-     * slow-path element is still pending */
-    ucp_request_complete_send(req, req->status);
-
     return 0;
+}
+
+void ucp_worker_close_req_timer(int id, void *arg)
+{
+    ucp_worker_h worker  = arg;
+    ucs_time_t curr_time = ucs_get_time();
+    ucp_request_t *req, *tmp;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_assert(worker->timer.id == id);
+
+    ucs_twheel_sweep(&worker->timer.wheel, curr_time);
+
+    ucs_list_for_each_safe(req, tmp, &worker->close_reqs, send.disconnect.list) {
+        ucs_trace("ep %p: timer %sexpired", req->send.ep,
+                 (req->send.disconnect.timeout < curr_time) ? "" : "not ");
+        if (req->send.disconnect.timeout < curr_time) {
+            ucs_assert(req->send.ep->worker == worker);
+            ucp_ep_close_request_complete(req, UCS_ERR_ENDPOINT_TIMEOUT);
+        }
+    }
+
+    if (ucs_list_is_empty(&worker->close_reqs) && (worker->timer.id != 0)) {
+        ucs_async_remove_handler(worker->timer.id, 1);
+        worker->timer.id = 0;
+    }
+
+    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
                                      const char *debug_msg)
 {
-    ucs_trace("ep %p: setting close request %p, %s", ep, request, debug_msg);
+    ucs_status_t status;
+
+    ucs_assert(request->send.ep == ep);
+    ucs_debug("ep %p: setting close request %p, %s, timer_id %d", ep, request,
+              debug_msg, ep->worker->timer.id);
 
     ucp_ep_flush_state_invalidate(ep);
+
+    ucs_list_add_tail(&ep->worker->close_reqs, &request->send.disconnect.list);
+
     ucp_ep_ext_gen(ep)->close_req.req = request;
     ep->flags                        |= UCP_EP_FLAG_CLOSE_REQ_VALID;
+    request->send.disconnect.timeout  = ucs_get_time() + ep->worker->timer.tick;
+
+    if (ep->worker->timer.id == 0) {
+        status = ucs_async_add_timer(ep->worker->async.mode,
+                                     ep->worker->timer.tick,
+                                     ucp_worker_close_req_timer, ep->worker,
+                                     &ep->worker->async, &ep->worker->timer.id);
+        if (status != UCS_OK) {
+            ucs_warn("ucs_async_add_timer failed with status %s, request(%p) "
+                     "closing ep(%p) may be never completed",
+                     ucs_status_string(status), request + 1, ep);
+        }
+    }
 }
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)

@@ -18,6 +18,7 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/time/timer_wheel.h>
 
 
 /* The size of the private buffer in UCT descriptor headroom, which UCP may
@@ -240,6 +241,16 @@ typedef struct ucp_worker {
                                                   * are in-progress */
     uct_worker_cb_id_t            rkey_ptr_cb_id;/* RKEY PTR worker callback queue ID */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
+    ucs_list_link_t               rndv_reqs_list;
+    ucs_list_link_t               close_reqs;    /* list of close requests which waiting
+                                                    remove disconnect event,
+                                                    TODO: can unite with rndv_reqs_list? */
+    struct {
+        ucs_twheel_t              wheel;
+        ucs_time_t                tick;
+        int                       id;
+    } timer;
+
     uint64_t                      am_message_id; /* For matching long am's */
     ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */
 

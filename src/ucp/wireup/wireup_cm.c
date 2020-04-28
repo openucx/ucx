@@ -432,12 +432,15 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     } else if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         ucs_assert(!ucp_ep_is_cm_local_connected(ucp_ep));
     } else {
-        /* ucp_ep_close(force) is called from err callback which was invoked
-           on remote connection reset
-           TODO: remove this case when IB flush cancel is fixed (#4743),
-                 moving QP to err state should move UCP EP to error state,
-                 then ucp_worker_set_ep_failed disconnects CM lane */
-        ucs_assert(req->status == UCS_ERR_CANCELED);
+        /* 1) ucp_ep_close(force) is called from err callback which was invoked
+              on remote connection reset
+              TODO: remove this case when IB flush cancel is fixed (#4743),
+                    moving QP to err state should move UCP EP to error state,
+                    then ucp_worker_set_ep_failed disconnects CM lane
+           2) transport level error is possible in case of > 1 lane
+           3) close protocol timeout is expired */
+        ucs_assert((req->status == UCS_ERR_CANCELED) ||
+                   (req->status == UCS_ERR_ENDPOINT_TIMEOUT));
     }
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
@@ -459,7 +462,8 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
     if (ucs_test_all_flags(ucp_ep->flags, UCP_EP_FLAG_CLOSED |
                                           UCP_EP_FLAG_CLOSE_REQ_VALID)) {
-        ucp_request_complete_send(ucp_ep_ext_gen(ucp_ep)->close_req.req, UCS_OK);
+        ucp_ep_close_request_complete(ucp_ep_ext_gen(ucp_ep)->close_req.req,
+                                      UCS_OK);
         return 1;
     }
 
@@ -934,9 +938,18 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
     request->status  = UCS_OK;
     request->flags   = 0;
     request->send.ep = ep;
-    request->send.flush.uct_flags = UCT_FLUSH_FLAG_LOCAL;
 
     return request;
+}
+
+void ucp_ep_close_request_complete(ucp_request_t *request, ucs_status_t status)
+{
+    ucs_debug("ep %p: disconnected with request %p, %s", request->send.ep,
+              request, ucs_status_string(status));
+
+    ucs_list_del(&request->send.disconnect.list);
+    ucp_ep_disconnected(request->send.ep, 1);
+    ucp_request_complete_send(request, status);
 }
 
 static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)

@@ -1327,7 +1327,12 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
         worker->cms[i++].cmpt_idx = cmpt_index;
     }
 
-    status = UCS_OK;
+    worker->timer.id   = 0;
+    worker->timer.tick = ucs_time_from_sec(context->config.ext.cm_close_timeout);
+    status = ucs_twheel_init(&worker->timer.wheel,
+                             ucs_min(worker->timer.tick / 4,
+                                     ucs_time_from_sec(5)),
+                             ucs_get_time());
     goto out;
 
 err_free_cms:
@@ -1739,6 +1744,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
     ucp_ep_match_init(&worker->ep_match_ctx);
+    ucs_list_head_init(&worker->rndv_reqs_list);
+    ucs_list_head_init(&worker->close_reqs);
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
@@ -1890,10 +1897,24 @@ err_free:
 
 static void ucp_worker_destroy_eps(ucp_worker_h worker)
 {
-    ucp_ep_ext_gen_t *ep_ext, *tmp;
+    ucp_ep_ext_gen_t *ep_ext, *ep_ext_tmp;
+    ucp_request_t *req, *req_tmp;
+
+    ucs_list_for_each_safe(req, req_tmp, &worker->close_reqs,
+                           send.disconnect.list) {
+        ucs_assert(req->send.ep->worker == worker);
+        ucp_ep_close_request_complete(req, UCS_ERR_CANCELED);
+    }
+
+    if (worker->timer.id != 0) {
+        ucs_async_remove_handler(worker->timer.id, 1);
+        worker->timer.id = 0;
+    }
+
+    ucs_twheel_cleanup(&worker->timer.wheel);
 
     ucs_debug("worker %p: destroy all endpoints", worker);
-    ucs_list_for_each_safe(ep_ext, tmp, &worker->all_eps, ep_list) {
+    ucs_list_for_each_safe(ep_ext, ep_ext_tmp, &worker->all_eps, ep_list) {
         ucp_ep_disconnected(ucp_ep_from_ext_gen(ep_ext), 1);
     }
 }

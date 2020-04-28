@@ -97,6 +97,8 @@ typedef struct ucp_context_config {
     int                                    unified_mode;
     /** Enable cm wireup-and-close protocol for client-server connections */
     ucs_ternary_value_t                    sockaddr_cm_enable;
+    /** CM close protocol timeout */
+    double                                 cm_close_timeout;
 } ucp_context_config_t;
 
 

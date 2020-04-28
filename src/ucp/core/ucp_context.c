@@ -279,6 +279,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "require out of band synchronization before destroying UCP resources.",
    ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
 
+  {"SOCKADDR_CM_CLOSE_TIMEOUT", "60s",
+   "Endpoint close protocol timeout, applicable only for client/server\n"
+   "endpoints if SOCKADDR_CM_ENABLE is enabled.",
+   ucs_offsetof(ucp_config_t, ctx.cm_close_timeout), UCS_CONFIG_TYPE_TIME},
+
   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)

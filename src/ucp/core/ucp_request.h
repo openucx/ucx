@@ -206,6 +206,9 @@ struct ucp_request {
 
                 struct {
                     uct_worker_cb_id_t        prog_id;/* Slow-path callback */
+                    ucs_list_link_t           list;   /* Elem in close EP requests list
+                                                         waiting disconnect event */
+                    ucs_time_t                timeout;/* timeout of close protocol */
                 } disconnect;
 
                 struct {

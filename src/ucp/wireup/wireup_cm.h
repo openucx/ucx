@@ -42,6 +42,8 @@ void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep);
 
 ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep);
 
+void ucp_ep_close_request_complete(ucp_request_t *request, ucs_status_t status);
+
 void ucp_ep_cm_slow_cbq_cleanup(ucp_ep_h ep);
 
 #endif /* WIREUP_CM_H_ */
