@@ -7,7 +7,7 @@
 #include "ib_mlx5.h"
 
 
-static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
+static UCS_F_ALWAYS_INLINE UCS_F_NON_NULL struct mlx5_cqe64*
 uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned cqe_index)
 {
     return UCS_PTR_BYTE_OFFSET(cq->cq_buf, ((cqe_index & (cq->cq_length - 1)) <<
@@ -83,7 +83,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
     }
 
     cq->cq_ci = cqe_index + 1;
-    return cqe; /* TODO optimize - let complier know cqe is not null */
+    return cqe;
 }
 
 
