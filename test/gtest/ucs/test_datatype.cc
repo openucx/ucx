@@ -388,7 +388,7 @@ UCS_TEST_F(test_datatype, queue_extract_if) {
 
 UCS_TEST_F(test_datatype, ptr_array_basic) {
     ucs_ptr_array_t pa;
-    int a = 1, b = 2, c = 3, d = 4;
+    int a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7;
     unsigned index;
 
     ucs_ptr_array_init(&pa, "ptr_array test");
@@ -402,8 +402,14 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     index = ucs_ptr_array_insert(&pa, &c);
     EXPECT_EQ(2u, index);
 
-    index = ucs_ptr_array_insert(&pa, &d);
-    EXPECT_EQ(3u, index);
+    ucs_ptr_array_set(&pa, 3, &d);
+
+    index = ucs_ptr_array_insert(&pa, &e);
+    EXPECT_EQ(4u, index);
+
+    ucs_ptr_array_set(&pa, 6, &f);
+
+    ucs_ptr_array_set(&pa, 100, &g);
 
     void *vc;
     int present = ucs_ptr_array_lookup(&pa, 2, vc);
@@ -416,13 +422,28 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     present = ucs_ptr_array_lookup(&pa, 2, vc);
     EXPECT_EQ(&d, vc);
 
+    ucs_ptr_array_set(&pa, 2, &g);
+    present = ucs_ptr_array_lookup(&pa, 2, vc);
+    EXPECT_EQ(&g, vc);
+
+    present = ucs_ptr_array_lookup(&pa, 6, vc);
+    EXPECT_EQ(&f, vc);
+
+    present = ucs_ptr_array_lookup(&pa, 100, vc);
+    EXPECT_EQ(&g, vc);
+
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5, vc));
+    EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 99, vc));
+    EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 101, vc));
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5005, vc));
 
     ucs_ptr_array_remove(&pa, 0);
     ucs_ptr_array_remove(&pa, 1);
     ucs_ptr_array_remove(&pa, 2);
     ucs_ptr_array_remove(&pa, 3);
+    ucs_ptr_array_remove(&pa, 4);
+    ucs_ptr_array_remove(&pa, 6);
+    ucs_ptr_array_remove(&pa, 100);
 
     ucs_ptr_array_cleanup(&pa);
 }
@@ -489,26 +510,6 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
     }
 
     EXPECT_EQ(count_elements, expeced_count);
-
-    ucs_ptr_array_cleanup(&pa);
-}
-
-UCS_TEST_F(test_datatype, ptr_array_placeholder) {
-    ucs_ptr_array_t pa;
-    int a = 1;
-    unsigned index;
-
-    ucs_ptr_array_init(&pa, "ptr_array test");
-
-    index = ucs_ptr_array_insert(&pa, &a);
-    EXPECT_EQ(0u, index);
-
-    ucs_ptr_array_remove(&pa, index);
-
-    index = ucs_ptr_array_insert(&pa, &a);
-    EXPECT_EQ(0u, index);
-
-    ucs_ptr_array_remove(&pa, index);
 
     ucs_ptr_array_cleanup(&pa);
 }
@@ -588,10 +589,10 @@ UCS_TEST_F(test_datatype, ptr_status) {
 
 UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
     ucs_ptr_array_locked_t pa;
-    int a = 1, b = 2, c = 3, d = 4;
+    int a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7;
     unsigned index;
 
-    ucs_ptr_array_locked_init(&pa, "ptr_array test");
+    ucs_ptr_array_locked_init(&pa, "ptr_array_locked test");
 
     index = ucs_ptr_array_locked_insert(&pa, &a);
     EXPECT_EQ(0u, index);
@@ -602,13 +603,17 @@ UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
     index = ucs_ptr_array_locked_insert(&pa, &c);
     EXPECT_EQ(2u, index);
 
-    index = ucs_ptr_array_locked_insert(&pa, &d);
-    EXPECT_EQ(3u, index);
+    ucs_ptr_array_locked_set(&pa, 3, &d);
+
+    index = ucs_ptr_array_locked_insert(&pa, &e);
+    EXPECT_EQ(4u, index);
+
+    ucs_ptr_array_locked_set(&pa, 6, &f);
+
+    ucs_ptr_array_locked_set(&pa, 100, &g);
 
     void *vc;
-
     int present = ucs_ptr_array_locked_lookup(&pa, 2, &vc);
-
     ASSERT_TRUE(present);
     EXPECT_EQ(&c, vc);
 
@@ -618,14 +623,28 @@ UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
     present = ucs_ptr_array_locked_lookup(&pa, 2, &vc);
     EXPECT_EQ(&d, vc);
 
-    EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 5, &vc));
+    ucs_ptr_array_locked_set(&pa, 2, &g);
+    present = ucs_ptr_array_locked_lookup(&pa, 2, &vc);
+    EXPECT_EQ(&g, vc);
 
+    present = ucs_ptr_array_locked_lookup(&pa, 6, &vc);
+    EXPECT_EQ(&f, vc);
+
+    present = ucs_ptr_array_locked_lookup(&pa, 100, &vc);
+    EXPECT_EQ(&g, vc);
+
+    EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 5, &vc));
+    EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 99, &vc));
+    EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 101, &vc));
     EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 5005, &vc));
 
     ucs_ptr_array_locked_remove(&pa, 0);
     ucs_ptr_array_locked_remove(&pa, 1);
     ucs_ptr_array_locked_remove(&pa, 2);
     ucs_ptr_array_locked_remove(&pa, 3);
+    ucs_ptr_array_locked_remove(&pa, 4);
+    ucs_ptr_array_locked_remove(&pa, 6);
+    ucs_ptr_array_locked_remove(&pa, 100);
 
     ucs_ptr_array_locked_cleanup(&pa);
 }
@@ -686,26 +705,6 @@ UCS_TEST_F(test_datatype, ptr_array_locked_random) {
         ucs_ptr_array_locked_remove(&pa, index);
         free(ptr);
     }
-
-    ucs_ptr_array_locked_cleanup(&pa);
-}
-
-UCS_TEST_F(test_datatype, ptr_array_locked_placeholder) {
-    ucs_ptr_array_locked_t pa;
-    int a = 1;
-    unsigned index;
-
-    ucs_ptr_array_locked_init(&pa, "ptr_array test");
-
-    index = ucs_ptr_array_locked_insert(&pa, &a);
-    EXPECT_EQ(0u, index);
-
-    ucs_ptr_array_locked_remove(&pa, index);
-
-    index = ucs_ptr_array_locked_insert(&pa, &a);
-    EXPECT_EQ(0u, index);
-
-    ucs_ptr_array_locked_remove(&pa, index);
 
     ucs_ptr_array_locked_cleanup(&pa);
 }
