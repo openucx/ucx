@@ -282,8 +282,7 @@ ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->super,
                                          &iface->super.super.super);
 
-    uct_rc_mlx5_iface_commom_clean(&iface->super.cq[UCT_IB_DIR_TX], NULL,
-                                   dci->txwq.super.qp_num);
+    uct_rc_mlx5_iface_commom_cq_clean_tx(&iface->super, &dci->txqp, &dci->txwq);
 
     /* Resume posting from to the beginning of the QP */
     uct_ib_mlx5_txwq_reset(&dci->txwq);

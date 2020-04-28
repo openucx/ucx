@@ -457,6 +457,22 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t,
                   uct_ib_iface_init_attr_t*);
 
 
+/**
+ * Callback for cleaning the completion queue.
+ *
+ * @param [in] iface    Interface which is being cleaned
+ * @param [in] cqe      Completion entry being cleaned. If NULL, the callback
+ *                      should just return whether more polling is required.
+ * @param [in] arg      User-defined argument
+ *
+ * @return Nonzero if cleaning should be completed, zero if cleaning should
+ *         continue and poll for more completions.
+ */
+typedef int (uct_rc_mlx5_cq_clean_callback_t)(uct_rc_mlx5_iface_common_t *iface,
+                                              const struct mlx5_cqe64 *cqe,
+                                              void *arg);
+
+
 #define UCT_RC_MLX5_TM_STAT(_iface, _op) \
     UCS_STATS_UPDATE_COUNTER((_iface)->tm.stats, UCT_RC_MLX5_STAT_TAG_##_op, 1)
 
@@ -615,14 +631,24 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                     uct_iface_attr_t *iface_attr,
                                     size_t max_inline, size_t max_tag_eager_iov);
 
+void uct_rc_mlx5_common_post_nop(uct_rc_mlx5_iface_common_t *iface,
+                                 uct_rc_txqp_t *txqp,
+                                 uct_ib_mlx5_txwq_t *txwq);
+
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                             uct_ib_iface_t *ib_iface);
 
 void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                           uct_ib_iface_t *ib_iface);
 
-int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
-                                   uct_ib_mlx5_srq_t *srq, uint32_t qpn);
+void uct_rc_mlx5_iface_commom_cq_clean(uct_rc_mlx5_iface_common_t *iface,
+                                       uct_ib_dir_t dir, uint32_t qp_num,
+                                       uct_rc_mlx5_cq_clean_callback_t cb,
+                                       void *arg);
+
+void uct_rc_mlx5_iface_commom_cq_clean_tx(uct_rc_mlx5_iface_common_t *iface,
+                                          uct_rc_txqp_t *txqp,
+                                          uct_ib_mlx5_txwq_t *txwq);
 
 static UCS_F_MAYBE_UNUSED void
 uct_rc_mlx5_iface_tm_set_cmd_qp_len(uct_rc_mlx5_iface_common_t *iface)
@@ -734,5 +760,8 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                  const uct_rc_iface_common_config_t *rc_config);
 
 void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq);
+
+void uct_rc_mlx5_iface_print(uct_rc_mlx5_iface_common_t *mlx5_iface,
+                             const char *title);
 
 #endif

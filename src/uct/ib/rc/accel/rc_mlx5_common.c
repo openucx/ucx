@@ -1052,6 +1052,18 @@ void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
     uct_rc_mlx5_tag_query(iface, iface_attr, max_inline, max_tag_eager_iov);
 }
 
+void uct_rc_mlx5_common_post_nop(uct_rc_mlx5_iface_common_t *iface,
+                                 uct_rc_txqp_t *txqp,
+                                 uct_ib_mlx5_txwq_t *txwq)
+{
+    uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC, txqp, txwq,
+                                 MLX5_OPCODE_NOP, NULL, 0,
+                                 0, 0, 0,
+                                 0, 0,
+                                 NULL, NULL, 0, 0,
+                                 INT_MAX);
+}
+
 void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                             uct_ib_iface_t *ib_iface)
 {
@@ -1070,50 +1082,50 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 #endif
 }
 
-int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
-                                   uct_ib_mlx5_srq_t *srq, uint32_t qpn)
+void uct_rc_mlx5_iface_commom_cq_clean(uct_rc_mlx5_iface_common_t *iface,
+                                       uct_ib_dir_t dir, uint32_t qp_num,
+                                       uct_rc_mlx5_cq_clean_callback_t cb,
+                                       void *arg)
 {
-    const size_t cqe_sz       = 1ul << mlx5_cq->cqe_size_log;
+    uct_ib_mlx5_cq_t *cq = &iface->cq[dir];
+    const size_t cqe_sz  = 1ul << cq->cqe_size_log;
+    volatile struct mlx5_cqe64 *vcqe;
     struct mlx5_cqe64 *cqe, *dest;
-    uct_ib_mlx5_srq_seg_t *seg;
-    unsigned pi, idx;
     uint8_t owner_bit;
+    unsigned pi;
     int nfreed;
+    int done;
 
-    pi = mlx5_cq->cq_ci;
-    for (;;) {
-        cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
-        if (uct_ib_mlx5_cqe_is_hw_owned(cqe->op_own, pi, mlx5_cq->cq_length)) {
-            break;
+    pi = cq->cq_ci;
+    do {
+        vcqe = cqe = uct_ib_mlx5_get_cqe(cq, pi);
+        if (uct_ib_mlx5_cqe_is_hw_owned(vcqe->op_own, pi, cq->cq_length)) {
+            /* CQE not available, check if can complete */
+            done = cb(iface, NULL, arg);
+        } else {
+            ucs_memory_cpu_load_fence();
+            ucs_assert((vcqe->op_own >> 4) != MLX5_CQE_INVALID);
+            if (uct_ib_mlx5_cqe_get_qpn(cqe) == qp_num) {
+                /* CQE on the relevant QP */
+                done = cb(iface, cqe, arg);
+            } else {
+                /* CQE on other QP */
+                done = 0;
+            }
+            ++pi;
         }
-
-        ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);
-
-        ++pi;
-        if (pi == (mlx5_cq->cq_ci + mlx5_cq->cq_length - 1)) {
-            break;
-        }
-    }
-
-    ucs_memory_cpu_load_fence();
+    } while (!done && (pi != (cq->cq_ci + cq->cq_length - 1)));
 
     /* Remove CQEs of the destroyed QP, so the driver would not see them and try
      * to remove them itself, creating a mess with the free-list.
      */
     nfreed = 0;
-    while ((int)--pi - (int)mlx5_cq->cq_ci >= 0) {
-        cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
-        if ((ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER)) == qpn) {
-            idx = ntohs(cqe->wqe_counter);
-            if (srq) {
-                seg = uct_ib_mlx5_srq_get_wqe(srq, idx);
-                seg->srq.free = 1;
-                ucs_trace("cq %p: freed srq seg[%d] of qpn 0x%x",
-                          mlx5_cq, idx, qpn);
-            }
+    while ((int)--pi - (int)cq->cq_ci >= 0) {
+        cqe = uct_ib_mlx5_get_cqe(cq, pi);
+        if (uct_ib_mlx5_cqe_get_qpn(cqe) == qp_num) {
             ++nfreed;
         } else if (nfreed) {
-            dest = uct_ib_mlx5_get_cqe(mlx5_cq, pi + nfreed);
+            dest = uct_ib_mlx5_get_cqe(cq, pi + nfreed);
             owner_bit = dest->op_own & MLX5_CQE_OWNER_MASK;
             memcpy(UCS_PTR_BYTE_OFFSET(dest + 1, -cqe_sz),
                    UCS_PTR_BYTE_OFFSET(cqe + 1, -cqe_sz), cqe_sz);
@@ -1121,8 +1133,68 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
         }
     }
 
-    mlx5_cq->cq_ci             += nfreed;
-
-    return nfreed;
+    cq->cq_ci += nfreed;
 }
 
+typedef struct {
+    uct_rc_txqp_t      *txqp;
+    uct_ib_mlx5_txwq_t *txwq;
+    int                post_nop;
+} uct_rc_mlx5_common_clean_tx_cq_ctx_t;
+
+static int uct_rc_mlx5_common_clean_tx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
+                                             const struct mlx5_cqe64 *cqe,
+                                             void *arg)
+{
+    uct_rc_mlx5_common_clean_tx_cq_ctx_t *ctx = arg;
+
+    if (cqe != NULL) {
+        uct_rc_mlx5_common_update_tx_res(&iface->super, ctx->txwq, ctx->txqp,
+                                         htons(cqe->wqe_counter));
+    }
+
+    if (uct_rc_txqp_available(ctx->txqp) == ctx->txwq->bb_max) {
+        return 1;
+    }
+
+    /* If not posted NOP already, and have the resources, post it to flush
+     * any unsignaled sends
+     */
+    if (ctx->post_nop && (iface->super.tx.cq_available > 0) &&
+        (uct_rc_txqp_available(ctx->txqp) > 0))
+    {
+        ucs_trace("qp 0x%x: posted NOP", ctx->txwq->super.qp_num);
+        uct_rc_mlx5_common_post_nop(iface, ctx->txqp, ctx->txwq);
+        ucs_assert(uct_rc_txqp_unsignaled(ctx->txqp) == 0);
+        ctx->post_nop = 0;
+    }
+
+    return 0;
+}
+
+void uct_rc_mlx5_iface_commom_cq_clean_tx(uct_rc_mlx5_iface_common_t *iface,
+                                          uct_rc_txqp_t *txqp,
+                                          uct_ib_mlx5_txwq_t *txwq)
+{
+    uct_rc_mlx5_common_clean_tx_cq_ctx_t ctx = {
+        .txqp     = txqp,
+        .txwq     = txwq,
+        .post_nop = (uct_rc_txqp_unsignaled(txqp) > 0)
+    };
+    uct_rc_mlx5_iface_commom_cq_clean(iface, UCT_IB_DIR_TX, txwq->super.qp_num,
+                                      uct_rc_mlx5_common_clean_tx_cq_cb, &ctx);
+}
+
+void uct_rc_mlx5_iface_print(uct_rc_mlx5_iface_common_t *mlx5_iface,
+                             const char *title)
+{
+    ucs_trace("%s: txcq [n 0x%x avail %d ci 0x%x] rcxq [n 0x%x ci 0x%x] "
+            "srq [n 0x%x avail %d]", title,
+            mlx5_iface->cq[UCT_IB_DIR_TX].cq_num,
+            mlx5_iface->super.tx.cq_available,
+            mlx5_iface->cq[UCT_IB_DIR_TX].cq_ci,
+            mlx5_iface->cq[UCT_IB_DIR_RX].cq_num,
+            mlx5_iface->cq[UCT_IB_DIR_RX].cq_ci,
+            mlx5_iface->rx.srq.srq_num,
+            mlx5_iface->super.rx.srq.available);
+}

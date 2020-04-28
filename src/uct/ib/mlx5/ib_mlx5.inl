@@ -87,6 +87,13 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 }
 
 
+static UCS_F_ALWAYS_INLINE uint32_t
+uct_ib_mlx5_cqe_get_qpn(const struct mlx5_cqe64 *cqe)
+{
+    return ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+}
+
+
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci)
 {

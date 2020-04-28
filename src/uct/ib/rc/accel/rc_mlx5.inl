@@ -194,7 +194,7 @@ static UCS_F_ALWAYS_INLINE uct_rc_mlx5_mp_context_t*
 uct_rc_mlx5_iface_rx_mp_context_from_ep(uct_rc_mlx5_iface_common_t *iface,
                                         struct mlx5_cqe64 *cqe, unsigned *flags)
 {
-    uint32_t qp_num      = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+    uint32_t qp_num      = uct_ib_mlx5_cqe_get_qpn(cqe);
     uct_rc_mlx5_ep_t *ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super,
                                                                  qp_num),
                                           uct_rc_mlx5_ep_t);
@@ -387,7 +387,7 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
                        uct_rc_mlx5_common_packet_dump);
 
     if (ucs_unlikely(hdr->rc_hdr.am_id & UCT_RC_EP_FC_MASK)) {
-        qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+        qp_num = uct_ib_mlx5_cqe_get_qpn(cqe);
         rc_ops = ucs_derived_of(iface->super.super.ops, uct_rc_iface_ops_t);
 
         /* coverity[overrun-buffer-val] */

@@ -112,12 +112,13 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
 
     ucs_memory_cpu_load_fence();
 
-    qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
-                        uct_rc_mlx5_ep_t);
-    /* TODO: temporary workaround for uct_ep_flush(cancel) case when EP has been
-     *       destroyed but successful CQE was not polled out from the CQ */
+    qp_num = uct_ib_mlx5_cqe_get_qpn(cqe);
+    ep     = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
+                            uct_rc_mlx5_ep_t);
     if (ucs_unlikely(ep == NULL)) {
+        /* TODO replace the warning with assertion for optimization */
+        ucs_warn("completion ignored on QP 0x%x index %d",
+                 qp_num, htons(cqe->wqe_counter));
         return 1;
     }
 
@@ -228,7 +229,7 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         txwq_copy.qend = UCS_PTR_BYTE_OFFSET(txwq_copy.qstart, txwq_size);
     }
 
-    if (uct_rc_mlx5_ep_handle_failure(ep, status) == UCS_OK) {
+    if (uct_rc_mlx5_ep_handle_failure(ep, cqe, status) == UCS_OK) {
         log_lvl = ib_iface->super.config.failure_level;
     }
 

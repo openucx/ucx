@@ -916,4 +916,3 @@ ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
     UCT_TL_IFACE_STAT_FENCE(&iface->super.super);
     return UCS_OK;
 }
-
