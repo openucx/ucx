@@ -231,6 +231,14 @@ out:
     return (status == UCS_OK) ? (sizeof(*sa_data) + ucp_addr_size) : status;
 }
 
+static void
+ucp_cm_client_connect_prog_arg_free(ucp_cm_client_connect_progress_arg_t *arg)
+{
+    ucs_free(arg->sa_data);
+    ucs_free(arg->dev_addr);
+    ucs_free(arg);
+}
+
 /*
  * The main thread progress part of connection establishment on client side
  */
@@ -314,11 +322,10 @@ out_unblock:
 out_free_addr:
     ucs_free(addr.address_list);
 out:
-    ucs_free(progress_arg->sa_data);
-    ucs_free(progress_arg->dev_addr);
-    ucs_free(progress_arg);
+    ucp_cm_client_connect_prog_arg_free(progress_arg);
 
     if (status != UCS_OK) {
+        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         ucp_worker_set_ep_failed(worker, ucp_ep, &wireup_ep->super.super,
                                  ucp_ep_get_cm_lane(ucp_ep), status);
     }
@@ -432,12 +439,15 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     } else if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         ucs_assert(!ucp_ep_is_cm_local_connected(ucp_ep));
     } else {
-        /* ucp_ep_close(force) is called from err callback which was invoked
-           on remote connection reset
-           TODO: remove this case when IB flush cancel is fixed (#4743),
-                 moving QP to err state should move UCP EP to error state,
-                 then ucp_worker_set_ep_failed disconnects CM lane */
-        ucs_assert(req->status == UCS_ERR_CANCELED);
+        /* 1) ucp_ep_close(force) is called from err callback which was invoked
+              on remote connection reset
+              TODO: remove this case when IB flush cancel is fixed (#4743),
+                    moving QP to err state should move UCP EP to error state,
+                    then ucp_worker_set_ep_failed disconnects CM lane
+           2) transport level error is possible in case of > 1 lane
+         */
+        ucs_assert((req->status == UCS_ERR_CANCELED) ||
+                   (req->status == UCS_ERR_ENDPOINT_TIMEOUT));
     }
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
@@ -515,19 +525,25 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
 
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
-    if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        /* - ignore close event on failed ep, since all lanes are destryed in
+             generic err flow
+           - close request is valid only if all lanes are flushed, transport
+             error is unexpected */
+        ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
+    } else if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
         /* if the EP is local connected, need to flush it from main thread first */
         ucp_ep_cm_remote_disconnect_progress(ucp_ep);
         ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
-    } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
+    } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
         /* if the EP is not local connected, the EP has been closed and flushed,
-         * CM lane is disconnected, complete close request and destroy EP */
-        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
+           CM lane is disconnected, complete close request and destroy EP */
+        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
         close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
     } else {
-        /* Ignore close event on failed ep */
-        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FAILED);
+        ucs_warn("ep %p: unexpected state on disconnect, flags: 0x%u",
+                 ucp_ep, ucp_ep->flags);
     }
 
     UCS_ASYNC_UNBLOCK(async);
@@ -943,10 +959,18 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
 
 static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
-    if ((elem->cb == ucp_ep_cm_disconnect_progress)        ||
-        (elem->cb == ucp_ep_cm_remote_disconnect_progress) ||
-        (elem->cb == ucp_cm_client_connect_progress)       ||
-        (elem->cb == ucp_cm_server_conn_notify_progress)) {
+    ucp_cm_client_connect_progress_arg_t *client_connect_arg;
+
+    if (elem->cb == ucp_cm_client_connect_progress) {
+        client_connect_arg = elem->arg;
+        if (client_connect_arg->ucp_ep == arg) {
+            ucp_cm_client_connect_prog_arg_free(client_connect_arg);
+            return 1;
+        } else {
+            return 0;
+        }
+    } else if ((elem->cb == ucp_ep_cm_disconnect_progress) ||
+               (elem->cb == ucp_cm_server_conn_notify_progress)) {
         return arg == elem->arg;
     } else {
         return 0;
