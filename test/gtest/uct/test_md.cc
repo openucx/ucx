@@ -253,11 +253,11 @@ UCS_TEST_P(test_md, mem_query) {
     status = uct_md_query(md(), &md_attr);
     ASSERT_UCS_OK(status);
 
-    if (!md_attr.cap.detect_mem_types) {
-        UCS_TEST_SKIP_R("MD can't detect any memory types");
+    if (!(md_attr.cap.detect_mem_attr)) {
+        UCS_TEST_SKIP_R("MD can't detect memory attributes");
     }
 
-    ucs_for_each_bit(mem_type_id, md_attr.cap.detect_mem_types) {
+    ucs_for_each_bit(mem_type_id, md_attr.cap.detect_mem_attr) {
         alloc_memory(&address, UCS_KBYTE, NULL,
                      static_cast<ucs_memory_type_t>(mem_type_id));
 	mem_attr.field_mask = 0;
