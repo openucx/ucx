@@ -54,8 +54,6 @@ ucp_rndv_req_get_zcopy_rma_lane(ucp_request_t *rndv_req, ucp_lane_map_t ignore,
 static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
 {
     ucp_worker_h worker;
-    uintptr_t tmp_req;
-    uint64_t req_id;
     khiter_t iter;
 
     ucp_request_send_generic_dt_finish(sreq);
@@ -66,19 +64,15 @@ static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
 
     /* remove from rndv sreqs hash */
     worker = sreq->send.ep->worker;
-    kh_foreach_key(&worker->rndv_req_ptrs, req_id, {
-    iter = kh_get(ucp_worker_rndv_req_ptrs, &worker->rndv_req_ptrs, req_id);
-    tmp_req = kh_value(&worker->rndv_req_ptrs, iter);
-
-    if (tmp_req == (uintptr_t)sreq) {
+    iter = kh_get(ucp_worker_rndv_req_ptrs, &worker->rndv_req_ptrs,
+                  sreq->send.rndv_req_id);
+    if (iter != kh_end(&worker->rndv_req_ptrs)) {
         kh_del(ucp_worker_rndv_req_ptrs, &worker->rndv_req_ptrs, iter);
-        ucs_debug("removed sreq %p, key %zu, worker %p", sreq, req_id, worker);
-        break;
-    }
-    });
-
-    if (iter == kh_end(&worker->rndv_req_ptrs)) {
-        ucs_warn("sreq %p does not exist on worker %p", sreq, worker);
+        ucs_debug("removed sreq %p, key %zu, worker %p",
+                  sreq, sreq->send.rndv_req_id, worker);
+    } else {
+        ucs_warn("sreq %p (req_id = %zu) does not exist on worker %p",
+                 sreq, sreq->send.rndv_req_id, worker);
     }
 
     ucp_request_complete_send(sreq, status);
@@ -1128,7 +1122,7 @@ static inline ucp_request_t *ucp_rndv_get_sreq_by_reqptr(ucp_worker_h worker,
     uintptr_t sreq;
     khiter_t iter;
 
-    /* FIXME rndv offload operations will here too but will their reqptr
+    /* FIXME rndv offload operations will get here too but their reqptr
      * will not be found in the hash since their req_id was not used */
     iter = kh_get(ucp_worker_rndv_req_ptrs, &worker->rndv_req_ptrs, reqid);
     if (iter == kh_end(&worker->rndv_req_ptrs)) {
