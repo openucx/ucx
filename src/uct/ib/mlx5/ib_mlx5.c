@@ -335,6 +335,8 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
 {
     ucs_status_t status;
 
+    ucs_memory_cpu_load_fence();
+
     switch (cqe->op_own >> 4) {
     case MLX5_CQE_REQ_ERR:
         /* update ci before invoking error callback, since it can poll on cq */

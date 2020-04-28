@@ -76,9 +76,11 @@ void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
 
     if (((ecqe->op_own >> 4) == MLX5_CQE_RESP_ERR) &&
         (ecqe->syndrome == MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR) &&
-        (ecqe->vendor_err_synd == UCT_IB_MLX5_CQE_VENDOR_SYND_ODP))
+        ((ecqe->vendor_err_synd == UCT_IB_MLX5_CQE_VENDOR_SYND_ODP) ||
+         (ecqe->vendor_err_synd == UCT_IB_MLX5_CQE_VENDOR_SYND_ABORT)))
     {
-        /* Release the aborted segment */
+        /* IBTA 9.9.3.1.6 RESPONDER CLASS E FAULT BEHAVIOR
+         * Release the aborted segment */
         wqe_ctr = ntohs(ecqe->wqe_counter);
         seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
         ++cq->cq_ci;
