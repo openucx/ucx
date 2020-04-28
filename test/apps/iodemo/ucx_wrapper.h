@@ -96,6 +96,12 @@ protected:
     virtual void dispatch_connection_error(UcxConnection* conn);
 
 private:
+    typedef enum {
+        WAIT_STATUS_OK,
+        WAIT_STATUS_FAILED,
+        WAIT_STATUS_TIMED_OUT
+    } wait_status_t;
+
     friend class UcxConnection;
 
     static const ucp_tag_t IOMSG_TAG = 1ull << 63;
@@ -124,7 +130,8 @@ private:
 
     void progress_failed_connections();
 
-    bool wait_completion(ucs_status_ptr_t status_ptr, double timeout = 1e6);
+    wait_status_t wait_completion(ucs_status_ptr_t status_ptr,
+                                  double timeout = 1e6);
 
     void recv_io_message();
 

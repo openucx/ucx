@@ -292,10 +292,11 @@ void UcxContext::progress_failed_connections()
     }
 }
 
-bool UcxContext::wait_completion(ucs_status_ptr_t status_ptr, double timeout)
+UcxContext::wait_status_t
+UcxContext::wait_completion(ucs_status_ptr_t status_ptr, double timeout)
 {
     if (status_ptr == NULL) {
-        return true;
+        return WAIT_STATUS_OK;
     } else if (UCS_PTR_IS_PTR(status_ptr)) {
         ucx_request *request = (ucx_request*)UCS_STATUS_PTR(status_ptr);
         ucs_status_t status;
@@ -306,19 +307,17 @@ bool UcxContext::wait_completion(ucs_status_ptr_t status_ptr, double timeout)
             gettimeofday(&tv_current, NULL);
             timersub(&tv_current, &tv_start, &elapsed);
             if (elapsed.tv_sec + (elapsed.tv_usec * 1e-6) > timeout) {
-                status = UCS_ERR_TIMED_OUT;
-                break;
+                return WAIT_STATUS_TIMED_OUT;
             }
 
             ucp_worker_progress(_worker);
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
         request_release(request);
-        return status == UCS_OK;
-        // TODO print error?
+        return (status == UCS_OK) ? WAIT_STATUS_OK : WAIT_STATUS_FAILED;
     } else {
         assert(UCS_PTR_IS_ERR(status_ptr));
-        return false;
+        return WAIT_STATUS_FAILED;
     }
 }
 
@@ -531,6 +530,8 @@ void UcxConnection::stream_recv_callback(void *request, ucs_status_t status,
 void UcxConnection::common_request_callback(void *request, ucs_status_t status)
 {
     ucx_request *r = reinterpret_cast<ucx_request*>(request);
+
+    assert(!r->completed);
     if (r->callback) {
         // already processed by send function
         (*r->callback)(status);
@@ -565,6 +566,7 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 
 bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 {
+    UcxContext::wait_status_t wait_status;
 
     // create endpoint
     ep_params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLER |
@@ -592,18 +594,26 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     // send local connection id
     void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
                                     stream_send_callback, 0);
-    if (!_context.wait_completion(sreq, 10)) {
+    wait_status = _context.wait_completion(sreq, 10);
+    if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to send remote connection id";
-        ucp_request_cancel(_context.worker(), rreq);
-        ucp_request_release(rreq);
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
+        if (wait_status == UcxContext::WAIT_STATUS_TIMED_OUT) {
+            _context.wait_completion(sreq);
+        }
+        // wait for receive request as well, which should be canceled by ep close
+        _context.wait_completion(rreq);
         return false;
     }
 
     // wait to complete receiving remote connection id
-    if (!_context.wait_completion(rreq, 10)) {
+    wait_status = _context.wait_completion(rreq, 10);
+    if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to receive remote connection id";
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
+        if (wait_status == UcxContext::WAIT_STATUS_TIMED_OUT) {
+            _context.wait_completion(rreq);
+        }
         return false;
     }
 
