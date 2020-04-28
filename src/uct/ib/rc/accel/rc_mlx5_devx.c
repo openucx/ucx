@@ -302,7 +302,22 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm,
                       iface->super.config.exp_backoff);
 
-    return uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
-                                      out_2rts, sizeof(out_2rts));
+    status = uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
+                                        out_2rts, sizeof(out_2rts));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_debug("connected rc devx qp 0x%x on "UCT_IB_IFACE_FMT" to lid %d(+%d) sl %d "
+              "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d",
+              qp->qp_num, UCT_IB_IFACE_ARG(&iface->super.super), ah_attr->dlid,
+              ah_attr->src_path_bits, ah_attr->sl, dest_qp_num,
+              uct_ib_mtu_value(iface->super.config.path_mtu),
+              iface->super.config.timeout,
+              iface->super.config.retry_cnt,
+              iface->super.config.min_rnr_timer,
+              iface->super.config.rnr_retry,
+              iface->super.config.max_rd_atomic);
+    return UCS_OK;
 }
 
