@@ -53,11 +53,28 @@ ucp_rndv_req_get_zcopy_rma_lane(ucp_request_t *rndv_req, ucp_lane_map_t ignore,
 
 static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
 {
+    ucp_worker_h worker;
+    khiter_t iter;
+
     ucp_request_send_generic_dt_finish(sreq);
     ucp_request_send_buffer_dereg(sreq);
     if (sreq->flags & UCP_REQUEST_FLAG_CANCELED) {
         ucs_list_del(&sreq->send.list);
     }
+
+    /* remove from rndv sreqs hash */
+    worker = sreq->send.ep->worker;
+    iter = kh_get(ucp_worker_rndv_req_ptrs, &worker->rndv_req_ptrs,
+                  sreq->send.rndv_req_id);
+    if (iter != kh_end(&worker->rndv_req_ptrs)) {
+        kh_del(ucp_worker_rndv_req_ptrs, &worker->rndv_req_ptrs, iter);
+        ucs_debug("removed sreq %p, key %zu, worker %p",
+                  sreq, sreq->send.rndv_req_id, worker);
+    } else {
+        ucs_warn("sreq %p (req_id = %zu) does not exist on worker %p",
+                 sreq, sreq->send.rndv_req_id, worker);
+    }
+
     ucp_request_complete_send(sreq, status);
 }
 
@@ -69,7 +86,7 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     ssize_t packed_rkey_size;
 
     rndv_rts_hdr->super.tag        = sreq->send.msg_proto.tag.tag;
-    rndv_rts_hdr->sreq.reqptr      = (uintptr_t)sreq;
+    rndv_rts_hdr->sreq.reqptr      = sreq->send.rndv_req_id;
     rndv_rts_hdr->sreq.ep_ptr      = ucp_request_get_dest_ep_ptr(sreq);
     rndv_rts_hdr->size             = sreq->send.length;
     rndv_rts_hdr->status           = UCS_OK;
@@ -135,7 +152,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_cancel, (self),
     sreq->send.lane = ucp_ep_get_am_lane(ep);
 
     rndv_rts_hdr.super.tag   = sreq->send.msg_proto.tag.tag;
-    rndv_rts_hdr.sreq.reqptr = (uintptr_t)sreq;
+    rndv_rts_hdr.sreq.reqptr = sreq->send.rndv_req_id;
     rndv_rts_hdr.sreq.ep_ptr = ucp_request_get_dest_ep_ptr(sreq);
     rndv_rts_hdr.size        = sreq->send.length;
     rndv_rts_hdr.status      = UCS_ERR_CANCELED;
@@ -240,7 +257,10 @@ ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq)
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
 {
     ucp_ep_h ep = sreq->send.ep;
+    ucp_worker_h worker = ep->worker;
     ucs_status_t status;
+    khiter_t khiter;
+    int ret;
 
     ucp_trace_req(sreq, "start_rndv to %s buffer %p length %zu",
                   ucp_ep_peer_name(ep), sreq->send.buffer,
@@ -261,6 +281,23 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
         sreq->send.uct.func = ucp_proto_progress_rndv_rts;
         status              = ucp_tag_rndv_reg_send_buffer(sreq);
     }
+
+    /* add the rndv send request to a hash on the worker. the key is a unique
+     * value on the worker */
+    khiter = kh_put(ucp_worker_rndv_req_ptrs, &worker->rndv_req_ptrs,
+                    worker->rndv_req_id, &ret);
+    if (ret < 1 ) {
+        ucs_warn("failed to add rndv req id (%zu) to worker %p rndv req ptrs hash",
+                 worker->rndv_req_id, worker);
+    }
+
+    sreq->send.rndv_req_id = worker->rndv_req_id;
+    kh_value(&worker->rndv_req_ptrs, khiter) = (uintptr_t)sreq;
+
+    ucs_debug("added sreq %p to hash with key %zu. worker %p",
+              sreq, sreq->send.rndv_req_id, worker);
+
+    worker->rndv_req_id++;
 
     return status;
 }
@@ -996,7 +1033,7 @@ out:
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-static void ucp_rdnv_send_cancel_ack(ucp_worker_h worker,
+static void ucp_rndv_send_cancel_ack(ucp_worker_h worker,
                                      ucp_rndv_rts_hdr_t *rndv_rts_hdr)
 {
     ucp_request_t *req;
@@ -1036,7 +1073,7 @@ static void ucp_rndv_unexp_cancel(ucp_worker_h worker,
                            "tag %"PRIx64, UCP_RECV_DESC_ARG(rdesc),
                            ucp_rdesc_get_tag(rdesc));
              ucp_tag_unexp_remove(rdesc);
-             ucp_rdnv_send_cancel_ack(worker, rndv_rts_hdr);
+             ucp_rndv_send_cancel_ack(worker, rndv_rts_hdr);
              ucp_recv_desc_release(rdesc);
              return;
          }
@@ -1079,6 +1116,24 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
     return status;
 }
 
+static inline ucp_request_t *ucp_rndv_get_sreq_by_reqptr(ucp_worker_h worker,
+                                                         uintptr_t reqid)
+{
+    uintptr_t sreq;
+    khiter_t iter;
+
+    /* FIXME rndv offload operations will get here too but their reqptr
+     * will not be found in the hash since their req_id was not used */
+    iter = kh_get(ucp_worker_rndv_req_ptrs, &worker->rndv_req_ptrs, reqid);
+    if (iter == kh_end(&worker->rndv_req_ptrs)) {
+        ucs_warn("reqid %zu does not exist on worker %p", reqid, worker);
+        return NULL;
+    }
+
+    sreq = kh_value(&worker->rndv_req_ptrs, iter);
+    return (ucp_request_t*) sreq;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
                  (arg, data, length, tl_flags),
                  void *arg, void *data, size_t length, unsigned tl_flags)
@@ -1091,7 +1146,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
                  void *arg, void *data, size_t length, unsigned flags)
 {
     ucp_reply_hdr_t *rep_hdr = data;
-    ucp_request_t *sreq = (ucp_request_t*) rep_hdr->reqptr;
+    ucp_worker_h worker = arg;
+    ucp_request_t *sreq;
+
+    sreq = ucp_rndv_get_sreq_by_reqptr(worker, rep_hdr->reqptr);
+    if (sreq == NULL) {
+        return UCS_OK;
+    }
 
     /* dereg the original send request and set it to complete */
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_ats_recv", 0);
@@ -1458,7 +1519,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
                  void *arg, void *data, size_t length, unsigned flags)
 {
     ucp_reply_hdr_t *rep_hdr = data;
-    ucp_request_t *req       = (ucp_request_t*) rep_hdr->reqptr;
+    ucp_request_t *req;
     ucp_request_t *rreq;
     ucp_worker_h worker;
     ucp_lane_index_t mem_type_rma_lane;
@@ -1466,6 +1527,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     ucp_md_index_t md_index;
     ucp_ep_h mem_type_ep;
     size_t frag_size, frag_offset;
+
+    req = ucp_rndv_get_sreq_by_reqptr((ucp_worker_h)arg, rep_hdr->reqptr);
+    if (req == NULL) {
+        return UCS_OK;
+    }
 
     if (req->recv.frag.rreq) {
         /* atp for fragmented rndv request */
@@ -1518,12 +1584,21 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                  void *arg, void *data, size_t length, unsigned flags)
 {
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
-    ucp_request_t *sreq              = (ucp_request_t*)rndv_rtr_hdr->sreq_ptr;
-    ucp_ep_h ep                      = sreq->send.ep;
-    ucp_ep_config_t *ep_config       = ucp_ep_config(ep);
-    ucp_context_h context            = ep->worker->context;
+    ucp_request_t *sreq;
+    ucp_ep_h ep;
+    ucp_ep_config_t *ep_config;
+    ucp_context_h context;
     ucs_status_t status;
     int is_pipeline_rndv;
+
+    sreq = ucp_rndv_get_sreq_by_reqptr((ucp_worker_h)arg, rndv_rtr_hdr->sreq_ptr);
+    if (sreq == NULL) {
+        return UCS_OK;
+    }
+
+    ep        = sreq->send.ep;
+    ep_config = ucp_ep_config(ep);
+    context   = ep->worker->context;
 
     ucp_trace_req(sreq, "received rtr address 0x%lx remote rreq 0x%lx",
                   rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_ptr);
