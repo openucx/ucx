@@ -205,19 +205,22 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
 {
     ucs_status_t status;
 
-    mem_attr_p->field_mask = 0;
-
     if ((addr == NULL) || (length == 0)) {
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (mem_attr_p->field_mask |= UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
         status = uct_rocm_base_detect_memory_type(md, addr, length,
                                                   &mem_attr_p->mem_type);
         if (UCS_OK != status) {
             ucs_warn("unable to query mem_type for %p", (void*) addr);
             return status;
         }
+    }
+
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+        ucs_warn("sys dev query on %p unsupported on rocm", (void*) addr);
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;

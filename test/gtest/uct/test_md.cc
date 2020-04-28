@@ -260,9 +260,10 @@ UCS_TEST_P(test_md, mem_query) {
     ucs_for_each_bit(mem_type_id, md_attr.cap.detect_mem_types) {
         alloc_memory(&address, UCS_KBYTE, NULL,
                      static_cast<ucs_memory_type_t>(mem_type_id));
+	mem_attr.field_mask = 0;
+	mem_attr.field_mask |= UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
         status = uct_md_mem_query(md(), address, UCS_KBYTE, &mem_attr);
         ASSERT_UCS_OK(status);
-        EXPECT_TRUE(mem_attr.field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE);
         EXPECT_TRUE(mem_attr.mem_type == mem_type_id);
     }
 }
