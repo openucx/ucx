@@ -15,6 +15,9 @@
 #include <assert.h>
 #include <unistd.h>
 #include <cstdlib>
+#include <ctime>
+#include <vector>
+#include <algorithm>
 
 #define ALIGNMENT 4096
 
@@ -34,16 +37,18 @@ static const char *io_op_names[] = {
 
 /* test options */
 typedef struct {
-    const char  *server_addr;
-    int         port_num;
-    long        client_retries;
-    double      client_timeout;
-    size_t      iomsg_size;
-    size_t      data_size;
-    long        iter_count;
-    long        window_size;
-    io_op_t     operation;
-    bool        verbose;
+    const char           *server_addr;
+    int                  port_num;
+    long                 client_retries;
+    double               client_timeout;
+    size_t               iomsg_size;
+    size_t               min_data_size;
+    size_t               max_data_size;
+    long                 iter_count;
+    long                 window_size;
+    std::vector<io_op_t> operations;
+    unsigned             random_seed;
+    bool                 verbose;
 } options_t;
 
 #define LOG         UcxLog("[DEMO]", true)
@@ -90,7 +95,7 @@ protected:
     P2pDemoCommon(const options_t& test_opts) :
         UcxContext(test_opts.iomsg_size), _test_opts(test_opts) {
 
-        _data_buffer.resize(opts().data_size + ALIGNMENT);
+        _data_buffer.resize(opts().max_data_size + ALIGNMENT);
         uintptr_t ptr = (uintptr_t)&_data_buffer[0];
         _padding = ((ptr + ALIGNMENT - 1) & ~(ALIGNMENT - 1)) - ptr;
     }
@@ -103,11 +108,18 @@ protected:
         return &_data_buffer[_padding];
     }
 
-    bool send_io_message(UcxConnection *conn, io_op_t op, uint32_t sn) {
+    inline size_t get_data_size() {
+        return opts().min_data_size +
+               (std::rand() % static_cast<size_t>(opts().max_data_size -
+                                                  opts().min_data_size + 1));
+    }
+
+    bool send_io_message(UcxConnection *conn, io_op_t op,
+                         uint32_t sn, size_t data_size) {
         IoMessage *m = new IoMessage(opts().iomsg_size, op, sn,
-                                     opts().data_size);
+                                     data_size);
         VERBOSE_LOG << "sending IO " << io_op_names[op] << ", sn " << sn
-                    << " data size " << opts().data_size;
+                    << " data size " << data_size;
         return conn->send_io_message(m->buffer(), opts().iomsg_size, m);
     }
 
@@ -126,13 +138,13 @@ public:
     class IoWriteResponseCallback : public UcxCallback {
     public:
         IoWriteResponseCallback(DemoServer *server, UcxConnection* conn,
-                                uint32_t sn) :
-            _server(server), _conn(conn), _sn(sn) {
+                                uint32_t sn, size_t data_size) :
+            _server(server), _conn(conn), _sn(sn), _data_size(data_size) {
         }
 
         virtual void operator()(ucs_status_t status) {
             if (status == UCS_OK) {
-                _server->send_io_message(_conn, IO_COMP, _sn);
+                _server->send_io_message(_conn, IO_COMP, _sn, _data_size);
             }
             delete this;
         }
@@ -141,6 +153,7 @@ public:
         DemoServer*     _server;
         UcxConnection*  _conn;
         uint32_t        _sn;
+        size_t          _data_size;
     };
 
     DemoServer(const options_t& test_opts) : P2pDemoCommon(test_opts) {
@@ -166,7 +179,8 @@ public:
     void handle_io_read_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
         // send data
         VERBOSE_LOG << "sending IO read data";
-        assert(opts().data_size >= hdr->data_size);
+        assert((opts().max_data_size >= hdr->data_size) &&
+               (opts().min_data_size <= hdr->data_size));
         conn->send_data(buffer(), hdr->data_size, hdr->sn);
 
         // send response as data
@@ -179,9 +193,11 @@ public:
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
         VERBOSE_LOG << "receiving IO write data";
-        assert(opts().data_size >= hdr->data_size);
+        assert((opts().max_data_size >= hdr->data_size) &&
+               (opts().min_data_size <= hdr->data_size));
         conn->recv_data(buffer(), hdr->data_size, hdr->sn,
-                        new IoWriteResponseCallback(this, conn, hdr->sn));
+                        new IoWriteResponseCallback(this, conn, hdr->sn,
+                                                     hdr->data_size));
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
@@ -242,31 +258,39 @@ public:
 
     DemoClient(const options_t& test_opts) :
         P2pDemoCommon(test_opts),
-        _num_sent(0), _num_completed(0), _error_flag(true)
+        _num_sent(0), _num_completed(0), _error_flag(true), _retry(0)
     {
     }
 
-    void do_io_read(UcxConnection *conn, uint32_t sn) {
-        if (!send_io_message(conn, IO_READ, sn)) {
-            return;
+    size_t do_io_read(UcxConnection *conn, uint32_t sn) {
+        size_t data_size = get_data_size();
+
+        if (!send_io_message(conn, IO_READ, sn, data_size)) {
+            return data_size;
         }
 
         ++_num_sent;
         IoReadResponseCallback *response =
                 new IoReadResponseCallback(&_num_completed, opts().iomsg_size);
-        conn->recv_data(buffer(), opts().data_size, sn, response);
+        conn->recv_data(buffer(), data_size, sn, response);
         conn->recv_data(response->buffer(), opts().iomsg_size, sn, response);
+
+        return data_size;
     }
 
-    void do_io_write(UcxConnection *conn, uint32_t sn) {
-        if (!send_io_message(conn, IO_WRITE, sn)) {
-            return;
+    size_t do_io_write(UcxConnection *conn, uint32_t sn) {
+        size_t data_size = get_data_size();
+
+        if (!send_io_message(conn, IO_WRITE, sn, data_size)) {
+            return data_size;
         }
 
         ++_num_sent;
         VERBOSE_LOG << "sending data " << buffer() << " size "
-                    << opts().data_size << " sn " << sn;
-        conn->send_data(buffer(), opts().data_size, sn);
+                    << data_size << " sn " << sn;
+        conn->send_data(buffer(), data_size, sn);
+
+        return data_size;
     }
 
     virtual void dispatch_io_message(UcxConnection* conn, const void *buffer,
@@ -293,7 +317,7 @@ public:
         long count;
 
         count = 0;
-        while ((_num_sent - _num_completed > max_outstanding) && !_error_flag) {
+        while (((_num_sent - _num_completed) > max_outstanding) && !_error_flag) {
             if (count < 1000) {
                 progress();
                 ++count;
@@ -339,87 +363,179 @@ public:
         return tv.tv_sec + (tv.tv_usec * 1e-6);
     }
 
-    void report_performance(long num_iter, double elapsed) {
-        double latency_usec   = (elapsed / num_iter) * 1e6;
-        double throughput_mbs = (num_iter * opts().data_size) / elapsed /
-                                (1024.0 * 1024.0);
-
-        std::cout << num_iter << " iterations of " << io_op_names[opts().operation]
-                  << ", throughput: " << throughput_mbs << " MB/s";
-        if (opts().window_size == 1) {
-            std::cout << " latency: " << latency_usec << " usec";
-        }
-        std::cout << std::endl;
-    }
-
     bool run() {
         UcxConnection* conn = connect();
         if (!conn) {
             return false;
         }
 
+        // reset number of retries after successful connection
+        _retry = 0;
+
         _error_flag = false;
 
-        // TODO reset these values by canceling reuqests
+        // TODO reset these values by canceling requests
         _num_sent      = 0;
         _num_completed = 0;
 
-        double prev_time = get_time();
-        long   prev_iter = 0;
+        double prev_time     = get_time();
+        long total_iter      = 0;
+        long total_prev_iter = 0;
+        std::vector<op_info_t> info;
 
-        long iteration = 0;
-        while ((iteration < opts().iter_count) && !_error_flag) {
-            VERBOSE_LOG << " <<<< iteration " << iteration << " >>>>";
+        for (size_t i = 0; i < opts().operations.size(); i++) {
+            io_op_t op = opts().operations[i];
+            info.push_back({ op, 0, 0 });
+        }
+
+        while ((total_iter < opts().iter_count) && !_error_flag) {
+            VERBOSE_LOG << " <<<< iteration " << total_iter << " >>>>";
 
             if (!wait_for_responses(opts().window_size - 1)) {
                 break;
             }
 
-            switch (opts().operation) {
+            io_op_t op = get_op();
+            size_t size;
+            switch (op) {
             case IO_READ:
-                do_io_read(conn, iteration);
+                size = do_io_read(conn, total_iter);
                 break;
             case IO_WRITE:
-                do_io_write(conn, iteration);
+                size = do_io_write(conn, total_iter);
                 break;
             default:
-                break;
+                abort();
             }
 
-            if (((iteration % 10) == 0) && (iteration > prev_iter)) {
+            info[op].total_bytes += size;
+            info[op].num_iters++;
+
+            if (((total_iter % 10) == 0) && (total_iter > total_prev_iter)) {
                 double curr_time = get_time();
                 if (curr_time >= (prev_time + 1.0)) {
                     if (!wait_for_responses(0)) {
                         break;
                     }
 
-                    report_performance(iteration - prev_iter,
-                                       curr_time - prev_time);
-                    prev_iter = iteration;
-                    prev_time = curr_time;
+                    report_performance(total_iter - total_prev_iter,
+                                       curr_time - prev_time, info);
+                    total_prev_iter = total_iter;
+                    prev_time       = curr_time;
                 }
             }
 
-            ++iteration;
+            ++total_iter;
         }
 
         if (wait_for_responses(0)) {
-            report_performance(opts().iter_count - prev_iter,
-                               get_time() - prev_time);
+            report_performance(total_iter - total_prev_iter,
+                               get_time() - prev_time, info);
         }
 
         delete conn;
         return !_error_flag;
     }
 
+    int update_retry() {
+        if (++_retry >= opts().client_retries) {
+            /* client failed all retries */
+            return -1;
+        }
+
+        LOG << "retry " << _retry << "/" << opts().client_retries
+            << " in " << opts().client_timeout << " seconds";
+        usleep((int)(1e6 * opts().client_timeout));
+        return 0;
+    }
+
+private:
+    typedef struct {
+        io_op_t   op;
+        long      num_iters;
+        size_t    total_bytes;
+    } op_info_t;
+
+    inline io_op_t get_op() {
+        if (opts().operations.size() == 1) {
+            return opts().operations[0];
+        }
+
+        return opts().operations[std::rand() %
+                                 opts().operations.size()];
+    }
+
+    void report_performance(long num_iters, double elapsed,
+                            std::vector<op_info_t> &info) {
+        double latency_usec = (elapsed / num_iters) * 1e6;
+
+        for (unsigned i = 0; i < info.size(); ++i) {
+            op_info_t *op_info = &info[i];
+
+            if (!op_info->total_bytes) {
+                continue;
+            }
+
+            double throughput_mbs = op_info->total_bytes /
+                                    elapsed / (1024.0 * 1024.0);
+
+            std::cout << op_info->num_iters << " iterations of "
+                      << io_op_names[op_info->op]
+                      << ", throughput: " << throughput_mbs << " MB/s"
+                      << std::endl;
+
+            // reset for the next round
+            op_info->total_bytes = 0;
+            op_info->num_iters   = 0;
+        }
+
+        if (opts().window_size == 1) {
+            std::cout << "latency: " << latency_usec << " usec" << std::endl;
+        }
+        std::cout << std::endl;
+    }
+
 private:
     long         _num_sent;
     long         _num_completed;
     bool         _error_flag;
+    unsigned     _retry;
 };
+
+static int set_data_size(char *str, options_t* test_opts)
+{
+    const static char token = ':';
+    char *val1, *val2;
+
+    if (strchr(str, token) == NULL) {
+        test_opts->min_data_size =
+            test_opts->max_data_size = strtol(str, NULL, 0);
+        return 0;
+    }
+
+    val1 = strtok(str, ":");
+    val2 = strtok(NULL, ":");
+
+    if ((val1 != NULL) && (val2 != NULL)) {
+        test_opts->min_data_size = strtol(val1, NULL, 0);
+        test_opts->max_data_size = strtol(val2, NULL, 0);
+    } else if (val1 != NULL) {
+        if (str[0] == ':') {
+            test_opts->min_data_size = 0;
+            test_opts->max_data_size = strtol(val1, NULL, 0);
+        } else {
+            test_opts->min_data_size = strtol(val1, NULL, 0);
+        }
+    } else {
+        return -1;
+    }
+
+    return 0;
+}
 
 static int parse_args(int argc, char **argv, options_t* test_opts)
 {
+    char *str;
     bool found;
     int c;
 
@@ -427,14 +543,15 @@ static int parse_args(int argc, char **argv, options_t* test_opts)
     test_opts->port_num       = 1337;
     test_opts->client_retries = 10;
     test_opts->client_timeout = 1.0;
+    test_opts->min_data_size  = 4096;
+    test_opts->max_data_size  = 4096;
     test_opts->iomsg_size     = 256;
-    test_opts->data_size      = 4096;
     test_opts->iter_count     = 1000;
     test_opts->window_size    = 1;
-    test_opts->operation      = IO_WRITE;
+    test_opts->random_seed    = std::time(NULL);
     test_opts->verbose        = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:i:w:o:t:v")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:i:w:o:t:s:v")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -446,7 +563,10 @@ static int parse_args(int argc, char **argv, options_t* test_opts)
             test_opts->iomsg_size = strtol(optarg, NULL, 0);
             break;
         case 'd':
-            test_opts->data_size = strtol(optarg, NULL, 0);
+            if (set_data_size(optarg, test_opts) == -1) {
+                std::cout << "invalid data size range '" << optarg << "'" << std::endl;
+                return -1;
+            }
             break;
         case 'i':
             test_opts->iter_count = strtol(optarg, NULL, 0);
@@ -455,37 +575,61 @@ static int parse_args(int argc, char **argv, options_t* test_opts)
             test_opts->window_size = atoi(optarg);
             break;
         case 'o':
-            found = false;
-            for (int op = 0; op < IO_COMP; ++op) {
-                if (!strcmp(io_op_names[op], optarg)) {
-                    test_opts->operation = (io_op_t)op;
-                    found = true;
+            str = strtok(optarg, ",");
+            while (str != NULL) {
+                found = false;
+
+                for (int op_it = 0; op_it < IO_COMP; ++op_it) {
+                    if (!strcmp(io_op_names[op_it], str)) {
+                        io_op_t op = static_cast<io_op_t>(op_it);
+                        if (std::find(test_opts->operations.begin(),
+                                      test_opts->operations.end(),
+                                      op) == test_opts->operations.end()) {
+                            test_opts->operations.push_back(op);
+                        }
+                        found = true;
+                    }
                 }
+
+                if (!found) {
+                    std::cout << "invalid operation name '" << str << "'" << std::endl;
+                    return -1;
+                }
+
+                str = strtok(NULL, ",");
             }
-            if (!found) {
-                std::cout << "invalid operation name '" << optarg << "'" << std::endl;
+
+            if (test_opts->operations.size() == 0) {
+                std::cout << "no operation names were provided '" << optarg << "'" << std::endl;
                 return -1;
             }
             break;
         case 't':
             test_opts->client_timeout = atof(optarg);
             break;
+        case 's':
+            test_opts->random_seed = strtoul(optarg, NULL, 0);
+            break;
         case 'v':
             test_opts->verbose = true;
             break;
         case 'h':
         default:
-            std::cout << "Usage: io_demo [ options] [ server_address]" << std::endl;
+            std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
             std::cout << "" << std::endl;
             std::cout << "Supported options are:" << std::endl;
             std::cout << "  -p <port>                TCP port number to use" << std::endl;
-            std::cout << "  -o <io-operation>        IO operation [read|write]" << std::endl;
-            std::cout << "  -d <data-size>           Size of IO payload" << std::endl;
+            std::cout << "  -o <op1,op2,...,opN>     Comma-separated string of IO operations [read|write]" << std::endl;
+            std::cout << "                           NOTE: if using \"random\", performance" << std::endl;
+            std::cout << "                                 measurments may be inaccurate" << std::endl;
+            std::cout << "  -d <min>:<max>           Range that should be used to get data" << std::endl;
+            std::cout << "                           size of IO payload" << std::endl;
             std::cout << "  -i <iterations-count>    Number of iterations to run communication" << std::endl;
             std::cout << "  -w <window-size>         Number of outstanding requests" << std::endl;
             std::cout << "  -r <io-request-size>     Size of IO request packet" << std::endl;
             std::cout << "  -c <client retries>      Number of retries on client for failure" << std::endl;
             std::cout << "  -t <client timeout>      Client timeout, in seconds" << std::endl;
+            std::cout << "  -s <random seed>         Random seed to use for randomizing" << std::endl;
             std::cout << "  -v                       Set verbose mode" << std::endl;
             std::cout << "" << std::endl;
             return -1;
@@ -494,6 +638,10 @@ static int parse_args(int argc, char **argv, options_t* test_opts)
 
     if (optind < argc) {
         test_opts->server_addr = argv[optind];
+    }
+
+    if (test_opts->operations.size() == 0) {
+        test_opts->operations.push_back(IO_WRITE);
     }
 
     return 0;
@@ -512,27 +660,23 @@ static int do_server(const options_t& test_opts)
 
 static int do_client(const options_t& test_opts)
 {
+    std::srand(test_opts.random_seed);
+    LOG << "random seed: " << test_opts.random_seed;
+
     DemoClient client(test_opts);
     if (!client.init()) {
         return -1;
     }
 
-    unsigned retry = 0;
     for (;;) {
         if (client.run()) {
             /* successful run */
             return 0;
         }
 
-        ++retry;
-        if (retry >= test_opts.client_retries) {
-            /* client failed all retries */
-            return -1;
+        if (client.update_retry() != 0) {
+            break;
         }
-
-        LOG << "retry " << retry << "/" << test_opts.client_retries
-            << " in " << test_opts.client_timeout << " seconds";
-        usleep((int)(1e6 * test_opts.client_timeout));
     }
 
     return -1;
