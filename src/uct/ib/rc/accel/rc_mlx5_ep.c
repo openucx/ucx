@@ -949,29 +949,12 @@ static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, uct_ib_mlx5_qp_t *qp,
                                                        uct_ib_mlx5_md_t);
 
     /* Make the HW generate CQEs for all in-progress SRQ receives from the QP,
-     * so we clean them all before ibv_modify_qp() can see them.
+     * so we clean them all and release all associated resouces.
      */
-#if HAVE_DECL_IBV_CMD_MODIFY_QP && !HAVE_DEVX
-    struct ibv_qp_attr qp_attr;
-    struct ibv_modify_qp cmd;
-    int ret;
-
-    /* Bypass mlx5 driver, and go directly to command interface, to avoid
-     * cleaning the CQ in mlx5 driver
-     */
-    memset(&qp_attr, 0, sizeof(qp_attr));
-    qp_attr.qp_state = IBV_QPS_RESET;
-    ret = ibv_cmd_modify_qp(qp->verbs.qp, &qp_attr, IBV_QP_STATE, &cmd, sizeof(cmd));
-    if (ret) {
-        ucs_warn("modify qp 0x%x to RESET failed: %m", qp->qp_num);
-    }
-#else
     (void)uct_ib_mlx5_modify_qp_state(md, qp, IBV_QPS_ERR);
-#endif
 
     uct_rc_mlx5_iface_commom_cq_clean(iface, UCT_IB_DIR_RX, qp->qp_num,
                                       uct_rc_mlx5_ep_clean_rx_cq_cb, qp);
-
     if ((txqp != NULL) && (txwq != NULL)) {
         /* TODO make this call outside of the function */
         uct_rc_mlx5_iface_commom_cq_clean_tx(iface, txqp, txwq);
