@@ -592,7 +592,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_resend,
                      (RUNNING_ON_VALGRIND ||
                       !check_caps(UCT_IFACE_FLAG_AM_SHORT))) {
 
-    int max_window = 10;
+    int max_window = 9;
     int i;
     ucs_status_t status;
 

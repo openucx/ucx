@@ -27,6 +27,7 @@
 #define UCT_UD_CA_DUP_ACK_CNT   2   /* TODO: not implemented yet */
 #define UCT_UD_RESENDS_PER_ACK  4   /* request per every N resends */
 #define UCT_UD_SKB_ALIGN        UCS_SYS_CACHE_LINE_SIZE
+#define UCT_UD_SKIP_SWEEP       8
 
 /* note that the ud tx window is [acked_psn+1, max_psn)
  * and max_psn = acked_psn + cwnd
