@@ -2094,8 +2094,8 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
     if ((ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
         /* error callback is not set */
         (ucp_ep_ext_gen(ep)->err_cb == NULL) ||
-        /* the EP has been closed by user */
-        (ep->flags & UCP_EP_FLAG_CLOSED)) {
+        /* the EP has been closed by user, or error callback already called */
+        (ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_ERR_HANDLER_INVOKED))) {
         return;
     }
 
@@ -2103,6 +2103,7 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
     ucs_debug("ep %p: calling user error callback %p with arg %p and status %s",
               ep, ucp_ep_ext_gen(ep)->err_cb, ucp_ep_ext_gen(ep)->user_data,
               ucs_status_string(status));
+    ep->flags |= UCP_EP_FLAG_ERR_HANDLER_INVOKED;
     ucp_ep_ext_gen(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
 }
 
