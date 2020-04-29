@@ -783,6 +783,16 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     }
 }
 
+static void ucp_worker_matchq_purge(ucp_tag_frag_match_t *matchq)
+{
+    ucp_recv_desc_t *rdesc;
+
+    ucs_queue_for_each_extract(rdesc, &matchq->unexp_q, tag_frag_queue, 1) {
+        ucs_debug("releasing unexpected rdesc %p", rdesc);
+        ucp_recv_desc_release(rdesc);
+    }
+}
+
 static void ucp_ep_cleanup_unexp(ucp_ep_h ep)
 {
     ucp_tag_match_t *tm = &ep->worker->tm;
@@ -829,6 +839,7 @@ static void ucp_ep_cleanup_unexp(ucp_ep_h ep)
             if (rreq->recv.tag.ep_ptr == (uintptr_t)ep) {
                 ucs_debug("completing req %p", rreq);
                 ucp_request_complete_tag_recv(rreq, UCS_ERR_CANCELED);
+                kh_del(ucp_tag_frag_hash, &tm->frag_hash, iter);
             }
         } else {
             /* remove receive fragments from unexpected matchq */
@@ -836,17 +847,11 @@ static void ucp_ep_cleanup_unexp(ucp_ep_h ep)
                                                   tag_frag_queue);
             ucs_assert(!(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV));
             eager_mid_hdr = (void*)(rdesc + 1);
-            if (eager_mid_hdr->ep_ptr != (uintptr_t)ep) {
-                continue;
-            }
-
-            ucs_queue_for_each_extract(rdesc, &matchq->unexp_q, tag_frag_queue, 1) {
-                ucs_debug("releasing unexpected rdesc %p", rdesc);
-                ucp_recv_desc_release(rdesc);
+            if (eager_mid_hdr->ep_ptr == (uintptr_t)ep) {
+                ucp_worker_matchq_purge(matchq);
+                kh_del(ucp_tag_frag_hash, &tm->frag_hash, iter);
             }
         }
-
-        kh_del(ucp_tag_frag_hash, &tm->frag_hash, iter);
     });
 
 }
