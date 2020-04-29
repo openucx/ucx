@@ -371,6 +371,7 @@ typedef struct uct_rc_mlx5_iface_common {
         void                           *pref_ptr;
     } rx;
     uct_ib_mlx5_cq_t                   cq[UCT_IB_DIR_NUM];
+    ucs_time_t                         ka_time;
     struct {
         uct_rc_mlx5_cmd_wq_t           cmd_wq;
         uct_rc_mlx5_tag_entry_t        *head;
@@ -423,6 +424,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uint8_t                        atomic_fence_flag;
         uint8_t                        put_fence_flag;
         ucs_ternary_value_t            cyclic_srq_enable;
+        ucs_time_t                     ka_interval;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
@@ -442,6 +444,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
     } tm;
     unsigned                         exp_backoff;
     ucs_ternary_value_t              cyclic_srq_enable;
+    double                           ka_interval;
 } uct_rc_mlx5_iface_common_config_t;
 
 

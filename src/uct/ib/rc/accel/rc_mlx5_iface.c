@@ -15,6 +15,7 @@
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
+#include <ucs/time/time.h>
 
 #include "rc_mlx5.inl"
 
@@ -592,6 +593,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
     self->tx.bb_max           = ucs_min(mlx5_config->tx_max_bb, UINT16_MAX);
     self->tm.am_desc.super.cb = uct_rc_mlx5_release_desc;
+    if (mlx5_config->ka_interval < 1e-6) {
+        self->config.ka_interval = UCS_TIME_INFINITY;
+        self->ka_time            = UCS_TIME_INFINITY;
+    } else {
+        self->config.ka_interval = ucs_time_from_sec(mlx5_config->ka_interval);
+        self->ka_time            = ucs_get_time() + self->config.ka_interval;
+    }
 
     if (!UCT_RC_MLX5_MP_ENABLED(self)) {
         self->tm.am_desc.offset = self->super.super.config.rx_headroom_offset;

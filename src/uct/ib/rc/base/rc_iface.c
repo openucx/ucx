@@ -361,13 +361,42 @@ ucs_status_t uct_rc_init_fc_thresh(uct_rc_iface_config_t *config,
     return UCS_OK;
 }
 
+void uct_rc_ep_fc_send_grant(uct_rc_ep_t *ep)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
+    uct_rc_fc_request_t *fc_req;
+    ucs_status_t status;
+
+    fc_req = ucs_mpool_get(&iface->tx.fc_mp);
+    if (ucs_unlikely(fc_req == NULL)) {
+        ucs_error("Failed to allocate FC request. "
+                  "Grant will not be sent on ep %p", ep);
+        return;
+    }
+
+    fc_req->ep         = &ep->super.super;
+    fc_req->super.func = uct_rc_ep_fc_grant;
+
+    /* Got hard credit request. Send grant to the peer immediately */
+    status = uct_rc_ep_fc_grant(&fc_req->super);
+
+    if (status == UCS_ERR_NO_RESOURCE){
+        /* force add request to group & schedule group to eliminate
+         * FC deadlock */
+        uct_pending_req_arb_group_push_head(&iface->tx.arbiter,
+                                            &ep->arb_group, &fc_req->super);
+        ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
+    } else {
+        ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
+                           ucs_status_string(status));
+    }
+
+}
 ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,
                                      uint32_t imm_data, uint16_t lid, unsigned flags)
 {
-    ucs_status_t status;
     int16_t      cur_wnd;
-    uct_rc_fc_request_t *fc_req;
     uct_rc_ep_t  *ep  = uct_rc_iface_lookup_ep(iface, qp_num);
     uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(hdr->am_id);
 
@@ -408,28 +437,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
     } else if (fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
-        fc_req = ucs_mpool_get(&iface->tx.fc_mp);
-        if (ucs_unlikely(fc_req == NULL)) {
-            ucs_error("Failed to allocate FC request. "
-                      "Grant will not be sent on ep %p", ep);
-            return UCS_ERR_NO_MEMORY;
-        }
-        fc_req->ep         = &ep->super.super;
-        fc_req->super.func = uct_rc_ep_fc_grant;
-
-        /* Got hard credit request. Send grant to the peer immediately */
-        status = uct_rc_ep_fc_grant(&fc_req->super);
-
-        if (status == UCS_ERR_NO_RESOURCE){
-            /* force add request to group & schedule group to eliminate
-             * FC deadlock */
-            uct_pending_req_arb_group_push_head(&iface->tx.arbiter,
-                                                &ep->arb_group, &fc_req->super);
-            ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
-        } else {
-            ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
-                               ucs_status_string(status));
-        }
+        uct_rc_ep_fc_send_grant(ep);
     }
 
     return uct_iface_invoke_am(&iface->super.super,

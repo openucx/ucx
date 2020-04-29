@@ -13,6 +13,7 @@
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/time/time.h>
 
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
@@ -69,9 +70,28 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, cyclic_srq_enable),
    UCS_CONFIG_TYPE_TERNARY},
 
+  {"KA_INTERVAL", "10.0",
+   "Interval for sending keep-alive messages on all connection. Set to 0.0 to"
+   "disable.",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, ka_interval),
+   UCS_CONFIG_TYPE_TIME},
+
   {NULL}
 };
 
+static void
+uct_rc_mlx5_iface_common_send_keepalive(uct_rc_mlx5_iface_common_t *iface)
+{
+     uct_rc_mlx5_ep_t *ep;
+     ucs_list_for_each(ep, &iface->super.ep_list, super.list) {
+         ucs_trace("send keepalive grant on ep %p", ep);
+         uct_rc_ep_fc_send_grant(&ep->super);
+     }
+
+     uct_rc_mlx5_iface_print(iface, "keepalive");
+
+     iface->ka_time = ucs_get_time() + iface->config.ka_interval;
+}
 
 unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
 {
@@ -135,6 +155,11 @@ out:
         *srq->db                    = htonl(srq->sw_pi);
         ucs_assert(uct_ib_mlx5_srq_get_wqe(srq, srq->mask)->srq.next_wqe_index == 0);
     }
+
+    if (ucs_unlikely(ucs_get_time() > iface->ka_time)) {
+        uct_rc_mlx5_iface_common_send_keepalive(iface);
+    }
+
     return count;
 }
 
