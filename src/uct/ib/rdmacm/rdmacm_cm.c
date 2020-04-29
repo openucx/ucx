@@ -168,7 +168,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     ucs_debug("cm_id %p: ah_attr %s", cm_id,
               uct_ib_ah_attr_str(ah_attr_str, sizeof(ah_attr_str),
                                  &qp_attr.ah_attr));
-    ucs_assert_always(qp_attr.path_mtu != 0);
+    ucs_assert_always(qp_attr.path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
     params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
     params.path_mtu = qp_attr.path_mtu;
 

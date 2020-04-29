@@ -283,11 +283,11 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
         }
     }
 
-    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
         size += sizeof(uint8_t);
     }
 
-    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
         size += sizeof(uint8_t);
     }
 
@@ -343,16 +343,16 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
         }
     }
 
-    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
-        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_GID_INDEX;
-        *(uint8_t*)ptr  = params->gid_index;
-        ptr             = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
-    }
-
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
         ucs_assert((int)params->path_mtu < UINT8_MAX);
         ib_addr->flags |= UCT_IB_ADDRESS_FLAG_PATH_MTU;
         *(uint8_t*)ptr  = (uint8_t)params->path_mtu;
+        ptr             = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+    }
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
+        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_GID_INDEX;
+        *(uint8_t*)ptr  = params->gid_index;
     }
 }
 
@@ -390,8 +390,8 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
     params.lid       = uct_ib_iface_port_attr(iface)->lid;
     params.roce_info = &iface->gid_info.roce_info;
     /* to suppress gcc 4.3.4 warning */
-    params.path_mtu  = 0;
-    params.gid_index = UINT8_MAX;
+    params.path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
+    params.gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
     uct_ib_address_pack(&params, ib_addr);
 }
 
@@ -402,8 +402,8 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
     const void *ptr = ib_addr + 1;
 
     *lid       = 0;
-    *gid_index = UINT8_MAX;
-    *path_mtu  = 0;
+    *gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
+    *path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) {
         /* uint8_t raw[16]; */
@@ -435,13 +435,13 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
         }
     }
 
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID_INDEX) {
-        *gid_index = *(const uint8_t*)ptr;
-        ptr        = UCS_PTR_TYPE_OFFSET(ptr, const uint8_t);
-    }
-
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_PATH_MTU) {
         *path_mtu = *(const uint8_t*)ptr;
+        ptr       = UCS_PTR_TYPE_OFFSET(ptr, const uint8_t);
+    }
+
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID_INDEX) {
+        *gid_index = *(const uint8_t*)ptr;
     }
 }
 
@@ -466,12 +466,12 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
     uct_ib_gid_str(&gid, p, endp - p);
     p += strlen(p);
 
-    if (gid_index != UINT8_MAX) {
+    if (gid_index != UCT_IB_ADDRESS_INVALID_GID_INDEX) {
         snprintf(p, endp - p, "gid index %u ", gid_index);
         p += strlen(p);
     }
 
-    if (mtu != 0) {
+    if (mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU) {
         snprintf(p, endp - p, "mtu %zu ", uct_ib_mtu_value(mtu));
     }
 
@@ -634,11 +634,11 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH));
 
     uct_ib_address_unpack(ib_addr, &lid, &gid, &gid_index, path_mtu);
-    if (*path_mtu == 0) {
+    if (*path_mtu == UCT_IB_ADDRESS_INVALID_PATH_MTU) {
         *path_mtu = iface->config.path_mtu;
     }
 
-    if (gid_index == UINT8_MAX) {
+    if (gid_index == UCT_IB_ADDRESS_INVALID_GID_INDEX) {
         gid_index = iface->gid_info.gid_index;
     }
 

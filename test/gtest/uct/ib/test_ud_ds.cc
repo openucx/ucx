@@ -77,10 +77,10 @@ UCS_TEST_P(test_ud_ds, if_addr) {
     EXPECT_EQ(gid1.global.interface_id, gid2.global.interface_id);
     EXPECT_NE(uct_ib_unpack_uint24(if_adr1.qp_num),
               uct_ib_unpack_uint24(if_adr2.qp_num));
-    EXPECT_EQ(0, mtu1);
-    EXPECT_EQ(0, mtu2);
-    EXPECT_EQ(std::numeric_limits<uint8_t>::max(), gid_index1);
-    EXPECT_EQ(std::numeric_limits<uint8_t>::max(), gid_index2);
+    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU,  mtu1);
+    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU,  mtu2);
+    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, gid_index1);
+    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, gid_index2);
 }
 
 void test_ud_ds::test_cep_insert(entity *e, uct_ib_address_t *ib_addr,

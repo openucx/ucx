@@ -20,7 +20,8 @@
 #define UCT_IB_MAX_IOV                     8UL
 #define UCT_IB_IFACE_NULL_RES_DOMAIN_KEY   0u
 #define UCT_IB_MAX_ATOMIC_SIZE             sizeof(uint64_t)
-
+#define UCT_IB_ADDRESS_INVALID_GID_INDEX   UINT8_MAX
+#define UCT_IB_ADDRESS_INVALID_PATH_MTU    0
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;

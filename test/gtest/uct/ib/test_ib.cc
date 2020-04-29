@@ -114,8 +114,8 @@ public:
             EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
         }
 
-        EXPECT_EQ(0, mtu);
-        EXPECT_EQ(std::numeric_limits<uint8_t>::max(), gid_index);
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU,  mtu);
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, gid_index);
         free(ib_addr);
     }
 
