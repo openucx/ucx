@@ -1656,6 +1656,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             /* Stub endpoint */
             config->am.max_bcopy        = UCP_MIN_BCOPY;
             config->tag.eager.max_bcopy = UCP_MIN_BCOPY;
+            config->tag.lane            = lane;
        }
     }
 
