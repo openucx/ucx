@@ -594,7 +594,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     // send local connection id
     void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
                                     stream_send_callback, 0);
-    wait_status = _context.wait_completion(sreq, 10);
+    wait_status = _context.wait_completion(sreq, 5);
     if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to send remote connection id";
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
@@ -607,7 +607,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     }
 
     // wait to complete receiving remote connection id
-    wait_status = _context.wait_completion(rreq, 10);
+    wait_status = _context.wait_completion(rreq, 5);
     if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to receive remote connection id";
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
