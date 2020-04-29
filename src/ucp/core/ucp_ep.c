@@ -539,22 +539,15 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
 out_ep_destroy:
     ucp_ep_destroy_internal(ep);
 out:
-    if (status == UCS_OK) {
-        if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
+    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
+        ucs_free(conn_request->remote_dev_addr);
+    } else {
+        if (status == UCS_OK) {
             status = uct_iface_accept(conn_request->uct.iface,
                                       conn_request->uct_req);
-        }
-    } else {
-        if (ucp_worker_sockaddr_is_cm_proto(worker)) {
-            uct_listener_reject(conn_request->uct.listener,
-                                conn_request->uct_req);
         } else {
             uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
         }
-    }
-
-    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
-        ucs_free(conn_request->remote_dev_addr);
     }
 
     ucs_free(conn_request);
