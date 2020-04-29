@@ -46,9 +46,9 @@ uct_rc_mlx5_txqp_process_tx_cqe(uct_rc_txqp_t *txqp, struct mlx5_cqe64 *cqe,
                                 uint16_t hw_ci, ucs_status_t status)
 {
     if (cqe->op_own & MLX5_INLINE_SCATTER_32) {
-        uct_rc_txqp_completion_inl_resp(txqp, cqe, hw_ci);
+        uct_rc_txqp_completion_inl_resp(txqp, cqe, hw_ci, status);
     } else if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
-        uct_rc_txqp_completion_inl_resp(txqp, cqe - 1, hw_ci);
+        uct_rc_txqp_completion_inl_resp(txqp, cqe - 1, hw_ci, status);
     } else {
         uct_rc_txqp_completion_desc(txqp, hw_ci, status);
     }

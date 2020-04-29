@@ -208,7 +208,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     ucs_status_t status;
 
     status = uct_ib_mlx5_poll_cq(&iface->super.super.super,
-                              &iface->super.cq[UCT_IB_DIR_TX], &cqe);
+                                 &iface->super.cq[UCT_IB_DIR_TX], &cqe);
     if (ucs_unlikely(status != UCS_OK)) {
         return status != UCS_ERR_NO_PROGRESS;
     }

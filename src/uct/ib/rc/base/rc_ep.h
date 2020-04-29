@@ -405,7 +405,8 @@ uct_rc_txqp_completion_desc(uct_rc_txqp_t *txqp, uint16_t sn,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t sn)
+uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp,
+                                uint16_t sn, ucs_status_t status)
 {
     uct_rc_iface_send_op_t *op;
 
@@ -413,7 +414,7 @@ uct_rc_txqp_completion_inl_resp(uct_rc_txqp_t *txqp, const void *resp, uint16_t 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         ucs_assert(!(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY));
-        uct_rc_txqp_completion_op(op, resp, UCS_OK);
+        uct_rc_txqp_completion_op(op, resp, status);
     }
 }
 
