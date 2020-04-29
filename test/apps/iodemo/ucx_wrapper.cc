@@ -233,7 +233,7 @@ const std::string UcxContext::sockaddr_str(const struct sockaddr* saddr,
         port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
         break;
     case AF_INET6:
-        inet_ntop(AF_INET, &((struct sockaddr_in6*)&addr)->sin6_addr,
+        inet_ntop(AF_INET6, &((struct sockaddr_in6*)&addr)->sin6_addr,
                   buf, sizeof(buf));
         port = ntohs(((struct sockaddr_in6*)&addr)->sin6_port);
         break;

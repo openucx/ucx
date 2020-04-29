@@ -381,9 +381,8 @@ public:
         long total_prev_iter = 0;
         std::vector<op_info_t> info;
 
-        for (size_t i = 0; i < opts().operations.size(); i++) {
-            io_op_t op = opts().operations[i];
-            op_info_t op_info = {op, 0, 0};
+        for (int i = 0; i < IO_COMP; ++i) {
+            op_info_t op_info = {static_cast<io_op_t>(i), 0, 0};
             info.push_back(op_info);
         }
 
