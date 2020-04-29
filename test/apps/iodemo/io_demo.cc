@@ -114,9 +114,9 @@ protected:
         return &_data_buffers[_cur_buffer_idx][_padding];
     }
 
-    inline void *next_buffer() {
+    inline void next_buffer() {
         _cur_buffer_idx = (_cur_buffer_idx + 1) % _data_buffers.size();
-        return buffer();
+        assert(_cur_buffer_idx < opts().num_buffers);
     }
 
     inline size_t get_data_size() {
