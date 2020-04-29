@@ -52,6 +52,25 @@ KHASH_IMPL(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*, 1,
            uct_ib_kh_ah_hash_func, uct_ib_kh_ah_hash_equal)
 
 
+static UCS_F_ALWAYS_INLINE
+khint32_t uct_ib_async_event_hash_func(uct_ib_async_event_t event)
+{
+    return kh_int64_hash_func(((uint64_t)event.event_type << 32) |
+                              event.resource_id);
+}
+
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_async_event_hash_equal(uct_ib_async_event_t event1,
+                              uct_ib_async_event_t event2)
+{
+    return (event1.event_type  == event2.event_type) &&
+           (event1.resource_id == event2.resource_id);
+}
+
+KHASH_IMPL(uct_ib_async_event, uct_ib_async_event_t, volatile unsigned, 1,
+           uct_ib_async_event_hash_func, uct_ib_async_event_hash_equal)
+
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
@@ -158,6 +177,69 @@ static void uct_ib_device_get_locality(const char *dev_name,
     *numa_node = (status == UCS_OK) ? n : -1;
 }
 
+static void
+uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                   enum ibv_event_type event_type,
+                                   uint32_t resource_id)
+{
+    uct_ib_async_event_t event = {
+        .event_type  = event_type,
+        .resource_id = resource_id
+    };
+    khiter_t iter;
+    int ret;
+
+    ucs_spin_lock(&dev->async_event_lock);
+    iter = kh_put(uct_ib_async_event, &dev->async_events_hash, event, &ret);
+    if (ret == 0) {
+        ++kh_val(&dev->async_events_hash, iter);
+    } else if ((ret = 1) || (ret == 2)) {
+        kh_val(&dev->async_events_hash, iter) = 1;
+    }
+    ucs_spin_unlock(&dev->async_event_lock);
+}
+
+void uct_ib_device_async_event_reset(uct_ib_device_t *dev,
+                                     enum ibv_event_type event_type,
+                                     uint32_t resource_id)
+{
+    uct_ib_async_event_t event = {
+        .event_type  = event_type,
+        .resource_id = resource_id
+    };
+    khiter_t iter;
+
+    ucs_spin_lock(&dev->async_event_lock);
+    iter = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
+    if (iter != kh_end(&dev->async_events_hash)) {
+        kh_del(uct_ib_async_event, &dev->async_events_hash, iter);
+    }
+    ucs_spin_unlock(&dev->async_event_lock);
+}
+
+unsigned uct_ib_device_async_event_get_count(uct_ib_device_t *dev,
+                                             enum ibv_event_type event_type,
+                                             uint32_t resource_id)
+{
+    uct_ib_async_event_t event = {
+        .event_type  = event_type,
+        .resource_id = resource_id
+    };
+    unsigned count;
+    khiter_t iter;
+
+    ucs_spin_lock(&dev->async_event_lock);
+    iter = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
+    if (iter == kh_end(&dev->async_events_hash)) {
+        count = 0;
+    } else {
+        count = kh_val(&dev->async_events_hash, iter);
+    }
+    ucs_spin_unlock(&dev->async_event_lock);
+
+    return count;
+}
+
 static void uct_ib_async_event_handler(int fd, void *arg)
 {
     uct_ib_device_t *dev = arg;
@@ -194,6 +276,8 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     case IBV_EVENT_QP_LAST_WQE_REACHED:
         snprintf(event_info, sizeof(event_info), "SRQ-attached QP 0x%x was flushed",
                  event.element.qp->qp_num);
+        uct_ib_device_async_event_dispatch(dev, event.event_type,
+                                           event.element.qp->qp_num);
         level = UCS_LOG_LEVEL_DEBUG;
         break;
     case IBV_EVENT_SRQ_ERR:
@@ -210,7 +294,7 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     case IBV_EVENT_PORT_ERR:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
                  ibv_event_type_str(event.event_type), event.element.port_num);
-        level = UCS_LOG_LEVEL_ERROR;
+        level = UCS_LOG_LEVEL_DIAG;
         break;
     case IBV_EVENT_PORT_ACTIVE:
 #if HAVE_DECL_IBV_EVENT_GID_CHANGE
@@ -222,13 +306,13 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     case IBV_EVENT_CLIENT_REREGISTER:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
                  ibv_event_type_str(event.event_type), event.element.port_num);
-        level = UCS_LOG_LEVEL_WARN;
+        level = UCS_LOG_LEVEL_DIAG;
         break;
 #ifdef HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
     case IBV_EXP_EVENT_DCT_KEY_VIOLATION:
         snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
                  "DCT key violation", event.element.dct->dct_num);
-        level = UCS_LOG_LEVEL_ERROR;
+        level = UCS_LOG_LEVEL_DIAG;
         break;
     case IBV_EXP_EVENT_DCT_ACCESS_ERR:
         if (event.element.dct) {
@@ -238,18 +322,18 @@ static void uct_ib_async_event_handler(int fd, void *arg)
             snprintf(event_info, sizeof(event_info), "%s on DCTN UNKNOWN",
                      "DCT access error");
         }
-        level = UCS_LOG_LEVEL_ERROR;
+        level = UCS_LOG_LEVEL_DIAG;
         break;
     case IBV_EXP_EVENT_DCT_REQ_ERR:
         snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
                  "DCT requester error", event.element.dct->dct_num);
-        level = UCS_LOG_LEVEL_ERROR;
+        level = UCS_LOG_LEVEL_DIAG;
         break;
 #endif
     default:
         snprintf(event_info, sizeof(event_info), "%s (%d)",
                  ibv_event_type_str(event.event_type), event.event_type);
-        level = UCS_LOG_LEVEL_INFO;
+        level = UCS_LOG_LEVEL_DIAG;
         break;
     };
 
@@ -332,6 +416,10 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     ucs_status_t status;
 
     dev->async_events = async_events;
+    ucs_recursive_spinlock_init(&dev->ah_lock, 0);
+    kh_init_inplace(uct_ib_ah, &dev->ah_hash);
+    ucs_spinlock_init(&dev->async_event_lock, 0);
+    kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
 
     uct_ib_device_get_locality(ibv_get_device_name(ibv_device), &dev->local_cpus,
                                &dev->numa_node);
@@ -359,9 +447,6 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         }
     }
 
-    kh_init_inplace(uct_ib_ah, &dev->ah_hash);
-    ucs_recursive_spinlock_init(&dev->ah_lock, 0);
-
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
               dev->num_ports);
@@ -385,6 +470,13 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
     ucs_status_t status;
 
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
+
+    kh_destroy_inplace(uct_ib_async_event, &dev->async_events_hash);
+
+    status = ucs_spinlock_destroy(&dev->async_event_lock);
+    if (status != UCS_OK) {
+        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+    }
 
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
 

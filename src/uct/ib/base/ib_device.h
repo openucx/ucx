@@ -144,6 +144,17 @@ typedef struct uct_ib_device_spec {
 KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*);
 
 /**
+ * Async event flag
+ */
+typedef struct uct_ib_async_event {
+    enum ibv_event_type         event_type;
+    uint32_t                    resource_id;
+} uct_ib_async_event_t;
+
+KHASH_TYPE(uct_ib_async_event, uct_ib_async_event_t, volatile unsigned);
+
+
+/**
  * IB device (corresponds to HCA)
  */
 typedef struct uct_ib_device {
@@ -168,6 +179,9 @@ typedef struct uct_ib_device {
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
+    /* Async event subscribers */
+    ucs_spinlock_t              async_event_lock;
+    khash_t(uct_ib_async_event) async_events_hash;
 } uct_ib_device_t;
 
 
@@ -340,6 +354,14 @@ ucs_status_t uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *d
 int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
                                       const union ibv_gid *gid,
                                       uint8_t gid_index);
+
+void uct_ib_device_async_event_reset(uct_ib_device_t *dev,
+                                     enum ibv_event_type event_type,
+                                     uint32_t resource_id);
+
+unsigned uct_ib_device_async_event_get_count(uct_ib_device_t *dev,
+                                             enum ibv_event_type event_type,
+                                             uint32_t resource_id);
 
 int uct_ib_get_cqe_size(int cqe_size_min);
 
