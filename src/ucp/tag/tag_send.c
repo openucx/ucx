@@ -58,7 +58,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     size_t rndv_rma_thresh;
     size_t rndv_am_thresh;
 
-    if (param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_ZCOPY) {
+    if (param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {
         rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv_send_nbr.rma_thresh;
         rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv_send_nbr.am_thresh;
     } else {
@@ -69,7 +69,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     rndv_thresh = ucp_tag_get_rndv_threshold(req, dt_count, msg_config->max_iov,
                                              rndv_rma_thresh, rndv_am_thresh);
 
-    if (!(param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_ZCOPY) ||
+    if (!(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
         ucs_unlikely(!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
         zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, dt_count,
                                                      rndv_thresh);
@@ -82,7 +82,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                   "zcopy_thresh=%zu zcopy_enabled=%d",
                   req, req->send.datatype, req->send.buffer, req->send.length,
                   max_short, rndv_thresh, zcopy_thresh,
-                  !(param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_ZCOPY));
+                  !(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL));
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
                                     dt_count, msg_config, proto);
@@ -204,7 +204,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_send_nbr,
 {
     ucp_request_param_t param = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FIELD_REQUEST |
-                        UCP_OP_ATTR_FLAG_NO_ZCOPY,
+                        UCP_OP_ATTR_FLAG_FAST_CMPL,
         .datatype     = datatype,
         .request      = request
     };
