@@ -179,8 +179,7 @@ public:
     void handle_io_read_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
         // send data
         VERBOSE_LOG << "sending IO read data";
-        assert((opts().max_data_size >= hdr->data_size) &&
-               (opts().min_data_size <= hdr->data_size));
+        assert(opts().max_data_size >= hdr->data_size);
         conn->send_data(buffer(), hdr->data_size, hdr->sn);
 
         // send response as data
@@ -193,8 +192,7 @@ public:
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
         VERBOSE_LOG << "receiving IO write data";
-        assert((opts().max_data_size >= hdr->data_size) &&
-               (opts().min_data_size <= hdr->data_size));
+        assert(opts().max_data_size >= hdr->data_size);
         conn->recv_data(buffer(), hdr->data_size, hdr->sn,
                         new IoWriteResponseCallback(this, conn, hdr->sn,
                                                      hdr->data_size));
@@ -385,7 +383,8 @@ public:
 
         for (size_t i = 0; i < opts().operations.size(); i++) {
             io_op_t op = opts().operations[i];
-            info.push_back({ op, 0, 0 });
+            op_info_t op_info = {op, 0, 0};
+            info.push_back(op_info);
         }
 
         while ((total_iter < opts().iter_count) && !_error_flag) {
@@ -479,10 +478,11 @@ private:
             double throughput_mbs = op_info->total_bytes /
                                     elapsed / (1024.0 * 1024.0);
 
-            std::cout << op_info->num_iters << " iterations of "
-                      << io_op_names[op_info->op]
-                      << ", throughput: " << throughput_mbs << " MB/s"
-                      << std::endl;
+            std::cout << op_info->num_iters << " " << io_op_names[op_info->op]
+                      << "s at " << throughput_mbs << " MB/s";
+            if (i < info.size() - 1) {
+                std::cout << ", ";
+            }
 
             // reset for the next round
             op_info->total_bytes = 0;
@@ -490,7 +490,7 @@ private:
         }
 
         if (opts().window_size == 1) {
-            std::cout << "latency: " << latency_usec << " usec" << std::endl;
+            std::cout << ", average latency: " << latency_usec << " usec";
         }
         std::cout << std::endl;
     }
