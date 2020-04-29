@@ -8,7 +8,6 @@
 
 #include "scopy_ep.h"
 
-#include <ucs/async/async.h>
 #include <uct/base/uct_iface.h>
 #include <uct/sm/base/sm_iface.h>
 
@@ -69,32 +68,5 @@ unsigned uct_scopy_iface_progress(uct_iface_h tl_iface);
 
 ucs_status_t uct_scopy_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                    uct_completion_t *comp);
-
-static UCS_F_ALWAYS_INLINE void
-uct_scopy_iface_modify_progress(uct_scopy_iface_t *iface,
-                                int enable)
-{
-    uct_base_iface_t *base_iface = &iface->super.super;
-    uct_priv_worker_t *worker    = base_iface->worker;
-
-    UCS_ASYNC_BLOCK(worker->async);
-
-    if (enable) {
-        ucs_assert(base_iface->prog.id == UCS_CALLBACKQ_ID_NULL);
-        base_iface->prog.id =
-            ucs_callbackq_add_safe(&worker->super.progress_q,
-                                   (ucs_callback_t)
-                                   base_iface->super.ops.iface_progress,
-                                   iface, UCS_CALLBACKQ_FLAG_FAST);
-    } else {
-        if (base_iface->prog.id != UCS_CALLBACKQ_ID_NULL) {
-            ucs_callbackq_remove_safe(&worker->super.progress_q,
-                                      base_iface->prog.id);
-            base_iface->prog.id = UCS_CALLBACKQ_ID_NULL;
-        }
-    }
-
-    UCS_ASYNC_UNBLOCK(worker->async);
-}
 
 #endif

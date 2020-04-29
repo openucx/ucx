@@ -114,7 +114,8 @@ UCS_CLASS_INIT_FUNC(uct_scopy_iface_t, uct_scopy_iface_ops_t *ops, uct_md_h md,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_scopy_iface_t)
 {
-    uct_scopy_iface_modify_progress(self, 0);
+    uct_worker_progress_unregister_safe(&self->super.super.worker->super,
+                                        &self->super.super.prog.id);
     ucs_mpool_cleanup(&self->tx_mpool, 1);
     ucs_arbiter_cleanup(&self->arbiter);
 }
@@ -129,7 +130,8 @@ unsigned uct_scopy_iface_progress(uct_iface_h tl_iface)
     ucs_arbiter_dispatch(&iface->arbiter, 1, uct_scopy_ep_progress_tx, &count);
 
     if (ucs_unlikely(ucs_arbiter_is_empty(&iface->arbiter))) {
-        uct_scopy_iface_modify_progress(iface, 0);
+        uct_worker_progress_unregister_safe(&iface->super.super.worker->super,
+                                            &iface->super.super.prog.id);
     }
 
     return count;

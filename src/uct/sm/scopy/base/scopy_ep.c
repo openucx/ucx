@@ -96,7 +96,11 @@ uct_scopy_ep_tx_init(uct_ep_h tl_ep, const uct_iov_t *iov,
     }
 
     if (ucs_unlikely(ucs_arbiter_is_empty(&iface->arbiter))) {
-        uct_scopy_iface_modify_progress(iface, 1);
+        uct_worker_progress_register_safe(&iface->super.super.worker->super,
+                                          (ucs_callback_t)
+                                          iface->super.super.super.ops.iface_progress,
+                                          iface, UCS_CALLBACKQ_FLAG_FAST,
+                                          &iface->super.super.prog.id);
     }
 
     ucs_arbiter_group_push_elem(&ep->arb_group, &tx->arb_elem);
