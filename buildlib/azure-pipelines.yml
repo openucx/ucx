@@ -18,7 +18,7 @@ stages:
       # Publish JUCX to maven central
       - job: publish_jucx
         displayName: Publish JUCX SNAPSHOT artifact to maven central
-        container: fedora
+        container: centos7
         steps:
           - checkout: self
             clean: true

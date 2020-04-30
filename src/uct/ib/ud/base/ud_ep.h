@@ -222,7 +222,8 @@ struct uct_ud_ep {
          ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
-         ucs_time_t             slow_tick;    /* timeout to trigger slow timer */
+         ucs_time_t             resend_time;  /* tx time of last resent packet */
+         ucs_time_t             tick;         /* timeout to trigger timer */
          UCS_STATS_NODE_DECLARE(stats)
          UCT_UD_EP_HOOK_DECLARE(tx_hook)
     } tx;
@@ -247,7 +248,7 @@ struct uct_ud_ep {
     uint16_t         flags;
     uint8_t          rx_creq_count; /* TODO: remove when reason for DUP/OOO CREQ is found */
     uint8_t          path_index;
-    ucs_wtimer_t     slow_timer;
+    ucs_wtimer_t     timer;
     ucs_time_t       close_time;   /* timestamp of closure */
     UCS_STATS_NODE_DECLARE(stats)
     UCT_UD_EP_HOOK_DECLARE(timer_hook)
