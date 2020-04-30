@@ -247,7 +247,6 @@ typedef struct ucp_worker {
                                                     TODO: can unite with rndv_reqs_list? */
     struct {
         ucs_twheel_t              wheel;
-        ucs_time_t                tick;
         int                       id;
     } timer;
 

@@ -807,19 +807,24 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 unsigned ucp_ep_local_disconnect_progress(void *arg)
 {
     ucp_request_t *req         = arg;
-    ucs_async_context_t *async = &req->send.ep->worker->async;
+    ucp_ep_h ep                = req->send.ep;
+    ucs_async_context_t *async = &ep->worker->async; /* ep becomes invalid */
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
     UCS_ASYNC_BLOCK(async);
-    if (req->send.ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
-        ucp_ep_close_request_complete(req, req->status);
+    ucs_debug("ep %p: disconnected with request %p, %s", ep, req,
+              ucs_status_string(req->status));
+    if (ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+        ucs_list_del(&req->send.disconnect.list);
+        ucp_ep_disconnected(ep, 1);
     } else {
-        ucp_ep_disconnected(req->send.ep,
-                            req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL);
-        ucp_request_complete_send(req, req->status);
+        ucp_ep_disconnected(ep, req->send.flush.uct_flags &
+                                UCT_FLUSH_FLAG_CANCEL);
     }
     UCS_ASYNC_UNBLOCK(async);
+
+    ucp_request_complete_send(req, req->status);
 
     return 0;
 }
@@ -828,19 +833,24 @@ void ucp_worker_close_req_timer(int id, void *arg)
 {
     ucp_worker_h worker  = arg;
     ucs_time_t curr_time = ucs_get_time();
-    ucp_request_t *req, *tmp;
+    ucp_request_t *req;
 
     UCS_ASYNC_BLOCK(&worker->async);
     ucs_assert(worker->timer.id == id);
 
-    ucs_twheel_sweep(&worker->timer.wheel, curr_time);
-
-    ucs_list_for_each_safe(req, tmp, &worker->close_reqs, send.disconnect.list) {
-        ucs_trace("ep %p: timer %sexpired", req->send.ep,
-                 (req->send.disconnect.timeout < curr_time) ? "" : "not ");
-        if (req->send.disconnect.timeout < curr_time) {
-            ucs_assert(req->send.ep->worker == worker);
-            ucp_ep_close_request_complete(req, UCS_ERR_ENDPOINT_TIMEOUT);
+    ucs_list_for_each(req, &worker->close_reqs, send.disconnect.list) {
+        ucs_trace("ep %p: disconnect timer %sexpired", req->send.ep,
+                  (req->send.disconnect.timeout < curr_time) ? "" : "not ");
+        if ((req->send.disconnect.timeout < curr_time) &&
+            (req->status == UCS_OK)) {
+            ucs_trace("adding slow-path callback to destroy ep %p",
+                      req->send.ep);
+            req->status = UCS_ERR_ENDPOINT_TIMEOUT;
+            req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
+            uct_worker_progress_register_safe(req->send.ep->worker->uct,
+                                              ucp_ep_local_disconnect_progress,
+                                              req, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                              &req->send.disconnect.prog_id);
         }
     }
 
@@ -855,6 +865,8 @@ void ucp_worker_close_req_timer(int id, void *arg)
 static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
                                      const char *debug_msg)
 {
+    double cm_close_timeout = ep->worker->context->config.ext.cm_close_timeout;
+    ucs_time_t timeout      = ucs_time_from_sec(cm_close_timeout);
     ucs_status_t status;
 
     ucs_assert(request->send.ep == ep);
@@ -867,11 +879,10 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
 
     ucp_ep_ext_gen(ep)->close_req.req = request;
     ep->flags                        |= UCP_EP_FLAG_CLOSE_REQ_VALID;
-    request->send.disconnect.timeout  = ucs_get_time() + ep->worker->timer.tick;
+    request->send.disconnect.timeout  = ucs_get_time() + timeout;
 
     if (ep->worker->timer.id == 0) {
-        status = ucs_async_add_timer(ep->worker->async.mode,
-                                     ep->worker->timer.tick,
+        status = ucs_async_add_timer(ep->worker->async.mode, timeout,
                                      ucp_worker_close_req_timer, ep->worker,
                                      &ep->worker->async, &ep->worker->timer.id);
         if (status != UCS_OK) {

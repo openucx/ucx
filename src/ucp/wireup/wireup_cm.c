@@ -448,7 +448,10 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(async);
 }
 
-static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
+/*
+ * returns UCS_OK if EP is destroyed and freed, UCS_INPROGRESS otherwise
+ */
+static ucs_status_t ucp_ep_cm_remote_disconnect_progress(void *arg)
 {
     ucp_ep_h ucp_ep = arg;
     void *req;
@@ -464,7 +467,7 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
                                           UCP_EP_FLAG_CLOSE_REQ_VALID)) {
         ucp_ep_close_request_complete(ucp_ep_ext_gen(ucp_ep)->close_req.req,
                                       UCS_OK);
-        return 1;
+        return UCS_OK;
     }
 
     if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
@@ -473,7 +476,7 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
          * @ref ucp_ep_close_flushed_callback */
         ucs_debug("ep %p: ep closed but request is not set, waiting for the flush callback",
                   ucp_ep);
-        return 1;
+        return UCS_INPROGRESS;
     }
 
     /*
@@ -496,13 +499,13 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
         goto err;
     }
 
-    return 1;
+    return UCS_INPROGRESS;
 
 err:
     ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
                              ucp_ep_get_cm_uct_ep(ucp_ep),
                              ucp_ep_get_cm_lane(ucp_ep), status);
-    return 1;
+    return UCS_INPROGRESS;
 }
 
 static unsigned ucp_ep_cm_disconnect_progress(void *arg)
@@ -521,8 +524,10 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
 
     if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
         /* if the EP is local connected, need to flush it from main thread first */
-        ucp_ep_cm_remote_disconnect_progress(ucp_ep);
-        ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
+        if (ucp_ep_cm_remote_disconnect_progress(ucp_ep) == UCS_INPROGRESS) {
+            /* if the EP is still alive, need to invoke err callback */
+            ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
+        }
     } else {
         /* if the EP is not local connected, the EP has been closed and flushed,
          * CM lane is disconnected, complete close request and destroy EP */
@@ -954,9 +959,8 @@ void ucp_ep_close_request_complete(ucp_request_t *request, ucs_status_t status)
 
 static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 {
-    if ((elem->cb == ucp_ep_cm_disconnect_progress)        ||
-        (elem->cb == ucp_ep_cm_remote_disconnect_progress) ||
-        (elem->cb == ucp_cm_client_connect_progress)       ||
+    if ((elem->cb == ucp_ep_cm_disconnect_progress)  ||
+        (elem->cb == ucp_cm_client_connect_progress) ||
         (elem->cb == ucp_cm_server_conn_notify_progress)) {
         return arg == elem->arg;
     } else {

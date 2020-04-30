@@ -1283,6 +1283,9 @@ static void ucp_worker_close_cms(ucp_worker_h worker)
 static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
 {
     ucp_context_h   context = worker->context;
+    double cm_close_timeout = context->config.ext.cm_close_timeout;
+    ucs_time_t timeout      = ucs_time_from_sec(cm_close_timeout);
+
     uct_cm_config_t *cm_config;
     uct_component_h cmpt;
     ucp_rsc_index_t cmpt_index, cm_cmpt_index, i;
@@ -1328,10 +1331,8 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
     }
 
     worker->timer.id   = 0;
-    worker->timer.tick = ucs_time_from_sec(context->config.ext.cm_close_timeout);
     status = ucs_twheel_init(&worker->timer.wheel,
-                             ucs_min(worker->timer.tick / 4,
-                                     ucs_time_from_sec(5)),
+                             ucs_min(timeout / 4, ucs_time_from_sec(5)),
                              ucs_get_time());
     goto out;
 
