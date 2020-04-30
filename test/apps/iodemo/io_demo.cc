@@ -381,6 +381,14 @@ public:
         return tv.tv_sec + (tv.tv_usec * 1e-6);
     }
 
+    static std::string get_time_str() {
+        char str[80];
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        snprintf(str, sizeof(str), "[%lu.%06lu]", tv.tv_sec, tv.tv_usec);
+        return str;
+    }
+
     bool run() {
         UcxConnection* conn = connect();
         if (!conn) {
@@ -486,7 +494,7 @@ private:
     void report_performance(long num_iters, double elapsed,
                             std::vector<op_info_t> &info) {
         double latency_usec = (elapsed / num_iters) * 1e6;
-        bool need_comma     = false;
+        bool first_print    = true;
 
         for (unsigned i = 0; i < info.size(); ++i) {
             op_info_t *op_info = &info[i];
@@ -495,18 +503,20 @@ private:
                 continue;
             }
 
-            if (need_comma) {
-                std::cout << ", ";
+            if (first_print) {
+                std::cout << get_time_str() << " ";
+                first_print = false;
             } else {
-                // require comma before the next printout
-                need_comma = true;
+                // print comma for non-first printouts
+                std::cout << ", ";
             }
 
             double throughput_mbs = op_info->total_bytes /
                                     elapsed / (1024.0 * 1024.0);
 
-            std::cout << op_info->num_iters << " " << io_op_names[op_info->op]
-                      << "s at " << throughput_mbs << " MB/s";
+            std::cout << op_info->num_iters << " "
+                      << io_op_names[op_info->op] << "s at "
+                      << throughput_mbs << " MB/s";
 
             // reset for the next round
             op_info->total_bytes = 0;
