@@ -758,6 +758,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err,
                      s_onesided_disconnect_s2c_timeout, no_close_protocol(),
                      "SOCKADDR_CM_CLOSE_TIMEOUT=1s") {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
+    /* FIXME: true one sided flush can't be completed for dc_ud if client is not
+     * connected to server yet */
+    flush_worker(receiver());
     true_one_sided_disconnect(receiver());
     short_progress_loop();
 }
