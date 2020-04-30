@@ -49,6 +49,9 @@
 /* Silence "defined but not used" error for static function */
 #define UCS_F_MAYBE_UNUSED __attribute__((used))
 
+/* Non-null return */
+#define UCS_F_NON_NULL __attribute__((nonnull))
+
 /* Always inline the function */
 #ifdef __GNUC__
 #define UCS_F_ALWAYS_INLINE      inline __attribute__ ((always_inline))
