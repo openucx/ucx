@@ -833,21 +833,27 @@ protected:
             << "recv_buf: '" << ucs::compact_string(send_buf, 20) << "'";
     }
 
-    void test_tag_send_recv(size_t size, bool is_exp)
+    void test_tag_send_recv(size_t size, bool is_exp, bool is_sync = false)
     {
         std::string send_buf(size, 'x');
         std::string recv_buf(size, 'y');
 
-        void *rreq, *sreq;
+        void *rreq = NULL, *sreq = NULL;
 
         if (is_exp) {
             rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
                                    ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
-            sreq = ucp_tag_send_nb(sender().ep(), &send_buf[0], size,
-                                   ucp_dt_make_contig(1), 0, scomplete_cb);
+        }
+
+        if (is_sync) {
+            sreq = ucp_tag_send_sync_nb(sender().ep(), &send_buf[0], size,
+                                        ucp_dt_make_contig(1), 0, scomplete_cb);
         } else {
             sreq = ucp_tag_send_nb(sender().ep(), &send_buf[0], size,
                                    ucp_dt_make_contig(1), 0, scomplete_cb);
+        }
+
+        if (!is_exp) {
             short_progress_loop();
             rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
                                    ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
@@ -958,6 +964,19 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_64k_exp,
 {
     test_tag_send_recv(64 * UCS_KBYTE, true);
 }
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_4k_exp_sync,
+           "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(4 * UCS_KBYTE, true, true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_64k_exp_sync,
+           "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(64 * UCS_KBYTE, true, true);
+}
+
 UCS_TEST_P(test_ucp_sockaddr_protocols, tag_rndv_exp, "RNDV_THRESH=10k")
 {
     test_tag_send_recv(64 * UCS_KBYTE, true);
@@ -974,6 +993,19 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_64k_unexp,
 {
     test_tag_send_recv(64 * UCS_KBYTE, false);
 }
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_4k_unexp_sync,
+           "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(4 * UCS_KBYTE, false, true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_64k_unexp_sync,
+           "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(64 * UCS_KBYTE, false, true);
+}
+
 UCS_TEST_P(test_ucp_sockaddr_protocols, tag_rndv_unexp, "RNDV_THRESH=10k")
 {
     test_tag_send_recv(64 * UCS_KBYTE, false);
