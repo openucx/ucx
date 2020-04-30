@@ -25,7 +25,6 @@ UCS_CLASS_INIT_FUNC(uct_scopy_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
     ucs_arbiter_group_init(&self->arb_group);
-    self->outstanding = 0;
 
     return UCS_OK;
 }
@@ -96,8 +95,14 @@ uct_scopy_ep_tx_init(uct_ep_h tl_ep, const uct_iov_t *iov,
         return UCS_OK;
     }
 
-    ep->outstanding++;
-    iface->outstanding++;
+    if (ucs_unlikely(ucs_arbiter_is_empty(&iface->arbiter))) {
+        uct_worker_progress_register_safe(&iface->super.super.worker->super,
+                                          (ucs_callback_t)
+                                          iface->super.super.super.ops.iface_progress,
+                                          iface, UCS_CALLBACKQ_FLAG_FAST,
+                                          &iface->super.super.prog.id);
+    }
+
     ucs_arbiter_group_push_elem(&ep->arb_group, &tx->arb_elem);
     ucs_arbiter_group_schedule(&iface->arbiter, &ep->arb_group);
 
@@ -159,9 +164,6 @@ ucs_arbiter_cb_result_t uct_scopy_ep_progress_tx(ucs_arbiter_t *arbiter,
                 return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
             }
         }
-
-        iface->outstanding--;
-        ep->outstanding--;
     }
 
     ucs_assert((tx->comp != NULL) ||
@@ -183,12 +185,10 @@ ucs_status_t uct_scopy_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                               uct_scopy_iface_t);
     uct_scopy_tx_t *flush_comp;
 
-    if (ep->outstanding == 0) {
+    if (ucs_arbiter_group_is_empty(&ep->arb_group)) {
         UCT_TL_EP_STAT_FLUSH(&ep->super);
         return UCS_OK;
     }
-
-    ucs_assert(!ucs_arbiter_group_is_empty(&ep->arb_group));
 
     if (comp != NULL) {
         flush_comp = ucs_mpool_get_inline(&iface->tx_mpool);
