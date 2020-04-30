@@ -480,7 +480,7 @@ ucp_am_handler_common(ucp_worker_h worker, void *hdr_end, size_t hdr_size,
     }
 
     status = ucp_recv_desc_init(worker, hdr_end, total_length, 0, am_flags,
-                                hdr_size, 0, -hdr_size, &desc);
+                                0, 0, -hdr_size, &desc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucs_error("worker %p  could not allocate descriptor for active message"
                   " on callback : %u", worker, am_id);
