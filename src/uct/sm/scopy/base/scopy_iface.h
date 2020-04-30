@@ -40,7 +40,6 @@ typedef struct uct_scopy_iface {
     ucs_arbiter_t                 arbiter;     /* TX arbiter */
     ucs_mpool_t                   tx_mpool;    /* TX memory pool */
     uct_scopy_ep_tx_func_t        tx;          /* TX function */
-    size_t                        outstanding; /* How many TX operations are in-flight */
     struct {
         size_t                    max_iov;     /* Maximum supported IOVs limited by
                                                 * user configuration and system

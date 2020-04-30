@@ -532,8 +532,7 @@ uct_rc_mlx5_fill_rvh(struct ibv_rvh *rvh, const void *vaddr,
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_tag_get_op_id(uct_rc_mlx5_iface_common_t *iface, uct_completion_t *comp)
 {
-    uint32_t prev_ph;
-    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp, &prev_ph);
+    return ucs_ptr_array_insert(&iface->tm.rndv_comps, comp);
 }
 
 
@@ -586,7 +585,7 @@ uct_rc_mlx5_handle_rndv_fin(uct_rc_mlx5_iface_common_t *iface, uint32_t app_ctx)
     found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, app_ctx, rndv_comp);
     ucs_assert_always(found > 0);
     uct_invoke_completion((uct_completion_t*)rndv_comp, UCS_OK);
-    ucs_ptr_array_remove(&iface->tm.rndv_comps, app_ctx, 0);
+    ucs_ptr_array_remove(&iface->tm.rndv_comps, app_ctx);
 }
 
 extern ucs_config_field_t uct_rc_mlx5_common_config_table[];

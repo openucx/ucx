@@ -128,7 +128,7 @@ static ucs_status_t uct_ud_ep_free_by_timeout(uct_ud_ep_t *ep,
     uct_ud_iface_ops_t *ops;
     ucs_time_t         diff;
 
-    diff = ucs_twheel_get_time(&iface->async.slow_timer) - ep->close_time;
+    diff = ucs_twheel_get_time(&iface->tx.timer) - ep->close_time;
     if (diff > iface->config.peer_timeout) {
         ucs_debug("ud_ep %p is destroyed after %fs with timeout %fs\n",
                   ep, ucs_time_to_sec(diff),
@@ -140,12 +140,13 @@ static ucs_status_t uct_ud_ep_free_by_timeout(uct_ud_ep_t *ep,
     return UCS_INPROGRESS;
 }
 
-static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
+static void uct_ud_ep_timer(ucs_wtimer_t *self)
 {
-    uct_ud_ep_t        *ep    = ucs_container_of(self, uct_ud_ep_t, slow_timer);
+    uct_ud_ep_t        *ep    = ucs_container_of(self, uct_ud_ep_t, timer);
     uct_ud_iface_t     *iface = ucs_derived_of(ep->super.super.iface,
                                                uct_ud_iface_t);
     ucs_time_t         now;
+    ucs_time_t         last;
     ucs_time_t         diff;
     ucs_status_t       status;
 
@@ -162,7 +163,7 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
         return;
     }
 
-    now = ucs_twheel_get_time(&iface->async.slow_timer);
+    now = ucs_twheel_get_time(&iface->tx.timer);
     diff = now - ep->tx.send_time;
     if (diff > iface->config.peer_timeout) {
         ucs_debug("ep %p: timeout of %.2f sec, config::peer_timeout - %.2f sec",
@@ -171,14 +172,17 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
         iface->super.ops->handle_failure(&iface->super, ep,
                                          UCS_ERR_ENDPOINT_TIMEOUT);
         return;
-    } else if (diff > 3*iface->async.slow_tick) {
+    }
+
+    last = ucs_max(ep->tx.send_time, ep->tx.resend_time);
+    diff = now - last;
+    if (diff > 3*iface->tx.tick) {
         ucs_trace("scheduling resend now: %lu send_time: %lu diff: %lu tick: %lu",
-                  now, ep->tx.send_time, now - ep->tx.send_time,
-                  ep->tx.slow_tick);
+                  now, last, diff, ep->tx.tick);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
         uct_ud_ep_ca_drop(ep);
         uct_ud_ep_resend_start(iface, ep);
-    } else if ((diff > iface->async.slow_tick) && uct_ud_ep_is_connected(ep)) {
+    } else if ((diff > iface->tx.tick) && uct_ud_ep_is_connected(ep)) {
         /* It is possible that the sender is slow.
          * Try to flush the window twice before going into
          * full resend mode.
@@ -188,10 +192,9 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
 
 again:
     /* Cool down the timer on rescheduling/resending */
-    ep->tx.slow_tick *= iface->config.slow_timer_backoff;
-    ep->tx.slow_tick = ucs_min(ep->tx.slow_tick,
-                               UCT_UD_SLOW_TIMER_MAX_TICK(iface));
-    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer, ep->tx.slow_tick);
+    ep->tx.tick *= iface->tx.timer_backoff;
+    ep->tx.tick = ucs_min(ep->tx.tick, UCT_UD_SLOW_TIMER_MAX_TICK(iface));
+    ucs_wtimer_add(&iface->tx.timer, &ep->timer, ep->tx.tick);
 }
 
 UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
@@ -207,8 +210,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
     uct_ud_ep_reset(self);
     ucs_list_head_init(&self->cep_list);
     uct_ud_iface_add_ep(iface, self);
-    self->tx.slow_tick = iface->async.slow_tick;
-    ucs_wtimer_init(&self->slow_timer, uct_ud_ep_slow_timer);
+    self->tx.tick = iface->async.tick;
+    ucs_wtimer_init(&self->timer, uct_ud_ep_timer);
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
 
@@ -244,7 +247,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
     ucs_trace_func("ep=%p id=%d conn_id=%d", self, self->ep_id, self->conn_id);
 
-    ucs_wtimer_remove(&self->slow_timer);
+    ucs_wtimer_remove(&iface->tx.timer, &self->timer);
     uct_ud_iface_remove_ep(iface, self);
     uct_ud_iface_cep_remove(self);
     ucs_frag_list_cleanup(&self->rx.ooo_pkts);
@@ -439,8 +442,8 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
-    ep->tx.slow_tick = iface->async.slow_tick;
-    ep->tx.send_time = uct_ud_iface_get_async_time(iface);
+    ep->tx.tick      = iface->tx.tick;
+    ep->tx.send_time = uct_ud_iface_get_time(iface);
 }
 
 static inline void uct_ud_ep_rx_put(uct_ud_neth_t *neth, unsigned byte_len)
@@ -973,6 +976,7 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     skb                = uct_ud_iface_ctl_skb_get(iface);
     sent_skb->flags   |= UCT_UD_SEND_SKB_FLAG_RESENDING;
     ep->resend.psn     = sent_skb->neth->psn;
+    ep->tx.resend_time = uct_ud_iface_get_time(iface);
 
     if (sent_skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY) {
         /* copy neth + am header part */
@@ -1338,10 +1342,10 @@ void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
     uct_ud_ep_flush(tl_ep, 0, NULL);
 
     /* the EP will be destroyed by interface destroy or timeout in
-     * uct_ud_ep_slow_timer
+     * uct_ud_ep_timer
      */
-    ep->close_time = ucs_twheel_get_time(&iface->async.slow_timer);
+    ep->close_time = ucs_twheel_get_time(&iface->tx.timer);
     ep->flags |= UCT_UD_EP_FLAG_DISCONNECTED;
-    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
+    ucs_wtimer_add(&iface->tx.timer, &ep->timer,
                    UCT_UD_SLOW_TIMER_MAX_TICK(iface));
 }

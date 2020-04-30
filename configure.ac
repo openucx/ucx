@@ -366,11 +366,12 @@ AC_CONFIG_FILES([
                  test/apps/Makefile
                  test/apps/iodemo/Makefile
                  test/apps/sockaddr/Makefile
-                 test/examples/Makefile
+                 test/apps/profiling/Makefile
                  test/mpi/Makefile
                  bindings/java/Makefile
                  bindings/java/pom.xml
                  bindings/java/src/main/native/Makefile
+                 examples/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

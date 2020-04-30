@@ -539,22 +539,15 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
 out_ep_destroy:
     ucp_ep_destroy_internal(ep);
 out:
-    if (status == UCS_OK) {
-        if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
+    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
+        ucs_free(conn_request->remote_dev_addr);
+    } else {
+        if (status == UCS_OK) {
             status = uct_iface_accept(conn_request->uct.iface,
                                       conn_request->uct_req);
-        }
-    } else {
-        if (ucp_worker_sockaddr_is_cm_proto(worker)) {
-            uct_listener_reject(conn_request->uct.listener,
-                                conn_request->uct_req);
         } else {
             uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
         }
-    }
-
-    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
-        ucs_free(conn_request->remote_dev_addr);
     }
 
     ucs_free(conn_request);
@@ -2097,18 +2090,12 @@ uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
 {
-    if (ep->flags & UCP_EP_FLAG_ERR_HANDLER_INVOKED) {
-        return;
-    }
-
-    ep->flags |= UCP_EP_FLAG_ERR_HANDLER_INVOKED;
-
     /* Do not invoke error handler if it's not enabled */
     if ((ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
         /* error callback is not set */
         (ucp_ep_ext_gen(ep)->err_cb == NULL) ||
-        /* the EP has been closed by user */
-        (ep->flags & UCP_EP_FLAG_CLOSED)) {
+        /* the EP has been closed by user, or error callback already called */
+        (ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_ERR_HANDLER_INVOKED))) {
         return;
     }
 
@@ -2116,6 +2103,7 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
     ucs_debug("ep %p: calling user error callback %p with arg %p and status %s",
               ep, ucp_ep_ext_gen(ep)->err_cb, ucp_ep_ext_gen(ep)->user_data,
               ucs_status_string(status));
+    ep->flags |= UCP_EP_FLAG_ERR_HANDLER_INVOKED;
     ucp_ep_ext_gen(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
 }
 

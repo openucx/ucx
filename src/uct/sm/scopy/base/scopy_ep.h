@@ -63,7 +63,6 @@ typedef struct uct_scopy_tx {
 typedef struct uct_scopy_ep {
     uct_base_ep_t                   super;
     ucs_arbiter_group_t             arb_group;          /* TX arbiter group */
-    size_t                          outstanding;        /* How many TX operations are in-flight */
 } uct_scopy_ep_t;
 
 

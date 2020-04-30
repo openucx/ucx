@@ -426,10 +426,11 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     return sizeof(*packed);
 }
 
-static int
+static ucs_status_t
 ucp_address_unpack_iface_attr(ucp_worker_t *worker,
                               ucp_address_iface_attr_t *iface_attr,
-                              const void *ptr)
+                              const void *ptr, unsigned unpack_flags,
+                              size_t *size_p)
 {
     const ucp_address_packed_iface_attr_t *packed;
     const ucp_address_unified_iface_attr_t *unified;
@@ -442,9 +443,13 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         unified               = ptr;
         rsc_idx               = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
         iface_attr->lat_ovh   = fabs(unified->lat_ovh);
-        ucs_assertv_always(worker->context->tl_bitmap & UCS_BIT(rsc_idx),
-                           "rsc_idx=%u tl_bitmap=0x%"PRIx64,
-                           rsc_idx, worker->context->tl_bitmap);
+        if (!(worker->context->tl_bitmap & UCS_BIT(rsc_idx))) {
+            if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
+                ucs_error("failed to unpack address, resource[%d] is not valid",
+                          rsc_idx);
+            }
+            return UCS_ERR_INVALID_ADDR;
+        }
 
         /* Just take the rest of iface attrs from the local resource. */
         wiface                  = ucp_worker_iface(worker, rsc_idx);
@@ -460,7 +465,8 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
             iface_attr->atomic.atomic64.fop_flags = wiface->attr.cap.atomic64.fop_flags;
         }
 
-        return sizeof(*unified);
+        *size_p = sizeof(*unified);
+        return UCS_OK;
     }
 
     packed                          = ptr;
@@ -493,7 +499,8 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         iface_attr->atomic.atomic64.fop_flags |= UCP_ATOMIC_FOP_MASK;
     }
 
-    return sizeof(*packed);
+    *size_p = sizeof(*packed);
+    return UCS_OK;
 }
 
 static void*
@@ -887,6 +894,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     ucp_rsc_index_t dev_index;
     ucp_md_index_t md_index;
     unsigned dev_num_paths;
+    ucs_status_t status;
     int empty_dev;
     uint64_t md_flags;
     size_t dev_addr_len;
@@ -970,7 +978,13 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
         last_tl = empty_dev;
         while (!last_tl) {
-            ucs_assert_always((address - address_list) < UCP_MAX_RESOURCES);
+            if (address >= &address_list[UCP_MAX_RESOURCES]) {
+                if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
+                    ucs_error("failed to parse address: number of addresses"
+                              "exceeds %d", UCP_MAX_RESOURCES);
+                }
+                goto err_free;
+            }
 
             /* tl_name_csum */
             address->tl_name_csum = *(uint16_t*)ptr;
@@ -982,7 +996,12 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             address->md_flags      = md_flags;
             address->dev_num_paths = dev_num_paths;
 
-            attr_len  = ucp_address_unpack_iface_attr(worker, &address->iface_attr, ptr);
+            status = ucp_address_unpack_iface_attr(worker, &address->iface_attr,
+                                                   ptr, unpack_flags, &attr_len);
+            if (status != UCS_OK) {
+                goto err_free;
+            }
+
             flags_ptr = ucp_address_iface_flags_ptr(worker, (void*)ptr, attr_len);
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
             ptr       = ucp_address_unpack_length(worker, flags_ptr, ptr,
@@ -996,7 +1015,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                 if (address->num_ep_addrs >= UCP_MAX_LANES) {
                     if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                         ucs_error("failed to parse address: number of ep addresses"
-                                "exceeds %d", UCP_MAX_LANES);
+                                  "exceeds %d", UCP_MAX_LANES);
                     }
                     goto err_free;
                 }

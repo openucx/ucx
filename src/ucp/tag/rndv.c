@@ -303,7 +303,8 @@ static void ucp_rndv_zcopy_recv_req_complete(ucp_request_t *req, ucs_status_t st
     ucp_request_complete_tag_recv(req, status);
 }
 
-static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req)
+static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req,
+                                            ucs_status_t status)
 {
     ucp_request_t *rreq = rndv_req->send.rndv_get.rreq;
 
@@ -311,15 +312,18 @@ static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req)
                 "rndv_req=%p offset=%zu length=%zu", rndv_req,
                 rndv_req->send.state.dt.offset, rndv_req->send.length);
 
-    ucp_trace_req(rndv_req, "rndv_get completed");
+    ucp_trace_req(rndv_req, "rndv_get completed with status %s",
+                  ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(rreq, "complete_rndv_get", 0);
 
     ucp_rkey_destroy(rndv_req->send.rndv_get.rkey);
     ucp_request_send_buffer_dereg(rndv_req);
 
-    ucp_rndv_req_send_ats(rndv_req, rreq, rndv_req->send.rndv_get.remote_request,
-                          UCS_OK);
-    ucp_rndv_zcopy_recv_req_complete(rreq, UCS_OK);
+    if (status == UCS_OK) {
+        ucp_rndv_req_send_ats(rndv_req, rreq,
+                              rndv_req->send.rndv_get.remote_request, UCS_OK);
+    }
+    ucp_rndv_zcopy_recv_req_complete(rreq, status);
 }
 
 static void ucp_rndv_recv_data_init(ucp_request_t *rreq, size_t size)
@@ -559,7 +563,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self, status),
                                                send.state.uct_comp);
 
     if (rndv_req->send.state.dt.offset == rndv_req->send.length) {
-        ucp_rndv_complete_rma_get_zcopy(rndv_req);
+        ucp_rndv_complete_rma_get_zcopy(rndv_req, status);
     }
 }
 

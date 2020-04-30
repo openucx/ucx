@@ -315,14 +315,13 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
     ucs_async_mode_t async_mode = async->mode;
     ucs_status_t status;
 
-    status = ucs_twheel_init(&iface->async.slow_timer,
-                             iface->async.slow_tick / 4,
-                             uct_ud_iface_get_async_time(iface));
+    status = ucs_twheel_init(&iface->tx.timer, iface->tx.tick / 4,
+                             uct_ud_iface_get_time(iface));
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = ucs_async_add_timer(async_mode, iface->async.slow_tick,
+    status = ucs_async_add_timer(async_mode, iface->async.tick,
                                  uct_ud_iface_timer, iface, async,
                                  &iface->async.timer_id);
     if (status != UCS_OK) {
@@ -332,7 +331,7 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
     return UCS_OK;
 
 err_twheel_cleanup:
-    ucs_twheel_cleanup(&iface->async.slow_timer);
+    ucs_twheel_cleanup(&iface->tx.timer);
 err:
     return status;
 }
@@ -426,6 +425,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;
+    self->tx.timer_sweep_count   = 0;
+    self->tx.timer_disable       = 0;
 
     self->rx.available           = config->super.rx.queue_len;
     self->rx.quota               = 0;
@@ -443,20 +444,28 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     self->config.max_window = config->max_window;
 
-    if (config->slow_timer_tick <= 0.) {
-        ucs_error("The slow timer tick should be > 0 (%lf)",
-                  config->slow_timer_tick);
+    if (config->timer_tick <= 0.) {
+        ucs_error("The timer tick should be > 0 (%lf)",
+                  config->timer_tick);
         return UCS_ERR_INVALID_PARAM;
     } else {
-        self->async.slow_tick = ucs_time_from_sec(config->slow_timer_tick);
+        self->tx.tick = ucs_time_from_sec(config->timer_tick);
     }
 
-    if (config->slow_timer_backoff < UCT_UD_MIN_TIMER_TIMER_BACKOFF) {
-        ucs_error("The slow timer back off must be >= %lf (%lf)",
-                  UCT_UD_MIN_TIMER_TIMER_BACKOFF, config->slow_timer_backoff);
+    if (config->timer_backoff < UCT_UD_MIN_TIMER_TIMER_BACKOFF) {
+        ucs_error("The timer back off must be >= %lf (%lf)",
+                  UCT_UD_MIN_TIMER_TIMER_BACKOFF, config->timer_backoff);
         return UCS_ERR_INVALID_PARAM;
     } else {
-        self->config.slow_timer_backoff = config->slow_timer_backoff;
+        self->tx.timer_backoff = config->timer_backoff;
+    }
+
+    if (config->event_timer_tick <= 0.) {
+        ucs_error("The event timer tick should be > 0 (%lf)",
+                  config->event_timer_tick);
+        return UCS_ERR_INVALID_PARAM;
+    } else {
+        self->async.tick = ucs_time_from_sec(config->event_timer_tick);
     }
 
     /* Redefine receive desc release callback */
@@ -468,7 +477,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_ptr_array_init(&self->eps, 0, "ud_eps");
+    ucs_ptr_array_init(&self->eps, "ud_eps");
     uct_ud_iface_cep_init(self);
 
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
@@ -534,6 +543,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
 
     /* TODO: proper flush and connection termination */
     uct_ud_enter(self);
+    ucs_twheel_cleanup(&self->tx.timer);
     ucs_debug("iface(%p): cep cleanup", self);
     uct_ud_iface_cep_cleanup(self);
     uct_ud_iface_free_async_comps(self);
@@ -561,13 +571,15 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
 
     {"TIMEOUT", "5.0m", "Transport timeout",
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
-    {"SLOW_TIMER_TICK", "100ms", "Initial timeout for retransmissions",
-     ucs_offsetof(uct_ud_iface_config_t, slow_timer_tick), UCS_CONFIG_TYPE_TIME},
-    {"SLOW_TIMER_BACKOFF", "2.0",
+    {"TIMER_TICK", "3ms", "Initial timeout for retransmissions",
+     ucs_offsetof(uct_ud_iface_config_t, timer_tick), UCS_CONFIG_TYPE_TIME},
+    {"TIMER_BACKOFF", "2.0",
      "Timeout multiplier for resending trigger (must be >= "
      UCS_PP_MAKE_STRING(UCT_UD_MIN_TIMER_TIMER_BACKOFF) ")",
-     ucs_offsetof(uct_ud_iface_config_t, slow_timer_backoff),
+     ucs_offsetof(uct_ud_iface_config_t, timer_backoff),
                   UCS_CONFIG_TYPE_DOUBLE},
+    {"ASYNC_TIMER_TICK", "100ms", "Resolution for async timer",
+     ucs_offsetof(uct_ud_iface_config_t, event_timer_tick), UCS_CONFIG_TYPE_TIME},
     {"ETH_DGID_CHECK", "y",
      "Enable checking destination GID for incoming packets of Ethernet network.\n"
      "Mismatched packets are silently dropped.",
@@ -690,15 +702,14 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
 void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    uint32_t prev_gen;
-    ep->ep_id = ucs_ptr_array_insert(&iface->eps, ep, &prev_gen);
+    ep->ep_id = ucs_ptr_array_insert(&iface->eps, ep);
 }
 
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     if (ep->ep_id != UCT_UD_EP_NULL_ID) {
         ucs_trace("iface(%p) remove ep: %p id %d", iface, ep, ep->ep_id);
-        ucs_ptr_array_remove(&iface->eps, ep->ep_id, 0);
+        ucs_ptr_array_remove(&iface->eps, ep->ep_id);
     }
 }
 
@@ -711,7 +722,7 @@ void uct_ud_iface_replace_ep(uct_ud_iface_t *iface,
     p = ucs_ptr_array_replace(&iface->eps, old_ep->ep_id, new_ep);
     ucs_assert_always(p == (void *)old_ep);
     ucs_trace("replace_ep: old(%p) id=%d new(%p) id=%d", old_ep, old_ep->ep_id, new_ep, new_ep->ep_id);
-    ucs_ptr_array_remove(&iface->eps, new_ep->ep_id, 0);
+    ucs_ptr_array_remove(&iface->eps, new_ep->ep_id);
 }
 
 uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface)
@@ -840,12 +851,8 @@ static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
 static void uct_ud_iface_timer(int timer_id, void *arg)
 {
     uct_ud_iface_t *iface = arg;
-    ucs_time_t now;
 
     uct_ud_enter(iface);
-    now = uct_ud_iface_get_async_time(iface);
-    ucs_trace_async("iface(%p) slow_timer_sweep: now %lu", iface, now);
-    ucs_twheel_sweep(&iface->async.slow_timer, now);
     uct_ud_iface_async_progress(iface);
     uct_ud_leave(iface);
 }

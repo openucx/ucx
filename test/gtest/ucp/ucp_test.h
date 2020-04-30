@@ -19,7 +19,15 @@
 
 #include <queue>
 
-#define MT_TEST_NUM_THREADS       4
+#if _OPENMP
+#include "omp.h"
+#endif
+
+#if _OPENMP && ENABLE_MT
+#define MT_TEST_NUM_THREADS omp_get_max_threads()
+#else
+#define MT_TEST_NUM_THREADS 4
+#endif
 
 
 namespace ucp {

@@ -42,7 +42,7 @@ SUBDIRS += \
 	src/tools/profile \
 	bindings/java \
 	test/apps \
-	test/examples
+	examples
 
 if HAVE_GTEST
 SUBDIRS += test/gtest

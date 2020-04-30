@@ -400,8 +400,9 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
 
     {
         scoped_log_handler slh(hide_errors_logger);
-        UCS_TEST_CREATE_HANDLE(ucp_context_h, m_ucph, ucp_cleanup, ucp_init,
-                               &entity_param.ctx_params, ucp_config);
+        UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucp_context_h, m_ucph, ucp_cleanup,
+                                            ucp_init, &entity_param.ctx_params,
+                                            ucp_config);
     }
 
     m_workers.resize(num_workers);

@@ -40,6 +40,7 @@ struct ucs_timer_wheel {
     ucs_list_link_t        *wheel;
     unsigned               res_order;
     unsigned               num_slots;
+    unsigned               count;
 };
 
 
@@ -96,6 +97,14 @@ static inline ucs_time_t ucs_twheel_get_time(ucs_twheel_t *t)
 }
 
 /**
+ * Get current time
+ */
+static UCS_F_ALWAYS_INLINE int ucs_twheel_is_empty(ucs_twheel_t *t)
+{
+    return !t->count;
+}
+
+/**
  * Add a one shot timer.
  *
  * @param twheel     Timer queue to schedule on.
@@ -123,11 +132,12 @@ static inline ucs_status_t ucs_wtimer_add(ucs_twheel_t *t, ucs_wtimer_t *timer,
  *
  * @param timer      timer to remove.
  */
-static inline void ucs_wtimer_remove(ucs_wtimer_t *timer)
+static inline void ucs_wtimer_remove(ucs_twheel_t *t, ucs_wtimer_t *timer)
 {
     if (ucs_likely(timer->is_active)) {
         ucs_list_del(&timer->list);
         timer->is_active = 0;
+        t->count--;
     }
 }
 
