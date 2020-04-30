@@ -486,6 +486,7 @@ private:
     void report_performance(long num_iters, double elapsed,
                             std::vector<op_info_t> &info) {
         double latency_usec = (elapsed / num_iters) * 1e6;
+        bool need_comma     = false;
 
         for (unsigned i = 0; i < info.size(); ++i) {
             op_info_t *op_info = &info[i];
@@ -494,14 +495,18 @@ private:
                 continue;
             }
 
+            if (need_comma) {
+                std::cout << ", ";
+            } else {
+                // require comma before the next printout
+                need_comma = true;
+            }
+
             double throughput_mbs = op_info->total_bytes /
                                     elapsed / (1024.0 * 1024.0);
 
             std::cout << op_info->num_iters << " " << io_op_names[op_info->op]
                       << "s at " << throughput_mbs << " MB/s";
-            if (i < info.size() - 1) {
-                std::cout << ", ";
-            }
 
             // reset for the next round
             op_info->total_bytes = 0;
