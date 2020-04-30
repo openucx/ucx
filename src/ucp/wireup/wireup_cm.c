@@ -526,19 +526,24 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        /* ignore close event on failed ep */
+        /* - ignore close event on failed ep, since all lanes are destroyed in
+             generic err flow
+           - close request is valid only if all lanes are flushed, transport
+             error is unexpected */
         ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
     } else if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
         /* if the EP is local connected, need to flush it from main thread first */
         ucp_ep_cm_remote_disconnect_progress(ucp_ep);
         ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
-    } else {
+    } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
         /* if the EP is not local connected, the EP has been closed and flushed,
-         * CM lane is disconnected, complete close request and destroy EP */
+           CM lane is disconnected, complete close request and destroy EP */
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
-        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID);
         close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
+    } else {
+        ucs_warn("ep %p: unexpected state on disconnect, flags: 0x%u",
+                 ucp_ep, ucp_ep->flags);
     }
 
     UCS_ASYNC_UNBLOCK(async);
@@ -952,7 +957,7 @@ static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         } else {
             return 0;
         }
-    } else if ((elem->cb == ucp_ep_cm_disconnect_progress)        ||
+    } else if ((elem->cb == ucp_ep_cm_disconnect_progress) ||
                (elem->cb == ucp_cm_server_conn_notify_progress)) {
         return arg == elem->arg;
     } else {
