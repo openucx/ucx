@@ -368,8 +368,16 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
             ucs_sockaddr_str(remote_addr, ip_port_str,
                              UCS_SOCKADDR_STRING_LEN));
 
-    remote_data.field_mask = 0;
-    uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+    if ((cep->flags & UCT_RDMACM_CM_EP_CONN_CB_INVOKED) &&
+        !(cep->flags & UCT_RDMACM_CM_EP_FAILED)) {
+        /* first failure on connected EP has to be reported as disconnect event
+         * to allow user to call disconnect due to UCT API limitation -
+         * disconnect callback does not have status arg */
+        uct_rdmacm_cm_handle_event_disconnected(event);
+    } else {
+        remote_data.field_mask = 0;
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+    }
 }
 
 static void
@@ -424,13 +432,13 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
          * After the timewait state has completed, the rdma_cm will report this event.*/
         break;
         /* client error events */
-    case RDMA_CM_EVENT_REJECTED:
     case RDMA_CM_EVENT_UNREACHABLE:
     case RDMA_CM_EVENT_ADDR_ERROR:
     case RDMA_CM_EVENT_ROUTE_ERROR:
     case RDMA_CM_EVENT_DEVICE_REMOVAL:
     case RDMA_CM_EVENT_ADDR_CHANGE:
         /* client and server error events */
+    case RDMA_CM_EVENT_REJECTED:
     case RDMA_CM_EVENT_CONNECT_ERROR:
         uct_rdmacm_cm_handle_error_event(event);
         break;
