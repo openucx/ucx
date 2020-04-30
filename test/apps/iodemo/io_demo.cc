@@ -48,6 +48,7 @@ typedef struct {
     long                 window_size;
     std::vector<io_op_t> operations;
     unsigned             random_seed;
+    size_t               num_buffers;
     bool                 verbose;
 } options_t;
 
@@ -93,19 +94,29 @@ protected:
     };
 
     P2pDemoCommon(const options_t& test_opts) :
-        UcxContext(test_opts.iomsg_size), _test_opts(test_opts) {
+        UcxContext(test_opts.iomsg_size), _test_opts(test_opts),
+        _cur_buffer_idx(0) {
 
-        _data_buffer.resize(opts().max_data_size + ALIGNMENT);
-        uintptr_t ptr = (uintptr_t)&_data_buffer[0];
-        _padding = ((ptr + ALIGNMENT - 1) & ~(ALIGNMENT - 1)) - ptr;
+        _data_buffers.resize(opts().num_buffers);
+        for (size_t i = 0; i < _data_buffers.size(); ++i) {
+            std::string &data_buffer = _data_buffers[i];
+            data_buffer.resize(opts().max_data_size + ALIGNMENT);
+            uintptr_t ptr = (uintptr_t)&data_buffer[0];
+            _padding = ((ptr + ALIGNMENT - 1) & ~(ALIGNMENT - 1)) - ptr;
+        }
     }
 
     const options_t& opts() const {
         return _test_opts;
     }
 
-    void *buffer() {
-        return &_data_buffer[_padding];
+    inline void *buffer() {
+        return &_data_buffers[_cur_buffer_idx][_padding];
+    }
+
+    inline void next_buffer() {
+        _cur_buffer_idx = (_cur_buffer_idx + 1) % _data_buffers.size();
+        assert(_cur_buffer_idx < opts().num_buffers);
     }
 
     inline size_t get_data_size() {
@@ -124,11 +135,12 @@ protected:
     }
 
 protected:
-    const options_t _test_opts;
+    const options_t          _test_opts;
 
 private:
-    std::string     _data_buffer;
-    size_t          _padding;
+    std::vector<std::string> _data_buffers;
+    size_t                   _cur_buffer_idx;
+    size_t                   _padding;
 };
 
 
@@ -188,6 +200,8 @@ public:
                                             0);
         conn->send_data(response->buffer(), opts().iomsg_size, hdr->sn,
                         response);
+
+        next_buffer();
     }
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
@@ -196,6 +210,8 @@ public:
         conn->recv_data(buffer(), hdr->data_size, hdr->sn,
                         new IoWriteResponseCallback(this, conn, hdr->sn,
                                                      hdr->data_size));
+
+        next_buffer();
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
@@ -273,6 +289,8 @@ public:
         conn->recv_data(buffer(), data_size, sn, response);
         conn->recv_data(response->buffer(), opts().iomsg_size, sn, response);
 
+        next_buffer();
+
         return data_size;
     }
 
@@ -287,6 +305,8 @@ public:
         VERBOSE_LOG << "sending data " << buffer() << " size "
                     << data_size << " sn " << sn;
         conn->send_data(buffer(), data_size, sn);
+
+        next_buffer();
 
         return data_size;
     }
@@ -361,6 +381,14 @@ public:
         return tv.tv_sec + (tv.tv_usec * 1e-6);
     }
 
+    static std::string get_time_str() {
+        char str[80];
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        snprintf(str, sizeof(str), "[%lu.%06lu]", tv.tv_sec, tv.tv_usec);
+        return str;
+    }
+
     bool run() {
         UcxConnection* conn = connect();
         if (!conn) {
@@ -381,9 +409,8 @@ public:
         long total_prev_iter = 0;
         std::vector<op_info_t> info;
 
-        for (size_t i = 0; i < opts().operations.size(); i++) {
-            io_op_t op = opts().operations[i];
-            op_info_t op_info = {op, 0, 0};
+        for (int i = 0; i < IO_COMP; ++i) {
+            op_info_t op_info = {static_cast<io_op_t>(i), 0, 0};
             info.push_back(op_info);
         }
 
@@ -467,6 +494,7 @@ private:
     void report_performance(long num_iters, double elapsed,
                             std::vector<op_info_t> &info) {
         double latency_usec = (elapsed / num_iters) * 1e6;
+        bool first_print    = true;
 
         for (unsigned i = 0; i < info.size(); ++i) {
             op_info_t *op_info = &info[i];
@@ -475,14 +503,20 @@ private:
                 continue;
             }
 
+            if (first_print) {
+                std::cout << get_time_str() << " ";
+                first_print = false;
+            } else {
+                // print comma for non-first printouts
+                std::cout << ", ";
+            }
+
             double throughput_mbs = op_info->total_bytes /
                                     elapsed / (1024.0 * 1024.0);
 
-            std::cout << op_info->num_iters << " " << io_op_names[op_info->op]
-                      << "s at " << throughput_mbs << " MB/s";
-            if (i < info.size() - 1) {
-                std::cout << ", ";
-            }
+            std::cout << op_info->num_iters << " "
+                      << io_op_names[op_info->op] << "s at "
+                      << throughput_mbs << " MB/s";
 
             // reset for the next round
             op_info->total_bytes = 0;
@@ -545,13 +579,14 @@ static int parse_args(int argc, char **argv, options_t* test_opts)
     test_opts->client_timeout = 1.0;
     test_opts->min_data_size  = 4096;
     test_opts->max_data_size  = 4096;
+    test_opts->num_buffers    = 1;
     test_opts->iomsg_size     = 256;
     test_opts->iter_count     = 1000;
     test_opts->window_size    = 1;
     test_opts->random_seed    = std::time(NULL);
     test_opts->verbose        = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:i:w:o:t:s:v")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:o:t:s:v")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -565,6 +600,14 @@ static int parse_args(int argc, char **argv, options_t* test_opts)
         case 'd':
             if (set_data_size(optarg, test_opts) == -1) {
                 std::cout << "invalid data size range '" << optarg << "'" << std::endl;
+                return -1;
+            }
+            break;
+        case 'b':
+            test_opts->num_buffers = strtol(optarg, NULL, 0);
+            if (test_opts->num_buffers == 0) {
+                std::cout << "number of buffers ('" << optarg << "')"
+                          << " has to be > 0" << std::endl;
                 return -1;
             }
             break;
@@ -624,6 +667,7 @@ static int parse_args(int argc, char **argv, options_t* test_opts)
             std::cout << "                                 measurments may be inaccurate" << std::endl;
             std::cout << "  -d <min>:<max>           Range that should be used to get data" << std::endl;
             std::cout << "                           size of IO payload" << std::endl;
+            std::cout << "  -b <number of buffers>   Number of IO buffers to use for communications" << std::endl;
             std::cout << "  -i <iterations-count>    Number of iterations to run communication" << std::endl;
             std::cout << "  -w <window-size>         Number of outstanding requests" << std::endl;
             std::cout << "  -r <io-request-size>     Size of IO request packet" << std::endl;
