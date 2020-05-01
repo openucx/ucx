@@ -8,8 +8,9 @@
 #define UCS_LIST_H_
 
 #include <ucs/sys/compiler_def.h>
-#include <ucs/datastruct/list_types.h>
 
+
+BEGIN_C_DECLS
 
 #define UCS_LIST_INITIALIZER(_prev, _next) \
     { (_prev), (_next) }
@@ -20,6 +21,15 @@
  */
 #define UCS_LIST_HEAD(name) \
     ucs_list_link_t name = UCS_LIST_INITIALIZER(&(name), &(name))
+
+
+/**
+ * A link in a circular list.
+ */
+typedef struct ucs_list_link {
+    struct ucs_list_link  *prev;
+    struct ucs_list_link  *next;
+} ucs_list_link_t;
 
 
 /**
@@ -201,5 +211,7 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
         ucs_list_del(tmp); \
         ucs_container_of(tmp, _type, _member); \
     })
+
+END_C_DECLS
 
 #endif
