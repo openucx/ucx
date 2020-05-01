@@ -322,7 +322,11 @@ static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req,
     if (status == UCS_OK) {
         ucp_rndv_req_send_ats(rndv_req, rreq,
                               rndv_req->send.rndv_get.remote_request, UCS_OK);
+    } else {
+        /* if completing RNDV with the error, just release RNDV request */
+        ucp_request_put(rndv_req);
     }
+
     ucp_rndv_zcopy_recv_req_complete(rreq, status);
 }
 
