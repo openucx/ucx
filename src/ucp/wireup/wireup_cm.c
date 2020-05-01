@@ -117,6 +117,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     ucp_lane_index_t lane_idx;
     ucp_rsc_index_t rsc_idx;
     const char *dev_name;
+    ucp_ep_h tmp_ep;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -133,16 +134,21 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     /* At this point the ep has only CM lane */
     ucs_assert((ucp_ep_num_lanes(ep) == 1) &&
                (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE));
-    /* Detach it before reconfiguration and restore then */
     cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     ucs_assert(cm_wireup_ep != NULL);
 
-    status = ucp_worker_get_ep_config(worker, &key, 0, &ep->cfg_index);
+    /* Create tmp ep which will hold local tl addresses until connect
+     * event arrives, to avoid asynchronous ep reconfiguration. */
+    status = ucp_ep_create_base(worker, "tmp_cm", "tmp cm client", &tmp_ep);
     if (status != UCS_OK) {
         goto out;
     }
+    cm_wireup_ep->tmp_ep = tmp_ep;
 
-    ep->am_lane = key.am_lane;
+    status = ucp_worker_get_ep_config(worker, &key, 0, &tmp_ep->cfg_index);
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
     status             = uct_cm_query(cm, &cm_attr);
@@ -151,18 +157,17 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     }
 
     tl_bitmap = 0;
-    for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(ep); ++lane_idx) {
-        if (lane_idx == ucp_ep_get_cm_lane(ep)) {
-            ep->uct_eps[lane_idx] = &cm_wireup_ep->super.super;
+    for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(tmp_ep); ++lane_idx) {
+        if (lane_idx == ucp_ep_get_cm_lane(tmp_ep)) {
             continue;
         }
 
-        rsc_idx = ucp_ep_get_rsc_index(ep, lane_idx);
+        rsc_idx = ucp_ep_get_rsc_index(tmp_ep, lane_idx);
         if (rsc_idx == UCP_NULL_RESOURCE) {
             continue;
         }
 
-        status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane_idx]);
+        status = ucp_wireup_ep_create(tmp_ep, &tmp_ep->uct_eps[lane_idx]);
         if (status != UCS_OK) {
             goto out;
         }
@@ -176,27 +181,24 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
             tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
                                       UCT_EP_PARAM_FIELD_PATH_INDEX;
             tl_ep_params.iface      = ucp_worker_iface(worker, rsc_idx)->iface;
-            tl_ep_params.path_index = ucp_ep_get_path_index(ep, lane_idx);
+            tl_ep_params.path_index = ucp_ep_get_path_index(tmp_ep, lane_idx);
             status = uct_ep_create(&tl_ep_params, &tl_ep);
             if (status != UCS_OK) {
                 /* coverity[leaked_storage] */
                 goto out;
             }
 
-            ucp_wireup_ep_set_next_ep(ep->uct_eps[lane_idx], tl_ep);
+            ucp_wireup_ep_set_next_ep(tmp_ep->uct_eps[lane_idx], tl_ep);
         } else {
             ucs_assert(ucp_worker_iface_get_attr(worker, rsc_idx)->cap.flags &
                        UCT_IFACE_FLAG_CONNECT_TO_IFACE);
         }
     }
 
-    /* Make sure that CM lane is restored */
-    ucs_assert(cm_wireup_ep == ucp_ep_get_cm_wireup_ep(ep));
-
     /* Don't pack the device address to reduce address size, it will be
      * delivered by uct_cm_listener_conn_request_callback_t in
      * uct_cm_remote_data_t */
-    status = ucp_address_pack(worker, ep, tl_bitmap,
+    status = ucp_address_pack(worker, tmp_ep, tl_bitmap,
                               UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
                               UCP_ADDRESS_PACK_FLAG_EP_ADDR,
                               NULL, &ucp_addr_size, &ucp_addr);
@@ -206,13 +208,15 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
     if (cm_attr.max_conn_priv < (sizeof(*sa_data) + ucp_addr_size)) {
         ucs_error("CM private data buffer is to small to pack UCP endpoint info, "
-                  "ep %p service data %lu, address length %lu, cm %p max_conn_priv %lu",
-                  ep, sizeof(*sa_data), ucp_addr_size, cm,
+                  "ep %p/%p service data %lu, address length %lu, cm %p max_conn_priv %lu",
+                  ep, tmp_ep, sizeof(*sa_data), ucp_addr_size, cm,
                   cm_attr.max_conn_priv);
         status = UCS_ERR_BUFFER_TOO_SMALL;
         goto free_addr;
     }
 
+    /* Pass real ep (not tmp_ep), because only its pointer and err_mode is
+     * taken from the config. */
     ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
 
 free_addr:
@@ -237,6 +241,31 @@ ucp_cm_client_connect_prog_arg_free(ucp_cm_client_connect_progress_arg_t *arg)
     ucs_free(arg->sa_data);
     ucs_free(arg->dev_addr);
     ucs_free(arg);
+}
+
+static uint64_t ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep,
+                                         ucp_ep_h ucp_ep)
+{
+    ucp_ep_h tmp_ep = wireup_cm_ep->tmp_ep;
+    ucp_wireup_ep_t *w_ep;
+    uint64_t tl_bitmap;
+    ucp_lane_index_t lane_idx;
+
+    for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(tmp_ep); ++lane_idx) {
+        if (tmp_ep->uct_eps[lane_idx] != NULL) {
+            ucs_assert(ucp_ep->uct_eps[lane_idx] == NULL);
+            ucp_ep->uct_eps[lane_idx] = tmp_ep->uct_eps[lane_idx];
+            w_ep = ucs_derived_of(ucp_ep->uct_eps[lane_idx], ucp_wireup_ep_t);
+            w_ep->super.ucp_ep = ucp_ep;
+        }
+    }
+
+    tl_bitmap = ucp_ep_get_tl_bitmap(tmp_ep);
+    ucs_assert(tl_bitmap != 0);
+    ucp_ep_delete_base(tmp_ep); /* not needed anymore */
+    wireup_cm_ep->tmp_ep = NULL;
+
+    return tl_bitmap;
 }
 
 /*
@@ -285,10 +314,9 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
 
-    /* extend tl_bitmap to all TLs on the same device as initial configuration
-       since TL can be changed due to server side configuration */
-    tl_bitmap = ucp_ep_get_tl_bitmap(ucp_ep);
-    ucs_assert(tl_bitmap != 0);
+    /* Restore initial configuration from tmp_ep created for packing local
+     * addresses and get its tl bitmap. */
+    tl_bitmap = ucp_cm_client_restore_ep(wireup_ep, ucp_ep);
     rsc_index = ucs_ffs64(tl_bitmap);
     dev_index = context->tl_rscs[rsc_index].dev_index;
 

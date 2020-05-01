@@ -442,7 +442,12 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
 ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
                         const char *message, ucp_ep_h *ep_p);
 
+ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
+                                const char *message, ucp_ep_h *ep_p);
+
 void ucp_ep_delete(ucp_ep_h ep);
+
+void ucp_ep_delete_base(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep);

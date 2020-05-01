@@ -34,6 +34,7 @@ struct ucp_wireup_ep {
     ucs_queue_head_t          pending_q;     /**< Queue of pending operations */
     uct_ep_h                  aux_ep;        /**< Used to wireup the "real" endpoint */
     uct_ep_h                  sockaddr_ep;   /**< Used for client-server wireup */
+    ucp_ep_h                  tmp_ep;        /**< Used by the client for local tls setup */
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
     ucp_rsc_index_t           sockaddr_rsc_index; /**< Index of sockaddr transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */

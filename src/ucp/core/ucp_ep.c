@@ -82,8 +82,8 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     memset(key->amo_lanes,    UCP_NULL_LANE, sizeof(key->amo_lanes));
 }
 
-ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
-                        const char *message, ucp_ep_h *ep_p)
+ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
+                                const char *message, ucp_ep_h *ep_p)
 {
     ucs_status_t status;
     ucp_ep_config_key_t key;
@@ -136,7 +136,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    ucs_list_head_init(&ucp_ep_ext_gen(ep)->ep_list);
+
     *ep_p = ep;
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
     return UCS_OK;
@@ -147,13 +148,36 @@ err:
     return status;
 }
 
-void ucp_ep_delete(ucp_ep_h ep)
+ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
+                        const char *message, ucp_ep_h *ep_p)
+{
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    status = ucp_ep_create_base(worker, peer_name, message, &ep);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+
+    *ep_p = ep;
+
+    return UCS_OK;
+}
+
+void ucp_ep_delete_base(ucp_ep_h ep)
 {
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
     UCS_STATS_NODE_FREE(ep->stats);
-    ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
+}
+
+void ucp_ep_delete(ucp_ep_h ep)
+{
+    ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
+    ucp_ep_delete_base(ep);
 }
 
 ucs_status_t
