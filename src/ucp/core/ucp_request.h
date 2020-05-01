@@ -327,7 +327,7 @@ struct ucp_recv_desc {
     uint32_t                payload_offset;  /* Offset from end of the descriptor
                                               * to AM data */
     uint16_t                flags;           /* Flags */
-    int32_t                 uct_desc_offset; /* Offset which needs to be
+    int16_t                 uct_desc_offset; /* Offset which needs to be
                                                 substructed from rdesc when
                                                 releasing it back to UCT */
 };

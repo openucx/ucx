@@ -592,12 +592,13 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
 static UCS_F_ALWAYS_INLINE void
 ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
 {
-    void *rd;
+    void *uct_desc;
+
     ucs_trace_req("release receive descriptor %p", rdesc);
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
         /* uct desc is slowpath */
-        rd = UCS_PTR_BYTE_OFFSET(rdesc, -rdesc->uct_desc_offset);
-        uct_iface_release_desc(rd);
+        uct_desc = UCS_PTR_BYTE_OFFSET(rdesc, -rdesc->uct_desc_offset);
+        uct_iface_release_desc(uct_desc);
     } else {
         ucs_mpool_put_inline(rdesc);
     }
