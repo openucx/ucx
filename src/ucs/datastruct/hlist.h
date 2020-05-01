@@ -188,7 +188,7 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
 #define ucs_hlist_next_elem(_elem, _member) \
     ucs_container_of(ucs_list_next(&(_elem)->_member.list, ucs_hlist_link_t, \
                                    list), \
-                     typeof(*_elem), _member)
+                     typeof(*(_elem)), _member)
 
 
 /**
@@ -208,11 +208,11 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
     for (_elem = NULL; \
          (_elem == NULL) ? \
              /* first iteration: check _head->ptr != NULL */ \
-             ((_elem = ucs_hlist_head_elem(_head, typeof(*_elem), _member)) != \
+             ((_elem = ucs_hlist_head_elem(_head, typeof(*(_elem)), _member)) != \
                      ucs_container_of(NULL, typeof(*(_elem)), _member)) : \
              /* rest of iterations: check _elem != _head->ptr */ \
              ((_elem = ucs_hlist_next_elem(_elem, _member)) != \
-                     ucs_hlist_head_elem(_head, typeof(*_elem), _member)); \
+                     ucs_hlist_head_elem(_head, typeof(*(_elem)), _member)); \
          )
 
 
