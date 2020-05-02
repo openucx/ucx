@@ -185,9 +185,9 @@ typedef struct uct_ud_ctl_desc {
     uint16_t                sn;          /* Sequence number in outstanding queue */
     uct_ud_send_skb_t       *self_skb;   /* Back-pointer to owner skb */
     uct_ud_send_skb_t       *resent_skb; /* For resend skb: points to a re-sent
-                                            skb in the window. Can be NULL. */
+                                            skb in the window, can be NULL */
     uct_ud_ep_t             *ep;         /* For resend skb: points to the endpoint
-                                            on which the resend was made. */
+                                            on which the resend was made */
 } uct_ud_ctl_desc_t;
 
 

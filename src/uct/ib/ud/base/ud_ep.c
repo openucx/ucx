@@ -221,8 +221,8 @@ static void uct_ud_ep_timer_backoff(uct_ud_ep_t *ep)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
 
-    ep->tx.tick *= iface->tx.timer_backoff;
-    ep->tx.tick  = ucs_min(ep->tx.tick, UCT_UD_SLOW_TIMER_MAX_TICK(iface));
+    ep->tx.tick = ucs_min(ep->tx.tick * iface->tx.timer_backoff,
+                          UCT_UD_SLOW_TIMER_MAX_TICK(iface));
     ucs_wtimer_add(&iface->tx.timer, &ep->timer, ep->tx.tick);
 }
 
