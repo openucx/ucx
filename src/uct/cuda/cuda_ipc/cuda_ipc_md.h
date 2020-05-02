@@ -50,7 +50,6 @@ typedef struct uct_cuda_ipc_key {
     size_t         b_len;        /* Allocation size */
     int            dev_num;      /* GPU Device number */
     CUuuid         uuid;         /* GPU Device UUID */
-    CUdeviceptr    d_mapped;     /* Locally mapped device address */
 } uct_cuda_ipc_key_t;
 
 
