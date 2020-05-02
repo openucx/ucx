@@ -244,7 +244,8 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
 {
     uct_ud_send_skb_t *skb = obj;
 
-    skb->lkey = uct_ib_memh_get_lkey(memh);
+    skb->lkey  = uct_ib_memh_get_lkey(memh);
+    skb->flags = UCT_UD_SEND_SKB_FLAG_INVALID;
 }
 
 static ucs_status_t
@@ -754,7 +755,7 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
     ucs_queue_for_each_extract(skb, &iface->tx.async_comp_q, queue, 1) {
         uct_ud_iface_dispatch_skb_comp(iface, skb);
         ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING));
-        ucs_mpool_put(skb);
+        uct_ud_skb_release(skb, 0);
     }
 }
 
@@ -763,7 +764,7 @@ static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface)
     uct_ud_send_skb_t *skb;
 
     ucs_queue_for_each_extract(skb, &iface->tx.async_comp_q, queue, 1) {
-        ucs_mpool_put(skb);
+        uct_ud_skb_release(skb, 0);
     }
 }
 
@@ -912,7 +913,7 @@ static void uct_ud_iface_resent_skb_complete(uct_ud_iface_t *iface,
         uct_ud_iface_dispatch_skb_comp(iface, skb);
     }
 
-    ucs_mpool_put(skb);
+    uct_ud_skb_release(skb, 0);
 }
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
@@ -921,6 +922,7 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
     uct_ud_send_skb_t *resent_skb, *skb;
 
     skb = cdesc->self_skb;
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
 
     resent_skb = cdesc->resent_skb;
     ucs_assert(uct_ud_ctl_desc(skb) == cdesc);
@@ -940,8 +942,7 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
         ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL_ACK);
     }
 
-    /* release the control skb */
-    ucs_mpool_put(skb);
+    uct_ud_skb_release(skb, 0);
 
 }
 

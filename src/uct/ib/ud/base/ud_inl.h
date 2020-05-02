@@ -67,6 +67,18 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
     return skb;
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_ud_skb_release(uct_ud_send_skb_t *skb, int is_inline)
+{
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
+    skb->flags = UCT_UD_SEND_SKB_FLAG_INVALID;
+    if (is_inline) {
+        ucs_mpool_put_inline(skb);
+    } else {
+        ucs_mpool_put(skb);
+    }
+}
+
 /* same as above but also check ep resources: window&connection state */
 static UCS_F_ALWAYS_INLINE uct_ud_send_skb_t *
 uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)

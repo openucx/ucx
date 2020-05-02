@@ -149,10 +149,11 @@ uct_ud_ep_window_release(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
                                UCT_UD_PSN_COMPARE(skb->neth->psn, <=, max_psn)) {
+        ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
         if (ucs_likely(!(skb->flags & (UCT_UD_SEND_SKB_FLAG_RESENDING |
                                        UCT_UD_SEND_SKB_FLAG_COMP)))) {
             /* fast path case: completed skb without completion callback */
-            ucs_mpool_put_inline(skb);
+            uct_ud_skb_release(skb, 1);
         } else if (ucs_likely(!(skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING))) {
             /* completed skb with user completion */
             ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP);
@@ -160,7 +161,7 @@ uct_ud_ep_window_release(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                 /* dispatch user completion immediately */
                 uct_ud_iface_dispatch_comp(iface, uct_ud_comp_desc(skb)->comp,
                                            status);
-                ucs_mpool_put_inline(skb);
+                uct_ud_skb_release(skb, 1);
             } else {
                 /* Don't call user completion from async context. Instead, put
                  * it on a queue which will be progressed from main thread.

@@ -134,12 +134,14 @@ enum {
     UCT_UD_SEND_SKB_FLAG_ACKED      = UCS_BIT(4), /* Acknowledged but not released yet */
 
 #if UCS_ENABLE_ASSERT
-    UCT_UD_SEND_SKB_FLAG_CTL_ACK    = UCS_BIT(6), /* This is a control-ack skb */
-    UCT_UD_SEND_SKB_FLAG_CTL_RESEND = UCS_BIT(7)  /* This is a control-resend rsb */
+    UCT_UD_SEND_SKB_FLAG_CTL_ACK    = UCS_BIT(5), /* This is a control-ack skb */
+    UCT_UD_SEND_SKB_FLAG_CTL_RESEND = UCS_BIT(6), /* This is a control-resend rsb */
+    UCT_UD_SEND_SKB_FLAG_INVALID    = UCS_BIT(7)  /* skb is released */
 
 #else
     UCT_UD_SEND_SKB_FLAG_CTL_ACK    = 0,
-    UCT_UD_SEND_SKB_FLAG_CTL_RESEND = 0
+    UCT_UD_SEND_SKB_FLAG_CTL_RESEND = 0,
+    UCT_UD_SEND_SKB_FLAG_INVALID    = 0
 #endif
 };
 
@@ -255,18 +257,21 @@ static inline uct_ud_ctl_desc_t *uct_ud_ctl_desc(uct_ud_send_skb_t *skb)
 {
     ucs_assert(skb->flags & (UCT_UD_SEND_SKB_FLAG_CTL_ACK |
                              UCT_UD_SEND_SKB_FLAG_CTL_RESEND));
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
     return (uct_ud_ctl_desc_t*)((char*)skb->neth + skb->len);
 }
 
 static inline uct_ud_comp_desc_t *uct_ud_comp_desc(uct_ud_send_skb_t *skb)
 {
     ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP);
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
     return (uct_ud_comp_desc_t*)((char*)skb->neth + skb->len);
 }
 
 static inline uct_ud_zcopy_desc_t *uct_ud_zcopy_desc(uct_ud_send_skb_t *skb)
 {
     ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY);
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
     return (uct_ud_zcopy_desc_t*)((char*)skb->neth + skb->len);
 }
 
