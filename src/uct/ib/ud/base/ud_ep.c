@@ -205,6 +205,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
     memset(self, 0, sizeof(*self));
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
+    uct_ud_enter(iface);
+
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     uct_ud_ep_reset(self);
@@ -217,6 +219,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
 
     UCT_UD_EP_HOOK_INIT(self);
     ucs_debug("created ep ep=%p iface=%p id=%d", self, iface, self->ep_id);
+
+    uct_ud_leave(iface);
+
     return UCS_OK;
 }
 
@@ -247,6 +252,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
     ucs_trace_func("ep=%p id=%d conn_id=%d", self, self->ep_id, self->conn_id);
 
+    uct_ud_enter(iface);
+
     ucs_wtimer_remove(&iface->tx.timer, &self->timer);
     uct_ud_iface_remove_ep(iface, self);
     uct_ud_iface_cep_remove(self);
@@ -261,6 +268,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
                    (int)ucs_queue_length(&self->tx.window));
     }
     ucs_arbiter_group_cleanup(&self->tx.pending.group);
+    uct_ud_leave(iface);
 }
 
 UCS_CLASS_DEFINE(uct_ud_ep_t, uct_base_ep_t);
@@ -1328,12 +1336,14 @@ void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_purge_callback_t cb,
     uct_ud_leave(iface);
 }
 
-void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
+void uct_ud_ep_disconnect(uct_ep_h tl_ep)
 {
     uct_ud_ep_t    *ep    = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_iface_t);
 
     ucs_debug("ep %p: disconnect", ep);
+
+    uct_ud_enter(iface);
 
     /* cancel user pending */
     uct_ud_ep_pending_purge(tl_ep, NULL, NULL);
@@ -1348,4 +1358,6 @@ void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
     ep->flags |= UCT_UD_EP_FLAG_DISCONNECTED;
     ucs_wtimer_add(&iface->tx.timer, &ep->timer,
                    UCT_UD_SLOW_TIMER_MAX_TICK(iface));
+
+    uct_ud_leave(iface);
 }
