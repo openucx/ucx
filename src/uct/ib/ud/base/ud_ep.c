@@ -901,6 +901,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
             /* Add dummy skb to the window, which would call user completion
              * callback when getting ACK.
              */
+            ucs_assert(comp->count > 0);
             skb->flags                  = UCT_UD_SEND_SKB_FLAG_COMP;
             skb->len                    = sizeof(skb->neth[0]);
             skb->neth->packet_type      = 0;
