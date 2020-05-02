@@ -37,6 +37,8 @@ typedef struct ucp_context_config {
     size_t                                 bcopy_thresh;
     /** Threshold for switching UCP to rendezvous protocol */
     size_t                                 rndv_thresh;
+    /** Threshold for switching UCP to rendezvous protocol for non-HOST memory */
+    size_t                                 memtype_rndv_thresh;
     /** Threshold for switching UCP to rendezvous protocol
      *  in ucp_tag_send_nbr() */
     size_t                                 rndv_send_nbr_thresh;

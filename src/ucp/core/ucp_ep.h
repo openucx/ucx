@@ -258,6 +258,8 @@ typedef struct ucp_ep_config {
             int             put_zcopy_split;
             /* Threshold for switching from eager to RMA based rendezvous */
             size_t          rma_thresh;
+            /* Threshold for switching from eager to RMA based rendezvous for non-HOST memory */
+            size_t          memtype_rma_thresh;
             /* Threshold for switching from eager to AM based rendezvous */
             size_t          am_thresh;
             /* Total size of packed rkey, according to high-bw md_map */

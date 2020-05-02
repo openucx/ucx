@@ -1261,6 +1261,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                                 min_thresh,
                                                 max_rndv_thresh);
 
+    config->tag.rndv.memtype_rma_thresh  = context->config.ext.memtype_rndv_thresh;
     config->tag.rndv_send_nbr.rma_thresh = ucp_ep_thresh(rndv_nbr_thresh,
                                                          min_thresh,
                                                          max_rndv_thresh);
