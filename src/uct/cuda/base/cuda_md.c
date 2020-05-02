@@ -56,12 +56,21 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
     return UCS_ERR_INVALID_ADDR;
 }
 
-static ucs_status_t uct_cuda_base_get_sys_dev(ucs_sys_device_t *sys_dev_p)
+static ucs_status_t uct_cuda_base_get_sys_dev(const void *addr,
+                                              ucs_sys_device_t *sys_dev_p)
 {
+    CUpointer_attribute attribute = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
     CUdevice dev;
     int attrib;
+    int ordinal;
 
-    if (UCS_OK != UCT_CUDADRV_FUNC(cuCtxGetDevice(&dev))) {
+    if (UCS_OK != UCT_CUDADRV_FUNC(cuPointerGetAttribute((void *)&ordinal,
+                                                         attribute,
+                                                         (CUdeviceptr)addr))) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (UCS_OK != UCT_CUDADRV_FUNC(cuDeviceGet(&dev, ordinal))) {
         return UCS_ERR_IO_ERROR;
     }
 
@@ -102,7 +111,7 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h md, const void *addr,
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
-        status = uct_cuda_base_get_sys_dev(&mem_attr_p->sys_dev);
+        status = uct_cuda_base_get_sys_dev(addr, &mem_attr_p->sys_dev);
         if (UCS_OK != status) {
             ucs_warn("unable to query sys_dev for %p", (void*) addr);
             return status;
