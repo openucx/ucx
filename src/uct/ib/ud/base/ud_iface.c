@@ -244,8 +244,7 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
 {
     uct_ud_send_skb_t *skb = obj;
 
-    skb->lkey  = uct_ib_memh_get_lkey(memh);
-    skb->flags = 0;
+    skb->lkey = uct_ib_memh_get_lkey(memh);
 }
 
 static ucs_status_t
@@ -736,65 +735,34 @@ uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface)
     }
 
     VALGRIND_MAKE_MEM_DEFINED(&skb->lkey, sizeof(skb->lkey));
-    skb->flags = UCT_UD_SEND_SKB_FLAG_CTL;
+    skb->flags = 0;
     return skb;
 }
 
-static void uct_ud_ep_dispatch_err_comp(uct_ud_iface_t *iface,
-                                        uct_ud_comp_desc_t *cdesc)
+static void uct_ud_iface_dispatch_skb_comp(uct_ud_iface_t *iface,
+                                           uct_ud_send_skb_t *skb)
 {
-    uct_ud_ep_t *ep = cdesc->err_ep;
-    ucs_status_t status;
+    uct_ud_comp_desc_t *cdesc = uct_ud_comp_desc(skb);
 
-    ucs_assert(ep->tx.err_skb_count > 0);
-    --ep->tx.err_skb_count;
-
-    if ((ep->tx.err_skb_count > 0) || (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED)) {
-        return;
-    }
-
-    if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
-        uct_ep_destroy(&ep->super.super);
-        return;
-    }
-
-    status = iface->super.ops->set_ep_failed(&iface->super, &ep->super.super,
-                                             cdesc->status);
-    if (status != UCS_OK) {
-        ucs_fatal("transport error: %s", ucs_status_string(status));
-    }
+    uct_ud_iface_dispatch_comp(iface, cdesc->comp, cdesc->status);
 }
 
 void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 {
-    uct_ud_comp_desc_t *cdesc;
-    uct_ud_send_skb_t  *skb;
+    uct_ud_send_skb_t *skb;
 
-    do {
-        skb = ucs_queue_pull_elem_non_empty(&iface->tx.async_comp_q,
-                                            uct_ud_send_skb_t, queue);
-        cdesc = uct_ud_comp_desc(skb);
-
-        if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
-            uct_ud_iface_dispatch_comp(iface, cdesc->comp, cdesc->status);
-        }
-
-        if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_ERR)) {
-            uct_ud_ep_dispatch_err_comp(iface, cdesc);
-        }
-
-        skb->flags = 0;
+    ucs_queue_for_each_extract(skb, &iface->tx.async_comp_q, queue, 1) {
+        uct_ud_iface_dispatch_skb_comp(iface, skb);
+        ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING));
         ucs_mpool_put(skb);
-    } while (!ucs_queue_is_empty(&iface->tx.async_comp_q));
+    }
 }
 
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface)
 {
     uct_ud_send_skb_t *skb;
 
-    while (!ucs_queue_is_empty(&iface->tx.async_comp_q)) {
-        skb = ucs_queue_pull_elem_non_empty(&iface->tx.async_comp_q,
-                                            uct_ud_send_skb_t, queue);
+    ucs_queue_for_each_extract(skb, &iface->tx.async_comp_q, queue, 1) {
         ucs_mpool_put(skb);
     }
 }
@@ -867,13 +835,6 @@ void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
     uct_ud_leave(iface);
 }
 
-void uct_ud_iface_handle_failure(uct_ib_iface_t *iface, void *arg,
-                                 ucs_status_t status)
-{
-    uct_ud_tx_wnd_purge_outstanding(ucs_derived_of(iface, uct_ud_iface_t),
-                                    (uct_ud_ep_t *)arg, status);
-}
-
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 {
     uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
@@ -938,32 +899,59 @@ void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
     uct_base_iface_progress_enable(tl_iface, flags);
 }
 
+static void uct_ud_iface_resent_skb_complete(uct_ud_iface_t *iface,
+                                             uct_ud_send_skb_t *skb,
+                                             int is_async)
+{
+    if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
+        if (!is_async) {
+            ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
+            return;
+        }
+
+        uct_ud_iface_dispatch_skb_comp(iface, skb);
+    }
+
+    ucs_mpool_put(skb);
+}
+
+void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
+                                   uct_ud_ctl_desc_t *cdesc, int is_async)
+{
+    uct_ud_send_skb_t *resent_skb, *skb;
+
+    skb = cdesc->self_skb;
+
+    resent_skb = cdesc->resent_skb;
+    ucs_assert(uct_ud_ctl_desc(skb) == cdesc);
+
+    if (resent_skb != NULL) {
+        ucs_assert(skb->flags        & UCT_UD_SEND_SKB_FLAG_CTL_RESEND);
+        ucs_assert(resent_skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING);
+
+        resent_skb->flags &= ~UCT_UD_SEND_SKB_FLAG_RESENDING;
+        if (resent_skb->flags & UCT_UD_SEND_SKB_FLAG_ACKED) {
+            /* skb was acknowledged, so we can complete it */
+            uct_ud_iface_resent_skb_complete(iface, resent_skb, is_async);
+        }
+
+        --cdesc->ep->resend.tx_count;
+    } else {
+        ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL_ACK);
+    }
+
+    /* release the control skb */
+    ucs_mpool_put(skb);
+
+}
+
 void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
                                   int is_async)
 {
-    uct_ud_send_skb_t *resent_skb, *skb;
     uct_ud_ctl_desc_t *cdesc;
 
     ucs_queue_for_each_extract(cdesc, &iface->tx.outstanding_q, queue,
                                UCS_CIRCULAR_COMPARE16(cdesc->sn, <=, sn)) {
-        skb        = cdesc->self_skb;
-        resent_skb = cdesc->resent_skb;
-        ucs_assert(uct_ud_ctl_desc(skb) == cdesc);
-
-        if (resent_skb != NULL) {
-            ucs_assert(resent_skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING);
-
-            if (resent_skb->flags & UCT_UD_SEND_SKB_FLAG_ACKED) {
-                /* skb was acknowledged, so we can complete it */
-                uct_ud_send_skb_complete(iface, cdesc->resent_skb, is_async);
-            } else {
-                /* skb was not yet acknowledged, just drop its resending flag */
-                resent_skb->flags &= ~UCT_UD_SEND_SKB_FLAG_RESENDING;
-            }
-        }
-
-        /* release the control skb */
-        skb->flags = 0;
-        ucs_mpool_put(skb);
+        uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
     }
 }
