@@ -937,7 +937,7 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
             uct_ud_iface_resent_skb_complete(iface, resent_skb, is_async);
         }
 
-        --cdesc->ep->resend.tx_count;
+        --cdesc->ep->tx.resend_count;
     } else {
         ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL_ACK);
     }

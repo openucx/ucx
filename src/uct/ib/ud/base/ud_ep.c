@@ -115,7 +115,7 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
     ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
     ep->resend.psn       = ep->tx.psn;
     ep->resend.max_psn   = ep->tx.acked_psn;
-    ep->resend.tx_count  = 0;
+    ep->tx.resend_count  = 0;
     ep->rx_creq_count    = 0;
 
     ep->rx.acked_psn = UCT_UD_INITIAL_PSN - 1;
@@ -171,7 +171,7 @@ uct_ud_ep_window_release(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         } else {
             /* slow-path case: the skb is still used by the QP, can happen in
              * when this skb is being resent */
-            ucs_assert(ep->resend.tx_count > 0);
+            ucs_assert(ep->tx.resend_count > 0);
             skb->flags |= UCT_UD_SEND_SKB_FLAG_ACKED;
             if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
                 uct_ud_comp_desc(skb)->status = status;
@@ -262,10 +262,10 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
      * It just means the sender is slow.
      */
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ|UCT_UD_EP_OP_RESEND) ||
-        (ep->resend.tx_count > 0)) {
+        (ep->tx.resend_count > 0)) {
         ucs_wtimer_add(&iface->tx.timer, &ep->timer, ep->tx.tick);
         ucs_trace("ep %p: resend still in progress, ops 0x%x tx_count %d",
-                  ep, ep->tx.pending.ops, ep->resend.tx_count);
+                  ep, ep->tx.pending.ops, ep->tx.resend_count);
         uct_ud_ep_timer_backoff(ep);
         return;
     }
@@ -348,7 +348,7 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
         }
     }
 
-    ucs_assert_always(ep->resend.tx_count == 0);
+    ucs_assert_always(ep->tx.resend_count == 0);
 }
 
 static int uct_ud_ep_remove_timeout_filter(const ucs_callbackq_elem_t *elem,
@@ -1129,7 +1129,7 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
                                       UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED,
                                       max_log_sge);
     uct_ud_iface_add_ctl_desc(iface, cdesc);
-    ++ep->resend.tx_count;
+    ++ep->tx.resend_count;
 }
 
 static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)

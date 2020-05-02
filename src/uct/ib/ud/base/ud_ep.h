@@ -218,6 +218,7 @@ struct uct_ud_ep {
          uct_ud_psn_t           psn;          /* Next PSN to send */
          uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent */
          uct_ud_psn_t           acked_psn;    /* last psn that was acked by remote side */
+         uint16_t               resend_count; /* number of in-flight resends on the ep */
          ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
@@ -241,7 +242,6 @@ struct uct_ud_ep {
          ucs_queue_iter_t       pos;       /* points to the part of tx window that needs to be resent */
          uct_ud_psn_t           psn;       /* last psn that was retransmitted */
          uct_ud_psn_t           max_psn;   /* max psn that should be retransmitted */
-         uint16_t               tx_count;  /* number of in-flight resends on the ep */
     } resend;
     ucs_list_link_t  cep_list;
     uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */
