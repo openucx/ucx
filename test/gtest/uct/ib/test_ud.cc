@@ -538,10 +538,10 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_md,
                       !check_caps(UCT_IFACE_FLAG_AM_SHORT)),
                      "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW)) {
 
-    ucs_status_t status;
-    int prev_cwnd, new_cwnd;
+    unsigned prev_cwnd, new_cwnd;
     uint32_t new_tx_count;
-    int i;
+    ucs_status_t status;
+    unsigned num_sent;
 
     connect();
 
@@ -551,20 +551,27 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_md,
      * on receive drop all packets. After several retransmission
      * attempts the window will be reduced to the minimum
      */
+    uct_ud_enter(iface(m_e1));
     set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
     ep(m_e2, 0)->rx.rx_hook = drop_rx;
-    for (i = 1; i < UCT_UD_CA_MAX_WINDOW; i++) {
+    uct_ud_leave(iface(m_e1));
+
+    num_sent = 0;
+    while (num_sent < UCT_UD_CA_MAX_WINDOW) {
         status = tx(m_e1);
         if (status == UCS_ERR_NO_RESOURCE) {
             // the congestion window can shrink by async timer if ACKs are
             // not received fast enough
-            EXPECT_GT(i, 1); /* at least one packet should be sent */
             break;
         }
-        EXPECT_UCS_OK(status);
+        ASSERT_UCS_OK(status);
         progress();
+        ++num_sent;
     }
     short_progress_loop();
+
+    UCS_TEST_MESSAGE << "sent " << num_sent << " packets";
+    EXPECT_GE(num_sent, 1u); /* at least one packet should be sent */
 
     ep(m_e1)->tx.tx_hook = count_tx;
     do {
@@ -583,7 +590,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_md,
         new_tx_count = tx_count;
         uct_ud_leave(iface(m_e1));
 
-        EXPECT_GE(new_tx_count, new_cwnd - 1);
+        EXPECT_GE(new_tx_count, ucs_min(new_cwnd - 1, num_sent));
         if (new_cwnd > UCT_UD_CA_MIN_WINDOW) {
            /* up to 3 additional ack_reqs per each resend */
            int order = ucs_ilog2(prev_cwnd / new_cwnd);
