@@ -20,6 +20,23 @@
 
 #define UCS_MAX_LOG_HANDLERS    32
 
+#define UCS_LOG_TIME_FMT        "[%lu.%06lu]"
+#define UCS_LOG_FILE_FMT        "%16s:%-4u"
+#define UCS_LOG_METADATA_FMT    "%-4s %-5s"
+#define UCS_LOG_PROC_DATA_FMT   "[%s:%-5d:%d]"
+#define UCS_LOG_SHORT_FMT       UCS_LOG_TIME_FMT" "UCS_LOG_FILE_FMT" " \
+                                UCS_LOG_METADATA_FMT" ""%s\n"
+#define UCS_LOG_FMT             UCS_LOG_TIME_FMT" "UCS_LOG_PROC_DATA_FMT" " \
+                                UCS_LOG_FILE_FMT" "UCS_LOG_METADATA_FMT" ""%s\n"
+
+#define UCS_LOG_TIME_ARG(_tv)  (_tv)->tv_sec, (_tv)->tv_usec
+#define UCS_LOG_SHORT_ARG(_short_file, _line, _level, _comp_conf, _tv, _message) \
+    UCS_LOG_TIME_ARG(_tv), _short_file, _line, (_comp_conf)->name, \
+    ucs_log_level_names[_level], _message
+#define UCS_LOG_ARG(_short_file, _line, _level, _comp_conf, _tv, _message) \
+    UCS_LOG_TIME_ARG(_tv), ucs_log_hostname, ucs_log_pid, \
+    ucs_log_get_thread_num(),_short_file, _line, (_comp_conf)->name, \
+    ucs_log_level_names[_level], _message
 
 const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_FATAL]        = "FATAL",
@@ -106,22 +123,18 @@ static void ucs_log_print(size_t buffer_size, const char *short_file, int line,
 
     if (RUNNING_ON_VALGRIND) {
         valg_buf = ucs_alloca(buffer_size + 1);
-        snprintf(valg_buf, buffer_size,
-                 "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n", tv->tv_sec, tv->tv_usec,
-                 short_file, line, comp_conf->name,
-                 ucs_log_level_names[level], message);
+        snprintf(valg_buf, buffer_size, UCS_LOG_SHORT_FMT,
+                 UCS_LOG_SHORT_ARG(short_file, line, level,
+                                   comp_conf, tv, message));
         VALGRIND_PRINTF("%s", valg_buf);
     } else if (ucs_log_initialized) {
-        fprintf(ucs_log_file,
-                "[%lu.%06lu] [%s:%-5d:%d] %16s:%-4u %-4s %-5s %s\n",
-                tv->tv_sec, tv->tv_usec, ucs_log_hostname, ucs_log_pid,
-                ucs_log_get_thread_num(), short_file, line, comp_conf->name,
-                ucs_log_level_names[level], message);
+        fprintf(ucs_log_file, UCS_LOG_FMT,
+                UCS_LOG_ARG(short_file, line, level,
+                            comp_conf, tv, message));
     } else {
-        fprintf(stdout,
-                "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n",
-                tv->tv_sec, tv->tv_usec, short_file, line,
-                comp_conf->name, ucs_log_level_names[level], message);
+        fprintf(stdout, UCS_LOG_SHORT_FMT,
+                UCS_LOG_SHORT_ARG(short_file, line, level,
+                                  comp_conf, tv, message));
     }
 }
 
