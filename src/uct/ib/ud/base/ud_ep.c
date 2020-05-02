@@ -169,8 +169,8 @@ uct_ud_ep_window_release(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                 uct_ud_iface_add_async_comp(iface, skb, status);
             }
         } else {
-            /* slow-path case: the skb is still used by the QP, can happen in
-             * when this skb is being resent */
+            /* slow-path case: the skb is still used by the QP, can happen when
+             * this skb is being resent */
             ucs_assert(ep->tx.resend_count > 0);
             skb->flags |= UCT_UD_SEND_SKB_FLAG_ACKED;
             if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
@@ -214,7 +214,7 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
         ucs_fatal("UD endpoint %p: unhandled timeout error", ep);
     }
 
-    return 0;
+    return 1;
 }
 
 static void uct_ud_ep_timer_backoff(uct_ud_ep_t *ep)
