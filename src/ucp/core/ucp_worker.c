@@ -687,7 +687,8 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
             ucs_trace("armed iface %p", wiface->iface);
 
             if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
-                /* re-enable events, which were disabled by ucp_suspended_iface_event() */
+                /* re-enable events, which were disabled by
+                 * ucp_worker_iface_async_fd_event() */
                 status = ucs_async_modify_handler(wiface->event_fd,
                                                   UCS_EVENT_SET_EVREAD);
                 if (status != UCS_OK) {
