@@ -29,6 +29,13 @@ typedef struct ucp_tag_recv_info             ucp_tag_recv_info_t;
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief Operation parameters provided in @ref ucp_am_recv_callback_t callback.
+ */
+typedef struct ucp_am_recv_param             ucp_am_recv_param_t;
+
+
+/**
  * @ingroup UCP_CONTEXT
  * @brief UCP Application Context
  *
@@ -486,9 +493,9 @@ typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
  * "receive operation" is completed and the data is ready in the receive buffer.
  *
  * @param [in]  request   The completed receive request.
- * @param [in]  status    Completion status. If the send operation was completed
+ * @param [in]  status    Completion status. If the receive operation was completed
  *                        successfully UCS_OK is returned. If send operation was
- *                        canceled UCS_ERR_CANCELED is returned. If the data can
+ *                        canceled, UCS_ERR_CANCELED is returned. If the data can
  *                        not fit into the receive buffer the
  *                        @ref UCS_ERR_MESSAGE_TRUNCATED error code is returned.
  *                        Otherwise, an @ref ucs_status_t "error status" is
@@ -502,6 +509,27 @@ typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
 typedef void (*ucp_tag_recv_nbx_callback_t)(void *request, ucs_status_t status,
                                             const ucp_tag_recv_info_t *tag_info,
                                             void *user_data);
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Completion callback for non-blocking Active Message receives.
+ *
+ * This callback routine is invoked whenever the @ref ucp_am_data_recv_nbx
+ * "receive operation" is completed and the data is ready in the receive buffer.
+ *
+ * @param [in]  request   The completed receive request.
+ * @param [in]  status    Completion status. If the receive operation was
+ *                        completed successfully UCS_OK is returned. Otherwise,
+ *                        an @ref ucs_status_t "error status" is returned.
+ * @param [in]  length    The size of the received data in bytes, always
+ *                        boundary of base datatype size. The value is valid
+ *                        only if the status is UCS_OK.
+ * @param [in]  user_data User data passed to "user_data" value,
+ *                        see @ref ucp_request_param_t
+ */
+typedef void (*ucp_am_data_recv_nbx_callback_t)(void *request, ucs_status_t status,
+                                                size_t length, void *user_data);
 
 
 /**
@@ -574,6 +602,64 @@ typedef enum ucp_wakeup_event_types {
  */
 typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
                                           ucp_ep_h reply_ep, unsigned flags);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Callback to process incoming Active Message sent by
+ * @ref ucp_am_send_nbx routine.
+ *
+ * The callback is always called from the progress context, therefore calling
+ * @ref ucp_worker_progress() is not allowed. It is recommended to define
+ * callbacks with relatively short execution time to avoid blocking of
+ * communication progress.
+ *
+ * @param [in]  arg           User-defined argument.
+ * @param [in]  header        User defined active message header. Can be NULL.
+ * @param [in]  header_length Active message header length in bytes. If this
+ *                            value is 0, the @a header pointer is undefined
+ *                            and should not be accessed.
+ * @param [in]  data          Points to the received data if @a
+ *                            UCP_AM_RECV_ATTR_FLAG_RNDV flag is not set in
+ *                            @ref ucp_am_recv_param_t.recv_attr. Otherwise
+ *                            it points to the internal UCP descriptor which
+ *                            can further be used for initiating data receive
+ *                            by using @ref ucp_am_data_recv_nbx routine.
+ * @param [in]  length        Length of data. If @a UCP_AM_RECV_ATTR_FLAG_RNDV
+ *                            flag is set in @ref ucp_am_recv_param_t.recv_attr,
+ *                            it indicates the required receive buffer size for
+ *                            initiating rendezvous protocol.
+ * @param [in]  param         Data receive parameters.
+ *
+ * @return UCS_OK         @a data will not persist after the callback returns.
+ *                        If UCP_AM_RECV_ATTR_FLAG_RNDV flag is set in
+ *                        @a param->recv_attr, the data descriptor will be
+ *                        dropped and the corresponding @ref ucp_am_send_nbx
+ *                        call should complete with UCS_OK status.
+ *
+ * @return UCS_INPROGRESS Can only be returned if @a param->recv_attr flags
+ *                        contains UCP_AM_RECV_ATTR_FLAG_DATA or
+ *                        UCP_AM_RECV_ATTR_FLAG_RNDV. The @a data will persist
+ *                        after the callback has returned. To free the memory,
+ *                        a pointer to the data must be passed into
+ *                        @ref ucp_am_data_release or, in the case of rendezvous
+ *                        descriptor, data receive is initiated by
+ *                        @ref ucp_am_data_recv_nbx.
+ *
+ * @return otherwise      Can only be returned if @a param->recv_attr contains
+ *                        UCP_AM_RECV_ATTR_FLAG_RNDV. In this case data
+ *                        descriptor @a data will be dropped and the
+ *                        corresponding @ref ucp_am_send_nbx call should
+ *                        complete with the status returned from the callback.
+ *
+ * @note This callback should be set and released
+ *       by @ref ucp_worker_set_am_recv_handler function.
+ *
+ */
+typedef ucs_status_t (*ucp_am_recv_callback_t)(void *arg, const void *header,
+                                               size_t header_length,
+                                               void *data, size_t length,
+                                               const ucp_am_recv_param_t *param);
 
 
 /**

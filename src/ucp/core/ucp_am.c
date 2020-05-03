@@ -170,6 +170,12 @@ ucp_am_fill_first_header(ucp_am_first_hdr_t *hdr, ucp_request_t *req)
     hdr->total_size   = req->send.length;
 }
 
+ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
+                                            const ucp_am_handler_param_t *param)
+{
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
+
 static size_t
 ucp_am_bcopy_pack_args_single(void *dest, void *arg)
 {
@@ -483,6 +489,23 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nb,
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
+                 (ep, id, header, header_length, buffer, count, param),
+                 ucp_ep_h ep, unsigned id, const void *header,
+                 size_t header_length, const void *buffer,
+                 size_t count, const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_data_recv_nbx,
+                 (data_desc, buffer, count, param),
+                 void *data_desc, void *buffer, size_t count,
+                 const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
