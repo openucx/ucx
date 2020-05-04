@@ -133,6 +133,9 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(_obj) \
     UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(UCS_BIT(UCT_IB_DEVX_OBJ_ ## _obj))
 
+#define UCT_IB_MLX5_DEVX_EVENT_TYPE_MASK  0xffff
+#define UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT 16
+
 enum {
     /* Device supports KSM */
     UCT_IB_MLX5_MD_FLAG_KSM              = UCS_BIT(0),
