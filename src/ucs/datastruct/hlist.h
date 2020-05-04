@@ -207,9 +207,13 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
 #define ucs_hlist_for_each(_elem, _head, _member) \
     for (_elem = NULL; \
          (_elem == NULL) ? \
-             /* first iteration: check _head->ptr != NULL */ \
-             ((_elem = ucs_hlist_head_elem(_head, typeof(*(_elem)), _member)) != \
-                     ucs_container_of(NULL, typeof(*(_elem)), _member)) : \
+             /* First iteration: check _head->ptr != NULL. 2nd && condition is \
+              * actually _elem != NULL which is always expected to be true. \
+              * We can't check (&_elem->_member != NULL) because some compilers \
+              * assume pointer-to-member is never NULL */ \
+             (!ucs_hlist_is_empty(_head) && \
+              ((_elem = ucs_hlist_head_elem(_head, typeof(*(_elem)), _member)) \
+                     != NULL)) : \
              /* rest of iterations: check _elem != _head->ptr */ \
              ((_elem = ucs_hlist_next_elem(_elem, _member)) != \
                      ucs_hlist_head_elem(_head, typeof(*(_elem)), _member)); \
