@@ -218,7 +218,7 @@ struct uct_ud_ep {
          uct_ud_psn_t           psn;          /* Next PSN to send */
          uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent */
          uct_ud_psn_t           acked_psn;    /* last psn that was acked by remote side */
-         uint16_t               err_skb_count;/* number of failed SKBs on the ep */
+         uint16_t               resend_count; /* number of in-flight resends on the ep */
          ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
@@ -276,7 +276,7 @@ uct_ud_pending_req_priv(uct_pending_req_t *req)
 
 
 void uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep,
-                                     ucs_status_t status);
+                                     ucs_status_t status, int is_async);
 
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep, unsigned flags,
                              uct_completion_t *comp);

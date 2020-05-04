@@ -61,10 +61,22 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
         }
         iface->tx.skb = skb;
     }
-    VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
-    ucs_assert(skb->flags == 0);
+    VALGRIND_MAKE_MEM_DEFINED(&skb->lkey, sizeof(skb->lkey));
+    skb->flags = 0;
     ucs_prefetch(skb->neth);
     return skb;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_skb_release(uct_ud_send_skb_t *skb, int is_inline)
+{
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
+    skb->flags = UCT_UD_SEND_SKB_FLAG_INVALID;
+    if (is_inline) {
+        ucs_mpool_put_inline(skb);
+    } else {
+        ucs_mpool_put(skb);
+    }
 }
 
 /* same as above but also check ep resources: window&connection state */
@@ -220,22 +232,3 @@ uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb,
     ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_ud_send_skb_complete(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb,
-                         int is_async)
-{
-    if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP)) {
-        if (ucs_unlikely(is_async)) {
-            /* don't call user completion from async context. instead, put
-             * it on a queue which will be progressed from main thread.
-             */
-            uct_ud_iface_add_async_comp(iface, skb, UCS_OK);
-            return;
-        }
-
-        uct_ud_iface_dispatch_comp(iface, uct_ud_comp_desc(skb)->comp, UCS_OK);
-    }
-
-    skb->flags = 0; /* reset all flags to 0 before returning to memory pool */
-    ucs_mpool_put_inline(skb);
-}
