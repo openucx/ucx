@@ -189,6 +189,18 @@ typedef struct {
 } uct_ib_device_gid_info_t;
 
 
+typedef struct {
+    unsigned           event_type;
+    union {
+        unsigned       port_num;
+        unsigned       qp_num;
+        unsigned       dct_num;
+        struct ibv_cq  *cq;
+        struct ibv_srq *srq;
+    };
+} uct_ib_async_event_t;
+
+
 extern const double uct_ib_qp_rnr_time_ms[];
 
 
@@ -358,5 +370,7 @@ static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, st
     *count = ret;
     return UCS_OK;
 }
+
+void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event);
 
 #endif

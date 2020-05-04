@@ -133,6 +133,9 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(_obj) \
     UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(UCS_BIT(UCT_IB_DEVX_OBJ_ ## _obj))
 
+#define UCT_IB_MLX5_DEVX_EVENT_TYPE_MASK  0xffff
+#define UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT 16
+
 enum {
     /* Device supports KSM */
     UCT_IB_MLX5_MD_FLAG_KSM              = UCS_BIT(0),
@@ -168,15 +171,19 @@ enum {
  * MLX5 IB memory domain.
  */
 typedef struct uct_ib_mlx5_md {
-    uct_ib_md_t              super;
-    uint32_t                 flags;
-    ucs_mpool_t              dbrec_pool;
-    ucs_recursive_spinlock_t dbrec_lock;
-    struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
-    struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
+    uct_ib_md_t                      super;
+    uint32_t                         flags;
+    ucs_mpool_t                      dbrec_pool;
+    ucs_recursive_spinlock_t         dbrec_lock;
+    struct ibv_qp                    *umr_qp;   /* special QP for creating UMR */
+    struct ibv_cq                    *umr_cq;   /* special CQ for creating UMR */
 
-    void                     *zero_buf;
-    struct mlx5dv_devx_umem  *zero_mem;
+    void                             *zero_buf;
+    struct mlx5dv_devx_umem          *zero_mem;
+
+#ifdef HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
+    struct mlx5dv_devx_event_channel *event_channel;
+#endif
 } uct_ib_mlx5_md_t;
 
 
@@ -572,6 +579,23 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp);
+
+#ifdef HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
+ucs_status_t uct_ib_mlx5_devx_subscribe_event(uct_ib_mlx5_md_t *md,
+                                              struct mlx5dv_devx_obj *obj,
+                                              unsigned event_num,
+                                              unsigned event_type,
+                                              unsigned event_data);
+#else
+static ucs_status_t uct_ib_mlx5_devx_subscribe_event(uct_ib_mlx5_md_t *md,
+                                                     struct mlx5dv_devx_obj *obj,
+                                                     unsigned event_num,
+                                                     unsigned event_type,
+                                                     unsigned event_data)
+{
+    return UCS_OK;
+}
+#endif
 
 #else
 
