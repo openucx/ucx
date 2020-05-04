@@ -120,6 +120,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_dt.cc \
 	ucp/test_ucp_memheap.cc \
 	ucp/test_ucp_mmap.cc \
+	ucp/test_ucp_mmap_mt.cc \
 	ucp/test_ucp_mem_type.cc \
 	ucp/test_ucp_perf.cc \
 	ucp/test_ucp_rma.cc \
@@ -198,7 +199,7 @@ endif
 if HAVE_TL_RC
 gtest_SOURCES += \
 	uct/ib/test_rc.cc
-endif	
+endif
 if HAVE_TL_DC
 gtest_SOURCES += \
 	uct/ib/test_dc.cc

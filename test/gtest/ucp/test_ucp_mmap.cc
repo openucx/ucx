@@ -343,7 +343,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     advise_params.address    = mem_attr.address;
     advise_params.length     = size;
     advise_params.advice     = UCP_MADV_WILLNEED;
-    status = ucp_mem_advise(sender().ucph(), memh, &advise_params); 
+    status = ucp_mem_advise(sender().ucph(), memh, &advise_params);
     ASSERT_UCS_OK(status);
     is_dummy = (size == 0);
     test_rkey_management(&sender(), memh, is_dummy);
