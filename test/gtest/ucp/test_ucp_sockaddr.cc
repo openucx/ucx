@@ -782,7 +782,7 @@ public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features    |= UCP_FEATURE_RMA;
+        params.features    |= UCP_FEATURE_RMA | UCP_FEATURE_AM;
         /* Atomics not supported for now because need to emulate the case
          * of using different device than the one selected by default on the
          * worker for atomic operations */
@@ -951,6 +951,30 @@ protected:
         ASSERT_UCS_OK(status);
     }
 
+    void test_am_send_recv(size_t size)
+    {
+        std::string sb(size, 'x');
+
+        bool am_received = false;
+        ucp_worker_set_am_handler(receiver().worker(), 0,
+                                  rx_am_msg_cb, &am_received, 0);
+
+        ucs_status_ptr_t sreq = ucp_am_send_nb(sender().ep(), 0, &sb[0], size,
+                                               ucp_dt_make_contig(1),
+                                               scomplete_cb, 0);
+        wait(sreq);
+        wait_for_flag(&am_received);
+        EXPECT_TRUE(am_received);
+    }
+
+private:
+    static ucs_status_t rx_am_msg_cb(void *arg, void *data, size_t length,
+                                     ucp_ep_h reply_ep, unsigned flags) {
+        volatile bool *am_rx = reinterpret_cast<volatile bool*>(arg);
+        EXPECT_FALSE(*am_rx);
+        *am_rx = true;
+        return UCS_OK;
+    }
 };
 
 UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_4k_exp,
@@ -1073,6 +1097,22 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, put_zcopy, "ZCOPY_THRESH=10k")
 {
     test_rma(64 * UCS_KBYTE, &test_ucp_sockaddr_protocols::put_nb);
 }
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_short)
+{
+    test_am_send_recv(1);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_1k, "ZCOPY_THRESH=inf")
+{
+    test_am_send_recv(1 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_64k, "ZCOPY_THRESH=inf")
+{
+    test_am_send_recv(64 * UCS_KBYTE);
+}
+
 
 /* Only IB transports support CM for now
  * For DC case, allow fallback to UD if DC is not supported

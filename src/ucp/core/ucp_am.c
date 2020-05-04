@@ -36,8 +36,8 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
 
     if (ep->worker->context->config.features & UCP_FEATURE_AM) {
         if (ucs_unlikely(!ucs_list_is_empty(&ep_ext->am.started_ams))) {
-            ucs_warn("worker : %p not all UCP active messages have been" 
-                     "run to completion", ep->worker);
+            ucs_warn("worker : %p not all UCP active messages have been"
+                     " run to completion", ep->worker);
         }
     }
 }
@@ -137,26 +137,26 @@ ucp_am_bcopy_pack_args_single_reply(void *dest, void *arg)
     return hdr_size + length;
 }
 
-static size_t 
+static size_t
 ucp_am_bcopy_pack_args_first(void *dest, void *arg)
 {
     ucp_am_long_hdr_t *hdr = dest;
-    ucp_request_t *req = arg;
+    ucp_request_t *req     = arg;
     size_t length;
-    
-    length = ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
-                                  sizeof(*hdr);
+
+    length = ucs_min(req->send.length,
+                     ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
+                     sizeof(*hdr));
     hdr->total_size = req->send.length;
     hdr->am_id      = req->send.msg_proto.am.am_id;
     hdr->msg_id     = req->send.msg_proto.message_id;
     hdr->ep         = ucp_request_get_dest_ep_ptr(req);
     hdr->offset     = req->send.state.dt.offset;
-    
-    ucs_assert(req->send.state.dt.offset == 0);
-    ucs_assert(req->send.length > length);
 
-    return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, 
-                                      req->send.datatype, 
+    ucs_assert(req->send.state.dt.offset == 0);
+
+    return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker,
+                                      req->send.datatype,
                                       UCS_MEMORY_TYPE_HOST,
                                       hdr + 1, req->send.buffer,
                                       &req->send.state.dt, length);
@@ -205,10 +205,10 @@ static ucs_status_t ucp_am_send_short(ucp_ep_h ep, uint16_t id,
 static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t  status = ucp_am_send_short(req->send.ep, 
-                                             req->send.msg_proto.am.am_id, 
-                                             req->send.buffer, 
-                                             req->send.length);
+    ucp_ep_t *ep         = req->send.ep;
+    req->send.lane       = ucp_ep_get_am_lane(ep);
+    ucs_status_t  status = ucp_am_send_short(ep, req->send.msg_proto.am.am_id,
+                                             req->send.buffer, req->send.length);
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
@@ -591,10 +591,18 @@ ucp_am_long_handler_common(void *am_arg, void *am_data, size_t am_length,
     size_t left;
     ucp_am_unfinished_t *unfinished;
 
+    left = long_hdr->total_size - (am_length - sizeof(*long_hdr));
+    if (left == 0) {
+        /* Can be a single fragment if send was issued on stub ep */
+        return ucp_am_handler_common(worker, am_data + 1, sizeof(*long_hdr),
+                                     am_length, reply_ep, long_hdr->am_id,
+                                     am_flags);
+    }
+
     if (ucs_unlikely((long_hdr->am_id >= worker->am_cb_array_len) ||
                      (worker->am_cbs[long_hdr->am_id].cb == NULL))) {
-        ucs_warn("UCP Active Message was received with id : %u, but there" 
-                 "is no registered callback for that id", long_hdr->am_id);
+        ucs_warn("UCP Active Message was received with id : %u, but there"
+                 " is no registered callback for that id", long_hdr->am_id);
         return UCS_OK;
     }
 
@@ -622,8 +630,6 @@ ucp_am_long_handler_common(void *am_arg, void *am_data, size_t am_length,
 
     all_data->flags = UCP_RECV_DESC_FLAG_MALLOC;
 
-    left = long_hdr->total_size - (am_length -
-                                   sizeof(ucp_am_long_hdr_t));
     
     memcpy(UCS_PTR_BYTE_OFFSET(all_data + 1, long_hdr->offset),
            long_hdr + 1, am_length - sizeof(ucp_am_long_hdr_t));
