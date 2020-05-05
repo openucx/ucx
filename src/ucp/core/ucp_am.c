@@ -204,11 +204,13 @@ static ucs_status_t ucp_am_send_short(ucp_ep_h ep, uint16_t id,
 
 static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
 {
-    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep         = req->send.ep;
-    req->send.lane       = ucp_ep_get_am_lane(ep);
-    ucs_status_t  status = ucp_am_send_short(ep, req->send.msg_proto.am.am_id,
-                                             req->send.buffer, req->send.length);
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_t *ep       = req->send.ep;
+    ucs_status_t  status;
+
+    req->send.lane = ucp_ep_get_am_lane(ep);
+    status         = ucp_am_send_short(ep, req->send.msg_proto.am.am_id,
+                                       req->send.buffer, req->send.length);
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
