@@ -115,6 +115,7 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
     ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
     ep->resend.psn       = ep->tx.psn;
     ep->resend.max_psn   = ep->tx.acked_psn;
+    ep->tx.resend_count  = 0;
     ep->rx_creq_count    = 0;
 
     ep->rx.acked_psn = UCT_UD_INITIAL_PSN - 1;
@@ -128,7 +129,7 @@ static ucs_status_t uct_ud_ep_free_by_timeout(uct_ud_ep_t *ep,
     uct_ud_iface_ops_t *ops;
     ucs_time_t         diff;
 
-    diff = ucs_twheel_get_time(&iface->async.slow_timer) - ep->close_time;
+    diff = ucs_twheel_get_time(&iface->tx.timer) - ep->close_time;
     if (diff > iface->config.peer_timeout) {
         ucs_debug("ud_ep %p is destroyed after %fs with timeout %fs\n",
                   ep, ucs_time_to_sec(diff),
@@ -140,14 +141,97 @@ static ucs_status_t uct_ud_ep_free_by_timeout(uct_ud_ep_t *ep,
     return UCS_INPROGRESS;
 }
 
-static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
+static UCS_F_ALWAYS_INLINE void
+uct_ud_ep_window_release(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                         uct_ud_psn_t max_psn, ucs_status_t status, int is_async)
 {
-    uct_ud_ep_t        *ep    = ucs_container_of(self, uct_ud_ep_t, slow_timer);
-    uct_ud_iface_t     *iface = ucs_derived_of(ep->super.super.iface,
-                                               uct_ud_iface_t);
-    ucs_time_t         now;
-    ucs_time_t         diff;
-    ucs_status_t       status;
+    uct_ud_send_skb_t *skb;
+
+    ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
+                               UCT_UD_PSN_COMPARE(skb->neth->psn, <=, max_psn)) {
+        ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
+        if (ucs_likely(!(skb->flags & (UCT_UD_SEND_SKB_FLAG_RESENDING |
+                                       UCT_UD_SEND_SKB_FLAG_COMP)))) {
+            /* fast path case: completed skb without completion callback */
+            uct_ud_skb_release(skb, 1);
+        } else if (ucs_likely(!(skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING))) {
+            /* completed skb with user completion */
+            ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP);
+            if (ucs_likely(!is_async)) {
+                /* dispatch user completion immediately */
+                uct_ud_iface_dispatch_comp(iface, uct_ud_comp_desc(skb)->comp,
+                                           status);
+                uct_ud_skb_release(skb, 1);
+            } else {
+                /* Don't call user completion from async context. Instead, put
+                 * it on a queue which will be progressed from main thread.
+                 */
+                uct_ud_iface_add_async_comp(iface, skb, status);
+            }
+        } else {
+            /* slow-path case: the skb is still used by the QP, can happen when
+             * this skb is being resent */
+            ucs_assert(ep->tx.resend_count > 0);
+            skb->flags |= UCT_UD_SEND_SKB_FLAG_ACKED;
+            if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
+                uct_ud_comp_desc(skb)->status = status;
+            }
+        }
+    }
+}
+
+static void uct_ud_ep_window_purge(uct_ud_ep_t *ep, ucs_status_t status)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+
+    uct_ud_ep_tx_stop(ep);
+    uct_ud_ep_window_release(iface, ep, ep->tx.psn, status, 0);
+    ucs_assert(ucs_queue_is_empty(&ep->tx.window));
+}
+
+static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
+{
+    uct_ud_ep_t *ep       = arg;
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+    ucs_status_t status;
+
+    if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
+        ucs_assert(ucs_queue_is_empty(&ep->tx.window));
+        return 0;
+    }
+
+    if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
+        ucs_assert(ucs_queue_is_empty(&ep->tx.window));
+        uct_ep_destroy(&ep->super.super);
+        return 0;
+    }
+
+    uct_ud_ep_window_purge(ep, UCS_ERR_ENDPOINT_TIMEOUT);
+
+    status = iface->super.ops->set_ep_failed(&iface->super, &ep->super.super,
+                                             UCS_ERR_ENDPOINT_TIMEOUT);
+    if (status != UCS_OK) {
+        ucs_fatal("UD endpoint %p: unhandled timeout error", ep);
+    }
+
+    return 1;
+}
+
+static void uct_ud_ep_timer_backoff(uct_ud_ep_t *ep)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+
+    ep->tx.tick = ucs_min(ep->tx.tick * iface->tx.timer_backoff,
+                          UCT_UD_SLOW_TIMER_MAX_TICK(iface));
+    ucs_wtimer_add(&iface->tx.timer, &ep->timer, ep->tx.tick);
+}
+
+static void uct_ud_ep_timer(ucs_wtimer_t *self)
+{
+    uct_ud_ep_t    *ep    = ucs_container_of(self, uct_ud_ep_t, timer);
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+    ucs_time_t now, last_send, diff;
+    ucs_status_t status;
 
     UCT_UD_EP_HOOK_CALL_TIMER(ep);
 
@@ -156,42 +240,50 @@ static void uct_ud_ep_slow_timer(ucs_wtimer_t *self)
         if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
             status = uct_ud_ep_free_by_timeout(ep, iface);
             if (status == UCS_INPROGRESS) {
-                goto again;
+                uct_ud_ep_timer_backoff(ep);
             }
         }
         return;
     }
 
-    now = ucs_twheel_get_time(&iface->async.slow_timer);
+    now  = ucs_twheel_get_time(&iface->tx.timer);
     diff = now - ep->tx.send_time;
     if (diff > iface->config.peer_timeout) {
         ucs_debug("ep %p: timeout of %.2f sec, config::peer_timeout - %.2f sec",
                   ep, ucs_time_to_sec(diff),
                   ucs_time_to_sec(iface->config.peer_timeout));
-        iface->super.ops->handle_failure(&iface->super, ep,
-                                         UCS_ERR_ENDPOINT_TIMEOUT);
+        ucs_callbackq_add_safe(&iface->super.super.worker->super.progress_q,
+                               uct_ud_ep_deferred_timeout_handler, ep,
+                               UCS_CALLBACKQ_FLAG_ONESHOT);
         return;
-    } else if (diff > 3*iface->async.slow_tick) {
-        ucs_trace("scheduling resend now: %lu send_time: %lu diff: %lu tick: %lu",
-                  now, ep->tx.send_time, now - ep->tx.send_time,
-                  ep->tx.slow_tick);
+    }
+
+    /* If we are already resending, do not consider this timeout as packet drop.
+     * It just means the sender is slow.
+     */
+    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ|UCT_UD_EP_OP_RESEND) ||
+        (ep->tx.resend_count > 0)) {
+        ucs_wtimer_add(&iface->tx.timer, &ep->timer, ep->tx.tick);
+        ucs_trace("ep %p: resend still in progress, ops 0x%x tx_count %d",
+                  ep, ep->tx.pending.ops, ep->tx.resend_count);
+        uct_ud_ep_timer_backoff(ep);
+        return;
+    }
+
+    last_send = ucs_max(ep->tx.send_time, ep->tx.resend_time);
+    diff      = now - last_send;
+    if (diff > 3 * iface->tx.tick) {
+        ucs_trace("scheduling resend now: %lu last_send: %lu diff: %lu tick: %lu",
+                  now, last_send, diff, ep->tx.tick);
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
         uct_ud_ep_ca_drop(ep);
         uct_ud_ep_resend_start(iface, ep);
-    } else if ((diff > iface->async.slow_tick) && uct_ud_ep_is_connected(ep)) {
-        /* It is possible that the sender is slow.
-         * Try to flush the window twice before going into
-         * full resend mode.
-         */
+    } else if ((diff > iface->tx.tick) && uct_ud_ep_is_connected(ep)) {
+        /* Try to request ACK twice before going into full resend mode */
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
     }
 
-again:
-    /* Cool down the timer on rescheduling/resending */
-    ep->tx.slow_tick *= iface->config.slow_timer_backoff;
-    ep->tx.slow_tick = ucs_min(ep->tx.slow_tick,
-                               UCT_UD_SLOW_TIMER_MAX_TICK(iface));
-    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer, ep->tx.slow_tick);
+    uct_ud_ep_timer_backoff(ep);
 }
 
 UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
@@ -202,18 +294,23 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
     memset(self, 0, sizeof(*self));
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
+    uct_ud_enter(iface);
+
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     uct_ud_ep_reset(self);
     ucs_list_head_init(&self->cep_list);
     uct_ud_iface_add_ep(iface, self);
-    self->tx.slow_tick = iface->async.slow_tick;
-    ucs_wtimer_init(&self->slow_timer, uct_ud_ep_slow_timer);
+    self->tx.tick = iface->async.tick;
+    ucs_wtimer_init(&self->timer, uct_ud_ep_timer);
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
 
     UCT_UD_EP_HOOK_INIT(self);
     ucs_debug("created ep ep=%p iface=%p id=%d", self, iface, self->ep_id);
+
+    uct_ud_leave(iface);
+
     return UCS_OK;
 }
 
@@ -238,13 +335,42 @@ uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
+static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+    uct_ud_ctl_desc_t *cdesc;
+    ucs_queue_iter_t iter;
+
+    ucs_queue_for_each_safe(cdesc, iter, &iface->tx.outstanding_q, queue) {
+        if (cdesc->ep == ep) {
+            ucs_queue_del_iter(&iface->tx.outstanding_q, iter);
+            uct_ud_iface_ctl_skb_complete(iface, cdesc, 0);
+        }
+    }
+
+    ucs_assert_always(ep->tx.resend_count == 0);
+}
+
+static int uct_ud_ep_remove_timeout_filter(const ucs_callbackq_elem_t *elem,
+                                           void *arg)
+{
+    return (elem->cb == uct_ud_ep_deferred_timeout_handler) && (elem->arg == arg);
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 {
     uct_ud_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_ud_iface_t);
 
     ucs_trace_func("ep=%p id=%d conn_id=%d", self, self->ep_id, self->conn_id);
 
-    ucs_wtimer_remove(&self->slow_timer);
+    uct_ud_enter(iface);
+
+    ucs_callbackq_remove_if(&iface->super.super.worker->super.progress_q,
+                            uct_ud_ep_remove_timeout_filter, self);
+    uct_ud_ep_window_purge(self, UCS_ERR_CANCELED);
+    uct_ud_ep_purge_outstanding(self);
+
+    ucs_wtimer_remove(&iface->tx.timer, &self->timer);
     uct_ud_iface_remove_ep(iface, self);
     uct_ud_iface_cep_remove(self);
     ucs_frag_list_cleanup(&self->rx.ooo_pkts);
@@ -258,6 +384,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
                    (int)ucs_queue_length(&self->tx.window));
     }
     ucs_arbiter_group_cleanup(&self->tx.pending.group);
+    uct_ud_leave(iface);
 }
 
 UCS_CLASS_DEFINE(uct_ud_ep_t, uct_base_ep_t);
@@ -408,8 +535,6 @@ static UCS_F_ALWAYS_INLINE void
 uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                       uct_ud_psn_t ack_psn, int is_async)
 {
-    uct_ud_send_skb_t *skb;
-
     /* Ignore duplicate ACK */
     if (ucs_unlikely(UCT_UD_PSN_COMPARE(ack_psn, <=, ep->tx.acked_psn))) {
         return;
@@ -417,19 +542,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ep->tx.acked_psn = ack_psn;
 
-    /* Release acknowledged skb's */
-    ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
-                               UCT_UD_PSN_COMPARE(skb->neth->psn, <=, ack_psn)) {
-
-        if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING)) {
-            /* The skb is still used by the QP, can happen in case of
-             * retransmission of the same skb */
-            skb->flags |= UCT_UD_SEND_SKB_FLAG_ACKED;
-            continue;
-        }
-
-        uct_ud_send_skb_complete(iface, skb, is_async);
-    }
+    uct_ud_ep_window_release(iface, ep, ack_psn, UCS_OK, is_async);
 
     uct_ud_ep_ca_ack(ep);
 
@@ -439,8 +552,8 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
-    ep->tx.slow_tick = iface->async.slow_tick;
-    ep->tx.send_time = uct_ud_iface_get_async_time(iface);
+    ep->tx.tick      = iface->tx.tick;
+    ep->tx.send_time = uct_ud_iface_get_time(iface);
 }
 
 static inline void uct_ud_ep_rx_put(uct_ud_neth_t *neth, unsigned byte_len)
@@ -805,41 +918,24 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     return UCS_INPROGRESS;
 }
 
-void uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                                     ucs_status_t status)
-{
-    uct_ud_send_skb_t *skb;
-
-    uct_ud_ep_tx_stop(ep);
-
-    ucs_queue_for_each_extract(skb, &ep->tx.window, queue, 1) {
-        if (status == UCS_ERR_ENDPOINT_TIMEOUT) {
-            skb->flags                   |= UCT_UD_SEND_SKB_FLAG_ERR;
-            uct_ud_comp_desc(skb)->err_ep = ep;
-            ++ep->tx.err_skb_count;
-        } else if (status == UCS_ERR_CANCELED) {
-            skb->flags                   |= UCT_UD_SEND_SKB_FLAG_CANCEL;
-        }
-        uct_ud_iface_add_async_comp(iface, skb, status);
-    }
-}
-
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
                              uct_completion_t *comp)
 {
-    ucs_status_t status;
     uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
+    ucs_status_t status;
 
     uct_ud_enter(iface);
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        uct_ud_tx_wnd_purge_outstanding(iface, ep, UCS_ERR_CANCELED);
-        uct_ud_iface_dispatch_async_comps(iface);
         uct_ep_pending_purge(ep_h, NULL, 0);
-        /* Open window after cancellation for next sending */
-        uct_ud_ep_ca_ack(ep);
+        uct_ud_iface_dispatch_async_comps(iface);
+        uct_ud_ep_window_purge(ep, UCS_ERR_CANCELED);
+        /* FIXME make flush(CANCEL) operation truly non-blocking and wait until
+         * all of the outstanding sends are completed. Without this, zero-copy
+         * sends which are still on the QP could be reported as completed which
+         * can lead to sending corrupt data, or local access error. */
         status = UCS_OK;
         goto out;
     }
@@ -971,8 +1067,10 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
      * skb was sent as well.
      */
     skb                = uct_ud_iface_ctl_skb_get(iface);
+    skb->flags         = UCT_UD_SEND_SKB_FLAG_CTL_RESEND;
     sent_skb->flags   |= UCT_UD_SEND_SKB_FLAG_RESENDING;
     ep->resend.psn     = sent_skb->neth->psn;
+    ep->tx.resend_time = uct_ud_iface_get_time(iface);
 
     if (sent_skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY) {
         /* copy neth + am header part */
@@ -1004,6 +1102,7 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     cdesc              = uct_ud_ctl_desc(skb);
     cdesc->self_skb    = skb;
     cdesc->resent_skb  = sent_skb;
+    cdesc->ep          = ep;
 
     /* force ack request on every Nth packet or on first packet in resend window */
     if ((skb->neth->psn % UCT_UD_RESENDS_PER_ACK) == 0 ||
@@ -1030,6 +1129,7 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
                                       UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED,
                                       max_log_sge);
     uct_ud_iface_add_ctl_desc(iface, cdesc);
+    ++ep->tx.resend_count;
 }
 
 static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
@@ -1058,6 +1158,7 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     }
 
     uct_ud_neth_init_data(ep, skb->neth);
+    skb->flags             = UCT_UD_SEND_SKB_FLAG_CTL_ACK;
     skb->len               = sizeof(uct_ud_neth_t);
     skb->neth->packet_type = ep->dest_ep_id;
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
@@ -1073,6 +1174,7 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
         cdesc->sn         = uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0, 0, 1);
         cdesc->self_skb   = skb;
         cdesc->resent_skb = NULL;
+        cdesc->ep         = NULL;
         uct_ud_iface_add_ctl_desc(iface, cdesc);
     }
 
@@ -1324,12 +1426,14 @@ void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_purge_callback_t cb,
     uct_ud_leave(iface);
 }
 
-void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
+void uct_ud_ep_disconnect(uct_ep_h tl_ep)
 {
     uct_ud_ep_t    *ep    = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_iface_t);
 
     ucs_debug("ep %p: disconnect", ep);
+
+    uct_ud_enter(iface);
 
     /* cancel user pending */
     uct_ud_ep_pending_purge(tl_ep, NULL, NULL);
@@ -1338,10 +1442,12 @@ void  uct_ud_ep_disconnect(uct_ep_h tl_ep)
     uct_ud_ep_flush(tl_ep, 0, NULL);
 
     /* the EP will be destroyed by interface destroy or timeout in
-     * uct_ud_ep_slow_timer
+     * uct_ud_ep_timer
      */
-    ep->close_time = ucs_twheel_get_time(&iface->async.slow_timer);
+    ep->close_time = ucs_twheel_get_time(&iface->tx.timer);
     ep->flags |= UCT_UD_EP_FLAG_DISCONNECTED;
-    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
+    ucs_wtimer_add(&iface->tx.timer, &ep->timer,
                    UCT_UD_SLOW_TIMER_MAX_TICK(iface));
+
+    uct_ud_leave(iface);
 }

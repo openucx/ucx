@@ -61,7 +61,7 @@ void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max)
             break;
         case 't':
             t = time(NULL);
-            strftime(p, end - p, "%Y-%m-%d-%H:%M:%S", localtime(&t));
+            strftime(p, end - p, "%Y-%m-%d-%H-%M-%S", localtime(&t));
             pf = pp + 2;
             p += strlen(p);
             break;

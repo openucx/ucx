@@ -80,14 +80,9 @@ enum {
     UCP_RECV_DESC_FLAG_EAGER_LAST     = UCS_BIT(5), /* Last fragment of eager tag message.
                                                        Used by tag offload protocol. */
     UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(6), /* Rendezvous request */
-    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(7), /* Descriptor was allocated with malloc
+    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(7)  /* Descriptor was allocated with malloc
                                                        and must be freed, not returned to the
-                                                       memory pool */
-    UCP_RECV_DESC_FLAG_AM_HDR         = UCS_BIT(8), /* Descriptor was orignally allocated by
-                                                       uct and the ucp level am header must
-                                                       be accounted for when releasing
-                                                       descriptors */
-    UCP_RECV_DESC_FLAG_AM_REPLY       = UCS_BIT(9)  /* AM that needed a reply */
+                                                       memory pool or UCT */
 };
 
 
@@ -324,19 +319,17 @@ struct ucp_request {
  */
 struct ucp_recv_desc {
     union {
-        ucs_list_link_t     tag_list[2];    /* Hash list TAG-element */
-        ucs_queue_elem_t    stream_queue;   /* Queue STREAM-element */
-        ucs_queue_elem_t    tag_frag_queue; /* Tag fragments queue */
+        ucs_list_link_t     tag_list[2];     /* Hash list TAG-element */
+        ucs_queue_elem_t    stream_queue;    /* Queue STREAM-element */
+        ucs_queue_elem_t    tag_frag_queue;  /* Tag fragments queue */
     };
-    uint32_t                length;         /* Received length */
-    uint32_t                payload_offset; /* Offset from end of the descriptor
-                                             * to AM data */
-    uint16_t                flags;          /* Flags */
-    int16_t                 priv_length;    /* Number of bytes consumed from
-                                               headroom private space, except the
-                                               space needed for ucp_recv_desc itself.
-                                               It is used for releasing descriptor
-                                               back to UCT only */
+    uint32_t                length;          /* Received length */
+    uint32_t                payload_offset;  /* Offset from end of the descriptor
+                                              * to AM data */
+    uint16_t                flags;           /* Flags */
+    int16_t                 uct_desc_offset; /* Offset which needs to be
+                                                substructed from rdesc when
+                                                releasing it back to UCT */
 };
 
 

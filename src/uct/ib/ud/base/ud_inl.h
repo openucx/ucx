@@ -61,10 +61,22 @@ uct_ud_send_skb_t *uct_ud_iface_get_tx_skb(uct_ud_iface_t *iface,
         }
         iface->tx.skb = skb;
     }
-    VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
-    ucs_assert(skb->flags == 0);
+    VALGRIND_MAKE_MEM_DEFINED(&skb->lkey, sizeof(skb->lkey));
+    skb->flags = 0;
     ucs_prefetch(skb->neth);
     return skb;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_skb_release(uct_ud_send_skb_t *skb, int is_inline)
+{
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
+    skb->flags = UCT_UD_SEND_SKB_FLAG_INVALID;
+    if (is_inline) {
+        ucs_mpool_put_inline(skb);
+    } else {
+        ucs_mpool_put(skb);
+    }
 }
 
 /* same as above but also check ep resources: window&connection state */
@@ -116,36 +128,43 @@ uct_ud_skb_set_zcopy_desc(uct_ud_send_skb_t *skb, const uct_iov_t *iov,
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_ud_iface_complete_tx(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                         uct_ud_send_skb_t *skb, int has_data, void *data,
+                         const void *buffer, unsigned length)
+{
+    ucs_time_t now = uct_ud_iface_get_time(iface);
+    iface->tx.skb  = ucs_mpool_get(&iface->tx.mp);
+    ep->tx.psn++;
+
+    if (has_data) {
+        skb->len += length;
+        memcpy(data, buffer, length);
+    }
+
+    ucs_queue_push(&ep->tx.window, &skb->queue);
+    ep->tx.tick = iface->tx.tick;
+
+    if (!iface->tx.timer_disable) {
+        ucs_wtimer_add(&iface->tx.timer, &ep->timer,
+                       now - ucs_twheel_get_time(&iface->tx.timer) + ep->tx.tick);
+    }
+
+    ep->tx.send_time = now;
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_complete_tx_inl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                              uct_ud_send_skb_t *skb, void *data,
                              const void *buffer, unsigned length)
 {
-    iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
-    ep->tx.psn++;
-    skb->len += length;
-    memcpy(data, buffer, length);
-    ucs_queue_push(&ep->tx.window, &skb->queue);
-    ep->tx.slow_tick = iface->async.slow_tick;
-    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
-                   uct_ud_iface_get_async_time(iface) -
-                   ucs_twheel_get_time(&iface->async.slow_timer) +
-                   ep->tx.slow_tick);
-    ep->tx.send_time = uct_ud_iface_get_async_time(iface);
+    uct_ud_iface_complete_tx(iface, ep, skb, 1, data, buffer, length);
 }
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                              uct_ud_send_skb_t *skb)
 {
-    iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
-    ep->tx.psn++;
-    ucs_queue_push(&ep->tx.window, &skb->queue);
-    ep->tx.slow_tick = iface->async.slow_tick;
-    ucs_wtimer_add(&iface->async.slow_timer, &ep->slow_timer,
-                   uct_ud_iface_get_async_time(iface) -
-                   ucs_twheel_get_time(&iface->async.slow_timer) +
-                   ep->tx.slow_tick);
-    ep->tx.send_time = uct_ud_iface_get_async_time(iface);
+    uct_ud_iface_complete_tx(iface, ep, skb, 0, NULL, NULL, 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -213,22 +232,3 @@ uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb,
     ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_ud_send_skb_complete(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb,
-                         int is_async)
-{
-    if (ucs_unlikely(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP)) {
-        if (ucs_unlikely(is_async)) {
-            /* don't call user completion from async context. instead, put
-             * it on a queue which will be progressed from main thread.
-             */
-            uct_ud_iface_add_async_comp(iface, skb, UCS_OK);
-            return;
-        }
-
-        uct_ud_iface_dispatch_comp(iface, uct_ud_comp_desc(skb)->comp, UCS_OK);
-    }
-
-    skb->flags = 0; /* reset all flags to 0 before returning to memory pool */
-    ucs_mpool_put_inline(skb);
-}

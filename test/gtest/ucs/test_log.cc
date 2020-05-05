@@ -5,9 +5,12 @@
 
 #include <common/test.h>
 #include <fstream>
+#include <set>
+#include <dirent.h>
 
 extern "C" {
 #include <ucs/debug/log.h>
+#include <ucs/sys/compiler.h>
 }
 
 class log_test : public ucs::test {
@@ -21,22 +24,35 @@ public:
             UCS_TEST_SKIP_R("skipping on valgrind");
         }
 
-        char ucs_log_spec[70];
         const char *default_tmp_dir = "/tmp";
-        const char *tmp_dir;
 
         ucs::test::init();
 
         ucs_log_cleanup();
         push_config();
-        tmp_dir = getenv("TMPDIR");
+        const char *tmp_dir = getenv("TMPDIR");
         if (tmp_dir == NULL) {
             tmp_dir = default_tmp_dir;
         }
-        snprintf(logfile, sizeof(logfile), "%s/gtest_ucs_log.%d", tmp_dir, getpid());
-        /* coverity[tainted_string] */
-        unlink(logfile);
-        snprintf(ucs_log_spec, sizeof(ucs_log_spec), "file:%s", logfile);
+
+        tmp_dir_path  = tmp_dir;
+        template_name = "gtest_ucs_log." + ucs::to_string(getpid());
+
+        std::string logfile = template_grep_name =
+            tmp_dir_path + "/" + template_name;
+
+        /* add date/time to the log file name in order to track how many
+         * different log files were created during testing */
+        logfile += ".%t";
+
+        /* add `*` to the template grep name to be able searching a test
+         * string in all possible file names with the time specified */
+        template_grep_name += ".*";
+
+        /* remove already created files with the similar file name */
+        log_files_foreach(&log_test::remove_file);
+
+        std::string ucs_log_spec = "file:" + logfile;
         modify_config("LOG_FILE", ucs_log_spec);
         modify_config("LOG_LEVEL", "info");
         ucs_log_init();
@@ -47,36 +63,103 @@ public:
         m_num_log_handlers_before = 0;
         pop_config();
         check_log_file();
-        unlink(logfile);
+        unsigned files_count = log_files_foreach(&log_test::remove_file);
+        EXPECT_LE(files_count, ucs_global_opts.log_file_rotate + 1);
+        EXPECT_NE(0, files_count);
         ucs_log_init();
         ucs::test::cleanup();
+    }
+
+    void remove_file(const std::string &name, void *arg) {
+        unlink(name.c_str());
+    }
+
+    typedef void (log_test::*log_file_foreach_cb)(const std::string &name,
+                                                  void *arg);
+
+    unsigned log_files_foreach(log_file_foreach_cb cb, void *arg = NULL) {
+        DIR *dir = opendir(tmp_dir_path.c_str());
+        struct dirent *entry;
+        unsigned files_count = 0;
+
+        while ((entry = readdir(dir)) != NULL) {
+            if (strstr(entry->d_name, template_name.c_str()) != NULL) {
+                std::string full_file_name = tmp_dir_path + "/" +
+                                             ucs::to_string(entry->d_name);
+                (this->*cb)(full_file_name, arg);
+                files_count++;
+            }
+        }
+        closedir(dir);
+
+        return files_count;
+    }
+
+    void test_file_cur_size(const std::string &log_file_name, void *arg) {
+        FILE *logfile_fp = fopen(log_file_name.c_str(), "r");
+        ASSERT_TRUE(logfile_fp != NULL);
+
+        ucs_log_flush();
+
+        int ret = fseek(logfile_fp, 0, SEEK_END);
+        EXPECT_EQ(0, ret);
+
+        long cur_size = ftell(logfile_fp);
+        EXPECT_LE(static_cast<size_t>(cur_size), ucs_global_opts.log_file_size);
+
+        fclose(logfile_fp);
+
+        m_log_files_set.insert(log_file_name);
     }
 
     virtual void check_log_file() {
         ADD_FAILURE() << read_logfile();
     }
 
-    int do_grep(const char *needle) {
-        char cmd[128];
+    bool do_grep(const std::string &needle) {
+        unsigned num_retries = 0;
 
-        snprintf(cmd, sizeof(cmd), "grep '%s' %s", needle, logfile);
-        return system(cmd);
+        while (num_retries++ < GREP_RETRIES) {
+            /* if this is the last retry, allow printing the grep output */
+            std::string grep_cmd = ucs_likely(num_retries != GREP_RETRIES) ?
+                                   "grep -q" : "grep";
+            std::string cmd_str = grep_cmd + " '" + needle + "' " +
+                                  template_grep_name;
+            int ret = system(cmd_str.c_str());
+            if (ret == 0) {
+                return true;
+            }
+
+            ucs_log_flush();
+        }
+
+        return false;
+    }
+
+    void read_logfile(const std::string &log_file_name, void *arg) {
+        std::stringstream *ss = (std::stringstream*)arg;
+        std::ifstream ifs(log_file_name.c_str());
+        *ss << log_file_name << ":" << std::endl << ifs.rdbuf() << std::endl;
     }
 
     std::string read_logfile() {
         std::stringstream ss;
-        std::ifstream ifs(logfile);
-        ss << ifs.rdbuf();
+        log_files_foreach(&log_test::read_logfile, &ss);
         return ss.str();
     }
 
 protected:
-    char logfile[64];
+    std::string template_name;
+    std::string template_grep_name;
+    std::string tmp_dir_path;
+    std::set<std::string> m_log_files_set;
+
+    static const unsigned GREP_RETRIES = 20;
 };
 
 class log_test_info : public log_test {
     virtual void check_log_file() {
-        if (do_grep("UCX  INFO  hello world")) {
+        if (!do_grep("UCX  INFO  hello world")) {
             ADD_FAILURE() << read_logfile();
         }
     }
@@ -89,7 +172,7 @@ UCS_TEST_F(log_test_info, hello) {
 
 class log_test_print : public log_test {
     virtual void check_log_file() {
-        if (do_grep("UCX  PRINT debug message")) {
+        if (!do_grep("UCX  PRINT debug message")) {
             if (ucs_global_opts.log_print_enable) {
                 /* not found but it should be there */
                 ADD_FAILURE() << read_logfile();
@@ -112,14 +195,105 @@ UCS_TEST_F(log_test_print, print_off) {
 }
 
 
+class log_test_file_size : public log_test {
+protected:
+    virtual void check_log_file() {
+        unsigned files_count = log_files_foreach(&log_test_file_size::
+                                                 test_file_cur_size);
+        EXPECT_LE(files_count, ucs_global_opts.log_file_rotate + 1);
+    }
+
+    virtual void check_log_file(const std::string &test_str) {
+        check_log_file();
+        EXPECT_TRUE(do_grep(test_str));
+    }
+
+    void generate_random_str(std::string &s, size_t len) {
+        static const char possible_vals[] =
+            "0123456789"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "abcdefghijklmnopqrstuvwxyz";
+
+        ASSERT_TRUE(len != 0);
+
+        for (size_t i = 0; i < len; ++i) {
+            s += possible_vals[ucs::rand() %
+                              (ucs_array_size(possible_vals) - 1)];
+        }
+    }
+
+    void print_random_str() {
+        size_t entry_size = ucs::rand() % ucs_log_get_buffer_size();
+        if (entry_size == 0) {
+            entry_size = 1;
+        }
+
+        std::string entry_buf;
+
+        generate_random_str(entry_buf, entry_size);
+        /* use %s here in order to satisfy the "format-security" compilation
+         * flag requirements */
+        ucs_info("%s", entry_buf.c_str());
+
+        /* to not waste a lot of time grepping the test string */
+        if (entry_size < 128) {
+            check_log_file(entry_buf);
+        } else {
+            check_log_file();
+        }
+    }
+
+    void test_log_file_max_size() {
+        const unsigned num_iters = 4;
+
+        for (unsigned i = 0; i < num_iters; i++) {
+            size_t set_size, exp_files_count;
+
+            do {
+                print_random_str();
+
+                set_size        = m_log_files_set.size();
+                exp_files_count = (ucs_global_opts.log_file_rotate + 1);
+            } while ((set_size == 0) ||
+                     ((set_size % exp_files_count) != 0));
+        }
+
+        EXPECT_EQ(m_log_files_set.size(),
+                  ucs_global_opts.log_file_rotate + 1);
+    }
+};
+
+const std::string small_file_size = ucs::to_string(UCS_ALLOCA_MAX_SIZE);
+
+UCS_TEST_F(log_test_file_size, small_file, "LOG_FILE_SIZE=" +
+                                           small_file_size) {
+    test_log_file_max_size();
+}
+
+UCS_TEST_F(log_test_file_size, large_file, "LOG_FILE_SIZE=8k") {
+    test_log_file_max_size();
+}
+
+UCS_TEST_F(log_test_file_size, small_files, "LOG_FILE_SIZE=" +
+                                            small_file_size,
+                                            "LOG_FILE_ROTATE=4") {
+    test_log_file_max_size();
+}
+
+UCS_TEST_F(log_test_file_size, large_files, "LOG_FILE_SIZE=8k",
+                                            "LOG_FILE_ROTATE=4") {
+    test_log_file_max_size();
+}
+
+
 class log_test_backtrace : public log_test {
     virtual void check_log_file() {
-        if (do_grep("print_backtrace")) {
+        if (!do_grep("print_backtrace")) {
             ADD_FAILURE() << read_logfile();
         }
 
 #ifdef HAVE_DETAILED_BACKTRACE
-        if (do_grep("main")) {
+        if (!do_grep("main")) {
             ADD_FAILURE() << read_logfile();
         }
 #endif

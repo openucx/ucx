@@ -1447,6 +1447,7 @@ run_gtest() {
 	export GTEST_UCT_TCP_FASTEST_DEV=1
 	# Report TOP-20 longest test at the end of testing
 	export GTEST_REPORT_LONGEST_TESTS=20
+	export OMP_NUM_THREADS=4
 
 	if [ $num_gpus -gt 0 ]; then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
@@ -1509,6 +1510,7 @@ run_gtest() {
 		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
 
+	unset OMP_NUM_THREADS
 	unset GTEST_UCT_TCP_FASTEST_DEV
 	unset GTEST_SHARD_INDEX
 	unset GTEST_TOTAL_SHARDS
@@ -1554,6 +1556,7 @@ run_gtest_release() {
 	export GTEST_SHUFFLE=1
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
+	export OMP_NUM_THREADS=4
 
 	echo "==== Running unit tests (release configuration) ===="
 	# Check:
@@ -1564,6 +1567,7 @@ run_gtest_release() {
 		$AFFINITY $TIMEOUT make -C test/gtest test
 	echo "ok 1" >> gtest_release.tap
 
+	unset OMP_NUM_THREADS
 	unset GTEST_SHARD_INDEX
 	unset GTEST_TOTAL_SHARDS
 	unset GTEST_RANDOM_SEED

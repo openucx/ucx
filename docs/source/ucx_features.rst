@@ -33,11 +33,11 @@ Fabrics support
 - InfiniBand
 - TCP sockets
 - Shared memory (CMA, knem, xpmem, SysV, mmap)
-- Cray Gemini
+- Cray Gemini / Aries (ugni)
 
 Platforms support
 *****************
-- Supported architectures: x86_64, ARM, Power.
+- Supported architectures: x86_64, Arm v8, Power.
 - Runs on virtual machines (using SRIOV) and containers (docker, singularity).
 - Can utilize either MLNX_OFED or Inbox RDMA drivers.
 - Tested on major Linux distributions (RedHat/Ubuntu/SLES).
@@ -56,7 +56,7 @@ Protocols, Optimizations and Advanced Features
 - Accelerated direct-verbs transport for Mellanox devices.
 - Pipeline protocols for GPU memory
 - QoS and traffic isolation for RDMA transports
-- Platform specific optimizations (such as memcpy)
+- Platform (micro-architecture) specific optimizations (such as memcpy, memory barriers, etc.)
 - Multi-rail support
 - Bare-metal, containers and cloud environments support
 - Advanced protocols for transfer messages of different sizes

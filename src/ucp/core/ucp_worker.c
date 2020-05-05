@@ -398,6 +398,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     ucp_lane_index_t failed_lane                = err_handle_arg->failed_lane;
     ucp_lane_index_t lane;
     ucp_ep_config_key_t key;
+    ucp_request_t *close_req;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -471,6 +472,15 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
         ucp_ep_disconnected(ucp_ep, 1);
     } else {
         ucp_ep_invoke_err_cb(ucp_ep, key.status);
+    }
+
+    if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+        /* Promote close operation to CANCEL in case of transport error, since
+         * the disconnect event may never arrive.
+         */
+        close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
+        close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
+        ucp_ep_local_disconnect_progress(close_req);
     }
 
     ucs_free(err_handle_arg);
@@ -677,7 +687,8 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
             ucs_trace("armed iface %p", wiface->iface);
 
             if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
-                /* re-enable events, which were disabled by ucp_suspended_iface_event() */
+                /* re-enable events, which were disabled by
+                 * ucp_worker_iface_async_fd_event() */
                 status = ucs_async_modify_handler(wiface->event_fd,
                                                   UCS_EVENT_SET_EVREAD);
                 if (status != UCS_OK) {

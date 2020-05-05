@@ -28,6 +28,7 @@ ucs_status_t ucs_twheel_init(ucs_twheel_t *twheel, ucs_time_t resolution,
     twheel->now         = current_time;
     twheel->wheel       = ucs_malloc(sizeof(*twheel->wheel) * twheel->num_slots,
                                      "twheel");
+    twheel->count       = 0;
     if (twheel->wheel == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -76,6 +77,7 @@ void __ucs_wtimer_add(ucs_twheel_t *t, ucs_wtimer_t *timer, ucs_time_t delta)
     ucs_assert(slot != t->current);
 
     ucs_list_add_tail(&t->wheel[slot], &timer->list);
+    t->count++;
 }
 
 void __ucs_twheel_sweep(ucs_twheel_t *t, ucs_time_t current_time)
@@ -97,6 +99,7 @@ void __ucs_twheel_sweep(ucs_twheel_t *t, ucs_time_t current_time)
             timer = ucs_list_extract_head(&t->wheel[t->current], ucs_wtimer_t, list);
             timer->is_active = 0;
             timer->cb(timer);
+            t->count--;
         }
     }
 }
