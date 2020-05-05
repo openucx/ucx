@@ -965,6 +965,8 @@ protected:
         wait(sreq);
         wait_for_flag(&am_received);
         EXPECT_TRUE(am_received);
+
+        ucp_worker_set_am_handler(receiver().worker(), 0, NULL, NULL, 0);
     }
 
 private:
