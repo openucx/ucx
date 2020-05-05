@@ -990,10 +990,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
                  uct_pending_req_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep = sreq->send.ep;
+    ucp_ep_t *ep        = sreq->send.ep;
     ucs_status_t status;
-
-    sreq->send.lane = ucp_ep_get_am_lane(ep);
 
     if (sreq->send.length <= ucp_ep_config(ep)->am.max_bcopy - sizeof(ucp_rndv_data_hdr_t)) {
         /* send a single bcopy message */
