@@ -44,7 +44,7 @@ struct ucs_rcache {
                                             taken **after** 'pgt_lock'. */
     ucs_mpool_t              mp;       /**< Memory pool to allocate entries for
                                             inv_q and page table entries, since
-                                            we cannot use regulat malloc().
+                                            we cannot use regular malloc().
                                             The backing storage is original mmap()
                                             which does not generate memory events */
     ucs_queue_head_t         inv_q;    /**< Regions which were invalidated during
