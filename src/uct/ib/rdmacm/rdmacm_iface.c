@@ -427,7 +427,7 @@ uct_rdmacm_iface_process_event(uct_rdmacm_iface_t *iface,
     return ret_flags;
 }
 
-static void uct_rdmacm_iface_event_handler(int fd, void *arg)
+static void uct_rdmacm_iface_event_handler(int fd, int async_events, void *arg)
 {
     uct_rdmacm_iface_t             *iface     = arg;
     uct_rdmacm_ctx_t               *cm_id_ctx = NULL;

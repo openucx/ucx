@@ -257,7 +257,7 @@ static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
     }
 }
 
-static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
+static void uct_tcp_iface_connect_handler(int listen_fd, int events, void *arg)
 {
     uct_tcp_iface_t *iface = arg;
     struct sockaddr_in peer_addr;

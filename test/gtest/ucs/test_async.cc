@@ -48,7 +48,7 @@ protected:
     virtual void ack_event() = 0;
     virtual int event_id() = 0;
 
-    static void cb(int id, void *arg) {
+    static void cb(int id, int events, void *arg) {
         base *self = reinterpret_cast<base*>(arg);
         self->handler();
     }
@@ -724,7 +724,7 @@ public:
     }
 
 protected:
-    static void dummy_cb(int id, void *arg) {
+    static void dummy_cb(int id, int events, void *arg) {
     }
 
     virtual void handler() {

@@ -35,7 +35,8 @@ typedef enum {
     UCS_EVENT_SET_EVREAD         = UCS_BIT(0),
     UCS_EVENT_SET_EVWRITE        = UCS_BIT(1),
     UCS_EVENT_SET_EVERR          = UCS_BIT(2),
-    UCS_EVENT_SET_EDGE_TRIGGERED = UCS_BIT(3)
+    UCS_EVENT_SET_EDGE_TRIGGERED = UCS_BIT(3),
+    UCS_EVENT_SET_DUMMY          = UCS_BIT(4)
 } ucs_event_set_type_t;
 
 /* The maximum possible number of events based on system constraints */

@@ -444,7 +444,7 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
     }
 }
 
-static void uct_rdmacm_cm_event_handler(int fd, void *arg)
+static void uct_rdmacm_cm_event_handler(int fd, int async_events, void *arg)
 {
     uct_rdmacm_cm_t      *cm = (uct_rdmacm_cm_t *)arg;
     struct rdma_cm_event *event;

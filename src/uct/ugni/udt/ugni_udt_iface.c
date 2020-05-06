@@ -192,7 +192,7 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
     return UCS_OK;
 }
 
-void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
+void uct_ugni_proccess_datagram_pipe(int event_id, int events, void *arg) {
     uct_ugni_udt_iface_t *iface = (uct_ugni_udt_iface_t *)arg;
     uct_ugni_udt_ep_t *ep;
     uct_ugni_udt_desc_t *datagram;
