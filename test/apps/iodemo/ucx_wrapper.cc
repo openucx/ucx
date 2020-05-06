@@ -211,9 +211,9 @@ void UcxContext::iomsg_recv_callback(void *request, ucs_status_t status,
                                      ucp_tag_recv_info *info)
 {
     ucx_request *r = reinterpret_cast<ucx_request*>(request);
-    r->completed = true;
-    r->conn_id   = (info->sender_tag & ~IOMSG_TAG) >> 32;
-    r->recv_length    = info->length;
+    r->completed   = true;
+    r->conn_id     = (info->sender_tag & ~IOMSG_TAG) >> 32;
+    r->recv_length = info->length;
 }
 
 const std::string UcxContext::sockaddr_str(const struct sockaddr* saddr,
