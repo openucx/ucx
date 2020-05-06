@@ -14,121 +14,97 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <list>
 
 
+/* Forward declarations */
 class UcxConnection;
 struct ucx_request;
+typedef std::list<ucx_request*> ucx_request_list_t;
 
-class verbose_ostream {
+/*
+ * UCX callback for send/receive completion
+ */
+class UcxCallback {
 public:
-    template<typename T>
-    verbose_ostream& operator<<(const T &t) {
-        if (_enable) {
-            if (_new_line) {
-                std::cout << _prefix;
-                _new_line = false;
-            }
+    virtual ~UcxCallback();
+    virtual void operator()(ucs_status_t status) = 0;
+};
 
+
+/*
+ * Empty callback singleton
+ */
+class EmptyCallback : public UcxCallback {
+public:
+    /// @override
+    virtual void operator()(ucs_status_t status);
+
+    static EmptyCallback* get();
+};
+
+
+/*
+ * Logger which can be enabled/disabled
+ */
+class UcxLog {
+public:
+    UcxLog(const std::string& prefix, bool enable);
+
+    ~UcxLog();
+
+    template<typename T>
+    const UcxLog& operator<<(const T &t) const {
+        if (_enable) {
             std::cout << t;
         }
-
-        return *this; 
-    }
-
-    typedef std::basic_ostream<char, std::char_traits<char> > EndLine;
-    typedef EndLine& (*EndLineManipulator)(EndLine&);
-    verbose_ostream& operator<<(EndLineManipulator manipulator) {
-        if (_enable) {
-            std::cout << manipulator;
-            _new_line = true;
-        }
-
         return *this;
-    }
-
-    verbose_ostream(bool enable) : _enable(enable), _new_line(true) {
-    }
-
-    ~verbose_ostream() {
-        if (_enable) {
-            std::cout << std::flush;
-        }
     }
 
 private:
     const bool               _enable;
-    bool                     _new_line;
-    static const std::string _prefix;
-};
-
-class UcxCallback {
-public:
-    virtual ~UcxCallback();
-    virtual void operator()(ucs_status_t status);
 };
 
 
-class EmptyCallback : public UcxCallback {
-public:
-    virtual void operator()() {};
-
-    static EmptyCallback* get() {
-        // singleton
-        static EmptyCallback instance;
-        return &instance;
-    }
-};
-
-
+/**
+ * Holds UCX global context and worker
+ */
 class UcxContext {
 public:
-    UcxContext(size_t iomsg_size, bool verbose);
+    UcxContext(size_t iomsg_size);
+
     virtual ~UcxContext();
 
-    void listen(const struct sockaddr* saddr, size_t addrlen);
+    bool init();
+
+    bool listen(const struct sockaddr* saddr, size_t addrlen);
 
     UcxConnection* connect(const struct sockaddr* saddr, size_t addrlen);
 
-    void disconnect(UcxConnection* conn);
-
-    virtual void on_disconnect(UcxConnection* conn) _GLIBCXX_NOTHROW;
-
     void progress();
 
-    void request_wait(const char *what, void *request);
+protected:
 
-    static void request_release(void *request);
-
-    static ucp_tag_t make_tag(uint32_t conn_id, uint32_t sn);
-
-    static ucp_tag_t make_io_msg_tag(uint32_t conn_id, uint32_t sn);
-
+    // Called when new connection is created on server side
     virtual void dispatch_new_connection(UcxConnection *conn);
 
-    virtual void dispatch_io_message(UcxConnection* conn, const void *buffer);
+    // Called when new IO message is received
+    virtual void dispatch_io_message(UcxConnection* conn, const void *buffer,
+                                     size_t length);
 
-    ucp_worker_h worker() const;
-
-    inline verbose_ostream& verbose_os();
-
-protected:
-    virtual void process_failed_connection(UcxConnection *conn);
+    // Called when there is a fatal failure on the connection
+    virtual void dispatch_connection_error(UcxConnection* conn);
 
 private:
+    typedef enum {
+        WAIT_STATUS_OK,
+        WAIT_STATUS_FAILED,
+        WAIT_STATUS_TIMED_OUT
+    } wait_status_t;
+
+    friend class UcxConnection;
+
     static const ucp_tag_t IOMSG_TAG = 1ull << 63;
-
-    void post_recv();
-
-    static void iomsg_recv_callback(void *request, ucs_status_t status,
-                                    ucp_tag_recv_info *info);
-
-    void process_conn_request();
-
-    void process_io_message();
-
-    void add_connection(UcxConnection *conn);
-
-    void remove_connection(UcxConnection *conn);
 
     static uint32_t get_next_conn_id();
 
@@ -136,13 +112,42 @@ private:
 
     static void request_reset(ucx_request *r);
 
+    static void request_release(void *request);
+
     static void connect_callback(ucp_conn_request_h conn_req, void *arg);
 
-    typedef std::map<uint32_t, UcxConnection*> conn_map_t;
+    static void iomsg_recv_callback(void *request, ucs_status_t status,
+                                    ucp_tag_recv_info *info);
 
-    void cleanup_conns();
-    void cleanup_listener();
-    void cleanup_worker();
+    static const std::string sockaddr_str(const struct sockaddr* saddr,
+                                          size_t addrlen);
+
+    ucp_worker_h worker() const;
+
+    void progress_conn_requests();
+
+    void progress_io_message();
+
+    void progress_failed_connections();
+
+    wait_status_t wait_completion(ucs_status_ptr_t status_ptr,
+                                  double timeout = 1e6);
+
+    void recv_io_message();
+
+    void add_connection(UcxConnection *conn);
+
+    void remove_connection(UcxConnection *conn);
+
+    void handle_connection_error(UcxConnection *conn);
+
+    void destroy_connections();
+
+    void destroy_listener();
+
+    void destroy_worker();
+
+    typedef std::map<uint32_t, UcxConnection*> conn_map_t;
 
     ucp_context_h                  _context;
     ucp_worker_h                   _worker;
@@ -151,52 +156,39 @@ private:
     ucx_request*                   _iomsg_recv_request;
     std::string                    _iomsg_buffer;
     std::deque<ucp_conn_request_h> _conn_requests;
-    std::deque<UcxConnection *>    _closing_conns;
-    verbose_ostream                _verbose_os;
+    std::deque<UcxConnection *>    _failed_conns;
 };
 
-verbose_ostream& UcxContext::verbose_os() {
-    return _verbose_os;
-}
 
 class UcxConnection {
 public:
-    UcxConnection(UcxContext& context, uint32_t conn_id,
-                  const struct sockaddr* saddr, socklen_t addrlen);
-
-    UcxConnection(UcxContext& context, uint32_t conn_id,
-                  ucp_conn_request_h conn_req);
+    UcxConnection(UcxContext& context, uint32_t conn_id);
 
     ~UcxConnection();
 
-    void establish();
+    bool connect(const struct sockaddr* saddr, socklen_t addrlen);
 
-    void disconnect();
+    bool accept(ucp_conn_request_h conn_req);
 
-    void on_disconnect() _GLIBCXX_NOTHROW;
-
-    bool is_disconnected();
-
-    void send_io_message(const void *buffer, size_t length,
+    bool send_io_message(const void *buffer, size_t length,
                          UcxCallback* callback = EmptyCallback::get());
 
-    void send_data(const void *buffer, size_t length, uint32_t sn,
+    bool send_data(const void *buffer, size_t length, uint32_t sn,
                    UcxCallback* callback = EmptyCallback::get());
 
-    void recv_data(void *buffer, size_t length, uint32_t sn,
+    bool recv_data(void *buffer, size_t length, uint32_t sn,
                    UcxCallback* callback = EmptyCallback::get());
+
+    void cancel_all();
 
     uint32_t id() const {
         return _conn_id;
     }
 
 private:
-    void ep_create_common(ucp_ep_params_t& ep_params);
+    static ucp_tag_t make_data_tag(uint32_t conn_id, uint32_t sn);
 
-    void ep_close(enum ucp_ep_close_mode mode);
-
-    void send_common(const void *buffer, size_t length, ucp_tag_t tag,
-                     UcxCallback* callback);
+    static ucp_tag_t make_iomsg_tag(uint32_t conn_id, uint32_t sn);
 
     static void stream_send_callback(void *request, ucs_status_t status);
 
@@ -208,17 +200,37 @@ private:
     static void data_recv_callback(void *request, ucs_status_t status,
                                    ucp_tag_recv_info *info);
 
-    static void process_request(const char *what, ucs_status_ptr_t ptr_status,
-                                UcxCallback* callback);
+    static void error_callback(void *arg, ucp_ep_h ep, ucs_status_t status);
 
-    static void error_handler(void *arg, ucp_ep_h ep,
-                              ucs_status_t status) _GLIBCXX_NOTHROW;
+    void set_log_prefix(const struct sockaddr* saddr, socklen_t addrlen);
 
-    UcxContext&  _context;
-    uint32_t     _conn_id;
-    uint32_t     _remote_conn_id;
-    ucp_ep_h     _ep;
-    void*        _close_request;
+    bool connect_common(ucp_ep_params_t& ep_params);
+
+    bool send_common(const void *buffer, size_t length, ucp_tag_t tag,
+                     UcxCallback* callback);
+
+    void request_started(ucx_request *r);
+
+    void request_completed(ucx_request *r);
+
+    void handle_connection_error(ucs_status_t status);
+
+    void disconnect(enum ucp_ep_close_mode mode);
+
+    void ep_close(enum ucp_ep_close_mode mode);
+
+    bool process_request(const char *what, ucs_status_ptr_t ptr_status,
+                         UcxCallback* callback);
+
+    static unsigned    _num_instances;
+
+    UcxContext&        _context;
+    uint32_t           _conn_id;
+    uint32_t           _remote_conn_id;
+    std::string        _log_prefix;
+    ucp_ep_h           _ep;
+    void*              _close_request;
+    ucx_request_list_t _all_requests;
 };
 
 #endif
