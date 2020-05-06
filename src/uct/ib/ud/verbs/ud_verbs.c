@@ -589,7 +589,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .create_cq                = uct_ib_verbs_create_cq,
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
-    .handle_failure           = uct_ud_iface_handle_failure,
+    .handle_failure           = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert,
     .set_ep_failed            = uct_ud_verbs_ep_set_failed,
     },
     .async_progress           = uct_ud_verbs_iface_async_progress,
@@ -663,8 +663,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     ucs_trace_func("");
 
-    init_attr.tx_cq_len = config->super.tx.queue_len;
-    init_attr.rx_cq_len = config->super.rx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_TX]   = config->super.tx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_RX]   = config->super.rx.queue_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, md,
                               worker, params, config, &init_attr);
@@ -714,7 +714,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_iface_t)
     uct_ud_iface_remove_async_handlers(&self->super);
     uct_ud_enter(&self->super);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_verbs_ep_t);
-    ucs_twheel_cleanup(&self->super.async.slow_timer);
     uct_ud_leave(&self->super);
 }
 

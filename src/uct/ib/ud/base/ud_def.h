@@ -27,6 +27,7 @@
 #define UCT_UD_CA_DUP_ACK_CNT   2   /* TODO: not implemented yet */
 #define UCT_UD_RESENDS_PER_ACK  4   /* request per every N resends */
 #define UCT_UD_SKB_ALIGN        UCS_SYS_CACHE_LINE_SIZE
+#define UCT_UD_SKIP_SWEEP       8
 
 /* note that the ud tx window is [acked_psn+1, max_psn)
  * and max_psn = acked_psn + cwnd
@@ -126,20 +127,21 @@ typedef struct uct_ud_neth {
 
 
 enum {
-    UCT_UD_SEND_SKB_FLAG_ACK_REQ   = UCS_BIT(0), /* ACK was requested for this skb */
-    UCT_UD_SEND_SKB_FLAG_COMP      = UCS_BIT(1), /* This skb contains a completion */
-    UCT_UD_SEND_SKB_FLAG_ZCOPY     = UCS_BIT(2), /* This skb contains a zero-copy segment */
-    UCT_UD_SEND_SKB_FLAG_ERR       = UCS_BIT(3), /* This skb contains a status after failure */
-
-    UCT_UD_SEND_SKB_FLAG_RESENDING = UCS_BIT(4), /* An active control skb refers to this skb */
-    UCT_UD_SEND_SKB_FLAG_ACKED     = UCS_BIT(5), /* Acknowledged but not released yet */
+    UCT_UD_SEND_SKB_FLAG_ACK_REQ    = UCS_BIT(0), /* ACK was requested for this skb */
+    UCT_UD_SEND_SKB_FLAG_COMP       = UCS_BIT(1), /* This skb contains a completion */
+    UCT_UD_SEND_SKB_FLAG_ZCOPY      = UCS_BIT(2), /* This skb contains a zero-copy segment */
+    UCT_UD_SEND_SKB_FLAG_RESENDING  = UCS_BIT(3), /* An active control skb refers to this skb */
+    UCT_UD_SEND_SKB_FLAG_ACKED      = UCS_BIT(4), /* Acknowledged but not released yet */
 
 #if UCS_ENABLE_ASSERT
-    UCT_UD_SEND_SKB_FLAG_CTL       = UCS_BIT(6), /* This is a control skb */
-    UCT_UD_SEND_SKB_FLAG_CANCEL    = UCS_BIT(7)  /* This skb contains a UCS_ERR_CANCEL status */
+    UCT_UD_SEND_SKB_FLAG_CTL_ACK    = UCS_BIT(5), /* This is a control-ack skb */
+    UCT_UD_SEND_SKB_FLAG_CTL_RESEND = UCS_BIT(6), /* This is a control-resend rsb */
+    UCT_UD_SEND_SKB_FLAG_INVALID    = UCS_BIT(7)  /* skb is released */
+
 #else
-    UCT_UD_SEND_SKB_FLAG_CTL       = 0,
-    UCT_UD_SEND_SKB_FLAG_CANCEL    = 0
+    UCT_UD_SEND_SKB_FLAG_CTL_ACK    = 0,
+    UCT_UD_SEND_SKB_FLAG_CTL_RESEND = 0,
+    UCT_UD_SEND_SKB_FLAG_INVALID    = 0
 #endif
 };
 
@@ -159,9 +161,11 @@ typedef struct uct_ud_send_skb {
 } UCS_S_PACKED UCS_V_ALIGNED(UCT_UD_SKB_ALIGN) uct_ud_send_skb_t;
 
 
+/*
+ * Call user completion handler
+ */
 typedef struct uct_ud_comp_desc {
     uct_completion_t        *comp;
-    uct_ud_ep_t             *err_ep;
     ucs_status_t            status;     /* used in case of failure */
 } uct_ud_comp_desc_t;
 
@@ -180,8 +184,10 @@ typedef struct uct_ud_ctl_desc {
     ucs_queue_elem_t        queue;       /* Queue element in outstanding queue */
     uint16_t                sn;          /* Sequence number in outstanding queue */
     uct_ud_send_skb_t       *self_skb;   /* Back-pointer to owner skb */
-    uct_ud_send_skb_t       *resent_skb; /* Points to a re-sent skb in the window.
-                                            Can be NULL. */
+    uct_ud_send_skb_t       *resent_skb; /* For resend skb: points to a re-sent
+                                            skb in the window, can be NULL */
+    uct_ud_ep_t             *ep;         /* For resend skb: points to the endpoint
+                                            on which the resend was made */
 } uct_ud_ctl_desc_t;
 
 
@@ -249,21 +255,23 @@ static inline void uct_ud_neth_set_am_id(uct_ud_neth_t *neth, uint8_t id)
 
 static inline uct_ud_ctl_desc_t *uct_ud_ctl_desc(uct_ud_send_skb_t *skb)
 {
-    ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL);
+    ucs_assert(skb->flags & (UCT_UD_SEND_SKB_FLAG_CTL_ACK |
+                             UCT_UD_SEND_SKB_FLAG_CTL_RESEND));
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
     return (uct_ud_ctl_desc_t*)((char*)skb->neth + skb->len);
 }
 
 static inline uct_ud_comp_desc_t *uct_ud_comp_desc(uct_ud_send_skb_t *skb)
 {
-    ucs_assert(skb->flags & (UCT_UD_SEND_SKB_FLAG_COMP  |
-                             UCT_UD_SEND_SKB_FLAG_ERR   |
-                             UCT_UD_SEND_SKB_FLAG_CANCEL));
+    ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP);
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
     return (uct_ud_comp_desc_t*)((char*)skb->neth + skb->len);
 }
 
 static inline uct_ud_zcopy_desc_t *uct_ud_zcopy_desc(uct_ud_send_skb_t *skb)
 {
     ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY);
+    ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
     return (uct_ud_zcopy_desc_t*)((char*)skb->neth + skb->len);
 }
 

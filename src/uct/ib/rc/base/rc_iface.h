@@ -223,7 +223,6 @@ struct uct_rc_iface {
         unsigned             tx_min_sge;
         unsigned             tx_min_inline;
         unsigned             tx_ops_count;
-        unsigned             rx_inline;
         uint16_t             tx_moderation;
 
         /* Threshold to send "soft" FC credit request. The peer will try to

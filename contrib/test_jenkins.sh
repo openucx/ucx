@@ -194,7 +194,11 @@ get_active_ib_devices() {
 # Get list of active IP interfaces
 #
 get_active_ip_ifaces() {
-	echo $(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	device_list=$(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	for netdev in ${device_list}
+	do
+		(ip addr show ${netdev} | grep -q 'inet ') && echo ${netdev} || true
+	done
 }
 
 #
@@ -773,7 +777,7 @@ run_hello() {
 
 	if [ ! -x ${test_name} ]
 	then
-		$MAKEP -C test/examples ${test_name}
+		$MAKEP -C examples ${test_name}
 	fi
 
 	# set smaller timeouts so the test will complete faster
@@ -791,7 +795,7 @@ run_hello() {
 		error_emulation=0
 	fi
 
-	run_client_server_app "./test/examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
+	run_client_server_app "./examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
 
 	if [[ ${test_args} == *"-e"* ]]
 	then
@@ -1144,6 +1148,12 @@ run_mpi_tests() {
 	fi
 }
 
+build_ucx_profiling() {
+	# compile the profiling example code
+	gcc -o ucx_profiling ../test/apps/profiling/ucx_profiling.c \
+		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+}
+
 #
 # Test profiling infrastructure
 #
@@ -1154,10 +1164,9 @@ test_profiling() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
+	$MAKEP install
 
-	# compile the profiling example code
-	gcc -o ucx_profiling ${ucx_inst}/share/ucx/examples/ucx_profiling.c \
-		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+	build_ucx_profiling
 
 	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./ucx_profiling
 
@@ -1171,6 +1180,9 @@ test_ucs_load() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
+	$MAKEP install
+
+	build_ucx_profiling
 
 	# Make sure UCS library constructor does not call socket()
 	echo "==== Running UCS library loading test ===="
@@ -1435,6 +1447,7 @@ run_gtest() {
 	export GTEST_UCT_TCP_FASTEST_DEV=1
 	# Report TOP-20 longest test at the end of testing
 	export GTEST_REPORT_LONGEST_TESTS=20
+	export OMP_NUM_THREADS=4
 
 	if [ $num_gpus -gt 0 ]; then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
@@ -1497,6 +1510,7 @@ run_gtest() {
 		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
 
+	unset OMP_NUM_THREADS
 	unset GTEST_UCT_TCP_FASTEST_DEV
 	unset GTEST_SHARD_INDEX
 	unset GTEST_TOTAL_SHARDS
@@ -1542,6 +1556,7 @@ run_gtest_release() {
 	export GTEST_SHUFFLE=1
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
+	export OMP_NUM_THREADS=4
 
 	echo "==== Running unit tests (release configuration) ===="
 	# Check:
@@ -1552,6 +1567,7 @@ run_gtest_release() {
 		$AFFINITY $TIMEOUT make -C test/gtest test
 	echo "ok 1" >> gtest_release.tap
 
+	unset OMP_NUM_THREADS
 	unset GTEST_SHARD_INDEX
 	unset GTEST_TOTAL_SHARDS
 	unset GTEST_RANDOM_SEED
@@ -1564,7 +1580,7 @@ run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
 
-	../test/apps/test_ucx_tls.py $ucx_inst
+	../test/apps/test_ucx_tls.py -p $ucx_inst
 
 	if [ $? -ne 0 ]; then
 		echo "not ok 1" >> ucx_tl_check.tap

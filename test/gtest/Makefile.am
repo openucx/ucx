@@ -191,7 +191,7 @@ if HAVE_TL_UD
 gtest_SOURCES += \
 	uct/ib/ud_base.cc \
 	uct/ib/test_ud.cc \
-	uct/ib/test_ud_slow_timer.cc \
+	uct/ib/test_ud_timer.cc \
 	uct/ib/test_ud_pending.cc \
 	uct/ib/test_ud_ds.cc
 endif

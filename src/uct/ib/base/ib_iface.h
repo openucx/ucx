@@ -102,7 +102,6 @@ struct uct_ib_iface_config {
         unsigned            max_batch;       /* How many fragments can be batched to one post send */
         unsigned            max_poll;        /* How many wcs can be picked when polling tx cq */
         size_t              min_inline;      /* Inline space to reserve for sends */
-        size_t              inl_resp;        /* Inline space to reserve for responses */
         unsigned            min_sge;         /* How many SG entries to support */
         uct_iface_mpool_config_t mp;
 
@@ -115,13 +114,15 @@ struct uct_ib_iface_config {
         unsigned            queue_len;       /* Queue length */
         unsigned            max_batch;       /* How many buffers can be batched to one post receive */
         unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
-        size_t              inl;             /* Inline space to reserve in CQ/QP */
         uct_iface_mpool_config_t mp;
 
         /* Event moderation parameters */
         unsigned            cq_moderation_count;
         double              cq_moderation_period;
     } rx;
+
+    /* Inline space to reserve in CQ */
+    size_t                  inl[UCT_IB_DIR_NUM];
 
     /* Change the address type */
     int                     addr_type;
@@ -158,6 +159,23 @@ struct uct_ib_iface_config {
 };
 
 
+enum {
+    UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
+    UCT_IB_TM_SUPPORTED              = UCS_BIT(1)
+};
+
+
+typedef struct uct_ib_iface_init_attr {
+    unsigned    rx_priv_len;            /* Length of transport private data to reserve */
+    unsigned    rx_hdr_len;             /* Length of transport network header */
+    unsigned    cq_len[UCT_IB_DIR_NUM]; /* CQ length */
+    size_t      seg_size;               /* Transport segment size */
+    unsigned    fc_req_size;            /* Flow control request size */
+    int         qp_type;                /* IB QP type */
+    int         flags;                  /* Various flags (see enum) */
+} uct_ib_iface_init_attr_t;
+
+
 typedef struct uct_ib_qp_attr {
     int                         qp_type;
     struct ibv_qp_cap           cap;
@@ -165,8 +183,7 @@ typedef struct uct_ib_qp_attr {
     struct ibv_srq              *srq;
     uint32_t                    srq_num;
     unsigned                    sq_sig_all;
-    unsigned                    max_inl_recv;
-    unsigned                    max_inl_resp;
+    unsigned                    max_inl_cqe[UCT_IB_DIR_NUM];
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     struct ibv_exp_qp_init_attr ibv;
 #elif HAVE_DECL_IBV_CREATE_QP_EX
@@ -177,10 +194,11 @@ typedef struct uct_ib_qp_attr {
 } uct_ib_qp_attr_t;
 
 
-typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(struct ibv_context *context, int cqe,
-                                                      struct ibv_comp_channel *channel,
-                                                      int comp_vector, int ignore_overrun,
-                                                      size_t *inl, struct ibv_cq **cq_p);
+typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(uct_ib_iface_t *iface,
+                                                      uct_ib_dir_t dir,
+                                                      const uct_ib_iface_init_attr_t *init_attr,
+                                                      int preferred_cpu,
+                                                      size_t inl);
 
 typedef ucs_status_t (*uct_ib_iface_arm_cq_func_t)(uct_ib_iface_t *iface,
                                                    uct_ib_dir_t dir,
@@ -230,7 +248,7 @@ struct uct_ib_iface {
         unsigned              tx_max_poll;
         unsigned              seg_size;
         unsigned              roce_path_factor;
-        uint8_t               max_inl_resp;
+        uint8_t               max_inl_cqe[UCT_IB_DIR_NUM];
         uint8_t               port_num;
         uint8_t               sl;
         uint8_t               traffic_class;
@@ -251,22 +269,6 @@ typedef struct uct_ib_fence_info {
                                              * because QP size is less than 64k */
 } uct_ib_fence_info_t;
 
-
-enum {
-    UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
-    UCT_IB_TM_SUPPORTED              = UCS_BIT(1)
-};
-
-typedef struct uct_ib_iface_init_attr {
-    unsigned    rx_priv_len;     /* Length of transport private data to reserve */
-    unsigned    rx_hdr_len;      /* Length of transport network header */
-    unsigned    tx_cq_len;       /* Send CQ length */
-    unsigned    rx_cq_len;       /* Receive CQ length */
-    size_t      seg_size;        /* Transport segment size */
-    unsigned    fc_req_size;     /* Flow control request size */
-    int         qp_type;         /* IB QP type */
-    int         flags;           /* Various flags (see enum) */
-} uct_ib_iface_init_attr_t;
 
 UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, const uct_ib_iface_config_t*,
@@ -515,10 +517,9 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
                                  uct_ib_dir_t dir,
                                  int solicited_only);
 
-ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
-                                    struct ibv_comp_channel *channel,
-                                    int comp_vector, int ignore_overrun,
-                                    size_t *inl, struct ibv_cq **cq_p);
+ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                    const uct_ib_iface_init_attr_t *init_attr,
+                                    int preferred_cpu, size_t inl);
 
 ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
                                     uct_ib_qp_attr_t *attr,

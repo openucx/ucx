@@ -332,6 +332,7 @@ int malloc_hooks_run_flags(void *dl, ucm_event_type_t events)
     dlclose(dl_test);
     free(ptr_malloc_core); /* This should still work */
     ptr_malloc_core = NULL;
+    malloc_trim(0);
     if (events & UCM_EVENT_VM_UNMAPPED) {
         CHKERR_JUMP(total_unmapped == 0, "No callback for munmap from malloc", fail);
     }
