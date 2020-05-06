@@ -140,6 +140,8 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     char ah_attr_str[128];
     uct_ib_roce_version_info_t roce_info;
 
+    params.flags = 0;
+
     /* get the qp attributes in order to modify the qp state.
      * the ah_attr fields from them are required to extract the device address
      * of the remote peer.
