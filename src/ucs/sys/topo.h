@@ -23,17 +23,15 @@ typedef struct ucs_sys_bus_id {
     uint8_t  function; /* range: 0 to 7 */
 } ucs_sys_bus_id_t;
 
+extern ucs_sys_bus_id_t ucs_sys_bus_id_unknown;
 
 /**
  * @ingroup UCS_RESOURCE
- * System Device abstraction
+ * System Device Index
+ * Obtained from a translation of the device bus id into an unsigned int
+ * Refer ucs_topo_find_device_by_bus_id()
  */
-typedef struct ucs_sys_device {
-    unsigned         id;        /**< Index of the device */
-    int              numa_node; /**< NUMA node assoicated with the device*/
-    ucs_sys_bus_id_t bus_id;    /**< bus ID of of the device if applicable.
-                                   eg: 0000:06:00.0 {domain:bus:slot.function}*/
-} ucs_sys_device_t;
+typedef unsigned ucs_sys_device_t;
 
 
 /*
@@ -49,28 +47,28 @@ typedef struct ucs_sys_dev_distance {
 /**
  * Find system device by pci bus id
  *
- * @param [in]     bus_id  bus id of the device of interest
- * @param [in/out] sys_dev pointer to ucs_sys_device_t
- *                         populated with device associated with the bus_id
+ * @param [in]  bus_id  pointer to bus id of the device of interest
+ * @param [out] sys_dev system device index associated with the bus_id
  *
  * @return UCS_OK or error in case device cannot be found
  */
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
-                                            const ucs_sys_device_t **sys_dev);
+                                            ucs_sys_device_t *sys_dev);
 
 
 /**
  * Find the distance between two system devices (in terms of latency,
  * bandwidth, hops, etc)
  *
- * @param [in]     device1 ucs_sys_device_t pointing to the first device
- * @param [in]     device2 ucs_sys_device_t pointing to the second device
- * @param [in/out] result  pointer to ucs_sys_dev_distance_t
- *                         populated with distance details between the two
- *                         devices
+ * @param [in]  device1  system device index of the first device
+ * @param [in]  device2  system device index of the second device
+ * @param [out] distance result populated with distance details between the two
+ *                       devices
+ *
+ * @return UCS_OK or error in case distance cannot be determined
  */
-ucs_status_t ucs_topo_get_distance(const ucs_sys_device_t *device1,
-                                   const ucs_sys_device_t *device2,
+ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
+                                   ucs_sys_device_t device2,
                                    ucs_sys_dev_distance_t *distance);
 
 

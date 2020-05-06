@@ -1289,7 +1289,7 @@ typedef struct uct_md_mem_attr {
     ucs_memory_type_t mem_type;
 
     /**
-     * Location of device pointer. E.g. NUMA/GPU
+     * Index of the system device on which the buffer resides. eg: NUMA/GPU
      */
     ucs_sys_device_t  sys_dev;
 } uct_md_mem_attr_t;
