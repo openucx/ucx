@@ -14,10 +14,12 @@ RUN dnf install -y \
     gcc-c++ \
     git \
     glibc-devel \
+    java-latest-openjdk-devel \
     libtool \
     make \
     maven \
     numactl-devel \
     rdma-core-devel \
     rpm-build \
+    && (dnf remove -y java-1.8.0-openjdk-devel || true) \
     && dnf clean dbcache packages
