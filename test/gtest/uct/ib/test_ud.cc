@@ -622,20 +622,10 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_resend,
     do {
         progress();
     } while(ep(m_e1)->ca.cwnd > max_window/2);
-    /* expect that:
-     * 4 packets will be retransmitted
-     * first packet will have ack_req,
-     * there will 2 ack_reqs
-     * in addition there may be up to two
-     * standalone ack_reqs
-     */
-    disable_async(m_e1);
-    disable_async(m_e2);
+    /* expect at least 1 drop and 1 ack req */
     short_progress_loop(100);
-    EXPECT_LE(0, rx_drop_count);
-    EXPECT_GE(4+2, rx_drop_count);
-    EXPECT_LE(0, ack_req_tx_cnt);
-    EXPECT_GE(2+2, ack_req_tx_cnt);
+    EXPECT_GE(rx_drop_count, 1u);
+    EXPECT_GE(ack_req_tx_cnt, 1u);
 }
 
 UCS_TEST_P(test_ud, connect_iface_single_drop_creq) {
