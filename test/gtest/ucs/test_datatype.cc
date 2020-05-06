@@ -92,6 +92,7 @@ UCS_TEST_F(test_datatype, list_splice) {
 UCS_TEST_F(test_datatype, hlist_basic) {
     elem_t elem1, elem2, elem3;
     ucs_hlist_head_t head;
+    std::vector<int> v;
     elem_t *elem;
 
     elem1.i = 1;
@@ -106,12 +107,29 @@ UCS_TEST_F(test_datatype, hlist_basic) {
     ucs_hlist_add_head(&head, &elem1.hlist);
     EXPECT_FALSE(ucs_hlist_is_empty(&head));
 
+    EXPECT_EQ(&elem1, ucs_hlist_head_elem(&head, elem_t, hlist));
+
+    /* test iteration over single-element list */
+    v.clear();
+    ucs_hlist_for_each(elem, &head, hlist) {
+        v.push_back(elem->i);
+    }
+    ASSERT_EQ(1ul, v.size());
+    EXPECT_EQ(1, v[0]);
+
     ucs_hlist_del(&head, &elem1.hlist);
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
 
     /* when list is empty, extract_head should return NULL */
     ucs_hlist_link_t *helem = ucs_hlist_extract_head(&head);
     EXPECT_TRUE(helem == NULL);
+
+    /* test iteration over empty list */
+    v.clear();
+    ucs_hlist_for_each(elem, &head, hlist) {
+        v.push_back(elem->i);
+    }
+    ASSERT_EQ(0ul, v.size());
 
     /* add one element to head and extract it */
     ucs_hlist_add_head(&head, &elem1.hlist);
@@ -123,15 +141,26 @@ UCS_TEST_F(test_datatype, hlist_basic) {
     ucs_hlist_add_head(&head, &elem1.hlist);
     ucs_hlist_add_tail(&head, &elem3.hlist);
 
-    std::vector<int> v;
-    ucs_hlist_for_each_extract(elem, &head, hlist) {
+    /* iterate without extract */
+    v.clear();
+    ucs_hlist_for_each(elem, &head, hlist) {
         v.push_back(elem->i);
     }
-    ASSERT_EQ(3ul, v.size()) << v[3];
-
+    ASSERT_EQ(3ul, v.size());
     EXPECT_EQ(1, v[0]);
     EXPECT_EQ(2, v[1]);
     EXPECT_EQ(3, v[2]);
+
+    /* iterate and extract */
+    v.clear();
+    ucs_hlist_for_each_extract(elem, &head, hlist) {
+        v.push_back(elem->i);
+    }
+    ASSERT_EQ(3ul, v.size());
+    EXPECT_EQ(1, v[0]);
+    EXPECT_EQ(2, v[1]);
+    EXPECT_EQ(3, v[2]);
+
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
 }
 

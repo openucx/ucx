@@ -9,7 +9,7 @@
 
 #include <ucp/core/ucp_types.h>
 #include <ucs/datastruct/khash.h>
-#include <ucs/datastruct/list.h>
+#include <ucs/datastruct/hlist.h>
 
 
 /*
@@ -17,7 +17,7 @@
  */
 typedef struct {
     uint64_t                  dest_uuid;     /* Destination worker UUID */
-    ucs_list_link_t           list;          /* List entry into endpoint
+    ucs_hlist_link_t          list;          /* List entry into endpoint
                                                 matching structure */
 } ucp_ep_match_t;
 
@@ -28,9 +28,9 @@ typedef struct {
  * The expected/unexpected lists are *not* circular
  */
 typedef struct ucp_ep_match_entry {
-    ucs_list_link_t          exp_ep_q;        /* Endpoints created by API and not
+    ucs_hlist_head_t         exp_ep_q;        /* Endpoints created by API and not
                                                  connected to remote endpoint */
-    ucs_list_link_t          unexp_ep_q;      /* Endpoints created internally as
+    ucs_hlist_head_t         unexp_ep_q;      /* Endpoints created internally as
                                                  connected a to remote endpoints,
                                                  but not provided to user yet */
     ucp_ep_conn_sn_t         next_conn_sn;    /* Sequence number of matching
