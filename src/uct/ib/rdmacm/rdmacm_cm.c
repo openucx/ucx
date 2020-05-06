@@ -130,14 +130,17 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
                                                  uct_device_addr_t **dev_addr_p,
                                                  size_t *dev_addr_len_p)
 {
+    uct_ib_address_pack_params_t params;
     struct ibv_port_attr port_attr;
     uct_ib_address_t *dev_addr;
     struct ibv_qp_attr qp_attr;
     size_t addr_length;
     int qp_attr_mask;
     char dev_name[UCT_DEVICE_NAME_MAX];
+    char ah_attr_str[128];
     uct_ib_roce_version_info_t roce_info;
-    unsigned address_pack_flags;
+
+    params.flags = 0;
 
     /* get the qp attributes in order to modify the qp state.
      * the ah_attr fields from them are required to extract the device address
@@ -160,33 +163,42 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         ucs_assert(!memcmp(&cm_id->route.addr.addr.ibaddr.dgid,
                            &qp_attr.ah_attr.grh.dgid,
                            sizeof(qp_attr.ah_attr.grh.dgid)));
+        params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
+        params.gid_index = qp_attr.ah_attr.grh.sgid_index;
     }
+
+    ucs_debug("cm_id %p: ah_attr %s", cm_id,
+              uct_ib_ah_attr_str(ah_attr_str, sizeof(ah_attr_str),
+                                 &qp_attr.ah_attr));
+    ucs_assert_always(qp_attr.path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
+    params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
+    params.path_mtu = qp_attr.path_mtu;
 
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
         /* Ethernet address */
         ucs_assert(qp_attr.ah_attr.is_global);
-        address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_ETH;
 
         /* pack the remote RoCE version as ANY assuming that rdmacm guarantees
          * that the remote peer is reachable to the local one */
         roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
         roce_info.addr_family = 0;
+        params.roce_info      = &roce_info;
+        params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_ETH;
     } else {
-        address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
-                             UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
+        params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
+                                UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
     }
 
-    addr_length = uct_ib_address_size(&cm_id->route.addr.addr.ibaddr.dgid,
-                                      address_pack_flags);
+    params.gid  = &cm_id->route.addr.addr.ibaddr.dgid;
+    params.lid  = qp_attr.ah_attr.dlid;
+    addr_length = uct_ib_address_size(&params);
     dev_addr    = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
         ucs_error("failed to allocate IB device address");
         return UCS_ERR_NO_MEMORY;
     }
 
-    uct_ib_address_pack(&cm_id->route.addr.addr.ibaddr.dgid,
-                        qp_attr.ah_attr.dlid, address_pack_flags, &roce_info,
-                        dev_addr);
+    uct_ib_address_pack(&params, dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
     *dev_addr_len_p = addr_length;

@@ -84,20 +84,24 @@ public:
         union ibv_gid gid_in, gid_out;
         uct_ib_address_t *ib_addr;
         uint16_t lid_out;
+        enum ibv_mtu mtu;
+        uint8_t gid_index;
+
+        ib_addr = (uct_ib_address_t*)malloc(uct_ib_iface_address_size(iface));
 
         gid_in.global.subnet_prefix = subnet_prefix;
         gid_in.global.interface_id  = 0xdeadbeef;
 
-        ib_addr = (uct_ib_address_t*)malloc(
-                      uct_ib_address_size(&gid_in,
-                                          uct_ib_iface_address_pack_flags(iface)));
-        ASSERT_TRUE(ib_addr != NULL);
-
-        uct_ib_address_pack(&gid_in, lid_in,
-                            uct_ib_iface_address_pack_flags(iface),
-                            &iface->gid_info.roce_info, ib_addr);
-
-        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
+        uct_ib_address_pack_params_t params;
+        params.flags     = uct_ib_iface_address_pack_flags(iface);
+        params.gid       = &gid_in;
+        params.lid       = lid_in;
+        params.roce_info = &iface->gid_info.roce_info;
+        /* to suppress gcc 4.3.4 warning */
+        params.path_mtu  = (enum ibv_mtu)0;
+        params.gid_index = std::numeric_limits<uint8_t>::max();
+        uct_ib_address_pack(&params, ib_addr);
+        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out, &gid_index, &mtu);
 
         if (uct_ib_iface_is_roce(iface)) {
             EXPECT_TRUE(iface->config.force_global_addr);
@@ -110,6 +114,8 @@ public:
             EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
         }
 
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU,  mtu);
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, gid_index);
         free(ib_addr);
     }
 
@@ -125,7 +131,9 @@ public:
         gid.global.subnet_prefix = subnet_prefix ?: iface->gid_info.gid.global.subnet_prefix;
         gid.global.interface_id  = 0xdeadbeef;
 
-        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, 0, &ah_attr);
+        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid,
+                                               iface->gid_info.gid_index, 0,
+                                               &ah_attr);
 
         if (uct_ib_iface_is_roce(iface)) {
             /* in case of roce, should be global */
