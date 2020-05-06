@@ -772,8 +772,8 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
 
     mp_obj_size = ucs_max(sizeof(ucs_pgt_dir_t), sizeof(ucs_rcache_inv_entry_t));
     mp_align    = ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN);
-    status = ucs_mpool_init(&self->mp, 0, mp_obj_size, 0, mp_align, 1024,
-                            UINT_MAX, &ucs_rcache_mp_ops, "rcache_mp");
+    status      = ucs_mpool_init(&self->mp, 0, mp_obj_size, 0, mp_align, 1024,
+                                 UINT_MAX, &ucs_rcache_mp_ops, "rcache_mp");
     if (status != UCS_OK) {
         goto err_cleanup_pgtable;
     }
