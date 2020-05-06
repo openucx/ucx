@@ -71,12 +71,53 @@
         } \
     }
 
-#define ucp_request_set_callback(_req, _cb, _value) \
+#define ucp_request_set_callback(_req, _cb, _cb_value, _user_data) \
     { \
-        (_req)->_cb    = _value; \
-        (_req)->flags |= UCP_REQUEST_FLAG_CALLBACK; \
-        ucs_trace_data("request %p %s set to %p", _req, #_cb, _value); \
+        (_req)->_cb       = _cb_value; \
+        (_req)->user_data = _user_data; \
+        (_req)->flags    |= UCP_REQUEST_FLAG_CALLBACK; \
+        ucs_trace_data("request %p %s set to %p, user data: %p", \
+                      _req, #_cb, _cb_value, _user_data); \
     }
+
+
+#define ucp_request_get_param(_worker, _param, _failed) \
+    ({ \
+        ucp_request_t *__req; \
+        if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
+            __req = ucp_request_get(_worker); \
+            if (ucs_unlikely((__req) == NULL)) { \
+                _failed; \
+            } \
+        } else { \
+            __req = ((ucp_request_t*)(_param)->request) - 1; \
+        } \
+        __req; \
+    })
+
+
+#define ucp_request_put_param(_param, _req) \
+    if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
+        ucp_request_put(_req); \
+    }
+
+
+#define ucp_request_cb_param(_param, _req, _cb, ...) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
+        param->cb._cb(req + 1, status, ##__VA_ARGS__, param->user_data); \
+    }
+
+
+#define ucp_request_imm_cmpl_param(_param, _req, _status, _cb, ...) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) { \
+        ucp_request_cb_param(_param, _req, _cb, ##__VA_ARGS__); \
+        ucs_trace_req("request %p completed, but immediate completion is " \
+                      "prohibited, status %s", _req, \
+                      ucs_status_string(_status)); \
+        return (_req) + 1; \
+    } \
+    ucp_request_put_param(_param, _req); \
+    return UCS_STATUS_PTR(_status);
 
 
 static UCS_F_ALWAYS_INLINE void
@@ -94,7 +135,7 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_send", status);
-    ucp_request_complete(req, send.cb, status);
+    ucp_request_complete(req, send.cb, status, req->user_data);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -106,7 +147,8 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
                   req->recv.tag.info.sender_tag, req->recv.tag.info.length,
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
-    ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info);
+    ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info,
+                         req->user_data);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -511,7 +553,7 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
                    int data_offset, unsigned am_flags, uint16_t hdr_len,
-                   uint16_t rdesc_flags, uint16_t priv_length,
+                   uint16_t rdesc_flags, int priv_length,
                    ucp_recv_desc_t **rdesc_p)
 {
     ucp_recv_desc_t *rdesc;
@@ -521,11 +563,11 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
     if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
         /* slowpath */
         ucs_assert(priv_length <= UCP_WORKER_HEADROOM_PRIV_SIZE);
-        data_hdr           = UCS_PTR_BYTE_OFFSET(data, -data_offset);
-        rdesc              = (ucp_recv_desc_t *)data_hdr - 1;
-        rdesc->flags       = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
-        rdesc->priv_length = priv_length;
-        status             = UCS_INPROGRESS;
+        data_hdr               = UCS_PTR_BYTE_OFFSET(data, -data_offset);
+        rdesc                  = (ucp_recv_desc_t *)data_hdr - 1;
+        rdesc->flags           = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+        rdesc->uct_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE - priv_length;
+        status                 = UCS_INPROGRESS;
     } else {
         rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
         if (rdesc == NULL) {
@@ -550,12 +592,13 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
 static UCS_F_ALWAYS_INLINE void
 ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
 {
+    void *uct_desc;
+
     ucs_trace_req("release receive descriptor %p", rdesc);
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
         /* uct desc is slowpath */
-        uct_iface_release_desc(UCS_PTR_BYTE_OFFSET(rdesc,
-                                                   -(UCP_WORKER_HEADROOM_PRIV_SIZE -
-                                                     rdesc->priv_length)));
+        uct_desc = UCS_PTR_BYTE_OFFSET(rdesc, -rdesc->uct_desc_offset);
+        uct_iface_release_desc(uct_desc);
     } else {
         ucs_mpool_put_inline(rdesc);
     }
@@ -568,7 +611,8 @@ ucp_send_request_get_am_bw_lane(ucp_request_t *req)
 
     lane = ucp_ep_config(req->send.ep)->
            key.am_bw_lanes[req->send.msg_proto.am_bw_index];
-    ucs_assert(lane != UCP_NULL_LANE);
+    ucs_assertv(lane != UCP_NULL_LANE, "req->send.msg_proto.am_bw_index=%d",
+                req->send.msg_proto.am_bw_index);
     return lane;
 }
 
@@ -577,7 +621,7 @@ ucp_send_request_next_am_bw_lane(ucp_request_t *req)
 {
     ucp_lane_index_t am_bw_index = ++req->send.msg_proto.am_bw_index;
     ucp_ep_config_t *config      = ucp_ep_config(req->send.ep);
-    
+
     if ((am_bw_index >= UCP_MAX_LANES) ||
         (config->key.am_bw_lanes[am_bw_index] == UCP_NULL_LANE)) {
         req->send.msg_proto.am_bw_index = 0;

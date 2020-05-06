@@ -7,7 +7,7 @@
 #include "ib_mlx5.h"
 
 
-static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
+static UCS_F_ALWAYS_INLINE UCS_F_NON_NULL struct mlx5_cqe64*
 uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned cqe_index)
 {
     return UCS_PTR_BYTE_OFFSET(cq->cq_buf, ((cqe_index & (cq->cq_length - 1)) <<
@@ -62,29 +62,28 @@ uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
     return UCS_PTR_BYTE_OFFSET(cqe, -UCT_IB_GRH_LEN);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
-                    struct mlx5_cqe64 **cqe)
+static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
+uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {
+    struct mlx5_cqe64 *cqe;
     unsigned cqe_index;
     uint8_t op_own;
 
     cqe_index = cq->cq_ci;
-    *cqe      = uct_ib_mlx5_get_cqe(cq, cqe_index);
-    op_own    = (*cqe)->op_own;
+    cqe       = uct_ib_mlx5_get_cqe(cq, cqe_index);
+    op_own    = cqe->op_own;
 
     if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, cqe_index, cq->cq_length))) {
-        return UCS_ERR_NO_PROGRESS;
+        return NULL;
     } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ucs_assert((op_own >> 4) != MLX5_CQE_INVALID);
-        /* check completion requires extra fields of cqe to be valid */
-        ucs_memory_cpu_load_fence();
-        return uct_ib_mlx5_check_completion(iface, cq, *cqe);
+        uct_ib_mlx5_check_completion(iface, cq, cqe);
+        return NULL; /* No CQE */
     }
 
     cq->cq_ci = cqe_index + 1;
-    return UCS_OK;
+    return cqe;
 }
 
 

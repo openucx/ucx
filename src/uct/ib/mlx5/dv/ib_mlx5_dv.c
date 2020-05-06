@@ -41,7 +41,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 {
     uct_ib_mlx5_md_t *md   = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev   = &md->super.dev;
-    ucs_status_t status    = UCS_ERR_NO_MEMORY;
     struct mlx5dv_pd dvpd  = {};
     struct mlx5dv_cq dvscq = {};
     struct mlx5dv_cq dvrcq = {};
@@ -51,8 +50,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
     char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
     uct_ib_mlx5_mmio_mode_t mmio_mode;
-    uct_ib_mlx5_devx_uar_t *uar;
     int max_tx, max_rx, len_tx, len;
+    uct_ib_mlx5_devx_uar_t *uar;
+    ucs_status_t status;
     int wqe_size;
     int dvflags;
     void *qpc;
@@ -94,12 +94,14 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                  "qp umem");
         if (ret != 0) {
             ucs_error("failed to allocate QP buffer of %d bytes: %m", len);
+            status = UCS_ERR_NO_MEMORY;
             goto err_uar;
         }
 
         qp->devx.mem = mlx5dv_devx_umem_reg(dev->ibv_context, qp->devx.wq_buf, len, 0);
         if (!qp->devx.mem) {
             ucs_error("mlx5dv_devx_umem_reg() failed: %m");
+            status = UCS_ERR_NO_MEMORY;
             goto err_free_buf;
         }
     } else {
@@ -108,6 +110,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     qp->devx.dbrec = uct_ib_mlx5_get_dbrec(md);
     if (!qp->devx.dbrec) {
+        status = UCS_ERR_NO_MEMORY;
         goto err_free_mem;
     }
 
@@ -134,9 +137,10 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, dvrcq.cqn);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_sq_size, ucs_ilog2_or0(max_tx));
     UCT_IB_MLX5DV_SET(qpc, qpc, log_rq_size, ucs_ilog2_or0(max_rx));
-    UCT_IB_MLX5DV_SET(qpc, qpc, cs_req, UCT_IB_MLX5_QPC_CS_REQ_UP_TO_64B);
+    UCT_IB_MLX5DV_SET(qpc, qpc, cs_req,
+            uct_ib_mlx5_qpc_cs_req(attr->super.max_inl_cqe[UCT_IB_DIR_TX]));
     UCT_IB_MLX5DV_SET(qpc, qpc, cs_res,
-                      uct_ib_mlx5_qpc_cs_res(attr->super.max_inl_resp, 0));
+            uct_ib_mlx5_qpc_cs_res(attr->super.max_inl_cqe[UCT_IB_DIR_RX], 0));
     UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
     UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
 
@@ -148,13 +152,12 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem->umem_id);
     }
 
-    status = UCS_ERR_IO_ERROR;
-
     qp->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
                                           out, sizeof(out));
     if (!qp->devx.obj) {
         ucs_error("mlx5dv_devx_obj_create(QP) failed, syndrome %x: %m",
                   UCT_IB_MLX5DV_GET(create_qp_out, out, syndrome));
+        status = UCS_ERR_IO_ERROR;
         goto err_free_db;
     }
 
@@ -172,6 +175,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     if (ret) {
         ucs_error("mlx5dv_devx_obj_modify(2INIT_QP) failed, syndrome %x: %m",
                   UCT_IB_MLX5DV_GET(rst2init_qp_out, out_2init, syndrome));
+        status = UCS_ERR_IO_ERROR;
         goto err_free;
     }
 

@@ -432,7 +432,6 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     void *packet;
     unsigned count;
     ptrdiff_t rx_hdr_offset;
-    ucs_status_t status;
 
     ci            = iface->rx.wq.cq_wqe_counter & iface->rx.wq.mask;
     packet        = (void *)be64toh(iface->rx.wq.wqes[ci].addr);
@@ -440,9 +439,8 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     rx_hdr_offset = iface->super.super.config.rx_hdr_offset;
     desc          = UCS_PTR_BYTE_OFFSET(packet, -rx_hdr_offset);
 
-    status = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_RX],
-                                 &cqe);
-    if (status == UCS_ERR_NO_PROGRESS) {
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_RX]);
+    if (cqe == NULL) {
         count = 0;
         goto out;
     }
@@ -488,11 +486,9 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface, int is_async)
 {
     struct mlx5_cqe64 *cqe;
     uint16_t hw_ci;
-    ucs_status_t status;
 
-    status = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX],
-                                 &cqe);
-    if (status == UCS_ERR_NO_PROGRESS) {
+    cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX]);
+    if (cqe == NULL) {
         return 0;
     }
 
@@ -740,13 +736,9 @@ static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
 
-    if (status == UCS_ERR_ENDPOINT_TIMEOUT) {
-        uct_ud_iface_handle_failure(ib_iface, arg, status);
-    } else {
-        /* Local side failure - treat as fatal */
-        uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.wq,
-                                        UCS_LOG_LEVEL_FATAL);
-    }
+    /* Local side failure - treat as fatal */
+    uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.wq,
+                                    UCS_LOG_LEVEL_FATAL);
 }
 
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
@@ -802,9 +794,9 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     ucs_trace_func("");
 
-    init_attr.flags     = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.tx_cq_len = config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
-    init_attr.rx_cq_len = config->super.super.rx.queue_len;
+    init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
+    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.super.rx.queue_len;
 
     self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
@@ -831,14 +823,14 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     }
 
     self->super.tx.available = self->tx.wq.bb_max;
-    ucs_assert(init_attr.tx_cq_len >= self->tx.wq.bb_max);
+    ucs_assert(init_attr.cq_len[UCT_IB_DIR_TX] >= self->tx.wq.bb_max);
 
     status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucs_assert(init_attr.rx_cq_len > self->rx.wq.mask);
+    ucs_assert(init_attr.cq_len[UCT_IB_DIR_RX] > self->rx.wq.mask);
 
     status = uct_ud_mlx5_iface_common_init(&self->super.super,
                                            &self->ud_mlx5_common,
@@ -871,7 +863,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
     uct_ud_iface_remove_async_handlers(&self->super);
     uct_ud_enter(&self->super);
     UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_mlx5_ep_t);
-    ucs_twheel_cleanup(&self->super.async.slow_timer);
     uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
     uct_ud_leave(&self->super);
 }

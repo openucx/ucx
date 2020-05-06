@@ -8,8 +8,45 @@
 #
 
 ## Current
-Features:
-- TBD
+### Features: TBD
+#### UCX Core TBD
+#### UCX Java (API Preview) TBD
+### Bugfixes: TBD
+
+## 1.8.0 (April 3, 2020)
+### Features:
+#### UCX Core
+- Improved detection for DEVX support
+- Improved TCP scalability
+- Added support for ROCM to perftest
+- Added support for different source and target memory types to perftest
+- Added optimized memcpy for ROCM devices
+- Added hardware tag-matching for CUDA buffers
+- Added support for CUDA and ROCM managed memories
+- Added support for client/server disconnect protocol over rdma connection manager
+- Added support for striding receive queue for hardware tag-matching
+- Added XPMEM-based rendezvous protocol for shared memory
+- Added support shared memory communication between containers on same machine
+- Added support for multi-threaded RDMA memory registration for large regions
+- Added new test cases to Azure CI
+
+#### UCX Java (API Preview)
+- Added APIs for stream send/recv, tag probe, and connect request handle
+- Added Java package (automatically published) to Maven central
+
+### Bugfixes:
+- Multiple fixes in JUCX
+- Fixes in UCP thread safety
+- Fixes for most recent versions GCC, PGI, and ICC
+- Fixes for CPU affinity on Azure instances
+- Fixes in XPMEM support on PPC64
+- Performance fixes in CUDA IPC
+- Fixes in RDMA CM flows
+- Multiple fixes in TCP transport
+- Multiple fixes in documentation
+- Fixes in transport lane selection logic
+- Fixes in Java jar build
+- Fixes in socket connection manager for Nvidia DGX-2 platform
 
 ## 1.7.0 (January 19, 2020)
 Features:

@@ -453,7 +453,8 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_nb,
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_no_comp,
-                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY),
+                     "UD_TIMER_TICK?=100ms") {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 
@@ -467,12 +468,14 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_no_comp,
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_iface_no_comp,
-                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY),
+                     "UD_TIMER_TICK?=100ms") {
     test_flush_am_zcopy(&uct_flush_test::flush_iface_no_comp, true);
 }
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, am_zcopy_flush_ep_nb,
-                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY),
+                     "UD_TIMER_TICK?=100ms") {
     am_rx_count   = 0;
     m_flush_flags = UCT_FLUSH_FLAG_LOCAL;
 

@@ -227,7 +227,7 @@ ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge,
                        "uct_rc_verbs_ep_get_zcopy");
     UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt),
-                     iface->super.super.config.max_inl_resp + 1,
+                     iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
                      iface->super.config.max_get_zcopy, "get_zcopy");
 
     status = uct_rc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, remote_addr,

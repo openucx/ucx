@@ -33,7 +33,7 @@
  *    Sergey Shalnov <sergeysh@mellanox.com> 7-June-2016
  */
 
-#include "ucx_hello_world.h"
+#include "hello_world_util.h"
 
 #include <ucp/api/ucp.h>
 

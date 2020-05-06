@@ -123,14 +123,17 @@ static const char *ucp_wireup_iface_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_AM_DUP)]           = "full reliability",
     [ucs_ilog2(UCT_IFACE_FLAG_CB_SYNC)]          = "sync callback",
     [ucs_ilog2(UCT_IFACE_FLAG_CB_ASYNC)]         = "async callback",
-    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_SEND_COMP)]  = "send completion event",
-    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV)]       = "tag or active message event",
-    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_SIG)]   = "signaled message event",
     [ucs_ilog2(UCT_IFACE_FLAG_PENDING)]          = "pending",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_SHORT)]  = "tag eager short",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)]  = "tag eager bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)]  = "tag eager zcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy"
+};
+
+static const char *ucp_wireup_event_flags[] = {
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_SEND_COMP)] = "send completion event",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV)]      = "tag or active message event",
+    [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_SIG)]  = "signaled message event"
 };
 
 static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
@@ -311,6 +314,8 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
          * ucp packed address */
         ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_FLAGS,
                                       criteria->remote_iface_flags));
+        ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_EVENT_FLAGS,
+                                      criteria->remote_event_flags));
 
         if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
             ucs_trace("addr[%d] %s: no %s", addr_index,
@@ -318,6 +323,15 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.cap_flags,
                                                        criteria->remote_iface_flags,
                                                        ucp_wireup_iface_flags));
+            continue;
+        }
+
+        if (!ucs_test_all_flags(ae->iface_attr.event_flags, criteria->remote_event_flags)) {
+            ucs_trace("addr[%d] %s: no %s", addr_index,
+                      ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
+                      ucp_wireup_get_missing_flag_desc(ae->iface_attr.event_flags,
+                                                       criteria->remote_event_flags,
+                                                       ucp_wireup_event_flags));
             continue;
         }
 
@@ -356,6 +370,9 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
             !ucp_wireup_check_flags(resource, iface_attr->cap.flags,
                                     criteria->local_iface_flags, criteria->title,
                                     ucp_wireup_iface_flags, p, endp - p) ||
+            !ucp_wireup_check_flags(resource, iface_attr->cap.event_flags,
+                                    criteria->local_event_flags, criteria->title,
+                                    ucp_wireup_event_flags, p, endp - p) ||
             !ucp_wireup_check_amo_flags(resource, iface_attr->cap.atomic32.op_flags,
                                         criteria->local_atomic_flags.atomic32.op_flags,
                                         32, 0, criteria->title, p, endp - p) ||
@@ -548,10 +565,10 @@ out_update_score:
 }
 
 static int ucp_wireup_is_lane_proxy(ucp_ep_h ep, ucp_rsc_index_t rsc_index,
-                                    uint64_t remote_cap_flags)
+                                    uint64_t remote_event_flags)
 {
     return !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
-           ((remote_cap_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
+           ((remote_event_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
             UCT_IFACE_FLAG_EVENT_RECV_SIG);
 }
 
@@ -562,7 +579,7 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
 {
     int is_proxy = 0;
     ucp_md_index_t dst_md_index;
-    uint64_t remote_cap_flags;
+    uint64_t remote_event_flags;
 
     if (usage & (UCP_WIREUP_LANE_USAGE_AM |
                  UCP_WIREUP_LANE_USAGE_AM_BW |
@@ -571,11 +588,11 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
          * deactivate its interface and wait for signaled active message to wake up.
          * Use a proxy lane which would send the first active message as signaled to
          * make sure the remote interface will indeed wake up. */
-        remote_cap_flags = select_params->address->address_list
-                                [select_info->addr_index].iface_attr.cap_flags;
-        is_proxy         = ucp_wireup_is_lane_proxy(select_params->ep,
-                                                    select_info->rsc_index,
-                                                    remote_cap_flags);
+        remote_event_flags = select_params->address->address_list
+                                 [select_info->addr_index].iface_attr.event_flags;
+        is_proxy           = ucp_wireup_is_lane_proxy(select_params->ep,
+                                                      select_info->rsc_index,
+                                                      remote_event_flags);
     }
 
     dst_md_index = select_params->address->address_list
@@ -757,6 +774,8 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
     criteria->remote_iface_flags = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                    UCT_IFACE_FLAG_AM_BCOPY |
                                    UCT_IFACE_FLAG_CB_ASYNC;
+    criteria->local_event_flags  = 0;
+    criteria->remote_event_flags = 0;
     criteria->calc_score         = ucp_wireup_aux_score_func;
     criteria->tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX; /* Can use aux transports */
 
@@ -849,6 +868,8 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
         criteria.local_iface_flags  = criteria.remote_iface_flags |
                                       UCT_IFACE_FLAG_PENDING;
     }
+    criteria.remote_event_flags     = 0;
+    criteria.local_event_flags      = 0;
     criteria.calc_score             = ucp_wireup_rma_score_func;
     criteria.tl_rsc_flags           = 0;
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
@@ -889,8 +910,10 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_context_uct_atomic_iface_flags(context, &criteria.remote_atomic_flags);
 
     criteria.title              = "atomic operations on %s memory";
-    criteria.local_iface_flags  = criteria.remote_iface_flags |
-                                  UCT_IFACE_FLAG_PENDING;
+    criteria.local_iface_flags  = UCT_IFACE_FLAG_PENDING;
+    criteria.remote_iface_flags = 0;
+    criteria.local_event_flags  = 0;
+    criteria.remote_event_flags = 0;
     criteria.local_atomic_flags = criteria.remote_atomic_flags;
     criteria.calc_score         = ucp_wireup_amo_score_func;
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
@@ -992,6 +1015,8 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
         criteria.remote_iface_flags = UCT_IFACE_FLAG_AM_BCOPY |
                                       UCT_IFACE_FLAG_CB_SYNC;
         criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
+        criteria.remote_event_flags = 0;
+        criteria.local_event_flags  = 0;
         criteria.calc_score         = ucp_wireup_am_score_func;
         ucp_wireup_fill_peer_err_criteria(&criteria,
                                           ucp_wireup_ep_init_flags(select_params,
@@ -999,7 +1024,7 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
 
         if (ucs_test_all_flags(ucp_ep_get_context_features(select_params->ep),
                                UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-            criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+            criteria.local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
         }
 
         status = ucp_wireup_select_transport(select_params, &criteria, tl_bitmap,
@@ -1145,6 +1170,8 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.criteria.remote_iface_flags = UCT_IFACE_FLAG_AM_BCOPY |
                                           UCT_IFACE_FLAG_CB_SYNC;
     bw_info.criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
+    bw_info.criteria.remote_event_flags = 0;
+    bw_info.criteria.local_event_flags  = 0;
     bw_info.criteria.calc_score         = ucp_wireup_am_bw_score_func;
     bw_info.criteria.tl_rsc_flags       = 0;
     ucp_wireup_clean_amo_criteria(&bw_info.criteria);
@@ -1152,7 +1179,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-        bw_info.criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+        bw_info.criteria.local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
 
     bw_info.local_dev_bitmap  = UINT64_MAX;
@@ -1223,6 +1250,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     bw_info.criteria.remote_iface_flags = 0;
     bw_info.criteria.local_iface_flags  = UCT_IFACE_FLAG_PENDING;
+    bw_info.criteria.remote_event_flags = 0;
+    bw_info.criteria.local_event_flags  = 0;
     bw_info.criteria.calc_score         = ucp_wireup_rma_bw_score_func;
     bw_info.criteria.tl_rsc_flags       = 0;
     bw_info.criteria.remote_md_flags    = md_reg_flag;
@@ -1231,7 +1260,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-        bw_info.criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+        bw_info.criteria.local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
 
     bw_info.local_dev_bitmap  = UINT64_MAX;
@@ -1335,11 +1364,12 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
                                   UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  |
                                   UCT_IFACE_FLAG_GET_ZCOPY       |
                                   UCT_IFACE_FLAG_PENDING;
+    criteria.remote_event_flags = 0;
     criteria.calc_score         = ucp_wireup_am_score_func;
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_WAKEUP)) {
-        criteria.local_iface_flags |= UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+        criteria.local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
     }
 
     /* Do not add tag offload lane, if selected tag lane score is lower
@@ -1387,9 +1417,17 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                    criteria.local_iface_flags, criteria.title,
                                    ucp_wireup_iface_flags, NULL, 0) &&
             ucp_wireup_check_flags(resource,
+                                   attrs->cap.event_flags,
+                                   criteria.local_event_flags, criteria.title,
+                                   ucp_wireup_event_flags, NULL, 0) &&
+            ucp_wireup_check_flags(resource,
                                    address_list[addr_index].iface_attr.cap_flags,
                                    criteria.remote_iface_flags, criteria.title,
-                                   ucp_wireup_iface_flags, NULL, 0))
+                                   ucp_wireup_iface_flags, NULL, 0) &&
+            ucp_wireup_check_flags(resource,
+                                   address_list[addr_index].iface_attr.event_flags,
+                                   criteria.remote_event_flags, criteria.title,
+                                   ucp_wireup_event_flags, NULL, 0))
          {
              return lane;
          } else if (ucp_worker_is_tl_p2p(worker, rsc_index)) {

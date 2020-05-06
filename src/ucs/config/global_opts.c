@@ -23,6 +23,8 @@ ucs_global_opts_t ucs_global_opts = {
     .log_component         = {UCS_LOG_LEVEL_WARN, "UCX"},
     .log_print_enable      = 0,
     .log_file              = "",
+    .log_file_size         = SIZE_MAX,
+    .log_file_rotate       = 0,
     .log_buffer_size       = 1024,
     .log_data_size         = 0,
     .mpool_fifo            = 0,
@@ -77,6 +79,16 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "  %h - Replaced with host name\n",
   ucs_offsetof(ucs_global_opts_t, log_file),
   UCS_CONFIG_TYPE_STRING},
+
+ {"LOG_FILE_SIZE", "inf",
+  "The maximal size of log file. The maximal log file size has to be >= LOG_BUFFER.",
+  ucs_offsetof(ucs_global_opts_t, log_file_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+ {"LOG_FILE_ROTATE", "0",
+  "The maximal number of backup log files that could be created to save logs\n"
+  "after the previous ones (if any) are completely filled. The value has to be\n"
+  "less than the maximal signed integer value.",
+  ucs_offsetof(ucs_global_opts_t, log_file_rotate), UCS_CONFIG_TYPE_UINT},
 
  {"LOG_BUFFER", "1024",
   "Buffer size for a single log message.",

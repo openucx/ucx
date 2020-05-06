@@ -517,10 +517,20 @@ typedef enum {
 typedef enum {
     UCP_OP_ATTR_FIELD_REQUEST       = UCS_BIT(0),  /**< request field */
     UCP_OP_ATTR_FIELD_CALLBACK      = UCS_BIT(1),  /**< cb field */
-    UCP_OP_ATTR_FIELD_DATATYPE      = UCS_BIT(2),  /**< datatype field */
+    UCP_OP_ATTR_FIELD_USER_DATA     = UCS_BIT(2),  /**< user_data field */
+    UCP_OP_ATTR_FIELD_DATATYPE      = UCS_BIT(3),  /**< datatype field */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
-    UCP_OP_ATTR_FLAG_NO_ZCOPY       = UCS_BIT(17), /**< do not use zcopy proto */
+    UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
+                                                        even if it delays remote 
+                                                        data delivery. Note for
+                                                        implementer: this option
+                                                        can disable zero copy
+                                                        and/or rendezvous protocols
+                                                        which require
+                                                        synchronization with the
+                                                        remote peer before releasing
+                                                        the local send buffer */
     UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL = UCS_BIT(18)  /**< force immediate complete
                                                         operation, fail if the
                                                         operation cannot be
@@ -1183,7 +1193,7 @@ typedef struct {
      * bits from @ref ucp_op_attr_t. Fields not specified in this mask will be
      * ignored. Provides ABI compatibility with respect to adding new fields.
      */
-    uint64_t       op_attr_mask;
+    uint32_t       op_attr_mask;
 
     /**
      * Request handle allocated by the user. There should

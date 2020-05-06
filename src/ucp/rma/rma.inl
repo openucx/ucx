@@ -28,7 +28,7 @@ ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
 
     ucs_trace_req("returning request %p, status %s", req,
                   ucs_status_string(status));
-    ucp_request_set_callback(req, send.cb, cb);
+    ucp_request_set_callback(req, send.cb, (ucp_send_nbx_callback_t)cb, NULL);
     return req + 1;
 }
 
