@@ -1172,7 +1172,7 @@ struct ucp_tag_recv_cancel_params {
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                               field_mask;
-    /* Tag for matching requests to canceled */
+    /* Tag for matching requests to cancel */
     ucp_tag_t                              tag;
     /* Tag mask to cancel requests by wildcard */
     ucp_tag_t                              tag_mask;
