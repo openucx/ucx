@@ -29,7 +29,7 @@ protected:
         long count = elem_count();
         ucs_status_t status;
 
-        for (uint64_t i = 0; i < count; ++i) {
+        for (uint32_t i = 0; i < count; ++i) {
             do {
                 status = ucs_mpmc_queue_push(mpmc, i);
             } while (status == UCS_ERR_EXCEEDS_LIMIT);

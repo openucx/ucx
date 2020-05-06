@@ -21,10 +21,10 @@
  * TODO make the queue resizeable.
  */
 typedef struct ucs_mpmc_queue {
-    uint64_t           length;      /* Array size. Rounded to power of 2. */
+    uint32_t           length;      /* Array size. Rounded to power of 2. */
     int                shift;
-    volatile uint64_t  producer;    /* Producer index */
-    volatile uint64_t  consumer;    /* Consumer index */
+    volatile uint32_t  producer;    /* Producer index */
+    volatile uint32_t  consumer;    /* Consumer index */
     uint64_t           *queue;      /* Array of data */
 } ucs_mpmc_queue_t;
 
@@ -34,7 +34,7 @@ typedef struct ucs_mpmc_queue {
  *
  * @param length   Queue length.
  */
-ucs_status_t ucs_mpmc_queue_init(ucs_mpmc_queue_t *mpmc, uint64_t length);
+ucs_status_t ucs_mpmc_queue_init(ucs_mpmc_queue_t *mpmc, uint32_t length);
 
 
 /**

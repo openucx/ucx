@@ -183,24 +183,24 @@ static ucs_status_t ucs_async_signal_dispatch_timer(int uid)
 
 static inline int ucs_signal_map_to_events(int si_code)
 {
-    int events = 0;
+    int events;
 
     switch (si_code) {
     case POLL_IN:
     case POLL_MSG:
     case POLL_PRI:
-        events |= UCS_EVENT_SET_EVREAD;
+        events = UCS_EVENT_SET_EVREAD;
         return events;
     case POLL_OUT:
-        events |= UCS_EVENT_SET_EVWRITE;
+        events = UCS_EVENT_SET_EVWRITE;
         return events;
     case POLL_HUP:
     case POLL_ERR:
-        events |= UCS_EVENT_SET_EVERR;
+        events = UCS_EVENT_SET_EVERR;
         return events;
     default:
         ucs_warn("unexpected si_code %d", si_code);
-        return UCS_EVENT_SET_DUMMY;
+        return UCS_ASYNC_EVENT_DUMMY;
     }
 }
 

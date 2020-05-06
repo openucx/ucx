@@ -158,7 +158,7 @@ static void uct_ib_device_get_locality(const char *dev_name,
     *numa_node = (status == UCS_OK) ? n : -1;
 }
 
-static void uct_ib_async_event_handler(int fd, int async_events, void *arg)
+static void uct_ib_async_event_handler(int fd, int events, void *arg)
 {
     uct_ib_device_t *dev = arg;
     struct ibv_async_event event;
