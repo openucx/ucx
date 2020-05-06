@@ -6,8 +6,6 @@
 
 #include "ud_base.h"
 
-#include <uct/uct_test.h>
-
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
