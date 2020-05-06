@@ -745,21 +745,15 @@ uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface)
     return skb;
 }
 
-static void uct_ud_iface_dispatch_skb_comp(uct_ud_iface_t *iface,
-                                           uct_ud_send_skb_t *skb)
-{
-    uct_ud_comp_desc_t *cdesc = uct_ud_comp_desc(skb);
-
-    uct_ud_iface_dispatch_comp(iface, cdesc->comp, cdesc->status);
-}
-
 void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 {
+    uct_ud_comp_desc_t *cdesc;
     uct_ud_send_skb_t *skb;
 
     ucs_queue_for_each_extract(skb, &iface->tx.async_comp_q, queue, 1) {
-        uct_ud_iface_dispatch_skb_comp(iface, skb);
         ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING));
+        cdesc = uct_ud_comp_desc(skb);
+        uct_ud_iface_dispatch_comp(iface, cdesc->comp, cdesc->status);
         uct_ud_skb_release(skb, 0);
     }
 }
@@ -905,22 +899,6 @@ void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
     uct_base_iface_progress_enable(tl_iface, flags);
 }
 
-static void uct_ud_iface_resent_skb_complete(uct_ud_iface_t *iface,
-                                             uct_ud_send_skb_t *skb,
-                                             int is_async)
-{
-    if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
-        if (!is_async) {
-            ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
-            return;
-        }
-
-        uct_ud_iface_dispatch_skb_comp(iface, skb);
-    }
-
-    uct_ud_skb_release(skb, 0);
-}
-
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
                                    uct_ud_ctl_desc_t *cdesc, int is_async)
 {
@@ -937,12 +915,9 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
         ucs_assert(resent_skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING);
 
         resent_skb->flags &= ~UCT_UD_SEND_SKB_FLAG_RESENDING;
-        if (resent_skb->flags & UCT_UD_SEND_SKB_FLAG_ACKED) {
-            /* skb was acknowledged, so we can complete it */
-            uct_ud_iface_resent_skb_complete(iface, resent_skb, is_async);
-        }
-
         --cdesc->ep->tx.resend_count;
+
+        uct_ud_ep_window_release_completed(cdesc->ep, is_async);
     } else {
         ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL_ACK);
     }

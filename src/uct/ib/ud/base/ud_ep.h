@@ -298,6 +298,8 @@ void   uct_ud_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
 
 void   uct_ud_ep_disconnect(uct_ep_h ep);
 
+void uct_ud_ep_window_release_completed(uct_ud_ep_t *ep, int is_async);
+
 
 /* helper function to create/destroy new connected ep */
 ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
