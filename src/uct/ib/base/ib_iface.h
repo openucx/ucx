@@ -414,8 +414,10 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
  * @param [in]  ib_addr    IB address to unpack.
  * @param [out] lid        Filled with address LID, or 0 if not present.
  * @param [out] gid        Filled with address GID, or 0 if not present.
- * @param [out] gid_index  Filled with GID index, or UINT8_MAX if not present.
- * @param [out] path_mtu   Filled with address path MTU, or 0 if not present.
+ * @param [out] gid_index  Filled with GID index, or
+ *                         @ref UCT_IB_ADDRESS_INVALID_GID_INDEX if not present.
+ * @param [out] path_mtu   Filled with address path MTU, or
+ *                         @ref UCT_IB_ADDRESS_INVALID_PATH_MTU if not present.
  */
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
                            union ibv_gid *gid, uint8_t *gid_index,
