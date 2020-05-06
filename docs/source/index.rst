@@ -55,7 +55,7 @@ and run a simple client/server example:
     $ ./contrib/configure-release --prefix=$PWD/install
     $ make -j8 install
 
-    $ gcc test/examples/ucp_client_server.c -lucp -lucs -o ucp_client_server \
+    $ gcc examples/ucp_client_server.c -lucp -lucs -o ucp_client_server \
           -Iinstall/include -Linstall/lib
     $ export LD_LIBRARY_PATH=$PWD/instal/lib
     $ ./ucp_client_server &

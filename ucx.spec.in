@@ -98,6 +98,7 @@ Provides header files and examples for developing with UCX.
            --disable-debug \
            --disable-assertions \
            --disable-params-check \
+           --enable-examples \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
            %_with_arg gdrcopy gdrcopy \

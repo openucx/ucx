@@ -125,7 +125,7 @@
         See https://storage-download.googleapis.com/maven-central/index.html
       -->
       <name>GCS Maven Central mirror</name>
-      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -156,7 +156,7 @@
         See https://storage-download.googleapis.com/maven-central/index.html
       -->
       <name>GCS Maven Central mirror</name>
-      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -226,12 +226,6 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-gpg-plugin</artifactId>
         <version>1.6</version>
-        <configuration>
-          <gpgArguments>
-            <arg>--pinentry-mode</arg>
-            <arg>loopback</arg>
-          </gpgArguments>
-        </configuration>
         <executions>
           <execution>
             <id>sign-artifacts</id>

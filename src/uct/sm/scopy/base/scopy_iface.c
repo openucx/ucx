@@ -93,7 +93,6 @@ UCS_CLASS_INIT_FUNC(uct_scopy_iface_t, uct_scopy_iface_ops_t *ops, uct_md_h md,
     UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &ops->super, md, worker, params, tl_config);
 
     self->tx              = ops->ep_tx;
-    self->outstanding     = 0;
     self->config.max_iov  = ucs_min(config->max_iov, ucs_iov_get_max());
     self->config.seg_size = config->seg_size;
     self->config.tx_quota = config->tx_quota;
@@ -115,9 +114,8 @@ UCS_CLASS_INIT_FUNC(uct_scopy_iface_t, uct_scopy_iface_ops_t *ops, uct_md_h md,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_scopy_iface_t)
 {
-    self->super.super.super.ops.iface_progress_disable(&self->super.super.super,
-                                                       UCT_PROGRESS_SEND |
-                                                       UCT_PROGRESS_RECV);
+    uct_worker_progress_unregister_safe(&self->super.super.worker->super,
+                                        &self->super.super.prog.id);
     ucs_mpool_cleanup(&self->tx_mpool, 1);
     ucs_arbiter_cleanup(&self->arbiter);
 }
@@ -130,6 +128,12 @@ unsigned uct_scopy_iface_progress(uct_iface_h tl_iface)
     unsigned count           = 0;
 
     ucs_arbiter_dispatch(&iface->arbiter, 1, uct_scopy_ep_progress_tx, &count);
+
+    if (ucs_unlikely(ucs_arbiter_is_empty(&iface->arbiter))) {
+        uct_worker_progress_unregister_safe(&iface->super.super.worker->super,
+                                            &iface->super.super.prog.id);
+    }
+
     return count;
 }
 
@@ -142,8 +146,7 @@ ucs_status_t uct_scopy_iface_flush(uct_iface_h tl_iface, unsigned flags,
         return UCS_ERR_UNSUPPORTED;        
     }
 
-    if (iface->outstanding != 0) {
-        ucs_assert(!ucs_arbiter_is_empty(&iface->arbiter));
+    if (!ucs_arbiter_is_empty(&iface->arbiter)) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
         return UCS_INPROGRESS;
     }

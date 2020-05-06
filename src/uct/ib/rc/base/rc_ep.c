@@ -160,19 +160,32 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_iface_resources(uct_rc_iface_send_op_t *op, int is_get_zcopy)
+{
+    uct_rc_iface_send_desc_t *desc;
+    uct_rc_iface_t *iface;
+
+    if (is_get_zcopy) {
+        ++op->iface->tx.reads_available;
+        return;
+    }
+
+    desc  = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+    iface = ucs_container_of(ucs_mpool_obj_owner(desc), uct_rc_iface_t, tx.mp);
+    ++iface->tx.reads_available;
+}
+
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
-    uct_rc_iface_t *iface          = ucs_container_of(ucs_mpool_obj_owner(desc),
-                                                      uct_rc_iface_t, tx.mp);
 
     VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
-    ++iface->tx.reads_available;
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
 
+    uct_rc_op_release_iface_resources(op, 0);
     uct_invoke_completion(desc->super.user_comp, UCS_OK);
-
     ucs_mpool_put(desc);
 }
 
@@ -180,21 +193,18 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
-    uct_rc_iface_t *iface          = ucs_container_of(ucs_mpool_obj_owner(desc),
-                                                      uct_rc_iface_t, tx.mp);
 
     VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
-    ++iface->tx.reads_available;
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
-
+    uct_rc_op_release_iface_resources(op, 0);
     ucs_mpool_put(desc);
 }
 
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp)
 {
-    ++op->iface->tx.reads_available;
+    uct_rc_op_release_iface_resources(op, 1);
     uct_rc_ep_send_op_completion_handler(op, resp);
 }
 
@@ -340,15 +350,26 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
 
             if (op->user_comp != NULL) {
                 /* This must be uct_rc_ep_get_bcopy_handler,
-                 * uct_rc_ep_send_completion_proxy_handler,
+                 * uct_rc_ep_get_bcopy_handler_no_completion,
+                 * uct_rc_ep_get_zcopy_completion_handler,
+                 * uct_rc_ep_flush_op_completion_handler or
                  * one of the atomic handlers,
                  * so invoke user completion */
                 uct_invoke_completion(op->user_comp, status);
             }
+
+            /* Need to release rdma_read resources taken by get operations  */
+            if ((op->handler == uct_rc_ep_get_bcopy_handler) ||
+                (op->handler == uct_rc_ep_get_bcopy_handler_no_completion)) {
+                uct_rc_op_release_iface_resources(op, 0);
+            } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
+                uct_rc_op_release_iface_resources(op, 1);
+            }
         }
         op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                        UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
-        if (op->handler == uct_rc_ep_send_op_completion_handler) {
+        if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
+            (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
             uct_rc_iface_put_send_op(op);
         } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
             ucs_mpool_put(op);

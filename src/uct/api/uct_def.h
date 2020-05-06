@@ -781,4 +781,15 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
                                                 const void *rkey_buf);
 
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Callback to process asynchronous events.
+ *
+ * @param [in]  arg      User argument to be passed to the callback.
+ * @param [in]  flags    Flags to be passed to the callback (reserved for
+ *                       future use).
+ */
+typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
+
+
 #endif

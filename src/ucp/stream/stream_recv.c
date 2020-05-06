@@ -400,11 +400,11 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_proto_t *ep_ext,
                rdesc_tmp.length);
     } else {
         /* slowpath */
-        rdesc                 = (ucp_recv_desc_t *)am_data - 1;
-        rdesc->length         = rdesc_tmp.length;
-        rdesc->payload_offset = rdesc_tmp.payload_offset + sizeof(*rdesc);
-        rdesc->priv_length    = 0;
-        rdesc->flags          = UCP_RECV_DESC_FLAG_UCT_DESC;
+        rdesc                  = (ucp_recv_desc_t *)am_data - 1;
+        rdesc->length          = rdesc_tmp.length;
+        rdesc->payload_offset  = rdesc_tmp.payload_offset + sizeof(*rdesc);
+        rdesc->uct_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE;
+        rdesc->flags           = UCP_RECV_DESC_FLAG_UCT_DESC;
     }
 
     ucp_ep_from_ext_proto(ep_ext)->flags |= UCP_EP_FLAG_STREAM_HAS_DATA;

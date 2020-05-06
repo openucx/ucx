@@ -257,7 +257,7 @@ ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
     UCT_CHECK_IOV_SIZE(iovcnt, UCT_RC_MLX5_RMA_MAX_IOV(0),
                        "uct_rc_mlx5_ep_get_zcopy");
     UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt),
-                     iface->super.super.config.max_inl_resp + 1,
+                     iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
                      iface->super.config.max_get_zcopy, "get_zcopy");
     UCT_RC_CHECK_NUM_RDMA_READ(&iface->super);
 
@@ -701,7 +701,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_cancel(uct_ep_h tl_ep, void *op)
                                                        uct_rc_mlx5_iface_common_t);
 
     uint32_t op_index = (uint32_t)((uint64_t)op);
-    ucs_ptr_array_remove(&iface->tm.rndv_comps, op_index, 0);
+    ucs_ptr_array_remove(&iface->tm.rndv_comps, op_index);
     return UCS_OK;
 }
 
@@ -867,13 +867,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(params->iface,
                                                        uct_rc_mlx5_iface_common_t);
-    uct_ib_qp_attr_t attr = {};
+    uct_ib_mlx5_qp_attr_t attr = {};
     ucs_status_t status;
 
     /* Need to create QP before super constructor to get QP number */
     uct_rc_mlx5_iface_fill_attr(iface, &attr, iface->super.config.tx_qp_len,
                                 &iface->rx.srq);
-    uct_ib_exp_qp_fill_attr(&iface->super.super, &attr);
+    uct_ib_exp_qp_fill_attr(&iface->super.super, &attr.super);
     status = uct_rc_mlx5_iface_create_qp(iface, &self->tx.wq.super, &self->tx.wq, &attr);
     if (status != UCS_OK) {
         return status;
@@ -896,7 +896,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
          * such a QP to be initialized with zero send queue length. */
         memset(&attr, 0, sizeof(attr));
         uct_rc_mlx5_iface_fill_attr(iface, &attr, 0, &iface->rx.srq);
-        uct_ib_exp_qp_fill_attr(&iface->super.super, &attr);
+        uct_ib_exp_qp_fill_attr(&iface->super.super, &attr.super);
         status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, &attr);
         if (status != UCS_OK) {
             goto err;

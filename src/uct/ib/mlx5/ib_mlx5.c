@@ -53,37 +53,36 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
     {NULL}
 };
 
-ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
-                                   struct ibv_comp_channel *channel,
-                                   int comp_vector, int ignore_overrun,
-                                   size_t *inl, struct ibv_cq **cq_p)
+ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                   const uct_ib_iface_init_attr_t *init_attr,
+                                   int preferred_cpu, size_t inl)
 {
 #if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
     struct ibv_cq *cq;
     struct ibv_cq_init_attr_ex cq_attr = {};
     struct mlx5dv_cq_init_attr dv_attr = {};
 
-    cq_attr.cqe = cqe;
-    cq_attr.channel = channel;
-    cq_attr.comp_vector = comp_vector;
-    if (ignore_overrun) {
+    cq_attr.cqe         = init_attr->cq_len[dir];
+    cq_attr.channel     = iface->comp_channel;
+    cq_attr.comp_vector = preferred_cpu;
+    if (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN) {
         cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
-        cq_attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
+        cq_attr.flags     = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
     }
     dv_attr.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE;
-    dv_attr.cqe_size  = uct_ib_get_cqe_size(*inl > 32 ? 128 : 64);
-    cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(context, &cq_attr, &dv_attr));
+    dv_attr.cqe_size  = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
+    cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
     if (!cq) {
-        ucs_error("mlx5dv_create_cq(cqe=%d) failed: %m", cqe);
+        ucs_error("mlx5dv_create_cq(cqe=%d) failed: %m", cq_attr.cqe);
         return UCS_ERR_IO_ERROR;
     }
 
-    *cq_p = cq;
-    *inl  = dv_attr.cqe_size / 2;
+    iface->cq[dir]                 = cq;
+    iface->config.max_inl_cqe[dir] = dv_attr.cqe_size / 2;
     return UCS_OK;
 #else
-    return uct_ib_verbs_create_cq(context, cqe, channel, comp_vector,
-                                  ignore_overrun, inl, cq_p);
+    return uct_ib_verbs_create_cq(iface, dir, init_attr, preferred_cpu, inl);
 #endif
 }
 
@@ -149,7 +148,7 @@ static int
 uct_ib_mlx5_res_domain_cmp(uct_ib_mlx5_res_domain_t *res_domain,
                            uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     return res_domain->ibv_domain->context == md->dev.ibv_context;
 #elif HAVE_DECL_IBV_ALLOC_TD
     return res_domain->pd->context == md->dev.ibv_context;
@@ -162,7 +161,7 @@ static ucs_status_t
 uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
                             uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain_init_attr attr;
 
     attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL |
@@ -221,7 +220,7 @@ uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
 
 static void uct_ib_mlx5_res_domain_cleanup(uct_ib_mlx5_res_domain_t *res_domain)
 {
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_destroy_res_domain_attr attr;
     int ret;
 
@@ -277,7 +276,7 @@ void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp)
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
-                                         uct_ib_qp_attr_t *attr)
+                                         uct_ib_mlx5_qp_attr_t *attr)
 {
     ucs_status_t status;
 
@@ -286,8 +285,8 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
         return status;
     }
 
-    uct_ib_exp_qp_fill_attr(iface, attr);
-    status = uct_ib_iface_create_qp(iface, attr, &qp->verbs.qp);
+    uct_ib_exp_qp_fill_attr(iface, &attr->super);
+    status = uct_ib_iface_create_qp(iface, &attr->super, &qp->verbs.qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -413,29 +412,6 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar)
 #endif
 }
 
-ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
-                                        uct_ib_mlx5_md_t *md,
-                                        uct_ib_mlx5_txwq_t *txwq,
-                                        uct_ib_mlx5_mmio_mode_t mode)
-{
-    uct_ib_mlx5_devx_uar_t *uar;
-
-    uar = uct_worker_tl_data_get(worker,
-                                 UCT_IB_MLX5_DEVX_UAR_KEY,
-                                 uct_ib_mlx5_devx_uar_t,
-                                 uct_ib_mlx5_devx_uar_cmp,
-                                 uct_ib_mlx5_devx_uar_init,
-                                 md, mode);
-    if (UCS_PTR_IS_ERR(uar)) {
-        return UCS_PTR_STATUS(uar);
-    }
-
-    txwq->reg        = &uar->super;
-    txwq->super.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
-
-    return UCS_OK;
-}
-
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 {
     txwq->curr       = txwq->qstart;
@@ -446,6 +422,32 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 #endif
     uct_ib_fence_info_init(&txwq->fi);
     memset(txwq->qstart, 0, UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
+}
+
+ucs_status_t
+uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
+                          uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
+                          unsigned bf_size,
+                          uct_ib_mlx5_mmio_mode_t *mmio_mode)
+{
+    ucs_assert(cfg_mmio_mode < UCT_IB_MLX5_MMIO_MODE_LAST);
+
+    if (cfg_mmio_mode != UCT_IB_MLX5_MMIO_MODE_AUTO) {
+        *mmio_mode = cfg_mmio_mode;
+    } else if (bf_size > 0) {
+        if (worker->thread_mode == UCS_THREAD_MODE_SINGLE) {
+            *mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST;
+        } else if (worker->thread_mode == UCS_THREAD_MODE_SERIALIZED) {
+            *mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST_MT;
+        } else {
+            ucs_error("unsupported thread mode for mlx5: %d", worker->thread_mode);
+            return UCS_ERR_UNSUPPORTED;
+        }
+    } else {
+        *mmio_mode = UCT_IB_MLX5_MMIO_MODE_DB;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
@@ -476,19 +478,10 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (cfg_mmio_mode != UCT_IB_MLX5_MMIO_MODE_AUTO) {
-        mmio_mode = cfg_mmio_mode;
-    } else if (qp_info.dv.bf.size > 0) {
-        if (worker->thread_mode == UCS_THREAD_MODE_SINGLE) {
-            mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST;
-        } else if (worker->thread_mode == UCS_THREAD_MODE_SERIALIZED) {
-            mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST_MT;
-        } else {
-            ucs_error("unsupported thread mode for mlx5: %d", worker->thread_mode);
-            return UCS_ERR_UNSUPPORTED;
-        }
-    } else {
-        mmio_mode = UCT_IB_MLX5_MMIO_MODE_DB;
+    status = uct_ib_mlx5_get_mmio_mode(worker, cfg_mmio_mode,
+                                       qp_info.dv.bf.size, &mmio_mode);
+    if (status != UCS_OK) {
+        return status;
     }
 
     ucs_debug("tx wq %d bytes [bb=%d, nwqe=%d] mmio_mode %s",

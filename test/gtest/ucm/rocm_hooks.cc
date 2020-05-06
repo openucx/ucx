@@ -126,7 +126,7 @@ UCS_TEST_F(rocm_hooks, test_hipMallocManaged) {
 
     ret = hipMallocManaged(&dptr, 64);
     ASSERT_EQ(ret, hipSuccess);
-    check_mem_alloc_events((void *)dptr, 64, UCS_MEMORY_TYPE_ROCM_MANAGED);
+    check_mem_alloc_events((void *)dptr, 64);
 
     ret = hipFree(dptr);
     ASSERT_EQ(ret, hipSuccess);
@@ -140,7 +140,7 @@ UCS_TEST_F(rocm_hooks, test_hipMallocPitch) {
 
     ret = hipMallocPitch(&dptr, &pitch, 4, 8);
     ASSERT_EQ(ret, hipSuccess);
-    check_mem_alloc_events((void *)dptr, (128 * 8));
+    check_mem_alloc_events((void *)dptr, (pitch * 8));
 
     ret = hipFree(dptr);
     ASSERT_EQ(ret, hipSuccess);

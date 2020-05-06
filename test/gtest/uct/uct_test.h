@@ -145,6 +145,7 @@ protected:
 
         bool is_caps_supported(uint64_t required_flags);
         bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+        bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
         bool check_atomics(uint64_t required_ops, atomic_mode mode);
 
         uct_md_h md() const;
@@ -350,6 +351,7 @@ protected:
     bool is_caps_supported(uint64_t required_flags);
     bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     void check_caps_skip(uint64_t required_flags, uint64_t invalid_flags = 0);
+    bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     bool check_atomics(uint64_t required_ops, atomic_mode mode);
     const entity& ent(unsigned index) const;
     unsigned progress() const;
@@ -374,7 +376,9 @@ protected:
                                     uct_tag_unexp_eager_cb_t eager_cb = NULL,
                                     uct_tag_unexp_rndv_cb_t rndv_cb = NULL,
                                     void *eager_arg = NULL,
-                                    void *rndv_arg = NULL);
+                                    void *rndv_arg = NULL,
+                                    uct_async_event_cb_t async_event_cb = NULL,
+                                    void *async_event_arg = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
     uct_test::entity* create_entity();
     int max_connections();

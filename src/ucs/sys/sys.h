@@ -149,14 +149,26 @@ uint64_t ucs_generate_uuid(uint64_t seed);
  *   - stdout
  *   - stderr
  *
- * *p_fstream is filled with the stream handle, *p_need_close is set to whether
- * fclose() should be called to release resources, *p_next_token to the remainder
- * of config_str.
+ * @param [in]  config_str     The file name or name of the output stream
+ *                             (stdout/stderr).
+ * @param [in]  err_log_level  Logging level that should be used for printing
+ *                             errors.
+ * @param [out] p_fstream      Pointer that is filled with the stream handle.
+ *                             User is responsible to close tha stream handle then.
+ * @param [out] p_need_close   Pointer to the variable that is set to whether
+ *                             fclose() should be called to release resources (1)
+ *                             or not (0).
+ * @param [out] p_next_token   Pointer that is set to remainder of @config_str.
+ * @oaram [out] p_filename     Pointer to the variable that is filled with the
+ *                             resulted name of the log file (if it is not NULL).
+ *                             Caller is responsible to release memory then.
+ *
+ * @return UCS_OK if successful, or error code otherwise.
  */
 ucs_status_t
 ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
                        FILE **p_fstream, int *p_need_close,
-                       const char **p_next_token);
+                       const char **p_next_token, char **p_filename);
 
 
 /**

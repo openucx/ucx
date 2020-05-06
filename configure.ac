@@ -29,9 +29,10 @@ AC_USE_SYSTEM_EXTENSIONS
 AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
 
-AC_CHECK_PROG(GITBIN,git,yes)
+AC_CHECK_PROG(GITBIN, git, yes)
 AS_IF([test x"${GITBIN}" = x"yes"],
-      [AC_SUBST(SCM_BRANCH,  esyscmd([sh -c 'git symbolic-ref --short   HEAD']))
+      [# remove preceding "refs/heads/" (11 characters) for symbolic ref
+       AC_SUBST(SCM_BRANCH,  esyscmd([sh -c 'git symbolic-ref --quiet   HEAD | sed "s/^.\{11\}//"']))
        AC_SUBST(SCM_VERSION, esyscmd([sh -c 'git rev-parse    --short=7 HEAD']))],
       [AC_SUBST(SCM_BRANCH,  "<unknown>")
        AC_SUBST(SCM_VERSION, "0000000")])
@@ -365,11 +366,12 @@ AC_CONFIG_FILES([
                  test/apps/Makefile
                  test/apps/iodemo/Makefile
                  test/apps/sockaddr/Makefile
-                 test/examples/Makefile
+                 test/apps/profiling/Makefile
                  test/mpi/Makefile
                  bindings/java/Makefile
                  bindings/java/pom.xml
                  bindings/java/src/main/native/Makefile
+                 examples/Makefile
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

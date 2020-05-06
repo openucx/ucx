@@ -80,14 +80,9 @@ enum {
     UCP_RECV_DESC_FLAG_EAGER_LAST     = UCS_BIT(5), /* Last fragment of eager tag message.
                                                        Used by tag offload protocol. */
     UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(6), /* Rendezvous request */
-    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(7), /* Descriptor was allocated with malloc
+    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(7)  /* Descriptor was allocated with malloc
                                                        and must be freed, not returned to the
-                                                       memory pool */
-    UCP_RECV_DESC_FLAG_AM_HDR         = UCS_BIT(8), /* Descriptor was orignally allocated by
-                                                       uct and the ucp level am header must
-                                                       be accounted for when releasing
-                                                       descriptors */
-    UCP_RECV_DESC_FLAG_AM_REPLY       = UCS_BIT(9)  /* AM that needed a reply */
+                                                       memory pool or UCT */
 };
 
 
@@ -104,20 +99,21 @@ enum {
  * Request in progress.
  */
 struct ucp_request {
-    ucs_status_t                  status;  /* Operation status */
-    uint32_t                      flags;   /* Request flags */
+    ucs_status_t                  status;     /* Operation status */
+    uint32_t                      flags;      /* Request flags */
+    void                          *user_data; /* Completion user data */
 
     union {
 
         /* "send" part - used for tag_send, am_send, stream_send, put, get, and atomic
          * operations */
         struct {
-            ucp_ep_h              ep;
-            void                  *buffer;  /* Send buffer */
-            ucp_datatype_t        datatype; /* Send type */
-            size_t                length;   /* Total length, in bytes */
-            ucs_memory_type_t     mem_type; /* Memory type */
-            ucp_send_callback_t   cb;       /* Completion callback */
+            ucp_ep_h                ep;
+            void                    *buffer;    /* Send buffer */
+            ucp_datatype_t          datatype;   /* Send type */
+            size_t                  length;     /* Total length, in bytes */
+            ucs_memory_type_t       mem_type;   /* Memory type */
+            ucp_send_nbx_callback_t cb;         /* Completion callback */
 
             union {
                 ucp_wireup_msg_t  wireup;
@@ -260,12 +256,13 @@ struct ucp_request {
 
             union {
                 struct {
-                    ucp_tag_t               tag;      /* Expected tag */
-                    ucp_tag_t               tag_mask; /* Expected tag mask */
-                    uint64_t                sn;       /* Tag match sequence */
-                    ucp_tag_recv_callback_t cb;       /* Completion callback */
-                    ucp_tag_recv_info_t     info;     /* Completion info to fill */
-                    ssize_t                 remaining; /* How much more data to be received */
+                    ucp_tag_t                   tag;        /* Expected tag */
+                    ucp_tag_t                   tag_mask;   /* Expected tag mask */
+                    uint64_t                    sn;         /* Tag match sequence */
+                    ucp_tag_recv_nbx_callback_t cb;         /* Completion callback */
+                    ucp_tag_recv_info_t         info;       /* Completion info to fill */
+                    ssize_t                     remaining;  /* How much more data
+                                                             * to be received */
 
                     /* Can use union, because rdesc is used in expected flow,
                      * while non_contig_buf is used in unexpected flow only. */
@@ -276,9 +273,9 @@ struct ucp_request {
                                                                 non-contig unexpected
                                                                 message in tag offload flow. */
                     };
-                    ucp_worker_iface_t      *wiface;  /* Cached iface this request
-                                                         is received on. Used in
-                                                         tag offload expected callbacks*/
+                    ucp_worker_iface_t      *wiface;    /* Cached iface this request
+                                                           is received on. Used in
+                                                           tag offload expected callbacks*/
                 } tag;
 
                 struct {
@@ -322,19 +319,17 @@ struct ucp_request {
  */
 struct ucp_recv_desc {
     union {
-        ucs_list_link_t     tag_list[2];    /* Hash list TAG-element */
-        ucs_queue_elem_t    stream_queue;   /* Queue STREAM-element */
-        ucs_queue_elem_t    tag_frag_queue; /* Tag fragments queue */
+        ucs_list_link_t     tag_list[2];     /* Hash list TAG-element */
+        ucs_queue_elem_t    stream_queue;    /* Queue STREAM-element */
+        ucs_queue_elem_t    tag_frag_queue;  /* Tag fragments queue */
     };
-    uint32_t                length;         /* Received length */
-    uint32_t                payload_offset; /* Offset from end of the descriptor
-                                             * to AM data */
-    uint16_t                flags;          /* Flags */
-    int16_t                 priv_length;    /* Number of bytes consumed from
-                                               headroom private space, except the
-                                               space needed for ucp_recv_desc itself.
-                                               It is used for releasing descriptor
-                                               back to UCT only */
+    uint32_t                length;          /* Received length */
+    uint32_t                payload_offset;  /* Offset from end of the descriptor
+                                              * to AM data */
+    uint16_t                flags;           /* Flags */
+    int16_t                 uct_desc_offset; /* Offset which needs to be
+                                                substructed from rdesc when
+                                                releasing it back to UCT */
 };
 
 

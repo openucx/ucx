@@ -168,10 +168,12 @@ static inline void ucx_perf_get_time(ucx_perf_context_t *perf)
     perf->current.time_acc = ucs_get_accurate_time();
 }
 
-static inline void ucx_perf_omp_barrier()
+static inline void ucx_perf_omp_barrier(ucx_perf_context_t *perf)
 {
 #if _OPENMP
+    if (perf->params.thread_count > 1) {
 #pragma omp barrier
+    }
 #endif
 }
 

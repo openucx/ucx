@@ -7,7 +7,7 @@
 #include "ib_mlx5.h"
 
 
-static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
+static UCS_F_ALWAYS_INLINE UCS_F_NON_NULL struct mlx5_cqe64*
 uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned cqe_index)
 {
     return UCS_PTR_BYTE_OFFSET(cq->cq_buf, ((cqe_index & (cq->cq_length - 1)) <<
@@ -23,7 +23,7 @@ uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned cqe_index, unsigned mask)
 static UCS_F_ALWAYS_INLINE int
 uct_ib_mlx5_cqe_stride_index(struct mlx5_cqe64* cqe)
 {
-#if HAVE_STRUCT_MLX5_CQE64_IB_STRIDE_INDEX
+#ifdef HAVE_STRUCT_MLX5_CQE64_IB_STRIDE_INDEX
     return ntohs(cqe->ib_stride_index);
 #else
     uint16_t *stride = (uint16_t*)&cqe->rsvd20[2];
@@ -83,7 +83,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
     }
 
     cq->cq_ci = cqe_index + 1;
-    return cqe; /* TODO optimize - let complier know cqe is not null */
+    return cqe;
 }
 
 
@@ -509,7 +509,7 @@ uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t wqe_index)
 static ucs_status_t UCS_F_MAYBE_UNUSED
 uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
                             uct_ib_mlx5_qp_t *qp,
-                            uct_ib_qp_attr_t *attr)
+                            uct_ib_mlx5_qp_attr_t *attr)
 {
     ucs_status_t status;
 
@@ -519,20 +519,20 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
     }
 
 #if HAVE_DECL_IBV_EXP_CREATE_QP
-    attr->ibv.comp_mask       = IBV_EXP_QP_INIT_ATTR_PD;
-    attr->ibv.pd              = uct_ib_iface_md(iface)->pd;
+    attr->super.ibv.comp_mask       = IBV_EXP_QP_INIT_ATTR_PD;
+    attr->super.ibv.pd              = uct_ib_iface_md(iface)->pd;
 #elif HAVE_DECL_IBV_CREATE_QP_EX
-    attr->ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
+    attr->super.ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
     if (qp->verbs.rd->pd != NULL) {
-        attr->ibv.pd          = qp->verbs.rd->pd;
+        attr->super.ibv.pd          = qp->verbs.rd->pd;
     } else {
-        attr->ibv.pd          = uct_ib_iface_md(iface)->pd;
+        attr->super.ibv.pd          = uct_ib_iface_md(iface)->pd;
     }
 #endif
 
-#if HAVE_IBV_EXP_RES_DOMAIN
-    attr->ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
-    attr->ibv.res_domain      = qp->verbs.rd->ibv_domain;
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
+    attr->super.ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
+    attr->super.ibv.res_domain      = qp->verbs.rd->ibv_domain;
 #endif
 
     return UCS_OK;
