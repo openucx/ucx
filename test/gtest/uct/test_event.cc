@@ -12,6 +12,7 @@ extern "C" {
 }
 #include <common/test.h>
 #include "uct_test.h"
+#include "uct_p2p_test.h"
 
 class test_uct_event : public uct_test {
 public:
@@ -169,3 +170,86 @@ UCS_TEST_SKIP_COND_P(test_uct_event, sig_am,
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_event);
+
+
+class uct_p2p_test_event : public uct_p2p_test {
+public:
+    uct_p2p_test_event(): uct_p2p_test(0) {}
+
+    static ucs_log_level_t orig_log_level;
+    static unsigned flushed_qp_num;
+
+    ucs_status_t send(uct_ep_h ep, const mapped_buffer &sendbuf,
+                      const mapped_buffer &recvbuf) {
+        return uct_ep_put_short(ep, sendbuf.ptr(), sendbuf.length(),
+                                recvbuf.addr(), recvbuf.rkey());
+    }
+
+    static ucs_log_func_rc_t
+    last_wqe_check_log(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap)
+    {
+        std::string msg = format_message(message, ap);
+
+        sscanf(msg.c_str(), "IB Async event on %*s SRQ-attached QP 0x%x was flushed", &flushed_qp_num);
+
+        return (level <= orig_log_level) ? UCS_LOG_FUNC_RC_CONTINUE
+            : UCS_LOG_FUNC_RC_STOP;
+    }
+
+    uint32_t check_flush_qp(entity &e) {
+        unsigned char *addr = (unsigned char *)alloca(e.iface_attr().ep_addr_len);
+
+        uct_ep_get_address(e.ep(0), (uct_ep_addr_t *)addr);
+        uint32_t qp_num = addr[0] |
+            ((uint32_t)addr[1] << 8) |
+            ((uint32_t)addr[2] << 16);
+
+        e.destroy_eps();
+        uint64_t timeout = 100000000;
+        while (flushed_qp_num != qp_num && timeout > 0) {
+            timeout--;
+            ucs_memory_bus_load_fence();
+        }
+
+        return timeout > 0;
+    }
+};
+
+UCS_TEST_P(uct_p2p_test_event, last_wqe, "ASYNC_EVENTS=y")
+{
+    const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
+    ucs_assert_always(r != NULL);
+
+    mapped_buffer sendbuf(0, 0, sender());
+    mapped_buffer recvbuf(0, 0, receiver());
+
+    ucs_log_push_handler(last_wqe_check_log);
+    orig_log_level = ucs_global_opts.log_component.log_level;
+    ucs_global_opts.log_component.log_level = UCS_LOG_LEVEL_DEBUG;
+    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
+        UCS_TEST_SKIP;
+    }
+
+    UCS_TEST_SCOPE_EXIT() {
+        ucs_global_opts.log_component.log_level = orig_log_level;
+        ucs_log_pop_handler();
+    } UCS_TEST_SCOPE_EXIT_END
+
+    blocking_send(static_cast<send_func_t>(&uct_p2p_test_event::send),
+                  sender_ep(), sendbuf, recvbuf, true);
+
+    if (r->loopback) {
+        ASSERT_TRUE(check_flush_qp(sender()));
+    } else {
+        ASSERT_TRUE(check_flush_qp(sender()));
+        ASSERT_TRUE(check_flush_qp(receiver()));
+    }
+}
+
+ucs_log_level_t uct_p2p_test_event::orig_log_level;
+unsigned uct_p2p_test_event::flushed_qp_num;
+
+_UCT_INSTANTIATE_TEST_CASE(uct_p2p_test_event, rc_mlx5);
