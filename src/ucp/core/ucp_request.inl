@@ -637,4 +637,15 @@ static UCS_F_ALWAYS_INLINE uintptr_t ucp_request_get_dest_ep_ptr(ucp_request_t *
     return ucp_ep_dest_ep_ptr(req->send.ep);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_request_set_send_callback_param(const ucp_request_param_t *param,
+                                    ucp_request_t *req)
+{
+    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
+        ucp_request_set_callback(req, send.cb, param->cb.send,
+                                 (param->op_attr_mask & UCP_OP_ATTR_FIELD_USER_DATA) ?
+                                 param->user_data : NULL);
+    }
+}
+
 #endif
