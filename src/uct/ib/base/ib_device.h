@@ -195,8 +195,7 @@ typedef struct {
         unsigned       port_num;
         unsigned       qp_num;
         unsigned       dct_num;
-        struct ibv_cq  *cq;
-        struct ibv_srq *srq;
+        void           *cookie;
     };
 } uct_ib_async_event_t;
 

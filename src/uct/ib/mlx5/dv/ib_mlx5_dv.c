@@ -179,14 +179,6 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err_free;
     }
 
-    status = uct_ib_mlx5_devx_subscribe_event(md, qp->devx.obj,
-                                              UCT_IB_MLX5_EVENT_TYPE_SRQ_LAST_WQE,
-                                              IBV_EVENT_QP_LAST_WQE_REACHED,
-                                              qp->qp_num);
-    if (status != UCS_OK) {
-        goto err_free;
-    }
-
     qp->type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
 
     attr->super.cap.max_send_wr = max_tx;

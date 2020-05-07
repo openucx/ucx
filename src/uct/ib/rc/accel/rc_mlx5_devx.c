@@ -4,6 +4,12 @@
 * See file LICENSE for terms.
 */
 
+/*
+ * Powerpc needs __SANE_USERSPACE_TYPES__ before <linux/types.h> to select
+ * 'int-ll64.h' and avoid compile warnings when printing __u64 with %llu.
+ */
+#define __SANE_USERSPACE_TYPES__
+
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -12,9 +18,116 @@
 
 #include <uct/api/uct.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/async/async.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 
+#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
+ucs_status_t uct_rc_mlx5_devx_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
+                                              uct_ib_mlx5_qp_t *qp,
+                                              unsigned event_num,
+                                              unsigned event_type,
+                                              unsigned event_data)
+{
+    uint64_t cookie;
+    uint16_t event;
+    int ret;
+
+    if (iface->event_channel == NULL) {
+        return UCS_OK;
+    }
+
+    event  = event_num;
+    cookie = event_type | ((uint64_t)event_data << UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT);
+    ret    = mlx5dv_devx_subscribe_devx_event(iface->event_channel, qp->devx.obj,
+                                              sizeof(event), &event, cookie);
+    if (ret) {
+        ucs_error("mlx5dv_devx_subscribe_devx_event() failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static void uct_rc_mlx5_devx_event_handler(int fd, void *arg)
+{
+    uct_rc_mlx5_iface_common_t *iface = arg;
+    uct_ib_md_t *md                   = uct_ib_iface_md(&iface->super.super);
+    struct mlx5dv_devx_async_event_hdr devx_event;
+    uct_ib_async_event_t event;
+    int ret;
+
+    ret = mlx5dv_devx_get_event(iface->event_channel, &devx_event, sizeof(devx_event));
+    if (ret < 0) {
+        ucs_warn("mlx5dv_devx_get_event() failed: %m");
+        return;
+    }
+
+    event.event_type = devx_event.cookie & UCT_IB_MLX5_DEVX_EVENT_TYPE_MASK;
+    switch (event.event_type) {
+    case IBV_EVENT_QP_LAST_WQE_REACHED:
+        event.qp_num = devx_event.cookie >> UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT;
+        break;
+    default:
+        ucs_warn("unexpected async event: %llx", devx_event.cookie);
+        return;
+    }
+
+    uct_ib_handle_async_event(&md->dev, &event);
+}
+
+ucs_status_t uct_rc_mlx5_devx_init_events(uct_rc_mlx5_iface_common_t *iface)
+{
+    uct_ib_mlx5_md_t *md  = ucs_derived_of(uct_ib_iface_md(&iface->super.super),
+                                           uct_ib_mlx5_md_t);
+    struct mlx5dv_devx_event_channel *event_channel;
+    ucs_status_t status;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) || !md->super.dev.async_events) {
+        iface->event_channel = NULL;
+        return UCS_OK;
+    }
+
+    event_channel = mlx5dv_devx_create_event_channel(
+            md->super.dev.ibv_context,
+            MLX5_IB_UAPI_DEVX_CR_EV_CH_FLAGS_OMIT_DATA);
+
+    if (event_channel == NULL) {
+            ucs_error("mlx5dv_devx_create_event_channel() failed: %m");
+            return UCS_ERR_IO_ERROR;
+    }
+
+    status = ucs_sys_fcntl_modfl(event_channel->fd, O_NONBLOCK, 0);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = ucs_async_set_event_handler(UCS_ASYNC_THREAD_LOCK_TYPE,
+            event_channel->fd, UCS_EVENT_SET_EVREAD,
+            uct_rc_mlx5_devx_event_handler, iface, NULL);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    iface->event_channel = event_channel;
+    return UCS_OK;
+
+err:
+    mlx5dv_devx_destroy_event_channel(event_channel);
+    iface->event_channel = NULL;
+    return status;
+}
+
+void uct_rc_mlx5_devx_free_events(uct_rc_mlx5_iface_common_t *iface)
+{
+    if (iface->event_channel == NULL) {
+        return;
+    }
+
+    ucs_async_remove_handler(iface->event_channel->fd, 1);
+    mlx5dv_devx_destroy_event_channel(iface->event_channel);
+}
+#endif
 
 static ucs_status_t
 uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
@@ -178,7 +291,7 @@ ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
     status = uct_rc_mlx5_devx_init_rx_common(iface, md, config, &dvpd,
                                              UCT_IB_MLX5DV_ADDR_OF(rmpc, rmpc, wq));
     if (status != UCS_OK) {
-        return UCS_OK;
+        return status;
     }
 
     iface->rx.srq.devx.obj = mlx5dv_devx_obj_create(dev->ibv_context,

@@ -176,7 +176,7 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     event.event_type = ibevent.event_type;
     switch (event.event_type) {
     case IBV_EVENT_CQ_ERR:
-        event.cq = ibevent.element.cq;
+        event.cookie = ibevent.element.cq;
         break;
     case IBV_EVENT_QP_FATAL:
     case IBV_EVENT_QP_REQ_ERR:
@@ -190,7 +190,7 @@ static void uct_ib_async_event_handler(int fd, void *arg)
         break;
     case IBV_EVENT_SRQ_ERR:
     case IBV_EVENT_SRQ_LIMIT_REACHED:
-        event.srq = ibevent.element.srq;
+        event.cookie = ibevent.element.srq;
         break;
     case IBV_EVENT_DEVICE_FATAL:
     case IBV_EVENT_PORT_ERR:
@@ -229,7 +229,7 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
     switch (event->event_type) {
     case IBV_EVENT_CQ_ERR:
         snprintf(event_info, sizeof(event_info), "%s on CQ %p",
-                 ibv_event_type_str(event->event_type), event->cq);
+                 ibv_event_type_str(event->event_type), event->cookie);
         level = UCS_LOG_LEVEL_ERROR;
         break;
     case IBV_EVENT_QP_FATAL:
@@ -251,11 +251,11 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
     case IBV_EVENT_SRQ_ERR:
         level = UCS_LOG_LEVEL_ERROR;
         snprintf(event_info, sizeof(event_info), "%s on SRQ %p",
-                 ibv_event_type_str(event->event_type), event->srq);
+                 ibv_event_type_str(event->event_type), event->cookie);
         break;
     case IBV_EVENT_SRQ_LIMIT_REACHED:
         snprintf(event_info, sizeof(event_info), "%s on SRQ %p",
-                 ibv_event_type_str(event->event_type), event->srq);
+                 ibv_event_type_str(event->event_type), event->cookie);
         level = UCS_LOG_LEVEL_DEBUG;
         break;
     case IBV_EVENT_DEVICE_FATAL:
