@@ -399,7 +399,14 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
 void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 {
-    if (req->send.state.uct_comp.func) {
+    /*
+     * FIXME should not fast-forward requests owned by UCT
+     */
+    ucp_trace_req(req, "fast-forward with status %s", ucs_status_string(status));
+
+    if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
+        ucp_ep_flush_request_ff(req, status);
+    } else if (req->send.state.uct_comp.func) {
         req->send.state.dt.offset = req->send.length;
         req->send.state.uct_comp.count = 0;
         req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
