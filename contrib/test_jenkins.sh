@@ -902,7 +902,7 @@ run_io_demo() {
 
 	echo "==== Running UCP IO demo  ===="
 
-	test_args="$@"
+	test_args="$@ -o write,read -d 128:4194304 -i 10000 -w 10"
 	test_name=io_demo
 
 	if [ ! -x ${test_name} ]
