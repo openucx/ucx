@@ -437,6 +437,32 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
     return UCS_OK;
 }
 
+void uct_perf_ep_flush_b(ucx_perf_context_t *perf, int peer_index)
+{
+    uct_ep_h ep = perf->uct.peers[peer_index].ep;
+    uct_completion_t comp;
+    ucs_status_t status;
+    int started;
+
+    started    = 0;
+    comp.func  = NULL;
+    comp.count = 2;
+    do {
+        if (!started) {
+            status = uct_ep_flush(ep, 0, &comp);
+            if (status == UCS_OK) {
+                --comp.count;
+            } else if (status == UCS_INPROGRESS) {
+                started = 1;
+            } else if (status != UCS_ERR_NO_RESOURCE) {
+                ucs_error("uct_ep_flush() failed: %s", ucs_status_string(status));
+                return;
+            }
+        }
+        uct_worker_progress(perf->uct.worker);
+    } while (comp.count > 1);
+}
+
 void uct_perf_iface_flush_b(ucx_perf_context_t *perf)
 {
     ucs_status_t status;
@@ -445,6 +471,9 @@ void uct_perf_iface_flush_b(ucx_perf_context_t *perf)
         status = uct_iface_flush(perf->uct.iface, 0, NULL);
         uct_worker_progress(perf->uct.worker);
     } while (status == UCS_INPROGRESS);
+    if (status != UCS_OK) {
+        ucs_error("uct_iface_flush() failed: %s", ucs_status_string(status));
+    }
 }
 
 static inline uint64_t __get_flag(uct_perf_data_layout_t layout, uint64_t short_f,

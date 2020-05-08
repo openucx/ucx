@@ -59,6 +59,12 @@ const test_perf::test_spec test_uct_perf::tests[] =
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 600.0, 15000.0,
     0 },
 
+  { "am zcopy bw flush ep", "MB/sec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCT_PERF_DATA_LAYOUT_ZCOPY, 0, 1, { 1000 }, 32, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 600.0, 15000.0,
+    UCX_PERF_TEST_FLAG_FLUSH_EP },
+
   { "put latency", "usec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
     UCT_PERF_DATA_LAYOUT_SHORT, 0, 1, { 8 }, 1, 100000lu,
