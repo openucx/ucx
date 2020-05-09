@@ -39,6 +39,7 @@ noinst_HEADERS = \
 	dt/dt_contig.h \
 	dt/dt_iov.h \
 	dt/dt_generic.h \
+	proto/lane_type.h \
 	proto/proto_am.h \
 	proto/proto_am.inl \
 	rma/rma.h \
@@ -85,6 +86,7 @@ libucp_la_SOURCES = \
 	dt/dt_iov.c \
 	dt/dt_generic.c \
 	dt/dt.c \
+	proto/lane_type.c \
 	proto/proto_am.c \
 	rma/amo_basic.c \
 	rma/amo_send.c \

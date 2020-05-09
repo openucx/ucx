@@ -10,6 +10,7 @@
 
 #include "ucp_types.h"
 
+#include <ucp/proto/lane_type.h>
 #include <ucp/wireup/ep_match.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/queue.h>
@@ -107,12 +108,14 @@ typedef struct ucp_ep_config_key {
     ucp_lane_index_t       num_lanes;    /* Number of active lanes */
 
     struct {
-        ucp_rsc_index_t    rsc_index;    /* Resource index */
-        ucp_lane_index_t   proxy_lane;   /* UCP_NULL_LANE - no proxy
+        ucp_rsc_index_t      rsc_index;    /* Resource index */
+        ucp_lane_index_t     proxy_lane;   /* UCP_NULL_LANE - no proxy
                                             otherwise - in which lane the real
                                             transport endpoint is stored */
-        ucp_md_index_t     dst_md_index; /* Destination memory domain index */
-        uint8_t            path_index;   /* Device path index */
+        ucp_md_index_t       dst_md_index; /* Destination memory domain index */
+        uint8_t              path_index;   /* Device path index */
+        ucp_lane_type_mask_t lane_types;   /* Which types of operations this lane
+                                              was selected for */
     } lanes[UCP_MAX_LANES];
 
     ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
