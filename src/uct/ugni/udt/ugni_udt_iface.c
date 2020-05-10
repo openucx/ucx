@@ -4,12 +4,18 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ugni_udt_iface.h"
 #include "ugni_udt_ep.h"
 #include <uct/ugni/base/ugni_device.h>
 #include <uct/ugni/base/ugni_md.h>
 #include <poll.h>
 
+
+extern ucs_class_t UCS_CLASS_DECL_NAME(uct_ugni_udt_iface_t);
 
 static ucs_config_field_t uct_ugni_udt_iface_config_table[] = {
     {"", "ALLOC=huge,thp,mmap,heap", NULL,

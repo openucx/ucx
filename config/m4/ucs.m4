@@ -43,6 +43,29 @@ AS_IF([test "x$enable_backtrace_detail" = xyes],
 	AC_CHECK_TYPES([struct dl_phdr_info], [], [AC_MSG_WARN([struct dl_phdr_info not defined])];BT=0,
 					[#define _GNU_SOURCE 1
 					 #include <link.h>]) 
+	AC_CHECK_DECLS([bfd_get_section_flags, bfd_section_flags, bfd_get_section_vma, bfd_section_vma],
+		       [], [], [#include <bfd.h>])
+
+	AC_MSG_CHECKING([bfd_section_size API version])
+	AC_LANG_PUSH([C])
+	SAVE_CFLAGS="$CFLAGS"
+	AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+		#include <bfd.h>
+		int main(int argc, char** argv) {
+			asection *sec = malloc(sizeof(*sec));
+			bfd_section_size(sec);
+			free(sec);
+			return 0;
+		} ]])],
+		[AC_MSG_RESULT([1-arg API])
+		 AC_DEFINE([HAVE_1_ARG_BFD_SECTION_SIZE], [1],
+			   [bfd_section_size 1-arg version])],
+		[AC_MSG_RESULT([2-args API])
+		 AC_DEFINE([HAVE_1_ARG_BFD_SECTION_SIZE], [0],
+			   [bfd_section_size 2-args version])])
+	CFLAGS="$SAVE_CFLAGS"
+	AC_LANG_POP([C])
+
 	if test "x$BT" = "x1"; then
 		AC_CHECK_FUNCS([cplus_demangle])
 		AC_DEFINE([HAVE_DETAILED_BACKTRACE], 1, [Enable detailed backtrace])
@@ -123,7 +146,6 @@ AS_IF([test "x$enable_logging" != xno],
         [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_INFO], [Highest log level])]
     )
 
-
 #
 # Disable assertions
 #
@@ -143,7 +165,7 @@ AC_MSG_CHECKING([__attribute__((constructor))])
 CHECK_CROSS_COMP([AC_LANG_SOURCE([static int rc = 1;
                   static void constructor_test() __attribute__((constructor));
                   static void constructor_test() { rc = 0; }
-                  int main() { return rc; }])],
+                  int main(int argc, char** argv) { return rc; }])],
                 [AC_MSG_RESULT([yes])],
                 [AC_MSG_ERROR([Cannot continue. Please use compiler that
                              supports __attribute__((constructor))])]
@@ -156,7 +178,7 @@ CHECK_CROSS_COMP([AC_LANG_SOURCE([static int rc = 1;
 AC_ARG_WITH([cache-line-size],
         [AC_HELP_STRING([--with-cache-line-size=SIZE],
             [Build UCX with cache line size defined by user. This parameter
-             overwrites defaulf cache line sizes defines in
+             overwrites default cache line sizes defines in
              UCX (x86-64: 64, Power: 128, ARMv8: 64/128). The supported values are: 64, 128])],
         [],
         [with_cache_line_size=no])

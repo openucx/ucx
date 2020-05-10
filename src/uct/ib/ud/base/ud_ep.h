@@ -185,10 +185,8 @@ enum {
 
 /* TODO: optimize endpoint memory footprint */
 enum {
-    UCT_UD_EP_FLAG_ASYNC_COMPS       = UCS_BIT(0), /* set if there are completions that
-                                                    * were picked by async thread and queued */
-    UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(1), /* set if the endpoint was disconnected */
-    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(2), /* EP is was created as internal */
+    UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(0), /* set if the endpoint was disconnected */
+    UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1), /* EP was created as internal */
 
     /* debug flags */
     UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(3), /* CREQ message was received */
@@ -220,11 +218,12 @@ struct uct_ud_ep {
          uct_ud_psn_t           psn;          /* Next PSN to send */
          uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent */
          uct_ud_psn_t           acked_psn;    /* last psn that was acked by remote side */
-         uint16_t               err_skb_count;/* number of failed SKBs on the ep */
+         uint16_t               resend_count; /* number of in-flight resends on the ep */
          ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
          uct_ud_ep_pending_op_t pending;      /* pending ops */
          ucs_time_t             send_time;    /* tx time of last packet */
-         ucs_time_t             slow_tick;    /* timeout to trigger slow timer */
+         ucs_time_t             resend_time;  /* tx time of last resent packet */
+         ucs_time_t             tick;         /* timeout to trigger timer */
          UCS_STATS_NODE_DECLARE(stats)
          UCT_UD_EP_HOOK_DECLARE(tx_hook)
     } tx;
@@ -248,7 +247,8 @@ struct uct_ud_ep {
     uint32_t         conn_id;      /* connection id. assigned in connect_to_iface() */
     uint16_t         flags;
     uint8_t          rx_creq_count; /* TODO: remove when reason for DUP/OOO CREQ is found */
-    ucs_wtimer_t     slow_timer;
+    uint8_t          path_index;
+    ucs_wtimer_t     timer;
     ucs_time_t       close_time;   /* timestamp of closure */
     UCS_STATS_NODE_DECLARE(stats)
     UCT_UD_EP_HOOK_DECLARE(timer_hook)
@@ -257,7 +257,7 @@ struct uct_ud_ep {
 #endif
 };
 
-UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*)
+UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*, const uct_ep_params_t*)
 
 /**
  * UD pending request private data
@@ -276,7 +276,7 @@ uct_ud_pending_req_priv(uct_pending_req_t *req)
 
 
 void uct_ud_tx_wnd_purge_outstanding(uct_ud_iface_t *iface, uct_ud_ep_t *ud_ep,
-                                     ucs_status_t status);
+                                     ucs_status_t status, int is_async);
 
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep, unsigned flags,
                              uct_completion_t *comp);
@@ -298,11 +298,14 @@ void   uct_ud_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
 
 void   uct_ud_ep_disconnect(uct_ep_h ep);
 
+void uct_ud_ep_window_release_completed(uct_ud_ep_t *ep, int is_async);
+
 
 /* helper function to create/destroy new connected ep */
 ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
                                                const uct_ib_address_t *ib_addr,
                                                const uct_ud_iface_addr_t *if_addr,
+                                               unsigned path_index,
                                                uct_ud_ep_t **new_ep_p,
                                                uct_ud_send_skb_t **skb_p);
 
@@ -313,8 +316,8 @@ void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep,
 uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
 
 ucs_arbiter_cb_result_t
-uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_elem_t *elem,
-                     void *arg);
+uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                     ucs_arbiter_elem_t *elem, void *arg);
 
 void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 
@@ -338,29 +341,11 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface,
 
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_neth_ctl_ack(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    neth->psn         = ep->tx.psn;
-    neth->ack_psn     = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
-    neth->packet_type = ep->dest_ep_id;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_ud_neth_ctl_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
-{
-    neth->psn         = ep->tx.psn;
-    neth->ack_psn     = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
-    neth->packet_type = ep->dest_ep_id|UCT_UD_PACKET_FLAG_ACK_REQ;
-}
-
-static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_init_data(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->psn = ep->tx.psn;
     neth->ack_psn = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
 }
-
-
 
 static inline int uct_ud_ep_compare(uct_ud_ep_t *a, uct_ud_ep_t *b)
 {

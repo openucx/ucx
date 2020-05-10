@@ -407,8 +407,9 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep)
     return wireup_ep->aux_rsc_index;
 }
 
-ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
-                                   ucp_rsc_index_t rsc_index, int connect_aux,
+ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
+                                   ucp_rsc_index_t rsc_index,
+                                   unsigned path_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address)
 {
     ucp_wireup_ep_t *wireup_ep     = ucp_wireup_ep(uct_ep);
@@ -420,7 +421,9 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
 
     ucs_assert(wireup_ep != NULL);
 
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
+    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
+                               UCT_EP_PARAM_FIELD_PATH_INDEX;
+    uct_ep_params.path_index = path_index;
     uct_ep_params.iface      = ucp_worker_iface(worker, rsc_index)->iface;
     status = uct_ep_create(&uct_ep_params, &next_ep);
     if (status != UCS_OK) {
@@ -437,7 +440,7 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {
-        status = ucp_wireup_ep_connect_aux(wireup_ep, ucp_ep_init_flags,
+        status = ucp_wireup_ep_connect_aux(wireup_ep, ep_init_flags,
                                            remote_address);
         if (status != UCS_OK) {
             goto err_destroy_next_ep;
@@ -480,7 +483,7 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
 
     if (found_supported_tl) {
         status = ucp_address_pack(worker, NULL, tl_bitmap,
-                                  UCP_ADDRESS_PACK_FLAG_ALL, NULL,
+                                  UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
                                   address_length_p, (void**)address_p);
     } else {
         ucs_error("no supported sockaddr auxiliary transports found for %s", dev_name);
@@ -491,8 +494,9 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
     return status;
 }
 
-ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name,
-                                                void *priv_data)
+ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
+                                                 const uct_cm_ep_priv_data_pack_args_t
+                                                 *pack_args, void *priv_data)
 {
     ucp_wireup_sockaddr_data_t *sa_data = priv_data;
     ucp_wireup_ep_t *wireup_ep          = arg;
@@ -506,9 +510,15 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     ucs_status_t status;
     uint64_t tl_bitmap;
     char aux_tls_str[64];
+    const char *dev_name;
+
+    ucs_assert_always(pack_args->field_mask &
+                      UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
+
+    dev_name = pack_args->dev_name;
 
     status = ucp_address_pack(worker, NULL, UINT64_MAX,
-                              UCP_ADDRESS_PACK_FLAG_ALL, NULL,
+                              UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
                               &address_length, (void**)&worker_address);
     if (status != UCS_OK) {
         goto err;
@@ -517,8 +527,10 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
     conn_priv_len = sizeof(*sa_data) + address_length;
 
     /* pack client data */
-    sa_data->err_mode = ucp_ep_config(ucp_ep)->key.err_mode;
-    sa_data->ep_ptr   = (uintptr_t)ucp_ep;
+    ucs_assert((int)ucp_ep_config(ucp_ep)->key.err_mode <= UINT8_MAX);
+    sa_data->err_mode  = ucp_ep_config(ucp_ep)->key.err_mode;
+    sa_data->ep_ptr    = (uintptr_t)ucp_ep;
+    sa_data->dev_index = UCP_NULL_RESOURCE; /* Not used */
 
     attrs = ucp_worker_iface_get_attr(worker, sockaddr_rsc);
 
@@ -561,7 +573,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg, const char *dev_name
         ucs_trace("sockaddr tl ("UCT_TL_RESOURCE_DESC_FMT") sending partial address: "
                   "(%s transports) (len=%zu) to server. "
                   "total client priv data len: %zu",
-                  context->tl_rscs[sockaddr_rsc].tl_rsc.tl_name, dev_name,
+                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
                   ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
                                     sizeof(aux_tls_str)),
                   address_length, conn_priv_len);

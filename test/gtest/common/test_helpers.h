@@ -10,6 +10,8 @@
 
 #include "gtest.h"
 
+#include <common/mem_buffer.h>
+
 #include <ucs/config/types.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
@@ -295,6 +297,12 @@ uint16_t get_port();
 void *mmap_fixed_address();
 
 
+/*
+ * Returns a compacted string with just head and tail, e.g "xxx...yyy"
+ */
+std::string compact_string(const std::string &str, size_t length);
+
+
 /**
  * Return the IP address of the given interface address.
  */
@@ -316,6 +324,10 @@ public:
 
     void set_sock_addr(const struct sockaddr &addr, const size_t size);
 
+    void reset_to_any();
+
+    bool operator==(const struct sockaddr_storage &sockaddr) const;
+
     void set_port(uint16_t port);
 
     uint16_t get_port() const;
@@ -323,6 +335,8 @@ public:
     size_t get_addr_size() const;
 
     ucs_sock_addr_t to_ucs_sock_addr() const;
+
+    std::string to_str() const;
 
     const struct sockaddr* get_sock_addr_ptr() const;
 
@@ -360,6 +374,11 @@ std::ostream& operator<<(std::ostream& os, const std::vector<char>& vec);
 static inline int rand() {
     /* coverity[dont_call] */
     return ::rand();
+}
+
+static inline void srand(unsigned seed) {
+    /* coverity[dont_call] */
+    return ::srand(seed);
 }
 
 void fill_random(void *data, size_t size);
@@ -630,6 +649,10 @@ public:
         return m_initialized ? m_value : NULL;
     }
 
+    T operator->() const {
+        return get();
+    }
+
 private:
 
     void release() {
@@ -764,6 +787,12 @@ private:
 };
 
 
+template <typename T>
+static void deleter(T *ptr) {
+    delete ptr;
+}
+
+
 extern int    perf_retry_count;
 extern double perf_retry_interval;
 
@@ -811,6 +840,17 @@ private:
 };
 
 } // detail
+
+/**
+ * N-ary Cartesian product over the N vectors provided in the input vector
+ * The cardinality of the result vector:
+ * output.size = input[0].size * input[1].size * ... * input[input.size].size
+ */
+template<typename T>
+void cartesian_product(std::vector<std::vector<T> > &output,
+                       const std::vector<std::vector<T> > &input);
+
+std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs();
 
 } // ucs
 

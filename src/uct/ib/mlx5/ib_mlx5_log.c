@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ib_mlx5_log.h"
 
 #include <uct/ib/base/ib_device.h>
@@ -141,12 +145,12 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
 }
 
 static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
-                                       struct ibv_sge *sg_list, int *index,
+                                       struct ibv_sge *sg_list, int *sg_index,
                                        int *is_inline)
 {
     struct mlx5_wqe_data_seg *dpseg;
     struct mlx5_wqe_inl_data_seg *inl;
-    struct ibv_sge *sg = &sg_list[*index];
+    struct ibv_sge *sg = &sg_list[*sg_index];
     int byte_count;
     void *addr;
     int ds;
@@ -165,14 +169,14 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
             (sg + 1)->addr   = (uintptr_t)qstart;
             (sg + 1)->lkey   = 0;
             (sg + 1)->length = byte_count - sg->length;
-            ++(*index);
+            ++(*sg_index);
         } else {
             sg->length       = byte_count;
         }
         *is_inline = 1;
         ds         = ucs_div_round_up(sizeof(*inl) + byte_count,
                                      UCT_IB_MLX5_WQE_SEG_SIZE);
-        ++(*index);
+        ++(*sg_index);
     } else {
         dpseg      = *dseg_p;
         sg->addr   = be64toh(dpseg->addr);
@@ -180,7 +184,7 @@ static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,
         sg->lkey   = ntohl(dpseg->lkey);
         *is_inline = 0;
         ds         = 1;
-        ++(*index);
+        ++(*sg_index);
     }
 
     *dseg_p = UCS_PTR_BYTE_OFFSET(*dseg_p, ds * UCT_IB_MLX5_WQE_SEG_SIZE);
@@ -234,7 +238,8 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
 
             sgid_index = (htonl(grh_av->grh_gid_fl) >> 20) & UCS_MASK(8);
             snprintf(p, endp - p,  " sgix %d dgid %s tc %d]", sgid_index,
-                     inet_ntop(AF_INET6, grh_av->rgid, gid_buf, sizeof(gid_buf)),
+                     uct_ib_gid_str((union ibv_gid *)grh_av->rgid, gid_buf,
+                                    sizeof(gid_buf)),
                      grh_av->tclass);
         } else {
             snprintf(p, endp - p, "]");

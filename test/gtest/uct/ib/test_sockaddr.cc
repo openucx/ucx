@@ -11,6 +11,7 @@ extern "C" {
 #include <uct/api/uct.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/arch/atomic.h>
 }
 
 #include <queue>
@@ -43,7 +44,36 @@ public:
                           server_recv_req(0), delay_conn_reply(false) {
     }
 
+    void check_md_usability() {
+        uct_md_attr_t md_attr;
+        uct_md_config_t *md_config;
+        ucs_status_t status;
+        uct_md_h md;
+
+        status = uct_md_config_read(GetParam()->component, NULL, NULL, &md_config);
+        EXPECT_TRUE(status == UCS_OK);
+
+        status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
+                             md_config, &md);
+        EXPECT_TRUE(status == UCS_OK);
+        uct_config_release(md_config);
+
+        status = uct_md_query(md, &md_attr);
+        ASSERT_UCS_OK(status);
+
+        uct_md_close(md);
+
+        if (!(md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
+            UCS_TEST_SKIP_R(GetParam()->md_name.c_str() +
+                            std::string(" does not support client-server "
+                                        "connection establishment via sockaddr "
+                                        "without a cm"));
+        }
+    }
+
     void init() {
+        check_md_usability();
+
         uct_iface_params_t server_params, client_params;
         uint16_t port;
 
@@ -104,8 +134,9 @@ public:
                          << " Interface: " << GetParam()->dev_name;
     }
 
-    static ssize_t client_iface_priv_data_cb(void *arg, const char *dev_name,
-                                             void *priv_data)
+    static ssize_t client_iface_priv_data_cb(void *arg,
+                                             const uct_cm_ep_priv_data_pack_args_t
+                                             *pack_args, void *priv_data)
     {
         size_t *max_conn_priv = (size_t*)arg;
         size_t priv_data_len;
@@ -132,20 +163,22 @@ public:
         } else {
             uct_iface_accept(iface, conn_request);
         }
+        ucs_memory_cpu_store_fence();
         self->server_recv_req++;
     }
 
     static ucs_status_t err_handler(void *arg, uct_ep_h ep, ucs_status_t status)
     {
         test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr*>(arg);
-        self->err_count++;
+        ucs_atomic_add32(&self->err_count, 1);
         return UCS_OK;
     }
 
 protected:
     entity *server, *client;
     ucs::sock_addr_storage m_listen_addr, m_connect_addr;
-    volatile int err_count, server_recv_req;
+    volatile uint32_t err_count;
+    volatile int server_recv_req;
     std::queue<uct_conn_request_h> delayed_conn_reqs;
     bool delay_conn_reply;
 };
@@ -164,7 +197,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server)
     /* since the transport may support a graceful exit in case of an error,
      * make sure that the error handling flow wasn't invoked (there were no
      * errors) */
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
     /* the test may end before the client's ep got connected.
      * it should also pass in this case as well - the client's
      * ep shouldn't be accessed (for connection reply from the server) after the
@@ -182,8 +215,9 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
         progress();
     }
     ASSERT_EQ(1,   server_recv_req);
+    ucs_memory_cpu_load_fence();
     ASSERT_EQ(1ul, delayed_conn_reqs.size());
-    EXPECT_EQ(0,   err_count);
+    EXPECT_EQ(0ul, err_count);
     while (!delayed_conn_reqs.empty()) {
         uct_iface_accept(server->iface(), delayed_conn_reqs.front());
         delayed_conn_reqs.pop();
@@ -197,7 +231,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
     } else {
         EXPECT_EQ(UCS_OK, status);
     }
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
 }
 
 UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
@@ -211,8 +245,9 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
         progress();
     }
     ASSERT_EQ(1, server_recv_req);
+    ucs_memory_cpu_load_fence();
     ASSERT_EQ(1ul, delayed_conn_reqs.size());
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
     while (!delayed_conn_reqs.empty()) {
         uct_iface_reject(server->iface(), delayed_conn_reqs.front());
         delayed_conn_reqs.pop();
@@ -220,7 +255,7 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_reject_with_delay)
     while (err_count == 0) {
         progress();
     }
-    EXPECT_EQ(1, err_count);
+    EXPECT_EQ(1ul, err_count);
 }
 
 UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
@@ -254,7 +289,7 @@ UCS_TEST_P(test_uct_sockaddr, many_clients_to_one_server)
         progress();
     }
     ASSERT_TRUE(server_recv_req == num_clients);
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
 }
 
 UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
@@ -271,7 +306,7 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
         progress();
     }
     ASSERT_TRUE(server_recv_req == num_conns_on_client);
-    EXPECT_EQ(0, err_count);
+    EXPECT_EQ(0ul, err_count);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_sockaddr, err_handle,
@@ -380,7 +415,21 @@ public:
 
 protected:
 
-    void start_listen(uct_listener_conn_request_callback_t server_conn_req_cb) {
+    void skip_tcp_sockcm() {
+        uct_component_attr_t cmpt_attr = {0};
+        ucs_status_t status;
+
+        cmpt_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME;
+        /* coverity[var_deref_model] */
+        status = uct_component_query(GetParam()->component, &cmpt_attr);
+        ASSERT_UCS_OK(status);
+
+        if (!strcmp(cmpt_attr.name, "tcp")) {
+            UCS_TEST_SKIP_R("tcp cm is not fully implemented");
+        }
+    }
+
+    void start_listen(uct_cm_listener_conn_request_callback_t server_conn_req_cb) {
         uct_listener_params_t params;
 
         params.field_mask      = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
@@ -405,8 +454,9 @@ protected:
         self->m_server_disconnect_cnt++;
     }
 
-    static ssize_t client_priv_data_cb(void *arg, const char *dev_name,
-                                       void *priv_data)
+    static ssize_t client_priv_data_cb(void *arg,
+                                       const uct_cm_ep_priv_data_pack_args_t
+                                       *pack_args, void *priv_data)
     {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
         size_t priv_data_len;
@@ -417,6 +467,7 @@ protected:
     }
 
     void listen_and_connect() {
+        skip_tcp_sockcm();
         start_listen(test_uct_cm_sockaddr::conn_request_cb);
         m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
                           client_connect_cb, client_disconnect_cb, this);
@@ -426,14 +477,13 @@ protected:
     }
 
     virtual void server_accept(entity *server, uct_conn_request_h conn_request,
-                               uct_ep_server_connect_cb_t connect_cb,
+                               uct_cm_ep_server_conn_notify_callback_t notify_cb,
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
     {
-        server->accept(server->cm(), conn_request, connect_cb, disconnect_cb,
+        server->accept(server->cm(), conn_request, notify_cb, disconnect_cb,
                        user_data);
     }
-
 
     /*
      * Common section for the server's handling of a connection request.
@@ -444,22 +494,37 @@ protected:
      * false if not.
      */
     static bool common_conn_request(uct_listener_h listener, void *arg,
-                                    const char *local_dev_name,
-                                    uct_conn_request_h conn_request,
-                                    const uct_cm_remote_data_t *remote_data) {
+                                    const uct_cm_listener_conn_request_args_t
+                                    *conn_req_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
+        ucs_sock_addr_t m_connect_addr_sock_addr =
+                        self->m_connect_addr.to_ucs_sock_addr();
+        uct_conn_request_h conn_request;
+        const uct_cm_remote_data_t *remote_data;
+        uint16_t client_port;
         ucs_status_t status;
 
-        EXPECT_TRUE(ucs_test_all_flags(remote_data->field_mask,
-                                       (UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH |
-                                        UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA)));
+        EXPECT_TRUE(ucs_test_all_flags(conn_req_args->field_mask,
+                                       (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
+                                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_REMOTE_DATA  |
+                                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR)));
+
+        conn_request = conn_req_args->conn_request;
+        remote_data  = conn_req_args->remote_data;
+
+        /* check the address of the remote client */
+        EXPECT_EQ(0, ucs_sockaddr_ip_cmp(m_connect_addr_sock_addr.addr,
+                                         conn_req_args->client_address.addr));
+
+        status = ucs_sockaddr_get_port(conn_req_args->client_address.addr, &client_port);
+        ASSERT_UCS_OK(status);
+        EXPECT_GT(client_port, 0);
 
         EXPECT_EQ(entity::client_priv_data.length() + 1, remote_data->conn_priv_data_length);
         EXPECT_EQ(entity::client_priv_data,
                   std::string(static_cast<const char *>(remote_data->conn_priv_data)));
 
         self->m_state |= TEST_STATE_CONNECT_REQUESTED;
-        self->m_server_recv_req_cnt++;
 
         if (self->m_delay_conn_reply) {
             self->m_delayed_conn_reqs.push(conn_request);
@@ -477,30 +542,47 @@ protected:
 
     static void
     conn_request_cb(uct_listener_h listener, void *arg,
-                    const char *local_dev_name,
-                    uct_conn_request_h conn_request,
-                    const uct_cm_remote_data_t *remote_data) {
+                    const uct_cm_listener_conn_request_args_t *conn_req_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
-        if (self->common_conn_request(listener, arg, local_dev_name,
-                                      conn_request, remote_data)) {
-            self->server_accept(self->m_server, conn_request,
+        if (self->common_conn_request(listener, arg, conn_req_args)) {
+            EXPECT_TRUE(conn_req_args->field_mask &
+                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST);
+            self->server_accept(self->m_server, conn_req_args->conn_request,
                                 server_connect_cb, server_disconnect_cb, self);
         }
+
+        ucs_memory_cpu_store_fence();
+        self->m_server_recv_req_cnt++;
     }
 
+
     static void
-    server_connect_cb(uct_ep_h ep, void *arg, ucs_status_t status) {
-         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
-         self->m_state |= TEST_STATE_SERVER_CONNECTED;
-         self->m_server_connect_cb_cnt++;
+    server_connect_cb(uct_ep_h ep, void *arg,
+                      const uct_cm_ep_server_conn_notify_args_t *notify_args) {
+        test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
+
+        if (notify_args->field_mask & UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS) {
+            EXPECT_EQ(UCS_OK, notify_args->status);
+        }
+
+        self->m_state |= TEST_STATE_SERVER_CONNECTED;
+        self->m_server_connect_cb_cnt++;
     }
 
     static void
     client_connect_cb(uct_ep_h ep, void *arg,
-                      const uct_cm_remote_data_t *remote_data,
-                      ucs_status_t status) {
+                      const uct_cm_ep_client_connect_args_t *connect_args) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
+        const uct_cm_remote_data_t *remote_data;
+        ucs_status_t status;
+
+        EXPECT_TRUE(ucs_test_all_flags(connect_args->field_mask,
+                                       (UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_REMOTE_DATA |
+                                        UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS)));
+
+        remote_data = connect_args->remote_data;
+        status      = connect_args->status;
 
         if (status == UCS_ERR_REJECTED) {
             self->m_state |= TEST_STATE_CLIENT_GOT_REJECT;
@@ -513,6 +595,10 @@ protected:
             EXPECT_EQ(entity::server_priv_data.length() + 1, remote_data->conn_priv_data_length);
             EXPECT_EQ(entity::server_priv_data,
                       std::string(static_cast<const char *>(remote_data->conn_priv_data)));
+
+            status = uct_cm_client_ep_conn_notify(ep);
+            ASSERT_UCS_OK(status);
+
             self->m_state |= TEST_STATE_CLIENT_CONNECTED;
             self->m_client_connect_cb_cnt++;
         }
@@ -563,6 +649,7 @@ protected:
     void test_delayed_server_response(bool reject)
     {
         ucs_status_t status;
+        ucs_time_t deadline;
 
         m_delay_conn_reply = true;
 
@@ -572,7 +659,14 @@ protected:
                      (TEST_STATE_SERVER_CONNECTED  | TEST_STATE_CLIENT_CONNECTED |
                       TEST_STATE_CLIENT_GOT_REJECT | TEST_STATE_CLIENT_GOT_ERROR));
 
-        ASSERT_EQ(1ul, m_delayed_conn_reqs.size());
+        deadline = ucs_get_time() + ucs_time_from_sec(DEFAULT_TIMEOUT_SEC) *
+                                    ucs::test_time_multiplier();
+
+        while ((m_server_recv_req_cnt == 0) && (ucs_get_time() < deadline)) {
+            progress();
+        }
+        ASSERT_EQ(1, m_server_recv_req_cnt);
+        ucs_memory_cpu_load_fence();
 
         if (reject) {
             /* wrap errors since a reject is expected */
@@ -599,12 +693,14 @@ protected:
 
     static ucs_log_func_rc_t
     detect_addr_route_error_logger(const char *file, unsigned line, const char *function,
-                                   ucs_log_level_t level, const char *message, va_list ap)
+                                   ucs_log_level_t level,
+                                   const ucs_log_component_config_t *comp_conf,
+                                   const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if ((strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
-                (strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
+            if ((strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
+                (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
                 (strstr(err_str.c_str(), "rdma_resolve_route(to addr=240.0.0.0"))) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
@@ -615,11 +711,30 @@ protected:
 
     static ucs_log_func_rc_t
     detect_reject_error_logger(const char *file, unsigned line, const char *function,
-                               ucs_log_level_t level, const char *message, va_list ap)
+                               ucs_log_level_t level,
+                               const ucs_log_component_config_t *comp_conf,
+                               const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if (strstr(err_str.c_str(), "client got error event RDMA_CM_EVENT_REJECTED")) {
+            if (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_REJECTED")) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static ucs_log_func_rc_t
+    detect_double_disconnect_error_logger(const char *file, unsigned line,
+                                          const char *function, ucs_log_level_t level,
+                                          const ucs_log_component_config_t *comp_conf,
+                                          const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+            if (err_str.find("duplicate call of uct_ep_disconnect") !=
+                std::string::npos) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
             }
@@ -678,7 +793,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
     status = ucs_sockaddr_get_port((struct sockaddr*)&attr.sockaddr, &port);
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(m_listen_addr.get_port(), htons(port));
+    EXPECT_EQ(m_listen_addr.get_port(), port);
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close)
@@ -691,6 +806,22 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close)
                                              TEST_STATE_CLIENT_CONNECTED)));
 
     cm_disconnect(m_client);
+}
+
+UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_kill_server)
+{
+    listen_and_connect();
+
+    wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
+                            TEST_STATE_CLIENT_CONNECTED);
+    EXPECT_TRUE(ucs_test_all_flags(m_state, (TEST_STATE_SERVER_CONNECTED |
+                                                TEST_STATE_CLIENT_CONNECTED)));
+
+    EXPECT_EQ(1ul, m_entities.remove(m_server));
+    m_server = NULL;
+
+    wait_for_bits(&m_state, TEST_STATE_CLIENT_DISCONNECTED);
+    EXPECT_TRUE(m_state & TEST_STATE_CLIENT_DISCONNECTED);
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
@@ -716,6 +847,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
     m_server_start_disconnect = true;
 
+    skip_tcp_sockcm();
     /* Listen */
     start_listen(conn_request_cb);
 
@@ -751,6 +883,8 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
 UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 {
+    skip_tcp_sockcm();
+
     /* wrap errors since a reject is expected */
     scoped_log_handler slh(detect_reject_error_logger);
 
@@ -768,6 +902,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 
 UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
 {
+    skip_tcp_sockcm();
     /* Listen */
     start_listen(test_uct_cm_sockaddr::conn_request_cb);
 
@@ -792,6 +927,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
     ucs_status_t status;
     size_t size;
 
+    skip_tcp_sockcm();
     /* Listen */
     start_listen(test_uct_cm_sockaddr::conn_request_cb);
 
@@ -834,6 +970,64 @@ UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
 UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_reject_with_delay)
 {
     test_delayed_server_response(true);
+}
+
+UCS_TEST_P(test_uct_cm_sockaddr, ep_disconnect_err_codes)
+{
+    bool disconnecting = false;
+
+    listen_and_connect();
+
+    {
+        entity::scoped_async_lock lock(*m_client);
+        if (m_state & TEST_STATE_CLIENT_CONNECTED) {
+            UCS_TEST_MESSAGE << "EXP: " << ucs_status_string(UCS_OK);
+            EXPECT_EQ(UCS_OK, uct_ep_disconnect(m_client->ep(0), 0));
+            disconnecting = true;
+        } else {
+            UCS_TEST_MESSAGE << "EXP: " << ucs_status_string(UCS_ERR_BUSY);
+            EXPECT_EQ(UCS_ERR_BUSY, uct_ep_disconnect(m_client->ep(0), 0));
+        }
+    }
+
+    wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
+                            TEST_STATE_CLIENT_CONNECTED);
+    EXPECT_TRUE(ucs_test_all_flags(m_state, (TEST_STATE_SERVER_CONNECTED |
+                                             TEST_STATE_CLIENT_CONNECTED)));
+
+    {
+        entity::scoped_async_lock lock(*m_client);
+        if (disconnecting) {
+            scoped_log_handler slh(detect_double_disconnect_error_logger);
+            if (m_state & TEST_STATE_CLIENT_DISCONNECTED) {
+                UCS_TEST_MESSAGE << "EXP: "
+                                 << ucs_status_string(UCS_ERR_NOT_CONNECTED);
+                EXPECT_EQ(UCS_ERR_NOT_CONNECTED,
+                          uct_ep_disconnect(m_client->ep(0), 0));
+            } else {
+                UCS_TEST_MESSAGE << "EXP: "
+                                 << ucs_status_string(UCS_INPROGRESS);
+                EXPECT_EQ(UCS_INPROGRESS,
+                          uct_ep_disconnect(m_client->ep(0), 0));
+            }
+        } else {
+            UCS_TEST_MESSAGE << "EXP: " << ucs_status_string(UCS_OK);
+            ASSERT_UCS_OK(uct_ep_disconnect(m_client->ep(0), 0));
+            disconnecting = true;
+        }
+    }
+
+    ASSERT_TRUE(disconnecting);
+    wait_for_bits(&m_state, TEST_STATE_CLIENT_DISCONNECTED);
+    EXPECT_TRUE(m_state & TEST_STATE_CLIENT_DISCONNECTED);
+
+    /* wrap errors since the client will call uct_ep_disconnect the second time
+     * on the same endpoint. this ep may not be disconnected yet */
+    {
+        scoped_log_handler slh(detect_double_disconnect_error_logger);
+        UCS_TEST_MESSAGE << "EXP: " << ucs_status_string(UCS_ERR_NOT_CONNECTED);
+        EXPECT_EQ(UCS_ERR_NOT_CONNECTED, uct_ep_disconnect(m_client->ep(0), 0));
+    }
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
@@ -898,30 +1092,29 @@ public:
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
-                       uct_ep_server_connect_cb_t connect_cb,
+                       uct_cm_ep_server_conn_notify_callback_t notify_cb,
                        uct_ep_disconnect_cb_t disconnect_cb,
                        void *user_data)
     {
-        server->accept(server->cm(), conn_request, connect_cb, disconnect_cb,
+        server->accept(server->cm(), conn_request, notify_cb, disconnect_cb,
                        user_data);
     }
 
     static void
     conn_request_cb(uct_listener_h listener, void *arg,
-                    const char *local_dev_name,
-                    uct_conn_request_h conn_request,
-                    const uct_cm_remote_data_t *remote_data) {
-
+                    const uct_cm_listener_conn_request_args_t *conn_req_args) {
         test_uct_cm_sockaddr_stress *self =
                         reinterpret_cast<test_uct_cm_sockaddr_stress *>(arg);
 
-        if (test_uct_cm_sockaddr::common_conn_request(listener, arg,
-                                                      local_dev_name,
-                                                      conn_request,
-                                                      remote_data)) {
-            self->server_accept(self->m_server, conn_request,
+        if (test_uct_cm_sockaddr::common_conn_request(listener, arg, conn_req_args)) {
+            EXPECT_TRUE(conn_req_args->field_mask &
+                        UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST);
+            self->server_accept(self->m_server, conn_req_args->conn_request,
                                 server_connect_cb, server_disconnect_cb, self);
         }
+
+        ucs_memory_cpu_store_fence();
+        self->m_server_recv_req_cnt++;
     }
 
 protected:
@@ -1058,28 +1251,32 @@ public:
                                           &m_test_async);
         ASSERT_UCS_OK(status);
 
+        status = uct_cm_config_read(GetParam()->component, NULL, NULL, &m_test_config);
+        ASSERT_UCS_OK(status);
+
         UCS_TEST_CREATE_HANDLE(uct_worker_h, m_test_worker, uct_worker_destroy,
                                uct_worker_create, m_test_async,
                                UCS_THREAD_MODE_SINGLE)
 
         UCS_TEST_CREATE_HANDLE(uct_cm_h, m_test_cm, uct_cm_close,
                                uct_cm_open, GetParam()->component,
-                               m_test_worker);
+                               m_test_worker, m_test_config);
     }
 
     void cleanup() {
         m_test_cm.reset();
+        uct_config_release(m_test_config);
         m_test_worker.reset();
         ucs_async_context_destroy(m_test_async);
         test_uct_cm_sockaddr::cleanup();
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
-                       uct_ep_server_connect_cb_t connect_cb,
+                       uct_cm_ep_server_conn_notify_callback_t notify_cb,
                        uct_ep_disconnect_cb_t disconnect_cb,
                        void *user_data)
     {
-        server->accept(m_test_cm, conn_request, connect_cb, disconnect_cb,
+        server->accept(m_test_cm, conn_request, notify_cb, disconnect_cb,
                        user_data);
     }
 
@@ -1087,6 +1284,7 @@ protected:
     ucs::handle<uct_worker_h> m_test_worker;
     ucs::handle<uct_cm_h>     m_test_cm;
     ucs_async_context_t       *m_test_async;
+    uct_cm_config_t           *m_test_config;
 };
 
 UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)

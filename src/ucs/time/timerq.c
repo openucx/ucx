@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "timerq.h"
 
 #include <ucs/debug/log.h>
@@ -16,7 +20,7 @@ ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq)
 {
     ucs_trace_func("timerq=%p", timerq);
 
-    ucs_spinlock_init(&timerq->lock);
+    ucs_recursive_spinlock_init(&timerq->lock, 0);
     timerq->timers       = NULL;
     timerq->num_timers   = 0;
     /* coverity[missing_lock] */
@@ -35,9 +39,9 @@ void ucs_timerq_cleanup(ucs_timer_queue_t *timerq)
     }
     ucs_free(timerq->timers);
 
-    status = ucs_spinlock_destroy(&timerq->lock);
+    status = ucs_recursive_spinlock_destroy(&timerq->lock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
 }
 
@@ -50,7 +54,7 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
     ucs_trace_func("timerq=%p interval=%.2fus timer_id=%d", timerq,
                    ucs_time_to_usec(interval), timer_id);
 
-    ucs_spin_lock(&timerq->lock);
+    ucs_recursive_spin_lock(&timerq->lock);
 
     /* Make sure ID is unique */
     for (ptr = timerq->timers; ptr < timerq->timers + timerq->num_timers; ++ptr) {
@@ -81,7 +85,7 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
     status = UCS_OK;
 
 out_unlock:
-    ucs_spin_unlock(&timerq->lock);
+    ucs_recursive_spin_unlock(&timerq->lock);
     return status;
 }
 
@@ -94,7 +98,7 @@ ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, int timer_id)
 
     status = UCS_ERR_NO_ELEM;
 
-    ucs_spin_lock(&timerq->lock);
+    ucs_recursive_spin_lock(&timerq->lock);
     timerq->min_interval = UCS_TIME_INFINITY;
     ptr = timerq->timers;
     while (ptr < timerq->timers + timerq->num_timers) {
@@ -116,6 +120,6 @@ ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, int timer_id)
         ucs_assert(timerq->min_interval != UCS_TIME_INFINITY);
     }
 
-    ucs_spin_unlock(&timerq->lock);
+    ucs_recursive_spin_unlock(&timerq->lock);
     return status;
 }

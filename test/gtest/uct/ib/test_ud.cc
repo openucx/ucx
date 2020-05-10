@@ -11,8 +11,10 @@
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
 #include <uct/ib/ud/base/ud_ep.h>
+#include <uct/ib/ud/verbs/ud_verbs.h>
 }
 
 
@@ -33,13 +35,10 @@ public:
         return UCS_OK;
     }
 
-    static int rx_ack_count;
-    static int tx_ackreq_psn;
-
     static ucs_status_t count_rx_acks(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     {
         if (UCT_UD_PSN_COMPARE(neth->ack_psn, >, ep->tx.acked_psn)) {
-            rx_ack_count++;
+            ucs_atomic_add32(&rx_ack_count, 1);
         }
         return UCS_OK;
     }
@@ -52,36 +51,28 @@ public:
         return UCS_OK;
     }
 
-    static int rx_drop_count;
-
     static ucs_status_t drop_rx(uct_ud_ep_t *ep, uct_ud_neth_t *neth) {
-        rx_drop_count++;
+        ucs_atomic_add32(&rx_drop_count, 1);
         if (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) {
             tx_ack_psn = neth->psn;
-            ack_req_tx_cnt++;
+            ucs_atomic_add32(&ack_req_tx_cnt, 1);
             ucs_debug("RX: psn %u ack_req", neth->psn);
         }
         return UCS_ERR_BUSY;
     }
 
-    static int ack_req_tx_cnt;
-
-    static uct_ud_psn_t tx_ack_psn;
-
     static ucs_status_t ack_req_count_tx(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     {
         if (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) {
             tx_ack_psn = neth->psn;
-            ack_req_tx_cnt++;
+            ucs_atomic_add32(&ack_req_tx_cnt, 1);
         }
         return UCS_OK;
     }
 
-    static int tx_count;
-
     static ucs_status_t count_tx(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
     {
-        tx_count++;
+        ucs_atomic_add32(&tx_count, 1);
         return UCS_OK;
     }
 
@@ -170,15 +161,22 @@ public:
         EXPECT_EQ(4, ep(m_e1, 0)->tx.psn);
         EXPECT_EQ(3, ep(m_e1)->tx.acked_psn);
     }
+
+
+    static volatile uint32_t     rx_ack_count;
+    static volatile uint32_t     rx_drop_count;
+    static volatile uint32_t     ack_req_tx_cnt;
+    static volatile uint32_t     tx_count;
+    static volatile uct_ud_psn_t tx_ackreq_psn;
+    static volatile uct_ud_psn_t tx_ack_psn;
 };
 
-int test_ud::ack_req_tx_cnt = 0;
-int test_ud::rx_ack_count   = 0;
-int test_ud::tx_ackreq_psn = 0;
-int test_ud::rx_drop_count  = 0;
-int test_ud::tx_count  = 0;
-
-uct_ud_psn_t test_ud::tx_ack_psn = 0;
+volatile uint32_t      test_ud::ack_req_tx_cnt = 0;
+volatile uint32_t      test_ud::rx_ack_count   = 0;
+volatile uint32_t      test_ud::rx_drop_count  = 0;
+volatile uint32_t      test_ud::tx_count  = 0;
+volatile uct_ud_psn_t  test_ud::tx_ackreq_psn = 0;
+volatile uct_ud_psn_t  test_ud::tx_ack_psn = 0;
 
 UCS_TEST_SKIP_COND_P(test_ud, basic_tx,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
@@ -540,9 +538,10 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_md,
                       !check_caps(UCT_IFACE_FLAG_AM_SHORT)),
                      "IB_TX_QUEUE_LEN=" UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW)) {
 
+    unsigned prev_cwnd, new_cwnd;
+    uint32_t new_tx_count;
     ucs_status_t status;
-    int prev_cwnd, new_cwnd;
-    int i;
+    unsigned num_sent;
 
     connect();
 
@@ -552,37 +551,51 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_md,
      * on receive drop all packets. After several retransmission
      * attempts the window will be reduced to the minimum
      */
+    uct_ud_enter(iface(m_e1));
     set_tx_win(m_e1, UCT_UD_CA_MAX_WINDOW);
     ep(m_e2, 0)->rx.rx_hook = drop_rx;
-    for (i = 1; i < UCT_UD_CA_MAX_WINDOW; i++) {
+    uct_ud_leave(iface(m_e1));
+
+    num_sent = 0;
+    while (num_sent < UCT_UD_CA_MAX_WINDOW) {
         status = tx(m_e1);
         if (status == UCS_ERR_NO_RESOURCE) {
             // the congestion window can shrink by async timer if ACKs are
             // not received fast enough
-            EXPECT_GT(i, 1); /* at least one packet should be sent */
             break;
         }
-        EXPECT_UCS_OK(status);
+        ASSERT_UCS_OK(status);
         progress();
+        ++num_sent;
     }
     short_progress_loop();
 
+    UCS_TEST_MESSAGE << "sent " << num_sent << " packets";
+    EXPECT_GE(num_sent, 1u); /* at least one packet should be sent */
+
     ep(m_e1)->tx.tx_hook = count_tx;
     do {
+        uct_ud_enter(iface(m_e1));
+        tx_count  = 0;
         prev_cwnd = ep(m_e1, 0)->ca.cwnd;
-        tx_count = 0;
+        uct_ud_leave(iface(m_e1));
+
         do {
             progress();
         } while (ep(m_e1, 0)->ca.cwnd > (prev_cwnd / UCT_UD_CA_MD_FACTOR));
         short_progress_loop();
 
-        new_cwnd = ep(m_e1, 0)->ca.cwnd;
-        EXPECT_GE(tx_count, new_cwnd - 1);
+        uct_ud_enter(iface(m_e1));
+        new_cwnd     = ep(m_e1, 0)->ca.cwnd;
+        new_tx_count = tx_count;
+        uct_ud_leave(iface(m_e1));
+
+        EXPECT_GE(new_tx_count, ucs_min(new_cwnd - 1, num_sent));
         if (new_cwnd > UCT_UD_CA_MIN_WINDOW) {
            /* up to 3 additional ack_reqs per each resend */
-           EXPECT_LE(tx_count, (prev_cwnd - new_cwnd) +
-                               (int)(3 * ucs_ilog2(prev_cwnd/new_cwnd)));
-	}
+           int order = ucs_ilog2(prev_cwnd / new_cwnd);
+           EXPECT_LE(new_tx_count, (prev_cwnd - new_cwnd + 3) * order);
+        }
 
     } while (ep(m_e1, 0)->ca.cwnd > UCT_UD_CA_MIN_WINDOW);
 }
@@ -591,7 +604,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_resend,
                      (RUNNING_ON_VALGRIND ||
                       !check_caps(UCT_IFACE_FLAG_AM_SHORT))) {
 
-    int max_window = 10;
+    int max_window = 9;
     int i;
     ucs_status_t status;
 
@@ -609,20 +622,10 @@ UCS_TEST_SKIP_COND_P(test_ud, ca_resend,
     do {
         progress();
     } while(ep(m_e1)->ca.cwnd > max_window/2);
-    /* expect that:
-     * 4 packets will be retransmitted
-     * first packet will have ack_req,
-     * there will 2 ack_reqs
-     * in addition there may be up to two
-     * standalone ack_reqs
-     */
-    disable_async(m_e1);
-    disable_async(m_e2);
+    /* expect at least 1 drop and 1 ack req */
     short_progress_loop(100);
-    EXPECT_LE(0, rx_drop_count);
-    EXPECT_GE(4+2, rx_drop_count);
-    EXPECT_LE(0, ack_req_tx_cnt);
-    EXPECT_GE(2+2, ack_req_tx_cnt);
+    EXPECT_GE(rx_drop_count, 1u);
+    EXPECT_GE(ack_req_tx_cnt, 1u);
 }
 
 UCS_TEST_P(test_ud, connect_iface_single_drop_creq) {
@@ -770,6 +773,8 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
     connect();
     EXPECT_UCS_OK(tx(m_e1));
     short_progress_loop();
+
+    /* m_e1::ep[0] has to be revoked at the end of the testing */
     uct_ep_destroy(m_e1->ep(0));
     /* ep destroy should try to flush outstanding packets */
     short_progress_loop();
@@ -783,17 +788,26 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
     ud_ep1 = ucs_derived_of(ep, uct_ud_ep_t);
     EXPECT_EQ(1U, ud_ep1->ep_id);
     uct_ep_destroy(ep);
+
+    /* revoke m_e1::ep[0] as it was destroyed manually */
+    m_e1->revoke_ep(0);
 }
 
 UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_passive,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     connect();
+
+    /* m_e2::ep[0] has to be revoked at the end of the testing */
     uct_ep_destroy(m_e2->ep(0));
+
     /* destroyed ep must still accept data */
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(ep_flush_b(m_e1));
 
     validate_flush();
+
+    /* revoke m_e2::ep[0] as it was destroyed manually */
+    m_e2->revoke_ep(0);
 }
 
 UCS_TEST_P(test_ud, ep_destroy_creq) {
@@ -806,7 +820,7 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
     m_e1->connect_to_iface(0, *m_e2);
     short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
 
-    uct_ep_destroy(m_e1->ep(0));
+    m_e1->destroy_ep(0);
 
     /* check that ep id are not reused on both sides */
     ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
@@ -824,83 +838,6 @@ UCS_TEST_P(test_ud, ep_destroy_creq) {
     ud_ep = ucs_derived_of(ep, uct_ud_ep_t);
     uct_ep_destroy(ep);
     EXPECT_EQ(1U, ud_ep->ep_id);
-}
-
-/* check that the amount of reserved skbs is not less than
- * iface tx queue len
- */
-UCS_TEST_P(test_ud, res_skb_basic) {
-    uct_ud_send_skb_t *skb;
-    uct_ud_iface_t *ud_if;
-    int i, tx_qlen;
-
-    connect();
-
-    ud_if = iface(m_e1);
-    tx_qlen = ud_if->tx.available;
-
-    uct_ud_send_skb_t *used_skbs[tx_qlen];
-
-    for (i = 0; i < tx_qlen; i++) {
-        skb = uct_ud_iface_resend_skb_get(ud_if);
-        ASSERT_TRUE(skb);
-        used_skbs[i] = skb;
-    }
-
-    for (i = 0; i < tx_qlen; i++) {
-        uct_ud_iface_resend_skb_put(ud_if, used_skbs[i]);
-    }
-}
-
-/* test that reserved skb is not being reused while it is still in flight
- */
-UCS_TEST_SKIP_COND_P(test_ud, res_skb_tx,
-                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    uct_ud_iface_t *ud_if;
-    int poll_sn;
-    uct_ud_send_skb_t *skb;
-    int n, tx_count;
-
-    disable_async(m_e1);
-    disable_async(m_e2);
-    connect();
-    EXPECT_UCS_OK(tx(m_e1));
-    short_progress_loop();
-
-    ud_if = iface(m_e1);
-    n = tx_count = 0;
-    poll_sn = 1;
-    while(n < 100) {
-        while(uct_ud_iface_can_tx(ud_if)) {
-            uct_ud_put_hdr_t *put_hdr;
-            uct_ud_neth_t *neth;
-
-            skb = uct_ud_iface_resend_skb_get(ud_if);
-            ASSERT_TRUE(skb);
-            VALGRIND_MAKE_MEM_DEFINED(skb, sizeof *skb);
-            ASSERT_LT(skb->flags, poll_sn);
-            skb->flags = poll_sn;
-
-            /* simulate put */
-            neth = skb->neth;
-            uct_ud_neth_init_data(ep(m_e1), neth);
-            uct_ud_neth_set_type_put(ep(m_e1), neth);
-            uct_ud_neth_ack_req(ep(m_e1), neth);
-
-            put_hdr      = (uct_ud_put_hdr_t *)(neth+1);
-            put_hdr->rva = (uint64_t)&m_dummy;
-            memcpy(put_hdr+1, &m_dummy, sizeof(m_dummy));
-            skb->len = sizeof(*neth) + sizeof(*put_hdr) + sizeof(m_dummy);
-
-            ucs_derived_of(ud_if->super.ops, uct_ud_iface_ops_t)->tx_skb(ep(m_e1),
-                                                                         skb, 0);
-            uct_ud_iface_resend_skb_put(ud_if, skb);
-            tx_count++;
-        }
-        short_progress_loop(1);
-        poll_sn++;
-        n++;
-    }
 }
 
 #if UCT_UD_EP_DEBUG_HOOKS
@@ -938,3 +875,42 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 #endif
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
+
+#ifdef HAVE_MLX5_HW
+extern "C" {
+#include <uct/ib/mlx5/ib_mlx5.h>
+}
+#endif
+
+class test_ud_iface_attrs : public test_uct_iface_attrs {
+public:
+    attr_map_t get_num_iov() {
+        attr_map_t iov_map;
+#ifdef HAVE_MLX5_HW
+        if (has_transport("ud_mlx5")) {
+            // For am zcopy just small constant number of iovs is allowed
+            // (to preserve some inline space for AM zcopy header)
+            iov_map["am"] = UCT_IB_MLX5_AM_ZCOPY_MAX_IOV;
+
+        } else
+#endif
+        {
+            EXPECT_TRUE(has_transport("ud_verbs"));
+            uct_ud_verbs_iface_t *iface = ucs_derived_of(m_e->iface(),
+                                                         uct_ud_verbs_iface_t);
+            size_t max_sge = 0;
+            EXPECT_UCS_OK(uct_ud_verbs_qp_max_send_sge(iface, &max_sge));
+            iov_map["am"]  = max_sge;
+        }
+
+        return iov_map;
+    }
+};
+
+UCS_TEST_P(test_ud_iface_attrs, iface_attrs)
+{
+    basic_iov_test();
+}
+
+UCT_INSTANTIATE_UD_TEST_CASE(test_ud_iface_attrs)
+

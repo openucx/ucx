@@ -71,8 +71,8 @@ protected:
             &ops,
             reinterpret_cast<void*>(this)
         };
-        UCS_TEST_CREATE_HANDLE(ucs_rcache_t*, m_rcache, ucs_rcache_destroy,
-                               ucs_rcache_create, &params, "test", ucs_stats_get_root());
+        UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucs_rcache_t*, m_rcache, ucs_rcache_destroy,
+                                            ucs_rcache_create, &params, "test", ucs_stats_get_root());
     }
 
     virtual void cleanup() {
@@ -562,7 +562,9 @@ protected:
 
     static ucs_log_func_rc_t
     log_handler(const char *file, unsigned line, const char *function,
-                ucs_log_level_t level, const char *message, va_list ap)
+                ucs_log_level_t level,
+                const ucs_log_component_config_t *comp_conf,
+                const char *message, va_list ap)
     {
         /* Ignore warnings about empty memory pool */
         if ((level == UCS_LOG_LEVEL_WARN) && strstr(message, "failed to register")) {
@@ -635,7 +637,7 @@ UCS_MT_TEST_F(test_rcache_no_register, merge_invalid_prot_slow, 5)
     munmap(mem, size1+size2);
 }
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 class test_rcache_stats : public test_rcache {
 protected:
 
@@ -657,7 +659,7 @@ protected:
     }
 
     int get_counter(int stat) {
-        return (int)UCS_STATS_GET_COUNTER(m_rcache.get()->stats, stat);
+        return (int)UCS_STATS_GET_COUNTER(m_rcache->stats, stat);
     }
 
     /* a helper function for stats tests debugging */
@@ -715,11 +717,37 @@ UCS_TEST_F(test_rcache_stats, unmap_dereg) {
     r1 = get(mem, size1);
     put(r1);
 
+    /* Should generate umap event and invalidate the memory */
+    munmap(mem, size1);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
+
+    /* when doing another rcache operation, the region is actually destroyed */
+    mem = alloc_pages(size1, PROT_READ|PROT_WRITE);
+    r1 = get(mem, size1);
+    put(r1);
+    EXPECT_GE(get_counter(UCS_RCACHE_UNMAPS), 1);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_DEREGS));
+
+    /* cleanup */
+    munmap(mem, size1);
+}
+
+UCS_TEST_F(test_rcache_stats, unmap_dereg_with_lock) {
+    static const size_t size1 = 1024 * 1024;
+    void *mem = alloc_pages(size1, PROT_READ|PROT_WRITE);
+    region *r1;
+
+    r1 = get(mem, size1);
+    put(r1);
+
     /* Should generate umap event but no dereg or unmap invalidation.
      * We can have more unmap events if releasing the region structure triggers
      * releasing memory back to the OS.
      */
+    pthread_rwlock_wrlock(&m_rcache->pgt_lock);
     munmap(mem, size1);
+    pthread_rwlock_unlock(&m_rcache->pgt_lock);
+
     EXPECT_GE(get_counter(UCS_RCACHE_UNMAPS), 1);
     EXPECT_EQ(0, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
     EXPECT_EQ(0, get_counter(UCS_RCACHE_DEREGS));
@@ -769,8 +797,11 @@ UCS_TEST_F(test_rcache_stats, hits_slow) {
     mem2 = alloc_pages(size1, PROT_READ|PROT_WRITE);
     r1 = get(mem2, size1);
 
-    /* generate unmap event */
+    /* generate unmap event under lock, to roce using invalidation queue */
+    pthread_rwlock_rdlock(&m_rcache->pgt_lock);
     munmap(mem1, size1);
+    pthread_rwlock_unlock(&m_rcache->pgt_lock);
+
     EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
 
     EXPECT_EQ(2, get_counter(UCS_RCACHE_GETS));

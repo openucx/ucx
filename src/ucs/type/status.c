@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "status.h"
 
 #include <stdio.h>
@@ -64,6 +68,10 @@ const char *ucs_status_string(ucs_status_t status)
         return "Unsupported operation";
     case UCS_ERR_REJECTED:
         return "Operation rejected by remote peer";
+    case UCS_ERR_NOT_CONNECTED:
+        return "Endpoint is not connected";
+    case UCS_ERR_CONNECTION_RESET:
+        return "Connection reset by remote peer";
     case UCS_ERR_ENDPOINT_TIMEOUT:
         return "Endpoint timeout";
     default:

@@ -217,10 +217,6 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                                           uct_rc_hdr_t *hdr, unsigned length,
                                           uint32_t imm_data, uint16_t lid, unsigned flags);
 
-void uct_dc_mlx5_iface_set_av_sport(uct_dc_mlx5_iface_t *iface,
-                                    uct_ib_mlx5_base_av_t *av,
-                                    uint32_t remote_dctn);
-
 void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
@@ -297,7 +293,8 @@ static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uin
 static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_has_tx_resources(uct_dc_mlx5_iface_t *iface)
 {
-    return !ucs_mpool_is_empty(&iface->super.super.tx.mp);
+    return !ucs_mpool_is_empty(&iface->super.super.tx.mp) &&
+           (iface->super.super.tx.reads_available > 0);
 }
 
 static inline int uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface, uint8_t dci)

@@ -6,28 +6,20 @@
 package org.openucx.jucx;
 
 import java.io.*;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Collections;
-import java.util.stream.Stream;
 
 public class NativeLibs {
-    private static final String UCM  = "libucm.so";
-    private static final String UCS  = "libucs.so";
-    private static final String UCT  = "libuct.so";
-    private static final String UCP  = "libucp.so";
-    private static final String JUCX = "libjucx.so";
-    private static ClassLoader loader = NativeLibs.class.getClassLoader();
+    private static final String UCM  = "ucm";
+    private static final String UCS  = "ucs";
+    private static final String UCT  = "uct";
+    private static final String UCP  = "ucp";
+    private static final String JUCX = "jucx";
+    private static final ClassLoader loader = NativeLibs.class.getClassLoader();
     private static String errorMessage = null;
 
     static {
-        extractUCTLibs();   // UCT Transport
         loadLibrary(UCM);   // UCM library
         loadLibrary(UCS);   // UCS library
         loadLibrary(UCT);   // UCT library
@@ -49,8 +41,17 @@ public class NativeLibs {
      */
     private static void loadLibrary(String resourceName) {
         // Search shared object on java classpath
-        URL url = loader.getResource(resourceName);
-        File file = null;
+        URL url = loader.getResource(System.mapLibraryName(resourceName));
+
+        if (url == null) {
+            // If not found in classpath, try to load from java.library.path
+            try {
+                System.loadLibrary(resourceName);
+            } catch (Throwable ignored) { }
+            return;
+        }
+
+        File file;
         try { // Extract shared object's content to a generated temp file
             file = extractResource(url);
         } catch (IOException ex) {
@@ -63,70 +64,11 @@ public class NativeLibs {
             try { // Load shared object to JVM
                 System.load(filename);
             } catch (UnsatisfiedLinkError ex) {
-                errorMessage = "Native code library failed to load: "
-                    + resourceName;
+                errorMessage = "Native code library failed to load: " + file.getName()
+                    + ". " + ex.getLocalizedMessage();
             }
 
             file.deleteOnExit();
-        }
-    }
-
-    /**
-     * Extracts shared UCT transport.
-     */
-    private static void extractUCTLibs() {
-        Path ucxTempFolder, ucxFolder;
-        Stream<Path> uctLibs;
-        final FileSystem fileSystem;
-        try {
-            createTempDir();
-            ucxTempFolder = Files.createDirectory(Paths.get(tempDir.getPath(), "ucx"));
-            ucxTempFolder.toFile().deleteOnExit();
-            URI uri = NativeLibs.class.getClassLoader().getResource("ucx").toURI();
-            if ("jar".equals(uri.getScheme())) {
-                fileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap(), null);
-                ucxFolder = fileSystem.getPath("ucx");
-            } else {
-                ucxFolder = Paths.get(uri);
-                fileSystem = null;
-            }
-            uctLibs = Files.walk(ucxFolder, 1);
-        } catch (IOException ex) {
-            errorMessage = "Failed to create temp directory";
-            return;
-        } catch (URISyntaxException e) {
-            errorMessage = "Failed to find ucx resources";
-            return;
-        }
-
-        uctLibs.forEach(filePath -> {
-            if (!filePath.getFileName().toString().contains(".so")) {
-                return;
-            }
-            FileOutputStream os = null;
-            InputStream is = null;
-            File out = new File(ucxTempFolder.toAbsolutePath().toString(),
-                filePath.getFileName().toString());
-            out.deleteOnExit();
-            try {
-                if (fileSystem != null) {
-                    is = NativeLibs.class.getResourceAsStream(filePath.toString());
-                } else {
-                    is = new FileInputStream(filePath.toFile());
-                }
-                os = new FileOutputStream(out);
-                copy(is, os);
-            } catch (IOException ex) {
-                errorMessage = "Failed to copy UCT lib: " + ex.getLocalizedMessage();
-                return;
-            } finally {
-                closeQuietly(os);
-                closeQuietly(is);
-            }
-        });
-
-        if (fileSystem != null) {
-            closeQuietly(fileSystem);
         }
     }
 

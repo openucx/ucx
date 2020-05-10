@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rdmacm_md.h"
 #include "rdmacm_cm.h"
 
@@ -242,9 +246,15 @@ uct_component_t uct_rdmacm_component = {
     .name               = "rdmacm",
     .md_config          = {
         .name           = "RDMA-CM memory domain",
-        .prefix         =  "IB_",
+        .prefix         = "RDMACM_",
         .table          = uct_rdmacm_md_config_table,
         .size           = sizeof(uct_rdmacm_md_config_t),
+    },
+    .cm_config          = {
+        .name           = "RDMA-CM connection manager",
+        .prefix         = "RDMACM_",
+        .table          = uct_cm_config_table,
+        .size           = sizeof(uct_cm_config_t),
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rdmacm_component),
 #if HAVE_RDMACM_QP_LESS

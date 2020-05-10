@@ -1,14 +1,38 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
-# Copyright (C) ARM Ltd. 2016-2018.  ALL RIGHTS RESERVED.
+# Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
+
 
 #
 # Initialize CFLAGS
 #
 BASE_CFLAGS="-g -Wall -Werror"
+
+
+#
+# Check that C++ is functional.
+#
+# AC_PROG_CXX never fails but falls back on g++ as a default CXX compiler that
+# always present. If g++ isn't installed, the macro doesn't detect this and
+# compilation fails later on. CHECK_CXX_COMP compiles simple C++ code to
+# verify that compiler is present and functional.
+#
+AC_DEFUN([CHECK_CXX_COMP],
+         [AC_MSG_CHECKING(if $CXX works)
+          AC_LANG_PUSH([C++])
+          AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+                            #ifndef __cplusplus
+                            #error "No C++ support, AC_PROG_CXX failed"
+                            #endif
+                            ]])],
+                            [AC_MSG_RESULT([yes])],
+                            [AC_MSG_ERROR([Cannot continue. Please install C++ compiler.])])
+          AC_LANG_POP([C++])
+         ])
+
 
 #
 # Debug mode
@@ -18,8 +42,10 @@ AC_ARG_ENABLE(debug,
         [],
         [enable_debug=no])
 AS_IF([test "x$enable_debug" = xyes],
-        [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"],
+        [BASE_CFLAGS="-D_DEBUG $BASE_CFLAGS"
+         BASE_CXXFLAGS="-D_DEBUG" $BASE_CXXFLAGS],
         [])
+
 
 #
 # Optimization level
@@ -31,8 +57,10 @@ AC_ARG_ENABLE(compiler-opt,
 AS_IF([test "x$enable_compiler_opt" = "xyes"], [BASE_CFLAGS="-O3 $BASE_CFLAGS"],
       [test "x$enable_compiler_opt" = "xnone"],
           [AS_IF([test "x$enable_debug" = xyes],
-                 [BASE_CFLAGS="-O0 $BASE_CFLAGS"],
-                 [BASE_CFLAGS="-O3 $BASE_CFLAGS"])],
+                 [BASE_CFLAGS="-O0 $BASE_CFLAGS"
+                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"],
+                 [BASE_CFLAGS="-O3 $BASE_CFLAGS"
+                  BASE_CXXFLAGS="-O0 $BASE_CXXFLAGS"])],
       [test "x$enable_compiler_opt" = "xno"], [],
       [BASE_CFLAGS="-O$enable_compiler_opt $BASE_CFLAGS"])
 
@@ -49,6 +77,7 @@ AC_DEFUN([CHECK_CROSS_COMP], [
          AC_RUN_IFELSE([$1], [$2], [$3],
                        [AC_LINK_IFELSE([$1], [$2], [$3])])
 ])
+
 
 #
 # Check for one specific attribute by compiling with C
@@ -166,6 +195,9 @@ AC_DEFUN([DETECT_UARCH],
       *)
         ;;
     esac 
+    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [test x$ax_cpu = xthunderx2t99])
+    AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [test x$ax_cpu = xthunderxt88])
+    AM_CONDITIONAL([HAVE_AARCH64_HI1620], [test x$ax_cpu = xtsv110])
 ])
 
 
@@ -193,6 +225,7 @@ AC_DEFUN([CHECK_COMPILER_FLAG],
                             $5])
 ])
 
+
 #
 # ADD_COMPILER_FLAG_IF_SUPPORTED
 # Usage: ADD_COMPILER_FLAG_IF_SUPPORTED([name], [flag], [program], [if-true], [if-false])
@@ -208,6 +241,20 @@ AC_DEFUN([ADD_COMPILER_FLAG_IF_SUPPORTED],
                              [$5])
 ])
 
+
+#
+# ADD_COMPILER_FLAGS_IF_SUPPORTED
+# Usage: ADD_COMPILER_FLAGS_IF_SUPPORTED([[flag1], [flag2], [flag3]], [program])
+#
+# The macro checks multiple flags supported by compiler
+#
+AC_DEFUN([ADD_COMPILER_FLAGS_IF_SUPPORTED],
+[
+         m4_foreach([_flag], [$1],
+                    [ADD_COMPILER_FLAG_IF_SUPPORTED([_flag], [_flag], [$2], [], [])])
+])
+
+
 #
 # CHECK_DEPRECATED_DECL_FLAG (flag, variable)
 #
@@ -221,7 +268,7 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
          CFLAGS="$BASE_CFLAGS $CFLAGS $1"
          AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
                                   int __attribute__ ((__deprecated__)) f() { return 0; }
-                                  int main() { return f(); }
+                                  int main(int argc, char** argv) { return f(); }
                             ]])],
                            [AC_MSG_RESULT([yes])
                             $2="${$2} $1"],
@@ -235,7 +282,7 @@ AC_DEFUN([CHECK_DEPRECATED_DECL_FLAG],
 # This evaluation should be called prior to all other compiler flags evals
 #
 CHECK_COMPILER_FLAG([-diag-error 10006], [-diag-error 10006],
-                    [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                     [BASE_CFLAGS="$BASE_CFLAGS -diag-error 10006"
                      BASE_CXXFLAGS="$BASE_CXXFLAGS -diag-error 10006"],
                     [])
@@ -253,7 +300,7 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-diag-disable 269],
                                [-diag-disable 269],
                                [AC_LANG_SOURCE([[#include <stdlib.h>
                                                  #include <stdio.h>
-                                                 int main() {
+                                                 int main(int argc, char** argv) {
                                                      char *p = NULL;
                                                      scanf("%m[^.]", &p);
                                                      free(p);
@@ -274,7 +321,7 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-diag-disable 269],
 UCX_ALLOC_ALIGN=16
 ADD_COMPILER_FLAG_IF_SUPPORTED([-fmax-type-align=$UCX_ALLOC_ALIGN],
                                [-fmax-type-align=$UCX_ALLOC_ALIGN],
-                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                               [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                                [AC_DEFINE_UNQUOTED([UCX_ALLOC_ALIGN], $UCX_ALLOC_ALIGN, [Set aligment assumption for compiler])],
                                [])
 
@@ -284,20 +331,20 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-fmax-type-align=$UCX_ALLOC_ALIGN],
 #
 COMPILER_CPU_OPTIMIZATION([avx], [AVX], [-mavx],
                           [#include <immintrin.h>
-                           int main() {
+                           int main(int argc, char** argv) {
                                return _mm256_testz_si256(_mm256_set1_epi32(1), _mm256_set1_epi32(3));
                            }
                           ])
 AS_IF([test "x$with_avx" != xyes],
       [COMPILER_CPU_OPTIMIZATION([sse41], [SSE 4.1], [-msse4.1],
                                  [#include <smmintrin.h>
-                                  int main() {
+                                  int main(int argc, char** argv) {
                                       return _mm_testz_si128(_mm_set1_epi32(1), _mm_set1_epi32(3));
                                   }
                                  ])
        COMPILER_CPU_OPTIMIZATION([sse42], [SSE 4.2], [-msse4.2],
                                  [#include <popcntintrin.h>
-                                  int main() { return _mm_popcnt_u32(0x101) - 2;
+                                  int main(int argc, char** argv) { return _mm_popcnt_u32(0x101) - 2;
                                   }])
       ])
 
@@ -310,7 +357,7 @@ DETECT_UARCH()
 #
 AS_IF([test "x$ax_cpu" != "x"],
       [COMPILER_CPU_OPTIMIZATION([mcpu], [CPU Model], [-mcpu=$ax_cpu],
-                                 [int main() { return 0;}])
+                                 [int main(int argc, char** argv) { return 0;}])
       ])
 
 
@@ -319,7 +366,7 @@ AS_IF([test "x$ax_cpu" != "x"],
 # 
 AS_IF([test "x$ax_arch" != "x"],
       [COMPILER_CPU_OPTIMIZATION([march], [architecture tuning], [-march=$ax_arch],
-                                 [int main() { return 0;}])
+                                 [int main(int argc, char** argv) { return 0;}])
       ])
 
 
@@ -343,10 +390,16 @@ AC_ARG_ENABLE([frame-pointer],
 AS_IF([test "x$enable_frame_pointer" = xyes],
       [ADD_COMPILER_FLAG_IF_SUPPORTED([-fno-omit-frame-pointer],
                                       [-fno-omit-frame-pointer],
-                                      [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                                      [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                                       [AS_MESSAGE([compiling with frame pointer])],
                                       [AS_MESSAGE([compiling with frame pointer is not supported])])],
       [:])
+
+
+#
+# Check for C++ support
+#
+CHECK_CXX_COMP()
 
 
 #
@@ -359,7 +412,7 @@ CXX11FLAGS="-std=c++11"
 CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
 					#include <string>
-					int main() {
+					int main(int argc, char** argv) {
 						std::to_string(1);
 						return 0;
 					} ]])],
@@ -374,52 +427,99 @@ AM_CONDITIONAL([HAVE_CXX11], [test "x$cxx11_happy" != xno])
 
 
 #
+# Check for GNU++11 support
+#
+AC_MSG_CHECKING([gnu++11 support])
+AC_LANG_PUSH([C++])
+
+SAVE_CXXFLAGS="$CXXFLAGS"
+CXX11FLAGS="-std=gnu++11"
+CXXFLAGS="$CXXFLAGS $CXX11FLAGS"
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <iostream>
+					#include <string>
+					int main(int argc, char** argv) {
+						int a;
+						typeof(a) b = 0;
+						std::to_string(1);
+						return 0;
+					} ]])],
+                  [AC_MSG_RESULT([yes])
+                   AC_SUBST([CXX11FLAGS])
+                   gnuxx11_happy=yes],
+                  [AC_MSG_RESULT([no])
+                   gnuxx11_happy=no])
+CXXFLAGS="$SAVE_CXXFLAGS"
+AM_CONDITIONAL([HAVE_GNUXX11], [test "x$gnuxx11_happy" != xno])
+
+AC_CHECK_DECL(_GLIBCXX_NOTHROW, have_glibcxx_nothrow=yes,
+              have_glibcxx_nothrow=no, [[#include <exception>]])
+AM_CONDITIONAL([HAVE_GLIBCXX_NOTHROW], [test "x$have_glibcxx_nothrow" = xyes])
+
+AC_LANG_POP
+
+
+#
 # PGI specific switches
 #
-ADD_COMPILER_FLAG_IF_SUPPORTED([--display_error_number],
-                               [--display_error_number],
-                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
-                               [],
-                               [])
+# --diag_suppress 181  - Suppress incorrect printf format for PGI18 compiler. TODO: remove it after compiler fix
+# --diag_suppress 1215 - Suppress deprecated API warning for PGI18 compiler
+# --diag_suppress 1901 - Use of a const variable in a constant expression is nonstandard in C
+ADD_COMPILER_FLAGS_IF_SUPPORTED([[--display_error_number],
+                                 [--diag_suppress 181],
+                                 [--diag_suppress 1215],
+                                 [--diag_suppress 1901]],
+                                [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
-# Suppress incorrect printf format for PGI18 compiler. TODO: remove it after compiler fix
-ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 181],
-                               [--diag_suppress 181],
-                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
-                               [],
-                               [])
 
-# Suppress deprecated API warning for PGI18 compiler
-ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 1215],
-                               [--diag_suppress 1215],
-                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
-                               [],
-                               [])
-
-# Use of a const variable in a constant expression is nonstandard in C
-ADD_COMPILER_FLAG_IF_SUPPORTED([--diag_suppress 1901],
-                               [--diag_suppress 1901],
-                               [AC_LANG_SOURCE([[int main(){return 0;}]])],
-                               [],
-                               [])
-
+#
 # Check if "-pedantic" flag is supported
+#
 CHECK_COMPILER_FLAG([-pedantic], [-pedantic],
-                    [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                     [CFLAGS_PEDANTIC="$CFLAGS_PEDANTIC -pedantic"],
                     [])
+
+
+#
+# Add strict compilation flags
+#
+ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
+                                 [-Wno-unused-parameter],
+                                 [-Wno-unused-label],
+                                 [-Wno-long-long],
+                                 [-Wno-endif-labels],
+                                 [-Wno-sign-compare],
+                                 [-Wno-multichar],
+                                 [-Wno-deprecated-declarations],
+                                 [-Winvalid-pch]],
+                                [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
 
 #
 # Set C++ optimization/debug flags to be the same as for C
 #
 BASE_CXXFLAGS="$BASE_CFLAGS"
-AC_SUBST([BASE_CFLAGS], [$BASE_CFLAGS]) 
-AC_SUBST([BASE_CXXFLAGS], [$BASE_CXXFLAGS])
-AC_SUBST([CFLAGS_PEDANTIC], [$CFLAGS_PEDANTIC]) 
+
 
 #
-# Set common preprocessor flags
+# Add strict flags supported by C compiler only
+# NOTE: This must be done after setting BASE_CXXFLAGS
+#
+ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-pointer-sign],
+                                 [-Werror-implicit-function-declaration],
+                                 [-Wno-format-zero-length],
+                                 [-Wnested-externs],
+                                 [-Wshadow]],
+                                [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
+
+
+AC_SUBST([BASE_CFLAGS])
+AC_SUBST([BASE_CXXFLAGS])
+AC_SUBST([CFLAGS_PEDANTIC])
+
+
+#
+# Set common C preprocessor flags
 #
 BASE_CPPFLAGS="-DCPU_FLAGS=\"$OPT_CFLAGS\""
 BASE_CPPFLAGS="$BASE_CPPFLAGS -I\${abs_top_srcdir}/src"

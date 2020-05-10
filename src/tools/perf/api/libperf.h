@@ -83,13 +83,20 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_TAG_WILDCARD     = UCS_BIT(4), /* For tag tests, use wildcard mask */
     UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE  = UCS_BIT(5), /* For tag tests, use probe to get unexpected receive */
     UCX_PERF_TEST_FLAG_VERBOSE          = UCS_BIT(7), /* Print error messages */
-    UCX_PERF_TEST_FLAG_STREAM_RECV_DATA = UCS_BIT(8)  /* For stream tests, use recv data API */
+    UCX_PERF_TEST_FLAG_STREAM_RECV_DATA = UCS_BIT(8), /* For stream tests, use recv data API */
+    UCX_PERF_TEST_FLAG_FLUSH_EP         = UCS_BIT(9)  /* Issue flush on endpoint instead of worker */
 };
 
 
 enum {
     UCT_PERF_TEST_MAX_FC_WINDOW   = 127         /* Maximal flow-control window */
 };
+
+
+#define UCT_PERF_TEST_PARAMS_FMT             "%s/%s"
+#define UCT_PERF_TEST_PARAMS_ARG(_params)    (_params)->uct.tl_name, \
+                                             (_params)->uct.dev_name
+
 
 /**
  * Performance counter type.
@@ -131,7 +138,8 @@ typedef void (*ucx_perf_rte_recv_func_t)(void *rte_group, unsigned src,
 typedef void (*ucx_perf_rte_exchange_vec_func_t)(void *rte_group, void *req);
 typedef void (*ucx_perf_rte_report_func_t)(void *rte_group,
                                            const ucx_perf_result_t *result,
-                                           void *arg, int is_final);
+                                           void *arg, int is_final,
+                                           int is_multi_thread);
 
 /**
  * RTE used to bring-up the test
@@ -168,7 +176,8 @@ typedef struct ucx_perf_params {
     unsigned               thread_count;    /* Number of threads in the test program */
     ucs_async_mode_t       async_mode;      /* how async progress and locking is done */
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
-    ucs_memory_type_t      mem_type;        /* memory type */
+    ucs_memory_type_t      send_mem_type;   /* Send memory type */
+    ucs_memory_type_t      recv_mem_type;   /* Recv memory type */
     unsigned               flags;           /* See ucx_perf_test_flags. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size
@@ -221,7 +230,8 @@ void ucx_perf_global_init();
 /**
  * Run a UCT performance test.
  */
-ucs_status_t ucx_perf_run(ucx_perf_params_t *params, ucx_perf_result_t *result);
+ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
+                          ucx_perf_result_t *result);
 
 
 END_C_DECLS

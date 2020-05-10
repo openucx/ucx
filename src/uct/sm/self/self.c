@@ -160,8 +160,6 @@ static ucs_mpool_ops_t uct_self_iface_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
-static UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_iface_t, uct_iface_t);
-
 static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -212,6 +210,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_self_iface_t)
 }
 
 UCS_CLASS_DEFINE(uct_self_iface_t, uct_base_iface_t);
+
+static UCS_CLASS_DEFINE_DELETE_FUNC(uct_self_iface_t, uct_iface_t);
+
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_self_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
@@ -323,7 +324,7 @@ static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
     /* Dummy memory registration provided. No real memory handling exists */
     attr->cap.flags            = UCT_MD_FLAG_REG |
                                  UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
-    attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->cap.reg_mem_types    = UCS_MEMORY_TYPES_CPU_ACCESSIBLE;
     attr->cap.detect_mem_types = 0;
     attr->cap.access_mem_type  = UCS_MEMORY_TYPE_HOST;
     attr->cap.max_alloc        = 0;
@@ -385,6 +386,7 @@ static uct_component_t uct_self_component = {
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_SELF_NAME,
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
+    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component),
     .flags              = 0
 };

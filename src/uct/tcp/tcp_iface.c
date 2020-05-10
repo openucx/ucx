@@ -19,8 +19,10 @@
 #include <dirent.h>
 
 
+extern ucs_class_t UCS_CLASS_DECL_NAME(uct_tcp_iface_t);
+
 static ucs_config_field_t uct_tcp_iface_config_table[] = {
-  {"", "", NULL,
+  {"", "MAX_NUM_EPS=256", NULL,
    ucs_offsetof(uct_tcp_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
@@ -45,6 +47,10 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Give higher priority to the default network interface on the host",
    ucs_offsetof(uct_tcp_iface_config_t, prefer_default), UCS_CONFIG_TYPE_BOOL},
 
+  {"PUT_ENABLE", "y",
+   "Enable PUT Zcopy support",
+   ucs_offsetof(uct_tcp_iface_config_t, put_enable), UCS_CONFIG_TYPE_BOOL},
+
   {"CONN_NB", "n",
    "Enable non-blocking connection establishment. It may improve startup "
    "time, but can lead to connection resets due to high load on TCP/IP stack",
@@ -54,7 +60,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "Number of times to poll on a ready socket. 0 - no polling, -1 - until drained",
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
-  {UCT_TCP_CONFIG_MAX_CONN_RETRIES, "5",
+  {UCT_TCP_CONFIG_MAX_CONN_RETRIES, "25",
    "How many connection establishment attmepts should be done if dropped "
    "connection was detected due to lack of system resources",
    ucs_offsetof(uct_tcp_iface_config_t, max_conn_retries), UCS_CONFIG_TYPE_UINT},
@@ -131,9 +137,10 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_AM_SHORT         |
                              UCT_IFACE_FLAG_AM_BCOPY         |
                              UCT_IFACE_FLAG_PENDING          |
-                             UCT_IFACE_FLAG_CB_SYNC          |
-                             UCT_IFACE_FLAG_EVENT_SEND_COMP  |
-                             UCT_IFACE_FLAG_EVENT_RECV;
+                             UCT_IFACE_FLAG_CB_SYNC;
+    attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                             UCT_IFACE_FLAG_EVENT_RECV      |
+                             UCT_IFACE_FLAG_EVENT_FD;
 
     attr->cap.am.max_short = am_buf_size;
     attr->cap.am.max_bcopy = am_buf_size;
@@ -148,13 +155,15 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         attr->cap.am.opt_zcopy_align  = 1;
         attr->cap.flags              |= UCT_IFACE_FLAG_AM_ZCOPY;
 
-        /* PUT */
-        attr->cap.put.max_iov          = iface->config.zcopy.max_iov -
-                                         UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT;
-        attr->cap.put.max_zcopy        = UCT_TCP_EP_PUT_ZCOPY_MAX -
-                                         UCT_TCP_EP_PUT_SERVICE_LENGTH;
-        attr->cap.put.opt_zcopy_align  = 1;
-        attr->cap.flags               |= UCT_IFACE_FLAG_PUT_ZCOPY;
+        if (iface->config.put_enable) {
+            /* PUT */
+            attr->cap.put.max_iov          = iface->config.zcopy.max_iov -
+                                             UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT;
+            attr->cap.put.max_zcopy        = UCT_TCP_EP_PUT_ZCOPY_MAX -
+                                             UCT_TCP_EP_PUT_SERVICE_LENGTH;
+            attr->cap.put.opt_zcopy_align  = 1;
+            attr->cap.flags               |= UCT_IFACE_FLAG_PUT_ZCOPY;
+        }
     }
 
     attr->bandwidth.dedicated = 0;
@@ -191,10 +200,10 @@ static void uct_tcp_iface_handle_events(void *callback_data,
     ucs_assertv(ep->conn_state != UCT_TCP_EP_CONN_STATE_CLOSED, "ep=%p", ep);
 
     if (events & UCS_EVENT_SET_EVREAD) {
-        *count += uct_tcp_ep_progress_rx(ep);
+        *count += uct_tcp_ep_cm_state[ep->conn_state].rx_progress(ep);
     }
     if (events & UCS_EVENT_SET_EVWRITE) {
-        *count += uct_tcp_ep_progress_tx(ep);
+        *count += uct_tcp_ep_cm_state[ep->conn_state].tx_progress(ep);
     }
 }
 
@@ -260,16 +269,15 @@ static void uct_tcp_iface_connect_handler(int listen_fd, void *arg)
 
     for (;;) {
         addrlen = sizeof(peer_addr);
-
-        fd = accept(iface->listen_fd, (struct sockaddr*)&peer_addr, &addrlen);
-        if (fd < 0) {
-            if ((errno != EAGAIN) && (errno != EWOULDBLOCK) && (errno != EINTR)) {
-                ucs_error("accept() failed: %m");
+        status  = ucs_socket_accept(iface->listen_fd, (struct sockaddr*)&peer_addr,
+                                    &addrlen, &fd);
+        if (status != UCS_OK) {
+            if (status != UCS_ERR_NO_PROGRESS) {
                 uct_tcp_iface_listen_close(iface);
             }
-
             return;
         }
+        ucs_assert(fd != -1);
 
         status = uct_tcp_cm_handle_incoming_conn(iface, &peer_addr, fd);
         if (status != UCS_OK) {
@@ -339,56 +347,28 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
 {
     struct sockaddr_in bind_addr = iface->config.ifaddr;
-    socklen_t addrlen            = sizeof(bind_addr);
-    int backlog                  = ucs_socket_max_conn();
+    socklen_t socklen            = sizeof(bind_addr);
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
     int ret;
 
-    /* Create the server socket for accepting incoming connections */
-    status = ucs_socket_create(AF_INET, SOCK_STREAM, &iface->listen_fd);
+    bind_addr.sin_port = 0;     /* use a random port */
+    status = ucs_socket_server_init((struct sockaddr *)&bind_addr,
+                                    sizeof(bind_addr), ucs_socket_max_conn(),
+                                    &iface->listen_fd);
     if (status != UCS_OK) {
-        return status;
-    }
-
-    /* Set the server socket to non-blocking mode */
-    status = ucs_sys_fcntl_modfl(iface->listen_fd, O_NONBLOCK, 0);
-    if (status != UCS_OK) {
-        goto err_close_sock;
-    }
-
-    /* Loop until unused port found */
-    do {
-        /* Bind socket to random available port */
-        bind_addr.sin_port = 0;
-        ret = bind(iface->listen_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
-    } while ((ret < 0) && (errno == EADDRINUSE));
-
-    if (ret < 0) {
-        ucs_error("bind(fd=%d) failed: %m", iface->listen_fd);
-        status = UCS_ERR_IO_ERROR;
-        goto err_close_sock;
+        goto err;
     }
 
     /* Get the port which was selected for the socket */
-    ret = getsockname(iface->listen_fd, (struct sockaddr*)&bind_addr, &addrlen);
+    ret = getsockname(iface->listen_fd, (struct sockaddr *)&bind_addr, &socklen);
     if (ret < 0) {
         ucs_error("getsockname(fd=%d) failed: %m", iface->listen_fd);
         status = UCS_ERR_IO_ERROR;
         goto err_close_sock;
     }
+
     iface->config.ifaddr.sin_port = bind_addr.sin_port;
-
-    /* Listen for connections */
-    ret = listen(iface->listen_fd, backlog);
-    if (ret < 0) {
-        ucs_error("listen(fd=%d; backlog=%d)",
-                  iface->listen_fd, backlog);
-        status = UCS_ERR_IO_ERROR;
-        goto err_close_sock;
-    }
-
-    ucs_debug("tcp_iface %p: listening for connections on %s:%d", iface,
-              inet_ntoa(bind_addr.sin_addr), ntohs(bind_addr.sin_port));
 
     /* Register event handler for incoming connections */
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
@@ -401,10 +381,14 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
         goto err_close_sock;
     }
 
+    ucs_debug("tcp_iface %p: listening for connections (fd=%d) on %s",
+              iface, iface->listen_fd, ucs_sockaddr_str((struct sockaddr *)&bind_addr,
+                                                       ip_port_str, sizeof(ip_port_str)));
     return UCS_OK;
 
 err_close_sock:
     close(iface->listen_fd);
+err:
     return status;
 }
 
@@ -479,6 +463,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.zcopy.max_hdr     = self->config.tx_seg_size -
                                      self->config.zcopy.hdr_offset;
     self->config.prefer_default    = config->prefer_default;
+    self->config.put_enable        = config->put_enable;
     self->config.conn_nb           = config->conn_nb;
     self->config.max_poll          = config->max_poll;
     self->config.max_conn_retries  = config->max_conn_retries;

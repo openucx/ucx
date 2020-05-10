@@ -7,17 +7,17 @@
 AC_LANG_PUSH([C++])
 
 CHECK_COMPILER_FLAG([-fno-exceptions], [-fno-exceptions],
-                    [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                     [PERF_LIB_CXXFLAGS="$PERF_LIB_CXXFLAGS -fno-exceptions"],
                     [])
 
 CHECK_COMPILER_FLAG([-fno-rtti], [-fno-rtti],
-                    [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                     [PERF_LIB_CXXFLAGS="$PERF_LIB_CXXFLAGS -fno-rtti"],
                     [])
 
 CHECK_COMPILER_FLAG([--no_exceptions], [--no_exceptions],
-                    [AC_LANG_SOURCE([[int main(){return 0;}]])],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
                     [PERF_LIB_CXXFLAGS="$PERF_LIB_CXXFLAGS --no_exceptions"],
                     [])
 

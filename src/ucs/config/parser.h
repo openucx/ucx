@@ -16,7 +16,7 @@
 #include <stdio.h>
 
 
-#define UCS_CONFIG_PREFIX      "UCX_"
+#define UCS_DEFAULT_ENV_PREFIX "UCX_"
 #define UCS_CONFIG_ARRAY_MAX   128
 
 BEGIN_C_DECLS
@@ -90,9 +90,17 @@ typedef struct ucs_config_bw_spec {
 } ucs_config_bw_spec_t;
 
 
+#define UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY \
+    { \
+        .name        = "", \
+        .prefix      = "", \
+        .table       = NULL, \
+        .size        = 0, \
+    }
+
+
 #define UCS_CONFIG_REGISTER_TABLE_ENTRY(_entry) \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t ucs_config_global_list; \
         ucs_list_add_tail(&ucs_config_global_list, &(_entry)->list); \
     } \
     \
@@ -108,6 +116,8 @@ typedef struct ucs_config_bw_spec {
         .size   = sizeof(_type) \
     }; \
     UCS_CONFIG_REGISTER_TABLE_ENTRY(&_table##_config_entry);
+
+extern ucs_list_link_t ucs_config_global_list;
 
 /*
  * Parsing and printing different data types
@@ -194,6 +204,8 @@ ucs_status_t ucs_config_clone_table(const void *src, void *dest, const void *arg
 void ucs_config_release_table(void *ptr, const void *arg);
 void ucs_config_help_table(char *buf, size_t max, const void *arg);
 
+ucs_status_t ucs_config_clone_log_comp(const void *src, void *dst, const void *arg);
+
 void ucs_config_release_nop(void *ptr, const void *arg);
 void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
@@ -279,6 +291,10 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
                                     ucs_config_help_generic,     \
                                     "device_name:<number>[T|G|M|K]B|b[[p|/]s] or device_name:auto"}
 
+#define UCS_CONFIG_TYPE_LOG_COMP   {ucs_config_sscanf_enum,      ucs_config_sprintf_enum, \
+                                    ucs_config_clone_log_comp,   ucs_config_release_nop, \
+                                    ucs_config_help_enum,        ucs_log_level_names}
+
 #define UCS_CONFIG_TYPE_SIGNO      {ucs_config_sscanf_signo,     ucs_config_sprintf_signo, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
                                     ucs_config_help_generic,     "system signal (number or SIGxxx)"}
@@ -313,7 +329,7 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_STRING_ARRAY \
     UCS_CONFIG_TYPE_ARRAY(string)
 
-UCS_CONFIG_DECLARE_ARRAY(string);
+UCS_CONFIG_DECLARE_ARRAY(string)
 
 /**
  * Set default values for options.
@@ -330,7 +346,8 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields);
  *
  * @param opts           User-defined options structure to fill.
  * @param fields         Array of fields which define how to parse.
- * @param env_prefix     Prefix to add to all environment variables.
+ * @param env_prefix     Prefix to add to all environment variables,
+ *                       env_prefix may consist of multiple sub preifxes
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
  * @param ignore_errors  Whether to ignore parsing errors and continue parsing
  *                       other fields.
@@ -366,19 +383,22 @@ void ucs_config_parser_release_opts(void *opts, ucs_config_field_t *fields);
  * @param opts           User-defined options structure.
  * @param fields         Array of fields which define the options.
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
+ * @param prefix         Prefix to add to all environment variables.
  * @param flags          Flags which control the output.
  */
 void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *opts,
                                   ucs_config_field_t *fields, const char *table_prefix,
-                                  ucs_config_print_flags_t flags);
+                                  const char *prefix, ucs_config_print_flags_t flags);
 
 /**
  * Print all options defined in the library - names, values, documentation.
  *
  * @param stream         Output stream to print to.
+ * @param prefix         Prefix to add to all environment variables.
  * @param flags          Flags which control the output.
  */
-void ucs_config_parser_print_all_opts(FILE *stream, ucs_config_print_flags_t flags);
+void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
+                                      ucs_config_print_flags_t flags);
 
 /**
  * Read a value from options structure.
@@ -404,16 +424,14 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
 /**
- * Check all UCX_ environment variables have been used so far by the
- * configuration parser, issue a warning if not. Called just before program exit.
- */
-void ucs_config_parser_warn_unused_env_vars();
-
-/**
  * Wrapper for `ucs_config_parser_warn_unused_env_vars`
  * that ensures that this is called once
+ *
+ * @param env_prefix     Environment variable prefix.
+ *                       env_prefix may consist of multiple sub prefixex
  */
-void ucs_config_parser_warn_unused_env_vars_once();
+
+void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix);
 
 /**
  * Translate configuration value of "MEMUNITS" type to actual value.

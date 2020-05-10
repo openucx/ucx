@@ -43,7 +43,7 @@
 /*
  * BullsEye Code Coverage tool
  */
-#if _BullseyeCoverage
+#ifdef _BullseyeCoverage
 #define BULLSEYE_ON                          1
 #define BULLSEYE_EXCLUDE_START               #pragma BullseyeCoverage off
 #define BULLSEYE_EXCLUDE_END                 #pragma BullseyeCoverage on

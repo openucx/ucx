@@ -44,7 +44,7 @@ static void modify_config_for_valgrind(const char *name, const char *value)
 {
     char full_name[128];
 
-    snprintf(full_name, sizeof(full_name), "%s%s", UCS_CONFIG_PREFIX, name);
+    snprintf(full_name, sizeof(full_name), "%s%s", UCS_DEFAULT_ENV_PREFIX, name);
 
     if (getenv(full_name) == NULL) {
         UCS_TEST_MESSAGE << " Setting for valgrind: " << full_name << "=" << value;

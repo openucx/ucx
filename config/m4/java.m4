@@ -29,9 +29,9 @@ AS_IF([test "x$with_java" != xno],
                             AC_CHECK_PROG(READLINK, readlink, yes)
                             AS_IF([test "x${READLINK}" = xyes],
                                   [
-                                   AC_SUBST([JAVA], [$(readlink -f $(type -P java))])
-                                   AC_SUBST([JAVA_HOME], [${JAVA%*/jre*}])
-                                   AC_MSG_WARN([Please set JAVA_HOME=$JAVA_HOME])
+                                   JAVA_BIN_FOLDER=`AS_DIRNAME([$(readlink -f $(type -P javac))])`
+                                   JAVA_HOME=`AS_DIRNAME([$JAVA_BIN_FOLDER])`
+                                   AC_MSG_NOTICE([Setting JAVA_HOME=$JAVA_HOME])
                                   ],
                                   [
                                    AS_IF(
@@ -77,6 +77,6 @@ AC_SUBST([JDK], [${java_dir}])
 AM_CONDITIONAL([HAVE_JAVA], [test "x$java_happy" != "xno"])
 #Set MVN according to whether user has Java and Maven or not
 AM_COND_IF([HAVE_JAVA],
-           [AC_SUBST([MVN], ["mvn"]),
+           [AC_SUBST([MVN], ["mvn"])
            build_bindings="${build_bindings}:java"]
           )

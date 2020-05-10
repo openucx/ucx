@@ -67,6 +67,21 @@ BEGIN_C_DECLS
 /** @file sys.h */
 
 
+typedef ino_t ucs_sys_ns_t;
+
+
+/* namespace type used in @ref ucs_sys_get_ns and @ref ucs_sys_ns_is_default */
+typedef enum {
+    UCS_SYS_NS_TYPE_IPC,
+    UCS_SYS_NS_TYPE_MNT,
+    UCS_SYS_NS_TYPE_NET,
+    UCS_SYS_NS_TYPE_PID,
+    UCS_SYS_NS_TYPE_USER,
+    UCS_SYS_NS_TYPE_UTS,
+    UCS_SYS_NS_TYPE_LAST
+} ucs_sys_namespace_type_t;
+
+
 /**
  * @return TMPDIR environment variable if set. Otherwise, return "/tmp".
  */
@@ -134,14 +149,26 @@ uint64_t ucs_generate_uuid(uint64_t seed);
  *   - stdout
  *   - stderr
  *
- * *p_fstream is filled with the stream handle, *p_need_close is set to whether
- * fclose() should be called to release resources, *p_next_token to the remainder
- * of config_str.
+ * @param [in]  config_str     The file name or name of the output stream
+ *                             (stdout/stderr).
+ * @param [in]  err_log_level  Logging level that should be used for printing
+ *                             errors.
+ * @param [out] p_fstream      Pointer that is filled with the stream handle.
+ *                             User is responsible to close tha stream handle then.
+ * @param [out] p_need_close   Pointer to the variable that is set to whether
+ *                             fclose() should be called to release resources (1)
+ *                             or not (0).
+ * @param [out] p_next_token   Pointer that is set to remainder of @config_str.
+ * @oaram [out] p_filename     Pointer to the variable that is filled with the
+ *                             resulted name of the log file (if it is not NULL).
+ *                             Caller is responsible to release memory then.
+ *
+ * @return UCS_OK if successful, or error code otherwise.
  */
 ucs_status_t
 ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
                        FILE **p_fstream, int *p_need_close,
-                       const char **p_next_token);
+                       const char **p_next_token, char **p_filename);
 
 
 /**
@@ -412,6 +439,36 @@ int ucs_sys_getaffinity(ucs_sys_cpuset_t *cpuset);
  * @param [out] dst         Destination
  */
 void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src);
+
+/**
+ * Get namespace id for resource.
+ *
+ * @param [in]  name        Namespace to get value
+ *
+ * @return namespace value or 0 if namespaces are not supported
+ */
+ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t name);
+
+
+/**
+ * Check if namespace is namespace of host system.
+ *
+ * @param [in]  name        Namespace to evaluate
+ *
+ * @return 1 in case if namespace is root, 0 - in other cases
+ */
+int ucs_sys_ns_is_default(ucs_sys_namespace_type_t name);
+
+
+/**
+ * Get 128-bit boot ID value.
+ *
+ * @param [out]  high       Pointer to high 64 bit of 128 boot ID
+ * @param [out]  low        Pointer to low 64 bit of 128 boot ID
+ *
+ * @return UCS_OK or error in case of failure.
+ */
+ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low);
 
 END_C_DECLS
 

@@ -32,6 +32,10 @@
  * SUCH DAMAGE.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "qsort_r.h"
 
 #include <ucs/sys/compiler.h>

@@ -6,19 +6,19 @@
 package org.openucx.jucx.examples;
 
 import org.openucx.jucx.UcxCallback;
-import org.openucx.jucx.UcxRequest;
+import org.openucx.jucx.ucp.UcpRequest;
+import org.openucx.jucx.UcxUtils;
 import org.openucx.jucx.ucp.UcpEndpoint;
 import org.openucx.jucx.ucp.UcpEndpointParams;
 import org.openucx.jucx.ucp.UcpMemory;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 
 
 public class UcxReadBWBenchmarkSender extends UcxBenchmark {
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws Exception {
         if (!initializeArguments(args)) {
             return;
         }
@@ -27,62 +27,44 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
 
         String serverHost = argsMap.get("s");
         UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
+            .setPeerErrorHadnlingMode()
             .setSocketAddress(new InetSocketAddress(serverHost, serverPort)));
 
-        // In java ByteBuffer can be allocated up to 2GB (int max size).
-        if (totalSize >= Integer.MAX_VALUE) {
-            throw new IOException("Max size must be no greater then " + Integer.MAX_VALUE);
-        }
-        ByteBuffer data = ByteBuffer.allocateDirect(totalSize);
-        byte b = Byte.MIN_VALUE;
-        while (data.hasRemaining()) {
-            data.put(b++);
-        }
-        data.clear();
-
-        // Register allocated buffer
-        UcpMemory memory = context.registerMemory(data);
+        UcpMemory memory = context.memoryMap(allocationParams);
+        resources.push(memory);
+        ByteBuffer data = UcxUtils.getByteBufferView(memory.getAddress(),
+            (int)Math.min(Integer.MAX_VALUE, totalSize));
 
         // Send worker and memory address and Rkey to receiver.
         ByteBuffer rkeyBuffer = memory.getRemoteKeyBuffer();
-        ByteBuffer workerAddress = worker.getAddress();
 
-        ByteBuffer sendData = ByteBuffer.allocateDirect(24 + rkeyBuffer.capacity() +
-            workerAddress.capacity());
+        // 24b = 8b buffer address + 8b buffer size + 4b rkeyBuffer size + 4b hashCode
+        ByteBuffer sendData = ByteBuffer.allocateDirect(24 + rkeyBuffer.capacity());
         sendData.putLong(memory.getAddress());
-        sendData.putInt(totalSize);
+        sendData.putLong(totalSize);
         sendData.putInt(rkeyBuffer.capacity());
         sendData.put(rkeyBuffer);
-        sendData.putInt(workerAddress.capacity());
-        sendData.put(workerAddress);
         sendData.putInt(data.hashCode());
         sendData.clear();
 
+        // Send memory metadata and wait until receiver will finish benchmark.
         endpoint.sendTaggedNonBlocking(sendData, null);
-
         ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
-        UcxRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer,
+        UcpRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer,
             new UcxCallback() {
                 @Override
-                public void onSuccess(UcxRequest request) {
+                public void onSuccess(UcpRequest request) {
                     System.out.println("Received a message:");
-                    System.out.println(recvBuffer.asCharBuffer().toString());
+                    System.out.println(recvBuffer.asCharBuffer().toString().trim());
                 }
             });
 
-        while (!recvRequest.isCompleted()) {
-            worker.progress();
-        }
+        worker.progressRequest(recvRequest);
 
-        // Close endpoint and wait for remote side
-        // TODO remove when UCP close protocol is implemented
-        endpoint.close();
-        try {
-            Thread.sleep(3000);
-        } catch (java.lang.InterruptedException e) {
-        }
+        UcpRequest closeRequest = endpoint.closeNonBlockingFlush();
+        worker.progressRequest(closeRequest);
+        resources.push(closeRequest);
 
-        memory.deregister();
         closeResources();
     }
 }

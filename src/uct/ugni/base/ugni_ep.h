@@ -40,9 +40,11 @@ ucs_status_t uct_ugni_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
 void uct_ugni_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                                void *arg);
 ucs_arbiter_cb_result_t uct_ugni_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                    ucs_arbiter_group_t *group,
                                                     ucs_arbiter_elem_t *elem,
                                                     void *arg);
 ucs_arbiter_cb_result_t uct_ugni_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                     ucs_arbiter_group_t *group,
                                                      ucs_arbiter_elem_t *elem,
                                                      void *arg);
 ucs_status_t uct_ugni_ep_flush(uct_ep_h tl_ep, unsigned flags,

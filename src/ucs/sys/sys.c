@@ -17,8 +17,11 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
+#include <ucs/type/init_once.h>
 #include <ucm/util/sys.h>
 
+#include <unistd.h>
+#include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
@@ -38,6 +41,24 @@
 /* Default huge page size is 2 MBytes */
 #define UCS_DEFAULT_MEM_FREE       640000
 #define UCS_PROCESS_SMAPS_FILE     "/proc/self/smaps"
+#define UCS_PROCESS_NS_DIR         "/proc/self/ns"
+#define UCS_PROCESS_BOOTID_FILE    "/proc/sys/kernel/random/boot_id"
+#define UCS_PROCESS_BOOTID_FMT     "%x-%4hx-%4hx-%4hx-%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx"
+#define UCS_PROCESS_NS_FIRST       0xF0000000U
+#define UCS_PROCESS_NS_NET_DFLT    0xF0000080U
+
+
+struct {
+    const char  *name;
+    ucs_sys_ns_t dflt;
+} static ucs_sys_namespace_info[] = {
+    [UCS_SYS_NS_TYPE_IPC]  = {.name = "ipc",  .dflt = UCS_PROCESS_NS_FIRST - 1},
+    [UCS_SYS_NS_TYPE_MNT]  = {.name = "mnt",  .dflt = UCS_PROCESS_NS_FIRST - 0},
+    [UCS_SYS_NS_TYPE_NET]  = {.name = "net",  .dflt = UCS_PROCESS_NS_NET_DFLT},
+    [UCS_SYS_NS_TYPE_PID]  = {.name = "pid",  .dflt = UCS_PROCESS_NS_FIRST - 4},
+    [UCS_SYS_NS_TYPE_USER] = {.name = "user", .dflt = UCS_PROCESS_NS_FIRST - 3},
+    [UCS_SYS_NS_TYPE_UTS]  = {.name = "uts",  .dflt = UCS_PROCESS_NS_FIRST - 2}
+};
 
 
 const char *ucs_get_tmpdir()
@@ -268,7 +289,7 @@ uint64_t ucs_generate_uuid(uint64_t seed)
 ucs_status_t
 ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
                        FILE **p_fstream, int *p_need_close,
-                       const char **p_next_token)
+                       const char **p_next_token, char **p_filename)
 {
     FILE *output_stream;
     char filename[256];
@@ -276,7 +297,10 @@ ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
     const char *p;
     size_t len;
 
-    *p_next_token = config_str;
+    *p_next_token   = config_str;
+    if (p_filename != NULL) {
+        *p_filename = NULL;
+    }
 
     len = strcspn(config_str, ":");
     if (!strncmp(config_str, "stdout", len)) {
@@ -304,6 +328,16 @@ ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
             ucs_log(err_log_level, "failed to open '%s' for writing: %m",
                     filename);
             return UCS_ERR_IO_ERROR;
+        }
+
+        if (p_filename != NULL) {
+            *p_filename = ucs_strdup(filename, "filename");
+            if (*p_filename == NULL) {
+                ucs_log(err_log_level, "failed to allocate filename for '%s'",
+                        filename);
+                fclose(output_stream);
+                return UCS_ERR_NO_MEMORY;
+            }
         }
 
         *p_fstream    = output_stream;
@@ -728,8 +762,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
             ucs_debug("huge pages are not supported on the system");
             return UCS_ERR_NO_MEMORY; /* Huge pages not supported */
         }
-    }
-    if (flags & SHM_HUGETLB) {
+
         alloc_size = ucs_align_up(*size, huge_page_size);
     } else
 #endif
@@ -953,7 +986,7 @@ unsigned long ucs_sys_get_pfn(uintptr_t address)
     return data & UCS_MASK(55);
 }
 
-ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove)
+ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int rem)
 {
     int oldfl, ret;
 
@@ -963,7 +996,7 @@ ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int remove)
         return UCS_ERR_IO_ERROR;
     }
 
-    ret = fcntl(fd, F_SETFL, (oldfl | add) & ~remove);
+    ret = fcntl(fd, F_SETFL, (oldfl | add) & ~rem);
     if (ret < 0) {
         ucs_error("fcntl(fd=%d, F_SETFL) returned %d: %m", fd, ret);
         return UCS_ERR_IO_ERROR;
@@ -1094,7 +1127,7 @@ char* ucs_make_affinity_str(const ucs_sys_cpuset_t *cpuset, char *str, size_t le
                 prev = i;
             }
         } else {
-            if (prev > 0) {
+            if (prev >= 0) {
                 if (prev == i - 1) {
                     p += snprintf(p, str + len - p, "%d,", prev);
                 } else {
@@ -1157,4 +1190,79 @@ void ucs_sys_cpuset_copy(ucs_cpu_set_t *dst, const ucs_sys_cpuset_t *src)
             UCS_CPU_SET(c, dst);
         }
     }
+}
+
+ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
+{
+    char filename[MAXPATHLEN];
+    int res;
+    struct stat st;
+
+    if (ns >= UCS_SYS_NS_TYPE_LAST) {
+        return 0;
+    }
+
+    snprintf(filename, sizeof(filename), "%s/%s", UCS_PROCESS_NS_DIR,
+             ucs_sys_namespace_info[ns].name);
+
+    res = stat(filename, &st);
+    if (res == 0) {
+        return (ucs_sys_ns_t)st.st_ino;
+    }
+
+    return ucs_sys_namespace_info[ns].dflt;
+}
+
+int ucs_sys_ns_is_default(ucs_sys_namespace_type_t ns)
+{
+    return ucs_sys_get_ns(ns) == ucs_sys_namespace_info[ns].dflt;
+}
+
+ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)
+{
+    static struct {
+        uint64_t     high;
+        uint64_t     low;
+    } boot_id                        = {0, 0};
+
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static ucs_status_t status       = UCS_ERR_IO_ERROR;
+    char bootid_str[256];
+    ssize_t size;
+    uint32_t v1;
+    uint16_t v2;
+    uint16_t v3;
+    uint16_t v4;
+    uint8_t v5[6];
+    int res;
+    int i;
+
+    UCS_INIT_ONCE(&init_once) {
+        size = ucs_read_file_str(bootid_str, sizeof(bootid_str), 1,
+                                 "%s", UCS_PROCESS_BOOTID_FILE);
+        if (size <= 0) {
+            continue; /* jump out of INIT_ONCE section */
+        }
+
+        res = sscanf(bootid_str, UCS_PROCESS_BOOTID_FMT,
+                     &v1, &v2, &v3, &v4,
+                     &v5[0], &v5[1], &v5[2],
+                     &v5[3], &v5[4], &v5[5]);
+        if (res == 10) { /* 10 values should be scanned */
+            status       = UCS_OK;
+            boot_id.low  = ((uint64_t)v1) | ((uint64_t)v2 << 32) |
+                           ((uint64_t)v3 << 48);
+            boot_id.high = v4;
+            for (i = 0; i < ucs_array_size(v5); i++) {
+                boot_id.high |= (uint64_t)v5[i] << (16 + (i * 8));
+            }
+        }
+    }
+
+    if (status == UCS_OK) {
+        *high = boot_id.high;
+        *low  = boot_id.low;
+    }
+
+    return status;
 }

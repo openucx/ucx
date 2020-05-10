@@ -6,8 +6,6 @@
 
 #include "ud_base.h"
 
-#include <uct/uct_test.h>
-
 extern "C" {
 #include <ucs/time/time.h>
 #include <ucs/datastruct/queue.h>
@@ -67,13 +65,20 @@ unsigned test_ud_ds::N = 1000;
 UCS_TEST_P(test_ud_ds, if_addr) {
     union ibv_gid gid1, gid2;
     uint16_t lid1, lid2;
-    uct_ib_address_unpack(ib_adr1, &lid1, &gid1);
-    uct_ib_address_unpack(ib_adr2, &lid2, &gid2);
+    enum ibv_mtu mtu1, mtu2;
+    uint8_t gid_index1, gid_index2;
+
+    uct_ib_address_unpack(ib_adr1, &lid1, &gid1, &gid_index1, &mtu1);
+    uct_ib_address_unpack(ib_adr2, &lid2, &gid2, &gid_index2, &mtu2);
     EXPECT_EQ(lid1, lid2);
     EXPECT_EQ(gid1.global.subnet_prefix, gid2.global.subnet_prefix);
     EXPECT_EQ(gid1.global.interface_id, gid2.global.interface_id);
     EXPECT_NE(uct_ib_unpack_uint24(if_adr1.qp_num),
               uct_ib_unpack_uint24(if_adr2.qp_num));
+    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU,  mtu1);
+    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU,  mtu2);
+    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, gid_index1);
+    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, gid_index2);
 }
 
 void test_ud_ds::test_cep_insert(entity *e, uct_ib_address_t *ib_addr,

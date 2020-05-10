@@ -15,6 +15,11 @@
 #include <ucs/arch/bitops.h>
 
 
+/* Peer name to show when we don't have debug information, or the name was not
+ * packed in the worker address */
+#define UCP_WIREUP_EMPTY_PEER_NAME  "<no debug data>"
+
+
 /**
  * Wireup message types
  */
@@ -31,11 +36,13 @@ enum {
  * Criteria for transport selection.
  */
 typedef struct {
-    const char  *title;            /* Name of the criteria for debugging */
-    uint64_t    local_md_flags;    /* Required local MD flags */
-    uint64_t    remote_md_flags;   /* Required remote MD flags */
-    uint64_t    local_iface_flags; /* Required local interface flags */
-    uint64_t    remote_iface_flags;/* Required remote interface flags */
+    const char  *title;             /* Name of the criteria for debugging */
+    uint64_t    local_md_flags;     /* Required local MD flags */
+    uint64_t    remote_md_flags;    /* Required remote MD flags */
+    uint64_t    local_iface_flags;  /* Required local interface flags */
+    uint64_t    remote_iface_flags; /* Required remote interface flags */
+    uint64_t    local_event_flags;  /* Required local event flags */
+    uint64_t    remote_event_flags; /* Required remote event flags */
 
     /**
      * Calculates score of a potential transport.
@@ -74,6 +81,7 @@ typedef struct ucp_wireup_msg {
 typedef struct {
     double          score;
     unsigned        addr_index;
+    unsigned        path_index;
     ucp_rsc_index_t rsc_index;
     uint8_t         priority;
 } ucp_wireup_select_info_t;
@@ -108,6 +116,7 @@ int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
                             const ucp_address_entry_t *ae);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
+                                   uint64_t local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices);
 
@@ -121,10 +130,18 @@ ucs_status_t ucp_signaling_ep_create(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
 int ucp_worker_iface_is_tl_p2p(const uct_iface_attr_t *iface_attr);
 
-int ucp_wireup_is_rsc_self_or_shm(ucp_ep_h ep, ucp_rsc_index_t rsc_index);
-
 void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
                             const char *info);
+
+ucs_status_t
+ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
+                        ucp_lane_index_t lane, unsigned path_index,
+                        const ucp_unpacked_address_t *remote_address,
+                        unsigned addr_index);
+
+ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep);
+
+void ucp_wireup_remote_connected(ucp_ep_h ep);
 
 static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
@@ -136,4 +153,8 @@ static inline int ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_
 unsigned ucp_ep_init_flags(const ucp_worker_h worker,
                            const ucp_ep_params_t *params);
 
+ucs_status_t
+ucp_wireup_connect_local(ucp_ep_h ep,
+                         const ucp_unpacked_address_t *remote_address,
+                         const ucp_lane_index_t *lanes2remote);
 #endif

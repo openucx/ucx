@@ -5,11 +5,14 @@
  */
 
 #include <common/test.h>
+#include <deque>
+
 extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/async/async.h>
 #include <ucs/datastruct/callbackq.h>
 }
+
 
 class test_callbackq :
     public ucs::test_base,
@@ -17,9 +20,10 @@ class test_callbackq :
 protected:
 
     enum {
-        COMMAND_NONE,
         COMMAND_REMOVE_SELF,
-        COMMAND_ADD_ANOTHER
+        COMMAND_ENQUEUE_KEY,
+        COMMAND_ADD_ANOTHER,
+        COMMAND_NONE
     };
 
     struct callback_ctx {
@@ -64,6 +68,9 @@ protected:
         case COMMAND_ADD_ANOTHER:
             add(ctx->to_add);
             break;
+        case COMMAND_ENQUEUE_KEY:
+            m_keys_queue.push_back(ctx->key);
+            break;
         case COMMAND_NONE:
         default:
             break;
@@ -91,9 +98,14 @@ protected:
                                              cb_flags() | flags);
     }
 
+    void remove(int callback_id)
+    {
+        ucs_callbackq_remove(&m_cbq, callback_id);
+    }
+
     void remove(callback_ctx *ctx)
     {
-        ucs_callbackq_remove(&m_cbq, ctx->callback_id);
+        remove(ctx->callback_id);
     }
 
     void add_safe(callback_ctx *ctx, unsigned flags = 0)
@@ -133,6 +145,7 @@ protected:
     }
 
     ucs_callbackq_t     m_cbq;
+    std::deque<int>     m_keys_queue;
 };
 
 UCS_TEST_P(test_callbackq, single) {
@@ -362,3 +375,55 @@ UCS_TEST_F(test_callbackq_noflags, remove_if) {
     }
 }
 
+UCS_TEST_F(test_callbackq_noflags, ordering) {
+    static const int UNUSED_CB_KEY = -1;
+    static const int num_callbacks = 100;
+    std::vector<callback_ctx> ctxs(num_callbacks);
+    std::deque<int> gc_list;
+    std::deque<int> oneshot_callback_keys;
+
+    for (int i = 0; i < num_callbacks; ++i) {
+        callback_ctx& r_ctx = ctxs[i];
+
+        // randomize: either permanent callback with key=i or oneshot callback
+        // with key=-1
+        init_ctx(&r_ctx);
+        unsigned cb_flags = 0;
+        if (ucs::rand() % 2) {
+            // oneshot callback, which must stay in order
+            r_ctx.key     = i;
+            r_ctx.command = COMMAND_ENQUEUE_KEY;
+            cb_flags      = UCS_CALLBACKQ_FLAG_ONESHOT;
+            oneshot_callback_keys.push_back(i);
+        } else {
+            // permanent
+            r_ctx.key     = UNUSED_CB_KEY;
+            if (ucs::rand() % 2) {
+                // do-nothing callback
+                r_ctx.command = COMMAND_NONE;
+            } else {
+                // non-one-shot callback which removes itself - for more fun
+                r_ctx.command = COMMAND_REMOVE_SELF;
+            }
+        }
+
+        add(&r_ctx, cb_flags);
+
+        if (r_ctx.command == COMMAND_NONE) {
+            // we need to remove callbacks which don't remove themselves in the
+            // end of the test
+            gc_list.push_back(r_ctx.callback_id);
+        }
+    }
+
+    dispatch(10);
+
+    // make sure the ONESHOT callbacks were executed in order
+    EXPECT_EQ(oneshot_callback_keys, m_keys_queue);
+
+    // remove remaining callbacks
+    while (!gc_list.empty()) {
+        remove(gc_list.front());
+        gc_list.pop_front();
+    }
+}

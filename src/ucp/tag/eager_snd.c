@@ -12,7 +12,6 @@
 #include "offload.h"
 
 #include <ucp/core/ucp_worker.h>
-#include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.inl>
 
 
@@ -21,20 +20,17 @@
 static UCS_F_ALWAYS_INLINE size_t
 ucp_tag_pack_eager_common(ucp_request_t *req, void *dest,
                           size_t length, size_t hdr_length,
-                          int UCS_V_UNUSED single,
-                          int UCS_V_UNUSED first)
+                          int UCS_V_UNUSED is_first)
 {
     size_t packed_length;
 
     ucs_assert((length + hdr_length) <=
                ucp_ep_get_max_bcopy(req->send.ep, req->send.lane));
-    ucs_assert(!first || (req->send.state.dt.offset == 0));
+    ucs_assert(!is_first || (req->send.state.dt.offset == 0));
 
     packed_length = ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                                 req->send.mem_type, dest, req->send.buffer,
                                 &req->send.state.dt, length);
-    ucs_assert((single && (packed_length == req->send.length)) ||
-               (packed_length < req->send.length));
     return packed_length + hdr_length;
 }
 
@@ -43,10 +39,10 @@ static size_t ucp_tag_pack_eager_only_dt(void *dest, void *arg)
     ucp_eager_hdr_t *hdr = dest;
     ucp_request_t *req = arg;
 
-    hdr->super.tag = req->send.tag.tag;
+    hdr->super.tag = req->send.msg_proto.tag.tag;
 
     return ucp_tag_pack_eager_common(req, hdr + 1, req->send.length,
-                                     sizeof(*hdr), 1, 1);
+                                     sizeof(*hdr), 1);
 }
 
 static size_t ucp_tag_pack_eager_sync_only_dt(void *dest, void *arg)
@@ -54,12 +50,12 @@ static size_t ucp_tag_pack_eager_sync_only_dt(void *dest, void *arg)
     ucp_eager_sync_hdr_t *hdr = dest;
     ucp_request_t *req = arg;
 
-    hdr->super.super.tag = req->send.tag.tag;
+    hdr->super.super.tag = req->send.msg_proto.tag.tag;
     hdr->req.ep_ptr      = ucp_request_get_dest_ep_ptr(req);
     hdr->req.reqptr      = (uintptr_t)req;
 
     return ucp_tag_pack_eager_common(req, hdr + 1, req->send.length,
-                                     sizeof(*hdr), 1, 1);
+                                     sizeof(*hdr), 1);
 }
 
 static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
@@ -72,11 +68,12 @@ static size_t ucp_tag_pack_eager_first_dt(void *dest, void *arg)
 
     length               = ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
                            sizeof(*hdr);
-    hdr->super.super.tag = req->send.tag.tag;
+    length               = ucs_min(length, req->send.length);
+    hdr->super.super.tag = req->send.msg_proto.tag.tag;
     hdr->total_len       = req->send.length;
-    hdr->msg_id          = req->send.tag.message_id;
+    hdr->msg_id          = req->send.msg_proto.message_id;
 
-    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0, 1);
+    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 1);
 }
 
 static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
@@ -90,13 +87,14 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
     length                     = ucp_ep_get_max_bcopy(req->send.ep,
                                                       req->send.lane) -
                                  sizeof(*hdr);
-    hdr->super.super.super.tag = req->send.tag.tag;
+    length                     = ucs_min(length, req->send.length);
+    hdr->super.super.super.tag = req->send.msg_proto.tag.tag;
     hdr->super.total_len       = req->send.length;
     hdr->req.ep_ptr            = ucp_request_get_dest_ep_ptr(req);
-    hdr->super.msg_id          = req->send.tag.message_id;
+    hdr->super.msg_id          = req->send.msg_proto.message_id;
     hdr->req.reqptr            = (uintptr_t)req;
 
-    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0, 1);
+    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 1);
 }
 
 static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
@@ -108,10 +106,10 @@ static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
     length      = ucs_min(ucp_ep_get_max_bcopy(req->send.ep, req->send.lane) -
                           sizeof(*hdr),
                           req->send.length - req->send.state.dt.offset);
-    hdr->msg_id = req->send.tag.message_id;
+    hdr->msg_id = req->send.msg_proto.message_id;
     hdr->offset = req->send.state.dt.offset;
 
-    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0, 0);
+    return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 0);
 }
 
 /* eager */
@@ -124,7 +122,8 @@ static ucs_status_t ucp_tag_eager_contig_short(uct_pending_req_t *self)
 
     req->send.lane = ucp_ep_get_am_lane(ep);
     status = uct_ep_am_short(ep->uct_eps[req->send.lane], UCP_AM_ID_EAGER_ONLY,
-                             req->send.tag.tag, req->send.buffer, req->send.length);
+                             req->send.msg_proto.tag.tag, req->send.buffer,
+                             req->send.length);
     if (status != UCS_OK) {
         return status;
     }
@@ -150,7 +149,6 @@ static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self,
                                                 UCP_AM_ID_EAGER_FIRST,
                                                 UCP_AM_ID_EAGER_MIDDLE,
-                                                sizeof(ucp_eager_middle_hdr_t),
                                                 ucp_tag_pack_eager_first_dt,
                                                 ucp_tag_pack_eager_middle_dt, 1);
     if (status == UCS_OK) {
@@ -168,7 +166,7 @@ static ucs_status_t ucp_tag_eager_zcopy_single(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_eager_hdr_t hdr;
 
-    hdr.super.tag = req->send.tag.tag;
+    hdr.super.tag = req->send.msg_proto.tag.tag;
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_EAGER_ONLY, &hdr, sizeof(hdr),
                                   ucp_proto_am_zcopy_req_complete);
 }
@@ -179,10 +177,10 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
     ucp_eager_first_hdr_t first_hdr;
     ucp_eager_middle_hdr_t middle_hdr;
 
-    first_hdr.super.super.tag = req->send.tag.tag;
+    first_hdr.super.super.tag = req->send.msg_proto.tag.tag;
     first_hdr.total_len       = req->send.length;
-    first_hdr.msg_id          = req->send.tag.message_id;
-    middle_hdr.msg_id         = req->send.tag.message_id;
+    first_hdr.msg_id          = req->send.msg_proto.message_id;
+    middle_hdr.msg_id         = req->send.msg_proto.message_id;
     middle_hdr.offset         = req->send.state.dt.offset;
 
     return ucp_do_am_zcopy_multi(self,
@@ -195,16 +193,14 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
 
 ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
 
-const ucp_proto_t ucp_tag_eager_proto = {
+const ucp_request_send_proto_t ucp_tag_eager_proto = {
     .contig_short            = ucp_tag_eager_contig_short,
     .bcopy_single            = ucp_tag_eager_bcopy_single,
     .bcopy_multi             = ucp_tag_eager_bcopy_multi,
     .zcopy_single            = ucp_tag_eager_zcopy_single,
     .zcopy_multi             = ucp_tag_eager_zcopy_multi,
     .zcopy_completion        = ucp_proto_am_zcopy_completion,
-    .only_hdr_size           = sizeof(ucp_eager_hdr_t),
-    .first_hdr_size          = sizeof(ucp_eager_first_hdr_t),
-    .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
+    .only_hdr_size           = sizeof(ucp_eager_hdr_t)
 };
 
 /* eager sync */
@@ -231,8 +227,6 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_single(uct_pending_req_t *self)
         ucp_request_send_generic_dt_finish(req);
         ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
                                       UCS_OK);
-    } else if (status == UCP_STATUS_PENDING_SWITCH) {
-        status = UCS_OK;
     }
     return status;
 }
@@ -242,7 +236,6 @@ static ucs_status_t ucp_tag_eager_sync_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self,
                                                 UCP_AM_ID_EAGER_SYNC_FIRST,
                                                 UCP_AM_ID_EAGER_MIDDLE,
-                                                sizeof(ucp_eager_middle_hdr_t),
                                                 ucp_tag_pack_eager_sync_first_dt,
                                                 ucp_tag_pack_eager_middle_dt, 1);
     if (status == UCS_OK) {
@@ -282,7 +275,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_single(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_eager_sync_hdr_t hdr;
 
-    hdr.super.super.tag = req->send.tag.tag;
+    hdr.super.super.tag = req->send.msg_proto.tag.tag;
     hdr.req.ep_ptr      = ucp_request_get_dest_ep_ptr(req);
     hdr.req.reqptr      = (uintptr_t)req;
 
@@ -296,12 +289,12 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
     ucp_eager_sync_first_hdr_t first_hdr;
     ucp_eager_middle_hdr_t middle_hdr;
 
-    first_hdr.super.super.super.tag = req->send.tag.tag;
+    first_hdr.super.super.super.tag = req->send.msg_proto.tag.tag;
     first_hdr.super.total_len       = req->send.length;
     first_hdr.req.ep_ptr            = ucp_request_get_dest_ep_ptr(req);
     first_hdr.req.reqptr            = (uintptr_t)req;
-    first_hdr.super.msg_id          = req->send.tag.message_id;
-    middle_hdr.msg_id               = req->send.tag.message_id;
+    first_hdr.super.msg_id          = req->send.msg_proto.message_id;
+    middle_hdr.msg_id               = req->send.msg_proto.message_id;
     middle_hdr.offset               = req->send.state.dt.offset;
 
     return ucp_do_am_zcopy_multi(self,
@@ -312,16 +305,14 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
                                  ucp_tag_eager_sync_zcopy_req_complete, 1);
 }
 
-const ucp_proto_t ucp_tag_eager_sync_proto = {
+const ucp_request_send_proto_t ucp_tag_eager_sync_proto = {
     .contig_short            = NULL,
     .bcopy_single            = ucp_tag_eager_sync_bcopy_single,
     .bcopy_multi             = ucp_tag_eager_sync_bcopy_multi,
     .zcopy_single            = ucp_tag_eager_sync_zcopy_single,
     .zcopy_multi             = ucp_tag_eager_sync_zcopy_multi,
     .zcopy_completion        = ucp_tag_eager_sync_zcopy_completion,
-    .only_hdr_size           = sizeof(ucp_eager_sync_hdr_t),
-    .first_hdr_size          = sizeof(ucp_eager_sync_first_hdr_t),
-    .mid_hdr_size            = sizeof(ucp_eager_hdr_t)
+    .only_hdr_size           = sizeof(ucp_eager_sync_hdr_t)
 };
 
 void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_flags)

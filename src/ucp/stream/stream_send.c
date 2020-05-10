@@ -12,7 +12,6 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
-#include <ucp/proto/proto.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucp/stream/stream.h>
 #include <ucp/dt/dt.h>
@@ -44,13 +43,14 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.mem_type     = ucp_memory_type_detect(ep->worker->context,
                                                     (void*)buffer,
                                                     req->send.length);
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.tag, sizeof(req->send.tag));
+    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.msg_proto.tag,
+                                sizeof(req->send.msg_proto.tag));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_stream_send_req(ucp_request_t *req, size_t count,
                     const ucp_ep_msg_config_t* msg_config,
-                    ucp_send_callback_t cb, const ucp_proto_t *proto)
+                    ucp_send_callback_t cb, const ucp_request_send_proto_t *proto)
 {
     size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config,
                                                         count, SIZE_MAX);
@@ -76,7 +76,7 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
         return UCS_STATUS_PTR(status);
     }
 
-    ucp_request_set_callback(req, send.cb, cb)
+    ucp_request_set_callback(req, send.cb, (ucp_send_nbx_callback_t)cb, NULL);
     ucs_trace_req("returning send request %p", req);
     return req + 1;
 }
@@ -189,10 +189,10 @@ static size_t ucp_stream_pack_am_first_dt(void *dest, void *arg)
     size_t              length;
 
     hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
-    length      = ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr);
+    length      = ucs_min(ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr),
+                          req->send.length);
 
     ucs_assert(req->send.state.dt.offset == 0);
-    ucs_assert(req->send.length > length);
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
                                       req->send.mem_type, hdr + 1, req->send.buffer,
                                       &req->send.state.dt, length);
@@ -217,7 +217,6 @@ static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self,
                                                 UCP_AM_ID_STREAM_DATA,
                                                 UCP_AM_ID_STREAM_DATA,
-                                                sizeof(ucp_stream_am_hdr_t),
                                                 ucp_stream_pack_am_first_dt,
                                                 ucp_stream_pack_am_middle_dt, 0);
     if (status == UCS_OK) {
@@ -253,14 +252,12 @@ static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
                                  ucp_proto_am_zcopy_req_complete, 0);
 }
 
-const ucp_proto_t ucp_stream_am_proto = {
+const ucp_request_send_proto_t ucp_stream_am_proto = {
     .contig_short            = ucp_stream_contig_am_short,
     .bcopy_single            = ucp_stream_bcopy_single,
     .bcopy_multi             = ucp_stream_bcopy_multi,
     .zcopy_single            = ucp_stream_eager_zcopy_single,
     .zcopy_multi             = ucp_stream_eager_zcopy_multi,
     .zcopy_completion        = ucp_proto_am_zcopy_completion,
-    .only_hdr_size           = sizeof(ucp_stream_am_hdr_t),
-    .first_hdr_size          = sizeof(ucp_stream_am_hdr_t),
-    .mid_hdr_size            = sizeof(ucp_stream_am_hdr_t)
+    .only_hdr_size           = sizeof(ucp_stream_am_hdr_t)
 };

@@ -3,10 +3,15 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "cuda_copy_iface.h"
 #include "cuda_copy_md.h"
 #include "cuda_copy_ep.h"
 
+#include <uct/cuda/base/cuda_iface.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/cpu.h>
@@ -182,7 +187,7 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .iface_progress           = uct_cuda_copy_iface_progress,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t),
     .iface_query              = uct_cuda_copy_iface_query,
-    .iface_get_device_address = (void*)ucs_empty_function_return_success,
+    .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
     .iface_get_address        = uct_cuda_copy_iface_get_address,
     .iface_is_reachable       = uct_cuda_copy_iface_is_reachable,
 };
@@ -203,11 +208,12 @@ static void uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chun
 static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t *) obj;
-    ucs_status_t status;
+    int active;
 
-    status = UCT_CUDA_FUNC(cudaEventDestroy(base->event));
-    if (UCS_OK != status) {
-        ucs_error("cudaEventDestroy Failed");
+    UCT_CUDADRV_CTX_ACTIVE(active);
+
+    if (active) {
+        UCT_CUDA_FUNC(cudaEventDestroy(base->event));
     }
 }
 
@@ -266,14 +272,20 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
+    int active;
+
+    UCT_CUDADRV_CTX_ACTIVE(active);
+
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    if (self->stream_h2d != 0) {
-        UCT_CUDA_FUNC(cudaStreamDestroy(self->stream_h2d));
-    }
+    if (active) {
+        if (self->stream_h2d != 0) {
+            UCT_CUDA_FUNC(cudaStreamDestroy(self->stream_h2d));
+        }
 
-    if (self->stream_d2h != 0) {
-        UCT_CUDA_FUNC(cudaStreamDestroy(self->stream_d2h));
+        if (self->stream_d2h != 0) {
+            UCT_CUDA_FUNC(cudaStreamDestroy(self->stream_d2h));
+        }
     }
 
     ucs_mpool_cleanup(&self->cuda_event_desc, 1);

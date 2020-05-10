@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "cuda_ipc_md.h"
 
 #include <string.h>
@@ -12,6 +16,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <ucs/profile/profile.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -30,7 +35,7 @@ static ucs_status_t uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_CUDA;
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
-    md_attr->cap.max_reg          = UCT_CUDA_IPC_MAX_ALLOC_SZ;
+    md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_cuda_ipc_key_t);
     md_attr->reg_cost.overhead    = 0;
     md_attr->reg_cost.growth      = 0;
@@ -45,7 +50,6 @@ static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
     uct_cuda_ipc_key_t *mem_hndl = (uct_cuda_ipc_key_t *) memh;
 
     *packed          = *mem_hndl;
-    packed->d_mapped = 0;
 
     return UCT_CUDADRV_FUNC(cuDeviceGetUuid(&packed->uuid, mem_hndl->dev_num));
 }
@@ -65,14 +69,14 @@ static inline void uct_cuda_ipc_uuid_copy(CUuuid* dst, const CUuuid* src)
     *b   = *a;
 }
 
-static ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
-                                                           uct_cuda_ipc_md_t* md,
-                                                           CUuuid* uuid)
+ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
+                                                    uct_cuda_ipc_md_t* md,
+                                                    uct_cuda_ipc_key_t *rkey)
 {
     int i;
 
     for (i = 0; i < md->uuid_map_size; i++) {
-        if (uct_cuda_ipc_uuid_equals(uuid, &md->uuid_map[i])) {
+        if (uct_cuda_ipc_uuid_equals(&rkey->uuid, &md->uuid_map[i])) {
             *idx = i;
             return UCS_OK; /* found */
         }
@@ -107,7 +111,7 @@ static ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
     }
 
     /* Add new mapping */
-    uct_cuda_ipc_uuid_copy(&md->uuid_map[md->uuid_map_size], uuid);
+    uct_cuda_ipc_uuid_copy(&md->uuid_map[md->uuid_map_size], &rkey->uuid);
     *idx = md->uuid_map_size++;
 
     return UCS_OK;
@@ -121,31 +125,41 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
     int peer_idx;
     int num_devices;
     char* accessible;
+    CUdeviceptr d_mapped;
 
-    status = uct_cuda_ipc_get_unique_index_for_uuid(&peer_idx, mdc->md, &rkey->uuid);
+    status = uct_cuda_ipc_get_unique_index_for_uuid(&peer_idx, mdc->md, rkey);
     if (ucs_unlikely(status != UCS_OK)) {
         return status;
     }
+
+    /* overwrite dev_num with a unique ID; this means that relative remote
+     * device number of multiple peers do not map on the same stream and reduces
+     * stream sequentialization */
+    rkey->dev_num = peer_idx;
 
     UCT_CUDA_IPC_GET_DEVICE(this_device);
     UCT_CUDA_IPC_DEVICE_GET_COUNT(num_devices);
 
     accessible = &mdc->md->peer_accessible_cache[peer_idx * num_devices + this_device];
     if (*accessible == (char)0xFF) { /* unchecked, add to cache */
-        /* rkey->d_mapped is picked up in uct_cuda_ipc_cache_map_memhandle */
-        CUresult result = cuIpcOpenMemHandle(&rkey->d_mapped,
+        CUresult result = cuIpcOpenMemHandle(&d_mapped,
                                              rkey->ph,
                                              CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
         *accessible = ((result != CUDA_SUCCESS) && (result != CUDA_ERROR_ALREADY_MAPPED))
                     ? 0 : 1;
+        if (result == CUDA_SUCCESS) {
+            result = cuIpcCloseMemHandle(d_mapped);
+            if (result != CUDA_SUCCESS) ucs_fatal("Unable to close memhandle");
+        }
     }
 
     return (*accessible == 1) ? UCS_OK : UCS_ERR_UNREACHABLE;
 }
 
-static ucs_status_t uct_cuda_ipc_rkey_unpack(uct_component_t *component,
-                                             const void *rkey_buffer,
-                                             uct_rkey_t *rkey_p, void **handle_p)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
+                 (component, rkey_buffer, rkey_p, handle_p),
+                 uct_component_t *component, const void *rkey_buffer,
+                 uct_rkey_t *rkey_p, void **handle_p)
 {
     uct_cuda_ipc_component_t *com = ucs_derived_of(component, uct_cuda_ipc_component_t);
     uct_cuda_ipc_key_t *packed    = (uct_cuda_ipc_key_t *) rkey_buffer;
@@ -200,9 +214,8 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
                                           &(key->b_len),
                                           (CUdeviceptr) addr));
     key->dev_num  = (int) cu_device;
-    key->d_mapped = 0;
     ucs_trace("registered memory:%p..%p length:%lu dev_num:%d",
-              addr, addr + length, length, (int) cu_device);
+              addr, UCS_PTR_BYTE_OFFSET(addr, length), length, (int) cu_device);
     return UCS_OK;
 }
 
@@ -315,6 +328,7 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
             .table          = uct_cuda_ipc_md_config_table,
             .size           = sizeof(uct_cuda_ipc_md_config_t),
         },
+        .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
         .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cuda_ipc_component.super),
         .flags              = 0
     },

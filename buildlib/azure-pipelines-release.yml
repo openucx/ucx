@@ -1,4 +1,5 @@
 # See https://aka.ms/yaml
+# This pipeline to be run on tags creation
 
 pr: none
 trigger:
@@ -8,8 +9,8 @@ trigger:
 
 resources:
   containers:
-    - container: fedora
-      image: ucfconsort.azurecr.io/ucx/fedora:1
+    - container: centos7
+      image: ucfconsort.azurecr.io/ucx/centos7:1
       endpoint: ucfconsort_registry
 
 stages:
@@ -19,13 +20,16 @@ stages:
         displayName: build tarball and source rpm
         container: fedora
         steps:
+          - checkout: self
+            clean: true
+
           - bash: ./autogen.sh
             displayName: Setup autotools
 
           - bash: |
               set -eE
               gcc --version
-              ./contrib/configure-release
+              ./contrib/configure-release --with-java
               ./contrib/buildrpm.sh -s -t -b
             displayName: Build tarball
 
@@ -41,3 +45,12 @@ stages:
               assets: |
                 ./ucx-*.tar.gz
                 ./rpm-dist/ucx-*.src.rpm
+
+          - bash: |
+              set -eE
+              make -s -j`nproc`
+            displayName: Build ucx
+
+          - template: jucx-publish.yml
+            parameters:
+              target: publish-release

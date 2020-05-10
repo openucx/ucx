@@ -8,6 +8,7 @@ import org.openucx.jucx.UcxException;
 import org.openucx.jucx.UcxNativeStruct;
 
 import java.io.Closeable;
+import java.net.InetSocketAddress;
 
 /**
  * The listener handle is an opaque object that is used for listening on a
@@ -15,11 +16,21 @@ import java.io.Closeable;
  */
 public class UcpListener extends UcxNativeStruct implements Closeable {
 
+    private InetSocketAddress address;
+
     public UcpListener(UcpWorker worker, UcpListenerParams params) {
         if (params.getSockAddr() == null) {
             throw new UcxException("UcpListenerParams.sockAddr must be non-null.");
         }
         setNativeId(createUcpListener(params, worker.getNativeId()));
+        address = params.getSockAddr();
+    }
+
+    /**
+     * Returns a socket address of this listener.
+     */
+    public InetSocketAddress getAddress() {
+        return address;
     }
 
     @Override

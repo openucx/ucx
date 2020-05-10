@@ -5,21 +5,29 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/debug/log.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
-#include <sys/types.h>
-#include <ifaddrs.h>
+#include <ucs/sys/iovec.h>
+#include <ucs/sys/iovec.inl>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <ifaddrs.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
 
 
-#define UCS_SOCKET_MAX_CONN_PATH "/proc/sys/net/core/somaxconn"
+#define UCS_NETIF_BOND_AD_NUM_PORTS_FMT  "/sys/class/net/%s/bonding/ad_num_ports"
+#define UCS_SOCKET_MAX_CONN_PATH         "/proc/sys/net/core/somaxconn"
 
 
 typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
@@ -38,7 +46,7 @@ ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
                              struct ifreq *if_req)
 {
     ucs_status_t status;
-    int fd, ret;
+    int fd = -1, ret;
 
     ucs_strncpy_zero(if_req->ifr_name, if_name, sizeof(if_req->ifr_name));
 
@@ -80,6 +88,23 @@ int ucs_netif_is_active(const char *if_name)
     return ucs_netif_flags_is_active(ifr.ifr_flags);
 }
 
+unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
+{
+    ucs_status_t status;
+    long ad_num_ports;
+
+    status = ucs_read_file_number(&ad_num_ports, 1,
+                                  UCS_NETIF_BOND_AD_NUM_PORTS_FMT, bond_name);
+    if ((status != UCS_OK) || (ad_num_ports <= 0) ||
+        (ad_num_ports > UINT_MAX)) {
+        ucs_diag("failed to read from " UCS_NETIF_BOND_AD_NUM_PORTS_FMT ": %m, "
+                 "assuming 802.3ad bonding is disabled", bond_name);
+        return 1;
+    }
+
+    return (unsigned)ad_num_ports;
+}
+
 ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)
 {
     int fd = socket(domain, type, 0);
@@ -105,7 +130,7 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
     return UCS_OK;
 }
 
-static const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
+const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
 {
     struct sockaddr_storage sock_addr = {0}; /* Suppress Clang false-positive */
     socklen_t addr_size;
@@ -124,6 +149,28 @@ static const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
                             str, max_size);
 }
 
+static ucs_status_t ucs_socket_check_errno(int io_errno)
+{
+    if ((io_errno == EAGAIN) || (io_errno == EWOULDBLOCK) || (io_errno == EINTR)) {
+        /* IO operation or connection establishment procedure was interrupted
+         * or would block and need to try again */
+        return UCS_ERR_NO_PROGRESS;
+    }
+
+    if (io_errno == ECONNRESET) {
+        /* Connection reset by peer */
+        return UCS_ERR_CONNECTION_RESET;
+    } else if (io_errno == ECONNREFUSED) {
+        /* A remote host refused to allow the network connection */
+        return UCS_ERR_REJECTED;
+    } else if (io_errno == ETIMEDOUT) {
+        /* Connection establishment procedure timed out */
+        return UCS_ERR_TIMED_OUT;
+    }
+
+    return UCS_ERR_IO_ERROR;
+}
+
 ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 {
     char dest_str[UCS_SOCKADDR_STRING_LEN];
@@ -140,12 +187,11 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
 
     do {
         ret = connect(fd, dest_addr, dest_addr_size);
-
-        /* Save errno to separate variable to not override it
-         * when calling getsockname() below */
-        conn_errno = errno;
-
         if (ret < 0) {
+            /* Save errno to separate variable to not override it
+             * when calling getsockname() below */
+            conn_errno = errno;
+
             if (errno == EINPROGRESS) {
                 status = UCS_INPROGRESS;
                 break;
@@ -162,6 +208,8 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
                                            UCS_SOCKADDR_STRING_LEN));
                 return UCS_ERR_UNREACHABLE;
             }
+        } else {
+            conn_errno = 0;
         }
     } while ((ret < 0) && (errno == EINTR));
 
@@ -173,22 +221,57 @@ ucs_status_t ucs_socket_connect(int fd, const struct sockaddr *dest_addr)
     return status;
 }
 
+ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_ptr,
+                               int *accept_fd)
+{
+    ucs_status_t status;
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+
+    *accept_fd = accept(fd, addr, length_ptr);
+    if (*accept_fd < 0) {
+        status = ucs_socket_check_errno(errno);
+        if (status == UCS_ERR_NO_PROGRESS) {
+            return status;
+        }
+
+        ucs_error("accept() failed (client addr %s): %m",
+                  ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_socket_getpeername(int fd, struct sockaddr_storage *peer_addr,
+                                    socklen_t *peer_addr_len)
+{
+    int ret;
+
+    *peer_addr_len = sizeof(*peer_addr);
+    ret            = getpeername(fd, (struct sockaddr*)peer_addr,
+                                 peer_addr_len);
+    if (ret < 0) {
+        if ((errno != ENOTCONN) && (errno != ECONNRESET)) {
+            ucs_error("getpeername(fd=%d) failed: %m", fd);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        return UCS_ERR_NOT_CONNECTED;
+    }
+
+    return UCS_OK;
+}
+
 int ucs_socket_is_connected(int fd)
 {
     struct sockaddr_storage peer_addr = {0}; /* Suppress Clang false-positive */
     char peer_str[UCS_SOCKADDR_STRING_LEN];
     char local_str[UCS_SOCKADDR_STRING_LEN];
     socklen_t peer_addr_len;
-    int ret;
+    ucs_status_t status;
 
-    peer_addr_len = sizeof(peer_addr);
-    ret           = getpeername(fd, (struct sockaddr*)&peer_addr,
-                                &peer_addr_len);
-    if (ret < 0) {
-        if ((errno != ENOTCONN) && (errno != ECONNRESET)) {
-            ucs_error("getpeername(fd=%d) failed: %m", fd);
-        }
-
+    status = ucs_socket_getpeername(fd, &peer_addr, &peer_addr_len);
+    if (status != UCS_OK) {
         return 0;
     }
 
@@ -198,6 +281,61 @@ int ucs_socket_is_connected(int fd)
                                UCS_SOCKADDR_STRING_LEN));
 
     return 1;
+}
+
+
+ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
+                                    int backlog, int *listen_fd)
+{
+    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+    int ret, fd = -1;
+    uint16_t port;
+
+    /* Create the server socket for accepting incoming connections */
+    status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, &fd);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    /* Set the fd to non-blocking mode (so that accept() won't be blocking) */
+    status = ucs_sys_fcntl_modfl(fd, O_NONBLOCK, 0);
+    if (status != UCS_OK) {
+        goto err_close_socket;
+    }
+
+    status = ucs_sockaddr_get_port(saddr, &port);
+    if (status != UCS_OK) {
+        goto err_close_socket;
+    }
+
+    do {
+        ret = bind(fd, saddr, socklen);
+    } while (!port && (ret < 0) && (errno == EADDRINUSE));
+
+    if (ret < 0) {
+        ucs_error("bind(fd=%d addr=%s) failed: %m",
+                  fd, ucs_sockaddr_str((struct sockaddr *)saddr,
+                                       ip_port_str, sizeof(ip_port_str)));
+        status = (errno == EADDRINUSE) ? UCS_ERR_BUSY : UCS_ERR_IO_ERROR;
+        goto err_close_socket;
+    }
+
+    if (listen(fd, backlog) < 0) {
+        ucs_error("listen(fd=%d addr=%s backlog=%d) failed: %m",
+                  fd, ucs_sockaddr_str(saddr, ip_port_str, sizeof(ip_port_str)),
+                  backlog);
+        status = UCS_ERR_IO_ERROR;
+        goto err_close_socket;
+    }
+
+    *listen_fd = fd;
+    return UCS_OK;
+
+err_close_socket:
+    close(fd);
+err:
+    return status;
 }
 
 int ucs_socket_max_conn()
@@ -221,20 +359,32 @@ static ucs_status_t
 ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_errno,
                            ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
 {
-    ucs_status_t status = UCS_ERR_IO_ERROR;
+    ucs_status_t status;
 
     if (io_retval == 0) {
+        /* 0 can be returned only by recv() system call as an error if
+         * the connection was dropped by peer */
+        ucs_assert(!strcmp(name, "recv"));
         ucs_trace("fd %d is closed", fd);
-        return UCS_ERR_CANCELED; /* Connection closed */
+        return UCS_ERR_NOT_CONNECTED; /* Connection closed by peer */
     }
 
-    if ((io_errno == EINTR) || (io_errno == EAGAIN) || (io_errno == EWOULDBLOCK)) {
+    status = ucs_socket_check_errno(io_errno);
+    if (status == UCS_ERR_NO_PROGRESS) {
         return UCS_ERR_NO_PROGRESS;
     }
 
     if (err_cb != NULL) {
-        status = err_cb(err_cb_arg, io_errno);
+        status = err_cb(err_cb_arg, status);
         if (status == UCS_OK) {
+            /* UCS_ERR_CANCELED has to be returned if no other actions
+             * are required in order to prevent an endless loop in
+             * blocking IO operations (they continue a loop if UCS_OK
+             * or UCS_ERR_NO_PROGRESS is returned) */
+            return UCS_ERR_CANCELED;
+        } else if (status == UCS_ERR_NO_PROGRESS) {
+            /* No error will be printed, a caller should continue
+             * calling function later in order to send/recv data */
             return UCS_ERR_NO_PROGRESS;
         }
     }
@@ -244,24 +394,62 @@ ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_e
     return status;
 }
 
+/**
+ * Handle the IO operation.
+ *
+ * @param [in]  fd         The socket fd.
+ * @param [in]  data       The pointer to user's data or pointer to the array of
+ *                         iov elements.
+ * @param [in]  count      The length of user's data or the number of elemnts in
+ *                         the array of iov.
+ * @param [out] length_p   Pointer to the result length of user's data that was
+ *                         sent/received.
+ * @param [in]  is_iov     Flag that specifies type of the operation (1 if vector
+ *                         operation).
+ * @param [in]  io_retval  The result of the IO operation.
+ * @param [in]  io_errno   IO operation errno.
+ * @param [in]  err_cb     Error callback.
+ * @param [in]  err_cb_arg User's argument for the error callback.
+ *
+ * @return if the IO operation was successful - UCS_OK, otherwise - error status.
+ */
+static inline ucs_status_t
+ucs_socket_handle_io(int fd, const void *data, size_t count,
+                     size_t *length_p, int is_iov, int io_retval,
+                     int io_errno, const char *name,
+                     ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+{
+    /* The IO operation is considered as successful if: */
+    if (ucs_likely(io_retval > 0)) {
+        /* - the return value > 0 */
+        *length_p = io_retval;
+        return UCS_OK;
+    }
+
+    if ((io_retval == 0) &&
+        ((count == 0) ||
+         (is_iov && (ucs_iovec_total_length((const struct iovec*)data,
+                                            count) == 0)))) {
+        /* - the return value == 0 and the user's data length == 0
+         *   (the number of the iov array buffers == 0 or the total
+         *   length of the iov array buffers == 0) */
+        *length_p = 0;
+        return UCS_OK;
+    }
+
+    *length_p = 0;
+    return ucs_socket_handle_io_error(fd, name, io_retval, io_errno,
+                                      err_cb, err_cb_arg);
+}
+
 static inline ucs_status_t
 ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
                     ucs_socket_io_func_t io_func, const char *name,
                     ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
 {
-    ssize_t ret;
-
-    ucs_assert(*length_p > 0);
-
-    ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
-    if (ucs_likely(ret > 0)) {
-        *length_p = ret;
-        return UCS_OK;
-    }
-
-    *length_p = 0;
-    return ucs_socket_handle_io_error(fd, name, ret, errno,
-                                      err_cb, err_cb_arg);
+    ssize_t ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
+    return ucs_socket_handle_io(fd, data, *length_p, length_p, 0,
+                                ret, errno, name, err_cb, err_cb_arg);
 }
 
 static inline ucs_status_t
@@ -295,17 +483,9 @@ ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p
     };
     ssize_t ret;
 
-    ucs_assert(iov_cnt > 0);
-
     ret = iov_func(fd, &msg, MSG_NOSIGNAL);
-    if (ucs_likely(ret > 0)) {
-        *length_p = ret;
-        return UCS_OK;
-    }
-
-    *length_p = 0;
-    return ucs_socket_handle_io_error(fd, name, ret, errno,
-                                      err_cb, err_cb_arg);
+    return ucs_socket_handle_io(fd, iov, iov_cnt, length_p, 1,
+                                ret, errno, name, err_cb, err_cb_arg);
 }
 
 ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
@@ -317,11 +497,18 @@ ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
                                "send", err_cb, err_cb_arg);
 }
 
+/* recv is declared as 'always_inline' on some platforms, it leads to
+ * compilation warning. wrap it into static function */
+static ssize_t ucs_socket_recv_io(int fd, void *data, size_t size, int flags)
+{
+    return recv(fd, data, size, flags);
+}
+
 ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
                                 ucs_socket_io_err_cb_t err_cb,
                                 void *err_cb_arg)
 {
-    return ucs_socket_do_io_nb(fd, data, length_p, recv,
+    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io,
                                "recv", err_cb, err_cb_arg);
 }
 
@@ -338,7 +525,7 @@ ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
                              ucs_socket_io_err_cb_t err_cb,
                              void *err_cb_arg)
 {
-    return ucs_socket_do_io_b(fd, data, length, recv,
+    return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io,
                               "recv", err_cb, err_cb_arg);
 }
 
@@ -493,6 +680,20 @@ out:
     return result;
 }
 
+int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
+{
+    if (!ucs_sockaddr_is_known_af(sa1) || !ucs_sockaddr_is_known_af(sa2)) {
+        ucs_error("unknown address family: %d",
+                  !ucs_sockaddr_is_known_af(sa1) ? sa1->sa_family : sa2->sa_family);
+        return -1;
+    }
+
+    return memcmp(ucs_sockaddr_get_inet_addr(sa1),
+                  ucs_sockaddr_get_inet_addr(sa2),
+                  (sa1->sa_family == AF_INET) ?
+                  sizeof(struct in_addr) : sizeof(struct in6_addr));
+}
+
 int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
 {
     switch (addr->sa_family) {
@@ -557,6 +758,12 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
 
     for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
         sa = (struct sockaddr*) ifa->ifa_addr;
+
+        if (sa == NULL) {
+            ucs_debug("NULL ifaddr encountered with ifa_name: %s", ifa->ifa_name);
+            continue;
+        }
+
         if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) && 
             (!ucs_sockaddr_cmp(sa, my_addr, NULL))) {
             ucs_debug("matching ip found iface on %s", ifa->ifa_name);
@@ -569,4 +776,16 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
     freeifaddrs(ifaddrs);
 
     return status;
+}
+
+const char *ucs_sockaddr_address_family_str(sa_family_t af)
+{
+    switch (af) {
+    case AF_INET:
+        return "IPv4";
+    case AF_INET6:
+        return "IPv6";
+    default:
+        return "not IPv4 or IPv6";
+    }
 }

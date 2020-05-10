@@ -233,15 +233,17 @@ static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler)
 
     mode  = handler->mode;
     async = handler->async;
-    if (async != NULL) {
-        async->last_wakeup = ucs_get_time();
-    }
+
     if (async == NULL) {
         ucs_async_handler_invoke(handler);
-    } else if (ucs_async_method_call(mode, context_try_block, async)) {
+        return UCS_OK;
+    }
+
+    async->last_wakeup = ucs_get_time();
+    if (ucs_async_method_call(mode, context_try_block, async)) {
         ucs_async_handler_invoke(handler);
         ucs_async_method_call(mode, context_unblock, async);
-    } else /* async != NULL */ {
+    } else {
         ucs_trace_async("missed " UCS_ASYNC_HANDLER_FMT ", last_wakeup %lu",
                         UCS_ASYNC_HANDLER_ARG(handler), async->last_wakeup);
         if (ucs_atomic_cswap32(&handler->missed, 0, 1) == 0) {
@@ -361,9 +363,8 @@ void ucs_async_context_cleanup(ucs_async_context_t *async)
         pthread_rwlock_rdlock(&ucs_async_global_context.handlers_lock);
         kh_foreach_value(&ucs_async_global_context.handlers, handler, {
             if (async == handler->async) {
-                ucs_warn("async %p handler "UCS_ASYNC_HANDLER_FMT" %s() not released",
-                         async, UCS_ASYNC_HANDLER_ARG(handler),
-                         ucs_debug_get_symbol_name(handler->cb));
+                ucs_warn("async %p handler "UCS_ASYNC_HANDLER_FMT" not released",
+                         async, UCS_ASYNC_HANDLER_ARG(handler));
             }
         });
         ucs_warn("releasing async context with %d handlers", async->num_handlers);
@@ -502,7 +503,7 @@ err:
     return status;
 }
 
-ucs_status_t ucs_async_remove_handler(int id, int sync)
+ucs_status_t ucs_async_remove_handler(int id, int is_sync)
 {
     ucs_async_handler_t *handler;
     ucs_status_t status;
@@ -536,7 +537,7 @@ ucs_status_t ucs_async_remove_handler(int id, int sync)
         ucs_atomic_add32(&handler->async->num_handlers, (uint32_t)-1);
     }
 
-    if (sync) {
+    if (is_sync) {
         int called = (pthread_self() == handler->caller);
         ucs_trace("waiting for " UCS_ASYNC_HANDLER_FMT " completion (called=%d)",
                   UCS_ASYNC_HANDLER_ARG(handler), called);

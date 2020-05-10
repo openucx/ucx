@@ -26,14 +26,9 @@ static const char *uct_rc_fence_mode_values[] = {
 };
 
 ucs_config_field_t uct_rc_iface_common_config_table[] = {
-  {"IB_", "RX_INLINE=64;RX_QUEUE_LEN=4095", NULL,
+  {UCT_IB_CONFIG_PREFIX, "RX_INLINE=64;TX_INLINE_RESP=64;RX_QUEUE_LEN=4095;SEG_SIZE=8256", NULL,
    ucs_offsetof(uct_rc_iface_common_config_t, super),
-                UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
-
-  {"PATH_MTU", "default",
-   "Path MTU. \"default\" will select the best MTU for the device.",
-   ucs_offsetof(uct_rc_iface_common_config_t, path_mtu),
-                UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
+   UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
   {"MAX_RD_ATOMIC", "4",
    "Maximal number of outstanding read or atomic replies",
@@ -86,13 +81,21 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
                 UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
 
+  {"TX_NUM_GET_OPS", "inf",
+   "Maximal number of simultaneous get/RDMA_READ operations.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_ops), UCS_CONFIG_TYPE_UINT},
+
+  {"MAX_GET_ZCOPY", "auto",
+   "Maximal size of get operation with zcopy protocol.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_zcopy), UCS_CONFIG_TYPE_MEMUNITS},
+
   {NULL}
 };
 
 
 /* Config relevant for rc_mlx5 and rc_verbs only (not for dc) */
 ucs_config_field_t uct_rc_iface_config_table[] = {
-  {"", "MAX_NUM_EPS=256", NULL,
+  {"RC_", "MAX_NUM_EPS=256", NULL,
    ucs_offsetof(uct_rc_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
 
@@ -113,14 +116,15 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 };
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_iface_stats_class = {
     .name = "rc_iface",
     .num_counters = UCT_RC_IFACE_STAT_LAST,
     .counter_names = {
         [UCT_RC_IFACE_STAT_RX_COMPLETION] = "rx_completion",
         [UCT_RC_IFACE_STAT_TX_COMPLETION] = "tx_completion",
-        [UCT_RC_IFACE_STAT_NO_CQE]        = "no_cqe"
+        [UCT_RC_IFACE_STAT_NO_CQE]        = "no_cqe",
+        [UCT_RC_IFACE_STAT_NO_READS]      = "no_reads"
     }
 };
 
@@ -156,7 +160,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov,
-                                size_t tag_max_iov, size_t tag_min_hdr)
+                                size_t am_min_hdr, size_t rma_max_iov)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     ucs_status_t status;
@@ -179,9 +183,10 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                   UCT_IFACE_FLAG_GET_ZCOPY       |
                                   UCT_IFACE_FLAG_PENDING         |
                                   UCT_IFACE_FLAG_CONNECT_TO_EP   |
-                                  UCT_IFACE_FLAG_CB_SYNC         |
-                                  UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                  UCT_IFACE_FLAG_EVENT_RECV;
+                                  UCT_IFACE_FLAG_CB_SYNC;
+    iface_attr->cap.event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                  UCT_IFACE_FLAG_EVENT_RECV      |
+                                  UCT_IFACE_FLAG_EVENT_FD;
 
     if (uct_ib_device_has_pci_atomics(dev)) {
         if (dev->pci_fadd_arg_sizes & sizeof(uint64_t)) {
@@ -206,9 +211,9 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.put.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.get.opt_zcopy_align = UCS_SYS_PCI_MAX_PAYLOAD;
     iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_PCI_MAX_PAYLOAD;
-    iface_attr->cap.put.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
-    iface_attr->cap.get.align_mtu = uct_ib_mtu_value(iface->config.path_mtu);
-    iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->config.path_mtu);
+    iface_attr->cap.put.align_mtu = uct_ib_mtu_value(iface->super.config.path_mtu);
+    iface_attr->cap.get.align_mtu = uct_ib_mtu_value(iface->super.config.path_mtu);
+    iface_attr->cap.am.align_mtu  = uct_ib_mtu_value(iface->super.config.path_mtu);
 
 
     /* PUT */
@@ -216,20 +221,20 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     iface_attr->cap.put.max_bcopy = iface->super.config.seg_size;
     iface_attr->cap.put.min_zcopy = 0;
     iface_attr->cap.put.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.put.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+    iface_attr->cap.put.max_iov   = rma_max_iov;
 
     /* GET */
     iface_attr->cap.get.max_bcopy = iface->super.config.seg_size;
-    iface_attr->cap.get.min_zcopy = iface->super.config.max_inl_resp + 1;
-    iface_attr->cap.get.max_zcopy = uct_ib_iface_port_attr(&iface->super)->max_msg_sz;
-    iface_attr->cap.get.max_iov   = uct_ib_iface_get_max_iov(&iface->super);
+    iface_attr->cap.get.min_zcopy = iface->super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1;
+    iface_attr->cap.get.max_zcopy = iface->config.max_get_zcopy;
+    iface_attr->cap.get.max_iov   = rma_max_iov;
 
     /* AM */
-    iface_attr->cap.am.max_short  = uct_ib_iface_hdr_size(max_inline, tag_min_hdr);
-    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - tag_min_hdr;
+    iface_attr->cap.am.max_short  = uct_ib_iface_hdr_size(max_inline, am_min_hdr);
+    iface_attr->cap.am.max_bcopy  = iface->super.config.seg_size - am_min_hdr;
     iface_attr->cap.am.min_zcopy  = 0;
-    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - tag_min_hdr;
-    iface_attr->cap.am.max_hdr    = am_max_hdr - tag_min_hdr;
+    iface_attr->cap.am.max_zcopy  = iface->super.config.seg_size - am_min_hdr;
+    iface_attr->cap.am.max_hdr    = am_max_hdr - am_min_hdr;
     iface_attr->cap.am.max_iov    = am_max_iov;
 
     /* Error Handling */
@@ -306,30 +311,9 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_rc_iface_send_desc_t *desc = obj;
-    uct_ib_mem_t *ib_memh = memh;
 
-    desc->lkey = ib_memh->lkey;
+    desc->lkey        = uct_ib_memh_get_lkey(memh);
     desc->super.flags = 0;
-}
-
-static void uct_rc_iface_set_path_mtu(uct_rc_iface_t *iface,
-                                      const uct_rc_iface_common_config_t *config)
-{
-    enum ibv_mtu port_mtu = uct_ib_iface_port_attr(&iface->super)->active_mtu;
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
-
-    /* MTU is set by user configuration */
-    if (config->path_mtu != UCT_IB_MTU_DEFAULT) {
-        iface->config.path_mtu = (enum ibv_mtu)(config->path_mtu + (IBV_MTU_512 - UCT_IB_MTU_512));
-    } else if ((port_mtu > IBV_MTU_2048) && (IBV_DEV_ATTR(dev, vendor_id) == 0x02c9) &&
-        ((IBV_DEV_ATTR(dev, vendor_part_id) == 4099) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4100) ||
-         (IBV_DEV_ATTR(dev, vendor_part_id) == 4103) || (IBV_DEV_ATTR(dev, vendor_part_id) == 4104)))
-    {
-        /* On some devices optimal path_mtu is 2048 */
-        iface->config.path_mtu = IBV_MTU_2048;
-    } else {
-        iface->config.path_mtu = port_mtu;
-    }
 }
 
 ucs_status_t uct_rc_init_fc_thresh(uct_rc_iface_config_t *config,
@@ -527,19 +511,20 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                     uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
+    uint32_t max_ib_msg_size;
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               &config->super, init_attr);
 
-    self->tx.cq_available           = init_attr->tx_cq_len - 1;
+    self->tx.cq_available           = init_attr->cq_len[UCT_IB_DIR_TX] - 1;
+    self->tx.reads_available        = config->tx.max_get_ops;
     self->rx.srq.available          = 0;
     self->rx.srq.quota              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
     self->config.tx_min_sge         = config->super.tx.min_sge;
     self->config.tx_min_inline      = config->super.tx.min_inline;
-    self->config.tx_ops_count       = init_attr->tx_cq_len;
-    self->config.rx_inline          = config->super.rx.inl;
+    self->config.tx_ops_count       = init_attr->cq_len[UCT_IB_DIR_TX];
     self->config.min_rnr_timer      = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
     self->config.timeout            = uct_ib_to_qp_fabric_time(config->tx.timeout);
     self->config.rnr_retry          = uct_rc_iface_config_limit_value(
@@ -553,11 +538,22 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.max_rd_atomic      = config->max_rd_atomic;
     self->config.ooo_rw             = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
-    self->config.tx_cq_len          = init_attr->tx_cq_len;
+    self->config.tx_cq_len          = init_attr->cq_len[UCT_IB_DIR_TX];
 #endif
+    max_ib_msg_size                 = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
+
+    if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
+        self->config.max_get_zcopy = max_ib_msg_size;
+    } else if (config->tx.max_get_zcopy <= max_ib_msg_size) {
+        self->config.max_get_zcopy = config->tx.max_get_zcopy;
+    } else {
+        ucs_warn("rc_iface on %s:%d: reduced max_get_zcopy to %u",
+                 uct_ib_device_name(dev), self->super.config.port_num,
+                 max_ib_msg_size);
+        self->config.max_get_zcopy = max_ib_msg_size;
+    }
 
     uct_ib_fence_info_init(&self->tx.fi);
-    uct_rc_iface_set_path_mtu(self, config);
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
@@ -695,21 +691,19 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
 
-void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
-                            uct_ib_qp_attr_t *qp_init_attr,
-                            unsigned max_send_wr,
-                            struct ibv_srq *srq)
+void uct_rc_iface_fill_attr(uct_rc_iface_t *iface, uct_ib_qp_attr_t *attr,
+                            unsigned max_send_wr, struct ibv_srq *srq)
 {
-    qp_init_attr->srq                 = srq;
-    qp_init_attr->cap.max_send_wr     = max_send_wr;
-    qp_init_attr->cap.max_recv_wr     = 0;
-    qp_init_attr->cap.max_send_sge    = iface->config.tx_min_sge;
-    qp_init_attr->cap.max_recv_sge    = 1;
-    qp_init_attr->cap.max_inline_data = iface->config.tx_min_inline;
-    qp_init_attr->qp_type             = iface->super.config.qp_type;
-    qp_init_attr->sq_sig_all          = !iface->config.tx_moderation;
-    qp_init_attr->max_inl_recv        = iface->config.rx_inline;
-    qp_init_attr->max_inl_resp        = iface->super.config.max_inl_resp;
+    attr->srq                        = srq;
+    attr->cap.max_send_wr            = max_send_wr;
+    attr->cap.max_recv_wr            = 0;
+    attr->cap.max_send_sge           = iface->config.tx_min_sge;
+    attr->cap.max_recv_sge           = 1;
+    attr->cap.max_inline_data        = iface->config.tx_min_inline;
+    attr->qp_type                    = iface->super.config.qp_type;
+    attr->sq_sig_all                 = !iface->config.tx_moderation;
+    attr->max_inl_cqe[UCT_IB_DIR_RX] = iface->super.config.max_inl_cqe[UCT_IB_DIR_RX];
+    attr->max_inl_cqe[UCT_IB_DIR_TX] = iface->super.config.max_inl_cqe[UCT_IB_DIR_TX];
 }
 
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
@@ -751,7 +745,8 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
-                                     struct ibv_ah_attr *ah_attr)
+                                     struct ibv_ah_attr *ah_attr,
+                                     enum ibv_mtu path_mtu)
 {
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     struct ibv_exp_qp_attr qp_attr;
@@ -762,12 +757,14 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     long qp_attr_mask;
     int ret;
 
+    ucs_assert(path_mtu != 0);
+
     memset(&qp_attr, 0, sizeof(qp_attr));
 
     qp_attr.qp_state              = IBV_QPS_RTR;
     qp_attr.dest_qp_num           = dest_qp_num;
     qp_attr.rq_psn                = 0;
-    qp_attr.path_mtu              = iface->config.path_mtu;
+    qp_attr.path_mtu              = path_mtu;
     qp_attr.max_dest_rd_atomic    = iface->config.max_rd_atomic;
     qp_attr.min_rnr_timer         = iface->config.min_rnr_timer;
     qp_attr.ah_attr               = *ah_attr;

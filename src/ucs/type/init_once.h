@@ -41,8 +41,8 @@ unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock);
  *         ... code ...
  *     }
  *
- * @note It's safe to use a "break" statement in order to exit the code block,
- * but "return" and "continue" statements may lead to unexpected behavior.
+ * @note It's safe to use a "continue" statement in order to exit the code block,
+ * but "return" and "break" statements may lead to unexpected behavior.
  *
  * How does it work? First, lock the mutex. Then check if already initialized,
  * if yes unlock the mutex and exit the loop (pthread_mutex_unlock is expected

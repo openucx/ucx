@@ -305,6 +305,9 @@ AS_IF([test "x$with_ib" = "xyes"],
                      [],
                      [[#include <infiniband/verbs.h>]])
 
+       AC_CHECK_MEMBERS([struct ibv_device_attr_ex.pci_atomic_caps],
+                        [], [], [[#include <infiniband/verbs.h>]])
+
        # Extended atomics
        AS_IF([test "x$have_ext_atomics" != xno],
              [AC_DEFINE([HAVE_IB_EXT_ATOMICS], 1, [IB extended atomics support])],
@@ -335,6 +338,10 @@ AS_IF([test "x$with_ib" = "xyes"],
 
            AS_IF([test "x$with_odp_i" = "xyes" ], [
                AC_DEFINE([HAVE_ODP_IMPLICIT], 1, [Implicit ODP support])])])
+
+       AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,
+                       IBV_QPF_GRH_REQUIRED],
+                      [], [], [[#include <infiniband/verbs.h>]])
 
        AC_CHECK_DECLS(ibv_exp_prefetch_mr, [with_prefetch=yes], [],
                       [[#include <infiniband/verbs_exp.h>]])

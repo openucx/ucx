@@ -19,7 +19,7 @@
 #include <ucs/debug/debug.h>
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ep_stats_class = {
     .name = "uct_ep",
     .num_counters = UCT_EP_STAT_LAST,
@@ -361,7 +361,7 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     ops->ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy;
     ops->ep_pending_purge    = uct_ep_failed_purge;
     ops->ep_flush            = (uct_ep_flush_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_fence            = (uct_ep_fence_func_t)ucs_empty_function_return_ep_timeout;
@@ -393,7 +393,8 @@ void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
 {
     memset(iface_attr, 0, sizeof(*iface_attr));
 
-    iface_attr->max_num_eps = iface->config.max_num_eps;
+    iface_attr->max_num_eps   = iface->config.max_num_eps;
+    iface_attr->dev_num_paths = 1;
 }
 
 ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
@@ -554,6 +555,11 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
                                   const uct_ep_addr_t *ep_addr)
 {
     return ep->iface->ops.ep_connect_to_ep(ep, dev_addr, ep_addr);
+}
+
+ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep)
+{
+    return ep->iface->ops.cm_ep_conn_notify(ep);
 }
 
 UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)

@@ -49,10 +49,10 @@
  */
 #define UCS_WORD_COPY(_dst_type, _dst, _src_type, _src, _size) \
     { \
-        unsigned i; \
+        unsigned _i; \
         UCS_STATIC_ASSERT(sizeof(_src_type) == sizeof(_dst_type)); \
-        for (i = 0; i < (_size) / sizeof(_src_type); ++i) { \
-            *((_dst_type*)(_dst) + i) = *((_src_type*)(_src) + i); \
+        for (_i = 0; _i < (_size) / sizeof(_src_type); ++_i) { \
+            *((_dst_type*)(_dst) + _i) = *((_src_type*)(_src) + _i); \
         } \
     }
 
@@ -85,19 +85,5 @@
     + sizeof(_x)
 #define UCS_CACHELINE_PADDING_MISALIGN(...) \
     ((UCS_PP_FOREACH(UCS_CACHELINE_PADDING_SIZEOF, _, __VA_ARGS__)) % UCS_SYS_CACHE_LINE_SIZE)
-
-
-/*
- * Define code which runs at global constructor phase
- */
-#define UCS_STATIC_INIT \
-    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_ctor)()
-
-
-/*
- * Define code which runs at global destructor phase
- */
-#define UCS_STATIC_CLEANUP \
-    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_dtor)()
 
 #endif

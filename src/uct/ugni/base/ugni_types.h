@@ -29,15 +29,15 @@ typedef struct uct_ugni_device {
 } uct_ugni_device_t;
 
 typedef struct uct_ugni_cdm {
-    gni_cdm_handle_t   cdm_handle; /**< Ugni communication domain */
-    gni_nic_handle_t   nic_handle; /**< Ugni NIC handle */
-    uct_ugni_device_t *dev;        /**< Ugni device the cdm is connected to */
-    ucs_thread_mode_t  thread_mode;
-    uint32_t           address; 
-    uint32_t           domain_id;
+    gni_cdm_handle_t         cdm_handle; /**< Ugni communication domain */
+    gni_nic_handle_t         nic_handle; /**< Ugni NIC handle */
+    uct_ugni_device_t       *dev;        /**< Ugni device the cdm is connected to */
+    ucs_thread_mode_t        thread_mode;
+    uint32_t                 address;
+    uint32_t                 domain_id;
 
 #if ENABLE_MT
-    ucs_spinlock_t   lock;                      /**< Device lock */
+    ucs_recursive_spinlock_t lock;       /**< Device lock */
 #endif
 } uct_ugni_cdm_t;
 

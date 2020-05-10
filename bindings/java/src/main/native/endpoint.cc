@@ -8,8 +8,6 @@
 
 #include <string.h>    /* memset */
 
-#include <ucp/core/ucp_ep.inl> /* ucp_ep_peer_name */
-
 
 static void error_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
@@ -70,6 +68,11 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass c
         }
     }
 
+    if (ep_params.field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
+        field = env->GetFieldID(ucp_ep_params_class, "connectionRequest", "J");
+        ep_params.conn_request = reinterpret_cast<ucp_conn_request_h>(env->GetLongField(ucp_ep_params, field));
+    }
+
     ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLER;
     ep_params.err_handler.cb = error_handler;
 
@@ -85,7 +88,16 @@ JNIEXPORT void JNICALL
 Java_org_openucx_jucx_ucp_UcpEndpoint_destroyEndpointNative(JNIEnv *env, jclass cls,
                                                             jlong ep_ptr)
 {
-    ucp_ep_destroy((ucp_ep_h) ep_ptr);
+    ucp_ep_destroy((ucp_ep_h)ep_ptr);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_closeNonBlockingNative(JNIEnv *env, jclass cls,
+                                                             jlong ep_ptr, jint mode)
+{
+    ucs_status_ptr_t request = ucp_ep_close_nb((ucp_ep_h)ep_ptr, mode);
+
+    return process_request(request, NULL);
 }
 
 JNIEXPORT jobject JNICALL
@@ -99,9 +111,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_unpackRemoteKey(JNIEnv *env, jclass cls,
         JNU_ThrowExceptionByStatus(env, status);
     }
 
-    jclass ucp_rkey_cls = env->FindClass("org/openucx/jucx/ucp/UcpRemoteKey");
-    jmethodID constructor = env->GetMethodID(ucp_rkey_cls, "<init>", "(J)V");
-    jobject result = env->NewObject(ucp_rkey_cls, constructor, (native_ptr)rkey);
+    jobject result = new_rkey_instance(env, rkey);
 
     /* Coverity thinks that rkey is a leaked object here,
      * but it's stored in a UcpRemoteKey object */
@@ -118,8 +128,8 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_putNonBlockingNative(JNIEnv *env, jclass c
     ucs_status_ptr_t request = ucp_put_nb((ucp_ep_h)ep_ptr, (void *)laddr, size, raddr,
                                           (ucp_rkey_h)rkey_ptr, jucx_request_callback);
 
-    ucs_trace_req("JUCX: put_nb request %p to %s, of size: %zu, raddr: %zu",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size, raddr);
+    ucs_trace_req("JUCX: put_nb request %p, of size: %zu, raddr: %zu",
+                  request, size, raddr);
     return process_request(request, callback);
 }
 
@@ -146,8 +156,8 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass c
     ucs_status_ptr_t request = ucp_get_nb((ucp_ep_h)ep_ptr, (void *)laddr, size,
                                           raddr, (ucp_rkey_h)rkey_ptr, jucx_request_callback);
 
-    ucs_trace_req("JUCX: get_nb request %p to %s, raddr: %zu, size: %zu, result address: %zu",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), raddr, size, laddr);
+    ucs_trace_req("JUCX: get_nb request %p, raddr: %zu, size: %zu, result address: %zu",
+                  request, raddr, size, laddr);
     return process_request(request, callback);
 }
 
@@ -174,8 +184,41 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, j
     ucs_status_ptr_t request = ucp_tag_send_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
                                                ucp_dt_make_contig(1), tag, jucx_request_callback);
 
-    ucs_trace_req("JUCX: send_nb request %p to %s, size: %zu, tag: %ld",
-                  request, ucp_ep_peer_name((ucp_ep_h)ep_ptr), size, tag);
+    ucs_trace_req("JUCX: send_tag_nb request %p, size: %zu, tag: %ld",
+                  request, size, tag);
+    return process_request(request, callback);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                  jlong ep_ptr, jlong addr,
+                                                                  jlong size, jobject callback)
+{
+    ucs_status_ptr_t request = ucp_stream_send_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
+                                                  ucp_dt_make_contig(1), jucx_request_callback, 0);
+
+    ucs_trace_req("JUCX: send_stream_nb request %p, size: %zu", request, size);
+    return process_request(request, callback);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                  jlong ep_ptr, jlong addr,
+                                                                  jlong size, jlong flags,
+                                                                  jobject callback)
+{
+    size_t rlength;
+    ucs_status_ptr_t request = ucp_stream_recv_nb((ucp_ep_h)ep_ptr, (void *)addr, size,
+                                                  ucp_dt_make_contig(1), stream_recv_callback,
+                                                  &rlength, flags);
+
+    ucs_trace_req("JUCX: recv_stream_nb request %p, size: %zu", request, size);
+
+    if (request == NULL) {
+        // If request completed immidiately.
+        return process_completed_stream_recv(rlength, callback);
+    }
+
     return process_request(request, callback);
 }
 

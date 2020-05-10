@@ -6,6 +6,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <tools/perf/lib/libperf_int.h>
 
 extern "C" {
@@ -357,6 +361,15 @@ public:
         };
     }
 
+    void flush(int peer_index)
+    {
+        if (m_perf.params.flags & UCX_PERF_TEST_FLAG_FLUSH_EP) {
+            uct_perf_ep_flush_b(&m_perf, peer_index);
+        } else {
+            uct_perf_iface_flush_b(&m_perf);
+        }
+    }
+
     ucs_status_t run_pingpong()
     {
         psn_t send_sn, *recv_sn, sn;
@@ -399,7 +412,7 @@ public:
         ucx_perf_test_start_clock(&m_perf);
 
         buffer      = m_perf.send_buffer;
-        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr + m_perf.offset;
+        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr;
         rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
         ep          = m_perf.uct.peers[1 - my_index].ep;
 
@@ -431,7 +444,7 @@ public:
             }
         }
 
-        uct_perf_iface_flush_b(&m_perf);
+        flush(1 - my_index);
         ucx_perf_get_time(&m_perf);
         return UCS_OK;
     }
@@ -471,7 +484,7 @@ public:
 
         ep          = m_perf.uct.peers[1 - my_index].ep;
         buffer      = m_perf.send_buffer;
-        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr + m_perf.offset;
+        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr;
         rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
         fc_window   = m_perf.params.uct.fc_window;
 
@@ -587,7 +600,7 @@ public:
             }
         }
 
-        uct_perf_iface_flush_b(&m_perf);
+        flush(1 - my_index);
         ucx_perf_get_time(&m_perf);
         ucs_assert(outstanding() == 0);
         if (my_index == 1) {

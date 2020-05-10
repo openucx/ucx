@@ -63,15 +63,16 @@
 #define UCT_IB_MLX5_MAX_SEND_WQE_SIZE   (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB)
 #define UCT_IB_MLX5_CQ_SET_CI           0
 #define UCT_IB_MLX5_CQ_ARM_DB           1
-#define UCT_IB_MLX5_ROCE_SRC_PORT_MIN   0xC000
 #define UCT_IB_MLX5_LOG_MAX_MSG_SIZE    30
 #define UCT_IB_MLX5_ATOMIC_MODE         3
+#define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA UCS_BIT(28) /* GRH/IP in the receive buffer */
+#define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE  UCS_BIT(29) /* GRH/IP in the CQE */
 
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
 
-#if HAVE_STRUCT_MLX5_WQE_AV_BASE
+#ifdef HAVE_STRUCT_MLX5_WQE_AV_BASE
 
 #  define mlx5_av_base(_av)         (&(_av)->base)
 #  define mlx5_av_grh(_av)          (&(_av)->grh_sec)
@@ -102,7 +103,7 @@ struct mlx5_grh_av {
 
 #endif
 
-#if !(HAVE_MLX5_WQE_CTRL_SOLICITED)
+#ifndef MLX5_WQE_CTRL_SOLICITED
 #  define MLX5_WQE_CTRL_SOLICITED  (1<<1)
 #endif
 
@@ -124,24 +125,34 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_PUT_MAX_SHORT(_av_size) \
     (UCT_IB_MLX5_AM_MAX_SHORT(_av_size) - sizeof(struct mlx5_wqe_raddr_seg))
 
-#define UCT_IB_MLX5_SRQ_STRIDE   (sizeof(struct mlx5_wqe_srq_next_seg) + \
-                                  sizeof(struct mlx5_wqe_data_seg))
-
 #define UCT_IB_MLX5_XRQ_MIN_UWQ_POST 33
 
+#define UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(_devx_objs) \
+    ((_devx_objs) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT)
+
+#define UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(_obj) \
+    UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(UCS_BIT(UCT_IB_DEVX_OBJ_ ## _obj))
 
 enum {
-    UCT_IB_MLX5_MD_FLAG_KSM      = UCS_BIT(0),   /* Device supports KSM */
-    UCT_IB_MLX5_MD_FLAG_DEVX     = UCS_BIT(1),   /* Device supports DEVX */
-    UCT_IB_MLX5_MD_FLAG_DC_TM    = UCS_BIT(2),   /* Device supports TM DC */
-    UCT_IB_MLX5_MD_FLAG_MP_RQ    = UCS_BIT(3),   /* Device supports MP RQ */
+    /* Device supports KSM */
+    UCT_IB_MLX5_MD_FLAG_KSM              = UCS_BIT(0),
+    /* Device supports DEVX */
+    UCT_IB_MLX5_MD_FLAG_DEVX             = UCS_BIT(1),
+    /* Device supports TM DC */
+    UCT_IB_MLX5_MD_FLAG_DC_TM            = UCS_BIT(2),
+    /* Device supports MP RQ */
+    UCT_IB_MLX5_MD_FLAG_MP_RQ            = UCS_BIT(3),
+    /* Device supports creation of indirect MR with atomics access rights */
+    UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS = UCS_BIT(4),
+    /* Device supports RMP to create SRQ for AM */
+    UCT_IB_MLX5_MD_FLAG_RMP              = UCS_BIT(5),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS      = 4,
-    UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP     = UCS_BIT(UCT_IB_DEVX_OBJ_RCQP) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS,
-    UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ    = UCS_BIT(UCT_IB_DEVX_OBJ_RCSRQ) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS,
-    UCT_IB_MLX5_MD_FLAG_DEVX_DCT       = UCS_BIT(UCT_IB_DEVX_OBJ_DCT) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS,
-    UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ    = UCS_BIT(UCT_IB_DEVX_OBJ_DCSRQ) << UCT_IB_MLX5_MD_FLAG_DEVX_OBJS,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 6,
+    UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
+    UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
+    UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
+    UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCSRQ),
 };
 
 
@@ -160,7 +171,7 @@ typedef struct uct_ib_mlx5_md {
     uct_ib_md_t              super;
     uint32_t                 flags;
     ucs_mpool_t              dbrec_pool;
-    ucs_spinlock_t           dbrec_lock;
+    ucs_recursive_spinlock_t dbrec_lock;
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
 
@@ -213,7 +224,6 @@ typedef enum {
 /* Shared receive queue */
 typedef struct uct_ib_mlx5_srq {
     uct_ib_mlx5_obj_type_t             type;
-    int                                topo;       /* linked-list or cyclic */
     uint32_t                           srq_num;
     void                               *buf;
     volatile uint32_t                  *db;
@@ -274,13 +284,19 @@ typedef struct uct_ib_mlx5_devx_uar {
 /* resource domain */
 typedef struct uct_ib_mlx5_res_domain {
     uct_worker_tl_data_t        super;
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
     struct ibv_exp_res_domain   *ibv_domain;
 #elif HAVE_DECL_IBV_ALLOC_TD
     struct ibv_td               *td;
     struct ibv_pd               *pd;
 #endif
 } uct_ib_mlx5_res_domain_t;
+
+
+typedef struct uct_ib_mlx5_qp_attr {
+    uct_ib_qp_attr_t            super;
+    uct_ib_mlx5_mmio_mode_t     mmio_mode;
+} uct_ib_mlx5_qp_attr_t;
 
 
 /* MLX5 QP wrapper */
@@ -291,7 +307,7 @@ typedef struct uct_ib_mlx5_qp {
         struct {
             union {
                 struct ibv_qp          *qp;
-#if HAVE_DC_EXP
+#ifdef HAVE_DC_EXP
                 struct ibv_exp_dct     *dct;
 #endif
             };
@@ -307,7 +323,6 @@ typedef struct uct_ib_mlx5_qp {
 #endif
     };
 } uct_ib_mlx5_qp_t;
-
 
 /* Send work-queue */
 typedef struct uct_ib_mlx5_txwq {
@@ -424,7 +439,7 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
  */
 static inline uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
 {
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
         return 0;
     }
@@ -455,15 +470,14 @@ void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp);
 
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
-                                         uct_ib_qp_attr_t *attr);
+                                         uct_ib_mlx5_qp_attr_t *attr);
 
 /**
  * Create CQ with DV
  */
-ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
-                                   struct ibv_comp_channel *channel,
-                                   int comp_vector, int ignore_overrun,
-                                   size_t *inl, struct ibv_cq **cq_p);
+ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                   const uct_ib_iface_init_attr_t *init_attr,
+                                   int preferred_cpu, size_t inl);
 
 extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
 
@@ -488,17 +502,18 @@ ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited);
 void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
                                   struct mlx5_cqe64 *cqe);
 
+ucs_status_t
+uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
+                          uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
+                          unsigned bf_size,
+                          uct_ib_mlx5_mmio_mode_t *mmio_mode);
+
 /**
  * Initialize txwq structure.
  */
 ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
-
-ucs_status_t uct_ib_mlx5_txwq_init_devx(uct_priv_worker_t *worker,
-                                        uct_ib_mlx5_md_t *md,
-                                        uct_ib_mlx5_txwq_t *txwq,
-                                        uct_ib_mlx5_mmio_mode_t mode);
 
 void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq);
 
@@ -515,13 +530,14 @@ ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
 /**
  * Initialize srq structure.
  */
-ucs_status_t uct_ib_mlx5_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
-                                  size_t sg_byte_count, int num_sge);
+ucs_status_t
+uct_ib_mlx5_verbs_srq_init(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq,
+                           size_t sg_byte_count, int num_sge);
 
 void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
                                uint32_t tail, size_t sg_byte_count, int num_sge);
 
-void uct_ib_mlx5_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
+void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq, struct ibv_srq *verbs_srq);
 
 /**
  * DEVX UAR API
@@ -545,7 +561,7 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar);
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
-                                        uct_ib_qp_attr_t *attr);
+                                        uct_ib_mlx5_qp_attr_t *attr);
 
 ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
                                         const void *in, size_t inlen,
@@ -562,7 +578,7 @@ static inline ucs_status_t
 uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                            uct_ib_mlx5_qp_t *qp,
                            uct_ib_mlx5_txwq_t *tx,
-                           uct_ib_qp_attr_t *attr)
+                           uct_ib_mlx5_qp_attr_t *attr)
 {
     return UCS_ERR_UNSUPPORTED;
 }
@@ -588,11 +604,13 @@ static inline uct_ib_mlx5_dbrec_t *uct_ib_mlx5_get_dbrec(uct_ib_mlx5_md_t *md)
 {
     uct_ib_mlx5_dbrec_t *dbrec;
 
-    ucs_spin_lock(&md->dbrec_lock);
+    ucs_recursive_spin_lock(&md->dbrec_lock);
     dbrec = (uct_ib_mlx5_dbrec_t *)ucs_mpool_get_inline(&md->dbrec_pool);
-    ucs_spin_unlock(&md->dbrec_lock);
+    ucs_recursive_spin_unlock(&md->dbrec_lock);
     if (dbrec != NULL) {
-        dbrec->md = md;
+        dbrec->db[MLX5_SND_DBR] = 0;
+        dbrec->db[MLX5_RCV_DBR] = 0;
+        dbrec->md               = md;
     }
 
     return dbrec;
@@ -602,9 +620,9 @@ static inline void uct_ib_mlx5_put_dbrec(uct_ib_mlx5_dbrec_t *dbrec)
 {
     uct_ib_mlx5_md_t *md = dbrec->md;
 
-    ucs_spin_lock(&md->dbrec_lock);
+    ucs_recursive_spin_lock(&md->dbrec_lock);
     ucs_mpool_put_inline(dbrec);
-    ucs_spin_unlock(&md->dbrec_lock);
+    ucs_recursive_spin_unlock(&md->dbrec_lock);
 }
 
 #endif

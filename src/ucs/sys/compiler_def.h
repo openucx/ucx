@@ -49,6 +49,9 @@
 /* Silence "defined but not used" error for static function */
 #define UCS_F_MAYBE_UNUSED __attribute__((used))
 
+/* Non-null return */
+#define UCS_F_NON_NULL __attribute__((nonnull))
+
 /* Always inline the function */
 #ifdef __GNUC__
 #define UCS_F_ALWAYS_INLINE      inline __attribute__ ((always_inline))
@@ -180,5 +183,17 @@
 
 /* Check if an expression is a compile-time constant */
 #define ucs_is_constant(expr)      __builtin_constant_p(expr)
+
+/*
+ * Define code which runs at global constructor phase
+ */
+#define UCS_STATIC_INIT \
+    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_ctor)()
+
+/*
+ * Define code which runs at global destructor phase
+ */
+#define UCS_STATIC_CLEANUP \
+    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_dtor)()
 
 #endif /* UCS_COMPILER_DEF_H */

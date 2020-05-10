@@ -5,9 +5,13 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "frag_list.h"
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 static ucs_stats_class_t ucs_frag_list_stats_class = {
     .name = "frag_list",
@@ -37,7 +41,7 @@ ucs_status_t ucs_frag_list_init(ucs_frag_list_sn_t initial_sn, ucs_frag_list_t *
     ucs_queue_head_init(&frag_list->list);
     ucs_queue_head_init(&frag_list->ready_list);
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
     frag_list->prev_sn = initial_sn;
 #endif
     status = UCS_STATS_NODE_ALLOC(&frag_list->stats, &ucs_frag_list_stats_class,

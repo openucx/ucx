@@ -3,6 +3,7 @@
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
+# Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -110,6 +111,7 @@ gtest_SOURCES = \
 	ucs/test_stats_filter.cc \
 	uct/test_peer_failure.cc \
 	uct/test_tag.cc \
+	uct/tcp/test_tcp.cc \
 	\
 	ucp/test_ucp_am.cc \
 	ucp/test_ucp_stream.cc \
@@ -129,6 +131,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_tag_perf.cc \
 	ucp/test_ucp_tag_probe.cc \
 	ucp/test_ucp_tag_xfer.cc \
+	ucp/test_ucp_tag_mem_type.cc \
 	ucp/test_ucp_tag.cc \
 	ucp/test_ucp_context.cc \
 	ucp/test_ucp_wireup.cc \
@@ -158,12 +161,14 @@ gtest_SOURCES = \
 	ucs/test_strided_alloc.cc \
 	ucs/test_string.cc \
 	ucs/test_sys.cc \
+	ucs/test_topo.cc \
 	ucs/test_sock.cc \
 	ucs/test_time.cc \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc \
 	ucs/test_type.cc \
 	ucs/test_log.cc \
+	ucs/test_iov.cc \
 	ucs/arch/test_x86_64.cc
 
 if HAVE_IB
@@ -186,7 +191,7 @@ if HAVE_TL_UD
 gtest_SOURCES += \
 	uct/ib/ud_base.cc \
 	uct/ib/test_ud.cc \
-	uct/ib/test_ud_slow_timer.cc \
+	uct/ib/test_ud_timer.cc \
 	uct/ib/test_ud_pending.cc \
 	uct/ib/test_ud_ds.cc
 endif
@@ -212,6 +217,21 @@ gtest_CPPFLAGS += \
 gtest_LDADD += \
 	$(CUDA_LDFLAGS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
+endif
+
+if HAVE_HIP
+if HAVE_GNUXX11
+gtest_SOURCES += \
+	ucm/rocm_hooks.cc
+gtest_CPPFLAGS += \
+	$(HIP_CPPFLAGS)
+gtest_CXXFLAGS += \
+	$(HIP_CXXFLAGS)
+gtest_LDADD += \
+	$(HIP_LDFLAGS) \
+	$(HIP_LIBS) \
+	$(top_builddir)/src/uct/rocm/libuct_rocm.la
+endif
 endif
 
 noinst_HEADERS = \

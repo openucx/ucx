@@ -12,7 +12,6 @@
 #include "ucp_context.h"
 #include "ucp_thread.h"
 
-#include <ucp/proto/proto.h>
 #include <ucp/tag/tag_match.h>
 #include <ucp/wireup/ep_match.h>
 #include <ucs/datastruct/mpool.h>
@@ -113,6 +112,7 @@ enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_WILDCARD,
     UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_SW_PEND,
     UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_NO_IFACE,
+    UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_MEM_REG,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_EGR,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV,
@@ -133,7 +133,7 @@ enum {
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
-                             (_flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) ? \
+                             ((_flags) & UCP_RECV_DESC_FLAG_EAGER_SYNC) ? \
                              UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG : \
                              UCP_WORKER_STAT_TAG_RX_EAGER_MSG, 1);
 
@@ -151,11 +151,11 @@ enum {
 
 #define ucp_worker_mpool_get(_mp) \
     ({ \
-        ucp_mem_desc_t *rdesc = ucs_mpool_get_inline((_mp)); \
-        if (rdesc != NULL) { \
-            VALGRIND_MAKE_MEM_DEFINED(rdesc, sizeof(*rdesc)); \
+        ucp_mem_desc_t *_rdesc = ucs_mpool_get_inline(_mp); \
+        if (_rdesc != NULL) { \
+            VALGRIND_MAKE_MEM_DEFINED(_rdesc, sizeof(*_rdesc)); \
         } \
-        rdesc; \
+        _rdesc; \
     })
 
 
@@ -236,6 +236,9 @@ typedef struct ucp_worker {
     ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
     ucs_mpool_t                   reg_mp;        /* Registered memory pool */
     ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
+    ucs_queue_head_t              rkey_ptr_reqs; /* Queue of submitted RKEY PTR requests that
+                                                  * are in-progress */
+    uct_worker_cb_id_t            rkey_ptr_cb_id;/* RKEY PTR worker callback queue ID */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
     uint64_t                      am_message_id; /* For matching long am's */
     ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */
@@ -313,8 +316,15 @@ static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
 static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
 ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    return (rsc_index == UCP_NULL_RESOURCE) ? NULL :
-           worker->ifaces[ucs_bitmap2idx(worker->context->tl_bitmap, rsc_index)];
+    uint64_t tl_bitmap;
+
+    if (rsc_index == UCP_NULL_RESOURCE) {
+        return NULL;
+    }
+
+    tl_bitmap = worker->context->tl_bitmap;
+    ucs_assert(UCS_BIT(rsc_index) & tl_bitmap);
+    return worker->ifaces[ucs_bitmap2idx(tl_bitmap, rsc_index)];
 }
 
 static UCS_F_ALWAYS_INLINE uct_iface_attr_t*
@@ -337,16 +347,16 @@ ucp_worker_unified_mode(ucp_worker_h worker)
     return worker->context->config.ext.unified_mode;
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
-{
-    return worker->context->config.cm_cmpts_bitmap != 0;
-}
-
 static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
 ucp_worker_num_cm_cmpts(const ucp_worker_h worker)
 {
-    return ucs_popcount(worker->context->config.cm_cmpts_bitmap);
+    return worker->context->config.num_cm_cmpts;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
+{
+    return !!ucp_worker_num_cm_cmpts(worker);
 }
 
 #endif

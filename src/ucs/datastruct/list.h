@@ -8,8 +8,9 @@
 #define UCS_LIST_H_
 
 #include <ucs/sys/compiler_def.h>
-#include <ucs/datastruct/list_types.h>
 
+
+BEGIN_C_DECLS
 
 #define UCS_LIST_INITIALIZER(_prev, _next) \
     { (_prev), (_next) }
@@ -20,6 +21,15 @@
  */
 #define UCS_LIST_HEAD(name) \
     ucs_list_link_t name = UCS_LIST_INITIALIZER(&(name), &(name))
+
+
+/**
+ * A link in a circular list.
+ */
+typedef struct ucs_list_link {
+    struct ucs_list_link  *prev;
+    struct ucs_list_link  *next;
+} ucs_list_link_t;
 
 
 /**
@@ -47,6 +57,18 @@ static inline void ucs_list_insert_replace(ucs_list_link_t *prev,
     elem->next = next;
     prev->next = elem;
     next->prev = elem;
+}
+
+/**
+ * Replace an element in a list with another element.
+ *
+ * @param elem         Element in the list to replace.
+ * @param replacement  New element to insert in place of 'elem'.
+ */
+static inline void ucs_list_replace(ucs_list_link_t *elem,
+                                    ucs_list_link_t *replacement)
+{
+    ucs_list_insert_replace(elem->prev, elem->next, replacement);
 }
 
 /**
@@ -78,10 +100,10 @@ static inline void ucs_list_insert_before(ucs_list_link_t *pos,
  *
  * @param link  Item to remove.
  */
-static inline void ucs_list_del(ucs_list_link_t *link)
+static inline void ucs_list_del(ucs_list_link_t *elem)
 {
-    link->prev->next = link->next;
-    link->next->prev = link->prev;
+    elem->prev->next = elem->next;
+    elem->next->prev = elem->prev;
 }
 
 /**
@@ -189,5 +211,7 @@ static inline unsigned long ucs_list_length(ucs_list_link_t *head)
         ucs_list_del(tmp); \
         ucs_container_of(tmp, _type, _member); \
     })
+
+END_C_DECLS
 
 #endif

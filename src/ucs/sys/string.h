@@ -28,11 +28,11 @@ BEGIN_C_DECLS
 
 /* the numeric value of "infinity" */
 #define UCS_MEMUNITS_INF    ((size_t)-1)
-#define UCS_ULUNITS_INF     ((size_t)-1)
+#define UCS_ULUNITS_INF     ((unsigned long)-1)
 
 /* value which specifies "auto" for a numeric variable */
 #define UCS_MEMUNITS_AUTO   ((size_t)-2)
-#define UCS_ULUNITS_AUTO    ((size_t)-2)
+#define UCS_ULUNITS_AUTO    ((unsigned long)-2)
 #define UCS_HEXUNITS_AUTO   ((uint16_t)-2)
 
 #define UCS_BANDWIDTH_AUTO  (-1.0)
@@ -91,8 +91,10 @@ uint64_t ucs_string_to_id(const char *str);
  * @param value  Value to convert.
  * @param buf    Buffer to place the string.
  * @param max    Maximal length of the buffer.
+ *
+ * @return Pointer to 'buf', which holds the resulting string.
  */
-void ucs_memunits_to_str(size_t value, char *buf, size_t max);
+char *ucs_memunits_to_str(size_t value, char *buf, size_t max);
 
 
 /**
@@ -181,6 +183,20 @@ static UCS_F_ALWAYS_INLINE const char* ucs_basename(const char *path)
  */
 const char *ucs_str_dump_hex(const void* data, size_t length, char *buf,
                              size_t max, size_t per_line);
+
+
+/**
+ * Convert the given flags to a string that represents them.
+ *
+ * @param  str            String to hold the flags string values.
+ * @param  max            Size of the string.
+ * @param  flags          Flags to be converted.
+ * @param  str_table      Conversion table - from flag value to a string.
+ *
+ * @return String that holds the representation of the given flags.
+ */
+const char* ucs_flags_str(char *str, size_t max,
+                          uint64_t flags, const char **str_table);
 
 END_C_DECLS
 

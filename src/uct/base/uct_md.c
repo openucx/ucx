@@ -31,26 +31,16 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
     {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
      ucs_offsetof(uct_md_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
 
-    {"RCACHE_OVERHEAD", "90ns", "Registration cache lookup overhead",
+    {"RCACHE_OVERHEAD", "180ns", "Registration cache lookup overhead",
      ucs_offsetof(uct_md_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME},
 
     {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
      "Registration cache address alignment, must be power of 2\n"
-         "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
+     "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
      ucs_offsetof(uct_md_rcache_config_t, alignment), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
-
-/**
- * Keeps information about allocated configuration structure, to be used when
- * releasing the options.
- */
-typedef struct uct_config_bundle {
-    ucs_config_field_t *table;
-    const char         *table_prefix;
-    char               data[];
-} uct_config_bundle_t;
 
 
 ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
@@ -174,43 +164,6 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
     *rkey_p   = 0xdeadbeef;
     *handle_p = NULL;
     return UCS_OK;
-}
-
-static ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
-                                    ucs_config_field_t *config_table,
-                                    size_t config_size, const char *env_prefix,
-                                    const char *cfg_prefix)
-{
-    uct_config_bundle_t *config_bundle;
-    ucs_status_t status;
-
-    config_bundle = ucs_calloc(1, sizeof(*config_bundle) + config_size, "uct_config");
-    if (config_bundle == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    /* TODO use env_prefix */
-    status = ucs_config_parser_fill_opts(config_bundle->data, config_table,
-                                         env_prefix, cfg_prefix, 0);
-    if (status != UCS_OK) {
-        goto err_free_bundle;
-    }
-
-    config_bundle->table = config_table;
-    config_bundle->table_prefix = ucs_strdup(cfg_prefix, "uct_config");
-    if (config_bundle->table_prefix == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_free_bundle;
-    }
-
-    *bundle = config_bundle;
-    return UCS_OK;
-
-err_free_bundle:
-    ucs_free(config_bundle);
-err:
-    return status;
 }
 
 static uct_tl_t *uct_find_tl(uct_component_h component, uint64_t md_flags,
@@ -463,6 +416,12 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
 ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
 {
     return md->ops->mem_dereg(md, memh);
+}
+
+ucs_status_t uct_md_mem_query(uct_md_h md, const void *addr, const size_t length,
+                              uct_md_mem_attr_t *mem_attr_p)
+{
+    return md->ops->mem_query(md, addr, length, mem_attr_p);
 }
 
 int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,

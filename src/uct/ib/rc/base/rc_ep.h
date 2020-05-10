@@ -92,9 +92,31 @@ enum {
         return _ret; \
     }
 
+#define UCT_RC_CHECK_NUM_RDMA_READ(_iface) \
+    if (ucs_unlikely((_iface)->tx.reads_available == 0)) { \
+        UCS_STATS_UPDATE_COUNTER((_iface)->stats, \
+                                 UCT_RC_IFACE_STAT_NO_READS, 1); \
+        return UCS_ERR_NO_RESOURCE; \
+    }
+
+#define UCT_RC_RDMA_READ_POSTED(_iface) \
+    { \
+        ucs_assert((_iface)->tx.reads_available > 0); \
+        --(_iface)->tx.reads_available; \
+    }
+
 #define UCT_RC_CHECK_RES(_iface, _ep) \
     UCT_RC_CHECK_CQE_RET(_iface, _ep, UCS_ERR_NO_RESOURCE) \
     UCT_RC_CHECK_TXQP_RET(_iface, _ep, UCS_ERR_NO_RESOURCE)
+
+/**
+ * All RMA and AMO operations are not allowed if no RDMA_READ credits.
+ * Otherwise operations ordering can be broken (which fence operation
+ * relies on).
+ */
+#define UCT_RC_CHECK_RMA_RES(_iface, _ep) \
+    UCT_RC_CHECK_RES(_iface, _ep) \
+    UCT_RC_CHECK_NUM_RDMA_READ(_iface)
 
 /*
  * check for FC credits and add FC protocol bits (if any)
@@ -180,9 +202,10 @@ struct uct_rc_ep {
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
     uct_rc_fc_t         fc;
+    uint8_t             path_index;
 };
 
-UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t);
+UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*);
 
 
 typedef struct uct_rc_ep_address {
@@ -198,6 +221,9 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
                                                const void *resp);
 
+void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                            const void *resp);
+
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
                                           const void *resp);
 
@@ -211,6 +237,7 @@ void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
                              void*arg);
 
 ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_group_t *group,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg);
 
@@ -302,7 +329,8 @@ uct_rc_txqp_add_send_op_sn(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
-                          uct_completion_t *comp, uint16_t sn, uint16_t flags)
+                          uct_rc_send_handler_t handler, uct_completion_t *comp,
+                          uint16_t sn, uint16_t flags)
 {
     uct_rc_iface_send_op_t *op;
 
@@ -311,6 +339,7 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     }
 
     op            = uct_rc_iface_get_send_op(iface);
+    op->handler   = handler;
     op->user_comp = comp;
     op->flags    |= flags;
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);

@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ib_log.h"
 
 #include <ucs/sys/sys.h>
@@ -26,11 +30,11 @@ const char *uct_ib_qp_type_str(int qp_type)
     }
 }
 
-void uct_ib_log_dump_opcode(uct_ib_opcode_t *op, int signal, int fence, int se,
+void uct_ib_log_dump_opcode(uct_ib_opcode_t *op, int sig, int fence, int se,
                             char *buf, size_t max)
 {
     snprintf(buf, max, "%s %c%c%c", op->name,
-             signal ? 's' : '-',
+             sig    ? 's' : '-',
              fence  ? 'f' : '-',
              se     ? 'e' : '-');
 }

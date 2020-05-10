@@ -256,27 +256,27 @@ static void ucs_async_thread_stop()
 
 static ucs_status_t ucs_async_thread_spinlock_init(ucs_async_context_t *async)
 {
-    return ucs_spinlock_init(&async->thread.spinlock);
+    return ucs_recursive_spinlock_init(&async->thread.spinlock, 0);
 }
 
 static void ucs_async_thread_spinlock_cleanup(ucs_async_context_t *async)
 {
     ucs_status_t status;
 
-    status = ucs_spinlock_destroy(&async->thread.spinlock);
+    status = ucs_recursive_spinlock_destroy(&async->thread.spinlock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
 }
 
 static int ucs_async_thread_spinlock_try_block(ucs_async_context_t *async)
 {
-    return ucs_spin_trylock(&async->thread.spinlock);
+    return ucs_recursive_spin_trylock(&async->thread.spinlock);
 }
 
 static void ucs_async_thread_spinlock_unblock(ucs_async_context_t *async)
 {
-    ucs_spin_unlock(&async->thread.spinlock);
+    ucs_recursive_spin_unlock(&async->thread.spinlock);
 }
 
 static ucs_status_t ucs_async_thread_mutex_init(ucs_async_context_t *async)

@@ -91,6 +91,7 @@ enum {
     UCT_RC_IFACE_STAT_RX_COMPLETION,
     UCT_RC_IFACE_STAT_TX_COMPLETION,
     UCT_RC_IFACE_STAT_NO_CQE,
+    UCT_RC_IFACE_STAT_NO_READS,
     UCT_RC_IFACE_STAT_LAST
 };
 
@@ -141,7 +142,6 @@ typedef enum uct_rc_fence_mode {
 /* Common configuration used for rc verbs, rcx and dc transports */
 typedef struct uct_rc_iface_common_config {
     uct_ib_iface_config_t    super;
-    uct_ib_mtu_t             path_mtu;
     unsigned                 max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
@@ -151,6 +151,8 @@ typedef struct uct_rc_iface_common_config {
         unsigned             retry_count;
         double               rnr_timeout;
         unsigned             rnr_retry_count;
+        unsigned             max_get_ops;
+        size_t               max_get_zcopy;
     } tx;
 
     struct {
@@ -204,6 +206,7 @@ struct uct_rc_iface {
          * In case of verbs TL we use QWE number, so 1 post always takes 1
          * credit */
         signed                  cq_available;
+        unsigned                reads_available;
         uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
@@ -220,7 +223,6 @@ struct uct_rc_iface {
         unsigned             tx_min_sge;
         unsigned             tx_min_inline;
         unsigned             tx_ops_count;
-        unsigned             rx_inline;
         uint16_t             tx_moderation;
 
         /* Threshold to send "soft" FC credit request. The peer will try to
@@ -239,7 +241,6 @@ struct uct_rc_iface {
         uint8_t              rnr_retry;
         uint8_t              retry_cnt;
         uint8_t              max_rd_atomic;
-        enum ibv_mtu         path_mtu;
         /* Enable out-of-order RDMA data placement */
         uint8_t              ooo_rw;
 #if UCS_ENABLE_ASSERT
@@ -247,6 +248,7 @@ struct uct_rc_iface {
 #endif
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
+        size_t               max_get_zcopy;
 
         /* Atomic callbacks */
         uct_rc_send_handler_t  atomic64_handler;      /* 64bit ib-spec */
@@ -277,9 +279,10 @@ struct uct_rc_iface_send_op {
     uint16_t                      flags;
     unsigned                      length;
     union {
-        void                      *buffer;        /* atomics / desc */
-        void                      *unpack_arg;    /* get_bcopy / desc */
-        uct_rc_iface_t            *iface;         /* zcopy / op */
+        void                      *buffer;     /* atomics / desc */
+        void                      *unpack_arg; /* get_bcopy / desc */
+        uct_rc_iface_t            *iface;      /* should not be used with
+                                                  get_bcopy completions */
     };
     uct_completion_t              *user_comp;
 };
@@ -310,7 +313,7 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t put_max_short, size_t max_inline,
                                 size_t am_max_hdr, size_t am_max_iov,
-                                size_t tag_max_iov, size_t tag_min_hdr);
+                                size_t am_min_hdr, size_t rma_max_iov);
 
 void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
                          unsigned qp_num);
@@ -340,7 +343,8 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
 
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t qp_num,
-                                     struct ibv_ah_attr *ah_attr);
+                                     struct ibv_ah_attr *ah_attr,
+                                     enum ibv_mtu path_mtu);
 
 ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,
@@ -433,7 +437,8 @@ static inline void uct_rc_zcopy_desc_set_header(uct_rc_hdr_t *rch,
 static inline int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
 {
     return uct_rc_iface_have_tx_cqe_avail(iface) &&
-           !ucs_mpool_is_empty(&iface->tx.mp);
+           !ucs_mpool_is_empty(&iface->tx.mp) &&
+           (iface->tx.reads_available != 0);
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_send_handler_t

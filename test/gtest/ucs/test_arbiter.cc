@@ -18,6 +18,7 @@ class test_arbiter : public ucs::test {
 protected:
 
     static ucs_arbiter_cb_result_t resched_groups(ucs_arbiter_t *arbitrer,
+                                                  ucs_arbiter_group_t *group,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg)
     {
@@ -119,6 +120,7 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t dispatch_cb(ucs_arbiter_t *arbiter,
+                                               ucs_arbiter_group_t *group,
                                                ucs_arbiter_elem_t *elem,
                                                void *arg)
     {
@@ -127,18 +129,19 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t dispatch_dummy_cb(ucs_arbiter_t *arbiter,
+                                                     ucs_arbiter_group_t *group,
                                                      ucs_arbiter_elem_t *elem,
                                                      void *arg)
     {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
-    ucs_arbiter_cb_result_t desched_group(ucs_arbiter_elem_t *elem)
+    ucs_arbiter_cb_result_t desched_group(ucs_arbiter_group_t *group,
+                                          ucs_arbiter_elem_t *elem)
     {
-        ucs_arbiter_group_t *g = ucs_arbiter_elem_group(elem);
         //ucs_warn("desched group %d", m_count);
         m_count++;
-        ucs_arbiter_group_schedule(&m_arb2, g);
+        ucs_arbiter_group_schedule(&m_arb2, group);
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
 
@@ -149,22 +152,25 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t desched_cb(ucs_arbiter_t *arbiter,
+                                              ucs_arbiter_group_t *group,
                                               ucs_arbiter_elem_t *elem,
                                               void *arg)
     {
         test_arbiter *self = (test_arbiter *)arg;
-        return self->desched_group(elem);
+        return self->desched_group(group, elem);
     }
 
     static ucs_arbiter_cb_result_t remove_cb(ucs_arbiter_t *arbiter,
-                                              ucs_arbiter_elem_t *elem,
-                                              void *arg)
+                                             ucs_arbiter_group_t *group,
+                                             ucs_arbiter_elem_t *elem,
+                                             void *arg)
     {
         test_arbiter *self = (test_arbiter *)arg;
         return self->remove_elem(elem);
     }
 
     static ucs_arbiter_cb_result_t stop_cb(ucs_arbiter_t *arbiter,
+                                           ucs_arbiter_group_t *group,
                                            ucs_arbiter_elem_t *elem,
                                            void *arg)
     {
@@ -172,6 +178,7 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t purge_cb(ucs_arbiter_t *arbiter,
+                                            ucs_arbiter_group_t *group,
                                             ucs_arbiter_elem_t *elem,
                                             void *arg)
     {
@@ -181,6 +188,7 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t count_cb(ucs_arbiter_t *arbiter,
+                                            ucs_arbiter_group_t *group,
                                             ucs_arbiter_elem_t *elem,
                                             void *arg)
     {
@@ -193,6 +201,7 @@ protected:
     }
 
     static ucs_arbiter_cb_result_t purge_cond_cb(ucs_arbiter_t *arbiter,
+                                                 ucs_arbiter_group_t *group,
                                                  ucs_arbiter_elem_t *elem,
                                                  void *arg)
     {
@@ -209,6 +218,7 @@ protected:
 
 
     static ucs_arbiter_cb_result_t purge_dummy_cb(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_group_t *group,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg)
     {
@@ -312,7 +322,7 @@ UCS_TEST_F(test_arbiter, purge_cond) {
 
         for (int j = 0; j < num_elems; ++j) {
             arb_elem *e = new arb_elem;
-            if (ucs::rand() % 2) {
+            if ((ucs::rand() % 2) == 0) {
                 e->release = true;
                 ++purged_count[i];
             } else {
@@ -422,7 +432,7 @@ UCS_TEST_F(test_arbiter, multiple_dispatch) {
 
     ucs_arbiter_dispatch(&arbiter, 1, dispatch_cb, this);
 
-    ASSERT_TRUE(arbiter.current == NULL);
+    ASSERT_TRUE(ucs_arbiter_is_empty(&arbiter));
 
     /* Release detached groups */
     for (unsigned i = 0; i < m_num_groups; ++i) {
@@ -471,7 +481,7 @@ UCS_TEST_F(test_arbiter, resched) {
     m_count = 0;
     ucs_arbiter_dispatch_nonempty(&arbiter, 3, remove_cb, this);
     EXPECT_EQ(1, m_count);
-    ASSERT_TRUE(arbiter.current == NULL);
+    ASSERT_TRUE(ucs_arbiter_is_empty(&arbiter));
 
     ucs_arbiter_group_cleanup(&group2);
     ucs_arbiter_group_cleanup(&group1);
@@ -711,7 +721,7 @@ UCS_TEST_F(test_arbiter, result_stop) {
     for (int i = 0; i < N + 3; i++) {
        ucs_arbiter_dispatch(&m_arb1, 1, stop_cb, this);
        /* arbiter current position must not change on STOP */
-       EXPECT_EQ(m_arb1.current, groups[0].tail->next);
+       EXPECT_EQ(m_arb1.list.next, &groups[0].tail->next->list);
     }
 
     m_count = 0;
@@ -722,4 +732,317 @@ UCS_TEST_F(test_arbiter, result_stop) {
 
     delete [] groups;
     delete [] elems;
+}
+
+class test_arbiter_resched_from_dispatch : public ucs::test {
+public:
+    virtual void init() {
+        ucs::test::init();
+        ucs_arbiter_init(&m_arb);
+        ucs_arbiter_group_init(&m_group1);
+        ucs_arbiter_group_init(&m_group2);
+        ucs_arbiter_elem_init(&m_elem);
+    }
+
+    virtual void cleanup() {
+        ucs_arbiter_cleanup(&m_arb);
+        ucs::test::cleanup();
+    }
+
+protected:
+
+    /* the callback pushes the elem on group2 and schedules it */
+    virtual ucs_arbiter_cb_result_t dispatch(ucs_arbiter_group_t *group,
+                                             ucs_arbiter_elem_t *elem)
+    {
+        if (m_moved) {
+            return UCS_ARBITER_CB_RESULT_STOP;
+        } else {
+            EXPECT_EQ(&m_elem, elem);
+            ucs_arbiter_group_push_elem(&m_group2, elem);
+            ucs_arbiter_group_schedule(&m_arb, &m_group2);
+            m_moved = true;
+        }
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
+    static ucs_arbiter_cb_result_t purge_cb(ucs_arbiter_t *arbiter,
+                                            ucs_arbiter_group_t *group,
+                                            ucs_arbiter_elem_t *elem, void *arg)
+    {
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
+    static ucs_arbiter_cb_result_t dispatch_cb(ucs_arbiter_t *arbiter,
+                                               ucs_arbiter_group_t *group,
+                                               ucs_arbiter_elem_t *elem,
+                                               void *arg)
+    {
+        test_arbiter_resched_from_dispatch *self =
+                reinterpret_cast<test_arbiter_resched_from_dispatch*>(arg);
+        EXPECT_EQ(&self->m_arb, arbiter);
+        return self->dispatch(group, elem);
+    }
+
+    void check_group_state(ucs_arbiter_group_t *group, bool is_scheduled)
+    {
+        EXPECT_EQ(is_scheduled, ucs_arbiter_group_is_scheduled(group));
+        EXPECT_EQ(is_scheduled, !ucs_arbiter_group_is_empty(group));
+    }
+
+    ucs_arbiter_t       m_arb;
+    ucs_arbiter_group_t m_group1, m_group2;
+    ucs_arbiter_elem_t  m_elem;
+    bool                m_moved;
+};
+
+/* from the arbiter dispatch callback, reschedule the element on another group,
+ * and remove it from current group
+ */
+UCS_TEST_F(test_arbiter_resched_from_dispatch, remove_and_resched) {
+
+    m_moved = false;
+
+    ucs_arbiter_group_push_elem(&m_group1, &m_elem);
+    ucs_arbiter_group_schedule(&m_arb, &m_group1);
+
+    /* group1 should be scheduled, group2 not */
+    check_group_state(&m_group1, true);
+    check_group_state(&m_group2, false);
+
+    ucs_arbiter_dispatch(&m_arb, 1, dispatch_cb, this);
+
+    /* the dispatch should deschedule group1 and schedule group2 instead */
+    check_group_state(&m_group1, false);
+    check_group_state(&m_group2, true);
+
+    ucs_arbiter_group_purge(&m_arb, &m_group2, purge_cb, NULL);
+}
+
+class test_arbiter_random_resched : public test_arbiter_resched_from_dispatch {
+public:
+    test_arbiter_random_resched();
+
+protected:
+    virtual ucs_arbiter_cb_result_t dispatch(ucs_arbiter_group_t *_group,
+                                             ucs_arbiter_elem_t *elem);
+
+    void do_test_loop(unsigned num_groups, unsigned elems_per_group,
+                      unsigned dispatch_per_group);
+
+private:
+    typedef struct {
+        ucs_arbiter_group_t  super;
+        unsigned             num_elems;
+    } arb_group_t;
+
+    void reset_counters();
+
+    void add_new_elem(arb_group_t *group);
+
+    void do_test(unsigned iteration_num, unsigned num_groups,
+                 unsigned elems_per_group, unsigned dispatch_per_group);
+
+    std::vector<arb_group_t> m_groups;
+    unsigned                 m_num_dispatch;
+    unsigned                 m_num_only;
+    unsigned                 m_num_added;
+    unsigned                 m_num_removed;
+    unsigned                 m_num_push_self;
+    unsigned                 m_num_push_another;
+    unsigned                 m_num_next_group;
+    unsigned                 m_num_desched;
+    unsigned                 m_num_resched;
+};
+
+test_arbiter_random_resched::test_arbiter_random_resched()
+{
+    reset_counters();
+}
+
+void test_arbiter_random_resched::reset_counters()
+{
+    m_num_dispatch     = 0;
+    m_num_only         = 0;
+    m_num_added        = 0;
+    m_num_removed      = 0;
+    m_num_push_self    = 0;
+    m_num_push_another = 0;
+    m_num_next_group   = 0;
+    m_num_desched      = 0;
+    m_num_resched      = 0;
+}
+
+void test_arbiter_random_resched::add_new_elem(arb_group_t *group)
+{
+    ucs_arbiter_elem_t *elem = new ucs_arbiter_elem_t;
+
+    ucs_arbiter_elem_init(elem);
+    ucs_arbiter_group_push_elem(&group->super, elem);
+    ++group->num_elems;
+    ++m_num_added;
+}
+
+ucs_arbiter_cb_result_t
+test_arbiter_random_resched::dispatch(ucs_arbiter_group_t *_group,
+                                      ucs_arbiter_elem_t *elem)
+{
+    arb_group_t *group = ucs_derived_of(_group, arb_group_t);
+    arb_group_t *new_group;
+
+    ++m_num_dispatch;
+
+    /* Test ucs_arbiter_group_num_elems() */
+    EXPECT_EQ(group->num_elems, ucs_arbiter_group_num_elems(&group->super));
+
+    /* We should be able to reschedule this group to another place */
+    EXPECT_FALSE(ucs_arbiter_group_is_scheduled(&group->super));
+
+    /* Test ucs_arbiter_elem_is_only() */
+    if (group->num_elems == 1) {
+        ++m_num_only;
+        EXPECT_TRUE(ucs_arbiter_elem_is_only(elem));
+    }
+
+    /* Randomly add few more elements to same group */
+    while ((ucs::rand() % 4) == 0) {
+        add_new_elem(group);
+        if ((ucs::rand() % 2) == 0) {
+            ucs_arbiter_group_schedule(&m_arb, &group->super);
+        }
+    }
+
+    if ((ucs::rand() % 2) == 0) {
+        /* Remove the current element.
+         * Must remove elements with higher probability than adding to avoid
+         * infinite loop.
+         */
+        if ((ucs::rand() % 4) == 0) {
+            /* push the removed element to a random group. It could be either
+             * the current group or a new group, both cases should work. */
+            new_group = &m_groups[ucs::rand() % m_groups.size()];
+            ucs_arbiter_group_push_elem(&new_group->super, elem);
+
+            if (new_group == group) {
+                ++m_num_push_self;
+                if ((ucs::rand() % 2) == 0) {
+                    ucs_arbiter_group_schedule(&m_arb, &new_group->super);
+                }
+            } else {
+                /* schedule the new group if it's now the current one */
+                ++m_num_push_another;
+                ucs_arbiter_group_schedule(&m_arb, &new_group->super);
+            }
+
+            ++new_group->num_elems;
+        } else {
+            /* Element is removed permanently, so invalidate and delete it */
+            ++m_num_removed;
+            memset(elem, 0xBB, sizeof(*elem));
+            delete elem;
+        }
+        --group->num_elems;
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    } else {
+        /* Don't remove the current element, do some other random group action
+         * instead.
+         */
+        int action = ucs::rand() % 3;
+        switch (action) {
+        case 0:
+            ++m_num_next_group;
+            return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+        case 1:
+            /* Reschedule the group on same arbiter to keep it going */
+            ucs_arbiter_group_schedule(&m_arb, &group->super);
+            ++m_num_desched;
+            return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+        case 2:
+        default:
+            ++m_num_resched;
+            return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+        }
+    }
+}
+
+void test_arbiter_random_resched::do_test(unsigned iteration_num,
+                                          unsigned num_groups,
+                                          unsigned elems_per_group,
+                                          unsigned dispatch_per_group)
+{
+    arb_group_t* group;
+
+    UCS_TEST_MESSAGE << "Iteration " << iteration_num << ": "
+                     << num_groups << " m_groups, "
+                     << elems_per_group << " elements each";
+
+    /* Add elements and groups */
+    m_groups.resize(num_groups);
+    for (unsigned group_index = 0; group_index < num_groups; ++group_index) {
+        group = &m_groups[group_index];
+        ucs_arbiter_group_init(&group->super);
+        group->num_elems = 0;
+
+        for (unsigned i = 0; i < elems_per_group; ++i) {
+            add_new_elem(group);
+        }
+        ucs_arbiter_group_schedule(&m_arb, &group->super);
+
+        /* Test arbiter helper functions */
+        EXPECT_EQ(elems_per_group, ucs_arbiter_group_num_elems(&group->super));
+        if (elems_per_group == 0) {
+            EXPECT_TRUE(ucs_arbiter_group_is_empty(&group->super));
+        }
+    }
+
+    EXPECT_EQ(num_groups * elems_per_group, m_num_added);
+
+    /* Dispatch arbiter until it becomes empty */
+    do {
+        ucs_arbiter_dispatch(&m_arb, dispatch_per_group, dispatch_cb,
+                             reinterpret_cast<void*>(this));
+    } while (!ucs_arbiter_is_empty(&m_arb));
+
+    /* Show counters */
+    UCS_TEST_MESSAGE << " added: " << m_num_added
+                     << " removed: " << m_num_removed;
+    UCS_TEST_MESSAGE << " dispatch: " << m_num_dispatch
+                     << " only: " << m_num_only
+                     << " push self: " << m_num_push_self
+                     << " push another: " << m_num_push_another;
+    UCS_TEST_MESSAGE << " desched: " << m_num_desched
+                     << " resched: " << m_num_resched
+                     << " next_group: " << m_num_next_group;
+
+    /* Check counters */
+    EXPECT_EQ(m_num_added, m_num_removed);
+
+    /* Make sure all is removed */
+    for (unsigned group_index = 0; group_index < num_groups; ++group_index) {
+        group = &m_groups[group_index];
+        EXPECT_EQ(0u, group->num_elems);
+        EXPECT_TRUE(ucs_arbiter_group_is_empty(&group->super));
+    }
+}
+
+void test_arbiter_random_resched::do_test_loop(unsigned num_groups,
+                                               unsigned elems_per_group,
+                                               unsigned dispatch_per_group)
+{
+    for (unsigned i = 0; i < 5; ++i) {
+        reset_counters();
+        do_test(i, num_groups, elems_per_group, dispatch_per_group);
+    }
+}
+
+UCS_TEST_F(test_arbiter_random_resched, one_elem_one_group) {
+    do_test_loop(1, 1, 1);
+}
+
+UCS_TEST_F(test_arbiter_random_resched, one_elem_many_groups) {
+    do_test_loop(42, 1, 1);
+}
+
+UCS_TEST_F(test_arbiter_random_resched, many_elems_many_groups) {
+    do_test_loop(42, 10, 4);
 }

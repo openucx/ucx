@@ -12,8 +12,6 @@
 #include <uct/cuda/base/cuda_iface.h>
 
 
-#define UCT_CUDA_IPC_MAX_ALLOC_SZ (1 << 30)
-
 /**
  * @brief cuda ipc MD descriptor
  */
@@ -52,7 +50,6 @@ typedef struct uct_cuda_ipc_key {
     size_t         b_len;        /* Allocation size */
     int            dev_num;      /* GPU Device number */
     CUuuid         uuid;         /* GPU Device UUID */
-    CUdeviceptr    d_mapped;     /* Locally mapped device address */
 } uct_cuda_ipc_key_t;
 
 

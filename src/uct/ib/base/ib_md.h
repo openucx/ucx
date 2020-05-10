@@ -27,6 +27,8 @@
                                   IBV_ACCESS_REMOTE_ATOMIC)
 
 #define UCT_IB_MEM_DEREG          0
+#define UCT_IB_CONFIG_PREFIX      "IB_"
+
 
 /**
  * IB MD statistics counters
@@ -65,7 +67,7 @@ typedef struct uct_ib_md_ext_config {
                                                          device */
     int                      enable_indirect_atomic; /** Enable indirect atomic */
     int                      enable_gpudirect_rdma; /** Enable GPUDirect RDMA */
-#if HAVE_EXP_UMR
+#ifdef HAVE_EXP_UMR
     unsigned                 max_inline_klm_list; /* Maximal length of inline KLM list */
 #endif
 
@@ -86,9 +88,9 @@ typedef struct uct_ib_md_ext_config {
 
 typedef struct uct_ib_mem {
     uint32_t                lkey;
+    uint32_t                rkey;
     uint32_t                atomic_rkey;
     uint32_t                flags;
-    struct ibv_mr           *mr;
 } uct_ib_mem_t;
 
 /**
@@ -97,7 +99,7 @@ typedef struct uct_ib_mem {
 typedef struct uct_ib_md {
     uct_md_t                 super;
     ucs_rcache_t             *rcache;   /**< Registration cache (can be NULL) */
-    uct_ib_mem_t             global_odp;/**< Implicit ODP memory handle */
+    uct_mem_h                global_odp;/**< Implicit ODP memory handle */
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
@@ -111,6 +113,7 @@ typedef struct uct_ib_md {
     int                      check_subnet_filter;
     uint64_t                 subnet_filter;
     double                   pci_bw;
+    int                      relaxed_order;
 } uct_ib_md_t;
 
 
@@ -139,30 +142,142 @@ typedef struct uct_ib_md_config {
 
     unsigned                 devx;         /**< DEVX support */
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
+    ucs_on_off_auto_value_t  mr_relaxed_order; /**< Allow reorder memory accesses */
 } uct_ib_md_config_t;
 
-
+/**
+ * Memory domain constructor.
+ *
+ * @param [in]  ibv_device    IB device.
+ *
+ * @param [in]  md_config     Memory domain configuration parameters.
+ *
+ * @param [out] md_p          Handle to memory domain.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_open_func_t)(struct ibv_device *ibv_device,
                                               const uct_ib_md_config_t *md_config,
-                                              struct uct_ib_md **p_md);
+                                              struct uct_ib_md **md_p);
 
+/**
+ * Memory domain destructor.
+ *
+ * @param [in]  md      Memory domain.
+ */
 typedef void (*uct_ib_md_cleanup_func_t)(struct uct_ib_md *);
 
+/**
+ * Memory domain method to register memory area.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  address Memory area start address.
+ *
+ * @param [in]  length  Memory area length.
+ *
+ * @param [in]  access  IB verbs registration access flags
+ *
+ * @param [in]  memh    Memory region handle.
+ *                      Method should initialize lkey & rkey.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_ib_md_reg_key_func_t)(struct uct_ib_md *md,
+                                                 void *address, size_t length,
+                                                 uint64_t access,
+                                                 uct_ib_mem_t *memh);
+
+/**
+ * Memory domain method to deregister memory area.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle registered with
+ *                      uct_ib_md_reg_key_func_t.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_ib_md_dereg_key_func_t)(struct uct_ib_md *md,
+                                                   uct_ib_mem_t *memh);
+
+/**
+ * Memory domain method to register memory area optimized for atomic ops.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle registered for regular ops.
+ *                      Method should initialize atomic_rkey
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_reg_atomic_key_func_t)(struct uct_ib_md *md,
                                                         uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to release resources registered for atomic ops.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle registered with
+ *                      uct_ib_md_reg_atomic_key_func_t.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_dereg_atomic_key_func_t)(struct uct_ib_md *md,
                                                           uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to register memory area using multiple threads.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  address Memory area start address.
+ *
+ * @param [in]  length  Memory area length.
+ *
+ * @param [in]  access  IB verbs registration access flags
+ *
+ * @param [in]  memh    Memory region handle.
+ *                      Method should initialize lkey & rkey.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_reg_multithreaded_func_t)(uct_ib_md_t *md,
                                                            void *address,
                                                            size_t length,
                                                            uint64_t access,
                                                            uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to deregister memory area.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle registered with
+ *                      uct_ib_md_reg_key_func_t.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
 typedef ucs_status_t (*uct_ib_md_dereg_multithreaded_func_t)(uct_ib_md_t *md,
                                                              uct_ib_mem_t *memh);
 
+/**
+ * Memory domain method to prefetch physical memory for virtual memory area.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle.
+ *
+ * @param [in]  address Memory area start address.
+ *
+ * @param [in]  length  Memory area length.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_ib_md_mem_prefetch_func_t)(uct_ib_md_t *md,
+                                                      uct_ib_mem_t *memh,
+                                                      void *addr, size_t length);
 
 typedef struct uct_ib_md_ops {
     uct_ib_md_open_func_t                open;
@@ -170,10 +285,13 @@ typedef struct uct_ib_md_ops {
 
     size_t                               memh_struct_size;
 
+    uct_ib_md_reg_key_func_t             reg_key;
+    uct_ib_md_dereg_key_func_t           dereg_key;
     uct_ib_md_reg_atomic_key_func_t      reg_atomic_key;
     uct_ib_md_dereg_atomic_key_func_t    dereg_atomic_key;
     uct_ib_md_reg_multithreaded_func_t   reg_multithreaded;
     uct_ib_md_dereg_multithreaded_func_t dereg_multithreaded;
+    uct_ib_md_mem_prefetch_func_t        mem_prefetch;
 } uct_ib_md_ops_t;
 
 
@@ -195,15 +313,17 @@ typedef struct uct_ib_rcache_region {
  */
 typedef struct uct_ib_md_ops_entry {
     ucs_list_link_t             list;
+    const char                  *name;
     uct_ib_md_ops_t             *ops;
     int                         priority;
 } uct_ib_md_ops_entry_t;
 
 #define UCT_IB_MD_OPS(_md_ops, _priority) \
+    extern ucs_list_link_t uct_ib_md_ops_list; \
     UCS_STATIC_INIT { \
-        extern ucs_list_link_t uct_ib_md_ops_list; \
         static uct_ib_md_ops_entry_t *p, entry = { \
-            .ops = &_md_ops, \
+            .name     = UCS_PP_MAKE_STRING(_md_ops), \
+            .ops      = &_md_ops, \
             .priority = _priority, \
         }; \
         ucs_list_for_each(p, &uct_ib_md_ops_list, list) { \
@@ -264,6 +384,20 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
 }
 
 
+static inline void uct_ib_memh_init_from_mr(uct_ib_mem_t *memh, struct ibv_mr *mr)
+{
+    memh->lkey = mr->lkey;
+    memh->rkey = mr->rkey;
+}
+
+
+static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)
+{
+    ucs_assert(memh != UCT_MEM_HANDLE_NULL);
+    return ((uct_ib_mem_t*)memh)->lkey;
+}
+
+
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p);
 
@@ -273,7 +407,10 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
 void uct_ib_md_close(uct_md_h uct_md);
 
+ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
+                           uint64_t access, struct ibv_mr **mr_p);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
+ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
 
 ucs_status_t
 uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,

@@ -19,10 +19,6 @@
 typedef uint64_t          uct_mm_seg_id_t;
 
 
-/* For compatibility - to be removed */
-typedef uct_mm_seg_id_t   uct_mm_id_t;
-
-
 /**
  * Local memory segment structure.
  * The mappers must implement memory allocation functions so that they will
@@ -92,6 +88,15 @@ typedef ucs_status_t
                                    uct_mm_remote_seg_t *rseg);
 
 
+/* Check if memory may be attached using mem_attach. seg_id is from
+ * 'uct_mm_seg_t' structure, and iface_addr is from iface_addr_pack() on the
+ * remote process
+ */
+typedef int
+(*uct_mm_mapper_is_reachable_func_t)(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
+                                     const void *iface_addr);
+
+
 /* Clean up the remote segment handle created by mem_attach() */
 typedef void
 (*uct_mm_mapper_mem_detach_func_t)(uct_mm_md_t *md,
@@ -108,6 +113,7 @@ typedef struct uct_mm_mapper_ops {
     uct_mm_mapper_iface_addr_pack_func_t     iface_addr_pack;
     uct_mm_mapper_mem_attach_func_t          mem_attach;
     uct_mm_mapper_mem_detach_func_t          mem_detach;
+    uct_mm_mapper_is_reachable_func_t        is_reachable;
 } uct_mm_md_mapper_ops_t;
 
 
@@ -161,6 +167,7 @@ typedef struct uct_mm_component {
                 .table          = uct_##_name##_md_config_table, \
                 .size           = sizeof(uct_##_name##_md_config_t), \
             }, \
+            .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY, \
             .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER( \
                                       &(_var).super), \
             .flags              = 0, \

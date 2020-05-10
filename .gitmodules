@@ -1,0 +1,4 @@
+[submodule "ucg"]
+	path = src/ucg
+	url = https://github.com/openucx/xucg.git
+	branch = master

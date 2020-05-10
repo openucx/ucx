@@ -16,7 +16,7 @@
 
 typedef struct {
     struct mlx5dv_obj  dv;
-#if HAVE_IBV_EXP_DM
+#ifdef HAVE_IBV_EXP_DM
     struct {
         struct ibv_exp_dm   *in;
         struct mlx5dv_dm    *out;
@@ -67,7 +67,7 @@ void *uct_dv_get_info_uar0(void *uar);
 /*
  * DM backports
  */
-#if HAVE_IBV_EXP_DM
+#ifdef HAVE_IBV_EXP_DM
 #  define ibv_dm            ibv_exp_dm
 #  define ibv_alloc_dm_attr ibv_exp_alloc_dm_attr
 #  define ibv_alloc_dm      ibv_exp_alloc_dm
@@ -85,7 +85,7 @@ enum {
 
 static struct ibv_mr * UCS_F_MAYBE_UNUSED
 ibv_reg_dm_mr(struct ibv_pd *pd, struct ibv_dm *dm,
-              uint64_t dm_offset, size_t length, unsigned int access)
+              uint64_t dm_offset, size_t length, unsigned int access_flags)
 {
     struct ibv_exp_reg_mr_in mr_in = {};
     mr_in.pd        = pd;

@@ -7,6 +7,12 @@
 #ifndef UCS_TEST_BASE_H
 #define UCS_TEST_BASE_H
 
+/* gcc 4.3.4 compilation */
+#ifndef UINT8_MAX
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
+#endif
+
 #include "test_helpers.h"
 
 #include <ucs/debug/log.h>
@@ -70,19 +76,27 @@ public:
 
     static ucs_log_func_rc_t
     count_warns_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *message, va_list ap);
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     hide_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *message, va_list ap);
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     hide_warns_logger(const char *file, unsigned line, const char *function,
-                      ucs_log_level_t level, const char *message, va_list ap);
+                      ucs_log_level_t level,
+                      const ucs_log_component_config_t *comp_conf,
+                      const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     wrap_errors_logger(const char *file, unsigned line, const char *function,
-                       ucs_log_level_t level, const char *message, va_list ap);
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap);
 
     state_t                         m_state;
     bool                            m_initialized;

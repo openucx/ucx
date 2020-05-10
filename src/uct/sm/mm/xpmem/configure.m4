@@ -28,14 +28,28 @@ AS_IF([test "x$with_xpmem" != "xno"],
               ])
        ])
 
-# Verify XPMEM header file
+# Verify XPMEM lib and header files
 AS_IF([test "x$xpmem_happy" = "xno" -a -d "$with_xpmem"],
-      [AC_CHECK_HEADER([$with_xpmem/include/xpmem.h],
+      [
+       save_LDFLAGS="$LDFLAGS"
+       save_CPPFLAGS="$CPPFLAGS"
+       LDFLAGS="$LDFLAGS -L$with_xpmem/lib -lxpmem"
+       CPPFLAGS="$CPPFLAGS -I$with_xpmem/include"
+       AC_CHECK_LIB([xpmem],
+                    [xpmem_init],
+                    [AC_CHECK_HEADER([xpmem.h],
                        [AC_SUBST(XPMEM_CFLAGS, "-I$with_xpmem/include")
                         AC_SUBST(XPMEM_LIBS,   "-L$with_xpmem/lib -lxpmem")
                         xpmem_happy="yes"],
-                       [AC_MSG_WARN([cray-xpmem header was not found in $with_xpmem])])
-       ])
+                       [AC_MSG_WARN([cray-xpmem header was not found in $with_xpmem])]
+                      )
+                    ],
+                    [AC_MSG_WARN([cray-xpmem lib was not found in $with_xpmem])]
+                   )
+       LDFLAGS="$save_LDFLAGS"
+       CPPFLAGS="$save_CPPFLAGS"
+      ]
+     )
 
 AS_IF([test "x$xpmem_happy" = "xyes"], [uct_modules="${uct_modules}:xpmem"])
 AM_CONDITIONAL([HAVE_XPMEM], [test "x$xpmem_happy" != "xno"])

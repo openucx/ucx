@@ -1,7 +1,12 @@
 /*
  * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 
 #include "rocm_ipc_md.h"
 
@@ -167,6 +172,7 @@ uct_component_t uct_rocm_ipc_component = {
         .table          = uct_rocm_ipc_md_config_table,
         .size           = sizeof(uct_rocm_ipc_md_config_t),
     },
+    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_ipc_component),
     .flags              = 0
 };

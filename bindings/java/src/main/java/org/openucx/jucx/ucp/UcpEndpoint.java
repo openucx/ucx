@@ -51,7 +51,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      * guarantee re-usability of the source {@code data} buffer.
      * {@code callback} is invoked on completion of this operation.
      */
-    public UcxRequest putNonBlocking(ByteBuffer src, long remoteAddress, UcpRemoteKey remoteKey,
+    public UcpRequest putNonBlocking(ByteBuffer src, long remoteAddress, UcpRemoteKey remoteKey,
                                      UcxCallback callback) {
 
         checkRemoteAccessParams(src, remoteKey);
@@ -60,7 +60,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
             remoteKey, callback);
     }
 
-    public UcxRequest putNonBlocking(long localAddress, long size,
+    public UcpRequest putNonBlocking(long localAddress, long size,
                                      long remoteAddress, UcpRemoteKey remoteKey,
                                      UcxCallback callback) {
 
@@ -104,9 +104,9 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      * not guarantee that remote data is loaded and stored under the local {@code dst} buffer
      * starting of it's {@code dst.position()} and size {@code dst.remaining()}.
      * {@code callback} is invoked on completion of this operation.
-     * @return {@link UcxRequest} object that can be monitored for completion.
+     * @return {@link UcpRequest} object that can be monitored for completion.
      */
-    public UcxRequest getNonBlocking(long remoteAddress, UcpRemoteKey remoteKey,
+    public UcpRequest getNonBlocking(long remoteAddress, UcpRemoteKey remoteKey,
                                      ByteBuffer dst, UcxCallback callback) {
 
         checkRemoteAccessParams(dst, remoteKey);
@@ -115,7 +115,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
             dst.remaining(), callback);
     }
 
-    public UcxRequest getNonBlocking(long remoteAddress, UcpRemoteKey remoteKey,
+    public UcpRequest getNonBlocking(long remoteAddress, UcpRemoteKey remoteKey,
                                      long localAddress, long size, UcxCallback callback) {
 
         return getNonBlockingNative(getNativeId(), remoteAddress, remoteKey.getNativeId(),
@@ -165,7 +165,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      * The send operation is considered completed when  it is safe to reuse the source
      * {@code data} buffer. {@code callback} is invoked on completion of this operation.
      */
-    public UcxRequest sendTaggedNonBlocking(ByteBuffer sendBuffer, long tag, UcxCallback callback) {
+    public UcpRequest sendTaggedNonBlocking(ByteBuffer sendBuffer, long tag, UcxCallback callback) {
         if (!sendBuffer.isDirect()) {
             throw new UcxException("Send buffer must be direct.");
         }
@@ -173,20 +173,53 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
           sendBuffer.remaining(), tag, callback);
     }
 
-    public UcxRequest sendTaggedNonBlocking(long localAddress, long size,
+    public UcpRequest sendTaggedNonBlocking(long localAddress, long size,
                                             long tag, UcxCallback callback) {
 
         return sendTaggedNonBlockingNative(getNativeId(),
             localAddress, size, tag, callback);
     }
 
-
     /**
      * Non blocking send operation. Invokes
      * {@link UcpEndpoint#sendTaggedNonBlocking(ByteBuffer, long, UcxCallback)} with default 0 tag.
      */
-    public UcxRequest sendTaggedNonBlocking(ByteBuffer sendBuffer, UcxCallback callback) {
+    public UcpRequest sendTaggedNonBlocking(ByteBuffer sendBuffer, UcxCallback callback) {
         return sendTaggedNonBlocking(sendBuffer, 0, callback);
+    }
+
+    /**
+     * This routine sends data that is described by the local address to the destination endpoint.
+     * The routine is non-blocking and therefore returns immediately, however the actual send
+     * operation may be delayed. The send operation is considered completed when it is safe
+     * to reuse the source buffer. The UCP library will schedule invocation of the call-back upon
+     * completion of the send operation.
+     */
+    public UcpRequest sendStreamNonBlocking(long localAddress, long size, UcxCallback callback) {
+        return sendStreamNonBlockingNative(getNativeId(), localAddress, size, callback);
+    }
+
+    public UcpRequest sendStreamNonBlocking(ByteBuffer buffer, UcxCallback callback) {
+        return sendStreamNonBlockingNative(getNativeId(), UcxUtils.getAddress(buffer),
+            buffer.remaining(), callback);
+    }
+
+    /**
+     * This routine receives data that is described by the local address and a size on the endpoint.
+     * The routine is non-blocking and therefore returns immediately. The receive operation is
+     * considered complete when the message is delivered to the buffer.
+     * In order to notify the application about completion of a scheduled receive operation,
+     * the UCP library will invoke the call-back when data is in the receive buffer
+     * and ready for application access.
+     */
+    public UcpRequest recvStreamNonBlocking(long localAddress, long size, long flags,
+                                            UcxCallback callback) {
+        return recvStreamNonBlockingNative(getNativeId(), localAddress, size, flags, callback);
+    }
+
+    public UcpRequest recvStreamNonBlocking(ByteBuffer buffer, long flags, UcxCallback callback) {
+        return recvStreamNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(), flags,
+            callback);
     }
 
     /**
@@ -194,8 +227,26 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      * All the AMO and RMA operations issued on this endpoint prior to this call
      * are completed both at the origin and at the target.
      */
-    public UcxRequest flushNonBlocking(UcxCallback callback) {
+    public UcpRequest flushNonBlocking(UcxCallback callback) {
         return flushNonBlockingNative(getNativeId(), callback);
+    }
+
+    /**
+     * Releases the endpoint without any confirmation from the peer. All
+     * outstanding requests will be completed with UCS_ERR_CANCELED error.
+     * This mode may cause transport level errors on remote side, so it requires set
+     * {@link UcpEndpointParams#setPeerErrorHadnlingMode()} for all endpoints created on
+     * both (local and remote) sides to avoid undefined behavior.
+     */
+    public UcpRequest closeNonBlockingForce() {
+        return closeNonBlockingNative(getNativeId(), UcpConstants.UCP_EP_CLOSE_MODE_FORCE);
+    }
+
+    /**
+     * Releases the endpoint by scheduling flushes on all outstanding operations.
+     */
+    public UcpRequest closeNonBlockingFlush() {
+        return closeNonBlockingNative(getNativeId(), UcpConstants.UCP_EP_CLOSE_MODE_FLUSH);
     }
 
     private static native long createEndpointNative(UcpEndpointParams params, long workerId);
@@ -204,7 +255,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
     private static native UcpRemoteKey unpackRemoteKey(long epId, long rkeyAddress);
 
-    private static native UcxRequest putNonBlockingNative(long enpointId, long localAddress,
+    private static native UcpRequest putNonBlockingNative(long enpointId, long localAddress,
                                                           long size, long remoteAddr,
                                                           long ucpRkeyId, UcxCallback callback);
 
@@ -212,7 +263,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
                                                             long size, long remoteAddr,
                                                             long ucpRkeyId);
 
-    private static native UcxRequest getNonBlockingNative(long enpointId, long remoteAddress,
+    private static native UcpRequest getNonBlockingNative(long enpointId, long remoteAddress,
                                                           long ucpRkeyId, long localAddress,
                                                           long size, UcxCallback callback);
 
@@ -220,9 +271,18 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
                                                             long ucpRkeyId, long localAddress,
                                                             long size);
 
-    private static native UcxRequest sendTaggedNonBlockingNative(long enpointId, long localAddress,
+    private static native UcpRequest sendTaggedNonBlockingNative(long enpointId, long localAddress,
                                                                  long size, long tag,
                                                                  UcxCallback callback);
 
-    private static native UcxRequest flushNonBlockingNative(long enpointId, UcxCallback callback);
+    private static native UcpRequest sendStreamNonBlockingNative(long enpointId, long localAddress,
+                                                                 long size, UcxCallback callback);
+
+    private static native UcpRequest recvStreamNonBlockingNative(long enpointId, long localAddress,
+                                                                 long size, long flags,
+                                                                 UcxCallback callback);
+
+    private static native UcpRequest flushNonBlockingNative(long enpointId, UcxCallback callback);
+
+    private static native UcpRequest closeNonBlockingNative(long endpointId, int mode);
 }

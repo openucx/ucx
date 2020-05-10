@@ -62,6 +62,7 @@ typedef struct uct_rc_verbs_iface {
     struct {
         size_t                  short_desc_size;
         size_t                  max_inline;
+        size_t                  max_send_sge;
         unsigned                tx_max_wr;
     } config;
 } uct_rc_verbs_iface_t;

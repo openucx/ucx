@@ -6,17 +6,18 @@
 package org.openucx.jucx.examples;
 
 import org.openucx.jucx.UcxCallback;
-import org.openucx.jucx.UcxRequest;
+import org.openucx.jucx.ucp.UcpRequest;
+import org.openucx.jucx.UcxUtils;
 import org.openucx.jucx.ucp.*;
 
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws Exception {
         if (!initializeArguments(args)) {
             return;
         }
@@ -25,80 +26,85 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         String serverHost = argsMap.get("s");
         InetSocketAddress sockaddr = new InetSocketAddress(serverHost, serverPort);
+        AtomicReference<UcpConnectionRequest> connRequest = new AtomicReference<>(null);
         UcpListener listener = worker.newListener(
-            new UcpListenerParams().setSockAddr(sockaddr));
+            new UcpListenerParams()
+                .setConnectionHandler(connRequest::set)
+                .setSockAddr(sockaddr));
         resources.push(listener);
-
-        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
-        UcxRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer, null);
-
         System.out.println("Waiting for connections on " + sockaddr + " ...");
 
-        while (!recvRequest.isCompleted()) {
+        while (connRequest.get() == null) {
             worker.progress();
         }
 
+        UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
+            .setConnectionRequest(connRequest.get())
+            .setPeerErrorHadnlingMode());
+
+        // Temporary workaround until new connection establishment protocol in UCX.
+        for (int i = 0; i < 10; i++) {
+            worker.progress();
+            try {
+                Thread.sleep(10);
+            } catch (Exception ignored) { }
+        }
+
+        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
+        UcpRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer, null);
+
+        worker.progressRequest(recvRequest);
+
         long remoteAddress = recvBuffer.getLong();
-        long remoteSize = recvBuffer.getInt();
+        long remoteSize = recvBuffer.getLong();
         int remoteKeySize = recvBuffer.getInt();
         int rkeyBufferOffset = recvBuffer.position();
 
         recvBuffer.position(rkeyBufferOffset + remoteKeySize);
-        int workerAdressSize = recvBuffer.getInt();
-        ByteBuffer workerAddress = ByteBuffer.allocateDirect(workerAdressSize);
-        copyBuffer(recvBuffer, workerAddress, workerAdressSize);
-
         int remoteHashCode = recvBuffer.getInt();
-        System.out.printf("Received connection. Will read %d bytes from remote address %d\n",
+        System.out.printf("Received connection. Will read %d bytes from remote address %d%n",
             remoteSize, remoteAddress);
-
-        UcpEndpoint endpoint = worker.newEndpoint(
-            new UcpEndpointParams().setUcpAddress(workerAddress).setPeerErrorHadnlingMode());
-
 
         recvBuffer.position(rkeyBufferOffset);
         UcpRemoteKey remoteKey = endpoint.unpackRemoteKey(recvBuffer);
         resources.push(remoteKey);
 
-        ByteBuffer data = ByteBuffer.allocateDirect((int)remoteSize);
+        UcpMemory recvMemory = context.memoryMap(allocationParams);
+        resources.push(recvMemory);
+        ByteBuffer data = UcxUtils.getByteBufferView(recvMemory.getAddress(),
+            (int)Math.min(Integer.MAX_VALUE, totalSize));
         for (int i = 0; i < numIterations; i++) {
             final int iterNum = i;
-            UcxRequest getRequest = endpoint.getNonBlocking(remoteAddress, remoteKey, data,
+            UcpRequest getRequest = endpoint.getNonBlocking(remoteAddress, remoteKey,
+                recvMemory.getAddress(), totalSize,
                 new UcxCallback() {
                     long startTime = System.nanoTime();
 
                     @Override
-                    public void onSuccess(UcxRequest request) {
+                    public void onSuccess(UcpRequest request) {
                         long finishTime = System.nanoTime();
                         data.clear();
                         assert data.hashCode() == remoteHashCode;
                         double bw = getBandwithGbits(finishTime - startTime, remoteSize);
-                        System.out.printf("Iteration %d, bandwidth: %.4f GB/s\n", iterNum, bw);
+                        System.out.printf("Iteration %d, bandwidth: %.4f GB/s%n", iterNum, bw);
                     }
                 });
 
-            while (!getRequest.isCompleted()) {
-                worker.progress();
-            }
+            worker.progressRequest(getRequest);
             // To make sure we receive correct data each time to compare hashCodes
             data.put(0, (byte)1);
         }
 
         ByteBuffer sendBuffer = ByteBuffer.allocateDirect(100);
         sendBuffer.asCharBuffer().put("DONE");
-        UcxRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer, null);
+        
+        UcpRequest sent = endpoint.sendTaggedNonBlocking(sendBuffer, null);
+        worker.progressRequest(sent);
 
-        while (!sent.isCompleted()) {
-            worker.progress();
-        }
-
-        // Close endpoint and wait for remote side
-        // TODO remove when UCP close protocol is implemented
-        endpoint.close();
-        try {
-            Thread.sleep(3000);
-        } catch (java.lang.InterruptedException e) {
-        }
+        UcpRequest closeRequest = endpoint.closeNonBlockingFlush();
+        worker.progressRequest(closeRequest);
+        // Close request won't be return to pull automatically, since there's no callback.
+        resources.push(closeRequest);
 
         closeResources();
     }

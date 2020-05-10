@@ -235,9 +235,10 @@ ucp_stream_recv_request_init(ucp_request_t *req, ucp_ep_h ep, void *buffer,
                              ucp_stream_recv_callback_t cb,
                              uint32_t request_flags)
 {
-    req->flags              = UCP_REQUEST_FLAG_CALLBACK | request_flags;
+    req->flags              = UCP_REQUEST_FLAG_CALLBACK |
+                              UCP_REQUEST_FLAG_STREAM_RECV |
+                              request_flags;
 #if UCS_ENABLE_ASSERT
-    req->flags             |= UCP_REQUEST_FLAG_STREAM_RECV;
     req->status             = UCS_OK; /* for ucp_request_recv_data_unpack() */
 #endif
     req->recv.stream.cb     = cb;
@@ -399,11 +400,11 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_proto_t *ep_ext,
                rdesc_tmp.length);
     } else {
         /* slowpath */
-        rdesc                 = (ucp_recv_desc_t *)am_data - 1;
-        rdesc->length         = rdesc_tmp.length;
-        rdesc->payload_offset = rdesc_tmp.payload_offset + sizeof(*rdesc);
-        rdesc->priv_length    = 0;
-        rdesc->flags          = UCP_RECV_DESC_FLAG_UCT_DESC;
+        rdesc                  = (ucp_recv_desc_t *)am_data - 1;
+        rdesc->length          = rdesc_tmp.length;
+        rdesc->payload_offset  = rdesc_tmp.payload_offset + sizeof(*rdesc);
+        rdesc->uct_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE;
+        rdesc->flags           = UCP_RECV_DESC_FLAG_UCT_DESC;
     }
 
     ucp_ep_from_ext_proto(ep_ext)->flags |= UCP_EP_FLAG_STREAM_HAS_DATA;
@@ -425,18 +426,33 @@ void ucp_stream_ep_init(ucp_ep_h ep)
 
 void ucp_stream_ep_cleanup(ucp_ep_h ep)
 {
+    ucp_ep_ext_proto_t* ep_ext;
+    ucp_request_t *req;
     size_t length;
     void *data;
 
-    if (ep->worker->context->config.features & UCP_FEATURE_STREAM) {
-        while ((data = ucp_stream_recv_data_nb_nolock(ep, &length)) != NULL) {
-            ucs_assert_always(!UCS_PTR_IS_ERR(data));
-            ucp_stream_data_release(ep, data);
-        }
+    if (!(ep->worker->context->config.features & UCP_FEATURE_STREAM)) {
+        return;
+    }
 
-        if (ucp_stream_ep_is_queued(ucp_ep_ext_proto(ep))) {
-            ucp_stream_ep_dequeue(ucp_ep_ext_proto(ep));
-        }
+    /* drop unmatched data */
+    while ((data = ucp_stream_recv_data_nb_nolock(ep, &length)) != NULL) {
+        ucs_assert_always(!UCS_PTR_IS_ERR(data));
+        ucp_stream_data_release(ep, data);
+    }
+
+    ep_ext = ucp_ep_ext_proto(ep);
+
+    if (ucp_stream_ep_is_queued(ep_ext)) {
+        ucp_stream_ep_dequeue(ep_ext);
+    }
+
+    /* cancel not completed requests */
+    ucs_assert(!ucp_stream_ep_has_data(ep_ext));
+    while (!ucs_queue_is_empty(&ep_ext->stream.match_q)) {
+        req = ucs_queue_head_elem_non_empty(&ep_ext->stream.match_q,
+                                            ucp_request_t, recv.queue);
+        ucp_request_complete_stream_recv(req, ep_ext, UCS_ERR_CANCELED);
     }
 }
 

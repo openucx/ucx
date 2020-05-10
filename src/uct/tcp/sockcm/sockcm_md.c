@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "sockcm_md.h"
 
 #define UCT_SOCKCM_NAME              "sockcm"
@@ -133,6 +137,7 @@ uct_component_t uct_sockcm_component = {
         .table          = uct_sockcm_md_config_table,
         .size           = sizeof(uct_sockcm_md_config_t),
     },
+    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_sockcm_component),
     .flags              = 0
 };

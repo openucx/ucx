@@ -3,6 +3,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rocm_copy_md.h"
 
 #include <uct/rocm/base/rocm_base.h>
@@ -146,6 +150,7 @@ uct_component_t uct_rocm_copy_component = {
         .table          = uct_rocm_copy_md_config_table,
         .size           = sizeof(uct_rocm_copy_md_config_t),
     },
+    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_copy_component),
     .flags              = 0
 };

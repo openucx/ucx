@@ -144,7 +144,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 /*
  * On-demand paging support
  */
-#if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
+#ifdef HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
 #  define IBV_EXP_HAVE_ODP(_attr)                   ((_attr)->odp_caps.general_odp_caps & IBV_EXP_ODP_SUPPORT)
 #  define IBV_EXP_ODP_CAPS(_attr, _xport)           ((_attr)->odp_caps.per_transport_caps._xport##_odp_caps)
 #else
@@ -153,19 +153,7 @@ static inline ucs_status_t uct_ib_query_device(struct ibv_context *ctx,
 #endif
 
 #if HAVE_ODP
-#  if HAVE_VERBS_EXP_H
-static inline struct ibv_mr * uct_ib_reg_mr(struct ibv_pd *pd, void *addr,
-                                            size_t length, long access)
-{
-    struct ibv_exp_reg_mr_in in = {};
-
-    in.pd         = pd;
-    in.addr       = addr;
-    in.length     = length;
-    in.exp_access = access;
-    return ibv_exp_reg_mr(&in);
-}
-#    define ibv_reg_mr                  uct_ib_reg_mr
+#  ifdef HAVE_VERBS_EXP_H
 #    define IBV_ACCESS_ON_DEMAND        IBV_EXP_ACCESS_ON_DEMAND
 #    define ibv_reg_mr_func_name        "ibv_exp_reg_mr"
 #  else
@@ -177,13 +165,17 @@ static inline struct ibv_mr * uct_ib_reg_mr(struct ibv_pd *pd, void *addr,
 #endif
 
 #if HAVE_ODP_IMPLICIT
-#  if HAVE_VERBS_EXP_H
+#  ifdef HAVE_VERBS_EXP_H
 #    define UCT_IB_HAVE_ODP_IMPLICIT(_attr)         ((_attr)->odp_caps.general_odp_caps & IBV_EXP_ODP_SUPPORT_IMPLICIT)
 #  else
 #    define UCT_IB_HAVE_ODP_IMPLICIT(_attr)         ((_attr)->odp_caps.general_caps & IBV_ODP_SUPPORT_IMPLICIT)
 #  endif
 #else
 #  define UCT_IB_HAVE_ODP_IMPLICIT(_attr)           0
+#endif
+
+#if !HAVE_DECL_IBV_ACCESS_RELAXED_ORDERING
+#  define IBV_ACCESS_RELAXED_ORDERING               0
 #endif
 
 #if !HAVE_DECL_IBV_EXP_PREFETCH_WRITE_ACCESS
@@ -273,6 +265,11 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 #  define IBV_PORT_IS_LINK_LAYER_ETHERNET(_attr)    0
 #endif
 
+#if HAVE_DECL_IBV_QPF_GRH_REQUIRED
+#  define uct_ib_grh_required(_attr)                ((_attr)->flags & IBV_QPF_GRH_REQUIRED)
+#else
+#  define uct_ib_grh_required(_attr)                0
+#endif
 
 typedef uint8_t uct_ib_uint24_t[3];
 
@@ -307,6 +304,24 @@ static inline void uct_ib_destroy_srq(struct ibv_srq *srq)
     if (ret) {
         ucs_warn("ibv_destroy_srq() failed: %m");
     }
+}
+
+static inline ucs_status_t uct_ib_qp_max_send_sge(struct ibv_qp *qp,
+                                                  uint32_t *max_send_sge)
+{
+    struct ibv_qp_attr qp_attr;
+    struct ibv_qp_init_attr qp_init_attr;
+    int ret;
+
+    ret = ibv_query_qp(qp, &qp_attr, IBV_QP_CAP, &qp_init_attr);
+    if (ret) {
+        ucs_error("Failed to query UD QP(ret=%d): %m", ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *max_send_sge = qp_attr.cap.max_send_sge;
+
+    return UCS_OK;
 }
 
 typedef struct uct_ib_qpnum {

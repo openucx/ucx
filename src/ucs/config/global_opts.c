@@ -20,9 +20,11 @@
 
 
 ucs_global_opts_t ucs_global_opts = {
-    .log_level             = UCS_LOG_LEVEL_WARN,
+    .log_component         = {UCS_LOG_LEVEL_WARN, "UCX"},
     .log_print_enable      = 0,
     .log_file              = "",
+    .log_file_size         = SIZE_MAX,
+    .log_file_rotate       = 0,
     .log_buffer_size       = 1024,
     .log_data_size         = 0,
     .mpool_fifo            = 0,
@@ -67,7 +69,8 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "UCS logging level. Messages with a level higher or equal to the selected "
   "will be printed.\n"
   "Possible values are: fatal, error, warn, info, debug, trace, data, func, poll.",
-  ucs_offsetof(ucs_global_opts_t, log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+  ucs_offsetof(ucs_global_opts_t, log_component),
+  UCS_CONFIG_TYPE_LOG_COMP},
 
  {"LOG_FILE", "",
   "If not empty, UCS will print log messages to the specified file instead of stdout.\n"
@@ -76,6 +79,16 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "  %h - Replaced with host name\n",
   ucs_offsetof(ucs_global_opts_t, log_file),
   UCS_CONFIG_TYPE_STRING},
+
+ {"LOG_FILE_SIZE", "inf",
+  "The maximal size of log file. The maximal log file size has to be >= LOG_BUFFER.",
+  ucs_offsetof(ucs_global_opts_t, log_file_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+ {"LOG_FILE_ROTATE", "0",
+  "The maximal number of backup log files that could be created to save logs\n"
+  "after the previous ones (if any) are completely filled. The value has to be\n"
+  "less than the maximal signed integer value.",
+  ucs_offsetof(ucs_global_opts_t, log_file_rotate), UCS_CONFIG_TYPE_UINT},
 
  {"LOG_BUFFER", "1024",
   "Buffer size for a single log message.",
@@ -144,7 +157,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Signal number used for async signaling.",
   ucs_offsetof(ucs_global_opts_t, async_signo), UCS_CONFIG_TYPE_SIGNO},
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
  {"STATS_DEST", "",
   "Destination to send statistics to. If the value is empty, statistics are\n"
   "not reported. Possible values are:\n"
@@ -182,7 +195,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 
 #endif
 
-#if ENABLE_MEMTRACK
+#ifdef ENABLE_MEMTRACK
  {"MEMTRACK_DEST", "",
   "Destination to output memory tracking report to. If the value is empty,\n"
   "results are not reported. Possible values are:\n"
@@ -236,7 +249,7 @@ void ucs_global_opts_init()
     ucs_status_t status;
 
     status = ucs_config_parser_fill_opts(&ucs_global_opts, ucs_global_opts_table,
-                                         NULL, NULL, 1);
+                                         UCS_DEFAULT_ENV_PREFIX, NULL, 1);
     if (status != UCS_OK) {
         ucs_fatal("failed to parse global configuration - aborting");
     }
@@ -267,5 +280,6 @@ void ucs_global_opts_release()
 void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags)
 {
     ucs_config_parser_print_opts(stream, "Global configuration", &ucs_global_opts,
-                                 ucs_global_opts_table, NULL, print_flags);
+                                 ucs_global_opts_table, NULL,
+                                 UCS_DEFAULT_ENV_PREFIX, print_flags);
 }

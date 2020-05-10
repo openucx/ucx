@@ -26,7 +26,7 @@
 #include <unistd.h>
 
 
-UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemFree, CUresult,-1, CUdeviceptr)
+UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemFree, CUresult, -1, CUdeviceptr)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemFreeHost, CUresult, -1, void *)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemAlloc, CUresult, -1, CUdeviceptr *, size_t)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(cuMemAllocManaged, CUresult, -1, CUdeviceptr *,
@@ -432,7 +432,7 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
     }
 
     ucm_debug("dispatching initial memtype allocation for %p..%p %s",
-              addr, addr + length, path);
+              addr, UCS_PTR_BYTE_OFFSET(addr, length), path);
 
     event.mem_type.address  = addr;
     event.mem_type.size     = length;

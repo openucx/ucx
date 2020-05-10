@@ -23,8 +23,9 @@ nobase_dist_libucs_la_HEADERS = \
 	config/parser.h \
 	config/types.h \
 	datastruct/callbackq.h \
+	datastruct/hlist.h \
 	datastruct/khash.h \
-	datastruct/list_types.h \
+	datastruct/linear_func.h \
 	datastruct/list.h \
 	datastruct/mpool.h \
 	datastruct/pgtable.h \
@@ -32,6 +33,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/strided_alloc.h \
 	datastruct/string_buffer.h \
 	datastruct/string_set.h \
+	debug/log_def.h \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
@@ -46,6 +48,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/preprocessor.h \
 	sys/string.h \
 	sys/sock.h \
+	sys/topo.h \
 	sys/stubs.h \
 	time/time_def.h \
 	type/class.h \
@@ -93,6 +96,7 @@ noinst_HEADERS = \
 	sys/module.h \
 	sys/sys.h \
 	sys/iovec.h \
+	sys/iovec.inl \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \
@@ -147,6 +151,7 @@ libucs_la_SOURCES = \
 	sys/sys.c \
 	sys/iovec.c \
 	sys/sock.c \
+	sys/topo.c \
 	sys/stubs.c \
 	time/time.c \
 	time/timer_wheel.c \
@@ -154,6 +159,11 @@ libucs_la_SOURCES = \
 	type/class.c \
 	type/status.c \
 	type/init_once.c
+
+if HAVE_AARCH64_THUNDERX2
+libucs_la_SOURCES += \
+        arch/aarch64/memcpy_thunderx2.S
+endif
 
 if HAVE_STATS
 libucs_la_SOURCES += \

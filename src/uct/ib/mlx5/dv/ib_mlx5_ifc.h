@@ -35,12 +35,15 @@
 /* insert a value to a struct */
 #define UCT_IB_MLX5DV_SET(_typ, _p, _fld, _v) \
     do { \
+        char *___p = _p; \
         uint32_t ___v = _v; \
+        uint32_t ___h; \
         UCS_STATIC_ASSERT(__uct_st_sz_bits(_typ) % 32 == 0); \
-        *((__be32 *)(_p) + __uct_dw_off(_typ, _fld)) = \
-            htobe32((be32toh(*((__be32 *)(_p) + __uct_dw_off(_typ, _fld))) & \
-            (~__uct_dw_mask(_typ, _fld))) | (((___v) & __uct_mask(_typ, _fld)) \
-            << __uct_dw_bit_off(_typ, _fld))); \
+        ___h = (be32toh(*((__be32 *)(___p) + __uct_dw_off(_typ, _fld))) & \
+                (~__uct_dw_mask(_typ, _fld))) | \
+               (((___v) & __uct_mask(_typ, _fld)) << \
+                __uct_dw_bit_off(_typ, _fld)); \
+        *((__be32 *)(___p) + __uct_dw_off(_typ, _fld)) = htobe32(___h); \
     } while (0)
 
 #define UCT_IB_MLX5DV_GET(_typ, _p, _fld) \
@@ -67,6 +70,7 @@ enum {
     UCT_IB_MLX5_CMD_OP_RTR2RTS_QP              = 0x504,
     UCT_IB_MLX5_CMD_OP_2ERR_QP                 = 0x507,
     UCT_IB_MLX5_CMD_OP_2RST_QP                 = 0x50a,
+    UCT_IB_MLX5_CMD_OP_CREATE_RMP              = 0x90c,
     UCT_IB_MLX5_CMD_OP_CREATE_DCT              = 0x710,
     UCT_IB_MLX5_CMD_OP_DRAIN_DCT               = 0x712,
     UCT_IB_MLX5_CMD_OP_CREATE_XRQ              = 0x717,
@@ -909,6 +913,48 @@ struct uct_ib_mlx5_create_xrq_in_bits {
 };
 
 enum {
+    UCT_IB_MLX5_RMPC_STATE_RDY = 0x1,
+    UCT_IB_MLX5_RMPC_STATE_ERR = 0x3
+};
+
+struct uct_ib_mlx5_rmpc_bits {
+    uint8_t         reserved_at_0[0x8];
+    uint8_t         state[0x4];
+    uint8_t         reserved_at_c[0x14];
+
+    uint8_t         basic_cyclic_rcv_wqe[0x1];
+    uint8_t         reserved_at_21[0x1f];
+
+    uint8_t         reserved_at_40[0x140];
+
+    struct uct_ib_mlx5_wq_bits wq;
+};
+
+struct uct_ib_mlx5_create_rmp_out_bits {
+    uint8_t         status[0x8];
+    uint8_t         reserved_at_8[0x18];
+
+    uint8_t         syndrome[0x20];
+
+    uint8_t         reserved_at_40[0x8];
+    uint8_t         rmpn[0x18];
+
+    uint8_t         reserved_at_60[0x20];
+};
+
+struct uct_ib_mlx5_create_rmp_in_bits {
+    uint8_t         opcode[0x10];
+    uint8_t         uid[0x10];
+
+    uint8_t         reserved_at_20[0x10];
+    uint8_t         op_mod[0x10];
+
+    uint8_t         reserved_at_40[0xc0];
+
+    struct uct_ib_mlx5_rmpc_bits rmp_context;
+};
+
+enum {
     UCT_IB_MLX5_ADS_STAT_RATE_NO_LIMIT  = 0x0,
     UCT_IB_MLX5_ADS_STAT_RATE_2_5GBPS   = 0x7,
     UCT_IB_MLX5_ADS_STAT_RATE_10GBPS    = 0x8,
@@ -1041,10 +1087,10 @@ enum {
     UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B  = 0x2
 };
 
-static inline unsigned uct_ib_mlx5_qpc_cs_res(unsigned size)
+static inline unsigned uct_ib_mlx5_qpc_cs_res(unsigned size, int dc)
 {
     return (size > 32) ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B :
-                  size ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_32B :
+         (size && !dc) ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_32B :
                          UCT_IB_MLX5_QPC_CS_RES_DISABLE;
 }
 

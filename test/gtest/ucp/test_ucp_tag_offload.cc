@@ -14,6 +14,10 @@ extern "C" {
 #include <ucp/tag/tag_match.h>
 }
 
+#define UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(_test_case) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx, "dc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx, "rc_x")
+
 class test_ucp_tag_offload : public test_ucp_tag {
 public:
     test_ucp_tag_offload() {
@@ -36,13 +40,30 @@ public:
         return req;
     }
 
+    request* recv_nb_exp(void *buffer, size_t count, ucp_datatype_t dt,
+                         ucp_tag_t tag, ucp_tag_t tag_mask)
+    {
+        request *req1 = recv_nb_and_check(buffer, count, DATATYPE, tag,
+                                          UCP_TAG_MASK_FULL);
+
+        // Post and cancel another receive to make sure the first one was offloaded
+        size_t size = receiver().worker()->context->config.ext.tm_thresh + 1;
+        std::vector<char> tbuf(size, 0);
+        request *req2 = recv_nb_and_check(&tbuf[0], size, DATATYPE, tag,
+                                          UCP_TAG_MASK_FULL);
+        req_cancel(receiver(), req2);
+
+        return req1;
+    }
+
     void send_recv(entity &se, ucp_tag_t tag, size_t length)
     {
         std::vector<uint8_t> sendbuf(length);
         std::vector<uint8_t> recvbuf(length);
 
-        request *rreq = recv_nb_and_check(&recvbuf[0], length, DATATYPE, tag,
-                                          UCP_TAG_MASK_FULL);
+        request *rreq = recv_nb_exp(&recvbuf[0], length, DATATYPE, tag,
+                                    UCP_TAG_MASK_FULL);
+
         request *sreq = (request*)ucp_tag_send_nb(se.ep(), &sendbuf[0], length,
                                                   DATATYPE, tag, send_callback);
         if (UCS_PTR_IS_ERR(sreq)) {
@@ -288,8 +309,22 @@ UCS_TEST_P(test_ucp_tag_offload, connect)
     e->connect(&receiver(), get_ep_params());
 }
 
+UCS_TEST_P(test_ucp_tag_offload, small_rndv, "RNDV_THRESH=0", "TM_THRESH=0")
+{
+    activate_offload(sender());
+    send_recv(sender(), 0x11ul, 0ul);
+    send_recv(sender(), 0x11ul, 1ul);
+}
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload)
+UCS_TEST_P(test_ucp_tag_offload, small_sw_rndv, "RNDV_THRESH=0", "TM_THRESH=0",
+                                                "TM_SW_RNDV=y")
+{
+    activate_offload(sender());
+    send_recv(sender(), 0x11ul, 0ul);
+    send_recv(sender(), 0x11ul, 1ul);
+}
+
+UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload)
 
 
 class test_ucp_tag_offload_multi : public test_ucp_tag_offload {
@@ -426,9 +461,13 @@ public:
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
     }
 
-    void init()
-    {
-        test_ucp_tag::init();
+    static uct_device_type_t get_dev_type(ucp_ep_h ep, ucp_rsc_index_t idx) {
+        return ep->worker->context->tl_rscs[idx].tl_rsc.dev_type;
+    }
+
+    static bool lane_shm_or_self(ucp_ep_h ep, ucp_rsc_index_t idx) {
+        uct_device_type_t dev_type = get_dev_type(ep, idx);
+        return (dev_type == UCT_DEVICE_TYPE_SHM) || (dev_type == UCT_DEVICE_TYPE_SELF);
     }
 };
 
@@ -439,7 +478,7 @@ UCS_TEST_P(test_ucp_tag_offload_selection, tag_lane)
     bool has_shm_or_self = false;
 
     for (ucp_rsc_index_t idx = 0; idx < sender().ucph()->num_tls; ++idx) {
-        if (ucp_wireup_is_rsc_self_or_shm(ep, idx)) {
+        if (lane_shm_or_self(ep, idx)) {
             has_shm_or_self = true;
         }
 
@@ -464,12 +503,69 @@ UCS_TEST_P(test_ucp_tag_offload_selection, tag_lane)
     }
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload_selection);
+UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload_selection);
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_selection, self_rcx,
                               "self,rc_x");
 
 
-#if ENABLE_STATS
+class test_ucp_tag_offload_cuda : public test_ucp_tag_offload {
+public:
+    test_ucp_tag_offload_cuda() {
+        modify_config("RNDV_THRESH", "1024");
+    }
+};
+
+// Test that expected SW RNDV request is handled properly when receive buffer
+// is allocated on GPU memory.
+UCS_TEST_P(test_ucp_tag_offload_cuda, sw_rndv_to_cuda_mem, "TM_SW_RNDV=y")
+{
+    activate_offload(sender());
+
+    size_t size   = 2048;
+    ucp_tag_t tag = 0xCAFEBABEul;
+    // Test will be skipped here if CUDA mem is not supported
+    mem_buffer rbuf(size, UCS_MEMORY_TYPE_CUDA);
+    request *rreq = recv_nb_exp(rbuf.ptr(), size, DATATYPE, tag,
+                                UCP_TAG_MASK_FULL);
+
+    std::vector<uint8_t> sendbuf(size); // can send from any memory
+    request *sreq = (request*)ucp_tag_send_nb(sender().ep(), &sendbuf[0],
+                                              size, DATATYPE, tag,
+                                              send_callback);
+    wait_and_validate(rreq);
+    wait_and_validate(sreq);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_cuda, rc_dc_cuda,
+                              "dc_x,rc_x,cuda_copy")
+
+class test_ucp_tag_offload_status : public test_ucp_tag {
+public:
+    test_ucp_tag_offload_status() {
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
+    }
+
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        // Do not pass UCP_FEATURE_TAG feature to check that UCT will not
+        // initialize tag offload infrastructure in this case.
+        params.features     = UCP_FEATURE_RMA;
+        return params;
+    }
+};
+
+UCS_TEST_P(test_ucp_tag_offload_status, check_offload_status)
+{
+    for (ucp_rsc_index_t i = 0; i < sender().ucph()->num_tls; ++i) {
+        EXPECT_FALSE(ucp_worker_iface_get_attr(sender().worker(), i)->cap.flags &
+                     (UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                      UCT_IFACE_FLAG_TAG_RNDV_ZCOPY));
+    }
+}
+
+UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload_status)
+
+#ifdef ENABLE_STATS
 
 class test_ucp_tag_offload_stats : public test_ucp_tag_offload_multi {
 public:
@@ -493,7 +589,9 @@ public:
                                           UCP_TAG_MASK_FULL);
 
         // Post and cancel another receive to make sure the first one was offloaded
-        request *req2 = recv_nb_and_check(buffer, count, DATATYPE, tag,
+        size_t size = receiver().worker()->context->config.ext.tm_thresh + 1;
+        std::vector<char> tbuf(size, 0);
+        request *req2 = recv_nb_and_check(&tbuf[0], size, DATATYPE, tag,
                                           UCP_TAG_MASK_FULL);
         req_cancel(receiver(), req2);
 
@@ -640,6 +738,47 @@ UCS_TEST_P(test_ucp_tag_offload_stats, sw_rndv, "RNDV_THRESH=1000")
     test_send_recv(size, true, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_offload_stats)
+UCS_TEST_P(test_ucp_tag_offload_stats, force_sw_rndv, "TM_SW_RNDV=y",
+                                                      "RNDV_THRESH=1000")
+{
+    size_t size = 2048; // Size bigger than RNDV thresh
+
+    // Offload is not activated, so the first message should arrive unexpectedly
+    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV);
+    test_send_recv(size, false, UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV);
+}
+
+
+UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload_stats)
+
+
+class test_ucp_tag_offload_stats_cuda : public test_ucp_tag_offload_stats {
+public:
+    test_ucp_tag_offload_stats_cuda() {
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+    }
+};
+
+UCS_TEST_P(test_ucp_tag_offload_stats_cuda, block_cuda_no_gpu_direct,
+           "TM_THRESH=1")
+{
+    activate_offload(sender());
+
+    size_t size   = 2048;
+    // Test will be skipped here if CUDA mem is not supported
+    mem_buffer rbuf(size, UCS_MEMORY_TYPE_CUDA);
+    request *rreq = recv_nb_and_check(rbuf.ptr(), size, DATATYPE, 0x11,
+                                      UCP_TAG_MASK_FULL);
+
+    wait_counter(worker_offload_stats(receiver()),
+                 UCP_WORKER_STAT_TAG_OFFLOAD_BLOCK_MEM_REG);
+
+    validate_offload_counter(UCP_WORKER_STAT_TAG_OFFLOAD_POSTED, 0ul);
+
+    req_cancel(receiver(), rreq);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_stats_cuda, rc_dc_cuda,
+                              "dc_x,rc_x,cuda_copy")
 
 #endif

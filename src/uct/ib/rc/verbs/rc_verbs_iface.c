@@ -112,10 +112,16 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         uct_rc_verbs_txqp_completed(&ep->super.txqp, &ep->txcnt, count);
         iface->super.tx.cq_available += count;
 
+       /* process pending elements prior to CQ entries to avoid out-of-order
+        * transmission in completion callbacks */
+        ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
+                                   &ep->super.arb_group);
+        ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1,
+                             uct_rc_ep_process_pending, NULL);
+
         uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci);
-        ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
     }
-    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending, NULL);
+
     return num_wcs;
 }
 
@@ -156,9 +162,9 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
                                 iface->config.max_inline,
                                 iface->config.max_inline,
                                 iface->config.short_desc_size,
-                                uct_ib_iface_get_max_iov(&iface->super.super) - 1,
-                                uct_ib_iface_get_max_iov(&iface->super.super) - 1,
-                                sizeof(uct_rc_hdr_t));
+                                iface->config.max_send_sge - 1,
+                                sizeof(uct_rc_hdr_t),
+                                iface->config.max_send_sge);
     if (status != UCS_OK) {
         return status;
     }
@@ -198,12 +204,12 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
 
-    init_attr.fc_req_size = sizeof(uct_rc_fc_request_t);
-    init_attr.rx_hdr_len  = sizeof(uct_rc_hdr_t);
-    init_attr.qp_type     = IBV_QPT_RC;
-    init_attr.rx_cq_len   = config->super.super.super.rx.queue_len;
-    init_attr.tx_cq_len   = config->super.tx_cq_len;
-    init_attr.seg_size    = config->super.super.super.seg_size;
+    init_attr.fc_req_size            = sizeof(uct_rc_fc_request_t);
+    init_attr.rx_hdr_len             = sizeof(uct_rc_hdr_t);
+    init_attr.qp_type                = IBV_QPT_RC;
+    init_attr.cq_len[UCT_IB_DIR_RX]  = config->super.super.super.rx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_TX]  = config->super.tx_cq_len;
+    init_attr.seg_size               = config->super.super.super.seg_size;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
                               worker, params, &config->super.super, &init_attr);
@@ -273,8 +279,10 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     }
     uct_ib_destroy_qp(qp);
 
-    self->config.max_inline = attr.cap.max_inline_data;
-    uct_ib_iface_set_max_iov(&self->super.super, attr.cap.max_send_sge);
+    self->config.max_inline   = attr.cap.max_inline_data;
+    self->config.max_send_sge = ucs_min(UCT_IB_MAX_IOV, attr.cap.max_send_sge);
+    ucs_assertv_always(self->config.max_send_sge > 1, /* need 1 iov for am header*/
+                       "max_send_sge %zu", self->config.max_send_sge);
 
     if (self->config.max_inline < sizeof(*hdr)) {
         self->fc_desc = ucs_mpool_get(&self->short_desc_mp);

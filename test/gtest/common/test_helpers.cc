@@ -382,14 +382,14 @@ scoped_setenv::~scoped_setenv() {
 }
 
 ucx_env_cleanup::ucx_env_cleanup() {
-    const size_t prefix_len = strlen(UCS_CONFIG_PREFIX);
+    const size_t prefix_len = strlen(UCS_DEFAULT_ENV_PREFIX);
     char **envp;
 
     for (envp = environ; *envp != NULL; ++envp) {
         std::string env_var = *envp;
 
         if ((env_var.find("=") != std::string::npos) &&
-            (env_var.find(UCS_CONFIG_PREFIX, 0, prefix_len) != std::string::npos)) {
+            (env_var.find(UCS_DEFAULT_ENV_PREFIX, 0, prefix_len) != std::string::npos)) {
             ucx_env_storage.push_back(env_var);
         }
     }
@@ -497,13 +497,22 @@ uint16_t get_port() {
     EXPECT_EQ(ret, 0);
     EXPECT_LT(1023, ntohs(ret_addr.sin_port)) ;
 
-    port = ret_addr.sin_port;
+    port = ntohs(ret_addr.sin_port);
     close(sock_fd);
     return port;
 }
 
 void *mmap_fixed_address() {
     return (void*)0xff0000000;
+}
+
+std::string compact_string(const std::string &str, size_t length)
+{
+    if (str.length() <= length * 2) {
+        return str;
+    }
+
+    return str.substr(0, length) + "..." + str.substr(str.length() - length);
 }
 
 sock_addr_storage::sock_addr_storage() : m_size(0), m_is_valid(false) {
@@ -529,27 +538,58 @@ void sock_addr_storage::set_sock_addr(const struct sockaddr &addr,
     m_is_valid = true;
 }
 
+void sock_addr_storage::reset_to_any() {
+    ASSERT_TRUE(m_is_valid);
+
+    if (get_sock_addr_ptr()->sa_family == AF_INET) {
+        struct sockaddr_in sin = {0};
+
+        sin.sin_family      = AF_INET;
+        sin.sin_addr.s_addr = INADDR_ANY;
+        sin.sin_port        = get_port();
+
+        set_sock_addr(*(struct sockaddr*)&sin, sizeof(sin));
+    } else {
+        ASSERT_EQ(get_sock_addr_ptr()->sa_family, AF_INET6);
+        struct sockaddr_in6 sin = {0};
+
+        sin.sin6_family = AF_INET6;
+        sin.sin6_addr   = in6addr_any;
+        sin.sin6_port   = get_port();
+
+        set_sock_addr(*(struct sockaddr*)&sin, sizeof(sin));
+    }
+}
+
+bool
+sock_addr_storage::operator==(const struct sockaddr_storage &sockaddr) const {
+    ucs_status_t status;
+    int result = ucs_sockaddr_cmp(get_sock_addr_ptr(),
+                                  (const struct sockaddr*)&sockaddr, &status);
+    ASSERT_UCS_OK(status);
+    return result == 0;
+}
+
 void sock_addr_storage::set_port(uint16_t port) {
     if (get_sock_addr_ptr()->sa_family == AF_INET) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)&m_storage;
-        addr_in->sin_port = port;
+        addr_in->sin_port = htons(port);
     } else {
         ASSERT_TRUE(get_sock_addr_ptr()->sa_family == AF_INET6);
-
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
-        addr_in->sin6_port = port;
+        addr_in->sin6_port = htons(port);
     }
 }
 
 uint16_t sock_addr_storage::get_port() const {
     if (get_sock_addr_ptr()->sa_family == AF_INET) {
         struct sockaddr_in *addr_in = (struct sockaddr_in *)&m_storage;
-        return addr_in->sin_port;
+        return ntohs(addr_in->sin_port);
     } else {
         EXPECT_TRUE(get_sock_addr_ptr()->sa_family == AF_INET6);
 
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
-        return addr_in->sin6_port;
+        return ntohs(addr_in->sin6_port);
     }
 }
 
@@ -563,6 +603,11 @@ ucs_sock_addr_t sock_addr_storage::to_ucs_sock_addr() const {
     addr.addr    = get_sock_addr_ptr();
     addr.addrlen = m_size;
     return addr;
+}
+
+std::string sock_addr_storage::to_str() const {
+    char str[UCS_SOCKADDR_STRING_LEN];
+    return ucs_sockaddr_str(get_sock_addr_ptr(), str, sizeof(str));
 }
 
 const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
@@ -606,5 +651,52 @@ message_stream::~message_stream() {
 }
 
 } // detail
+
+template<typename T>
+void cartesian_product(std::vector<std::vector<T> > &final_output,
+                       std::vector<T> &cur_output,
+                       typename std::vector<std::vector<T> >
+                       ::const_iterator cur_input,
+                       typename std::vector<std::vector<T> >
+                       ::const_iterator end_input) {
+    if (cur_input == end_input) {
+        final_output.push_back(cur_output);
+        return;
+    }
+
+    const std::vector<T> &cur_vector = *cur_input;
+
+    cur_input++;
+
+    for (typename std::vector<T>::const_iterator iter =
+            cur_vector.begin(); iter != cur_vector.end(); ++iter) {
+        cur_output.push_back(*iter);
+        ucs::cartesian_product(final_output, cur_output,
+                               cur_input, end_input);
+        cur_output.pop_back();
+    }
+}
+
+template<typename T>
+void cartesian_product(std::vector<std::vector<T> > &output,
+                       const std::vector<std::vector<T> > &input) {
+    std::vector<T> cur_output;
+    cartesian_product(output, cur_output, input.begin(), input.end());
+}
+
+std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs() {
+    static std::vector<std::vector<ucs_memory_type_t> > result;
+
+    if (result.empty()) {
+        std::vector<std::vector<ucs_memory_type_t> > input;
+
+        input.push_back(mem_buffer::supported_mem_types());
+        input.push_back(mem_buffer::supported_mem_types());
+
+        ucs::cartesian_product(result, input);
+    }
+
+    return result;
+}
 
 } // ucs

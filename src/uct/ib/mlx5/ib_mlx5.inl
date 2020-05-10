@@ -7,23 +7,23 @@
 #include "ib_mlx5.h"
 
 
-static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
-uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned index)
+static UCS_F_ALWAYS_INLINE UCS_F_NON_NULL struct mlx5_cqe64*
+uct_ib_mlx5_get_cqe(uct_ib_mlx5_cq_t *cq,  unsigned cqe_index)
 {
-    return UCS_PTR_BYTE_OFFSET(cq->cq_buf, ((index & (cq->cq_length - 1)) <<
+    return UCS_PTR_BYTE_OFFSET(cq->cq_buf, ((cqe_index & (cq->cq_length - 1)) <<
                                             cq->cqe_size_log));
 }
 
 static UCS_F_ALWAYS_INLINE int
-uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned index, unsigned mask)
+uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned cqe_index, unsigned mask)
 {
-    return (op_own & MLX5_CQE_OWNER_MASK) == !(index & mask);
+    return (op_own & MLX5_CQE_OWNER_MASK) == !(cqe_index & mask);
 }
 
 static UCS_F_ALWAYS_INLINE int
 uct_ib_mlx5_cqe_stride_index(struct mlx5_cqe64* cqe)
 {
-#if HAVE_STRUCT_MLX5_CQE64_IB_STRIDE_INDEX
+#ifdef HAVE_STRUCT_MLX5_CQE64_IB_STRIDE_INDEX
     return ntohs(cqe->ib_stride_index);
 #else
     uint16_t *stride = (uint16_t*)&cqe->rsvd20[2];
@@ -47,18 +47,33 @@ uct_ib_mlx5_srq_max_wrs(int rxq_len, int num_sge)
     return ucs_max(rxq_len / num_sge, UCT_IB_MLX5_XRQ_MIN_UWQ_POST);
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_cqe_is_grh_present(struct mlx5_cqe64* cqe)
+{
+    return cqe->flags_rqpn & htonl(UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA |
+                                   UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE);
+}
+
+static UCS_F_ALWAYS_INLINE void*
+uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
+{
+    ucs_assert(uct_ib_mlx5_cqe_is_grh_present(cqe) ==
+               htonl(UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE)); /* GRH is in CQE */
+    return UCS_PTR_BYTE_OFFSET(cqe, -UCT_IB_GRH_LEN);
+}
+
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {
     struct mlx5_cqe64 *cqe;
-    unsigned index;
+    unsigned cqe_index;
     uint8_t op_own;
 
-    index  = cq->cq_ci;
-    cqe    = uct_ib_mlx5_get_cqe(cq, index);
-    op_own = cqe->op_own;
+    cqe_index = cq->cq_ci;
+    cqe       = uct_ib_mlx5_get_cqe(cq, cqe_index);
+    op_own    = cqe->op_own;
 
-    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, index, cq->cq_length))) {
+    if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, cqe_index, cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
@@ -67,8 +82,8 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
         return NULL; /* No CQE */
     }
 
-    cq->cq_ci = index + 1;
-    return cqe; /* TODO optimize - let complier know cqe is not null */
+    cq->cq_ci = cqe_index + 1;
+    return cqe;
 }
 
 
@@ -364,12 +379,12 @@ uct_ib_mlx5_set_data_seg(struct mlx5_wqe_data_seg *dptr,
 
 
 static UCS_F_ALWAYS_INLINE
-unsigned uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
-                                      struct mlx5_wqe_data_seg *dptr,
-                                      const uct_iov_t *iov, size_t iovcnt)
+size_t uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
+                                    struct mlx5_wqe_data_seg *dptr,
+                                    const uct_iov_t *iov, size_t iovcnt)
 {
-    unsigned len = 0;
-    size_t   iov_it;
+    size_t wqe_size = 0;
+    size_t iov_it;
 
     for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
         if (!iov[iov_it].length) { /* Skip zero length WQE*/
@@ -379,12 +394,14 @@ unsigned uct_ib_mlx5_set_data_seg_iov(uct_ib_mlx5_txwq_t *txwq,
 
         /* place data into the buffer */
         dptr = uct_ib_mlx5_txwq_wrap_any(txwq, dptr);
-        uct_ib_mlx5_set_data_seg(dptr, iov[iov_it].buffer, iov[iov_it].length,
-                                 ((uct_ib_mem_t*)iov[iov_it].memh)->lkey);
-        len += sizeof(*dptr);
+        uct_ib_mlx5_set_data_seg(dptr, iov[iov_it].buffer,
+                                 uct_iov_get_length(iov + iov_it),
+                                 uct_ib_memh_get_lkey(iov[iov_it].memh));
+        wqe_size += sizeof(*dptr);
         ++dptr;
     }
-    return len;
+
+    return wqe_size;
 }
 
 
@@ -484,58 +501,38 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
 
 
 static inline uct_ib_mlx5_srq_seg_t *
-uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t index)
+uct_ib_mlx5_srq_get_wqe(uct_ib_mlx5_srq_t *srq, uint16_t wqe_index)
 {
-    return UCS_PTR_BYTE_OFFSET(srq->buf, (index & srq->mask) * srq->stride);
-}
-
-static inline uint16_t uct_ib_mlx5_calc_av_sport(uint32_t rqpn, uint32_t qpn)
-{
-    uint32_t flow_id = qpn ^ rqpn;
-    uint16_t sport   = flow_id ^ (flow_id >> 16);
-
-    return UCT_IB_MLX5_ROCE_SRC_PORT_MIN | sport;
-}
-
-static inline void uct_ib_mlx5_iface_set_av_sport(uct_ib_iface_t *iface,
-                                                  uct_ib_mlx5_base_av_t *av,
-                                                  uint32_t rqpn, uint32_t qpn)
-{
-    if (!uct_ib_iface_is_roce(iface) ||
-        (ntohs(av->rlid) >= UCT_IB_MLX5_ROCE_SRC_PORT_MIN)) {
-        return;
-    }
-
-    av->rlid = htons(uct_ib_mlx5_calc_av_sport(qpn, rqpn));
+    return UCS_PTR_BYTE_OFFSET(srq->buf, (wqe_index & srq->mask) * srq->stride);
 }
 
 static ucs_status_t UCS_F_MAYBE_UNUSED
 uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
                             uct_ib_mlx5_qp_t *qp,
-                            uct_ib_qp_attr_t *attr)
+                            uct_ib_mlx5_qp_attr_t *attr)
 {
     ucs_status_t status;
 
     status = uct_ib_mlx5_iface_get_res_domain(iface, qp);
-    if (status) {
+    if (status != UCS_OK) {
         return status;
     }
 
 #if HAVE_DECL_IBV_EXP_CREATE_QP
-    attr->ibv.comp_mask       = IBV_EXP_QP_INIT_ATTR_PD;
-    attr->ibv.pd              = uct_ib_iface_md(iface)->pd;
+    attr->super.ibv.comp_mask       = IBV_EXP_QP_INIT_ATTR_PD;
+    attr->super.ibv.pd              = uct_ib_iface_md(iface)->pd;
 #elif HAVE_DECL_IBV_CREATE_QP_EX
-    attr->ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
+    attr->super.ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
     if (qp->verbs.rd->pd != NULL) {
-        attr->ibv.pd          = qp->verbs.rd->pd;
+        attr->super.ibv.pd          = qp->verbs.rd->pd;
     } else {
-        attr->ibv.pd          = uct_ib_iface_md(iface)->pd;
+        attr->super.ibv.pd          = uct_ib_iface_md(iface)->pd;
     }
 #endif
 
-#if HAVE_IBV_EXP_RES_DOMAIN
-    attr->ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
-    attr->ibv.res_domain      = qp->verbs.rd->ibv_domain;
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
+    attr->super.ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
+    attr->super.ibv.res_domain      = qp->verbs.rd->ibv_domain;
 #endif
 
     return UCS_OK;

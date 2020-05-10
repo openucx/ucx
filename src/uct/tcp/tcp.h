@@ -8,6 +8,7 @@
 
 #include <uct/base/uct_md.h>
 #include <uct/base/uct_iface.h>
+#include <uct/base/uct_iov.inl>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <ucs/datastruct/khash.h>
@@ -20,6 +21,9 @@
 #define UCT_TCP_NAME                          "tcp"
 
 #define UCT_TCP_CONFIG_PREFIX                 "TCP_"
+
+/* Magic number that is used by TCP to identify its peers */
+#define UCT_TCP_MAGIC_NUMBER                  0xCAFEBABE12345678lu
 
 /* Maximum number of events to wait on event set */
 #define UCT_TCP_MAX_EVENTS                    16
@@ -86,9 +90,13 @@ typedef enum uct_tcp_ep_conn_state {
      * After it is done, it sends `UCT_TCP_CM_CONN_REQ` to the peer.
      * All AM operations return `UCS_ERR_NO_RESOURCE` error to a caller. */
     UCT_TCP_EP_CONN_STATE_CONNECTING,
+    /* EP is receiving the magic number in order to verify a peer. EP is moved
+     * to this state after accept() completed. */
+    UCT_TCP_EP_CONN_STATE_RECV_MAGIC_NUMBER,
     /* EP is accepting connection from a peer, i.e. accept() returns socket fd
      * on which a connection was accepted, this EP was created using this socket
-     * and now it is waiting for `UCT_TCP_CM_CONN_REQ` from a peer. */
+     * fd and the magic number was received and verified by EP and now it is
+     * waiting for `UCT_TCP_CM_CONN_REQ` from a peer. */
     UCT_TCP_EP_CONN_STATE_ACCEPTING,
     /* EP is waiting for `UCT_TCP_CM_CONN_ACK` message from a peer after sending
      * `UCT_TCP_CM_CONN_REQ`.
@@ -101,7 +109,7 @@ typedef enum uct_tcp_ep_conn_state {
      * to `UCT_TCP_EP_CONN_STATE_CONNECTED` state upon receiving this message.
      * All AM operations return `UCS_ERR_NO_RESOURCE` error to a caller. */
     UCT_TCP_EP_CONN_STATE_WAITING_REQ,
-    /* EP is connected to a peer and them can comunicate with each other. */
+    /* EP is connected to a peer and they can communicate with each other. */
     UCT_TCP_EP_CONN_STATE_CONNECTED
 } uct_tcp_ep_conn_state_t;
 
@@ -144,6 +152,7 @@ KHASH_INIT(uct_tcp_cm_eps, struct sockaddr_in, ucs_list_link_t*,
 typedef struct uct_tcp_cm_state {
     const char            *name;       /* CM state name */
     uct_tcp_ep_progress_t tx_progress; /* TX progress function */
+    uct_tcp_ep_progress_t rx_progress; /* RX progress function */
 } uct_tcp_cm_state_t;
 
 
@@ -249,7 +258,8 @@ typedef struct uct_tcp_ep_ctx {
                                                    * or received PUT operation */
     void                          *buf;           /* Partial send/recv data */
     size_t                        length;         /* How much data in the buffer */
-    size_t                        offset;         /* Next offset to send/recv */
+    size_t                        offset;         /* How much data was sent (TX) or was
+                                                   * handled after receiving (RX) */
 } uct_tcp_ep_ctx_t;
 
 
@@ -321,6 +331,7 @@ typedef struct uct_tcp_iface {
         struct sockaddr_in        ifaddr;            /* Network address */
         struct sockaddr_in        netmask;           /* Network address mask */
         int                       prefer_default;    /* Prefer default gateway */
+        int                       put_enable;        /* Enable PUT Zcopy operation support */
         int                       conn_nb;           /* Use non-blocking connect() */
         unsigned                  max_poll;          /* Number of events to poll per socket*/
         unsigned                  max_conn_retries;  /* How many connection establishment attmepts
@@ -346,6 +357,7 @@ typedef struct uct_tcp_iface_config {
     size_t                        max_iov;
     size_t                        sendv_thresh;
     int                           prefer_default;
+    int                           put_enable;
     int                           conn_nb;
     unsigned                      max_poll;
     unsigned                      max_conn_retries;
@@ -383,11 +395,8 @@ void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
 
-ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep, int io_errno);
-
-unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep);
-
-unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep);
+ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep,
+                                               ucs_status_t io_status);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
@@ -452,7 +461,7 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
 ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t event);
 
-unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep, void *pkt, uint32_t length);
+unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep_p, void *pkt, uint32_t length);
 
 unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep);
 
@@ -478,20 +487,6 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              int fd);
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
-
-static inline unsigned uct_tcp_ep_progress_tx(uct_tcp_ep_t *ep)
-{
-    return uct_tcp_ep_cm_state[ep->conn_state].tx_progress(ep);
-}
-
-static inline unsigned uct_tcp_ep_progress_rx(uct_tcp_ep_t *ep)
-{
-    if (!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX))) {
-        return uct_tcp_ep_progress_am_rx(ep);
-    } else {
-        return uct_tcp_ep_progress_put_rx(ep);
-    }
-}
 
 static inline void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
 {

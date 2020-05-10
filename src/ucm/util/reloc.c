@@ -484,11 +484,11 @@ static ucs_status_t ucm_reloc_install_dlopen()
 ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
 {
     ucs_status_t status;
-    Dl_info dlinfo;
+    Dl_info dl_info;
     int ret;
 
     /* Take default symbol value from the current library */
-    ret = dladdr(ucm_reloc_modify, &dlinfo);
+    ret = dladdr(ucm_reloc_modify, &dl_info);
     if (!ret) {
         ucm_error("dladdr() failed to query current library");
         return UCS_ERR_UNSUPPORTED;
@@ -504,7 +504,7 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
         goto out_unlock;
     }
 
-    status = ucm_reloc_apply_patch(patch, (uintptr_t)dlinfo.dli_fbase);
+    status = ucm_reloc_apply_patch(patch, (uintptr_t)dl_info.dli_fbase);
     if (status != UCS_OK) {
         goto out_unlock;
     }

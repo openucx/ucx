@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ib_iface.h"
 #include "ib_log.h"
 
@@ -15,6 +19,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <ucs/memory/numa.h>
+#include <ucs/sys/sock.h>
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
@@ -79,10 +84,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "enough will be sent inline.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_inline), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TX_INLINE_RESP", "32",
+  {"TX_INLINE_RESP", "0",
    "Bytes to reserve in send WQE for inline response. Responses which are small\n"
    "enough, such as of atomic operations and small reads, will be received inline.",
-   ucs_offsetof(uct_ib_iface_config_t, tx.inl_resp), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_TX]), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"TX_MIN_SGE", "3",
    "Number of SG entries to reserve in the send WQE.",
@@ -127,7 +132,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Number of bytes to request for inline receive. If the maximal supported size\n"
    "is smaller, it will be used instead. If it is possible to support a larger\n"
    "size than requested with the same hardware resources, it will be used instead.",
-   ucs_offsetof(uct_ib_iface_config_t, rx.inl), UCS_CONFIG_TYPE_MEMUNITS},
+   ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_RX]), UCS_CONFIG_TYPE_MEMUNITS},
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 0, "receive",
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
@@ -156,7 +161,22 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "IB Hop limit / RoCEv2 Time to Live. Should be between 0 and 255.\n",
    ucs_offsetof(uct_ib_iface_config_t, hop_limit), UCS_CONFIG_TYPE_UINT},
 
-  {"LID_PATH_BITS", "0-17",
+  {"NUM_PATHS", "auto",
+   "Number of connections that should be created between a pair of communicating\n"
+   "endpoints for optimal performance. The default value 'auto' behaves according\n"
+   "to the port link layer:\n"
+   " RoCE       - "UCS_PP_MAKE_STRING(UCT_IB_DEV_MAX_PORTS) " for LAG port, otherwise - 1.\n"
+   " InfiniBand - As the number of path bits enabled by fabric's LMC value and selected\n"
+   "              by "UCS_DEFAULT_ENV_PREFIX UCT_IB_CONFIG_PREFIX"LID_PATH_BITS configuration.",
+   ucs_offsetof(uct_ib_iface_config_t, num_paths), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"ROCE_PATH_FACTOR", "1",
+   "Multiplier for RoCE LAG UDP source port calculation. The UDP source port\n"
+   "is typically used by switches and network adapters to select a different\n"
+   "path for the same pair of endpoints.",
+   ucs_offsetof(uct_ib_iface_config_t, roce_path_factor), UCS_CONFIG_TYPE_UINT},
+
+  {"LID_PATH_BITS", "0",
    "List of IB Path bits separated by comma (a,b,c) "
    "which will be the low portion of the LID, according to the LMC in the fabric.",
    ucs_offsetof(uct_ib_iface_config_t, lid_path_bits), UCS_CONFIG_TYPE_ARRAY(path_bits_spec)},
@@ -166,12 +186,16 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "\"auto\" option selects a first valid pkey value with full membership.",
    ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
 
-#if HAVE_IBV_EXP_RES_DOMAIN
+#ifdef HAVE_IBV_EXP_RES_DOMAIN
   {"RESOURCE_DOMAIN", "y",
    "Enable multiple resource domains (experimental).",
    ucs_offsetof(uct_ib_iface_config_t, enable_res_domain), UCS_CONFIG_TYPE_BOOL},
 #endif
 
+  {"PATH_MTU", "default",
+   "Path MTU. \"default\" will select the best MTU for the device.",
+   ucs_offsetof(uct_ib_iface_config_t, path_mtu),
+                UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
 
   {NULL}
 };
@@ -182,12 +206,17 @@ int uct_ib_iface_is_roce(uct_ib_iface_t *iface)
                                       iface->config.port_num);
 }
 
+int uct_ib_iface_is_ib(uct_ib_iface_t *iface)
+{
+    return uct_ib_device_is_port_ib(uct_ib_iface_device(iface),
+                                    iface->config.port_num);
+}
+
 static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh)
 {
     uct_ib_iface_recv_desc_t *desc = obj;
-    uct_ib_mem_t *ib_memh = memh;
 
-    desc->lkey = ib_memh->lkey;
+    desc->lkey = uct_ib_memh_get_lkey(memh);
 }
 
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
@@ -222,117 +251,197 @@ void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
     ucs_mpool_put_inline(ib_desc);
 }
 
-size_t uct_ib_address_size(const union ibv_gid *gid, uint8_t is_global_addr,
-                           int is_link_layer_eth)
+size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
 {
-    if (is_link_layer_eth) {
-        return sizeof(uct_ib_address_t) +
-               sizeof(union ibv_gid);  /* raw gid */
-    } else if ((gid->global.subnet_prefix == UCT_IB_LINK_LOCAL_PREFIX) &&
-               !is_global_addr) {
-        return sizeof(uct_ib_address_t) +
-               sizeof(uint16_t); /* lid */
-    } else if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
-                UCT_IB_SITE_LOCAL_PREFIX) && !is_global_addr) {
-        return sizeof(uct_ib_address_t) +
-               sizeof(uint16_t) + /* lid */
-               sizeof(uint64_t) + /* if_id */
-               sizeof(uint16_t);  /* subnet16 */
+    size_t size = sizeof(uct_ib_address_t);
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
+        /* Ethernet: address contains only raw GID */
+        size += sizeof(union ibv_gid);
     } else {
-        return sizeof(uct_ib_address_t) +
-               sizeof(uint16_t) + /* lid */
-               sizeof(uint64_t) + /* if_id */
-               sizeof(uint64_t);  /* subnet64 */
+        /* InfiniBand: address always contains LID */
+        size += sizeof(uint16_t); /* lid */
+
+        if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) {
+            /* Add GUID */
+            UCS_STATIC_ASSERT(sizeof(params->gid->global.interface_id) == sizeof(uint64_t));
+            size += sizeof(uint64_t);
+        }
+
+        if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX) {
+            if ((params->gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+                                                     UCT_IB_SITE_LOCAL_PREFIX) {
+                /* 16-bit subnet prefix */
+                size += sizeof(uint16_t);
+            } else if (params->gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
+                /* 64-bit subnet prefix */
+                size += sizeof(uint64_t);
+            }
+            /* Note: if subnet prefix is LINK_LOCAL, no need to pack it because
+             * it's a well-known value defined by IB specification.
+             */
+        }
+    }
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
+        size += sizeof(uint8_t);
+    }
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
+        size += sizeof(uint8_t);
+    }
+
+    return size;
+}
+
+void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
+                         uct_ib_address_t *ib_addr)
+{
+    void *ptr = ib_addr + 1;
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
+        ucs_assert(params->roce_info != NULL);
+        /* RoCE, in this case we don't use the lid, we pack the gid, the RoCE
+         * version, address family and set the ETH flag */
+        ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH |
+                         (params->roce_info->ver <<
+                          ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
+
+        if (params->roce_info->addr_family == AF_INET6) {
+            ib_addr->flags |= UCT_IB_ADDRESS_FLAG_ROCE_IPV6;
+        }
+
+        /* uint8_t raw[16]; */
+        memcpy(ptr, params->gid->raw, sizeof(params->gid->raw));
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, params->gid->raw);
+    } else {
+        /* IB, LID */
+        ib_addr->flags   = !UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH;
+        *(uint16_t*)ptr  = params->lid;
+        ptr              = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
+
+        if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) {
+            /* Pack GUID */
+            ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_IF_ID;
+            *(uint64_t*) ptr = params->gid->global.interface_id;
+            ptr              = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+        }
+
+        if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX) {
+            if ((params->gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+                                                     UCT_IB_SITE_LOCAL_PREFIX) {
+                /* Site-local */
+                ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET16;
+                *(uint16_t*)ptr = params->gid->global.subnet_prefix >> 48;
+                ptr             = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
+            } else if (params->gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
+                /* Global */
+                ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET64;
+                *(uint64_t*)ptr = params->gid->global.subnet_prefix;
+                ptr             = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
+            }
+        }
+    }
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
+        ucs_assert((int)params->path_mtu < UINT8_MAX);
+        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_PATH_MTU;
+        *(uint8_t*)ptr  = (uint8_t)params->path_mtu;
+        ptr             = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+    }
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
+        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_GID_INDEX;
+        *(uint8_t*)ptr  = params->gid_index;
+    }
+}
+
+unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
+{
+    if (uct_ib_iface_is_roce(iface)) {
+        /* pack Ethernet address */
+        return UCT_IB_ADDRESS_PACK_FLAG_ETH;
+    } else if (iface->config.force_global_addr) {
+        /* pack full IB address */
+        return UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
+               UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
+    } else {
+        /* pack only subnet prefix for reachability test */
+        return UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
     }
 }
 
 size_t uct_ib_iface_address_size(uct_ib_iface_t *iface)
 {
-    return uct_ib_address_size(&iface->gid, iface->is_global_addr, uct_ib_iface_is_roce(iface));
+    uct_ib_address_pack_params_t params;
+
+    params.flags     = uct_ib_iface_address_pack_flags(iface);
+    params.gid       = &iface->gid_info.gid;
+    params.roce_info = &iface->gid_info.roce_info;
+    return uct_ib_address_size(&params);
 }
 
-void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
-                         int is_link_layer_eth, uint8_t is_global_addr,
-                         uct_ib_address_t *ib_addr)
+void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
 {
-    void *ptr = ib_addr + 1;
+    uct_ib_address_pack_params_t params;
 
-    if (is_link_layer_eth) {
-        /* RoCE, in this case we don't use the lid and set the GID flag */
-        ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH |
-                         UCT_IB_ADDRESS_FLAG_GID;
-        /* uint8_t raw[16]; */
-        memcpy(ptr, gid->raw, sizeof(gid->raw) * sizeof(uint8_t));
-    } else {
-        /* IB, LID */
-        ib_addr->flags   = UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB |
-                           UCT_IB_ADDRESS_FLAG_LID;
-        *(uint16_t*) ptr = lid;
-        ptr              = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
-
-        if ((gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) ||
-            is_global_addr) {
-            ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_IF_ID;
-            *(uint64_t*) ptr = gid->global.interface_id;
-            ptr              = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint64_t));
-
-            if (((gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
-                                              UCT_IB_SITE_LOCAL_PREFIX) &&
-                !is_global_addr) {
-                /* Site-local */
-                ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_SUBNET16;
-                *(uint16_t*) ptr = gid->global.subnet_prefix >> 48;
-            } else {
-                /* Global */
-                ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_SUBNET64;
-                *(uint64_t*) ptr = gid->global.subnet_prefix;
-            }
-        }
-    }
-}
-
-void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
-                               uint16_t lid, uct_ib_address_t *ib_addr)
-{
-    uct_ib_address_pack(gid, lid, uct_ib_iface_is_roce(iface),
-                        iface->is_global_addr, ib_addr);
+    params.flags     = uct_ib_iface_address_pack_flags(iface);
+    params.gid       = &iface->gid_info.gid;
+    params.lid       = uct_ib_iface_port_attr(iface)->lid;
+    params.roce_info = &iface->gid_info.roce_info;
+    /* to suppress gcc 4.3.4 warning */
+    params.path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
+    params.gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
+    uct_ib_address_pack(&params, ib_addr);
 }
 
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
-                           union ibv_gid *gid)
+                           union ibv_gid *gid, uint8_t *gid_index,
+                           enum ibv_mtu *path_mtu)
 {
     const void *ptr = ib_addr + 1;
 
-    *lid                      = 0;
+    *lid       = 0;
+    *gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
+    *path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
 
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID) {
-        memcpy(gid->raw, ptr, sizeof(gid->raw) * sizeof(uint8_t)); /* uint8_t raw[16]; */
-        ucs_assert(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH);
-        ucs_assert(!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID));
-        return;
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) {
+        /* uint8_t raw[16]; */
+        memcpy(gid->raw, ptr, sizeof(gid->raw)); 
+        ptr = UCS_PTR_BYTE_OFFSET(ptr, sizeof(gid->raw));
+    } else {
+        gid->global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX; /* Default prefix */
+        gid->global.interface_id  = 0;
+
+        /* If the link layer is not ETHERNET, then it is IB and a lid must be present */
+        *lid = *(const uint16_t*)ptr;
+        ptr  = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
+
+        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
+            gid->global.interface_id = *(uint64_t*)ptr;
+            ptr                      = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+        }
+
+        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
+            gid->global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
+                                        ((uint64_t) *(uint16_t*) ptr << 48);
+            ptr                       = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
+            ucs_assert(!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64));
+        }
+
+        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
+            gid->global.subnet_prefix = *(uint64_t*)ptr;
+            ptr                       = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+        }
     }
 
-    gid->global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX; /* Default prefix */
-    gid->global.interface_id  = 0;
-
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID) {
-        *lid = *(uint16_t*)ptr;
-        ptr  = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_PATH_MTU) {
+        *path_mtu = *(const uint8_t*)ptr;
+        ptr       = UCS_PTR_TYPE_OFFSET(ptr, const uint8_t);
     }
 
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
-        gid->global.interface_id = *(uint64_t*)ptr;
-        ptr                      = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint64_t));
-    }
-
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
-        gid->global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
-                                    ((uint64_t) *(uint16_t*) ptr << 48);
-        ptr                       = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
-    }
-
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
-        gid->global.subnet_prefix = *(uint64_t*) ptr;
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID_INDEX) {
+        *gid_index = *(const uint8_t*)ptr;
     }
 }
 
@@ -341,9 +450,11 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
 {
     union ibv_gid gid;
     uint16_t lid;
+    enum ibv_mtu mtu;
+    uint8_t gid_index;
     char *p, *endp;
 
-    uct_ib_address_unpack(ib_addr, &lid, &gid);
+    uct_ib_address_unpack(ib_addr, &lid, &gid, &gid_index, &mtu);
 
     p    = buf;
     endp = buf + max;
@@ -351,7 +462,18 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
         snprintf(p, endp - p, "lid %d ", lid);
         p += strlen(p);
     }
-    inet_ntop(AF_INET6, &gid, p, endp - p);
+
+    uct_ib_gid_str(&gid, p, endp - p);
+    p += strlen(p);
+
+    if (gid_index != UCT_IB_ADDRESS_INVALID_GID_INDEX) {
+        snprintf(p, endp - p, "gid index %u ", gid_index);
+        p += strlen(p);
+    }
+
+    if (mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU) {
+        snprintf(p, endp - p, "mtu %zu ", uct_ib_mtu_value(mtu));
+    }
 
     return buf;
 }
@@ -359,32 +481,90 @@ const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
 ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
                                              uct_device_addr_t *dev_addr)
 {
-    uct_ib_iface_t   *iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
 
-    uct_ib_iface_address_pack(iface, &iface->gid, uct_ib_iface_port_attr(iface)->lid,
-                              (void*)dev_addr);
+    uct_ib_iface_address_pack(iface, (void*)dev_addr);
+
     return UCS_OK;
 }
 
-int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
+static inline uct_ib_roce_version_t
+uct_ib_address_flags_get_roce_version(uint8_t flags)
+{
+    ucs_assert(flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH);
+
+    return (uct_ib_roce_version_t)(flags >> ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
+}
+
+static int uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
+                                          const uct_ib_address_t *remote_ib_addr)
+{
+    sa_family_t local_ib_addr_af         = local_gid_info->roce_info.addr_family;
+    uct_ib_roce_version_t local_roce_ver = local_gid_info->roce_info.ver;
+    uint8_t remote_ib_addr_flags         = remote_ib_addr->flags;
+    uct_ib_roce_version_t remote_roce_ver;
+    sa_family_t remote_ib_addr_af;
+    char local_gid_str[128], remote_gid_str[128];
+
+    if ((uct_ib_address_flags_get_roce_version(remote_ib_addr_flags)) ==
+         UCT_IB_DEVICE_ROCE_ANY) {
+        return 1;
+    }
+
+    /* check the address family */
+    remote_ib_addr_af = (remote_ib_addr_flags & UCT_IB_ADDRESS_FLAG_ROCE_IPV6) ?
+                        AF_INET6 : AF_INET;
+
+    if (local_ib_addr_af != remote_ib_addr_af) {
+        ucs_assert(local_ib_addr_af != 0);
+        ucs_debug("different addr_family detected. local %s remote %s",
+                  ucs_sockaddr_address_family_str(local_ib_addr_af),
+                  ucs_sockaddr_address_family_str(remote_ib_addr_af));
+        return 0;
+    }
+
+    /* check the RoCE version */
+    ucs_assert(local_roce_ver != UCT_IB_DEVICE_ROCE_ANY);
+
+    remote_roce_ver = uct_ib_address_flags_get_roce_version(remote_ib_addr_flags);
+
+    if (local_roce_ver != remote_roce_ver) {
+        ucs_trace("different RoCE versions detected. local %s (gid=%s)"
+                  "remote %s (gid=%s)",
+                  uct_ib_roce_version_str(local_roce_ver),
+                  uct_ib_gid_str(&local_gid_info->gid, local_gid_str,
+                                 sizeof(local_gid_str)),
+                  uct_ib_roce_version_str(remote_roce_ver),
+                  uct_ib_gid_str((union ibv_gid *)(remote_ib_addr + 1), remote_gid_str,
+                                 sizeof(remote_gid_str)));
+        return 0;
+    }
+
+    return 1;
+}
+
+int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,
+                              const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
     int is_local_eth = uct_ib_iface_is_roce(iface);
     const uct_ib_address_t *ib_addr = (const void*)dev_addr;
     union ibv_gid gid;
+    uint8_t gid_index;
     uint16_t lid;
+    enum ibv_mtu mtu;
 
-    uct_ib_address_unpack(ib_addr, &lid, &gid);
+    uct_ib_address_unpack(ib_addr, &lid, &gid, &gid_index, &mtu);
 
-    if (!is_local_eth && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_IB)) {
+    if (!is_local_eth && !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* same subnet prefix */
-        return gid.global.subnet_prefix == iface->gid.global.subnet_prefix;
+        return gid.global.subnet_prefix == iface->gid_info.gid.global.subnet_prefix;
     } else if (is_local_eth && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
-        /* there shouldn't be a lid and the gid flag should be on */
-        ucs_assert(ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID);
-        ucs_assert(!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LID));
-        return 1;
+        /* there shouldn't be a lid and the UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH
+         * flag should be on. If reachable, the remote and local RoCE versions
+         * and address families have to be the same */
+        return uct_ib_iface_roce_is_reachable(&iface->gid_info, ib_addr);
     } else {
         /* local and remote have different link layers and therefore are unreachable */
         return 0;
@@ -397,6 +577,73 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
 {
     return uct_ib_device_create_ah_cached(uct_ib_iface_device(iface), ah_attr,
                                           uct_ib_iface_md(iface)->pd, ah_p);
+}
+
+void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
+                                            const union ibv_gid *gid,
+                                            uint8_t gid_index,
+                                            unsigned path_index,
+                                            struct ibv_ah_attr *ah_attr)
+{
+    uint8_t path_bits;
+    char buf[128];
+
+    memset(ah_attr, 0, sizeof(*ah_attr));
+
+    ah_attr->sl                = iface->config.sl;
+    ah_attr->port_num          = iface->config.port_num;
+    ah_attr->grh.traffic_class = iface->config.traffic_class;
+
+    if (uct_ib_iface_is_roce(iface)) {
+        ah_attr->dlid          = UCT_IB_ROCE_UDP_SRC_PORT_BASE |
+                                 (iface->config.roce_path_factor * path_index);
+    } else {
+        /* TODO iface->path_bits should be removed and replaced by path_index */
+        path_bits              = iface->path_bits[path_index %
+                                                  iface->path_bits_count];
+        ah_attr->dlid          = lid | path_bits;
+        ah_attr->src_path_bits = path_bits;
+    }
+
+    if (iface->config.force_global_addr ||
+        (iface->gid_info.gid.global.subnet_prefix != gid->global.subnet_prefix)) {
+        ucs_assert_always(gid->global.interface_id != 0);
+        ah_attr->is_global      = 1;
+        ah_attr->grh.dgid       = *gid;
+        ah_attr->grh.sgid_index = gid_index;
+        ah_attr->grh.hop_limit  = iface->config.hop_limit;
+    } else {
+        ah_attr->is_global      = 0;
+    }
+
+    ucs_debug("iface %p: ah_attr %s", iface,
+              uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
+}
+
+void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
+                                         const uct_ib_address_t *ib_addr,
+                                         unsigned path_index,
+                                         struct ibv_ah_attr *ah_attr,
+                                         enum ibv_mtu *path_mtu)
+{
+    union ibv_gid  gid;
+    uint8_t        gid_index;
+    uint16_t       lid;
+
+    ucs_assert(!uct_ib_iface_is_roce(iface) ==
+               !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH));
+
+    uct_ib_address_unpack(ib_addr, &lid, &gid, &gid_index, path_mtu);
+    if (*path_mtu == UCT_IB_ADDRESS_INVALID_PATH_MTU) {
+        *path_mtu = iface->config.path_mtu;
+    }
+
+    if (gid_index == UCT_IB_ADDRESS_INVALID_GID_INDEX) {
+        gid_index = iface->gid_info.gid_index;
+    }
+
+    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, gid_index,
+                                           path_index, ah_attr);
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
@@ -581,82 +828,93 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
     qp = ibv_create_qp(uct_ib_iface_md(iface)->pd, &attr->ibv);
 #endif
     if (qp == NULL) {
-        ucs_error("iface=%p: failed to create %s QP TX wr:%d sge:%d inl:%d RX wr:%d sge:%d inl %d: %m",
+        ucs_error("iface=%p: failed to create %s QP "
+                  "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d: %m",
                   iface, uct_ib_qp_type_str(attr->qp_type),
-                  attr->cap.max_send_wr, attr->cap.max_send_sge, attr->cap.max_inline_data,
-                  attr->cap.max_recv_wr, attr->cap.max_recv_sge, attr->max_inl_recv);
+                  attr->cap.max_send_wr, attr->cap.max_send_sge,
+                  attr->cap.max_inline_data, attr->max_inl_cqe[UCT_IB_DIR_TX],
+                  attr->cap.max_recv_wr, attr->cap.max_recv_sge,
+                  attr->max_inl_cqe[UCT_IB_DIR_RX]);
         return UCS_ERR_IO_ERROR;
     }
 
     attr->cap  = attr->ibv.cap;
     *qp_p      = qp;
 
-    ucs_debug("iface=%p: created %s QP 0x%x on %s:%d TX wr:%d sge:%d inl:%d RX wr:%d sge:%d inl %d",
+    ucs_debug("iface=%p: created %s QP 0x%x on %s:%d "
+              "TX wr:%d sge:%d inl:%d resp:%d RX wr:%d sge:%d resp:%d",
               iface, uct_ib_qp_type_str(attr->qp_type), qp->qp_num,
               uct_ib_device_name(dev), iface->config.port_num,
-              attr->cap.max_send_wr, attr->cap.max_send_sge, attr->cap.max_inline_data,
-              attr->cap.max_recv_wr, attr->cap.max_recv_sge, attr->max_inl_recv);
+              attr->cap.max_send_wr, attr->cap.max_send_sge,
+              attr->cap.max_inline_data, attr->max_inl_cqe[UCT_IB_DIR_TX],
+              attr->cap.max_recv_wr, attr->cap.max_recv_sge,
+              attr->max_inl_cqe[UCT_IB_DIR_RX]);
 
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
-                                    struct ibv_comp_channel *channel,
-                                    int comp_vector, int ignore_overrun,
-                                    size_t *inl, struct ibv_cq **cq_p)
+ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                    const uct_ib_iface_init_attr_t *init_attr,
+                                    int preferred_cpu, size_t inl)
 {
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
     struct ibv_cq *cq;
 #if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
     struct ibv_cq_init_attr_ex cq_attr = {};
 
-    cq_attr.cqe = cqe;
-    cq_attr.channel = channel;
-    cq_attr.comp_vector = comp_vector;
-    if (ignore_overrun) {
+    cq_attr.cqe         = init_attr->cq_len[dir];
+    cq_attr.channel     = iface->comp_channel;
+    cq_attr.comp_vector = preferred_cpu;
+    if (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN) {
         cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
-        cq_attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
+        cq_attr.flags     = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
     }
 
-    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(context, &cq_attr));
+    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(dev->ibv_context, &cq_attr));
     if (!cq && (errno == ENOSYS))
 #endif
     {
-        *inl = 0;
-        cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+        iface->config.max_inl_cqe[dir] = 0;
+        cq = ibv_create_cq(dev->ibv_context, init_attr->cq_len[dir], NULL,
+                           iface->comp_channel, preferred_cpu);
     }
 
     if (!cq) {
-        ucs_error("ibv_create_cq(cqe=%d) failed: %m", cqe);
+        ucs_error("ibv_create_cq(cqe=%d) failed: %m", init_attr->cq_len[dir]);
         return UCS_ERR_IO_ERROR;
     }
 
-    *cq_p = cq;
+    iface->cq[dir]                 = cq;
+    iface->config.max_inl_cqe[dir] = inl;
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
-                                           size_t *inl, int preferred_cpu,
-                                           int flags, struct ibv_cq **cq_p)
+static ucs_status_t
+uct_ib_iface_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                       const uct_ib_iface_init_attr_t *init_attr,
+                       const uct_ib_iface_config_t *config,
+                       int preferred_cpu)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
     ucs_status_t status;
+    size_t inl                          = config->inl[dir];
 #if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+    uct_ib_device_t *dev                = uct_ib_iface_device(iface);
     static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
+    size_t cqe_size                     = 64;
+    int env_var_added                   = 0;
     const char *cqe_size_env_value;
-    size_t cqe_size = 64;
     size_t cqe_size_min;
     char cqe_size_buf[32];
-    int env_var_added = 0;
     int ret;
 
-    cqe_size_min       = (*inl > 32) ? 128 : 64;
+    cqe_size_min       = (inl > 32) ? 128 : 64;
     cqe_size_env_value = getenv(cqe_size_env_var);
 
     if (cqe_size_env_value != NULL) {
         cqe_size = atol(cqe_size_env_value);
         if (cqe_size < cqe_size_min) {
             ucs_error("%s is set to %zu, but at least %zu is required (inl: %zu)",
-                      cqe_size_env_var, cqe_size, cqe_size_min, *inl);
+                      cqe_size_env_var, cqe_size, cqe_size_min, inl);
             return UCS_ERR_INVALID_PARAM;
         }
     } else {
@@ -674,9 +932,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
         env_var_added = 1;
     }
 #endif
-    status = iface->ops->create_cq(dev->ibv_context, cq_length,
-                                   iface->comp_channel, preferred_cpu,
-                                   flags & UCT_IB_CQ_IGNORE_OVERRUN, inl, cq_p);
+    status = iface->ops->create_cq(iface, dir, init_attr, preferred_cpu, inl);
     if (status != UCS_OK) {
         goto out_unsetenv;
     }
@@ -685,7 +941,7 @@ static ucs_status_t uct_ib_iface_create_cq(uct_ib_iface_t *iface, int cq_length,
 
 out_unsetenv:
 #if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
-    *inl = cqe_size / 2;
+    iface->config.max_inl_cqe[dir] = cqe_size / 2;
     if (env_var_added) {
         /* if we created a new environment variable, remove it */
         ret = ibv_exp_unsetenv(dev->ibv_context, cqe_size_env_var);
@@ -739,12 +995,112 @@ static ucs_status_t uct_ib_iface_set_moderation(struct ibv_cq *cq,
     return UCS_OK;
 }
 
+static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
+                                       const uct_ib_iface_config_t *config)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+
+    if (config->num_paths == UCS_ULUNITS_AUTO) {
+        if (uct_ib_iface_is_roce(iface)) {
+            /* RoCE - number of paths is RoCE LAG level */
+            iface->num_paths =
+                    uct_ib_device_get_roce_lag_level(dev, iface->config.port_num);
+        } else {
+            /* IB - number of paths is LMC level */
+            ucs_assert(iface->path_bits_count > 0);
+            iface->num_paths = iface->path_bits_count;
+        }
+    } else {
+        iface->num_paths = config->num_paths;
+    }
+}
+
+int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev)
+{
+    return uct_ib_iface_is_roce(iface) &&
+           (iface->gid_info.roce_info.ver == UCT_IB_DEVICE_ROCE_V2);
+}
+
+ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
+                                             size_t md_config_index)
+{
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    uint8_t port_num     = iface->config.port_num;
+
+    ucs_assert(uct_ib_iface_is_roce(iface));
+
+    if (md_config_index == UCS_ULUNITS_AUTO) {
+        return uct_ib_device_select_gid(dev, port_num, &iface->gid_info);
+    }
+
+    return uct_ib_device_query_gid_info(dev->ibv_context, uct_ib_device_name(dev),
+                                        port_num, md_config_index,
+                                        &iface->gid_info);
+}
+
+static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
+                                               size_t md_config_index)
+{
+    uct_ib_device_gid_info_t *gid_info = &iface->gid_info;
+    ucs_status_t status;
+
+    /* Fill the gid index and the RoCE version */
+    if (uct_ib_iface_is_roce(iface)) {
+        status = uct_ib_iface_init_roce_gid_info(iface, md_config_index);
+        if (status != UCS_OK) {
+            goto out;
+        }
+    } else {
+        gid_info->gid_index             = (md_config_index ==
+                                           UCS_ULUNITS_AUTO) ?
+                                          UCT_IB_MD_DEFAULT_GID_INDEX :
+                                          md_config_index;
+        gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
+        gid_info->roce_info.addr_family = 0;
+    }
+
+    /* Fill the gid */
+    status = uct_ib_device_query_gid(uct_ib_iface_device(iface),
+                                     iface->config.port_num,
+                                     gid_info->gid_index, &gid_info->gid);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+out:
+    return status;
+}
+
+static void uct_ib_iface_set_path_mtu(uct_ib_iface_t *iface,
+                                      const uct_ib_iface_config_t *config)
+{
+    enum ibv_mtu port_mtu = uct_ib_iface_port_attr(iface)->active_mtu;
+    uct_ib_device_t *dev  = uct_ib_iface_device(iface);
+
+    /* MTU is set by user configuration */
+    if (config->path_mtu != UCT_IB_MTU_DEFAULT) {
+        /* cast from uct_ib_mtu_t to ibv_mtu */
+        iface->config.path_mtu = (enum ibv_mtu)(config->path_mtu +
+                                                (IBV_MTU_512 - UCT_IB_MTU_512));
+    } else if ((port_mtu > IBV_MTU_2048) &&
+               (IBV_DEV_ATTR(dev, vendor_id) == 0x02c9) &&
+               ((IBV_DEV_ATTR(dev, vendor_part_id) == 4099) ||
+                (IBV_DEV_ATTR(dev, vendor_part_id) == 4100) ||
+                (IBV_DEV_ATTR(dev, vendor_part_id) == 4103) ||
+                (IBV_DEV_ATTR(dev, vendor_part_id) == 4104))) {
+        /* On some devices optimal path_mtu is 2048 */
+        iface->config.path_mtu = IBV_MTU_2048;
+    } else {
+        iface->config.path_mtu = port_mtu;
+    }
+}
+
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_ib_iface_config_t *config,
                     const uct_ib_iface_init_attr_t *init_attr)
 {
-    uct_ib_md_t *ib_md    = ucs_derived_of(md, uct_ib_md_t);
+    uct_ib_md_t *ib_md   = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_device_t *dev = &ib_md->dev;
     size_t rx_headroom   = (params->field_mask &
                             UCT_IFACE_PARAM_FIELD_RX_HEADROOM) ?
@@ -753,8 +1109,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     int preferred_cpu;
     ucs_status_t status;
     uint8_t port_num;
-    int is_roce_v2;
-    size_t inl;
 
     if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
         return UCS_ERR_UNSUPPORTED;
@@ -794,6 +1148,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.rx_headroom_offset = self->config.rx_payload_offset -
                                       rx_headroom;
     self->config.seg_size           = init_attr->seg_size;
+    self->config.roce_path_factor   = config->roce_path_factor;
     self->config.tx_max_poll        = config->tx.max_poll;
     self->config.rx_max_poll        = config->rx.max_poll;
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
@@ -804,6 +1159,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.enable_res_domain  = config->enable_res_domain;
     self->config.qp_type            = init_attr->qp_type;
+    uct_ib_iface_set_path_mtu(self, config);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("IB transports do not support multi-threaded worker");
@@ -815,22 +1171,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    status = uct_ib_device_select_gid_index(dev, self->config.port_num,
-                                            ib_md->config.gid_index,
-                                            &self->config.gid_index);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    status = uct_ib_device_query_gid(dev, self->config.port_num,
-                                     self->config.gid_index, &self->gid,
-                                     &is_roce_v2);
+    status = uct_ib_iface_init_gid_info(self, ib_md->config.gid_index);
     if (status != UCS_OK) {
         goto err;
     }
 
     if (config->traffic_class == UCS_ULUNITS_AUTO) {
-        self->config.traffic_class = is_roce_v2 ? UCT_IB_DEFAULT_ROCEV2_DSCP : 0;
+        self->config.traffic_class = uct_ib_iface_is_roce_v2(self, dev) ?
+                                     UCT_IB_DEFAULT_ROCEV2_DSCP : 0;
     } else {
         self->config.traffic_class = config->traffic_class;
     }
@@ -839,6 +1187,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     if (status != UCS_OK) {
         goto err;
     }
+
+    uct_ib_iface_set_num_paths(self, config);
 
     self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
     if (self->comp_channel == NULL) {
@@ -852,15 +1202,11 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_comp_channel;
     }
 
-    inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, init_attr->tx_cq_len, &inl,
-                                    preferred_cpu, init_attr->flags,
-                                    &self->cq[UCT_IB_DIR_TX]);
+    status = uct_ib_iface_create_cq(self, UCT_IB_DIR_TX, init_attr,
+                                    config, preferred_cpu);
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
-    ucs_assert_always(inl <= UINT8_MAX);
-    self->config.max_inl_resp = inl;
 
     status = uct_ib_iface_set_moderation(self->cq[UCT_IB_DIR_TX],
                                          config->tx.cq_moderation_count,
@@ -869,10 +1215,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_send_cq;
     }
 
-    inl = config->rx.inl;
-    status = uct_ib_iface_create_cq(self, init_attr->rx_cq_len, &inl,
-                                    preferred_cpu, init_attr->flags,
-                                    &self->cq[UCT_IB_DIR_RX]);
+    status = uct_ib_iface_create_cq(self, UCT_IB_DIR_RX, init_attr,
+                                    config, preferred_cpu);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
     }
@@ -886,12 +1230,13 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     /* Address scope and size */
     if (uct_ib_iface_is_roce(self) || config->is_global ||
+        uct_ib_grh_required(uct_ib_iface_port_attr(self)) ||
         /* check ADDR_TYPE for backward compatibility */
         (config->addr_type == UCT_IB_ADDRESS_TYPE_SITE_LOCAL) ||
         (config->addr_type == UCT_IB_ADDRESS_TYPE_GLOBAL)) {
-        self->is_global_addr = 1;
+        self->config.force_global_addr = 1;
     } else {
-        self->is_global_addr = 0;
+        self->config.force_global_addr = 0;
     }
 
     self->addr_size  = uct_ib_iface_address_size(self);
@@ -1055,6 +1400,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     }
 
     iface_attr->device_addr_len = iface->addr_size;
+    iface_attr->dev_num_paths   = iface->num_paths;
 
     switch (active_speed) {
     case 1: /* SDR */
@@ -1141,7 +1487,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    *fd_p  = iface->comp_channel->fd;
+    *fd_p                 = iface->comp_channel->fd;
     return UCS_OK;
 }
 

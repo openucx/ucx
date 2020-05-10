@@ -19,11 +19,15 @@
 std::string resource::name() const {
     std::stringstream ss;
     ss << tl_name << "/" << dev_name;
+    if (!variant_name.empty()) {
+        ss << "/" << variant_name;
+    }
     return ss.str();
 }
 
 resource::resource() : component(NULL), md_name(""), tl_name(""), dev_name(""),
-                       dev_type(UCT_DEVICE_TYPE_LAST)
+                       variant_name(""), dev_type(UCT_DEVICE_TYPE_LAST),
+                       variant(DEFAULT_VARIANT)
 {
     CPU_ZERO(&local_cpus);
 }
@@ -32,7 +36,8 @@ resource::resource(uct_component_h component, const std::string& md_name,
                    const ucs_cpu_set_t& local_cpus, const std::string& tl_name,
                    const std::string& dev_name, uct_device_type_t dev_type) :
                    component(component), md_name(md_name), local_cpus(local_cpus),
-                   tl_name(tl_name), dev_name(dev_name), dev_type(dev_type)
+                   tl_name(tl_name), dev_name(dev_name), variant_name(""),
+                   dev_type(dev_type), variant(DEFAULT_VARIANT)
 {
 }
 
@@ -44,7 +49,9 @@ resource::resource(uct_component_h component, const uct_md_attr_t& md_attr,
                    local_cpus(md_attr.local_cpus),
                    tl_name(tl_resource.tl_name),
                    dev_name(tl_resource.dev_name),
-                   dev_type(tl_resource.dev_type)
+                   variant_name(""),
+                   dev_type(tl_resource.dev_type),
+                   variant(DEFAULT_VARIANT)
 {
 }
 
@@ -134,33 +141,54 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
 }
 
 uct_test::uct_test() {
+    uct_component_attr_t component_attr = {0};
     ucs_status_t status;
-    uct_md_attr_t pd_attr;
-    uct_md_h pd;
+    uct_md_attr_t md_attr;
+    uct_md_h md;
 
     status = uct_md_config_read(GetParam()->component, NULL, NULL, &m_md_config);
     ASSERT_UCS_OK(status);
 
     status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
-                         m_md_config, &pd);
+                         m_md_config, &md);
     ASSERT_UCS_OK(status);
 
-    status = uct_md_query(pd, &pd_attr);
+    status = uct_md_query(md, &md_attr);
     ASSERT_UCS_OK(status);
 
-    if (pd_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-        status = uct_md_iface_config_read(pd, NULL, NULL, NULL, &m_iface_config);
+    if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
+        status = uct_md_iface_config_read(md, NULL, NULL, NULL, &m_iface_config);
+    } else if (!strcmp(GetParam()->tl_name.c_str(), "sockaddr")) {
+        m_iface_config = NULL;
     } else {
-        status = uct_md_iface_config_read(pd, GetParam()->tl_name.c_str(), NULL,
+        status = uct_md_iface_config_read(md, GetParam()->tl_name.c_str(), NULL,
                                           NULL, &m_iface_config);
     }
 
     ASSERT_UCS_OK(status);
-    uct_md_close(pd);
+    uct_md_close(md);
+
+    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
+                                UCT_COMPONENT_ATTR_FIELD_FLAGS;
+    /* coverity[var_deref_model] */
+    status = uct_component_query(GetParam()->component, &component_attr);
+    ASSERT_UCS_OK(status);
+
+    if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
+        status = uct_cm_config_read(GetParam()->component, NULL, NULL, &m_cm_config);
+        ASSERT_UCS_OK(status);
+    } else {
+        m_cm_config = NULL;
+    }
 }
 
 uct_test::~uct_test() {
-    uct_config_release(m_iface_config);
+    if (m_cm_config != NULL) {
+        uct_config_release(m_cm_config);
+    }
+    if (m_iface_config != NULL) {
+        uct_config_release(m_iface_config);
+    }
     uct_config_release(m_md_config);
 }
 
@@ -171,7 +199,7 @@ void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
     rsc->connect_sock_addr.set_sock_addr(*connect_addr, size);
 }
 
-void uct_test::set_interface_rscs(const md_resource& md_rsc,
+void uct_test::set_interface_rscs(uct_component_h cmpt, const char *name,
                                   ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
                                   std::vector<resource>& all_resources)
 {
@@ -180,9 +208,8 @@ void uct_test::set_interface_rscs(const md_resource& md_rsc,
     /* Create two resources on the same interface. the first one will have the
      * ip of the interface and the second one will have INADDR_ANY */
     for (i = 0; i < 2; i++) {
-        resource rsc(md_rsc.cmpt, std::string(md_rsc.rsc_desc.md_name),
-                     local_cpus, "sockaddr", std::string(ifa->ifa_name),
-                     UCT_DEVICE_TYPE_NET);
+        resource rsc(cmpt, std::string(name), local_cpus, "sockaddr",
+                     std::string(ifa->ifa_name), UCT_DEVICE_TYPE_NET);
 
         if (i == 0) {
             /* first rsc */
@@ -220,36 +247,94 @@ void uct_test::set_interface_rscs(const md_resource& md_rsc,
     }
 }
 
-void uct_test::set_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
-                                      ucs_cpu_set_t local_cpus,
-                                      std::vector<resource>& all_resources) {
+bool uct_test::is_interface_usable(struct ifaddrs *ifa, const char *name) {
+    if (!(ucs_netif_flags_is_active(ifa->ifa_flags)) ||
+        !(ucs::is_inet_addr(ifa->ifa_addr))) {
+        return false;
+    }
+
+    /* If rdmacm is tested, make sure that this is an IPoIB or RoCE interface */
+    if (!strcmp(name, "rdmacm") && !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
+        return false;
+    }
+
+    return true;
+}
+
+void uct_test::set_md_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
+                                         ucs_cpu_set_t local_cpus,
+                                         std::vector<resource>& all_resources) {
 
     struct ifaddrs *ifaddr, *ifa;
     ucs_sock_addr_t sock_addr;
 
-    EXPECT_TRUE(getifaddrs(&ifaddr) != -1);
+    EXPECT_EQ(0, getifaddrs(&ifaddr)) << strerror(errno);
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         sock_addr.addr = ifa->ifa_addr;
 
-        if (!ucs_netif_flags_is_active(ifa->ifa_flags)) {
-            continue;
-        }
-
-        /* If rdmacm is tested, make sure that this is an IPoIB or RoCE interface */
-        if (!strcmp(md_rsc.rsc_desc.md_name, "rdmacm") &&
-            !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
+        if (!uct_test::is_interface_usable(ifa, md_rsc.rsc_desc.md_name)) {
             continue;
         }
 
         if (uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
             uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE))
         {
-            uct_test::set_interface_rscs(md_rsc, local_cpus, ifa, all_resources);
+            uct_test::set_interface_rscs(md_rsc.cmpt, md_rsc.rsc_desc.md_name,
+                                         local_cpus, ifa, all_resources);
         }
     }
 
     freeifaddrs(ifaddr);
+}
+
+void uct_test::set_cm_sockaddr_resources(uct_component_h cmpt, const char *cmpt_name,
+                                         ucs_cpu_set_t local_cpus,
+                                         std::vector<resource>& all_resources) {
+
+    struct ifaddrs *ifaddr, *ifa;
+
+    EXPECT_EQ(0, getifaddrs(&ifaddr)) << strerror(errno);
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!uct_test::is_interface_usable(ifa, cmpt_name)) {
+            continue;
+        }
+
+        uct_test::set_interface_rscs(cmpt, cmpt_name, local_cpus, ifa, all_resources);
+    }
+
+    freeifaddrs(ifaddr);
+}
+
+void uct_test::set_cm_resources(std::vector<resource>& all_resources)
+{
+    uct_component_h *uct_components;
+    unsigned num_components;
+    ucs_status_t status;
+
+    status = uct_query_components(&uct_components, &num_components);
+    ASSERT_UCS_OK(status);
+
+    for (unsigned cmpt_index = 0; cmpt_index < num_components; ++cmpt_index) {
+        uct_component_attr_t component_attr = {0};
+
+        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
+                                    UCT_COMPONENT_ATTR_FIELD_FLAGS;
+        /* coverity[var_deref_model] */
+        status = uct_component_query(uct_components[cmpt_index], &component_attr);
+        ASSERT_UCS_OK(status);
+
+        if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
+            ucs_cpu_set_t local_cpus;
+            CPU_ZERO(&local_cpus);
+            uct_test::set_cm_sockaddr_resources(uct_components[cmpt_index],
+                                                component_attr.name, local_cpus,
+                                                all_resources);
+        }
+    }
+
+    uct_release_component_list(uct_components);
 }
 
 std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name)
@@ -316,9 +401,10 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
                 all_resources.push_back(tcp_fastest_rsc);
             }
 
-            if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-                uct_test::set_sockaddr_resources(*iter, md, md_attr.local_cpus,
-                                                 all_resources);
+            if ((md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) &&
+                !(iter->cmpt_attr.flags & UCT_COMPONENT_FLAG_CM)) {
+                uct_test::set_md_sockaddr_resources(*iter, md, md_attr.local_cpus,
+                                                    all_resources);
             }
 
             uct_release_tl_resource_list(tl_resources);
@@ -327,9 +413,31 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
         uct_worker_destroy(worker);
         ucs_async_context_destroy(async);
+
+        set_cm_resources(all_resources);
     }
 
     return filter_resources(all_resources, tl_name);
+}
+
+void uct_test::generate_test_variant(int variant,
+                                     const std::string &variant_name,
+                                     std::vector<resource>& test_res,
+                                     const std::string &tl_name)
+{
+    std::vector<const resource*> r = uct_test::enum_resources("");
+
+    for (std::vector<const resource*>::iterator iter = r.begin();
+         iter != r.end(); ++iter) {
+        if (tl_name.empty() || ((*iter)->tl_name == tl_name)) {
+            resource rsc((*iter)->component, (*iter)->md_name,
+                         (*iter)->local_cpus, (*iter)->tl_name,
+                         (*iter)->dev_name, (*iter)->dev_type);
+            rsc.variant      = variant;
+            rsc.variant_name = variant_name;
+            test_res.push_back(rsc);
+        }
+    }
 }
 
 void uct_test::init() {
@@ -367,6 +475,15 @@ void uct_test::check_caps_skip(uint64_t required_flags, uint64_t invalid_flags) 
     }
 }
 
+bool uct_test::check_event_caps(uint64_t required_flags, uint64_t invalid_flags) {
+    FOR_EACH_ENTITY(iter) {
+        if (!(*iter)->check_event_caps(required_flags, invalid_flags)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
     FOR_EACH_ENTITY(iter) {
         if (!(*iter)->check_atomics(required_ops, mode)) {
@@ -378,20 +495,35 @@ bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
 
 void uct_test::modify_config(const std::string& name, const std::string& value,
                              bool optional) {
-    ucs_status_t status;
+    ucs_status_t status = UCS_OK;
 
-    status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
-    if (status == UCS_ERR_NO_ELEM) {
-        status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
-        if (status == UCS_ERR_NO_ELEM) {
-            test_base::modify_config(name, value, optional);
-        } else if (status != UCS_OK) {
-            UCS_TEST_ABORT("Couldn't modify pd config parameter: " << name.c_str() <<
+    if (m_cm_config != NULL) {
+        status = uct_config_modify(m_cm_config, name.c_str(), value.c_str());
+        if (status == UCS_OK) {
+            return;
+        } else if (status != UCS_ERR_NO_ELEM) {
+            UCS_TEST_ABORT("Couldn't modify cm config parameter: " << name.c_str() <<
                            " to " << value.c_str() << ": " << ucs_status_string(status));
         }
+    }
 
+    if (m_iface_config != NULL) {
+        status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
+        if (status == UCS_OK) {
+            return;
+        } else if (status != UCS_ERR_NO_ELEM) {
+            UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
+                           " to " << value.c_str() << ": " << ucs_status_string(status));
+        }
+    }
+
+    ucs_assert(status == UCS_ERR_NO_ELEM);
+
+    status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
+    if (status == UCS_ERR_NO_ELEM) {
+        test_base::modify_config(name, value, optional);
     } else if (status != UCS_OK) {
-        UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
+        UCS_TEST_ABORT("Couldn't modify md config parameter: " << name.c_str() <<
                        " to " << value.c_str() << ": " << ucs_status_string(status));
     }
 }
@@ -402,15 +534,30 @@ bool uct_test::get_config(const std::string& name, std::string& value) const
     const size_t max = 1024;
 
     value.resize(max);
-    status = uct_config_get(m_iface_config, name.c_str(),
-                            const_cast<char *>(value.c_str()), max);
 
-    if (status == UCS_ERR_NO_ELEM) {
-        status = uct_config_get(m_md_config, name.c_str(),
+    if (m_cm_config != NULL) {
+        status = uct_config_get(m_cm_config, name.c_str(),
                                 const_cast<char *>(value.c_str()), max);
+        if (status == UCS_OK) {
+            return true;
+        }
     }
 
-    return (status == UCS_OK);
+    if (m_iface_config != NULL) {
+        status = uct_config_get(m_iface_config, name.c_str(),
+                                const_cast<char *>(value.c_str()), max);
+        if (status == UCS_OK) {
+            return true;
+        }
+    }
+
+    status = uct_config_get(m_md_config, name.c_str(),
+                            const_cast<char *>(value.c_str()), max);
+    if (status == UCS_OK) {
+        return true;
+    }
+
+    return false;
 }
 
 bool uct_test::has_transport(const std::string& tl_name) const {
@@ -451,22 +598,44 @@ void uct_test::stats_restore()
 }
 
 uct_test::entity* uct_test::create_entity(size_t rx_headroom,
-                                          uct_error_handler_t err_handler) {
+                                          uct_error_handler_t err_handler,
+                                          uct_tag_unexp_eager_cb_t eager_cb,
+                                          uct_tag_unexp_rndv_cb_t rndv_cb,
+                                          void *eager_arg, void *rndv_arg,
+                                          uct_async_event_cb_t async_event_cb,
+                                          void *async_event_arg) {
     uct_iface_params_t iface_params;
 
-    iface_params.field_mask        = UCT_IFACE_PARAM_FIELD_RX_HEADROOM     |
-                                     UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
-                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER     |
-                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG |
-                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS;
+    iface_params.field_mask        = UCT_IFACE_PARAM_FIELD_RX_HEADROOM       |
+                                     UCT_IFACE_PARAM_FIELD_OPEN_MODE         |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
+                                     UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB    |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG   |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     |
+                                     UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG    |
+                                     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB    |
+                                     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG;
     iface_params.rx_headroom       = rx_headroom;
     iface_params.open_mode         = UCT_IFACE_OPEN_MODE_DEVICE;
     iface_params.err_handler       = err_handler;
     iface_params.err_handler_arg   = this;
     iface_params.err_handler_flags = 0;
-    entity *new_ent = new entity(*GetParam(), m_iface_config, &iface_params,
-                                 m_md_config);
-    return new_ent;
+    iface_params.eager_cb          = (eager_cb == NULL) ?
+                                     reinterpret_cast<uct_tag_unexp_eager_cb_t>
+                                     (ucs_empty_function_return_success) :
+                                     eager_cb;
+    iface_params.eager_arg         = eager_arg;
+    iface_params.rndv_cb           = (rndv_cb == NULL) ?
+                                     reinterpret_cast<uct_tag_unexp_rndv_cb_t>
+                                     (ucs_empty_function_return_success) :
+                                     rndv_cb;
+    iface_params.rndv_arg          = rndv_arg;
+    iface_params.async_event_cb    = async_event_cb;
+    iface_params.async_event_arg   = async_event_arg;
+
+    return new entity(*GetParam(), m_iface_config, &iface_params, m_md_config);
 }
 
 uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
@@ -476,7 +645,7 @@ uct_test::entity* uct_test::create_entity(uct_iface_params_t &params) {
 }
 
 uct_test::entity* uct_test::create_entity() {
-    return new entity(*GetParam(), m_md_config);
+    return new entity(*GetParam(), m_md_config, m_cm_config);
 }
 
 const uct_test::entity& uct_test::ent(unsigned index) const {
@@ -603,11 +772,11 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
         if (ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr =
                 reinterpret_cast<struct sockaddr_in *>(ifa_addr);
-            addr->sin_port = ucs::get_port();
+            addr->sin_port = ntohs(ucs::get_port());
         } else {
             struct sockaddr_in6 *addr =
                 reinterpret_cast<struct sockaddr_in6 *>(ifa_addr);
-            addr->sin6_port = ucs::get_port();
+            addr->sin6_port = ntohs(ucs::get_port());
         }
     }
 
@@ -621,7 +790,11 @@ uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_con
     max_conn_priv = 0;
 }
 
-uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
+uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
+                         uct_cm_config_t *cm_config) {
+    ucs_status_t         status;
+    uct_component_attr_t comp_attr;
+
     memset(&m_iface_attr,   0, sizeof(m_iface_attr));
     memset(&m_iface_params, 0, sizeof(m_iface_params));
 
@@ -633,17 +806,28 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config) {
                            uct_md_open, resource.component,
                            resource.md_name.c_str(), md_config);
 
-    ucs_status_t status = uct_md_query(m_md, &m_md_attr);
+    status = uct_md_query(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
 
-    UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_cm_h, m_cm, uct_cm_close,
-                                        uct_cm_open, resource.component, m_worker);
 
-    m_cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
-    status = uct_cm_query(m_cm, &m_cm_attr);
+    comp_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
+                           UCT_COMPONENT_ATTR_FIELD_FLAGS;
+    status = uct_component_query(resource.component, &comp_attr);
     ASSERT_UCS_OK(status);
 
-    max_conn_priv = 0;
+    if (comp_attr.flags & UCT_COMPONENT_FLAG_CM) {
+        UCS_TEST_CREATE_HANDLE(uct_cm_h, m_cm, uct_cm_close, uct_cm_open,
+                               resource.component, m_worker, cm_config);
+
+        m_cm_attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+        status = uct_cm_query(m_cm, &m_cm_attr);
+        ASSERT_UCS_OK(status);
+
+        max_conn_priv = 0;
+    } else {
+        UCS_TEST_SKIP_R(std::string("cm is not supported on component ") +
+                        comp_attr.name );
+    }
 }
 
 void uct_test::entity::mem_alloc_host(size_t length,
@@ -740,6 +924,18 @@ bool uct_test::entity::check_caps(uint64_t required_flags,
     uint64_t iface_flags = iface_attr().cap.flags;
     return (ucs_test_all_flags(iface_flags, required_flags) &&
             !(iface_flags & invalid_flags));
+}
+
+bool uct_test::entity::check_event_caps(uint64_t required_flags,
+                                        uint64_t invalid_flags)
+{
+    uint64_t iface_event_flags = iface_attr().cap.event_flags;
+    return (ucs_test_all_flags(iface_event_flags, required_flags) &&
+            !(iface_event_flags & invalid_flags) &&
+            /* iface has to support either event fd or event async
+             * callback notification mechanism */
+            ((iface_event_flags & UCT_IFACE_FLAG_EVENT_FD) ||
+             (iface_event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB)));
 }
 
 bool uct_test::entity::check_atomics(uint64_t required_ops, atomic_mode mode)
@@ -868,6 +1064,14 @@ void uct_test::entity::destroy_ep(unsigned index) {
     m_eps[index].reset();
 }
 
+void uct_test::entity::revoke_ep(unsigned index) {
+    if (!m_eps[index]) {
+        UCS_TEST_ABORT("ep[" << index << "] does not exist");
+    }
+
+    m_eps[index].revoke();
+}
+
 void uct_test::entity::destroy_eps() {
     for (unsigned index = 0; index < m_eps.size(); ++index) {
         if (!m_eps[index]) {
@@ -888,8 +1092,9 @@ size_t uct_test::entity::priv_data_do_pack(void *priv_data)
     return priv_data_len;
 }
 
-ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,
-                                              void *priv_data)
+ssize_t uct_test::entity::server_priv_data_cb(void *arg,
+                                              const uct_cm_ep_priv_data_pack_args_t
+                                              *pack_args, void *priv_data)
 {
     const size_t priv_data_len = server_priv_data.length() + 1;
 
@@ -900,8 +1105,8 @@ ssize_t uct_test::entity::server_priv_data_cb(void *arg, const char *dev_name,
 void
 uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
                                       const ucs::sock_addr_storage &remote_addr,
-                                      uct_sockaddr_priv_pack_callback_t pack_cb,
-                                      uct_ep_client_connect_cb_t connect_cb,
+                                      uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                                      uct_cm_ep_client_connect_callback_t connect_cb,
                                       uct_ep_disconnect_cb_t disconnect_cb,
                                       void *user_data)
 {
@@ -1016,8 +1221,8 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
 void uct_test::entity::connect(unsigned index, entity& other,
                                unsigned other_index,
                                const ucs::sock_addr_storage &remote_addr,
-                               uct_sockaddr_priv_pack_callback_t pack_cb,
-                               uct_ep_client_connect_cb_t connect_cb,
+                               uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                               uct_cm_ep_client_connect_callback_t connect_cb,
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
 {
@@ -1042,7 +1247,7 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
 }
 
 void uct_test::entity::accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                              uct_ep_server_connect_cb_t connect_cb,
+                              uct_cm_ep_server_conn_notify_callback_t notify_cb,
                               uct_ep_disconnect_cb_t disconnect_cb,
                               void *user_data)
 {
@@ -1065,7 +1270,7 @@ void uct_test::entity::accept(uct_cm_h cm, uct_conn_request_h conn_request,
     ep_params.conn_request               = conn_request;
     ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
     ep_params.sockaddr_pack_cb           = server_priv_data_cb;
-    ep_params.sockaddr_connect_cb.server = connect_cb;
+    ep_params.sockaddr_connect_cb.server = notify_cb;
     ep_params.disconnect_cb              = disconnect_cb;
     ep_params.user_data                  = user_data;
 
@@ -1099,11 +1304,11 @@ void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
         if (ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *addr =
                             reinterpret_cast<struct sockaddr_in *>(ifa_addr);
-            addr->sin_port = ucs::get_port();
+            addr->sin_port = ntohs(ucs::get_port());
         } else {
             struct sockaddr_in6 *addr =
                             reinterpret_cast<struct sockaddr_in6 *>(ifa_addr);
-            addr->sin6_port = ucs::get_port();
+            addr->sin6_port = ntohs(ucs::get_port());
         }
     }
 }
@@ -1243,6 +1448,14 @@ void uct_test::entity::async_wrapper::check_miss()
     ucs_async_check_miss(&m_async);
 }
 
+uct_test::entity::scoped_async_lock::scoped_async_lock(entity &e) : m_entity(e) {
+    UCS_ASYNC_BLOCK(&m_entity.m_async.m_async);
+}
+
+uct_test::entity::scoped_async_lock::~scoped_async_lock() {
+    UCS_ASYNC_UNBLOCK(&m_entity.m_async.m_async);
+}
+
 ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
 {
     ssize_t res;
@@ -1256,3 +1469,31 @@ ucs_status_t uct_test::send_am_message(entity *e, uint8_t am_id, int ep_idx)
         return (ucs_status_t)(res >= 0 ? UCS_OK : res);
     }
 }
+
+void test_uct_iface_attrs::init()
+{
+    uct_test::init();
+    m_e = uct_test::create_entity(0ul);
+    m_entities.push_back(m_e);
+}
+
+void test_uct_iface_attrs::basic_iov_test()
+{
+    attr_map_t max_iov_map = get_num_iov();
+
+    EXPECT_FALSE(max_iov_map.empty());
+
+    if (max_iov_map.find("am")  != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("am"), m_e->iface_attr().cap.am.max_iov);
+    }
+    if (max_iov_map.find("tag") != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("tag"), m_e->iface_attr().cap.tag.eager.max_iov);
+    }
+    if (max_iov_map.find("put") != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("put"), m_e->iface_attr().cap.put.max_iov);
+    }
+    if (max_iov_map.find("get") != max_iov_map.end()) {
+        EXPECT_EQ(max_iov_map.at("get"), m_e->iface_attr().cap.get.max_iov);
+    }
+}
+

@@ -33,6 +33,13 @@ typedef struct ucp_tl_rkey {
     uct_component_h               cmpt;
 } ucp_tl_rkey_t;
 
+/**
+ * Rkey flags
+ */
+enum {
+    UCP_RKEY_DESC_FLAG_POOL       = UCS_BIT(0)  /* Descriptor was allocated from pool
+                                                   and must be retuned to pool, not free */
+};
 
 /**
  * Remote memory key structure.
@@ -46,7 +53,7 @@ typedef struct ucp_rkey {
         ucp_ep_cfg_index_t        ep_cfg_index; /* EP configuration relevant for the cache */
         ucp_lane_index_t          rma_lane;     /* Lane to use for RMAs */
         ucp_lane_index_t          amo_lane;     /* Lane to use for AMOs */
-        unsigned                  max_put_short;/* Cached value of max_put_short */
+        ssize_t                   max_put_short;/* Cached value of max_put_short */
         uct_rkey_t                rma_rkey;     /* Key to use for RMAs */
         uct_rkey_t                amo_rkey;     /* Key to use for AMOs */
         ucp_amo_proto_t           *amo_proto;   /* Protocol for AMOs */
@@ -54,6 +61,7 @@ typedef struct ucp_rkey {
     } cache;
     ucp_md_map_t                  md_map;       /* Which *remote* MDs have valid memory handles */
     ucs_memory_type_t             mem_type;     /* Memory type of remote key memory */
+    uint8_t                       flags;        /* Rkey flags */
 #if ENABLE_PARAMS_CHECK
     ucp_ep_h                      ep;
 #endif
@@ -89,10 +97,13 @@ typedef struct ucp_mem_desc {
 
 void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep);
 
-ucp_lane_index_t ucp_rkey_get_rma_bw_lane(ucp_rkey_h rkey, ucp_ep_h ep,
-                                          ucs_memory_type_t mem_type,
-                                          uct_rkey_t *uct_rkey_p,
-                                          ucp_lane_map_t ignore);
+ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
+                                        const ucp_ep_config_t *config,
+                                        ucs_memory_type_t mem_type,
+                                        const ucp_lane_index_t *lanes,
+                                        ucp_rkey_h rkey,
+                                        ucp_lane_map_t ignore,
+                                        uct_rkey_t *uct_rkey_p);
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
@@ -157,6 +168,12 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
                                 ucp_md_map_t *md_map,
                                 uct_rkey_bundle_t *rkey_bundle);
 
+static UCS_F_ALWAYS_INLINE ucp_md_map_t
+ucp_rkey_packed_md_map(const void *rkey_buffer)
+{
+    return *(const ucp_md_map_t*)rkey_buffer;
+}
+
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
 {
@@ -176,30 +193,30 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 
 #define UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type) \
     ({ \
-        ucs_status_t status = UCS_OK; \
+        ucs_status_t _status_nc = UCS_OK; \
         if (ucs_unlikely((_ep)->cfg_index != (_rkey)->cache.ep_cfg_index)) { \
             ucp_rkey_resolve_inner(_rkey, _ep); \
         } \
         if (ucs_unlikely((_rkey)->cache._op_type##_lane == UCP_NULL_LANE)) { \
             ucs_error("remote memory is unreachable (remote md_map 0x%lx)", \
                       (_rkey)->md_map); \
-            status = UCS_ERR_UNREACHABLE; \
+            _status_nc = UCS_ERR_UNREACHABLE; \
         } \
-        status; \
+        _status_nc; \
     })
 
 
 #if ENABLE_PARAMS_CHECK
 #define UCP_RKEY_RESOLVE(_rkey, _ep, _op_type) \
     ({ \
-        ucs_status_t status; \
+        ucs_status_t _status; \
         if ((_rkey)->ep != (_ep)) { \
             ucs_error("cannot use a remote key on a different endpoint than it was unpacked on"); \
-            status = UCS_ERR_INVALID_PARAM; \
+            _status = UCS_ERR_INVALID_PARAM; \
         } else { \
-            status = UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type); \
+            _status = UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type); \
         } \
-        status; \
+        _status; \
     })
 #else
 #define UCP_RKEY_RESOLVE  UCP_RKEY_RESOLVE_NOCHECK
@@ -210,5 +227,7 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 #define UCP_MEM_IS_CUDA(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA)
 #define UCP_MEM_IS_CUDA_MANAGED(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA_MANAGED)
 #define UCP_MEM_IS_ROCM_MANAGED(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ROCM_MANAGED)
+#define UCP_MEM_IS_ACCESSIBLE_FROM_CPU(_mem_type) \
+    (UCS_BIT(_mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)
 
 #endif

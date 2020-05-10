@@ -19,7 +19,15 @@
 
 #include <queue>
 
-#define MT_TEST_NUM_THREADS       4
+#if _OPENMP
+#include "omp.h"
+#endif
+
+#if _OPENMP && ENABLE_MT
+#define MT_TEST_NUM_THREADS omp_get_max_threads()
+#else
+#define MT_TEST_NUM_THREADS 4
+#endif
 
 
 namespace ucp {
@@ -34,6 +42,8 @@ struct ucp_test_param {
     int                       thread_type;
 };
 
+class ucp_test; // forward declaration
+
 class ucp_test_base : public ucs::test_base {
 public:
     enum {
@@ -43,9 +53,10 @@ public:
     };
 
     class entity {
-        typedef std::vector<ucs::handle<ucp_ep_h, entity *> > ep_vec_t;
+        typedef std::vector<ucs::handle<ucp_ep_h, entity*> > ep_vec_t;
         typedef std::vector<std::pair<ucs::handle<ucp_worker_h>,
                                       ep_vec_t> > worker_vec_t;
+        typedef std::deque<void*> close_ep_reqs_t;
 
     public:
         typedef enum {
@@ -55,12 +66,15 @@ public:
         } listen_cb_type_t;
 
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config,
-               const ucp_worker_params_t& worker_params);
+               const ucp_worker_params_t& worker_params,
+               const ucp_test_base* test_owner);
 
         ~entity();
 
         void connect(const entity* other, const ucp_ep_params_t& ep_params,
                      int ep_idx = 0, int do_set_ep = 1);
+
+        bool verify_client_address(struct sockaddr_storage *client_address);
 
         ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request);
 
@@ -74,12 +88,18 @@ public:
         void fence(int worker_index = 0) const;
 
         void* disconnect_nb(int worker_index = 0, int ep_index = 0,
-                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH) const;
+                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
+
+        void close_ep_req_free(void *close_req);
+
+        void close_all_eps(const ucp_test &test, int wirker_idx,
+                           enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
 
         void destroy_worker(int worker_index = 0);
 
         ucs_status_t listen(listen_cb_type_t cb_type,
                             const struct sockaddr *saddr, socklen_t addrlen,
+                            const ucp_ep_params_t& ep_params,
                             int worker_index = 0);
 
         ucp_ep_h ep(int worker_index = 0, int ep_index = 0) const;
@@ -98,9 +118,11 @@ public:
 
         int get_num_eps(int worker_index = 0) const;
 
-        void inc_rejected_cntr();
+        void add_err(ucs_status_t status);
 
-        size_t get_rejected_cntr() const;
+        const size_t &get_err_num_rejected() const;
+
+        const size_t &get_err_num() const;
 
         void warn_existing_eps() const;
 
@@ -115,7 +137,10 @@ public:
         worker_vec_t                    m_workers;
         ucs::handle<ucp_listener_h>     m_listener;
         std::queue<ucp_conn_request_h>  m_conn_reqs;
+        close_ep_reqs_t                 m_close_ep_reqs;
+        size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
+        ucs::handle<ucp_ep_params_t*>   m_server_ep_params;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);
@@ -125,6 +150,8 @@ public:
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
     };
+
+    static bool is_request_completed(void *req);
 };
 
 /**
@@ -187,19 +214,18 @@ protected:
     bool has_only_transports(const std::vector<std::string>& tl_names) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
-    entity* get_entity_by_ep(ucp_ep_h ep);
     unsigned progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
     void flush_worker(const entity &e, int worker_index = 0);
-    void disconnect(const entity& entity);
+    void disconnect(entity& entity);
     void wait(void *req, int worker_index = 0);
     void set_ucp_config(ucp_config_t *config);
     int max_connections();
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-        ucp_test *self = reinterpret_cast<ucp_test*>(arg);
-        self->m_err_handler_count++;
+        entity *e = reinterpret_cast<entity*>(arg);
+        e->add_err(status);
     }
 
     template <typename T>
@@ -210,7 +236,6 @@ protected:
         }
     }
 
-    volatile int m_err_handler_count;
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;
 
@@ -265,5 +290,30 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,   "ugni") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, self,   "self") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,    "tcp")
+
+
+/**
+ * The list of GPU copy TLs
+ */
+#define UCP_TEST_GPU_COPY_TLS "cuda_copy,rocm_copy"
+
+
+/**
+ * Instantiate the parameterized test case for all transport combinations
+ * with GPU memory awareness
+ *
+ * @param _test_case  Test case class, derived from ucp_test.
+ */
+#define UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(_test_case) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,        "dc_x," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,         "ud_v," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,        "ud_x," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,         "rc_v," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,        "rc_x," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib,     "shm,ib," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib_ipc, "shm,ib,cuda_ipc,rocm_ipc," \
+                                                          UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,       "ugni," UCP_TEST_GPU_COPY_TLS) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,        "tcp," UCP_TEST_GPU_COPY_TLS)
 
 #endif

@@ -12,7 +12,16 @@
 
 BEGIN_C_DECLS
 
+
+/* Memory types accessible from CPU  */
+#define UCS_MEMORY_TYPES_CPU_ACCESSIBLE \
+    (UCS_BIT(UCS_MEMORY_TYPE_HOST) | \
+     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED) | \
+     UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED))
+
+
 /*
+ * @ingroup UCS_RESOURCE
  * Memory types
  */
 typedef enum ucs_memory_type {
@@ -29,6 +38,11 @@ typedef enum ucs_memory_type {
  * Array of string names for each memory type
  */
 extern const char *ucs_memory_type_names[];
+
+/**
+ * Array of string descriptions for each memory type
+ */
+extern const char *ucs_memory_type_descs[];
 
 
 END_C_DECLS

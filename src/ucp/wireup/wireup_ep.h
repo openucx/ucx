@@ -64,12 +64,14 @@ ucp_rsc_index_t ucp_wireup_ep_get_aux_rsc_index(uct_ep_h uct_ep);
  * @param [in]  uct_ep            Stub endpoint to connect.
  * @param [in]  ucp_ep_init_flags Initial flags of UCP EP.
  * @param [in]  rsc_index         Resource of the real transport.
+ * @param [in]  path_index        Path index the transport endpoint should use.
  * @param [in]  connect_aux       Whether to connect the auxiliary transport,
  *                                for sending.
  * @param [in]  remote_address    Remote address connect to.
  */
 ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
-                                   ucp_rsc_index_t rsc_index, int connect_aux,
+                                   ucp_rsc_index_t rsc_index,
+                                   unsigned path_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address);
 
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,

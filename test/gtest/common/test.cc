@@ -128,7 +128,9 @@ void test_base::pop_config()
 
 ucs_log_func_rc_t
 test_base::count_warns_logger(const char *file, unsigned line, const char *function,
-                              ucs_log_level_t level, const char *message, va_list ap)
+                              ucs_log_level_t level,
+                              const ucs_log_component_config_t *comp_conf,
+                              const char *message, va_list ap)
 {
     pthread_mutex_lock(&m_logger_mutex);
     if (level == UCS_LOG_LEVEL_ERROR) {
@@ -162,7 +164,9 @@ void test_base::push_debug_message_with_limit(std::vector<std::string>& vec,
 
 ucs_log_func_rc_t
 test_base::hide_errors_logger(const char *file, unsigned line, const char *function,
-                              ucs_log_level_t level, const char *message, va_list ap)
+                              ucs_log_level_t level,
+                              const ucs_log_component_config_t *comp_conf,
+                              const char *message, va_list ap)
 {
     if (level == UCS_LOG_LEVEL_ERROR) {
         pthread_mutex_lock(&m_logger_mutex);
@@ -174,13 +178,16 @@ test_base::hide_errors_logger(const char *file, unsigned line, const char *funct
         pthread_mutex_unlock(&m_logger_mutex);
     }
 
-    ucs_log_default_handler(file, line, function, level, message, ap);
+    ucs_log_default_handler(file, line, function, level,
+                            &ucs_global_opts.log_component, message, ap);
     return UCS_LOG_FUNC_RC_STOP;
 }
 
 ucs_log_func_rc_t
 test_base::hide_warns_logger(const char *file, unsigned line, const char *function,
-                             ucs_log_level_t level, const char *message, va_list ap)
+                             ucs_log_level_t level,
+                             const ucs_log_component_config_t *comp_conf,
+                             const char *message, va_list ap)
 {
     if (level == UCS_LOG_LEVEL_WARN) {
         pthread_mutex_lock(&m_logger_mutex);
@@ -192,13 +199,16 @@ test_base::hide_warns_logger(const char *file, unsigned line, const char *functi
         pthread_mutex_unlock(&m_logger_mutex);
     }
 
-    ucs_log_default_handler(file, line, function, level, message, ap);
+    ucs_log_default_handler(file, line, function, level,
+                            &ucs_global_opts.log_component, message, ap);
     return UCS_LOG_FUNC_RC_STOP;
 }
 
 ucs_log_func_rc_t
 test_base::wrap_errors_logger(const char *file, unsigned line, const char *function,
-                              ucs_log_level_t level, const char *message, va_list ap)
+                              ucs_log_level_t level,
+                              const ucs_log_component_config_t *comp_conf,
+                              const char *message, va_list ap)
 {
     /* Ignore warnings about empty memory pool */
     if (level == UCS_LOG_LEVEL_ERROR) {

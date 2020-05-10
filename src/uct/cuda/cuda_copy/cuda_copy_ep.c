@@ -3,10 +3,16 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "cuda_copy_ep.h"
 #include "cuda_copy_iface.h"
 
 #include <uct/base/uct_log.h>
+#include <uct/base/uct_iov.inl>
+#include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
@@ -37,16 +43,16 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
 
 #define UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(_strm) \
     if ((_strm) == 0) { \
-        ucs_status_t status; \
-        status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&(_strm), cudaStreamNonBlocking)); \
-        if (UCS_OK != status) { \
+        ucs_status_t __status; \
+        __status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&(_strm), cudaStreamNonBlocking)); \
+        if (UCS_OK != __status) { \
             return UCS_ERR_IO_ERROR; \
         } \
     }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t length,
-                                   int direction, cudaStream_t stream,
+                                   enum cudaMemcpyKind direction, cudaStream_t stream,
                                    ucs_queue_head_t *outstanding_queue,
                                    uct_completion_t *comp)
 {
@@ -81,9 +87,11 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_cuda_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
-                                        uint64_t remote_addr, uct_rkey_t rkey,
-                                        uct_completion_t *comp)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_zcopy,
+                 (tl_ep, iov, iovcnt, remote_addr, rkey, comp),
+                 uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                 uint64_t remote_addr, uct_rkey_t rkey,
+                 uct_completion_t *comp)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
@@ -94,6 +102,9 @@ ucs_status_t uct_cuda_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
                                                 iov[0].length, cudaMemcpyDeviceToHost,
                                                 iface->stream_d2h,
                                                 &iface->outstanding_d2h_cuda_event_q, comp);
+    if (!UCS_STATUS_IS_ERR(status)) {
+        VALGRIND_MAKE_MEM_DEFINED(iov[0].buffer, iov[0].length);
+    }
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
@@ -102,9 +113,11 @@ ucs_status_t uct_cuda_copy_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
     return status;
 }
 
-ucs_status_t uct_cuda_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
-                                        uint64_t remote_addr, uct_rkey_t rkey,
-                                        uct_completion_t *comp)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_zcopy,
+                 (tl_ep, iov, iovcnt, remote_addr, rkey, comp),
+                 uct_ep_h tl_ep, const uct_iov_t *iov, size_t iovcnt,
+                 uint64_t remote_addr, uct_rkey_t rkey,
+                 uct_completion_t *comp)
 {
 
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
@@ -125,10 +138,10 @@ ucs_status_t uct_cuda_copy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, si
 
 }
 
-
-ucs_status_t uct_cuda_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
-                                        unsigned length, uint64_t remote_addr,
-                                        uct_rkey_t rkey)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
+                 (tl_ep, buffer, length, remote_addr, rkey),
+                 uct_ep_h tl_ep, const void *buffer, unsigned length,
+                 uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
@@ -145,9 +158,10 @@ ucs_status_t uct_cuda_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     return status;
 }
 
-ucs_status_t uct_cuda_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
-                                        unsigned length, uint64_t remote_addr,
-                                        uct_rkey_t rkey)
+UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
+                 (tl_ep, buffer, length, remote_addr, rkey),
+                 uct_ep_h tl_ep, void *buffer, unsigned length,
+                 uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;

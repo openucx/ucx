@@ -14,6 +14,7 @@
 #  - JOB_URL           : jenkins job url
 #  - EXECUTOR_NUMBER   : number of executor within the test machine
 #  - JENKINS_RUN_TESTS : whether to run unit tests
+#  - RUN_TESTS         : same as JENKINS_RUN_TESTS, but for Azure
 #  - JENKINS_TEST_PERF : whether to validate performance
 #
 # Optional environment variables (could be set by job configuration):
@@ -25,7 +26,7 @@
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
 CUDA_MODULE="dev/cuda10.1"
-GDRCOPY_MODULE="dev/gdrcopy"
+GDRCOPY_MODULE="dev/gdrcopy1.3_cuda10.1"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -44,7 +45,9 @@ fi
 
 
 #
-# Set affinity to 2 cores according to Jenkins executor number
+# Set affinity to 2 cores according to Jenkins executor number.
+# Affinity is inherited from agent in Azure CI.
+# TODO: remove or rename after CI migration.
 #
 if [ -n "$EXECUTOR_NUMBER" ] && [ -n "$JENKINS_RUN_TESTS" ]
 then
@@ -61,9 +64,12 @@ num_cpus=$(lscpu -p | grep -v '^#' | wc -l)
 [ -z $num_cpus ] && num_cpus=1
 parallel_jobs=4
 [ $parallel_jobs -gt $num_cpus ] && parallel_jobs=$num_cpus
+num_pinned_threads=$(nproc)
+[ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
 
 MAKE="make"
 MAKEP="make -j${parallel_jobs}"
+export AUTOMAKE_JOBS=$parallel_jobs
 
 
 #
@@ -103,10 +109,12 @@ module_load() {
 try_load_cuda_env() {
 	num_gpus=0
 	have_cuda=no
+	have_gdrcopy=no
 	if [ -f "/proc/driver/nvidia/version" ]; then
 		have_cuda=yes
+		have_gdrcopy=yes
 		module_load $CUDA_MODULE    || have_cuda=no
-		module_load $GDRCOPY_MODULE || have_cuda=no
+		module_load $GDRCOPY_MODULE || have_gdrcopy=no
 		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
 }
@@ -186,7 +194,11 @@ get_active_ib_devices() {
 # Get list of active IP interfaces
 #
 get_active_ip_ifaces() {
-	echo $(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	device_list=$(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	for netdev in ${device_list}
+	do
+		(ip addr show ${netdev} | grep -q 'inet ') && echo ${netdev} || true
+	done
 }
 
 #
@@ -199,6 +211,16 @@ get_ifaddr() {
 }
 
 get_rdma_device_ip_addr() {
+	if [ ! -r /dev/infiniband/rdma_cm  ]
+	then
+		return
+	fi
+
+	if ! which ibdev2netdev >&/dev/null
+	then
+		return
+	fi
+
 	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
 	if [ -n "$iface" ]
 	then
@@ -228,8 +250,12 @@ prepare() {
 	echo " ==== Prepare ===="
 	env
 	cd ${WORKSPACE}
+	if [ -d build-test ]
+	then
+		chmod u+rwx build-test -R
+		rm -rf build-test
+	fi
 	./autogen.sh
-	rm -rf build-test
 	mkdir -p build-test
 	cd build-test
 }
@@ -337,7 +363,7 @@ build_release_pkg() {
 		dpkg-buildpackage -us -uc
 	else
 		echo "==== Build RPM ===="
-		../contrib/buildrpm.sh -s -b --nodeps
+		../contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
 	fi
 
 	# check that UCX version is present in spec file
@@ -365,6 +391,11 @@ build_icc() {
 		$MAKEP clean
 		$MAKEP
 		$MAKEP distclean
+		echo "==== Build with Intel compiler (clang) ===="
+		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
+		$MAKEP clean
+		$MAKEP
+		$MAKEP distclean
 		echo "ok 1 - build successful " >> build_icc.tap
 	else
 		echo "==== Not building with Intel compiler ===="
@@ -379,7 +410,7 @@ build_icc() {
 build_pgi() {
 	echo 1..1 > build_pgi.tap
 	pgi_test_file=$(mktemp ./XXXXXX).c
-	echo "int main() {}" > ${pgi_test_file}
+	echo "int main() {return 0;}" > ${pgi_test_file}
 
 	if module_load pgi/latest && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
 	then
@@ -537,6 +568,7 @@ build_gcc_latest() {
 			UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
 			$MAKEP distclean
 			echo "ok 1 - build successful " >> build_gcc_latest.tap
+			module unload dev/gcc-latest
 		else
 			echo "==== Not building with latest gcc compiler ===="
 			echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
@@ -594,7 +626,9 @@ build_jucx() {
 #
 build_armclang() {
 	echo 1..1 > build_armclang.tap
-	if module_load arm-compiler/latest
+	armclang_test_file=$(mktemp ./XXXXXX).c
+	echo "int main() {return 0;}" > ${armclang_test_file}
+	if module_load arm-compiler/latest && armclang --version && armclang ${armclang_test_file} -o ${armclang_test_file}.out
 	then
 		echo "==== Build with armclang compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
@@ -604,11 +638,13 @@ build_armclang() {
 		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
 		$MAKEP distclean
 		echo "ok 1 - build successful " >> build_armclang.tap
-		module unload arm-compiler/latest
 	else
 		echo "==== Not building with armclang compiler ===="
 		echo "ok 1 - # SKIP because armclang not installed" >> build_armclang.tap
 	fi
+
+	rm -rf ${armclang_test_file} ${armclang_test_file}.out
+	module unload arm-compiler/latest
 }
 
 check_inst_headers() {
@@ -641,6 +677,57 @@ check_make_distcheck() {
 	fi
 }
 
+check_config_h() {
+	echo 1..1 > check_config_h.tap
+
+	srcdir=$PWD/../src
+
+	# Check if all .c files include config.h
+	echo "==== Checking for config.h files in directory $srcdir ===="
+
+	missing=`find $srcdir -name \*.c -o -name \*.cc | xargs grep -LP '\#\s*include\s+"config.h"'`
+	
+	if [ `echo $missing | wc -w` -eq 0 ]
+	then
+		echo "ok 1 - check successful " >> check_config_h.tap
+	else
+		echo "Error: missing include config.h in files: $missing"
+		exit 1
+	fi
+}
+
+#
+# Expands a CPU list such as "0-3,17" to "0 1 2 3 17" (each cpu in a new line)
+#
+expand_cpulist() {
+	cpulist=$1
+	tokens=$(echo ${cpulist} | tr ',' ' ')
+	for token in ${tokens}
+	do
+		# if there is no '-', first and last would be equal
+		first=$(echo ${token} | cut -d'-' -f1)
+		last=$( echo ${token} | cut -d'-' -f2)
+
+		for ((cpu=${first};cpu<=${last};++cpu))
+		do
+			echo ${cpu}
+		done
+	done
+}
+
+#
+# Get the N'th CPU that the current process can run on
+#
+slice_affinity() {
+	n=$1
+
+	# get affinity mask of the current process
+	compact_cpulist=$($AFFINITY bash -c 'taskset -cp $$' | cut -d: -f2)
+	cpulist=$(expand_cpulist ${compact_cpulist})
+
+	echo "${cpulist}" | head -n $((n + 1)) | tail -1
+}
+
 run_client_server_app() {
 	test_name=$1
 	test_args=$2
@@ -651,7 +738,10 @@ run_client_server_app() {
 	server_port=$((10000 + EXECUTOR_NUMBER))
 	server_port_arg="-p $server_port"
 
-	$AFFINITY ${test_name} ${test_args} ${server_port_arg} &
+	affinity_server=$(slice_affinity 0)
+	affinity_client=$(slice_affinity 1)
+
+	taskset -c $affinity_server ${test_name} ${test_args} ${server_port_arg} &
 	server_pid=$!
 
 	sleep 15
@@ -661,7 +751,7 @@ run_client_server_app() {
 		set +Ee
 	fi
 
-	$AFFINITY ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
+	taskset -c $affinity_client ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
 	client_pid=$!
 
 	wait ${client_pid}
@@ -687,9 +777,7 @@ run_hello() {
 
 	if [ ! -x ${test_name} ]
 	then
-		gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
-		    -l${api} -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
-		    -Wl,-rpath=${ucx_inst}/lib
+		$MAKEP -C examples ${test_name}
 	fi
 
 	# set smaller timeouts so the test will complete faster
@@ -707,7 +795,7 @@ run_hello() {
 		error_emulation=0
 	fi
 
-	run_client_server_app "./${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
+	run_client_server_app "./examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
 
 	if [[ ${test_args} == *"-e"* ]]
 	then
@@ -726,10 +814,20 @@ run_ucp_hello() {
 		return # skip if cannot create ucp ep
 	fi
 
+	mem_types_list="host "
+
+	if [ "X$have_cuda" == "Xyes" ]
+	then
+		mem_types_list+="cuda cuda-managed "
+	fi
+
 	for test_mode in -w -f -b -e
 	do
-		echo "==== Running UCP hello world with mode ${test_mode} ===="
-		run_hello ucp ${test_mode}
+		for mem_type in $mem_types_list
+		do
+			echo "==== Running UCP hello world with mode ${test_mode} and \"${mem_type}\" memory type ===="
+			run_hello ucp ${test_mode} -m ${mem_type}
+		done
 	done
 	rm -f ./ucp_hello_world
 }
@@ -738,12 +836,27 @@ run_ucp_hello() {
 # Compile and run UCT hello world example
 #
 run_uct_hello() {
+	mem_types_list="host "
+
+	if [ "X$have_cuda" == "Xyes" ] && [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+	then
+		mem_types_list+="cuda-managed "
+		if [ -f "/sys/kernel/mm/memory_peers/nv_mem/version" ]
+		then
+			# test RDMA GPUDirect
+			mem_types_list+="cuda "
+		fi
+	fi
+
 	for send_func in -i -b -z
 	do
 		for ucx_dev in $(get_active_ib_devices)
 		do
-			echo "==== Running UCT hello world server on rc/${ucx_dev} with sending ${send_func} ===="
-			run_hello uct  -d ${ucx_dev} -t "rc" ${send_func}
+			for mem_type in $mem_types_list
+			do
+				echo "==== Running UCT hello world server on rc/${ucx_dev} with sending ${send_func} and \"${mem_type}\" memory type ===="
+				run_hello uct -d ${ucx_dev} -t "rc_verbs" ${send_func} -m ${mem_type}
+			done
 		done
 		for ucx_dev in $(get_active_ip_iface)
 		do
@@ -774,20 +887,34 @@ run_client_server() {
 }
 
 run_ucp_client_server() {
-	if [ ! -r /dev/infiniband/rdma_cm  ]
-	then
-		return
-	fi
-
-	if ! which ibdev2netdev >&/dev/null
-	then
-		return
-	fi
-
 	echo "==== Running UCP client-server  ===="
 	run_client_server
 
 	rm -f ./ucp_client_server
+}
+
+run_io_demo() {
+	server_ip=$(get_rdma_device_ip_addr)
+	if [ "$server_ip" == "" ]
+	then
+		return
+	fi
+
+	echo "==== Running UCP IO demo  ===="
+
+	test_args="$@ -o write,read -d 128:4194304 -i 10000 -w 10"
+	test_name=io_demo
+
+	if [ ! -x ${test_name} ]
+	then
+		$MAKEP -C test/apps/iodemo ${test_name}
+	fi
+
+	export UCX_SOCKADDR_CM_ENABLE=y
+	run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+
+	unset UCX_SOCKADDR_CM_ENABLE
+	make clean
 }
 
 #
@@ -821,7 +948,7 @@ run_ucx_perftest() {
 	ip_ifaces=$(get_active_ip_ifaces)
 
 	# shared memory, IB devices, IP ifaces
-	devices="posix $(get_active_ib_devices) ${ip_ifaces}"
+	devices="memory $(get_active_ib_devices) ${ip_ifaces}"
 
 	# Run on all devices
 	my_devices=$(get_my_tasks $devices)
@@ -831,17 +958,17 @@ run_ucx_perftest() {
 			opt_transports="-b $ucx_inst_ptest/transports"
 			tls=`awk '{print $3 }' $ucx_inst_ptest/transports | tr '\n' ',' | sed -r 's/,$//; s/mlx5/x/g'`
 			dev=$ucx_dev
-		elif [[ $ucx_dev =~ posix ]]; then
-			opt_transports="-x mm"
-			tls="mm"
+		elif [[ $ucx_dev =~ memory ]]; then
+			opt_transports="-x posix"
+			tls="shm"
 			dev="all"
 		elif [[ " ${ip_ifaces[*]} " == *" ${ucx_dev} "* ]]; then
 			opt_transports="-x tcp"
 			tls="tcp"
 			dev=$ucx_dev
 		else
-			opt_transports="-x rc"
-			tls="rc"
+			opt_transports="-x rc_verbs"
+			tls="rc_v"
 			dev=$ucx_dev
 		fi
 
@@ -850,8 +977,12 @@ run_ucx_perftest() {
 		then
 			# Run UCT performance test
 			$MPIRUN -np 2 $AFFINITY $ucx_perftest $uct_test_args -d $ucx_dev $opt_transports
+
 			# Run UCP performance test
 			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
+
+			# Run UCP performance test with 2 threads
+			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args -T 2
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
@@ -859,8 +990,12 @@ run_ucx_perftest() {
 			# Run UCT performance test
 			run_client_server_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}" \
 								"$(hostname)" 0 0
+
 			# Run UCP performance test
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+
+			# Run UCP performance test with 2 threads
+			run_client_server_app "$ucx_perftest" "$ucp_test_args -T 2" "$(hostname)" 0 0
 
 			unset UCX_NET_DEVICES
 			unset UCX_TLS
@@ -879,7 +1014,7 @@ run_ucx_perftest() {
 			gdr_options+="y "
 		fi
 
-		if (lsmod | grep -q "gdrdrv")
+		if  [ "X$have_gdrcopy" == "Xyes" ] && (lsmod | grep -q "gdrdrv")
 		then
 			echo "GDRCopy module (gdrdrv) is present..."
 			tls_list+="rc,cuda_copy,gdr_copy "
@@ -919,14 +1054,37 @@ run_ucx_perftest() {
 
 		if [ $with_mpi -eq 1 ]
 		then
-			$MPIRUN -np 2 -x UCX_TLS=self,mm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
+			$MPIRUN -np 2 -x UCX_TLS=self,sm,cuda_ipc,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
 			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
 		else
-			export UCX_TLS=self,mm,cma,cuda_copy
+			export UCX_TLS=self,shm,cma,cuda_copy
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 			unset UCX_TLS
 
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+		fi
+
+		# Specifically test cuda_ipc for large message sizes
+	        cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
+		ucp_test_args_large="-b $ucx_inst_ptest/test_types_cuda_ucp \
+			             -b $ucx_inst_ptest/msg_pow2_large -w 1"
+		if [ $with_mpi -eq 1 ]
+		then
+			for ipc_cache in y n
+			do
+				$MPIRUN -np 2 -x UCX_TLS=self,sm,cuda_copy,cuda_ipc \
+					-x UCX_CUDA_IPC_CACHE=$ipc_cache $AFFINITY $ucx_perftest $ucp_test_args_large
+			done
+		else
+			for ipc_cache in y n
+			do
+				export UCX_TLS=self,sm,cuda_copy,cuda_ipc
+				export UCX_CUDA_IPC_CACHE=$ipc_cache
+				run_client_server_app "$ucx_perftest" "$ucp_test_args_large" "$(hostname)" 0 0
+				unset UCX_TLS
+				unset UCX_CUDA_IPC_CACHE
+			done
 		fi
 
 		unset CUDA_VISIBLE_DEVICES
@@ -966,6 +1124,7 @@ run_mpi_tests() {
 		$MAKEP installcheck # check whether installation is valid (it compiles examples at least)
 
 		MPIRUN="mpirun \
+				--bind-to none \
 				-x UCX_ERROR_SIGNALS \
 				-x UCX_HANDLE_ERRORS \
 				-mca pml ob1 \
@@ -989,6 +1148,12 @@ run_mpi_tests() {
 	fi
 }
 
+build_ucx_profiling() {
+	# compile the profiling example code
+	gcc -o ucx_profiling ../test/apps/profiling/ucx_profiling.c \
+		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+}
+
 #
 # Test profiling infrastructure
 #
@@ -999,10 +1164,9 @@ test_profiling() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
+	$MAKEP install
 
-	# compile the profiling example code
-	gcc -o ucx_profiling ${ucx_inst}/share/ucx/examples/ucx_profiling.c \
-		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
+	build_ucx_profiling
 
 	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./ucx_profiling
 
@@ -1016,6 +1180,9 @@ test_ucs_load() {
 	../contrib/configure-release --prefix=$ucx_inst
 	$MAKEP clean
 	$MAKEP
+	$MAKEP install
+
+	build_ucx_profiling
 
 	# Make sure UCS library constructor does not call socket()
 	echo "==== Running UCS library loading test ===="
@@ -1124,6 +1291,7 @@ test_jucx() {
 	then
 		jucx_port=$((20000 + EXECUTOR_NUMBER))
 		export JUCX_TEST_PORT=$jucx_port
+		export UCX_MEM_EVENTS=no
 		$MAKE -C bindings/java/src/main/native test
 	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
 		if [ -n "$ifaces" ]
@@ -1145,19 +1313,22 @@ test_jucx() {
                         echo "Running standalone benchamrk on $iface"
 
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
-			         -cp "bindings/java/src/main/native/build-java/*" \
+                                -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
+			         -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
 				 org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
 				 s=$server_ip p=$JUCX_TEST_PORT &
                         java_pid=$!
 			 sleep 10
                         java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
-			         -cp "bindings/java/src/main/native/build-java/*"  \
+				 -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
+			         -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*"  \
 				 org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
 				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
 			 wait $java_pid
 		done
 
 		unset JUCX_TEST_PORT
+		unset UCX_MEM_EVENTS
 		module unload dev/jdk
 		module unload dev/mvn
 		echo "ok 1 - jucx test" >> jucx_tests.tap
@@ -1182,8 +1353,8 @@ run_coverity() {
 		cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
 		cov_build="$WORKSPACE/$cov_build_id"
 		rm -rf $cov_build
-		cov-build   --dir $cov_build $MAKEP all
-		cov-analyze $COV_OPT --security --concurrency --dir $cov_build
+		cov-build --dir $cov_build $MAKEP all
+		cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
 		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
 		rc=$(($rc+$nerrors))
 
@@ -1276,6 +1447,7 @@ run_gtest() {
 	export GTEST_UCT_TCP_FASTEST_DEV=1
 	# Report TOP-20 longest test at the end of testing
 	export GTEST_REPORT_LONGEST_TESTS=20
+	export OMP_NUM_THREADS=4
 
 	if [ $num_gpus -gt 0 ]; then
 		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
@@ -1338,6 +1510,7 @@ run_gtest() {
 		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
 
+	unset OMP_NUM_THREADS
 	unset GTEST_UCT_TCP_FASTEST_DEV
 	unset GTEST_SHARD_INDEX
 	unset GTEST_TOTAL_SHARDS
@@ -1383,6 +1556,7 @@ run_gtest_release() {
 	export GTEST_SHUFFLE=1
 	export GTEST_TAP=2
 	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
+	export OMP_NUM_THREADS=4
 
 	echo "==== Running unit tests (release configuration) ===="
 	# Check:
@@ -1393,6 +1567,7 @@ run_gtest_release() {
 		$AFFINITY $TIMEOUT make -C test/gtest test
 	echo "ok 1" >> gtest_release.tap
 
+	unset OMP_NUM_THREADS
 	unset GTEST_SHARD_INDEX
 	unset GTEST_TOTAL_SHARDS
 	unset GTEST_RANDOM_SEED
@@ -1405,7 +1580,7 @@ run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
 
-	../test/apps/test_ucx_tls.py $ucx_inst
+	../test/apps/test_ucx_tls.py -p $ucx_inst
 
 	if [ $? -ne 0 ]; then
 		echo "not ok 1" >> ucx_tl_check.tap
@@ -1458,15 +1633,16 @@ run_tests() {
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 2 4 run_ucx_perftest
+	do_distributed_task 1 4 run_io_demo
 	do_distributed_task 3 4 test_profiling
-	do_distributed_task 0 4 test_ucp_dlopen
+	do_distributed_task 0 3 test_jucx
 	do_distributed_task 1 4 test_ucs_dlopen
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 2 4 test_env_var_aliases
 	do_distributed_task 1 3 test_malloc_hook
-	do_distributed_task 0 3 test_jucx
+	do_distributed_task 0 4 test_ucp_dlopen
 
 	# all are running gtest
 	run_gtest_default
@@ -1486,8 +1662,8 @@ do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg
 do_distributed_task 3 4 check_inst_headers
 do_distributed_task 1 4 check_make_distcheck
-
-if [ -n "$JENKINS_RUN_TESTS" ]
+do_distributed_task 2 4 check_config_h
+if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
 	run_tests
 fi

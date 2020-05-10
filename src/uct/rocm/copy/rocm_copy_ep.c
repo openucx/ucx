@@ -3,12 +3,21 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "rocm_copy_ep.h"
 #include "rocm_copy_iface.h"
 
 #include <uct/base/uct_log.h>
+#include <uct/base/uct_iov.inl>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <ucs/arch/cpu.h>
+
+#define uct_rocm_memcpy_h2d(_d,_s,_l)  memcpy((_d),(_s),(_l))
+#define uct_rocm_memcpy_d2h(_d,_s,_l)  ucs_memcpy_nontemporal((_d),(_s),(_l))
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_ep_t, const uct_ep_params_t *params)
 {
@@ -44,9 +53,9 @@ uct_rocm_copy_ep_zcopy(uct_ep_h tl_ep,
     }
 
     if (is_put)
-        memcpy((void *)remote_addr, iov->buffer, size);
+        uct_rocm_memcpy_h2d((void *)remote_addr, iov->buffer, size);
     else
-        memcpy(iov->buffer, (void *)remote_addr, size);
+        uct_rocm_memcpy_d2h(iov->buffer, (void *)remote_addr, size);
 
     return UCS_OK;
 }
@@ -87,7 +96,7 @@ ucs_status_t uct_rocm_copy_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                         unsigned length, uint64_t remote_addr,
                                         uct_rkey_t rkey)
 {
-    memcpy((void *)remote_addr, buffer, length);
+    uct_rocm_memcpy_h2d((void *)remote_addr, buffer, length);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
@@ -99,8 +108,7 @@ ucs_status_t uct_rocm_copy_ep_get_short(uct_ep_h tl_ep, void *buffer,
                                         unsigned length, uint64_t remote_addr,
                                         uct_rkey_t rkey)
 {
-    /* device to host */
-    memcpy(buffer, (void *)remote_addr, length);
+    uct_rocm_memcpy_d2h(buffer, (void *)remote_addr, length);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",

@@ -18,7 +18,7 @@
 #include <stdio.h>
 
 
-#if ENABLE_MEMTRACK
+#ifdef ENABLE_MEMTRACK
 
 #define UCS_MEMTRACK_FORMAT_STRING    ("%22s: size: %9lu / %9lu\tcount: %9u / %9u\n")
 
@@ -47,7 +47,7 @@ static ucs_memtrack_context_t ucs_memtrack_context = {
     .lock    = PTHREAD_MUTEX_INITIALIZER
 };
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t ucs_memtrack_stats_class = {
     .name = "memtrack",
     .num_counters = UCS_MEMTRACK_STAT_LAST,
@@ -320,7 +320,7 @@ static void ucs_memtrack_generate_report()
 
     status = ucs_open_output_stream(ucs_global_opts.memtrack_dest,
                                     UCS_LOG_LEVEL_ERROR, &output_stream,
-                                    &need_close, &next_token);
+                                    &need_close, &next_token, NULL);
     if (status != UCS_OK) {
         return;
     }

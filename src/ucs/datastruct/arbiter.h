@@ -21,6 +21,11 @@
  * - "Element" - a single work element.
  * - "Group"   - queue of work elements which would be dispatched in-order
  *
+ * The arbiter contains a double-linked list of the group head elements. The
+ * next group head to dispatch is the first entry in the list. Whenever a group
+ * is rescheduled it's moved to the tail of the list. At any point a group head
+ * can be removed from the "middle" of the list.
+ *
  * The groups and elements are arranged like this:
  *  - every arbitrated element points to the group (head).
  *  - first element in the group points to previous and next group (list)
@@ -36,18 +41,21 @@
  *
  *
  * Arbiter:
- *   +=========+
- *   | current +-----------------------+
- *   +=========+                       |
- *                                     |
- * Elements:                           |
- *                                     |
- *   +---------------------------------]----------------------------------+
- *   |                                 V                                  |
- *   |   +------------+          +------------+          +------------+<--+
- *   +-->| list       |<-------->| list       |<-------->| list       |
- *       +------------+          +------------+          +------------+<--+
- *    +->| next       +---+   +->| next       +---+      + next       +---+
+ *   +=============+
+ *   | list        +
+ *   +======+======+
+ *   | next | prev |
+ *   +==|===+===|==+
+ *      |       +----------------------------------------------+
+ *      |                                                      |
+ *      +------+                                               |
+ *             |                                               |
+ *             |                                               |
+ * Elements:   V                                               V
+ *       +------------+          +------------+          +------------+
+ *       | list       |<-------->| list       |<-------->| list       |
+ *       +------------+          +------------+          +------------+
+ *    +->| next       +---+   +->| next       +---+      + next       +
  *    |  +------------+   |   |  +------------+   |      +------------+
  *    |  | group      |   |   |  | group      |   |      | group      |
  *    |  +------------+   |   |  +------------+   |      +--------+---+
@@ -94,19 +102,27 @@ typedef enum {
 } ucs_arbiter_cb_result_t;
 
 #if UCS_ENABLE_ASSERT
-#define UCS_ARBITER_GUARD                   int guard;
-#define UCS_ARBITER_GUARD_INIT(_arbiter)    (_arbiter)->guard = 0
-#define UCS_ARBITER_GUARD_ENTER(_arbiter)   (_arbiter)->guard++
-#define UCS_ARBITER_GUARD_EXIT(_arbiter)    (_arbiter)->guard--
-#define UCS_ARBITER_GUARD_CHECK(_arbiter) \
-    ucs_assertv((_arbiter)->guard == 0, \
-                "scheduling group from the arbiter callback")
+#define UCS_ARBITER_GROUP_GUARD_DEFINE          int guard
+#define UCS_ARBITER_GROUP_GUARD_INIT(_group)    (_group)->guard = 0
+#define UCS_ARBITER_GROUP_GUARD_ENTER(_group)   (_group)->guard++
+#define UCS_ARBITER_GROUP_GUARD_EXIT(_group)    (_group)->guard--
+#define UCS_ARBITER_GROUP_GUARD_CHECK(_group) \
+    ucs_assertv((_group)->guard == 0, \
+                "scheduling arbiter group %p while it's being dispatched", _group)
+#define UCS_ARBITER_GROUP_ARBITER_DEFINE        ucs_arbiter_t *arbiter
+#define UCS_ARBITER_GROUP_ARBITER_SET(_group, _arbiter) \
+    (_group)->arbiter = (_arbiter)
+#define UCS_ARBITER_GROUP_ARBITER_CHECK(_group, _arbiter) \
+    ucs_assert((_group)->arbiter == (_arbiter))
 #else
-#define UCS_ARBITER_GUARD
-#define UCS_ARBITER_GUARD_INIT(_arbiter)
-#define UCS_ARBITER_GUARD_ENTER(_arbiter)
-#define UCS_ARBITER_GUARD_EXIT(_arbiter)
-#define UCS_ARBITER_GUARD_CHECK(_arbiter)
+#define UCS_ARBITER_GROUP_GUARD_DEFINE
+#define UCS_ARBITER_GROUP_GUARD_INIT(_group)
+#define UCS_ARBITER_GROUP_GUARD_ENTER(_group)
+#define UCS_ARBITER_GROUP_GUARD_EXIT(_group)
+#define UCS_ARBITER_GROUP_GUARD_CHECK(_group)
+#define UCS_ARBITER_GROUP_ARBITER_DEFINE
+#define UCS_ARBITER_GROUP_ARBITER_SET(_group, _arbiter)
+#define UCS_ARBITER_GROUP_ARBITER_CHECK(_group, _arbiter)
 #endif
 
 
@@ -120,6 +136,7 @@ typedef enum {
  * @return According to @ref ucs_arbiter_cb_result_t.
  */
 typedef ucs_arbiter_cb_result_t (*ucs_arbiter_callback_t)(ucs_arbiter_t *arbiter,
+                                                          ucs_arbiter_group_t *group,
                                                           ucs_arbiter_elem_t *elem,
                                                           void *arg);
 
@@ -128,8 +145,7 @@ typedef ucs_arbiter_cb_result_t (*ucs_arbiter_callback_t)(ucs_arbiter_t *arbiter
  * Top-level arbiter.
  */
 struct ucs_arbiter {
-    ucs_arbiter_elem_t      *current;
-    UCS_ARBITER_GUARD
+    ucs_list_link_t         list;
 };
 
 
@@ -138,6 +154,8 @@ struct ucs_arbiter {
  */
 struct ucs_arbiter_group {
     ucs_arbiter_elem_t      *tail;
+    UCS_ARBITER_GROUP_GUARD_DEFINE;
+    UCS_ARBITER_GROUP_ARBITER_DEFINE;
 };
 
 
@@ -177,8 +195,14 @@ void ucs_arbiter_group_cleanup(ucs_arbiter_group_t *group);
  */
 static inline void ucs_arbiter_elem_init(ucs_arbiter_elem_t *elem)
 {
-    elem->next = NULL;
+    elem->group = NULL;
 }
+
+
+/**
+ * Check if a group is scheduled on an arbiter.
+ */
+int ucs_arbiter_group_is_scheduled(ucs_arbiter_group_t *group);
 
 
 /**
@@ -209,6 +233,12 @@ void ucs_arbiter_group_purge(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                              ucs_arbiter_callback_t cb, void *cb_arg);
 
 
+/**
+ * @return Number of elements in the group
+ */
+size_t ucs_arbiter_group_num_elems(ucs_arbiter_group_t *group);
+
+
 void ucs_arbiter_dump(ucs_arbiter_t *arbiter, FILE *stream);
 
 
@@ -218,13 +248,13 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
 
 
 /* Internal function */
-void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
-                                   ucs_arbiter_callback_t cb, void *cb_arg);
+void ucs_arbiter_group_desched_nonempty(ucs_arbiter_t *arbiter,
+                                        ucs_arbiter_group_t *group);
 
 
 /* Internal function */
-void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
-                                    ucs_arbiter_elem_t *head);
+void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
+                                   ucs_arbiter_callback_t cb, void *cb_arg);
 
 
 /**
@@ -234,7 +264,7 @@ void ucs_arbiter_group_head_desched(ucs_arbiter_t *arbiter,
  */
 static inline int ucs_arbiter_is_empty(ucs_arbiter_t *arbiter)
 {
-    return arbiter->current == NULL;
+    return ucs_list_is_empty(&arbiter->list);
 }
 
 
@@ -270,16 +300,11 @@ static inline void ucs_arbiter_group_schedule(ucs_arbiter_t *arbiter,
  * @param [in]  arbiter  Arbiter object that  group on.
  * @param [in]  group    Group to deschedule.
  */
-
 static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
                                              ucs_arbiter_group_t *group)
 {
     if (ucs_unlikely(!ucs_arbiter_group_is_empty(group))) {
-        ucs_arbiter_elem_t *head;
-
-        head = group->tail->next;
-        ucs_arbiter_group_head_desched(arbiter, head);
-        head->list.next = NULL;
+        ucs_arbiter_group_desched_nonempty(arbiter, group);
     }
 }
 
@@ -287,11 +312,10 @@ static inline void ucs_arbiter_group_desched(ucs_arbiter_t *arbiter,
 /**
  * @return Whether the element is queued in an arbiter group.
  *         (an element can't be queued more than once)
- *
  */
 static inline int ucs_arbiter_elem_is_scheduled(ucs_arbiter_elem_t *elem)
 {
-    return elem->next != NULL;
+    return elem->group != NULL;
 }
 
 
@@ -359,30 +383,12 @@ ucs_arbiter_dispatch(ucs_arbiter_t *arbiter, unsigned per_group,
 
 
 /**
- * @return Group the element belongs to.
- */
-static inline ucs_arbiter_group_t* ucs_arbiter_elem_group(ucs_arbiter_elem_t *elem)
-{
-    return elem->group;
-}
-
-
-/**
- * @return true if element is the last one in the group
- */
-static inline int
-ucs_arbiter_elem_is_last(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
-{
-    return group->tail == elem;
-}
-
-/**
  * @return true if element is the only one in the group
  */
 static inline int
-ucs_arbiter_elem_is_only(ucs_arbiter_group_t *group, ucs_arbiter_elem_t *elem)
+ucs_arbiter_elem_is_only(ucs_arbiter_elem_t *elem)
 {
-    return ucs_arbiter_elem_is_last(group, elem) && (elem->next == elem);
+    return elem->next == elem;
 }
 
 #endif

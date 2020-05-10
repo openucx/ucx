@@ -11,7 +11,7 @@
 #  include "config.h"
 #endif
 
-#if HAVE_PROFILING
+#ifdef HAVE_PROFILING
 #  include "profile_on.h"
 #else
 #  include "profile_off.h"

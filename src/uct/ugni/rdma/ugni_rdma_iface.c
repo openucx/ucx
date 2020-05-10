@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ugni_rdma_ep.h"
 #include "ugni_rdma_iface.h"
 #include <uct/ugni/base/ugni_def.h>
@@ -171,6 +175,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_rdma_iface_t)
     ucs_mpool_cleanup(&self->free_desc_buffer, 1);
     ucs_mpool_cleanup(&self->free_desc, 1);
 }
+
+extern ucs_class_t UCS_CLASS_DECL_NAME(uct_ugni_rdma_iface_t);
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_rdma_iface_t, uct_iface_t);
 

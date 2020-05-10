@@ -58,6 +58,7 @@ typedef enum ucs_cpu_vendor {
     UCS_CPU_VENDOR_AMD,
     UCS_CPU_VENDOR_GENERIC_ARM,
     UCS_CPU_VENDOR_GENERIC_PPC,
+    UCS_CPU_VENDOR_FUJITSU_ARM,
     UCS_CPU_VENDOR_LAST
 } ucs_cpu_vendor_t;
 
@@ -101,9 +102,13 @@ typedef struct ucs_cpu_builtin_memcpy {
 #define UCS_SYS_CACHE_LINE_SIZE    UCS_ARCH_CACHE_LINE_SIZE
 #endif
 
-/* Array of default built-in memcpy settings for different CPU arhitectures */
+/* Array of default built-in memcpy settings for different CPU architectures */
 extern const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST];
 
+#if HAVE___CLEAR_CACHE
+/* libc routine declaration */
+void __clear_cache(void* beg, void* end);
+#endif
 
 /**
  * Get size of CPU cache.
@@ -126,14 +131,25 @@ size_t ucs_cpu_get_cache_size(ucs_cpu_cache_type_t type);
 static inline void ucs_clear_cache(void *start, void *end)
 {
 #if HAVE___CLEAR_CACHE
-    /* do not allow global declaration of compiler intrinsic */
-    void __clear_cache(void* beg, void* end);
-
     __clear_cache(start, end);
 #else
     ucs_arch_clear_cache(start, end);
 #endif
 }
+
+/**
+ * Get memory copy bandwidth.
+ * 
+ * @return Memory copy bandwidth estimation based on CPU used.
+ */
+double ucs_cpu_get_memcpy_bw();
+
+
+static inline int ucs_cpu_prefer_relaxed_order()
+{
+    return ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM;
+}
+
 
 END_C_DECLS
 

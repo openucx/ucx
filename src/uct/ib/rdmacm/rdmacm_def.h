@@ -21,6 +21,9 @@
 #define UCT_RDMACM_TL_NAME              "rdmacm"
 #define UCT_RDMACM_UDP_PRIV_DATA_LEN    136   /** See rdma_accept(3) */
 #define UCT_RDMACM_TCP_PRIV_DATA_LEN    56    /** See rdma_connect(3) */
+#define UCT_RDMACM_EP_FLAGS_STRING_LEN  128   /** A string to hold the
+                                                  representation of the ep flags */
+#define UCT_RDMACM_EP_STRING_LEN        192   /** A string to hold the ep info */
 
 typedef struct uct_rdmacm_iface   uct_rdmacm_iface_t;
 typedef struct uct_rdmacm_ep      uct_rdmacm_ep_t;

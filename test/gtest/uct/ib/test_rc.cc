@@ -6,12 +6,16 @@
 */
 
 #include "test_rc.h"
+#include <uct/ib/rc/verbs/rc_verbs.h>
 
 
 #define UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_verbs) \
     _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5)
 
+#define UCT_INSTANTIATE_RC_DC_TEST_CASE(_test_case) \
+    UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
 
 void test_rc::init()
 {
@@ -52,12 +56,11 @@ void test_rc::test_iface_ops(int cq_len)
     comp.func  = NULL;
 
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                            sendbuf.memh(),
-                            m_e1->iface_attr().cap.am.max_iov);
+                            sendbuf.memh(), m_e1->iface_attr().cap.put.max_iov);
     // For _x transports several CQEs can be consumed per WQE, post less put zcopy
     // ops, so that flush would be sucessfull (otherwise flush will return
     // NO_RESOURCES and completion will not be added for it).
-    for (int i = 0; i < cq_len / 3; i++) {
+    for (int i = 0; i < cq_len / 5; i++) {
         ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(e->ep(0), iov, iovcnt,
                                                      recvbuf.addr(),
                                                      recvbuf.rkey(), &comp));
@@ -133,6 +136,283 @@ UCS_TEST_P(test_rc_max_wr, send_limit)
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
+
+class test_rc_get_limit : public test_rc {
+public:
+    test_rc_get_limit() {
+        m_num_get_ops = 8;
+        modify_config("RC_TX_NUM_GET_OPS",
+                      ucs::to_string(m_num_get_ops).c_str());
+
+        m_max_get_zcopy = 4096;
+        modify_config("RC_MAX_GET_ZCOPY",
+                      ucs::to_string(m_max_get_zcopy).c_str());
+
+        modify_config("RC_TX_QUEUE_LEN", "32");
+        modify_config("RC_TM_ENABLE", "y", true);
+
+        m_comp.count = 300000; // some big value to avoid func invocation
+        m_comp.func  = NULL;
+    }
+
+    void init() {
+#ifdef ENABLE_STATS
+        stats_activate();
+#endif
+        test_rc::init();
+    }
+
+#ifdef ENABLE_STATS
+    void cleanup() {
+        uct_test::cleanup();
+        stats_restore();
+    }
+
+    uint64_t get_no_reads_stat_counter(entity *e) {
+        uct_rc_iface_t *iface = ucs_derived_of(e->iface(), uct_rc_iface_t);
+
+        return UCS_STATS_GET_COUNTER(iface->stats, UCT_RC_IFACE_STAT_NO_READS);
+    }
+#endif
+
+    unsigned reads_available(entity *e) {
+        return rc_iface(e)->tx.reads_available;
+    }
+
+    void post_max_reads(entity *e, const mapped_buffer &sendbuf,
+                        const mapped_buffer &recvbuf) {
+        ucs_status_t status, status_exp;
+
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(), e->iface_attr().cap.get.max_iov);
+
+        for (unsigned i = 0; i <= m_num_get_ops; ++i) {
+            if (i % 2) {
+                status = uct_ep_get_zcopy(e->ep(0), iov, iovcnt, recvbuf.addr(),
+                                          recvbuf.rkey(), &m_comp);
+            } else {
+                status = uct_ep_get_bcopy(e->ep(0), (uct_unpack_callback_t)memcpy,
+                                          sendbuf.ptr(), sendbuf.length(),
+                                          recvbuf.addr(), recvbuf.rkey(), &m_comp);
+            }
+            status_exp = (i == m_num_get_ops) ? UCS_ERR_NO_RESOURCE :
+                                                UCS_INPROGRESS;
+            EXPECT_EQ(status_exp, status);
+        }
+
+        EXPECT_EQ(0u, reads_available(e));
+    }
+
+    static size_t empty_pack_cb(void *dest, void *arg) {
+        return 0ul;
+    }
+
+protected:
+    unsigned         m_num_get_ops;
+    unsigned         m_max_get_zcopy;
+    uct_completion_t m_comp;
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_ops_limit,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_BCOPY))
+{
+    mapped_buffer sendbuf(1024, 0ul, *m_e1);
+    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+
+    post_max_reads(m_e1, sendbuf, recvbuf);
+
+#ifdef ENABLE_STATS
+    EXPECT_GT(get_no_reads_stat_counter(m_e1), 0ul);
+#endif
+
+    // Check that it is possible to add to pending if get returns NO_RESOURCE
+    // due to lack of get credits
+    uct_pending_req_t pend_req;
+    pend_req.func = NULL; // Make valgrind happy
+    EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(0), &pend_req, 0));
+    uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
+
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+}
+
+// Check that get function fails for messages bigger than MAX_GET_ZCOPY value
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_size_limit,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    EXPECT_EQ(m_max_get_zcopy, m_e1->iface_attr().cap.get.max_zcopy);
+
+    mapped_buffer buf(m_max_get_zcopy + 1, 0ul, *m_e1);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf.ptr(), buf.length(), buf.memh(),
+                            m_e1->iface_attr().cap.get.max_iov);
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    ucs_status_t status = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt,
+                                           buf.addr(), buf.rkey(), &m_comp);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+}
+
+// Check that get size value is trimmed by the actual maximum IB msg size
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, invalid_get_size,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    size_t max_ib_msg = uct_ib_iface_port_attr(&rc_iface(m_e1)->super)->max_msg_sz;
+
+    modify_config("RC_MAX_GET_ZCOPY", ucs::to_string(max_ib_msg + 1).c_str());
+
+    scoped_log_handler wrap_warn(hide_warns_logger);
+    entity *e = uct_test::create_entity(0);
+    m_entities.push_back(e);
+
+    EXPECT_EQ(m_max_get_zcopy, m_e1->iface_attr().cap.get.max_zcopy);
+}
+
+// Check that gets resource counter is not affected/changed when the get
+// function fails due to lack of some other resources.
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_AM_BCOPY))
+{
+    unsigned max_get_ops = reads_available(m_e1);
+    ucs_status_t status;
+
+    do {
+        status = send_am_message(m_e1, 0, 0);
+    } while (status == UCS_OK);
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+    EXPECT_EQ(max_get_ops, reads_available(m_e1));
+
+    mapped_buffer buf(1024, 0ul, *m_e1);
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf.ptr(), buf.length(), buf.memh(),
+                            m_e1->iface_attr().cap.get.max_iov);
+
+    status = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, buf.addr(), buf.rkey(),
+                              &m_comp);
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+    EXPECT_EQ(max_get_ops, reads_available(m_e1));
+#ifdef ENABLE_STATS
+    EXPECT_EQ(get_no_reads_stat_counter(m_e1), 0ul);
+#endif
+
+    flush();
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, check_rma_ops,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_BCOPY |
+                                 UCT_IFACE_FLAG_PUT_SHORT |
+                                 UCT_IFACE_FLAG_PUT_BCOPY |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY |
+                                 UCT_IFACE_FLAG_AM_SHORT  |
+                                 UCT_IFACE_FLAG_AM_BCOPY  |
+                                 UCT_IFACE_FLAG_AM_ZCOPY))
+
+{
+    mapped_buffer sendbuf(1024, 0ul, *m_e1);
+    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+
+    post_max_reads(m_e1, sendbuf, recvbuf);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), 1, sendbuf.memh(), 1);
+    uct_ep_h ep = m_e1->ep(0);
+
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_short(ep, NULL, 0, 0, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_bcopy(ep, NULL, NULL, 0, 0));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_zcopy(ep, iov, iovcnt, 0, 0,
+                                                    NULL));
+
+    if (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64)) {
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64));
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP64));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, 0));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0,
+                                        NULL));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic_cswap64(ep, 0, 0, 0, 0, NULL, NULL));
+    }
+
+    if (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP32)) {
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32));
+        ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, 0));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0,
+                                        NULL));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE,
+                  uct_ep_atomic_cswap32(ep, 0, 0, 0, 0, NULL, NULL));
+    }
+
+    EXPECT_UCS_OK(uct_ep_am_short(ep, 0, 0, NULL, 0));
+    EXPECT_EQ(0l, uct_ep_am_bcopy(ep, 0, empty_pack_cb, NULL, 0));
+    EXPECT_FALSE(UCS_STATUS_IS_ERR(uct_ep_am_zcopy(ep, 0, NULL, 0, iov, iovcnt,
+                                                   0, NULL)));
+
+    if (check_caps(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)) {
+        // we do not have partial tag offload support
+        ASSERT_TRUE(check_caps(UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+                               UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                               UCT_IFACE_FLAG_TAG_RNDV_ZCOPY));
+
+        EXPECT_UCS_OK(uct_ep_tag_eager_short(ep, 0ul, NULL, 0));
+        EXPECT_EQ(0l, uct_ep_tag_eager_bcopy(ep, 0ul, 0ul, empty_pack_cb,
+                                             NULL, 0));
+        EXPECT_FALSE(UCS_STATUS_IS_ERR(uct_ep_tag_eager_zcopy(ep, 0ul, 0ul, iov,
+                                                              iovcnt, 0u,
+                                                              NULL)));
+        void *rndv_op = uct_ep_tag_rndv_zcopy(ep, 0ul, NULL, 0u, iov, iovcnt,
+                                              0u, NULL);
+        EXPECT_FALSE(UCS_PTR_IS_ERR(rndv_op));
+        EXPECT_UCS_OK(uct_ep_tag_rndv_cancel(ep, rndv_op));
+        EXPECT_UCS_OK(uct_ep_tag_rndv_request(ep, 0ul, NULL, 0u, 0u));
+    }
+
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+}
+
+// Check that outstanding get ops purged gracefully when ep is closed.
+// Also check that get resources taken by those ops are released.
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_BCOPY))
+{
+    mapped_buffer sendbuf(128, 0ul, *m_e1);
+    mapped_buffer recvbuf(128, 0ul, *m_e2);
+
+    post_max_reads(m_e1, sendbuf, recvbuf);
+
+    scoped_log_handler hide_warn(hide_warns_logger);
+
+    unsigned flags      = UCT_FLUSH_FLAG_CANCEL;
+    ucs_time_t deadline = ucs::get_deadline();
+    ucs_status_t status;
+    do {
+        ASSERT_EQ(1ul, m_e1->num_eps());
+        status = uct_ep_flush(m_e1->ep(0), flags, NULL);
+        progress();
+        if (flags & UCT_FLUSH_FLAG_CANCEL) {
+            ASSERT_UCS_OK_OR_INPROGRESS(status);
+            flags = UCT_FLUSH_FLAG_LOCAL;
+            continue;
+        }
+    } while (((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) &&
+             (ucs_get_time() < deadline));
+
+    m_e1->destroy_eps();
+    flush();
+    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+}
+
+UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_get_limit)
 
 uint32_t test_rc_flow_control::m_am_rx_count = 0;
 
@@ -289,7 +569,7 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
     send_am_and_flush(m_e1, wnd);
 
     m_e2->destroy_ep(0);
-    ASSERT_TRUE(rc_iface(m_e2)->tx.arbiter.current == NULL);
+    ASSERT_TRUE(ucs_arbiter_is_empty(&rc_iface(m_e2)->tx.arbiter));
 }
 
 /* Check that user callback passed to uct_ep_pending_purge is not
@@ -312,318 +592,7 @@ UCS_TEST_P(test_rc_flow_control, fc_disabled_flush)
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control)
 
 
-#ifdef IBV_HW_TM
-// TODO: Remove when declared in UCT
-#define UCT_RC_MLX5_TAG_BCOPY_MAX     131072
-
-size_t test_rc_mp_xrq::m_rx_counter = 0;
-
-test_rc_mp_xrq::test_rc_mp_xrq() : m_hold_uct_desc(false),
-                                   m_first_received(false),
-                                   m_last_received(false)
-{
-    m_max_hdr        = sizeof(ibv_tmh) + sizeof(ibv_rvh);
-    m_uct_comp.count = 512; // We do not need completion func to be invoked
-    m_uct_comp.func  = NULL;
-}
-
-uct_rc_mlx5_iface_common_t* test_rc_mp_xrq::rc_mlx5_iface(entity &e)
-{
-    return ucs_derived_of(e.iface(), uct_rc_mlx5_iface_common_t);
-}
-
-void test_rc_mp_xrq::set_env_var_or_skip(void *config, const char *var,
-                                         const char *val)
-{
-    ucs_status_t status = uct_config_modify(config, var, val);
-    if (status != UCS_OK) {
-        ucs_warn("%s", ucs_status_string(status));
-        UCS_TEST_SKIP_R(std::string("Can't set ") + var);
-    }
-}
-
-void test_rc_mp_xrq::init()
-{
-    set_env_var_or_skip(m_iface_config, "RC_TM_NUM_STRIDES", "8");
-    set_env_var_or_skip(m_iface_config, "RC_TM_ENABLE", "y");
-    set_env_var_or_skip(m_md_config, "MLX5_DEVX_OBJECTS", "dct,dcsrq,rcsrq,rcqp");
-
-    uct_test::init();
-
-    uct_iface_params params;
-    params.field_mask  = UCT_IFACE_PARAM_FIELD_RX_HEADROOM     |
-                         UCT_IFACE_PARAM_FIELD_OPEN_MODE       |
-                         UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB  |
-                         UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG |
-                         UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB   |
-                         UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG;
-
-    // tl and dev names are taken from resources via GetParam, no need
-    // to fill it here
-    params.rx_headroom = 0;
-    params.open_mode   = UCT_IFACE_OPEN_MODE_DEVICE;
-    params.eager_cb    = unexp_eager;
-    params.eager_arg   = reinterpret_cast<void*>(this);
-    params.rndv_cb     = unexp_rndv;
-    params.rndv_arg    = reinterpret_cast<void*>(this);
-
-    entity *sender = uct_test::create_entity(params);
-    m_entities.push_back(sender);
-
-    entity *receiver = uct_test::create_entity(params);
-    m_entities.push_back(receiver);
-
-    if (!UCT_RC_MLX5_MP_ENABLED(rc_mlx5_iface(test_rc_mp_xrq::sender()))) {
-        UCS_TEST_SKIP_R("No MP XRQ support");
-    }
-
-    sender->connect(0, *receiver, 0);
-
-    uct_iface_set_am_handler(receiver->iface(), AM_ID, am_handler, this, 0);
-}
-
-void test_rc_mp_xrq::send_eager_bcopy(mapped_buffer *buf)
-{
-    ssize_t len = uct_ep_tag_eager_bcopy(sender().ep(0), 0x11,
-                                         reinterpret_cast<uint64_t>(this),
-                                         mapped_buffer::pack,
-                                         reinterpret_cast<void*>(buf), 0);
-
-    EXPECT_EQ(buf->length(), static_cast<size_t>(len));
-}
-
-void test_rc_mp_xrq::send_eager_zcopy(mapped_buffer *buf)
-{
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf->ptr(), buf->length(), buf->memh(),
-                            sender().iface_attr().cap.tag.eager.max_iov);
-
-    ucs_status_t status = uct_ep_tag_eager_zcopy(sender().ep(0), 0x11,
-                                                 reinterpret_cast<uint64_t>(this),
-                                                 iov, iovcnt, 0, &m_uct_comp);
-    ASSERT_UCS_OK_OR_INPROGRESS(status);
-}
-
-void test_rc_mp_xrq::send_rndv_zcopy(mapped_buffer *buf)
-{
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf->ptr(), buf->length(), buf->memh(),
-                            sender().iface_attr().cap.tag.rndv.max_iov);
-
-    uint64_t dummy_hdr       = 0xFAFA;
-    ucs_status_ptr_t rndv_op = uct_ep_tag_rndv_zcopy(sender().ep(0), 0x11, &dummy_hdr,
-                                                     sizeof(dummy_hdr), iov,
-                                                     iovcnt, 0, &m_uct_comp);
-    ASSERT_FALSE(UCS_PTR_IS_ERR(rndv_op));
-
-    // There will be no real RNDV performed, cancel the op to avoid mpool
-    // warning on exit
-    ASSERT_UCS_OK(uct_ep_tag_rndv_cancel(sender().ep(0),rndv_op));
-}
-
-void test_rc_mp_xrq::send_rndv_request(mapped_buffer *buf)
-{
-    size_t size = sender().iface_attr().cap.tag.rndv.max_hdr;
-    void *hdr   = alloca(size);
-
-    ASSERT_UCS_OK(uct_ep_tag_rndv_request(sender().ep(0), 0x11, hdr, size, 0));
-}
-
-void test_rc_mp_xrq::send_am_bcopy(mapped_buffer *buf)
-{
-    ssize_t len = uct_ep_am_bcopy(sender().ep(0), AM_ID, mapped_buffer::pack,
-                                  reinterpret_cast<void*>(buf), 0);
-
-    EXPECT_EQ(buf->length(), static_cast<size_t>(len));
-}
-
-void test_rc_mp_xrq::test_common(send_func sfunc, size_t num_segs,
-                                 size_t exp_segs, bool is_eager)
-{
-    size_t seg_size  = rc_mlx5_iface(sender())->super.super.config.seg_size;
-    size_t seg_num   = is_eager ? num_segs : 1;
-    size_t exp_val   = is_eager ? exp_segs : 1;
-    size_t size      = (seg_size * seg_num) - m_max_hdr;
-    m_rx_counter     = 0;
-    m_first_received = m_last_received = false;
-
-    EXPECT_TRUE(size <= sender().iface_attr().cap.tag.eager.max_bcopy);
-    mapped_buffer buf(size, SEND_SEED, sender());
-
-    (this->*sfunc)(&buf);
-
-    wait_for_value(&m_rx_counter, exp_val, true);
-    EXPECT_EQ(exp_val, m_rx_counter);
-    EXPECT_EQ(is_eager, m_first_received); // relevant for eager only
-    EXPECT_EQ(is_eager, m_last_received);  // relevant for eager only
-}
-
-ucs_status_t test_rc_mp_xrq::handle_uct_desc(void *data, unsigned flags)
-{
-    if ((flags & UCT_CB_PARAM_FLAG_DESC) && m_hold_uct_desc) {
-        m_uct_descs.push_back(data);
-        return UCS_INPROGRESS;
-    }
-
-    return UCS_OK;
-}
-
-ucs_status_t test_rc_mp_xrq::am_handler(void *arg, void *data, size_t length,
-                                        unsigned flags)
-{
-   EXPECT_TRUE(flags & UCT_CB_PARAM_FLAG_FIRST);
-   EXPECT_FALSE(flags & UCT_CB_PARAM_FLAG_MORE);
-
-   m_rx_counter++;
-
-   test_rc_mp_xrq *self = reinterpret_cast<test_rc_mp_xrq*>(arg);
-   return self->handle_uct_desc(data, flags);
-}
-
-ucs_status_t test_rc_mp_xrq::unexp_handler(void *data, unsigned flags,
-                                           uint64_t imm, void **context)
-{
-    void *self = reinterpret_cast<void*>(this);
-
-    if (flags & UCT_CB_PARAM_FLAG_FIRST) {
-        // Set the message context which will be passed back with the rest of
-        // message fragments
-        *context         = self;
-        m_first_received = true;
-
-    } else {
-        // Check that the correct message context is passed with all fragments
-        EXPECT_EQ(self, *context);
-    }
-
-    if (!(flags & UCT_CB_PARAM_FLAG_MORE)) {
-        // Last message should contain valid immediate value
-        EXPECT_EQ(reinterpret_cast<uint64_t>(this), imm);
-        m_last_received = true;
-    } else {
-        // Immediate value is passed with the last message only
-        EXPECT_EQ(0ul, imm);
-    }
-
-
-    return handle_uct_desc(data, flags);
-}
-
-ucs_status_t test_rc_mp_xrq::unexp_eager(void *arg, void *data, size_t length,
-                                         unsigned flags, uct_tag_t stag,
-                                         uint64_t imm, void **context)
-{
-    test_rc_mp_xrq *self = reinterpret_cast<test_rc_mp_xrq*>(arg);
-
-    m_rx_counter++;
-
-    return self->unexp_handler(data, flags, imm, context);
-}
-
-ucs_status_t test_rc_mp_xrq::unexp_rndv(void *arg, unsigned flags,
-                                        uint64_t stag, const void *header,
-                                        unsigned header_length,
-                                        uint64_t remote_addr, size_t length,
-                                        const void *rkey_buf)
-{
-    EXPECT_FALSE(flags & UCT_CB_PARAM_FLAG_FIRST);
-    EXPECT_FALSE(flags & UCT_CB_PARAM_FLAG_MORE);
-
-    m_rx_counter++;
-
-    return UCS_OK;
-}
-
-UCS_TEST_P(test_rc_mp_xrq, config)
-{
-    uct_rc_mlx5_iface_common_t *iface = rc_mlx5_iface(sender());
-
-    // MP XRQ is supported with tag offload only
-    EXPECT_TRUE(UCT_RC_MLX5_TM_ENABLED(iface));
-
-    // With MP XRQ segment size should be equal to MTU, because HW generates
-    // CQE per each received MTU
-    size_t mtu = uct_ib_mtu_value(uct_ib_iface_port_attr(&(iface)->super.super)->active_mtu);
-    EXPECT_EQ(mtu, iface->super.super.config.seg_size);
-
-    const uct_iface_attr *attrs = &sender().iface_attr();
-
-    // Max tag bcopy is limited by tag tx memory pool
-    EXPECT_EQ(iface->tm.max_bcopy - sizeof(ibv_tmh),
-              attrs->cap.tag.eager.max_bcopy);
-    EXPECT_GT(attrs->cap.tag.eager.max_bcopy,
-              iface->super.super.config.seg_size);
-
-    // Max tag zcopy is limited by maximal IB message size
-    EXPECT_EQ(uct_ib_iface_port_attr(&iface->super.super)->max_msg_sz - sizeof(ibv_tmh),
-              attrs->cap.tag.eager.max_zcopy);
-
-    // Maximal AM size should not exceed segment size, so it would always
-    // arrive in one-fragment packet (with header it should be strictly less)
-    EXPECT_LT(attrs->cap.am.max_bcopy, iface->super.super.config.seg_size);
-    EXPECT_LT(attrs->cap.am.max_zcopy, iface->super.super.config.seg_size);
-}
-
-UCS_TEST_P(test_rc_mp_xrq, desc_release)
-{
-    m_hold_uct_desc = true; // We want to "hold" UCT memory descriptors
-    std::pair<send_func, bool> sfuncs[5] = {
-              std::make_pair(&test_rc_mp_xrq::send_eager_bcopy,  true),
-              std::make_pair(&test_rc_mp_xrq::send_eager_zcopy,  true),
-              std::make_pair(&test_rc_mp_xrq::send_rndv_zcopy,   false),
-              std::make_pair(&test_rc_mp_xrq::send_rndv_request, false),
-              std::make_pair(&test_rc_mp_xrq::send_am_bcopy,     false)
-    };
-
-    for (int i = 0; i < 5; ++i) {
-        test_common(sfuncs[i].first, 3, 3, sfuncs[i].second);
-    }
-
-    for (ucs::ptr_vector<void>::const_iterator iter = m_uct_descs.begin();
-         iter != m_uct_descs.end(); ++iter)
-    {
-        uct_iface_release_desc(*iter);
-    }
-}
-
-UCS_TEST_P(test_rc_mp_xrq, am)
-{
-    test_common(&test_rc_mp_xrq::send_am_bcopy, 1, 1, false);
-}
-
-UCS_TEST_P(test_rc_mp_xrq, bcopy_eager_only)
-{
-    test_common(&test_rc_mp_xrq::send_eager_bcopy, 1);
-}
-
-UCS_TEST_P(test_rc_mp_xrq, zcopy_eager_only)
-{
-    test_common(&test_rc_mp_xrq::send_eager_zcopy, 1);
-}
-
-UCS_TEST_P(test_rc_mp_xrq, bcopy_eager)
-{
-    test_common(&test_rc_mp_xrq::send_eager_bcopy, 5, 5);
-}
-
-UCS_TEST_P(test_rc_mp_xrq, zcopy_eager)
-{
-    test_common(&test_rc_mp_xrq::send_eager_zcopy, 5, 5);
-}
-
-UCS_TEST_P(test_rc_mp_xrq, rndv_zcopy)
-{
-    test_common(&test_rc_mp_xrq::send_rndv_zcopy, 1, 1, false);
-}
-
-UCS_TEST_P(test_rc_mp_xrq, rndv_request)
-{
-    test_common(&test_rc_mp_xrq::send_rndv_request, 1, 1, false);
-}
-
-_UCT_INSTANTIATE_TEST_CASE(test_rc_mp_xrq, rc_mlx5)
-#endif
-
-
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 void test_rc_flow_control_stats::test_general(int wnd, int soft_thresh,
                                               int hard_thresh)
@@ -680,3 +649,70 @@ UCS_TEST_P(test_rc_flow_control_stats, soft_request)
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control_stats)
 
 #endif
+
+#ifdef HAVE_MLX5_HW
+extern "C" {
+#include <uct/ib/rc/accel/rc_mlx5_common.h>
+}
+#endif
+
+test_uct_iface_attrs::attr_map_t test_rc_iface_attrs::get_num_iov() {
+    if (has_transport("rc_mlx5")) {
+        return get_num_iov_mlx5_common(0ul);
+    } else {
+        EXPECT_TRUE(has_transport("rc_verbs"));
+        m_e->connect(0, *m_e, 0);
+        uct_rc_verbs_ep_t *ep = ucs_derived_of(m_e->ep(0), uct_rc_verbs_ep_t);
+        uint32_t max_sge;
+        ASSERT_UCS_OK(uct_ib_qp_max_send_sge(ep->qp, &max_sge));
+
+        attr_map_t iov_map;
+        iov_map["put"] = iov_map["get"] = max_sge;
+        iov_map["am"]  = max_sge - 1; // 1 iov reserved for am header
+        return iov_map;
+    }
+}
+
+test_uct_iface_attrs::attr_map_t
+test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
+{
+    attr_map_t iov_map;
+
+#ifdef HAVE_MLX5_HW
+    // For RMA iovs can use all WQE space, remainig from control and
+    // remote address segments (and AV if relevant)
+    size_t rma_iov = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
+                      (sizeof(struct mlx5_wqe_raddr_seg) +
+                       sizeof(struct mlx5_wqe_ctrl_seg) + av_size)) /
+                     sizeof(struct mlx5_wqe_data_seg);
+
+    iov_map["put"] = iov_map["get"] = rma_iov;
+
+    // For am zcopy just small constant number of iovs is allowed
+    // (to preserve some inline space for AM zcopy header)
+    iov_map["am"]  = UCT_IB_MLX5_AM_ZCOPY_MAX_IOV;
+
+#if IBV_HW_TM
+    if (UCT_RC_MLX5_TM_ENABLED(ucs_derived_of(m_e->iface(),
+                                              uct_rc_mlx5_iface_common_t))) {
+        // For TAG eager zcopy iovs can use all WQE space, remainig from control
+        // segment, TMH header (+ inline data segment) and AV (if relevant)
+        iov_map["tag"] = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
+                          (sizeof(struct mlx5_wqe_ctrl_seg) +
+                           sizeof(struct mlx5_wqe_inl_data_seg) +
+                           sizeof(struct ibv_tmh) + av_size)) /
+                         sizeof(struct mlx5_wqe_data_seg);
+    }
+#endif // IBV_HW_TM
+#endif // HAVE_MLX5_HW
+
+    return iov_map;
+}
+
+UCS_TEST_P(test_rc_iface_attrs, iface_attrs)
+{
+    basic_iov_test();
+}
+
+UCT_INSTANTIATE_RC_TEST_CASE(test_rc_iface_attrs)
+

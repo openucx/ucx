@@ -19,6 +19,7 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/sys/string.h>
 
 
 enum {
@@ -45,12 +46,17 @@ typedef struct ucp_context_config {
     /** The percentage allowed for performance difference between rendezvous
      *  and the eager_zcopy protocol */
     double                                 rndv_perf_diff;
+    /** Maximal allowed ratio between slowest and fastest lane in a multi-lane
+     *  protocol. Lanes slower than the specified ratio will not be used */
+    double                                 multi_lane_max_ratio;
     /** Threshold for switching UCP to zero copy protocol */
     size_t                                 zcopy_thresh;
     /** Communication scheme in RNDV protocol */
     ucp_rndv_mode_t                        rndv_mode;
+    /** RKEY PTR segment size */
+    size_t                                 rkey_ptr_seg_size;
     /** Estimation of bcopy bandwidth */
-    size_t                                 bcopy_bw;
+    double                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */
     size_t                                 seg_size;
     /** RNDV pipeline fragment size */
@@ -63,6 +69,10 @@ typedef struct ucp_context_config {
     /** Upper bound for posting tm offload receives with internal UCP
      *  preregistered bounce buffers. */
     size_t                                 tm_max_bb_size;
+    /** Enabling SW rndv protocol with tag offload mode */
+    int                                    tm_sw_rndv;
+    /** Pack debug information in worker address */
+    int                                    address_debug_info;
     /** Maximal size of worker name for debugging */
     unsigned                               max_worker_name;
     /** Atomic mode */
@@ -105,6 +115,8 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */
     int                                    warn_invalid_config;
+    /** This config environment prefix */
+    char                                   *env_prefix;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
 };
@@ -114,12 +126,12 @@ struct ucp_config {
  * UCP communication resource descriptor
  */
 typedef struct ucp_tl_resource_desc {
-    uct_tl_resource_desc_t        tl_rsc;     /* UCT resource descriptor */
+    uct_tl_resource_desc_t        tl_rsc;       /* UCT resource descriptor */
     uint16_t                      tl_name_csum; /* Checksum of transport name */
-    ucp_rsc_index_t               md_index;   /* Memory domain index (within the context) */
-    ucp_rsc_index_t               dev_index;  /* Arbitrary device index. Resources
-                                                 with same index have same device name. */
-    uint8_t                       flags;      /* Flags that describe resource specifics */
+    ucp_md_index_t                md_index;     /* Memory domain index (within the context) */
+    ucp_rsc_index_t               dev_index;    /* Arbitrary device index. Resources
+                                                   with same index have same device name. */
+    uint8_t                       flags;        /* Flags that describe resource specifics */
 } ucp_tl_resource_desc_t;
 
 
@@ -161,11 +173,11 @@ typedef struct ucp_context {
     ucp_rsc_index_t               num_cmpts;  /* Number of UCT components */
 
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
-    ucp_rsc_index_t               num_mds;    /* Number of memory domains */
+    ucp_md_index_t                num_mds;    /* Number of memory domains */
 
     /* List of MDs which detect non host memory type */
-    ucp_rsc_index_t               mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
-    ucp_rsc_index_t               num_mem_type_detect_mds;  /* Number of mem type MDs */
+    ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
+    ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
     ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
@@ -205,20 +217,26 @@ typedef struct ucp_context {
         } *alloc_methods;
         unsigned                  num_alloc_methods;
 
-        /* Cached map of components which support CM capability or 0 if disabled
-         * by user */
+        /* Cached map of components which support CM capability */
         uint64_t                  cm_cmpts_bitmap;
 
         /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
         uint64_t                  sockaddr_aux_rscs_bitmap;
 
         /* Array of sockaddr transports indexes.
-         * The indexes appear it the configured priority order */
+         * The indexes appear in the configured priority order */
         ucp_rsc_index_t           sockaddr_tl_ids[UCP_MAX_RESOURCES];
-        unsigned                  num_sockaddr_tls;
+        ucp_rsc_index_t           num_sockaddr_tls;
+        /* Array of CMs indexes. The indexes appear in the configured priority
+         * order. */
+        ucp_rsc_index_t           cm_cmpt_idxs[UCP_MAX_RESOURCES];
+        ucp_rsc_index_t           num_cm_cmpts;
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
+        
+        /* Config environment prefix used to create the context */
+        char                      *env_prefix;
 
     } config;
 
@@ -302,13 +320,13 @@ typedef struct ucp_tl_iface_atomic_flags {
 #define UCP_CONTEXT_CHECK_FEATURE_FLAGS(_context, _flags, _action) \
     do { \
         if (ENABLE_PARAMS_CHECK && \
-            ucs_unlikely(!((_context)->config.features & (_flags)))) { \
+            ucs_unlikely(!((_context)->config.features & (_flags)))) {  \
             size_t feature_list_str_max = 512; \
-            char *feature_list_str = ucs_alloca(feature_list_str_max); \
+            char *feature_list_str = ucs_alloca(feature_list_str_max);  \
             ucs_error("feature flags %s were not set for ucp_init()", \
-                      ucp_feature_flags_str((_flags) & \
-                                            ~(_context)->config.features, \
-                      feature_list_str, feature_list_str_max)); \
+                      ucs_flags_str(feature_list_str, feature_list_str_max,  \
+                                    (_flags) & ~(_context)->config.features, \
+                                    ucp_feature_str)); \
             _action; \
         } \
     } while (0)
@@ -324,7 +342,7 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 
 extern ucp_am_handler_t ucp_am_handlers[];
-
+extern const char       *ucp_feature_str[];
 
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length);
@@ -387,16 +405,17 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 }
 
 static UCS_F_ALWAYS_INLINE double
-ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)
+ucp_tl_iface_latency(ucp_context_h context, const uct_linear_growth_t *latency)
 {
-    return iface_attr->latency.overhead +
-           (iface_attr->latency.growth * context->config.est_num_eps);
+    return latency->overhead +
+           (latency->growth * context->config.est_num_eps);
 }
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwidth)
 {
-    return bandwidth->dedicated + (bandwidth->shared / context->config.est_num_ppn);
+    return bandwidth->dedicated +
+           (bandwidth->shared / context->config.est_num_ppn);
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
@@ -439,5 +458,8 @@ ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length
 }
 
 uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
+
+uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
+                                       ucp_rsc_index_t dev_idx);
 
 #endif

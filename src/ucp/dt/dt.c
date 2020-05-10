@@ -40,7 +40,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_unpack,
                                       mem_type, md_index, memh, &md_map,
                                       &rkey_bundle);
     if (status != UCS_OK) {
-        ucs_error("failed to register buffer with mem type domian");
+        ucs_error("failed to register buffer with mem type domain %s",
+                  ucs_memory_type_names[mem_type]);
         return status;
     }
 
@@ -78,14 +79,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_pack,
     status = ucp_mem_type_reg_buffers(worker, (void *)src, length, mem_type,
                                       md_index, memh, &md_map, &rkey_bundle);
     if (status != UCS_OK) {
-        ucs_error("failed to register buffer with mem type domian");
+        ucs_error("failed to register buffer with mem type domain %s",
+                  ucs_memory_type_names[mem_type]);
         return status;
     }
 
     status = uct_ep_get_short(ep->uct_eps[lane], dest, length,
                               (uint64_t)src, rkey_bundle.rkey);
     if (status != UCS_OK) {
-        ucs_error("uct_ep_put_short() failed %s", ucs_status_string(status));
+        ucs_error("uct_ep_get_short() failed %s", ucs_status_string(status));
     }
 
     ucp_mem_type_unreg_buffers(worker, mem_type, md_index, memh,
@@ -106,9 +108,7 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if ((ucs_likely(UCP_MEM_IS_HOST(mem_type))) ||
-            (ucs_likely(UCP_MEM_IS_CUDA_MANAGED(mem_type))) ||
-            (ucs_likely(UCP_MEM_IS_ROCM_MANAGED(mem_type)))) {
+        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
             UCS_PROFILE_CALL(ucs_memcpy_relaxed, dest,
                              UCS_PTR_BYTE_OFFSET(src, state->offset), length);
         } else {

@@ -12,6 +12,7 @@
 #include "math.h"
 #include "sys.h"
 #include <ucs/config/parser.h>
+#include <ucs/arch/bitops.h>
 
 #include <string.h>
 #include <ctype.h>
@@ -60,7 +61,7 @@ void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max)
             break;
         case 't':
             t = time(NULL);
-            strftime(p, end - p, "%Y-%m-%d-%H:%M:%S", localtime(&t));
+            strftime(p, end - p, "%Y-%m-%d-%H-%M-%S", localtime(&t));
             pf = pp + 2;
             p += strlen(p);
             break;
@@ -128,22 +129,23 @@ size_t ucs_string_quantity_prefix_value(char prefix)
     }
 }
 
-void ucs_memunits_to_str(size_t value, char *buf, size_t max)
+char *ucs_memunits_to_str(size_t value, char *buf, size_t max)
 {
     static const char * suffixes[] = {"", "K", "M", "G", "T", NULL};
 
     const char **suffix;
 
     if (value == SIZE_MAX) {
-        strncpy(buf, "(inf)", max);
+        ucs_strncpy_safe(buf, "(inf)", max);
     } else {
         suffix = &suffixes[0];
         while ((value >= 1024) && ((value % 1024) == 0) && *(suffix + 1)) {
             value /= 1024;
             ++suffix;
         }
-        snprintf(buf, max, "%zu%s", value, *suffix);
+        ucs_snprintf_safe(buf, max, "%zu%s", value, *suffix);
     }
+    return buf;
 }
 
 ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
@@ -265,5 +267,26 @@ const char * ucs_str_dump_hex(const void* data, size_t length, char *buf,
         ++i;
     }
     *p = 0;
+    return buf;
+}
+
+const char* ucs_flags_str(char *buf, size_t max,
+                          uint64_t flags, const char **str_table)
+{
+    size_t i, len = 0;
+
+    for (i = 0; *str_table; ++str_table, ++i) {
+        if (flags & UCS_BIT(i)) { /* not using ucs_for_each_bit to silence coverity */
+            snprintf(buf + len, max - len, "%s,", *str_table);
+            len = strlen(buf);
+        }
+    }
+
+    if (len > 0) {
+        buf[len - 1] = '\0'; /* remove last ',' */
+    } else {
+        buf[0] = '\0';
+    }
+
     return buf;
 }

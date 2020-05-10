@@ -15,6 +15,6 @@ git remote show origin &>/dev/null || git remote add origin https://github.com/o
 git fetch --all
 git checkout -t origin/master -f
 git pull
-cp -f ../doc/doxygen-doc/ucx.pdf ./
+cp -f ../docs/doxygen-doc/ucx.pdf ./
 git commit ucx.pdf -m "update ucx.pdf for $rev"
 git push

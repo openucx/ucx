@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "gdr_copy_md.h"
 
 #include <string.h>
@@ -13,6 +17,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
+#include <ucs/profile/profile.h>
 #include <ucm/api/ucm.h>
 #include <uct/cuda/base/cuda_iface.h>
 
@@ -98,9 +103,10 @@ static ucs_status_t uct_gdr_copy_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_gdr_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
-                              unsigned flags, uct_gdr_copy_mem_t *mem_hndl)
+UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
+                 (uct_md, address, length, flags, mem_hndl),
+                 uct_md_h uct_md, void *address, size_t length,
+                 unsigned flags, uct_gdr_copy_mem_t *mem_hndl)
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     CUdeviceptr d_ptr     = ((CUdeviceptr )(char *) address);
@@ -132,7 +138,7 @@ uct_gdr_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
     }
 
     ucs_trace("registered memory:%p..%p length:%lu info.va:0x%"PRIx64" bar_ptr:%p",
-              address, address + length, length,
+              address, UCS_PTR_BYTE_OFFSET(address, length), length,
               mem_hndl->info.va, mem_hndl->bar_ptr);
 
     return UCS_OK;
@@ -151,9 +157,10 @@ err:
     return UCS_ERR_IO_ERROR;
 }
 
-static ucs_status_t uct_gdr_copy_mem_dereg_internal(uct_md_h uct_md, uct_gdr_copy_mem_t *mem_hndl)
+UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_dereg_internal,
+                 (uct_md, mem_hndl),
+                 uct_md_h uct_md, uct_gdr_copy_mem_t *mem_hndl)
 {
-
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     int ret;
 
@@ -188,10 +195,12 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
     }
 
     start = ucs_align_down_pow2_ptr(address, GPU_PAGE_SIZE);
-    end   = ucs_align_up_pow2_ptr(address + length, GPU_PAGE_SIZE);
+    end   = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(address, length), GPU_PAGE_SIZE);
     ucs_assert_always(start <= end);
 
-    status = uct_gdr_copy_mem_reg_internal(uct_md, start, end - start, 0, mem_hndl);
+    status = uct_gdr_copy_mem_reg_internal(uct_md, start,
+                                           UCS_PTR_BYTE_DIFF(start, end),
+                                           0, mem_hndl);
     if (status != UCS_OK) {
         ucs_free(mem_hndl);
         return status;
@@ -425,6 +434,7 @@ uct_component_t uct_gdr_copy_component = {
         .table          = uct_gdr_copy_md_config_table,
         .size           = sizeof(uct_gdr_copy_md_config_t),
     },
+    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_gdr_copy_component),
     .flags              = 0
 };

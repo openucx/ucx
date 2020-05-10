@@ -18,7 +18,7 @@
 #include <ucs/type/class.h>
 #include <endian.h>
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_fc_stats_class = {
     .name = "rc_fc",
     .num_counters = UCT_RC_FC_STAT_LAST,
@@ -90,7 +90,8 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
     UCS_STATS_NODE_FREE(fc->stats);
 }
 
-UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num)
+UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
+                    const uct_ep_params_t *params)
 {
     ucs_status_t status;
 
@@ -101,6 +102,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num)
     if (status != UCS_OK) {
         return status;
     }
+
+    self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
 
     status = uct_rc_fc_init(&self->fc, iface->config.fc_wnd_size
                             UCS_STATS_ARG(self->super.stats));
@@ -157,6 +160,22 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_iface_resources(uct_rc_iface_send_op_t *op, int is_get_zcopy)
+{
+    uct_rc_iface_send_desc_t *desc;
+    uct_rc_iface_t *iface;
+
+    if (is_get_zcopy) {
+        ++op->iface->tx.reads_available;
+        return;
+    }
+
+    desc  = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+    iface = ucs_container_of(ucs_mpool_obj_owner(desc), uct_rc_iface_t, tx.mp);
+    ++iface->tx.reads_available;
+}
+
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
 {
     uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
@@ -165,8 +184,8 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
 
+    uct_rc_op_release_iface_resources(op, 0);
     uct_invoke_completion(desc->super.user_comp, UCS_OK);
-
     ucs_mpool_put(desc);
 }
 
@@ -178,8 +197,15 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
     VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
-
+    uct_rc_op_release_iface_resources(op, 0);
     ucs_mpool_put(desc);
+}
+
+void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
+                                            const void *resp)
+{
+    uct_rc_op_release_iface_resources(op, 1);
+    uct_rc_ep_send_op_completion_handler(op, resp);
 }
 
 void uct_rc_ep_send_op_completion_handler(uct_rc_iface_send_op_t *op,
@@ -221,6 +247,7 @@ ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
 }
 
 ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
+                                                  ucs_arbiter_group_t *group,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg)
 {
@@ -239,7 +266,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     } else {
-        ep    = ucs_container_of(ucs_arbiter_elem_group(elem), uct_rc_ep_t, arb_group);
+        ep    = ucs_container_of(group, uct_rc_ep_t, arb_group);
         iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
         if (!uct_rc_iface_has_tx_resources(iface)) {
             /* No iface resources */
@@ -254,6 +281,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
 }
 
 static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+                                                          ucs_arbiter_group_t *group,
                                                           ucs_arbiter_elem_t *elem,
                                                           void *arg)
 {
@@ -261,9 +289,8 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t,
                                                        priv);
-    uct_rc_ep_t UCS_V_UNUSED *ep    = ucs_container_of(
-                                          ucs_arbiter_elem_group(elem),
-                                          uct_rc_ep_t, arb_group);
+    uct_rc_ep_t UCS_V_UNUSED *ep    = ucs_container_of(group, uct_rc_ep_t,
+                                                       arb_group);
     uct_rc_fc_request_t *freq;
 
     /* Invoke user's callback only if it is not internal FC message */
@@ -323,15 +350,26 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
 
             if (op->user_comp != NULL) {
                 /* This must be uct_rc_ep_get_bcopy_handler,
-                 * uct_rc_ep_send_completion_proxy_handler,
+                 * uct_rc_ep_get_bcopy_handler_no_completion,
+                 * uct_rc_ep_get_zcopy_completion_handler,
+                 * uct_rc_ep_flush_op_completion_handler or
                  * one of the atomic handlers,
                  * so invoke user completion */
                 uct_invoke_completion(op->user_comp, status);
             }
+
+            /* Need to release rdma_read resources taken by get operations  */
+            if ((op->handler == uct_rc_ep_get_bcopy_handler) ||
+                (op->handler == uct_rc_ep_get_bcopy_handler_no_completion)) {
+                uct_rc_op_release_iface_resources(op, 0);
+            } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
+                uct_rc_op_release_iface_resources(op, 1);
+            }
         }
         op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                        UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
-        if (op->handler == uct_rc_ep_send_op_completion_handler) {
+        if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
+            (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
             uct_rc_iface_put_send_op(op);
         } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
             ucs_mpool_put(op);

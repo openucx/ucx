@@ -17,35 +17,6 @@
 __KHASH_IMPL(ucp_ep_match, static UCS_F_MAYBE_UNUSED inline, uint64_t,
              ucp_ep_match_entry_t, 1, kh_int64_hash_func, kh_int64_hash_equal);
 
-/* `_elem` and `_next` are `ucs_list_link_t*` objects */
-#define ucp_ep_match_list_for_each(_elem, _head) \
-    for (_elem = (_head)->next; (_elem) != NULL; _elem = (_elem)->next)
-
-static inline void ucp_ep_match_list_add_tail(ucs_list_link_t *head,
-                                              ucs_list_link_t *elem)
-{
-    ucs_list_link_t *last;
-
-    last       = head->prev;
-    elem->next = NULL;
-    head->prev = elem;
-
-    if (last == NULL) {
-        elem->prev = NULL;
-        head->next = elem;
-    } else {
-        elem->prev = last;
-        last->next = elem;
-    }
-}
-
-static inline void ucp_ep_match_list_del(ucs_list_link_t *head,
-                                         ucs_list_link_t *elem)
-{
-    (elem->prev ? elem->prev : head)->next = elem->next;
-    (elem->next ? elem->next : head)->prev = elem->prev;
-}
-
 void ucp_ep_match_init(ucp_ep_match_ctx_t *match_ctx)
 {
     kh_init_inplace(ucp_ep_match, &match_ctx->hash);
@@ -57,11 +28,11 @@ void ucp_ep_match_cleanup(ucp_ep_match_ctx_t *match_ctx)
     uint64_t dest_uuid;
 
     kh_foreach(&match_ctx->hash, dest_uuid, entry, {
-        if (entry.exp_ep_q.next != NULL) {
+        if (!ucs_hlist_is_empty(&entry.exp_ep_q)) {
             ucs_warn("match_ctx %p: uuid 0x%"PRIx64" expected queue is not empty",
                      match_ctx, dest_uuid);
         }
-        if (entry.unexp_ep_q.next != NULL) {
+        if (!ucs_hlist_is_empty(&entry.unexp_ep_q)) {
             ucs_warn("match_ctx %p: uuid 0x%"PRIx64" unexpected queue is not empty",
                      match_ctx, dest_uuid);
         }
@@ -82,10 +53,8 @@ ucp_ep_match_entry_get(ucp_ep_match_ctx_t *match_ctx, uint64_t dest_uuid)
     if (ret != 0) {
         /* initialize match list on first use */
         entry->next_conn_sn    = 0;
-        entry->exp_ep_q.next   = NULL;
-        entry->exp_ep_q.prev   = NULL;
-        entry->unexp_ep_q.next = NULL;
-        entry->unexp_ep_q.prev = NULL;
+        ucs_hlist_head_init(&entry->exp_ep_q);
+        ucs_hlist_head_init(&entry->unexp_ep_q);
     }
 
     return entry;
@@ -99,7 +68,7 @@ ucp_ep_conn_sn_t ucp_ep_match_get_next_sn(ucp_ep_match_ctx_t *match_ctx,
 }
 
 static void ucp_ep_match_insert_common(ucp_ep_match_ctx_t *match_ctx,
-                                       ucs_list_link_t *list, ucp_ep_h ep,
+                                       ucs_hlist_head_t *head, ucp_ep_h ep,
                                        uint64_t dest_uuid, const char *title)
 {
     /* NOTE: protect union */
@@ -107,7 +76,7 @@ static void ucp_ep_match_insert_common(ucp_ep_match_ctx_t *match_ctx,
                               UCP_EP_FLAG_FLUSH_STATE_VALID |
                               UCP_EP_FLAG_LISTENER)));
 
-    ucp_ep_match_list_add_tail(list, &ucp_ep_ext_gen(ep)->ep_match.list);
+    ucs_hlist_add_tail(head, &ucp_ep_ext_gen(ep)->ep_match.list);
     ep->flags                              |= UCP_EP_FLAG_ON_MATCH_CTX;
     ucp_ep_ext_gen(ep)->ep_match.dest_uuid  = dest_uuid;
     ucs_trace("match_ctx %p: ep %p added as %s uuid 0x%"PRIx64" conn_sn %d",
@@ -139,8 +108,8 @@ ucp_ep_match_retrieve_common(ucp_ep_match_ctx_t *match_ctx, uint64_t dest_uuid,
                              ucp_ep_flags_t exp_ep_flags, const char *title)
 {
     ucp_ep_match_entry_t *entry;
-    ucs_list_link_t *list, *list_entry;
     ucp_ep_ext_gen_t *ep_ext;
+    ucs_hlist_head_t *head;
     khiter_t iter;
     ucp_ep_h ep;
 
@@ -150,12 +119,12 @@ ucp_ep_match_retrieve_common(ucp_ep_match_ctx_t *match_ctx, uint64_t dest_uuid,
     }
 
     entry = &kh_value(&match_ctx->hash, iter);
-    list  = is_exp ? &entry->exp_ep_q : &entry->unexp_ep_q;
-    ucp_ep_match_list_for_each(list_entry, list) {
-        ep_ext = ucs_container_of(list_entry, ucp_ep_ext_gen_t, ep_match.list);
+    head  = is_exp ? &entry->exp_ep_q : &entry->unexp_ep_q;
+
+    ucs_hlist_for_each(ep_ext, head, ep_match.list) {
         ep = ucp_ep_from_ext_gen(ep_ext);
         if (ep->conn_sn == conn_sn) {
-            ucp_ep_match_list_del(list, &ep_ext->ep_match.list);
+            ucs_hlist_del(head, &ep_ext->ep_match.list);
             ucs_trace("match_ctx %p: matched %s ep %p by uuid 0x%"PRIx64" conn_sn %d",
                       match_ctx, title, ep, dest_uuid, conn_sn);
             ucs_assertv(ucs_test_all_flags(ep->flags,
@@ -203,10 +172,10 @@ void ucp_ep_match_remove_ep(ucp_ep_match_ctx_t *match_ctx, ucp_ep_h ep)
 
     if (ep->flags & UCP_EP_FLAG_DEST_EP) {
         ucs_trace("match_ctx %p: remove unexpected ep %p", match_ctx, ep);
-        ucp_ep_match_list_del(&entry->unexp_ep_q, &ep_ext->ep_match.list);
+        ucs_hlist_del(&entry->unexp_ep_q, &ep_ext->ep_match.list);
     } else {
         ucs_trace("match_ctx %p: remove expected ep %p", match_ctx, ep);
-        ucp_ep_match_list_del(&entry->exp_ep_q, &ep_ext->ep_match.list);
+        ucs_hlist_del(&entry->exp_ep_q, &ep_ext->ep_match.list);
     }
     ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
 }

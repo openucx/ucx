@@ -10,6 +10,8 @@
 #ifndef UCT_TEST_H_
 #define UCT_TEST_H_
 
+#include <common/test.h>
+
 #include <uct/api/uct.h>
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
@@ -21,6 +23,7 @@
 
 #define DEFAULT_DELAY_MS           1.0
 #define DEFAULT_TIMEOUT_SEC       10.0
+#define DEFAULT_VARIANT              0
 
 #define UCT_TEST_CALL_AND_TRY_AGAIN(_func, _res) \
     do { \
@@ -45,9 +48,11 @@ struct resource {
     ucs_cpu_set_t           local_cpus;
     std::string             tl_name;
     std::string             dev_name;
+    std::string             variant_name;
     uct_device_type_t       dev_type;
     ucs::sock_addr_storage  listen_sock_addr;     /* sockaddr to listen on */
     ucs::sock_addr_storage  connect_sock_addr;    /* sockaddr to connect to */
+    int                     variant;
 
     resource();
     resource(uct_component_h component, const std::string& md_name,
@@ -97,6 +102,12 @@ public:
      */
     static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
+    /* By default generate test variant for all tls. If variant is specific to
+     * the particular transport tl_name need to be specified accordingly */
+    static void generate_test_variant(int variant,
+                                      const std::string &variant_name,
+                                      std::vector<resource>& test_res,
+                                      const std::string &tl_name="");
     uct_test();
     virtual ~uct_test();
 
@@ -116,7 +127,8 @@ protected:
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
-        entity(const resource& resource, uct_md_config_t *md_config);
+        entity(const resource& resource, uct_md_config_t *md_config,
+               uct_cm_config_t *cm_config);
 
         void mem_alloc_host(size_t length, uct_allocated_memory_t *mem) const;
 
@@ -135,6 +147,7 @@ protected:
 
         bool is_caps_supported(uint64_t required_flags);
         bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+        bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
         bool check_atomics(uint64_t required_ops, atomic_mode mode);
 
         uct_md_h md() const;
@@ -161,12 +174,13 @@ protected:
 
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
+        void revoke_ep(unsigned index);
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
         void connect(unsigned index, entity& other, unsigned other_index,
                      const ucs::sock_addr_storage &remote_addr,
-                     uct_sockaddr_priv_pack_callback_t pack_cb,
-                     uct_ep_client_connect_cb_t connect_cb,
+                     uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                     uct_cm_ep_client_connect_callback_t connect_cb,
                      uct_ep_disconnect_cb_t disconnect_cb,
                      void *user_data);
         void connect_to_iface(unsigned index, entity& other);
@@ -174,14 +188,14 @@ protected:
                            unsigned other_index);
         void connect_to_sockaddr(unsigned index, entity& other,
                                  const ucs::sock_addr_storage &remote_addr,
-                                 uct_sockaddr_priv_pack_callback_t pack_cb,
-                                 uct_ep_client_connect_cb_t connect_cb,
+                                 uct_cm_ep_priv_data_pack_callback_t pack_cb,
+                                 uct_cm_ep_client_connect_callback_t connect_cb,
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_sata);
 
         static size_t priv_data_do_pack(void *priv_data);
         void accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                    uct_ep_server_connect_cb_t connect_cb,
+                    uct_cm_ep_server_conn_notify_callback_t notify_cb,
                     uct_ep_disconnect_cb_t disconnect_cb,
                     void *user_data);
         void listen(const ucs::sock_addr_storage &listen_addr,
@@ -193,6 +207,14 @@ protected:
         static const std::string server_priv_data;
         static std::string       client_priv_data;
         size_t                   max_conn_priv;
+
+        class scoped_async_lock {
+        public:
+            scoped_async_lock(entity &e);
+            ~scoped_async_lock();
+        private:
+            entity &m_entity;
+        };
 
     private:
         class async_wrapper {
@@ -213,8 +235,9 @@ protected:
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
         void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
-        static ssize_t server_priv_data_cb(void *arg, const char *dev_name,
-                                           void *priv_data);
+        static ssize_t server_priv_data_cb(void *arg,
+                                           const uct_cm_ep_priv_data_pack_args_t
+                                           *pack_args, void *priv_data);
 
 
         const resource              m_resource;
@@ -293,7 +316,8 @@ protected:
                               ucs_time_from_sec(timeout) *
                               ucs::test_time_multiplier();
         while ((ucs_get_time() < deadline) && (!ucs_test_all_flags(*flag, mask))) {
-            short_progress_loop();
+            /* Don't do short_progress_loop() to avoid extra timings */
+            progress();
         }
     }
 
@@ -329,22 +353,34 @@ protected:
     bool is_caps_supported(uint64_t required_flags);
     bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     void check_caps_skip(uint64_t required_flags, uint64_t invalid_flags = 0);
+    bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     bool check_atomics(uint64_t required_ops, atomic_mode mode);
     const entity& ent(unsigned index) const;
     unsigned progress() const;
     void flush(ucs_time_t deadline = ULONG_MAX) const;
     virtual void short_progress_loop(double delay_ms = DEFAULT_DELAY_MS) const;
     virtual void twait(int delta_ms = DEFAULT_DELAY_MS) const;
-    static void set_sockaddr_resources(const md_resource& md_rsc, uct_md_h pm,
-                                       ucs_cpu_set_t local_cpus,
-                                       std::vector<resource>& all_resources);
-    static void set_interface_rscs(const md_resource& md_rsc,
+    static void set_cm_resources(std::vector<resource>& all_resources);
+    static bool is_interface_usable(struct ifaddrs *ifa, const char *name);
+    static void set_md_sockaddr_resources(const md_resource& md_rsc, uct_md_h pm,
+                                          ucs_cpu_set_t local_cpus,
+                                          std::vector<resource>& all_resources);
+    static void set_cm_sockaddr_resources(uct_component_h cmpt, const char *cmpt_name,
+                                          ucs_cpu_set_t local_cpus,
+                                          std::vector<resource>& all_resources);
+    static void set_interface_rscs(uct_component_h comt, const char * name,
                                    ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
                                    std::vector<resource>& all_resources);
     static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
                                   struct sockaddr *connect_addr, size_t size);
     uct_test::entity* create_entity(size_t rx_headroom,
-                                    uct_error_handler_t err_handler = NULL);
+                                    uct_error_handler_t err_handler = NULL,
+                                    uct_tag_unexp_eager_cb_t eager_cb = NULL,
+                                    uct_tag_unexp_rndv_cb_t rndv_cb = NULL,
+                                    void *eager_arg = NULL,
+                                    void *rndv_arg = NULL,
+                                    uct_async_event_cb_t async_event_cb = NULL,
+                                    void *async_event_arg = NULL);
     uct_test::entity* create_entity(uct_iface_params_t &params);
     uct_test::entity* create_entity();
     int max_connections();
@@ -355,9 +391,23 @@ protected:
     ucs::ptr_vector<entity> m_entities;
     uct_iface_config_t      *m_iface_config;
     uct_md_config_t         *m_md_config;
+    uct_cm_config_t         *m_cm_config;
 };
 
 std::ostream& operator<<(std::ostream& os, const resource* resource);
+
+
+class test_uct_iface_attrs : public uct_test {
+public:
+    typedef std::map<std::string, size_t> attr_map_t;
+
+    void init();
+    virtual attr_map_t get_num_iov() = 0;
+    void basic_iov_test();
+
+protected:
+    entity *m_e;
+};
 
 
 #define UCT_TEST_IB_TLS \
@@ -377,7 +427,9 @@ std::ostream& operator<<(std::ostream& os, const resource* resource);
     ugni_udt,                \
     ugni_smsg,               \
     tcp,                     \
-    mm,                      \
+    posix,                   \
+    sysv,                    \
+    xpmem,                   \
     cma,                     \
     knem
 

@@ -24,7 +24,7 @@ void ucs_stats_cleanup();
 void ucs_stats_dump();
 int ucs_stats_is_active();
 #include "stats_fwd.h"
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 
 #include "libstats.h"
 

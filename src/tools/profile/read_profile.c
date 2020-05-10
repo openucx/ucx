@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/khash.h>
 
@@ -18,7 +22,6 @@
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
-#include <assert.h>
 #include <errno.h>
 
 
@@ -105,7 +108,7 @@ static const char* time_units_str[] = {
 static int read_profile_data(const char *file_name, profile_data_t *data)
 {
     uint32_t thread_idx;
-    struct stat stat;
+    struct stat stt;
     const void *ptr;
     int ret, fd;
 
@@ -116,14 +119,14 @@ static int read_profile_data(const char *file_name, profile_data_t *data)
         goto out;
     }
 
-    ret = fstat(fd, &stat);
+    ret = fstat(fd, &stt);
     if (ret < 0) {
         print_error("fstat(%s) failed: %m", file_name);
         goto out_close;
     }
 
-    data->length = stat.st_size;
-    data->mem    = mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    data->length = stt.st_size;
+    data->mem    = mmap(NULL, stt.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (data->mem == MAP_FAILED) {
         print_error("mmap(%s, length=%zd) failed: %m", file_name,
                     data->length);
@@ -180,30 +183,30 @@ static void release_profile_data(profile_data_t *data)
 
 static int parse_thread_list(int *thread_list, const char *str)
 {
-    char *dup, *p, *saveptr, *tailptr;
+    char *str_dup, *p, *saveptr, *tailptr;
     int thread_idx;
-    unsigned index;
+    unsigned idx;
     int ret;
 
-    dup = strdup(str);
-    if (dup == NULL) {
+    str_dup = strdup(str);
+    if (str_dup == NULL) {
         ret = -ENOMEM;
         print_error("failed to duplicate thread list string");
         goto out;
     }
 
-    index = 0;
+    idx = 0;
 
     /* the special value 'all' will create an empty thread list, which means
      * use all threads
      */
-    if (!strcasecmp(dup, "all")) {
+    if (!strcasecmp(str_dup, "all")) {
         goto out_terminate;
     }
 
-    p = strtok_r(dup, ",", &saveptr);
+    p = strtok_r(str_dup, ",", &saveptr);
     while (p != NULL) {
-        if (index >= MAX_THREADS) {
+        if (idx >= MAX_THREADS) {
             ret = -EINVAL;
             print_error("up to %d threads are supported", MAX_THREADS);
             goto out;
@@ -222,11 +225,11 @@ static int parse_thread_list(int *thread_list, const char *str)
             goto out;
         }
 
-        thread_list[index++] = thread_idx;
+        thread_list[idx++] = thread_idx;
         p = strtok_r(NULL, ",", &saveptr);
     }
 
-    if (index == 0) {
+    if (idx == 0) {
         ret = -EINVAL;
         print_error("empty thread list");
         goto out;
@@ -234,9 +237,9 @@ static int parse_thread_list(int *thread_list, const char *str)
 
 out_terminate:
     ret                = 0;
-    thread_list[index] = -1; /* terminator */
+    thread_list[idx] = -1; /* terminator */
 out:
-    free(dup);
+    free(str_dup);
     return ret;
 }
 
@@ -423,13 +426,14 @@ out:
     return ret;
 }
 
-KHASH_MAP_INIT_INT64(request_ids, int)
+KHASH_MAP_INIT_INT64(request_ids, size_t)
 
 static void show_profile_data_log(profile_data_t *data, options_t *opts,
                                   int thread_idx)
 {
-    profile_thread_data_t *thread   = &data->threads[thread_idx];
-    size_t num_recods               = thread->header->num_records;
+    profile_thread_data_t *thread = &data->threads[thread_idx];
+    size_t num_records            = thread->header->num_records;
+    size_t reqid_ctr              = 1;
     const ucs_profile_record_t **stack[UCS_PROFILE_STACK_MAX * 2];
     const ucs_profile_record_t **scope_ends;
     const ucs_profile_location_t *loc;
@@ -441,7 +445,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
     khash_t(request_ids) reqids;
     int hash_extra_status;
     khiter_t hash_it;
-    int reqid, reqid_ctr = 1;
+    size_t reqid;
 
 #define RECORD_FMT       "%s%10.3f%s%*s"
 #define RECORD_ARG(_ts)  TS_COLOR, time_to_units(data, opts, (_ts)), CLEAR_COLOR, \
@@ -455,7 +459,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
                                 basename(loc->file), loc->line, loc->function, \
                                 CLEAR_COLOR)
 
-    scope_ends = calloc(1, sizeof(*scope_ends) * num_recods);
+    scope_ends = calloc(1, sizeof(*scope_ends) * num_records);
     if (scope_ends == NULL) {
         print_error("failed to allocate memory for scope ends");
         return;
@@ -473,7 +477,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
     /* Find the first record with minimal nesting level, which is the base of call stack */
     nesting         = 0;
     min_nesting     = 0;
-    for (rec = thread->records; rec < thread->records + num_recods; ++rec) {
+    for (rec = thread->records; rec < thread->records + num_records; ++rec) {
         loc = &data->locations[rec->location];
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
@@ -495,7 +499,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
         }
     }
 
-    if (num_recods > 0) {
+    if (num_records > 0) {
         prev_time = thread->records[0].timestamp;
     } else {
         prev_time = 0;
@@ -505,7 +509,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
 
     /* Display records */
     nesting = -min_nesting;
-    for (rec = thread->records; rec < thread->records + num_recods; ++rec) {
+    for (rec = thread->records; rec < thread->records + num_records; ++rec) {
         loc = &data->locations[rec->location];
         switch (loc->type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
@@ -553,13 +557,13 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
                     reqid = reqid_ctr++;
                     kh_value(&reqids, hash_it) = reqid;
                 }
-                action = "NEW ";
+                action = "NEW";
             } else {
-                assert(reqid_ctr > 1);
                 hash_it = kh_get(request_ids, &reqids, rec->param64);
                 if (hash_it == kh_end(&reqids)) {
                     reqid = 0; /* could not find request */
                 } else {
+                    assert(reqid_ctr > 1);
                     reqid = kh_value(&reqids, hash_it);
                     if (loc->type == UCS_PROFILE_TYPE_REQUEST_FREE) {
                         kh_del(request_ids, &reqids, hash_it);
@@ -571,7 +575,7 @@ static void show_profile_data_log(profile_data_t *data, options_t *opts,
                     action = "";
                 }
             }
-            snprintf(buf, sizeof(buf), RECORD_FMT"  %s%s%s%s %s{%d}%s",
+            snprintf(buf, sizeof(buf), RECORD_FMT"  %s%s%s%s %s{%zu}%s",
                      RECORD_ARG(rec->timestamp - prev_time),
                      REQ_COLOR, action, loc->name, CLEAR_COLOR,
                      REQ_COLOR, reqid, CLEAR_COLOR);

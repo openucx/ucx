@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "log.h"
 
 #include <ucs/debug/debug.h>
@@ -16,11 +20,29 @@
 
 #define UCS_MAX_LOG_HANDLERS    32
 
+#define UCS_LOG_TIME_FMT        "[%lu.%06lu]"
+#define UCS_LOG_FILE_FMT        "%16s:%-4u"
+#define UCS_LOG_METADATA_FMT    "%-4s %-5s"
+#define UCS_LOG_PROC_DATA_FMT   "[%s:%-5d:%d]"
+#define UCS_LOG_SHORT_FMT       UCS_LOG_TIME_FMT" "UCS_LOG_FILE_FMT" " \
+                                UCS_LOG_METADATA_FMT" ""%s\n"
+#define UCS_LOG_FMT             UCS_LOG_TIME_FMT" "UCS_LOG_PROC_DATA_FMT" " \
+                                UCS_LOG_FILE_FMT" "UCS_LOG_METADATA_FMT" ""%s\n"
+
+#define UCS_LOG_TIME_ARG(_tv)  (_tv)->tv_sec, (_tv)->tv_usec
+#define UCS_LOG_SHORT_ARG(_short_file, _line, _level, _comp_conf, _tv, _message) \
+    UCS_LOG_TIME_ARG(_tv), _short_file, _line, (_comp_conf)->name, \
+    ucs_log_level_names[_level], _message
+#define UCS_LOG_ARG(_short_file, _line, _level, _comp_conf, _tv, _message) \
+    UCS_LOG_TIME_ARG(_tv), ucs_log_hostname, ucs_log_pid, \
+    ucs_log_get_thread_num(),_short_file, _line, (_comp_conf)->name, \
+    ucs_log_level_names[_level], _message
 
 const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_FATAL]        = "FATAL",
     [UCS_LOG_LEVEL_ERROR]        = "ERROR",
     [UCS_LOG_LEVEL_WARN]         = "WARN",
+    [UCS_LOG_LEVEL_DIAG]         = "DIAG",
     [UCS_LOG_LEVEL_INFO]         = "INFO",
     [UCS_LOG_LEVEL_DEBUG]        = "DEBUG",
     [UCS_LOG_LEVEL_TRACE]        = "TRACE",
@@ -38,7 +60,9 @@ static int ucs_log_initialized              = 0;
 static char ucs_log_hostname[HOST_NAME_MAX] = {0};
 static int  ucs_log_pid                     = 0;
 static FILE *ucs_log_file                   = NULL;
+static char *ucs_log_file_base_name         = NULL;
 static int ucs_log_file_close               = 0;
+static int ucs_log_file_last_idx            = 0;
 static unsigned threads_count               = 0;
 static pthread_spinlock_t threads_lock      = 0;
 static pthread_t threads[128]               = {0};
@@ -89,47 +113,138 @@ void ucs_log_flush()
 size_t ucs_log_get_buffer_size()
 {
     return ucs_config_memunits_get(ucs_global_opts.log_buffer_size,
-                                   256, 2048);
+                                   256, UCS_ALLOCA_MAX_SIZE);
+}
+
+static void ucs_log_get_file_name(char *log_file_name, size_t max, int idx)
+{
+    ucs_assert(idx <= ucs_global_opts.log_file_rotate);
+
+    if (idx == 0) {
+        ucs_strncpy_zero(log_file_name, ucs_log_file_base_name, max);
+        return;
+    }
+
+    ucs_snprintf_zero(log_file_name, max, "%s.%d",
+                      ucs_log_file_base_name, idx);
+}
+
+static void ucs_log_file_rotate()
+{
+    char old_log_file_name[PATH_MAX];
+    char new_log_file_name[PATH_MAX];
+    int idx, ret;
+
+    if (ucs_log_file_last_idx == ucs_global_opts.log_file_rotate) {
+        /* remove the last file and log rotation from the
+         * `log_file_rotate - 1` file */
+        ucs_log_get_file_name(old_log_file_name,
+                              sizeof(old_log_file_name),
+                              ucs_log_file_last_idx);
+        unlink(old_log_file_name);
+    } else {
+        ucs_log_file_last_idx++;
+    }
+
+    ucs_assert(ucs_log_file_last_idx <= ucs_global_opts.log_file_rotate);
+
+    for (idx = ucs_log_file_last_idx - 1; idx >= 0; --idx) {
+        ucs_log_get_file_name(old_log_file_name,
+                              sizeof(old_log_file_name), idx);
+        ucs_log_get_file_name(new_log_file_name,
+                              sizeof(new_log_file_name), idx + 1);
+
+        if (access(old_log_file_name, W_OK) != 0) {
+            ucs_fatal("unable to write to %s", old_log_file_name);
+        }
+
+        /* coverity[toctou] */
+        ret = rename(old_log_file_name, new_log_file_name);
+        if (ret) {
+            ucs_fatal("failed to rename %s to %s: %m",
+                      old_log_file_name, new_log_file_name);
+        }
+
+
+        if (access(old_log_file_name, F_OK) != -1) {
+            ucs_fatal("%s must not exist on the filesystem", old_log_file_name);
+        }
+
+        if (access(new_log_file_name, W_OK) != 0) {
+            ucs_fatal("unable to write to %s", new_log_file_name);
+        }
+    }
+}
+
+static void ucs_log_handle_file_max_size(int log_entry_len)
+{
+    const char *next_token;
+
+    /* check if it is necessary to find a new storage for logs */
+    if ((log_entry_len + ftell(ucs_log_file)) < ucs_global_opts.log_file_size) {
+        return;
+    }
+
+    fclose(ucs_log_file);
+
+    if (ucs_global_opts.log_file_rotate != 0) {
+        ucs_log_file_rotate();
+    } else {
+        unlink(ucs_log_file_base_name);
+    }
+
+    ucs_open_output_stream(ucs_log_file_base_name, UCS_LOG_LEVEL_FATAL,
+                           &ucs_log_file, &ucs_log_file_close,
+                           &next_token, NULL);
 }
 
 static void ucs_log_print(size_t buffer_size, const char *short_file, int line,
-                          ucs_log_level_t level, const struct timeval *tv,
-                          const char *message)
+                          ucs_log_level_t level,
+                          const ucs_log_component_config_t *comp_conf,
+                          const struct timeval *tv, const char *message)
 {
-    char *valg_buf;
+    char *log_buf;
+    int log_entry_len;
 
     if (RUNNING_ON_VALGRIND) {
-        valg_buf = ucs_alloca(buffer_size + 1);
-        snprintf(valg_buf, buffer_size,
-                 "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n", tv->tv_sec, tv->tv_usec,
-                 short_file, line, "UCX", ucs_log_level_names[level],
-                 message);
-        VALGRIND_PRINTF("%s", valg_buf);
+        log_buf = ucs_alloca(buffer_size + 1);
+        snprintf(log_buf, buffer_size, UCS_LOG_SHORT_FMT,
+                UCS_LOG_SHORT_ARG(short_file, line, level,
+                                  comp_conf, tv, message));
+        VALGRIND_PRINTF("%s", log_buf);
     } else if (ucs_log_initialized) {
-        fprintf(ucs_log_file,
-                "[%lu.%06lu] [%s:%-5d:%d] %16s:%-4u %-4s %-5s %s\n",
-                tv->tv_sec, tv->tv_usec, ucs_log_hostname, ucs_log_pid,
-                ucs_log_get_thread_num(), short_file, line, "UCX",
-                ucs_log_level_names[level], message);
+        if (ucs_log_file_close) { /* non-stdout/stderr */
+            /* get log entry size */
+            log_entry_len = snprintf(NULL, 0, UCS_LOG_FMT,
+                                     UCS_LOG_ARG(short_file, line, level,
+                                                 comp_conf, tv, message));
+            ucs_log_handle_file_max_size(log_entry_len);
+        }
+
+        fprintf(ucs_log_file, UCS_LOG_FMT,
+                UCS_LOG_ARG(short_file, line, level,
+                            comp_conf, tv, message));
     } else {
-        fprintf(stdout,
-                "[%lu.%06lu] %16s:%-4u %-4s %-5s %s\n",
-                tv->tv_sec, tv->tv_usec, short_file, line,
-                "UCX", ucs_log_level_names[level], message);
+        fprintf(stdout, UCS_LOG_SHORT_FMT,
+                UCS_LOG_SHORT_ARG(short_file, line, level,
+                                  comp_conf, tv, message));
     }
 }
 
 ucs_log_func_rc_t
 ucs_log_default_handler(const char *file, unsigned line, const char *function,
-                        ucs_log_level_t level, const char *format, va_list ap)
+                        ucs_log_level_t level,
+                        const ucs_log_component_config_t *comp_conf,
+                        const char *format, va_list ap)
 {
     size_t buffer_size = ucs_log_get_buffer_size();
-    char *log_line, *saveptr;
+    char *saveptr      = "";
+    char *log_line;
     struct timeval tv;
     char *buf;
 
-    if (!ucs_log_is_enabled(level) && (level != UCS_LOG_LEVEL_PRINT)) {
-        return UCS_LOG_FUNC_RC_CONTINUE;
+    if (!ucs_log_component_is_enabled(level, comp_conf) && (level != UCS_LOG_LEVEL_PRINT)) {
+         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
     buf = ucs_alloca(buffer_size + 1);
@@ -143,7 +258,8 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
 
         log_line = strtok_r(buf, "\n", &saveptr);
         while (log_line != NULL) {
-            ucs_log_print(buffer_size, ucs_basename(file), line, level, &tv, log_line);
+            ucs_log_print(buffer_size, ucs_basename(file), line, level, comp_conf,
+                          &tv, log_line);
             log_line = strtok_r(NULL, "\n", &saveptr);
         }
     }
@@ -176,19 +292,21 @@ unsigned ucs_log_num_handlers()
 }
 
 void ucs_log_dispatch(const char *file, unsigned line, const char *function,
-                      ucs_log_level_t level, const char *format, ...)
+                      ucs_log_level_t level, ucs_log_component_config_t *comp_conf,
+                      const char *format, ...)
 {
     ucs_log_func_rc_t rc;
-    unsigned index;
+    unsigned idx;
     va_list ap;
 
     /* Call handlers in reverse order */
     rc    = UCS_LOG_FUNC_RC_CONTINUE;
-    index = ucs_log_handlers_count;
-    while ((index > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
-        --index;
+    idx = ucs_log_handlers_count;
+    while ((idx > 0) && (rc == UCS_LOG_FUNC_RC_CONTINUE)) {
+        --idx;
         va_start(ap, format);
-        rc = ucs_log_handlers[index](file, line, function, level, format, ap);
+        rc = ucs_log_handlers[idx](file, line, function,
+                                   level, comp_conf, format, ap);
         va_end(ap);
     }
 }
@@ -289,12 +407,13 @@ overflow:
 
 void ucs_log_early_init()
 {
-    ucs_log_initialized      = 0;
-    ucs_log_hostname[0]      = 0;
-    ucs_log_pid              = getpid();
-    ucs_log_file             = NULL;
-    ucs_log_file_close       = 0;
-    threads_count            = 0;
+    ucs_log_initialized   = 0;
+    ucs_log_hostname[0]   = 0;
+    ucs_log_pid           = getpid();
+    ucs_log_file          = NULL;
+    ucs_log_file_last_idx = 0;
+    ucs_log_file_close    = 0;
+    threads_count         = 0;
     pthread_spin_init(&threads_lock, 0);
 }
 
@@ -308,26 +427,47 @@ void ucs_log_init()
 
     ucs_log_initialized = 1; /* Set this to 1 immediately to avoid infinite recursion */
 
+    if (ucs_global_opts.log_file_size < ucs_log_get_buffer_size()) {
+        ucs_fatal("the maximal log file size (%zu) has to be >= %zu",
+                  ucs_global_opts.log_file_size,
+                  ucs_log_get_buffer_size());
+    }
+
+    if (ucs_global_opts.log_file_rotate > INT_MAX) {
+        ucs_fatal("the log file rotate (%u) has to be <= %d",
+                  ucs_global_opts.log_file_rotate, INT_MAX);
+    }
+
+
     strcpy(ucs_log_hostname, ucs_get_host_name());
-    ucs_log_file       = stdout;
-    ucs_log_file_close = 0;
+    ucs_log_file           = stdout;
+    ucs_log_file_base_name = NULL;
+    ucs_log_file_close     = 0;
+    ucs_log_file_last_idx  = 0;
 
     ucs_log_push_handler(ucs_log_default_handler);
 
     if (strlen(ucs_global_opts.log_file) != 0) {
-         ucs_open_output_stream(ucs_global_opts.log_file, UCS_LOG_LEVEL_FATAL,
-                                &ucs_log_file, &ucs_log_file_close, &next_token);
+        ucs_open_output_stream(ucs_global_opts.log_file, UCS_LOG_LEVEL_FATAL,
+                               &ucs_log_file, &ucs_log_file_close,
+                               &next_token, &ucs_log_file_base_name);
     }
 }
 
 void ucs_log_cleanup()
 {
+    ucs_assert(ucs_log_initialized);
+
     ucs_log_flush();
     if (ucs_log_file_close) {
         fclose(ucs_log_file);
     }
     pthread_spin_destroy(&threads_lock);
+
+    ucs_free(ucs_log_file_base_name);
+    ucs_log_file_base_name = NULL;
     ucs_log_file           = NULL;
+    ucs_log_file_last_idx  = 0;
     ucs_log_initialized    = 0;
     ucs_log_handlers_count = 0;
 }

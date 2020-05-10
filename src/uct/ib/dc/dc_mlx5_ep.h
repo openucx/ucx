@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2016-2018.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 
 * See file LICENSE for terms.
 */
@@ -169,22 +169,29 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
+                                      ucs_arbiter_group_t *group,
                                       ucs_arbiter_elem_t *elem,
                                       void *arg);
 
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
+                                        ucs_arbiter_group_t *group,
                                         ucs_arbiter_elem_t *elem,
                                         void *arg);
 
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
+                                         ucs_arbiter_group_t *group,
                                          ucs_arbiter_elem_t *elem,
                                          void *arg);
 
 ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                                         unsigned flags);
 void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, void *arg);
+
+void uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface,
+                                   uct_dc_mlx5_ep_t *ep, uct_pending_req_t *r,
+                                   unsigned flags, int push_to_head);
 
 void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls);
 
@@ -331,7 +338,18 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx
     }
 }
 
-static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+static UCS_F_ALWAYS_INLINE void
+ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+{
+    iface->tx.stack_top--;
+    iface->tx.dcis_stack[iface->tx.stack_top] = dci;
+#if UCS_ENABLE_ASSERT
+    iface->tx.dcis[dci].flags = 0;
+#endif
+}
+
+static UCS_F_ALWAYS_INLINE void
+ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 {
     uct_dc_mlx5_ep_t *ep;
 
@@ -342,6 +360,13 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
     ep = uct_dc_mlx5_ep_from_dci(iface, dci);
 
     ucs_assert(iface->tx.stack_top > 0);
+
+    if (ucs_unlikely(ep == NULL)) {
+        if (!uct_dc_mlx5_iface_dci_has_outstanding(iface, dci)) {
+            uct_dc_mlx5_iface_dci_release(iface, dci);
+        }
+        return;
+    }
 
     if (uct_dc_mlx5_iface_dci_has_outstanding(iface, dci)) {
         if (iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) {
@@ -359,15 +384,8 @@ static inline void uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t
         ucs_arbiter_group_schedule(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group);
         return;
     }
-    iface->tx.stack_top--;
-    iface->tx.dcis_stack[iface->tx.stack_top] = dci;
-#if UCS_ENABLE_ASSERT
-    iface->tx.dcis[dci].flags = 0;
-#endif
 
-    if (ucs_unlikely(ep == NULL)) {
-        return;
-    }
+    uct_dc_mlx5_iface_dci_release(iface, dci);
 
     ucs_assert(uct_dc_mlx5_ep_from_dci(iface, dci)->dci != UCT_DC_MLX5_EP_NO_DCI);
     ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
@@ -413,18 +431,15 @@ static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface, uct_dc
         return;
     }
 
-    iface->tx.stack_top--;
-    iface->tx.dcis_stack[iface->tx.stack_top] = dci;
-    iface->tx.dcis[dci].ep                    = NULL;
-#if UCS_ENABLE_ASSERT
-    iface->tx.dcis[ep->dci].flags             = 0;
-#endif
+    uct_dc_mlx5_iface_dci_release(iface, dci);
 
-    ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
-    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
+    iface->tx.dcis[dci].ep = NULL;
+    ep->dci                = UCT_DC_MLX5_EP_NO_DCI;
+    ep->flags             &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
 }
 
-static inline ucs_status_t uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     uct_rc_txqp_t *txqp;
     int16_t available;
@@ -504,9 +519,9 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 
 #define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
     { \
-        ucs_status_t status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
-        if (ucs_unlikely(status != UCS_OK)) { \
-            return status; \
+        ucs_status_t _status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
+        if (ucs_unlikely(_status != UCS_OK)) { \
+            return _status; \
         } \
     }
 
@@ -520,6 +535,18 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
     }
 
 
+/**
+ * All RMA and AMO operations are not allowed if no RDMA_READ credits.
+ * Otherwise operations ordering can be broken (which fence operation
+ * relies on).
+ */
+#define UCT_DC_MLX5_CHECK_RMA_RES(_iface, _ep) \
+    { \
+        UCT_RC_CHECK_NUM_RDMA_READ(&(_iface)->super.super) \
+        UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
+    }
+
+
 /* First, check whether we have FC window. If hard threshold is reached, credit
  * request will be sent by "fc_ctrl" as a separate message. TX resources
  * are checked after FC, because fc credits request may consume latest
@@ -528,15 +555,16 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
     { \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= \
                          (_iface)->super.super.config.fc_hard_thresh)) { \
-            ucs_status_t status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
-            if (ucs_unlikely(status != UCS_OK)) { \
+            ucs_status_t _status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
+            if (ucs_unlikely(_status != UCS_OK)) { \
                 if (((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI) && \
                     !uct_dc_mlx5_iface_is_dci_rand(_iface)) { \
-                    ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(_iface, (_ep)->dci), \
+                    ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(_iface, \
+                                                                             (_ep)->dci), \
                                        "iface (%p) ep (%p) dci leak detected: dci=%d", \
                                        _iface, _ep, (_ep)->dci); \
                 } \
-                return status; \
+                return _status; \
             } \
         } \
         UCT_DC_MLX5_CHECK_RES(_iface, _ep) \

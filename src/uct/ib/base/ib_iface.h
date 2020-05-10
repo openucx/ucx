@@ -11,6 +11,7 @@
 
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
+#include <uct/base/uct_iov.inl>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
@@ -19,7 +20,8 @@
 #define UCT_IB_MAX_IOV                     8UL
 #define UCT_IB_IFACE_NULL_RES_DOMAIN_KEY   0u
 #define UCT_IB_MAX_ATOMIC_SIZE             sizeof(uint64_t)
-
+#define UCT_IB_ADDRESS_INVALID_GID_INDEX   UINT8_MAX
+#define UCT_IB_ADDRESS_INVALID_PATH_MTU    0
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -51,12 +53,44 @@ typedef enum {
 
 enum {
     UCT_IB_QPT_UNKNOWN,
-#if HAVE_DC_EXP
+#ifdef HAVE_DC_EXP
     UCT_IB_QPT_DCI = IBV_EXP_QPT_DC_INI,
 #elif HAVE_DC_DV
     UCT_IB_QPT_DCI = IBV_QPT_DRIVER,
 #endif
 };
+
+
+/**
+ * IB address packing flags
+ */
+enum {
+    UCT_IB_ADDRESS_PACK_FLAG_ETH           = UCS_BIT(0),
+    UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID  = UCS_BIT(1),
+    UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2),
+    UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU      = UCS_BIT(3),
+    UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX     = UCS_BIT(4)
+};
+
+
+typedef struct uct_ib_address_pack_params {
+    /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
+    uint64_t                          flags;
+    /* GID address to pack. */
+    const union ibv_gid               *gid;
+    /* LID address to pack. */
+    uint16_t                          lid;
+    /* RoCE version to pack in case of an Ethernet link layer,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_ETH is set. */
+    const uct_ib_roce_version_info_t  *roce_info;
+    /* path MTU size as defined in enum ibv_mtu,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU is set. */
+    enum ibv_mtu                      path_mtu;
+    /* GID index,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX is set. */
+    uint8_t                           gid_index;
+} uct_ib_address_pack_params_t;
+
 
 struct uct_ib_iface_config {
     uct_iface_config_t      super;
@@ -68,7 +102,6 @@ struct uct_ib_iface_config {
         unsigned            max_batch;       /* How many fragments can be batched to one post send */
         unsigned            max_poll;        /* How many wcs can be picked when polling tx cq */
         size_t              min_inline;      /* Inline space to reserve for sends */
-        size_t              inl_resp;        /* Inline space to reserve for responses */
         unsigned            min_sge;         /* How many SG entries to support */
         uct_iface_mpool_config_t mp;
 
@@ -81,7 +114,6 @@ struct uct_ib_iface_config {
         unsigned            queue_len;       /* Queue length */
         unsigned            max_batch;       /* How many buffers can be batched to one post receive */
         unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
-        size_t              inl;             /* Inline space to reserve in CQ/QP */
         uct_iface_mpool_config_t mp;
 
         /* Event moderation parameters */
@@ -89,10 +121,13 @@ struct uct_ib_iface_config {
         double              cq_moderation_period;
     } rx;
 
+    /* Inline space to reserve in CQ */
+    size_t                  inl[UCT_IB_DIR_NUM];
+
     /* Change the address type */
     int                     addr_type;
 
-    /* Forice global routing */
+    /* Force global routing */
     int                     is_global;
 
     /* IB SL to use */
@@ -104,6 +139,12 @@ struct uct_ib_iface_config {
     /* IB hop limit / TTL */
     unsigned                hop_limit;
 
+    /* Number of paths to expose for the interface  */
+    unsigned long           num_paths;
+
+    /* Multiplier for RoCE LAG UDP source port calculation */
+    unsigned                roce_path_factor;
+
     /* Ranges of path bits */
     UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
 
@@ -112,7 +153,27 @@ struct uct_ib_iface_config {
 
     /* Multiple resource domains */
     int                     enable_res_domain;
+
+    /* Path MTU size */
+    uct_ib_mtu_t            path_mtu;
 };
+
+
+enum {
+    UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
+    UCT_IB_TM_SUPPORTED              = UCS_BIT(1)
+};
+
+
+typedef struct uct_ib_iface_init_attr {
+    unsigned    rx_priv_len;            /* Length of transport private data to reserve */
+    unsigned    rx_hdr_len;             /* Length of transport network header */
+    unsigned    cq_len[UCT_IB_DIR_NUM]; /* CQ length */
+    size_t      seg_size;               /* Transport segment size */
+    unsigned    fc_req_size;            /* Flow control request size */
+    int         qp_type;                /* IB QP type */
+    int         flags;                  /* Various flags (see enum) */
+} uct_ib_iface_init_attr_t;
 
 
 typedef struct uct_ib_qp_attr {
@@ -122,8 +183,7 @@ typedef struct uct_ib_qp_attr {
     struct ibv_srq              *srq;
     uint32_t                    srq_num;
     unsigned                    sq_sig_all;
-    unsigned                    max_inl_recv;
-    unsigned                    max_inl_resp;
+    unsigned                    max_inl_cqe[UCT_IB_DIR_NUM];
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     struct ibv_exp_qp_init_attr ibv;
 #elif HAVE_DECL_IBV_CREATE_QP_EX
@@ -134,10 +194,11 @@ typedef struct uct_ib_qp_attr {
 } uct_ib_qp_attr_t;
 
 
-typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(struct ibv_context *context, int cqe,
-                                                      struct ibv_comp_channel *channel,
-                                                      int comp_vector, int ignore_overrun,
-                                                      size_t *inl, struct ibv_cq **cq_p);
+typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(uct_ib_iface_t *iface,
+                                                      uct_ib_dir_t dir,
+                                                      const uct_ib_iface_init_attr_t *init_attr,
+                                                      int preferred_cpu,
+                                                      size_t inl);
 
 typedef ucs_status_t (*uct_ib_iface_arm_cq_func_t)(uct_ib_iface_t *iface,
                                                    uct_ib_dir_t dir,
@@ -164,40 +225,41 @@ struct uct_ib_iface_ops {
 
 
 struct uct_ib_iface {
-    uct_base_iface_t        super;
+    uct_base_iface_t          super;
 
-    struct ibv_cq           *cq[UCT_IB_DIR_NUM];
-    struct ibv_comp_channel *comp_channel;
-    uct_recv_desc_t         release_desc;
+    struct ibv_cq             *cq[UCT_IB_DIR_NUM];
+    struct ibv_comp_channel   *comp_channel;
+    uct_recv_desc_t           release_desc;
 
-    uint8_t                 *path_bits;
-    unsigned                path_bits_count;
-    uint16_t                pkey_index;
-    uint16_t                pkey_value;
-    uint8_t                 is_global_addr;
-    uint8_t                 addr_size;
-    union ibv_gid           gid;
+    uint8_t                   *path_bits;
+    unsigned                  path_bits_count;
+    unsigned                  num_paths;
+    uint16_t                  pkey_index;
+    uint16_t                  pkey_value;
+    uint8_t                   addr_size;
+    uct_ib_device_gid_info_t  gid_info;
 
     struct {
-        unsigned            rx_payload_offset;   /* offset from desc to payload */
-        unsigned            rx_hdr_offset;       /* offset from desc to network header */
-        unsigned            rx_headroom_offset;  /* offset from desc to user headroom */
-        unsigned            rx_max_batch;
-        unsigned            rx_max_poll;
-        unsigned            tx_max_poll;
-        unsigned            seg_size;
-        uint8_t             max_inl_resp;
-        uint8_t             port_num;
-        uint8_t             sl;
-        uint8_t             traffic_class;
-        uint8_t             hop_limit;
-        uint8_t             gid_index;           /* IB GID index to use  */
-        uint8_t             enable_res_domain;   /* Disable multiple resource domains */
-        uint8_t             qp_type;
-        size_t              max_iov;             /* Maximum buffers in IOV array */
+        unsigned              rx_payload_offset;   /* offset from desc to payload */
+        unsigned              rx_hdr_offset;       /* offset from desc to network header */
+        unsigned              rx_headroom_offset;  /* offset from desc to user headroom */
+        unsigned              rx_max_batch;
+        unsigned              rx_max_poll;
+        unsigned              tx_max_poll;
+        unsigned              seg_size;
+        unsigned              roce_path_factor;
+        uint8_t               max_inl_cqe[UCT_IB_DIR_NUM];
+        uint8_t               port_num;
+        uint8_t               sl;
+        uint8_t               traffic_class;
+        uint8_t               hop_limit;
+        uint8_t               enable_res_domain;   /* Disable multiple resource domains */
+        uint8_t               qp_type;
+        uint8_t               force_global_addr;
+        enum ibv_mtu          path_mtu;
     } config;
 
-    uct_ib_iface_ops_t      *ops;
+    uct_ib_iface_ops_t        *ops;
 };
 
 
@@ -207,22 +269,6 @@ typedef struct uct_ib_fence_info {
                                              * because QP size is less than 64k */
 } uct_ib_fence_info_t;
 
-
-enum {
-    UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
-    UCT_IB_TM_SUPPORTED              = UCS_BIT(1)
-};
-
-typedef struct uct_ib_iface_init_attr {
-    unsigned    rx_priv_len;     /* Length of transport private data to reserve */
-    unsigned    rx_hdr_len;      /* Length of transport network header */
-    unsigned    tx_cq_len;       /* Send CQ length */
-    unsigned    rx_cq_len;       /* Receive CQ length */
-    size_t      seg_size;        /* Transport segment size */
-    unsigned    fc_req_size;     /* Flow control request size */
-    int         qp_type;         /* IB QP type */
-    int         flags;           /* Various flags (see enum) */
-} uct_ib_iface_init_attr_t;
 
 UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
                   const uct_iface_params_t*, const uct_ib_iface_config_t*,
@@ -311,10 +357,26 @@ int uct_ib_iface_is_roce(uct_ib_iface_t *iface);
 
 
 /**
+ * @return Whether the port used by this interface is IB
+ */
+int uct_ib_iface_is_ib(uct_ib_iface_t *iface);
+
+
+/**
+ * Get the expected size of IB packed address.
+ *
+ * @param [in]  params   Address parameters as defined in
+ *                       @ref uct_ib_address_pack_params_t.
+ *
  * @return IB address size of the given link scope.
  */
-size_t uct_ib_address_size(const union ibv_gid *gid, uint8_t is_global_addr,
-                           int is_link_layer_eth);
+size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params);
+
+
+/**
+ * @return IB address packing flags of the given iface.
+ */
+unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface);
 
 
 /**
@@ -326,29 +388,26 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface);
 /**
  * Pack IB address.
  *
- * @param [in]  gid        GID address to pack.
- * @param [in]  lid        LID address to pack.
- * @param [in/out] ib_addr Filled with packed ib address. Size of the structure
- *                         must be at least what @ref uct_ib_address_size()
- *                         returns for the given scope.
+ * @param [in]     params   Address parameters as defined in
+ *                          @ref uct_ib_address_pack_params_t.
+ * @param [in/out] ib_addr  Filled with packed ib address. Size of the structure
+ *                          must be at least what @ref uct_ib_address_size()
+ *                          returns for the given scope.
  */
-void uct_ib_address_pack(const union ibv_gid *gid, uint16_t lid,
-                         int is_link_layer_eth, uint8_t is_global_addr,
+void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
                          uct_ib_address_t *ib_addr);
+
 
 
 /**
  * Pack the IB address of the given iface.
  *
  * @param [in]  iface      Iface whose IB address to pack.
- * @param [in]  gid        GID address to pack.
- * @param [in]  lid        LID address to pack.
  * @param [in/out] ib_addr Filled with packed ib address. Size of the structure
  *                         must be at least what @ref uct_ib_address_size()
  *                         returns for the given scope.
  */
-void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
-                               uint16_t lid, uct_ib_address_t *ib_addr);
+void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr);
 
 
 /**
@@ -357,9 +416,14 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, const union ibv_gid *gid,
  * @param [in]  ib_addr    IB address to unpack.
  * @param [out] lid        Filled with address LID, or 0 if not present.
  * @param [out] gid        Filled with address GID, or 0 if not present.
+ * @param [out] gid_index  Filled with GID index, or
+ *                         @ref UCT_IB_ADDRESS_INVALID_GID_INDEX if not present.
+ * @param [out] path_mtu   Filled with address path MTU, or
+ *                         @ref UCT_IB_ADDRESS_INVALID_PATH_MTU if not present.
  */
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
-                           union ibv_gid *gid);
+                           union ibv_gid *gid, uint8_t *gid_index,
+                           enum ibv_mtu *path_mtu);
 
 
 /**
@@ -379,6 +443,20 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_
  */
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr);
+
+
+int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev);
+
+
+/**
+ * Select the IB gid index and RoCE version to use for a RoCE port.
+ *
+ * @param iface                 IB interface
+ * @param md_config_index       Gid index from the md configuration.
+ */
+ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
+                                             size_t md_config_index);
+
 
 static inline uct_ib_md_t* uct_ib_iface_md(uct_ib_iface_t *iface)
 {
@@ -419,6 +497,18 @@ ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
                                     struct ibv_ah **ah_p);
 
+void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
+                                            const union ibv_gid *gid,
+                                            uint8_t gid_index,
+                                            unsigned path_index,
+                                            struct ibv_ah_attr *ah_attr);
+
+void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
+                                         const uct_ib_address_t *ib_addr,
+                                         unsigned path_index,
+                                         struct ibv_ah_attr *ah_attr,
+                                         enum ibv_mtu *path_mtu);
+
 ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface);
 
 ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h iface, int *fd_p);
@@ -427,10 +517,9 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
                                  uct_ib_dir_t dir,
                                  int solicited_only);
 
-ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
-                                    struct ibv_comp_channel *channel,
-                                    int comp_vector, int ignore_overrun,
-                                    size_t *inl, struct ibv_cq **cq_p);
+ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                    const uct_ib_iface_init_attr_t *init_attr,
+                                    int preferred_cpu, size_t inl);
 
 ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
                                     uct_ib_qp_attr_t *attr,
@@ -488,70 +577,12 @@ size_t uct_ib_verbs_sge_fill_iov(struct ibv_sge *sge, const uct_iov_t *iov,
         if (iov[sge_it].memh == UCT_MEM_HANDLE_NULL) {
             sge[sge_it].lkey = 0;
         } else {
-            sge[sge_it].lkey = ((uct_ib_mem_t *)(iov[iov_it].memh))->lkey;
+            sge[sge_it].lkey = uct_ib_memh_get_lkey(iov[iov_it].memh);
         }
         ++sge_it;
     }
 
     return sge_it;
-}
-
-
-static UCS_F_ALWAYS_INLINE
-size_t uct_ib_iface_get_max_iov(uct_ib_iface_t *iface)
-{
-    return iface->config.max_iov;
-}
-
-
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_set_max_iov(uct_ib_iface_t *iface, size_t max_iov)
-{
-    size_t min_iov_requested;
-
-    ucs_assert((ssize_t)max_iov > 0);
-
-    min_iov_requested = ucs_max(max_iov, 1UL); /* max_iov mustn't be 0 */
-    iface->config.max_iov = ucs_min(UCT_IB_MAX_IOV, min_iov_requested);
-}
-
-
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
-                                            const union ibv_gid *gid,
-                                            struct ibv_ah_attr *ah_attr)
-{
-    memset(ah_attr, 0, sizeof(*ah_attr));
-
-    ah_attr->sl                = iface->config.sl;
-    ah_attr->src_path_bits     = iface->path_bits[0];
-    ah_attr->dlid              = lid | iface->path_bits[0];
-    ah_attr->port_num          = iface->config.port_num;
-    ah_attr->grh.traffic_class = iface->config.traffic_class;
-
-    if (iface->is_global_addr ||
-        (iface->gid.global.subnet_prefix != gid->global.subnet_prefix)) {
-        ucs_assert_always(gid->global.interface_id != 0);
-        ah_attr->is_global      = 1;
-        ah_attr->grh.dgid       = *gid;
-        ah_attr->grh.sgid_index = iface->config.gid_index;
-        ah_attr->grh.hop_limit  = iface->config.hop_limit;
-    } else {
-        ah_attr->is_global      = 0;
-    }
-}
-
-static UCS_F_ALWAYS_INLINE
-void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
-                                         const uct_ib_address_t *ib_addr,
-                                         struct ibv_ah_attr *ah_attr)
-{
-    union ibv_gid  gid;
-    uint16_t       lid;
-
-    uct_ib_address_unpack(ib_addr, &lid, &gid);
-
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, ah_attr);
 }
 
 static UCS_F_ALWAYS_INLINE

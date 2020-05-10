@@ -122,6 +122,10 @@ enum {
                     "UCT_EP_PARAM_FIELD_DEV_ADDR and UCT_EP_PARAM_FIELD_IFACE_ADDR are not defined")
 
 
+#define UCT_EP_PARAMS_GET_PATH_INDEX(_params) \
+    (((_params)->field_mask & UCT_EP_PARAM_FIELD_PATH_INDEX) ? \
+     (_params)->path_index : 0)
+
 /**
  * Check the condition and return status as a pointer if not true.
  */
@@ -642,66 +646,12 @@ static UCS_F_ALWAYS_INLINE
 void uct_invoke_completion(uct_completion_t *comp, ucs_status_t status)
 {
     ucs_trace_func("comp=%p, count=%d, status=%d", comp, comp->count, status);
+    ucs_assertv(comp->count > 0, "comp=%p count=%d", comp, comp->count);
     if (--comp->count == 0) {
         comp->func(comp, status);
     }
 }
 
-/**
- * Calculates total length of particular iov data buffer.
- * Currently has no support for stride.
- * If stride supported it should be like: length + ((count - 1) * stride)
- */
-static UCS_F_ALWAYS_INLINE
-size_t uct_iov_get_length(const uct_iov_t *iov)
-{
-    return iov->count * iov->length;
-}
-
-/**
- * Calculates total length of the iov array buffers.
- */
-static UCS_F_ALWAYS_INLINE
-size_t uct_iov_total_length(const uct_iov_t *iov, size_t iovcnt)
-{
-    size_t iov_it, total_length = 0;
-
-    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-        total_length += uct_iov_get_length(&iov[iov_it]);
-    }
-
-    return total_length;
-}
-
-/**
- * Fill iovec data structure by data provided in uct_iov_t.
- * The function avoids copying IOVs with zero length.
- * @return Number of elements in io_vec[].
- */
-static UCS_F_ALWAYS_INLINE
-size_t uct_iovec_fill_iov(struct iovec *io_vec, const uct_iov_t *iov,
-                          size_t iovcnt, size_t *total_length)
-{
-    size_t io_vec_it  = 0;
-    size_t io_vec_len = 0;
-    size_t iov_it;
-
-    *total_length = 0;
-
-    for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
-        io_vec_len = uct_iov_get_length(&iov[iov_it]);
-
-        /* Avoid zero length elements in resulted iov_vec */
-        if (io_vec_len != 0) {
-            io_vec[io_vec_it].iov_len   = io_vec_len;
-            io_vec[io_vec_it].iov_base  = iov[iov_it].buffer;
-            *total_length              += io_vec_len;
-            ++io_vec_it;
-        }
-    }
-
-    return io_vec_it;
-}
 
 /**
  * Copy data to target am_short buffer

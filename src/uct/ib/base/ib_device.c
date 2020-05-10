@@ -4,6 +4,10 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "ib_device.h"
 #include "ib_md.h"
 
@@ -13,18 +17,10 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
 #include <sched.h>
-
-
-typedef struct {
-    union ibv_gid       gid;
-    struct {
-        uint8_t         major;
-        uint8_t         minor;
-    } roce_version;
-} uct_ib_device_gid_info_t;
 
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
@@ -56,7 +52,7 @@ KHASH_IMPL(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*, 1,
            uct_ib_kh_ah_hash_func, uct_ib_kh_ah_hash_equal)
 
 
-#if ENABLE_STATS
+#ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
     .num_counters   = UCT_IB_DEVICE_STAT_LAST,
@@ -67,79 +63,51 @@ static ucs_stats_class_t uct_ib_device_stats_class = {
 #endif
 
 static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
-  {0x02c9, 4099, "ConnectX-3",
+  {"ConnectX-3", {0x15b3, 4099},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 10},
-  {0x02c9, 4103, "ConnectX-3 Pro",
+  {"ConnectX-3 Pro", {0x15b3, 4103},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX4_PRM, 11},
-  {0x02c9, 4113, "Connect-IB",
+  {"Connect-IB", {0x15b3, 4113},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 20},
-  /* Bull Inca FDR 1 port */
-  {0x119f, 0x1b83, "Connect-IB",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 20},
-  /* Bull Newsca FDR 1 port */
-  {0x119f, 0x1b93, "Connect-IB",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 20},
-  /* Bull Newsca FDR 2 ports */
-  {0x119f, 0x1b94, "Connect-IB",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 20},
-  /* Bull Newsca HDR 1 port */
-  {0x119f, 0x1bb4, "ConnectX-4",
+  {"ConnectX-4", {0x15b3, 4115},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 30},
-  /* Bull Newsca HDR 2 ports */
-  {0x119f, 0x1bb5, "ConnectX-4",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 30},
-  /* Bull Sequana HDR 1 port */
-  {0x119f, 0x1bc4, "ConnectX-4",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 30},
-  {0x02c9, 4115, "ConnectX-4",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V1, 30},
-  {0x02c9, 4116, "ConnectX-4",
+  {"ConnectX-4", {0x15b3, 4116},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 29},
-  {0x02c9, 4117, "ConnectX-4 LX",
+  {"ConnectX-4 LX", {0x15b3, 4117},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 28},
-  {0x02c9, 4118, "ConnectX-4 LX VF",
+  {"ConnectX-4 LX VF", {0x15b3, 4118},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V1, 28},
-  {0x02c9, 4119, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 4119},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 38},
-  {0x02c9, 4121, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 4121},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 40},
-  {0x02c9, 4120, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 4120},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 39},
-  {0x02c9, 41682, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 41682},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 37},
-  {0x02c9, 4122, "ConnectX-5",
+  {"ConnectX-5", {0x15b3, 4122},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 36},
-  {0x02c9, 4123, "ConnectX-6",
+  {"ConnectX-6", {0x15b3, 4123},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  {0x02c9, 4124, "ConnectX-6 VF",
+  {"ConnectX-6 VF", {0x15b3, 4124},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  /* Bull Sequana HDR 1 port */
-  {0x119f, 0x1bc5, "ConnectX-6",
+  {"ConnectX-6 DX", {0x15b3, 4125},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
    UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  /* Bull Sequana HDR100 1 port */
-  {0x119f, 0x1bc6, "ConnectX-6",
-   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 50},
-  {0, 0, "Generic HCA", 0, 0}
+  {"Generic HCA", {0, 0}, 0, 0},
+  {NULL}
 };
 
 static void uct_ib_device_get_locality(const char *dev_name,
@@ -155,9 +123,8 @@ static void uct_ib_device_get_locality(const char *dev_name,
 
     /* Read list of CPUs close to the device */
     CPU_ZERO(cpu_mask);
-    nread = ucs_read_file(buf, sizeof(buf) - 1, 1,
-                          "/sys/class/infiniband/%s/device/local_cpus",
-                          dev_name);
+    nread = ucs_read_file(buf, sizeof(buf) - 1, 1, UCT_IB_DEVICE_SYSFS_FMT,
+                          dev_name, "local_cpus");
     if (nread >= 0) {
         buf[CPU_SETSIZE - 1] = '\0';
         base = 0;
@@ -257,7 +224,7 @@ static void uct_ib_async_event_handler(int fd, void *arg)
                  ibv_event_type_str(event.event_type), event.element.port_num);
         level = UCS_LOG_LEVEL_WARN;
         break;
-#if HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
+#ifdef HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
     case IBV_EXP_EVENT_DCT_KEY_VIOLATION:
         snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
                  "DCT key violation", event.element.dct->dct_num);
@@ -289,6 +256,26 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_ASYNC_EVENT, +1);
     ucs_log(level, "IB Async event on %s: %s", uct_ib_device_name(dev), event_info);
     ibv_ack_async_event(&event);
+}
+
+static void uct_ib_device_get_ids(uct_ib_device_t *dev)
+{
+    long vendor_id, device_id;
+
+    if ((ucs_read_file_number(&vendor_id, 1, UCT_IB_DEVICE_SYSFS_FMT,
+                              uct_ib_device_name(dev), "vendor") == UCS_OK) &&
+        (ucs_read_file_number(&device_id, 1, UCT_IB_DEVICE_SYSFS_FMT,
+                              uct_ib_device_name(dev), "device") == UCS_OK)) {
+        dev->pci_id.vendor = vendor_id;
+        dev->pci_id.device = device_id;
+        ucs_debug("%s vendor_id: 0x%x device_id: %d", uct_ib_device_name(dev),
+                  dev->pci_id.vendor, dev->pci_id.device);
+    } else {
+        dev->pci_id.vendor = 0;
+        dev->pci_id.device = 0;
+        ucs_warn("%s: could not read device/vendor id from sysfs, "
+                 "performance may be affected", uct_ib_device_name(dev));
+    }
 }
 
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
@@ -333,6 +320,8 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
         }
     }
 
+    uct_ib_device_get_ids(dev);
+
     return UCS_OK;
 }
 
@@ -344,7 +333,6 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
     dev->async_events = async_events;
 
-    /* Get device locality */
     uct_ib_device_get_locality(ibv_get_device_name(ibv_device), &dev->local_cpus,
                                &dev->numa_node);
 
@@ -372,7 +360,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     }
 
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
-    ucs_spinlock_init(&dev->ah_lock);
+    ucs_recursive_spinlock_init(&dev->ah_lock, 0);
 
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
@@ -400,9 +388,9 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
 
-    status = ucs_spinlock_destroy(&dev->ah_lock);
+    status = ucs_recursive_spinlock_destroy(&dev->ah_lock);
     if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
+        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
     }
 
     if (dev->async_events) {
@@ -414,8 +402,8 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
 static inline int uct_ib_device_spec_match(uct_ib_device_t *dev,
                                            const uct_ib_device_spec_t *spec)
 {
-    return (spec->vendor_id == IBV_DEV_ATTR(dev, vendor_id)) &&
-           (spec->part_id   == IBV_DEV_ATTR(dev, vendor_part_id));
+    return (spec->pci_id.vendor == dev->pci_id.vendor) &&
+           (spec->pci_id.device == dev->pci_id.device);
 }
 
 const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
@@ -433,7 +421,7 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
 
     /* search through built-in list of device specifications */
     spec = uct_ib_builtin_device_specs;
-    while ((spec->vendor_id != 0) && !uct_ib_device_spec_match(dev, spec)) {
+    while ((spec->name != NULL) && !uct_ib_device_spec_match(dev, spec)) {
         ++spec;
     }
     return spec; /* if no match is found, return the last entry, which contains
@@ -462,7 +450,6 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     uint8_t required_dev_flags;
     ucs_status_t status;
     union ibv_gid gid;
-    int is_roce_v2;
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
@@ -505,13 +492,11 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
 
     if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num)) {
         status = uct_ib_device_query_gid(dev, port_num,
-                                         uct_ib_device_get_ib_gid_index(md), &gid,
-                                         &is_roce_v2);
-        if (status) {
+                                         uct_ib_device_get_ib_gid_index(md), &gid);
+        if (status != UCS_OK) {
             return status;
         }
 
-        ucs_assert(is_roce_v2 == 0);
         if (md->subnet_filter != gid.global.subnet_prefix) {
             ucs_trace("%s:%d subnet_prefix does not match",
                       uct_ib_device_name(dev), port_num);
@@ -520,6 +505,26 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     return UCS_OK;
+}
+
+const char *uct_ib_roce_version_str(uct_ib_roce_version_t roce_ver)
+{
+    switch (roce_ver) {
+    case UCT_IB_DEVICE_ROCE_V1:
+        return "RoCE v1";
+    case UCT_IB_DEVICE_ROCE_V1_5:
+        return "RoCE v1.5";
+    case UCT_IB_DEVICE_ROCE_V2:
+        return "RoCE v2";
+    default:
+        return "<unknown RoCE version>";
+    }
+}
+
+const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size)
+{
+    inet_ntop(AF_INET6, gid, str, max_size);
+    return str;
 }
 
 static int uct_ib_device_is_addr_ipv4_mcast(const struct in6_addr *raw,
@@ -537,7 +542,7 @@ static sa_family_t uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_ind
     char p[128];
 
     ucs_debug("testing addr_family on gid index %d: %s",
-              gid_index, inet_ntop(AF_INET6, gid, p, sizeof(p)));
+              gid_index, uct_ib_gid_str(gid, p, sizeof(p)));
 
     if (!((raw->s6_addr32[0] | raw->s6_addr32[1]) | addr_last_bits) ||
         uct_ib_device_is_addr_ipv4_mcast(raw, addr_last_bits)) {
@@ -547,9 +552,10 @@ static sa_family_t uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_ind
     }
 }
 
-static ucs_status_t
-uct_ib_device_query_gid_info(uct_ib_device_t *dev, uint8_t port_num,
-                             unsigned gid_index, uct_ib_device_gid_info_t *info)
+ucs_status_t
+uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
+                             uint8_t port_num, unsigned gid_index,
+                             uct_ib_device_gid_info_t *info)
 {
     int ret;
 
@@ -557,58 +563,58 @@ uct_ib_device_query_gid_info(uct_ib_device_t *dev, uint8_t port_num,
     struct ibv_exp_gid_attr attr;
 
     attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE | IBV_EXP_QUERY_GID_ATTR_GID;
-    ret = ibv_exp_query_gid_attr(dev->ibv_context, port_num, gid_index, &attr);
+    ret = ibv_exp_query_gid_attr(ctx, port_num, gid_index, &attr);
     if (ret == 0) {
-        info->gid = attr.gid;
+        info->gid                  = attr.gid;
+        info->gid_index            = gid_index;
+        info->roce_info.addr_family =
+                        uct_ib_device_get_addr_family(&info->gid, gid_index);
         switch (attr.type) {
         case IBV_EXP_IB_ROCE_V1_GID_TYPE:
-            info->roce_version.major = 1;
-            info->roce_version.minor = 0;
+            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1;
             return UCS_OK;
         case IBV_EXP_ROCE_V1_5_GID_TYPE:
-            info->roce_version.major = 1;
-            info->roce_version.minor = 5;
+            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1_5;
             return UCS_OK;
         case IBV_EXP_ROCE_V2_GID_TYPE:
-            info->roce_version.major = 2;
-            info->roce_version.minor = 0;
+            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V2;
             return UCS_OK;
         default:
             ucs_error("Invalid GID[%d] type on %s:%d: %d",
-                      gid_index, uct_ib_device_name(dev), port_num, attr.type);
+                      gid_index, dev_name, port_num, attr.type);
             return UCS_ERR_IO_ERROR;
         }
     }
 #else
-#define UCT_IB_SYSFS_GID_TYPE_FMT \
-    "/sys/class/infiniband/%s/ports/%d/gid_attrs/types/%d"
     char buf[16];
 
-    ret = ibv_query_gid(dev->ibv_context, port_num, gid_index, &info->gid);
+    ret = ibv_query_gid(ctx, port_num, gid_index, &info->gid);
     if (ret == 0) {
-        ret = ucs_read_file(buf, sizeof(buf) - 1, 1, UCT_IB_SYSFS_GID_TYPE_FMT,
-                            uct_ib_device_name(dev), port_num, gid_index);
+        ret = ucs_read_file(buf, sizeof(buf) - 1, 1,
+                            UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT,
+                            dev_name, port_num, gid_index);
         if (ret > 0) {
             if (!strncmp(buf, "IB/RoCE v1", 10)) {
-                info->roce_version.major = 1;
-                info->roce_version.minor = 0;
+                info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1;
             } else if (!strncmp(buf, "RoCE v2", 7)) {
-                info->roce_version.major = 2;
-                info->roce_version.minor = 0;
+                info->roce_info.ver = UCT_IB_DEVICE_ROCE_V2;
             } else {
                 ucs_error("failed to parse gid type '%s' (dev=%s port=%d index=%d)",
-                          buf, uct_ib_device_name(dev), port_num, gid_index);
+                          buf, dev_name, port_num, gid_index);
                 return UCS_ERR_INVALID_PARAM;
             }
         } else {
-            info->roce_version.major = 1;
-            info->roce_version.minor = 0;
+            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1;
         }
+
+        info->roce_info.addr_family =
+                        uct_ib_device_get_addr_family(&info->gid, gid_index);
+        info->gid_index            = gid_index;
         return UCS_OK;
     }
 #endif
     ucs_error("ibv_query_gid(dev=%s port=%d index=%d) failed: %m",
-              uct_ib_device_name(dev), port_num, gid_index);
+              dev_name, port_num, gid_index);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -637,49 +643,53 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
     return 1;
 }
 
-static ucs_status_t uct_ib_device_set_roce_gid_index(uct_ib_device_t *dev,
-                                                     uint8_t port_num,
-                                                     uint8_t *gid_index)
+ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,
+                                      uct_ib_device_gid_info_t *gid_info)
 {
-    static const uct_ib_roce_version_desc_t roce_prio[] = {
-        {2, 0, AF_INET},
-        {2, 0, AF_INET6},
-        {1, 0, AF_INET},
-        {1, 0, AF_INET6}
+    static const uct_ib_roce_version_info_t roce_prio[] = {
+        {UCT_IB_DEVICE_ROCE_V2, AF_INET},
+        {UCT_IB_DEVICE_ROCE_V2, AF_INET6},
+        {UCT_IB_DEVICE_ROCE_V1, AF_INET},
+        {UCT_IB_DEVICE_ROCE_V1, AF_INET6}
     };
     int gid_tbl_len         = uct_ib_device_port_attr(dev, port_num)->gid_tbl_len;
     ucs_status_t status     = UCS_OK;
     int priorities_arr_len  = ucs_static_array_size(roce_prio);
-    uct_ib_device_gid_info_t gid_info;
+    uct_ib_device_gid_info_t gid_info_tmp;
     int i, prio_idx;
 
-    /* search for matching GID table entries, accroding to the order defined
+    ucs_assert(uct_ib_device_is_port_roce(dev, port_num));
+
+    /* search for matching GID table entries, according to the order defined
      * in priorities array
      */
     for (prio_idx = 0; prio_idx < priorities_arr_len; prio_idx++) {
         for (i = 0; i < gid_tbl_len; i++) {
-            status = uct_ib_device_query_gid_info(dev, port_num, i, &gid_info);
+            status = uct_ib_device_query_gid_info(dev->ibv_context,
+                                                  uct_ib_device_name(dev),
+                                                  port_num, i, &gid_info_tmp);
             if (status != UCS_OK) {
                 goto out;
             }
 
-            if ((roce_prio[prio_idx].roce_major     == gid_info.roce_version.major) &&
-                (roce_prio[prio_idx].roce_minor     == gid_info.roce_version.minor) &&
-                (roce_prio[prio_idx].address_family ==
-                                uct_ib_device_get_addr_family(&gid_info.gid, i)) &&
-                uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info.gid, i)) {
+            if ((roce_prio[prio_idx].ver         == gid_info_tmp.roce_info.ver) &&
+                (roce_prio[prio_idx].addr_family == gid_info_tmp.roce_info.addr_family) &&
+                uct_ib_device_test_roce_gid_index(dev, port_num, &gid_info_tmp.gid, i)) {
 
-                *gid_index = i;
+                gid_info->gid_index = i;
+                gid_info->roce_info = gid_info_tmp.roce_info;
                 goto out_print;
             }
         }
     }
 
-    *gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
+    gid_info->gid_index             = UCT_IB_MD_DEFAULT_GID_INDEX;
+    gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_V1;
+    gid_info->roce_info.addr_family = AF_INET;
 
 out_print:
     ucs_debug("%s:%d using gid_index %d", uct_ib_device_name(dev), port_num,
-              *gid_index);
+              gid_info->gid_index);
 out:
     return status;
 }
@@ -696,26 +706,6 @@ int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num)
 int uct_ib_device_is_port_roce(uct_ib_device_t *dev, uint8_t port_num)
 {
     return IBV_PORT_IS_LINK_LAYER_ETHERNET(uct_ib_device_port_attr(dev, port_num));
-}
-
-ucs_status_t uct_ib_device_select_gid_index(uct_ib_device_t *dev,
-                                            uint8_t port_num,
-                                            size_t md_config_index,
-                                            uint8_t *gid_index)
-{
-    ucs_status_t status = UCS_OK;
-
-    if (md_config_index == UCS_ULUNITS_AUTO) {
-        if (uct_ib_device_is_port_roce(dev, port_num)) {
-            status = uct_ib_device_set_roce_gid_index(dev, port_num, gid_index);
-        } else {
-            *gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
-        }
-    } else {
-        *gid_index = md_config_index;
-    }
-
-    return status;
 }
 
 const char *uct_ib_device_name(uct_ib_device_t *dev)
@@ -740,11 +730,11 @@ size_t uct_ib_mtu_value(enum ibv_mtu mtu)
     ucs_fatal("Invalid MTU value (%d)", mtu);
 }
 
-uint8_t uct_ib_to_qp_fabric_time(double time)
+uint8_t uct_ib_to_qp_fabric_time(double t)
 {
     double to;
 
-    to = log(time / 4.096e-6) / log(2.0);
+    to = log(t / 4.096e-6) / log(2.0);
     if (to < 1) {
         return 1; /* Very small timeout */
     } else if ((long)(to + 0.5) >= UCT_IB_FABRIC_TIME_MAX) {
@@ -754,22 +744,22 @@ uint8_t uct_ib_to_qp_fabric_time(double time)
     }
 }
 
-uint8_t uct_ib_to_rnr_fabric_time(double time)
+uint8_t uct_ib_to_rnr_fabric_time(double t)
 {
-    double time_ms = time * UCS_MSEC_PER_SEC;
-    uint8_t index, next_index;
+    double time_ms = t * UCS_MSEC_PER_SEC;
+    uint8_t idx, next_index;
     double avg_ms;
 
-    for (index = 1; index < UCT_IB_FABRIC_TIME_MAX; index++) {
-        next_index = (index + 1) % UCT_IB_FABRIC_TIME_MAX;
+    for (idx = 1; idx < UCT_IB_FABRIC_TIME_MAX; idx++) {
+        next_index = (idx + 1) % UCT_IB_FABRIC_TIME_MAX;
 
         if (time_ms <= uct_ib_qp_rnr_time_ms[next_index]) {
-            avg_ms = (uct_ib_qp_rnr_time_ms[index] +
+            avg_ms = (uct_ib_qp_rnr_time_ms[idx] +
                       uct_ib_qp_rnr_time_ms[next_index]) * 0.5;
 
             if (time_ms < avg_ms) {
                 /* return previous index */
-                return index;
+                return idx;
             } else {
                 /* return current index */
                 return next_index;
@@ -910,13 +900,13 @@ int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
 }
 
 ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
-                                     unsigned gid_index, union ibv_gid *gid,
-                                     int *is_roce_v2)
+                                     unsigned gid_index, union ibv_gid *gid)
 {
     uct_ib_device_gid_info_t gid_info;
     ucs_status_t status;
 
-    status = uct_ib_device_query_gid_info(dev, port_num, gid_index, &gid_info);
+    status = uct_ib_device_query_gid_info(dev->ibv_context, uct_ib_device_name(dev),
+                                          port_num, gid_index, &gid_info);
     if (status != UCS_OK) {
         return status;
     }
@@ -927,15 +917,13 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    *gid        = gid_info.gid;
-    *is_roce_v2 = uct_ib_device_is_port_roce(dev, port_num) &&
-                  (gid_info.roce_version.major >= 2);
+    *gid = gid_info.gid;
     return UCS_OK;
 }
 
 size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
 {
-#if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
+#ifdef HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
     const struct ibv_exp_device_attr *dev_attr = &dev->dev_attr;
     uint32_t required_ud_odp_caps = IBV_EXP_ODP_SUPPORT_SEND;
     uint32_t required_rc_odp_caps = IBV_EXP_ODP_SUPPORT_SEND |
@@ -980,29 +968,13 @@ static ucs_status_t uct_ib_device_create_ah(uct_ib_device_t *dev,
                                             struct ibv_pd *pd,
                                             struct ibv_ah **ah_p)
 {
-    char buf[128];
-    char *p, *endp;
     struct ibv_ah *ah;
+    char buf[128];
 
     ah = ibv_create_ah(pd, ah_attr);
     if (ah == NULL) {
-        p    = buf;
-        endp = buf + sizeof(buf);
-        snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
-                 ah_attr->dlid, ah_attr->sl,
-                 ah_attr->port_num, ah_attr->src_path_bits);
-        p += strlen(p);
-
-        if (ah_attr->is_global) {
-            snprintf(p, endp - p, " dgid=");
-            p += strlen(p);
-            inet_ntop(AF_INET6, &ah_attr->grh.dgid, p, endp - p);
-            p += strlen(p);
-            snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
-                     ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
-        }
-
-        ucs_error("ibv_create_ah(%s) failed: %m", buf);
+        ucs_error("ibv_create_ah(%s) failed: %m",
+                  uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
         return UCS_ERR_INVALID_ADDR;
     }
 
@@ -1019,7 +991,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
     khiter_t iter;
     int ret;
 
-    ucs_spin_lock(&dev->ah_lock);
+    ucs_recursive_spin_lock(&dev->ah_lock);
 
     /* looking for existing AH with same attributes */
     iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
@@ -1047,7 +1019,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
     }
 
 unlock:
-    ucs_spin_unlock(&dev->ah_lock);
+    ucs_recursive_spin_unlock(&dev->ah_lock);
     return status;
 }
 
@@ -1084,4 +1056,75 @@ int uct_ib_get_cqe_size(int cqe_size_min)
     cqe_size = ucs_min(cqe_size, cqe_size_max);
 
     return cqe_size;
+}
+
+static ucs_status_t
+uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
+                                 char *ndev_name, size_t max)
+{
+    ssize_t nread;
+
+    ucs_assert_always(uct_ib_device_is_port_roce(dev, port_num));
+
+    /* get the network device name which corresponds to a RoCE port */
+    nread = ucs_read_file_str(ndev_name, max, 1,
+                              UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
+                              uct_ib_device_name(dev), port_num, 0);
+    if (nread < 0) {
+        ucs_diag("failed to read " UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT": %m",
+                 uct_ib_device_name(dev), port_num, 0);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    ucs_strtrim(ndev_name);
+    return UCS_OK;
+}
+
+unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num)
+{
+    char ndev_name[IFNAMSIZ];
+    unsigned roce_lag_level;
+    ucs_status_t status;
+    long lag_enable;
+
+    status = ucs_read_file_number(&lag_enable, 1, UCT_IB_DEVICE_SYSFS_FMT,
+                                  uct_ib_device_name(dev), "roce_lag_enable");
+    if ((status != UCS_OK) || !lag_enable) {
+        ucs_debug("RoCE LAG is disabled on %s", uct_ib_device_name(dev));
+        return 1;
+    }
+
+    status = uct_ib_device_get_roce_ndev_name(dev, port_num, ndev_name,
+                                              sizeof(ndev_name));
+    if (status != UCS_OK) {
+        return 1;
+    }
+
+    roce_lag_level = ucs_netif_bond_ad_num_ports(ndev_name);
+    ucs_debug("RoCE LAG level on %s:%d (%s) is %u", uct_ib_device_name(dev),
+              port_num, ndev_name, roce_lag_level);
+    return roce_lag_level;
+}
+
+const char* uct_ib_ah_attr_str(char *buf, size_t max,
+                               const struct ibv_ah_attr *ah_attr)
+{
+    char *p    = buf;
+    char *endp = buf + max;
+
+    snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
+             ah_attr->dlid, ah_attr->sl,
+             ah_attr->port_num, ah_attr->src_path_bits);
+    p += strlen(p);
+
+    if (ah_attr->is_global) {
+        snprintf(p, endp - p, " dgid=");
+        p += strlen(p);
+        uct_ib_gid_str(&ah_attr->grh.dgid, p, endp - p);
+        p += strlen(p);
+        snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
+                 ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
+    }
+
+    return buf;
 }

@@ -73,6 +73,7 @@ available, TCP is used instead. UCX supports efficient transfer of data in
 either main memory (RAM) or GPU memory (through CUDA and ROCm libraries).
 In addition, UCX provides efficient intra-node communication, by leveraging the
 following shared memory mechanisms: posix, sysv, cma, knem, and xpmem.
+This package was built from '@SCM_BRANCH@' branch, commit @SCM_VERSION@.
 
 %if "%{_vendor}" == "suse"
 %debug_package
@@ -97,6 +98,7 @@ Provides header files and examples for developing with UCX.
            --disable-debug \
            --disable-assertions \
            --disable-params-check \
+           --enable-examples \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
            %_with_arg gdrcopy gdrcopy \
@@ -310,6 +312,8 @@ Provides java bindings for UCX.
 %endif
 
 %changelog
+* Mon Feb 10 2020 Yossi Itigin <yosefe@mellanox.com> 1.9.0-1
+- Bump version to 1.9.0
 * Sun Sep 22 2019 Yossi Itigin <yosefe@mellanox.com> 1.8.0-1
 - Bump version to 1.8.0
 * Sun Mar 24 2019 Yossi Itigin <yosefe@mellanox.com> 1.7.0-1
