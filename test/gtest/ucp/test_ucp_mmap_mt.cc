@@ -17,7 +17,7 @@ class test_ucp_mmap_mt : public test_ucp_memheap {
     public:
         static ucp_params_t get_ctx_params() {
             ucp_params_t params = ucp_test::get_ctx_params();
-            params.features |= UCP_FEATURE_RMA;
+            params.features |= UCP_FEATURE_RMA | UCP_FEATURE_AMO;
             return params;
         }
 
@@ -154,6 +154,44 @@ UCS_TEST_P(test_ucp_mmap_mt, reg_mt) {
         }
         #endif
     }
+}
+
+UCS_TEST_P(test_ucp_mmap_mt, rkey_pack_mt) {
+    sender().connect(&sender(), get_ep_params());
+    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
+        ucs_status_t status;
+
+        size_t size = ucs::rand() % (UCS_MBYTE);
+
+        void *ptr = malloc(size);
+        ucs::fill_random(ptr, size);
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.address = ptr;
+        params.length = size;
+        params.flags = rand_flags();
+
+        status = ucp_mem_map(sender().ucph(), &params, &memh);
+        ASSERT_UCS_OK(status);
+
+        // Test parallel rkey_pack for the same memh
+        #if _OPENMP && ENABLE_MT
+        #pragma omp parallel for
+            for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
+                test_rkey_management(&sender(), memh, (size == 0));
+            }
+        #endif
+
+        status = ucp_mem_unmap(sender().ucph(), memh);
+        ASSERT_UCS_OK(status);
+
+        free(ptr);
+  }
 }
 
 UCS_TEST_P(test_ucp_mmap_mt, reg_advise_mt) {
