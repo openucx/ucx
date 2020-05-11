@@ -58,7 +58,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     size_t rndv_rma_thresh;
     size_t rndv_am_thresh;
 
-    if (param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {
+    if ((param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
         rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv_send_nbr.rma_thresh;
         rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv_send_nbr.am_thresh;
     } else {

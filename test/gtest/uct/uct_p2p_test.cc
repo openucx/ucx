@@ -249,12 +249,23 @@ void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
 {
     unsigned prev_comp_count = m_completion_count;
 
+    ucs_assert(m_completion.uct.count == 0);
+
     ucs_status_t status;
     do {
+        if (!m_null_completion) {
+            ++m_completion.uct.count;
+        }
         status = (this->*send)(ep, sendbuf, recvbuf);
         if (status == UCS_OK) {
+            if (!m_null_completion) {
+                --m_completion.uct.count;
+            }
             return;
         } else if (status == UCS_ERR_NO_RESOURCE) {
+            if (!m_null_completion) {
+                --m_completion.uct.count;
+            }
             progress();
         } else if (status == UCS_INPROGRESS) {
             break;
@@ -274,7 +285,6 @@ void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
             flush(); 
         } else {
             /* explicit non-blocking mode */
-            ++m_completion.uct.count;
             while (m_completion_count <= prev_comp_count) {
                 progress();
             }

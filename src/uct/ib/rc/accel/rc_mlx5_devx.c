@@ -211,7 +211,8 @@ ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
-                                         struct ibv_ah_attr *ah_attr)
+                                         struct ibv_ah_attr *ah_attr,
+                                         enum ibv_mtu path_mtu)
 {
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
     char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
@@ -228,8 +229,9 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, qp->qp_num);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, 14);
 
+    ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
     qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
-    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, iface->super.config.path_mtu);
+    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, path_mtu);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
     UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
     if (uct_ib_iface_is_roce(&iface->super.super)) {
@@ -312,7 +314,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
               "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d",
               qp->qp_num, UCT_IB_IFACE_ARG(&iface->super.super), ah_attr->dlid,
               ah_attr->src_path_bits, ah_attr->sl, dest_qp_num,
-              uct_ib_mtu_value(iface->super.config.path_mtu),
+              uct_ib_mtu_value(iface->super.super.config.path_mtu),
               iface->super.config.timeout,
               iface->super.config.retry_cnt,
               iface->super.config.min_rnr_timer,

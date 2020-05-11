@@ -649,6 +649,10 @@ public:
         return m_initialized ? m_value : NULL;
     }
 
+    T operator->() const {
+        return get();
+    }
+
 private:
 
     void release() {

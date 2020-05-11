@@ -9,6 +9,7 @@
 
 #include <ucs/type/spinlock.h>
 
+
 /* Names of rcache stats counters */
 enum {
     UCS_RCACHE_GETS,                /* number of get operations */
@@ -28,21 +29,30 @@ enum {
 
 struct ucs_rcache {
     ucs_rcache_params_t      params;   /**< rcache parameters (immutable) */
-    pthread_rwlock_t         lock;     /**< Protects the page table and all regions
-                                            whose refcount is 0 */
+
+    pthread_rwlock_t         pgt_lock; /**< Protects the page table and all
+                                            regions whose refcount is 0 */
     ucs_pgtable_t            pgtable;  /**< page table to hold the regions */
 
-    ucs_recursive_spinlock_t inv_lock; /**< Lock for inv_q and inv_mp. This is a
-                                          separate lock because we may want to put
-                                          regions on inv_q while the page table
-                                          lock is held by the calling context */
-    ucs_queue_head_t         inv_q;    /**< Regions which were invalidated during
-                                            memory events */
-    ucs_mpool_t              inv_mp;   /**< Memory pool to allocate entries for inv_q,
-                                            since we cannot use regulat malloc().
+
+    ucs_spinlock_t           lock;     /**< Protects 'mp', 'inv_q' and 'gc_list'.
+                                            This is a separate lock because we
+                                            may want to invalidate regions
+                                            while the page table lock is held by
+                                            the calling context.
+                                            @note: This lock should always be
+                                            taken **after** 'pgt_lock'. */
+    ucs_mpool_t              mp;       /**< Memory pool to allocate entries for
+                                            inv_q and page table entries, since
+                                            we cannot use regular malloc().
                                             The backing storage is original mmap()
                                             which does not generate memory events */
-    char                     *name;
+    ucs_queue_head_t         inv_q;    /**< Regions which were invalidated during
+                                            memory events */
+    ucs_list_link_t          gc_list;  /**< list for regions to destroy, regions
+                                            could not be destroyed from memhook */
+
+    char                     *name;    /**< Name of the cache, for debug purpose */
     UCS_STATS_NODE_DECLARE(stats)
 };
 

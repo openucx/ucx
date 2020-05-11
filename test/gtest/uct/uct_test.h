@@ -10,6 +10,8 @@
 #ifndef UCT_TEST_H_
 #define UCT_TEST_H_
 
+#include <common/test.h>
+
 #include <uct/api/uct.h>
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>

@@ -3,12 +3,10 @@
 * See file LICENSE for terms.
 */
 
-#include <common/test.h>
 #include <uct/uct_test.h>
 
 extern "C" {
 #include <poll.h>
-#include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_iface.h>
