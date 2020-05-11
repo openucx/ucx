@@ -76,7 +76,7 @@ static inline ucs_time_t ucs_time_from_sec(double sec)
 }
 
 /**
- * Convert seconds to UCS time units.
+ * Convert milliseconds to UCS time units.
  */
 static inline ucs_time_t ucs_time_from_msec(double msec)
 {
@@ -84,7 +84,7 @@ static inline ucs_time_t ucs_time_from_msec(double msec)
 }
 
 /**
- * Convert seconds to UCS time units.
+ * Convert microseconds to UCS time units.
  */
 static inline ucs_time_t ucs_time_from_usec(double usec)
 {
