@@ -185,7 +185,8 @@ gtest_LDADD += \
 	$(top_builddir)/src/uct/ib/libuct_ib.la
 if HAVE_DEVX
 gtest_SOURCES += \
-	uct/ib/test_devx.cc
+	uct/ib/test_devx.cc \
+	uct/ib/test_ib_event.cc
 endif
 if HAVE_TL_UD
 gtest_SOURCES += \

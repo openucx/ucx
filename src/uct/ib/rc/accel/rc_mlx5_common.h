@@ -723,36 +723,15 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 }
 #endif
 
-#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
-ucs_status_t uct_rc_mlx5_devx_init_events(uct_rc_mlx5_iface_common_t *iface);
+ucs_status_t uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface);
 
-void uct_rc_mlx5_devx_free_events(uct_rc_mlx5_iface_common_t *iface);
+void uct_rc_mlx5_devx_iface_free_events(uct_rc_mlx5_iface_common_t *iface);
 
-ucs_status_t uct_rc_mlx5_devx_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
-                                              uct_ib_mlx5_qp_t *qp,
-                                              unsigned event_num,
-                                              unsigned event_type,
-                                              unsigned event_data);
-#else
-static UCS_F_MAYBE_UNUSED ucs_status_t
-uct_rc_mlx5_devx_init_events(uct_rc_mlx5_iface_common_t *iface)
-{
-    return UCS_OK;
-}
-
-static UCS_F_MAYBE_UNUSED void
-uct_rc_mlx5_devx_free_events(uct_rc_mlx5_iface_common_t *iface) { }
-
-static UCS_F_MAYBE_UNUSED ucs_status_t
-uct_rc_mlx5_devx_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
-                                 uct_ib_mlx5_qp_t *qp,
-                                 unsigned event_num,
-                                 unsigned event_type,
-                                 unsigned event_data)
-{
-    return UCS_OK;
-}
-#endif
+ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
+                                                    uct_ib_mlx5_qp_t *qp,
+                                                    unsigned event_num,
+                                                    enum ibv_event_type event_type,
+                                                    unsigned event_data);
 
 void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_qp_attr_t *qp_attr,

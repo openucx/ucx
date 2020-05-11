@@ -4,12 +4,6 @@
 * See file LICENSE for terms.
 */
 
-/*
- * Powerpc needs __SANE_USERSPACE_TYPES__ before <linux/types.h> to select
- * 'int-ll64.h' and avoid compile warnings when printing __u64 with %llu.
- */
-#define __SANE_USERSPACE_TYPES__
-
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -22,13 +16,13 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 
-#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
-ucs_status_t uct_rc_mlx5_devx_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
-                                              uct_ib_mlx5_qp_t *qp,
-                                              unsigned event_num,
-                                              unsigned event_type,
-                                              unsigned event_data)
+ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
+                                                    uct_ib_mlx5_qp_t *qp,
+                                                    unsigned event_num,
+                                                    enum ibv_event_type event_type,
+                                                    unsigned event_data)
 {
+#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
     uint64_t cookie;
     uint16_t event;
     int ret;
@@ -45,11 +39,13 @@ ucs_status_t uct_rc_mlx5_devx_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
         ucs_error("mlx5dv_devx_subscribe_devx_event() failed: %m");
         return UCS_ERR_IO_ERROR;
     }
+#endif
 
     return UCS_OK;
 }
 
-static void uct_rc_mlx5_devx_event_handler(int fd, void *arg)
+#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
+static void uct_rc_mlx5_devx_iface_event_handler(int fd, void *arg)
 {
     uct_rc_mlx5_iface_common_t *iface = arg;
     uct_ib_md_t *md                   = uct_ib_iface_md(&iface->super.super);
@@ -69,19 +65,21 @@ static void uct_rc_mlx5_devx_event_handler(int fd, void *arg)
         event.qp_num = devx_event.cookie >> UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT;
         break;
     default:
-        ucs_warn("unexpected async event: %llx", devx_event.cookie);
+        ucs_warn("unexpected async event: %d", event.event_type);
         return;
     }
 
     uct_ib_handle_async_event(&md->dev, &event);
 }
+#endif
 
-ucs_status_t uct_rc_mlx5_devx_init_events(uct_rc_mlx5_iface_common_t *iface)
+ucs_status_t uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface)
 {
+    ucs_status_t status = UCS_OK;
+#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
     uct_ib_mlx5_md_t *md  = ucs_derived_of(uct_ib_iface_md(&iface->super.super),
                                            uct_ib_mlx5_md_t);
     struct mlx5dv_devx_event_channel *event_channel;
-    ucs_status_t status;
 
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) || !md->super.dev.async_events) {
         iface->event_channel = NULL;
@@ -93,41 +91,47 @@ ucs_status_t uct_rc_mlx5_devx_init_events(uct_rc_mlx5_iface_common_t *iface)
             MLX5_IB_UAPI_DEVX_CR_EV_CH_FLAGS_OMIT_DATA);
 
     if (event_channel == NULL) {
-            ucs_error("mlx5dv_devx_create_event_channel() failed: %m");
-            return UCS_ERR_IO_ERROR;
+        ucs_error("mlx5dv_devx_create_event_channel() failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err;
+
     }
 
     status = ucs_sys_fcntl_modfl(event_channel->fd, O_NONBLOCK, 0);
     if (status != UCS_OK) {
-        goto err;
+        goto err_destroy_channel;
     }
 
-    status = ucs_async_set_event_handler(UCS_ASYNC_THREAD_LOCK_TYPE,
-            event_channel->fd, UCS_EVENT_SET_EVREAD,
-            uct_rc_mlx5_devx_event_handler, iface, NULL);
+    status = ucs_async_set_event_handler(iface->super.super.super.worker->async->mode,
+                                         event_channel->fd, UCS_EVENT_SET_EVREAD,
+                                         uct_rc_mlx5_devx_iface_event_handler, iface,
+                                         iface->super.super.super.worker->async);
     if (status != UCS_OK) {
-        goto err;
+        goto err_destroy_channel;
     }
 
     iface->event_channel = event_channel;
     return UCS_OK;
 
-err:
+err_destroy_channel:
     mlx5dv_devx_destroy_event_channel(event_channel);
     iface->event_channel = NULL;
+err:
+#endif
     return status;
 }
 
-void uct_rc_mlx5_devx_free_events(uct_rc_mlx5_iface_common_t *iface)
+void uct_rc_mlx5_devx_iface_free_events(uct_rc_mlx5_iface_common_t *iface)
 {
+#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
     if (iface->event_channel == NULL) {
         return;
     }
 
     ucs_async_remove_handler(iface->event_channel->fd, 1);
     mlx5dv_devx_destroy_event_channel(iface->event_channel);
-}
 #endif
+}
 
 static ucs_status_t
 uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,

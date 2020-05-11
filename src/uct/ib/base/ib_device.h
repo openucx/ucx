@@ -190,12 +190,12 @@ typedef struct {
 
 
 typedef struct {
-    unsigned           event_type;
+    enum ibv_event_type event_type;
     union {
-        unsigned       port_num;
-        unsigned       qp_num;
-        unsigned       dct_num;
-        void           *cookie;
+        uint8_t         port_num;
+        uint32_t        qp_num;
+        uint32_t        dct_num;
+        void            *cookie;
     };
 } uct_ib_async_event_t;
 

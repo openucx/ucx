@@ -215,6 +215,8 @@ static void uct_ib_async_event_handler(int fd, void *arg)
         }
         break;
 #endif
+    default:
+        break;
     };
 
     uct_ib_handle_async_event(dev, &event);
