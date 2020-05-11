@@ -31,9 +31,9 @@ struct ucs_async_handler {
 /**
  * Dispatch event coming from async context.
  *
- * @param handler_ids        Array of handler IDs to dispatch.
- * @param count              Number of events
- * @param triggered_events   Events to pass to the handler
+ * @param handler_ids   Array of handler IDs to dispatch.
+ * @param count         Number of events
+ * @param events        Events to pass to the handler
  */
 ucs_status_t ucs_async_dispatch_handlers(int *handler_ids, size_t count, int events);
 
