@@ -185,21 +185,23 @@ enum {
 
 /* TODO: optimize endpoint memory footprint */
 enum {
-    UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(0), /* set if the endpoint was disconnected */
+    UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(0), /* EP was disconnected */
     UCT_UD_EP_FLAG_PRIVATE           = UCS_BIT(1), /* EP was created as internal */
+    UCT_UD_EP_FLAG_HAS_PENDING       = UCS_BIT(2), /* EP has some pending requests */
+    UCT_UD_EP_FLAG_CONNECTED         = UCS_BIT(3), /* EP was connected to the peer */
 
     /* debug flags */
-    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(3), /* CREQ message was received */
-    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(4), /* CREP message was received */
-    UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(5), /* CREQ message was sent */
-    UCT_UD_EP_FLAG_CREP_SENT         = UCS_BIT(6), /* CREP message was sent */
-    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(7), /* CREQ message is NOT sent, because
+    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(4), /* CREQ message was received */
+    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(5), /* CREP message was received */
+    UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(6), /* CREQ message was sent */
+    UCT_UD_EP_FLAG_CREP_SENT         = UCS_BIT(7), /* CREP message was sent */
+    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(8), /* CREQ message is NOT sent, because
                                                       connection establishment process
                                                       is driven by remote side. */
 
     /* Endpoint is currently executing the pending queue */
 #if UCS_ENABLE_ASSERT
-    UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(8)
+    UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(9)
 #else
     UCT_UD_EP_FLAG_IN_PENDING        = 0
 #endif
@@ -388,11 +390,20 @@ uct_ud_ep_ctl_op_check_ex(uct_ud_ep_t *ep, uint32_t ops)
            ((ep->tx.pending.ops & ~ops) == 0);
 }
 
-
-/* TODO: relay on window check instead. max_psn = psn  */
+/* TODO: rely on window check instead. max_psn = psn  */
 static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_connected(uct_ud_ep_t *ep)
 {
-    return ep->dest_ep_id != UCT_UD_EP_NULL_ID;
+    ucs_assert((ep->dest_ep_id == UCT_UD_EP_NULL_ID) ==
+               !(ep->flags & UCT_UD_EP_FLAG_CONNECTED));
+    return ep->flags & UCT_UD_EP_FLAG_CONNECTED;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ud_ep_is_connected_and_no_pending(uct_ud_ep_t *ep)
+{
+    return (ep->flags & (UCT_UD_EP_FLAG_CONNECTED |
+                         UCT_UD_EP_FLAG_HAS_PENDING))
+           == UCT_UD_EP_FLAG_CONNECTED;
 }
 
 static UCS_F_ALWAYS_INLINE int uct_ud_ep_no_window(uct_ud_ep_t *ep)

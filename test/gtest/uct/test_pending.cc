@@ -145,6 +145,13 @@ public:
         return UCS_OK;
     }
 
+    static ucs_status_t am_handler_count(void *arg, void *data, size_t length,
+                                         unsigned flags) {
+        volatile unsigned *counter = (volatile unsigned*) arg;
+        ucs_atomic_add32(counter, 1);
+        return UCS_OK;
+    }
+
     static ucs_status_t am_handler_simple(void *arg, void *data, size_t length,
                                           unsigned flags) {
         return UCS_OK;
@@ -205,6 +212,24 @@ public:
         return status;
     }
 
+    static ucs_status_t pending_send_op_add_pending(uct_pending_req_t *self) {
+        ucs_status_t status = pending_send_op(self);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            pending_send_request_t *req = ucs_container_of(self,
+                                                           pending_send_request_t,
+                                                           uct);
+            /* replace with the callback that just do sends and return
+             * `UCS_ERR_NO_RESOURCE` in case of no resources on the given EP */
+            req->uct.func = pending_send_op;
+
+            status = uct_ep_pending_add(req->ep, &req->uct, 0);
+            ASSERT_UCS_OK(status);
+            return UCS_OK;
+        }
+
+        return status;
+    }
+
     static void purge_cb(uct_pending_req_t *self, void *arg)
     {
         pending_send_request_t *req = ucs_container_of(self,
@@ -214,14 +239,15 @@ public:
         ++n_purge;
     }
 
-    pending_send_request_t* pending_alloc(uint64_t send_data, int idx = 0,
-                                          int count = 5, bool delete_me = true) {
+    pending_send_request_t* pending_alloc(uint64_t send_data, int ep_idx = 0,
+                                          int count = 5, bool delete_me = true,
+                                          uct_pending_callback_t cb = pending_send_op) {
         pending_send_request_t *req = new pending_send_request_t();
-        req->ep                     = m_e1->ep(idx);
+        req->ep                     = m_e1->ep(ep_idx);
         req->data                   = send_data;
         req->pending                = false;
         req->countdown              = count;
-        req->uct.func               = pending_send_op;
+        req->uct.func               = cb;
         req->delete_me              = delete_me;
         req->send_count             = 0;
 
@@ -326,6 +352,81 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending,
 
     /* the receive side checks that the messages were received in order.
      * check the last message here. (counter was raised by one for next iteration) */
+    wait_for_value(&counter, n_sends, true);
+    EXPECT_EQ(n_sends, counter);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending_another_ep,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT |
+                                 UCT_IFACE_FLAG_PENDING))
+{
+    const int num_eps  = 2;
+    uint64_t send_data = 0xdeadbeefUL;
+    unsigned counter   = 0;
+    unsigned n_sends   = 0;
+    bool ep_pending_idx[num_eps];
+
+     /* set a callback for the uct to invoke when receiving the data */
+    install_handler_sync_or_async(m_e2->iface(), AM_ID, am_handler_count,
+                                  &counter);
+
+    for (unsigned idx = 0; idx < num_eps; ++idx) {
+        m_e1->connect(idx, *m_e2, idx);
+        ep_pending_idx[idx] = false;
+    }
+
+    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(3);
+    unsigned n_iters          = 10000;
+    unsigned i                = 0;
+    unsigned num_ep_pending   = 0;
+
+    n_pending = 0;
+
+    do {
+        ucs_status_t status;
+
+        for (unsigned idx = 0; idx < num_eps; ++idx) {
+            if (ep_pending_idx[idx]) {
+                num_ep_pending++;
+                continue;
+            }
+
+            /* try to user all transport's resources */
+            status = uct_ep_am_short(m_e1->ep(idx), AM_ID, PENDING_HDR,
+                                     &send_data, sizeof(send_data));
+            if (status != UCS_OK) {
+                ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
+                ep_pending_idx[idx] = true;
+
+                /* schedule pending req to send data on the another EP */
+                pending_send_request_t *preq =
+                    pending_alloc(send_data, num_eps - idx - 1,
+                                  0, true, pending_send_op_add_pending);
+                status = uct_ep_pending_add(m_e1->ep(idx), &preq->uct, 0);
+                ASSERT_UCS_OK(status);
+                ++n_pending;
+                preq->pending = true;
+                /* coverity[leaked_storage] */
+            }
+            ++n_sends;
+        }
+
+        ++i;
+    } while ((num_ep_pending < num_eps) &&
+             (i < n_iters) && (ucs_get_time() < loop_end_limit));
+
+    if (num_ep_pending != num_eps) {
+        std::stringstream ss;
+        ss << "can't fill UCT resources for all EPs in the given time "
+           << "(done=" << num_ep_pending << ", expected=" << num_eps << ")";
+        UCS_TEST_SKIP_R(ss.str());
+    }
+
+    flush();
+
+    wait_for_value(&n_pending, 0, true);
+    EXPECT_EQ(0, n_pending);
+
     wait_for_value(&counter, n_sends, true);
     EXPECT_EQ(n_sends, counter);
 }

@@ -268,6 +268,16 @@ static inline int ucs_arbiter_is_empty(ucs_arbiter_t *arbiter)
 
 
 /**
+ * @return the last group element.
+ */
+static inline ucs_arbiter_elem_t*
+ucs_arbiter_group_tail(ucs_arbiter_group_t *group)
+{
+    return group->tail;
+}
+
+
+/**
  * @return whether the group does not have any queued elements.
  */
 static inline int ucs_arbiter_group_is_empty(ucs_arbiter_group_t *group)
