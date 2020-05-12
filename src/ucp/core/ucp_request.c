@@ -357,9 +357,13 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         if (length <= (msg_config->max_bcopy - proto->only_hdr_size)) {
             req->send.uct.func = proto->bcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
-        } else {
+        } else  if (proto->bcopy_multi != NULL) {
             ucp_request_init_multi_proto(req, proto->bcopy_multi,
                                          "start_bcopy_multi");
+        } else {
+            /* tag offload proto does not support multi-fragment,
+             * switch to RNDV*/
+            return UCS_ERR_NO_PROGRESS;
         }
         return UCS_OK;
     } else if (length < zcopy_max) {

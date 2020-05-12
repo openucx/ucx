@@ -90,7 +90,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     if (ucs_unlikely(status != UCS_OK)) {
         if (status == UCS_ERR_NO_PROGRESS) {
             /* RMA/AM rendezvous */
-            ucs_assert(req->send.length >= rndv_thresh);
+            ucs_assert((req->send.length >= rndv_thresh) ||
+                       (proto->bcopy_multi == NULL));
             status = ucp_tag_send_start_rndv(req);
             if (status != UCS_OK) {
                 return UCS_STATUS_PTR(status);
