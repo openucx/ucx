@@ -1031,7 +1031,11 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     int max_log_sge;
     uint16_t iovcnt;
 
-    ucs_assert_always(UCT_UD_PSN_COMPARE(ep->resend.max_psn, >, ep->tx.acked_psn));
+    /* check if the resend window was acknowledged */
+    if (UCT_UD_PSN_COMPARE(ep->resend.max_psn, <=, ep->tx.acked_psn)) {
+        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+        return;
+    }
 
     /* check window */
     resend_pos = ep->resend.pos;
