@@ -385,11 +385,6 @@ public:
                              m_delay_conn_reply(false) {
     }
 
-    struct ep_state_t {
-        uct_ep_h         ep;
-        volatile uint8_t state;
-    };
-
     void init() {
         uct_test::init();
 
@@ -1039,13 +1034,24 @@ public:
                                     m_ep_init_disconnect_cnt(0) {
     }
 
+    struct ep_state_t {
+        uct_ep_h         ep;
+        volatile uint8_t state;
+    };
+
     void init() {
         test_uct_cm_sockaddr::init();
 
         m_clients_num = ucs_max(2, 100 / ucs::test_time_multiplier());
+        pthread_mutex_init(&m_lock, NULL);
     }
 
-    int get_ep_index (uct_ep_h ep) {
+    void cleanup() {
+        pthread_mutex_destroy(&m_lock);
+        test_uct_cm_sockaddr::cleanup();
+    }
+
+    int get_ep_index(uct_ep_h ep) {
         for (int i = 0; i < (2 * m_clients_num); i++) {
             if (m_all_eps[i].ep == ep) {
                 return i;
@@ -1059,20 +1065,25 @@ public:
         int index;
 
         index = get_ep_index(ep);
-        EXPECT_GE(index, 0);
+        ASSERT_GE(index, 0);
         EXPECT_LT(index, (2 * m_clients_num));
 
         pthread_mutex_lock(&m_lock);
         m_all_eps[index].state |= TEST_EP_FLAG_DISCONNECT_CB_INVOKED;
-        pthread_mutex_unlock(&m_lock);
 
         if (m_all_eps[index].state & TEST_EP_FLAG_DISCONNECT_INITIATOR) {
-            pthread_mutex_lock(&m_lock);
             m_ep_init_disconnect_cnt--;
             pthread_mutex_unlock(&m_lock);
         } else {
+            pthread_mutex_unlock(&m_lock);
             ASSERT_UCS_OK(uct_ep_disconnect(ep, 0));
         }
+    }
+
+    void disconnect_cnt_increment(volatile int *cnt) {
+        pthread_mutex_lock(&m_lock);
+        (*cnt)++;
+        pthread_mutex_unlock(&m_lock);
     }
 
     static void server_disconnect_cb(uct_ep_h ep, void *arg) {
@@ -1080,7 +1091,7 @@ public:
                         reinterpret_cast<test_uct_cm_sockaddr_stress *>(arg);
 
         self->common_test_disconnect(ep);
-        self->m_server_disconnect_cnt++;
+        self->disconnect_cnt_increment(&self->m_server_disconnect_cnt);
     }
 
     static void client_disconnect_cb(uct_ep_h ep, void *arg) {
@@ -1088,7 +1099,7 @@ public:
                         reinterpret_cast<test_uct_cm_sockaddr_stress *>(arg);
 
         self->common_test_disconnect(ep);
-        self->m_client_disconnect_cnt++;
+        self->disconnect_cnt_increment(&self->m_client_disconnect_cnt);
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
@@ -1126,11 +1137,12 @@ protected:
 
 UCS_TEST_P(test_uct_cm_sockaddr_stress, many_clients_to_one_server)
 {
-    int i, no_disconnect_eps_cnt = 0;
+    int i, disconnected_eps_on_each_side, no_disconnect_eps_cnt = 0;
     entity *client_test;
     time_t seed = time(0);
     ucs_time_t deadline;
 
+    skip_tcp_sockcm();
     /* Listen */
     start_listen(test_uct_cm_sockaddr_stress::conn_request_cb);
 
@@ -1156,9 +1168,8 @@ UCS_TEST_P(test_uct_cm_sockaddr_stress, many_clients_to_one_server)
 
     /* Disconnect */
     srand(seed);
-    UCS_TEST_MESSAGE << "Using seed: " << seed;
+    UCS_TEST_MESSAGE << "Using random seed: " << seed;
 
-    pthread_mutex_init(&m_lock, NULL);
     m_all_eps.resize(2 * m_clients_num);
 
     /* save all the clients' and server's eps in the m_all_eps array */
@@ -1174,23 +1185,30 @@ UCS_TEST_P(test_uct_cm_sockaddr_stress, many_clients_to_one_server)
     /* go over the eps array and for each ep - use rand() to decide whether or
      * not it should initiate a disconnect */
     for (i = 0; i < (2 * m_clients_num); ++i) {
-        if (ucs::rand() % 2) {
-            /* don't start a disconnect on an ep that was already disconnected */
-            pthread_mutex_lock(&m_lock);
-            if (!(m_all_eps[i].state & TEST_EP_FLAG_DISCONNECT_CB_INVOKED)) {
-                m_all_eps[i].state |= TEST_EP_FLAG_DISCONNECT_INITIATOR;
-                ASSERT_UCS_OK(uct_ep_disconnect(m_all_eps[i].ep, 0));
-                /* count the number of eps that initiated a disconnect */
-                m_ep_init_disconnect_cnt++;
-            }
-            pthread_mutex_unlock(&m_lock);
+        if ((ucs::rand() % 2) == 0) {
+            continue;
         }
+
+        /* don't start a disconnect on an ep that was already disconnected */
+        pthread_mutex_lock(&m_lock);
+        if (!(m_all_eps[i].state & TEST_EP_FLAG_DISCONNECT_CB_INVOKED)) {
+            m_all_eps[i].state |= TEST_EP_FLAG_DISCONNECT_INITIATOR;
+            pthread_mutex_unlock(&m_lock);
+            /* uct_ep_disconnect cannot be called when m_lock is taken
+             * in order to prevent abba deadlock since uct will try taking
+             * the async lock inside this function */
+            ASSERT_UCS_OK(uct_ep_disconnect(m_all_eps[i].ep, 0));
+            /* count the number of eps that initiated a disconnect */
+            pthread_mutex_lock(&m_lock);
+            m_ep_init_disconnect_cnt++;
+        }
+        pthread_mutex_unlock(&m_lock);
     }
 
     /* wait for all the disconnect flows that began, to complete.
      * if an ep initiated a disconnect, its disconnect callback should have been
      * called, and so is the disconnect callback of its remote peer ep.
-     * every ep that initiated a disconnect is counted. this couneter is
+     * every ep that initiated a disconnect is counted. this counter is
      * decremented in its disconnect cb, therefore once all eps that initiated
      * a disconnect are disconnected, this counter should be equal to zero */
     deadline = ucs_get_time() + ucs_time_from_sec(10 * DEFAULT_TIMEOUT_SEC) *
@@ -1206,10 +1224,8 @@ UCS_TEST_P(test_uct_cm_sockaddr_stress, many_clients_to_one_server)
         if (m_all_eps[i].state == 0) {
             no_disconnect_eps_cnt++;
         } else {
-            EXPECT_TRUE((m_all_eps[i].state ==
-                        (TEST_EP_FLAG_DISCONNECT_INITIATOR |
-                         TEST_EP_FLAG_DISCONNECT_CB_INVOKED)) ||
-                        (m_all_eps[i].state == TEST_EP_FLAG_DISCONNECT_CB_INVOKED));
+            EXPECT_TRUE((m_all_eps[i].state & ~TEST_EP_FLAG_DISCONNECT_INITIATOR) ==
+                        TEST_EP_FLAG_DISCONNECT_CB_INVOKED);
         }
     }
 
@@ -1217,24 +1233,17 @@ UCS_TEST_P(test_uct_cm_sockaddr_stress, many_clients_to_one_server)
                      " (out of " << (2 * m_clients_num) << ") "
                      "eps were not disconnected during the test.";
 
+    disconnected_eps_on_each_side = ((2 * m_clients_num) - no_disconnect_eps_cnt) / 2;
     wait_for_client_server_counters(&m_server_disconnect_cnt,
                                     &m_client_disconnect_cnt,
-                                    ((2 * m_clients_num) - no_disconnect_eps_cnt) / 2);
+                                    disconnected_eps_on_each_side);
 
-    EXPECT_EQ(((2 * m_clients_num) - no_disconnect_eps_cnt) / 2, m_server_disconnect_cnt);
-    EXPECT_EQ(((2 * m_clients_num) - no_disconnect_eps_cnt) / 2, m_client_disconnect_cnt);
+    EXPECT_EQ(disconnected_eps_on_each_side, m_server_disconnect_cnt);
+    EXPECT_EQ(disconnected_eps_on_each_side, m_client_disconnect_cnt);
 
-    /* destroy all the eps here (and not in the test's distruction flow) so that
-     * no disconnect ballbacks are invoked after the test ends */
-    for (i = 0; i < m_clients_num; i++) {
-        client_test = m_entities.back();
-        client_test->destroy_ep(0);
-        m_entities.remove(client_test);
-
-        m_server->destroy_ep(i);
-    }
-
-    pthread_mutex_destroy(&m_lock);
+    /* destroy all the eps here (and not in the test's destruction flow) so that
+     * no disconnect callbacks are invoked after the test ends */
+    m_entities.clear();
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr_stress)
