@@ -68,7 +68,7 @@ ucs_status_t test_ucp_am_base::ucp_process_am_cb(void *arg, void *data,
                                                  unsigned flags)
 {
     test_ucp_am_base *self = reinterpret_cast<test_ucp_am_base*>(arg);
-    
+
     if (reply_ep) {
         self->reply = ucp_am_send_nb(reply_ep, UCP_REPLY_ID, NULL, 1,
                                      ucp_dt_make_contig(0),
@@ -76,7 +76,7 @@ ucs_status_t test_ucp_am_base::ucp_process_am_cb(void *arg, void *data,
                                      0);
         EXPECT_FALSE(UCS_PTR_IS_ERR(self->reply));
     }
-    
+
     return self->am_handler(self, data, length, flags);
 }
 
@@ -96,7 +96,7 @@ ucs_status_t test_ucp_am_base::am_handler(test_ucp_am_base *me, void *data,
     } else {
         status = UCS_OK;
     }
-    
+
     me->recv_ams++;
     return status;
 }
@@ -173,7 +173,7 @@ void test_ucp_am::do_send_process_data_test(int test_release, uint16_t am_id,
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         wait(sstatus);
         sent_ams++;
-        
+
         if (send_reply) {
             while (sent_ams != replies) {
                 progress();
@@ -256,7 +256,7 @@ void test_ucp_am::do_set_am_handler_realloc_test()
     do_send_process_data_test(0, UCP_SEND_ID + 1, 0);
 }
 
-UCS_TEST_P(test_ucp_am, send_process_am) 
+UCS_TEST_P(test_ucp_am, send_process_am)
 {
     set_handlers(UCP_SEND_ID);
     do_send_process_data_test(0, UCP_SEND_ID, 0);
@@ -271,7 +271,7 @@ UCS_TEST_P(test_ucp_am, send_process_am_release)
     do_send_process_data_test(UCP_RELEASE, 0, 0);
 }
 
-UCS_TEST_P(test_ucp_am, send_process_iov_am) 
+UCS_TEST_P(test_ucp_am, send_process_iov_am)
 {
     ucs::detail::message_stream ms("INFO");
 
