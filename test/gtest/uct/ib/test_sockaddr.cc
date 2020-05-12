@@ -443,7 +443,9 @@ protected:
     server_disconnect_cb(uct_ep_h ep, void *arg) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
-        self->m_server->disconnect(ep);
+        if(!(self->m_server_start_disconnect)) {
+            self->m_server->disconnect(ep);
+        }
 
         self->m_state |= TEST_STATE_SERVER_DISCONNECTED;
         self->m_server_disconnect_cnt++;
