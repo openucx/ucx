@@ -119,10 +119,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
         ucp_request_imm_cmpl_param(param, req, status, send);
     }
 
-    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-        ucp_request_set_callback(req, send.cb, param->cb.send, param->user_data);
-    }
-
+    ucp_request_set_send_callback_param(param, req);
     ucs_trace_req("returning send request %p", req);
     return req + 1;
 }
