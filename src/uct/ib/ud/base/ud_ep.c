@@ -304,7 +304,6 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
      */
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ|UCT_UD_EP_OP_RESEND) ||
         (ep->tx.resend_count > 0)) {
-        ucs_wtimer_add(&iface->tx.timer, &ep->timer, ep->tx.tick);
         ucs_trace("ep %p: resend still in progress, ops 0x%x tx_count %d",
                   ep, ep->tx.pending.ops, ep->tx.resend_count);
         uct_ud_ep_timer_backoff(ep);
