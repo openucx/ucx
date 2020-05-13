@@ -411,7 +411,7 @@ public:
 protected:
 
     void skip_tcp_sockcm() {
-        uct_component_attr_t cmpt_attr = {0};
+        uct_component_attr_t cmpt_attr;
         ucs_status_t status;
 
         cmpt_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME;
@@ -443,7 +443,7 @@ protected:
     server_disconnect_cb(uct_ep_h ep, void *arg) {
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
-        if(!(self->m_server_start_disconnect)) {
+        if (!(self->m_server_start_disconnect)) {
             self->m_server->disconnect(ep);
         }
 
@@ -1036,10 +1036,10 @@ public:
                                     m_ep_init_disconnect_cnt(0) {
     }
 
-    struct ep_state_t {
+    typedef struct {
         uct_ep_h         ep;
         volatile uint8_t state;
-    };
+    } ep_state_t;
 
     void init() {
         test_uct_cm_sockaddr::init();
