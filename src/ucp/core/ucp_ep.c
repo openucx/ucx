@@ -148,8 +148,8 @@ err:
     return status;
 }
 
-ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
-                        const char *message, ucp_ep_h *ep_p)
+ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, const char *peer_name,
+                                  const char *message, ucp_ep_h *ep_p)
 {
     ucs_status_t status;
     ucp_ep_h ep;
@@ -166,18 +166,13 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
     return UCS_OK;
 }
 
-void ucp_ep_delete_base(ucp_ep_h ep)
+void ucp_ep_delete(ucp_ep_h ep)
 {
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
     UCS_STATS_NODE_FREE(ep->stats);
-    ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
-}
-
-void ucp_ep_delete(ucp_ep_h ep)
-{
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-    ucp_ep_delete_base(ep);
+    ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
 
 ucs_status_t
@@ -190,7 +185,7 @@ ucp_ep_create_sockaddr_aux(ucp_worker_h worker, unsigned ep_init_flags,
     ucp_ep_h ep;
 
     /* allocate endpoint */
-    status = ucp_ep_new(worker, remote_address->name, "listener", &ep);
+    status = ucp_worker_create_ep(worker, remote_address->name, "listener", &ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -359,7 +354,7 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ucp_ep_h ep;
 
     /* allocate endpoint */
-    status = ucp_ep_new(worker, remote_address->name, message, &ep);
+    status = ucp_worker_create_ep(worker, remote_address->name, message, &ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -402,7 +397,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     /* allocate endpoint */
     ucs_sockaddr_str(params->sockaddr.addr, peer_name, sizeof(peer_name));
 
-    status = ucp_ep_new(worker, peer_name, "from api call", &ep);
+    status = ucp_worker_create_ep(worker, peer_name, "from api call", &ep);
     if (status != UCS_OK) {
         goto err;
     }

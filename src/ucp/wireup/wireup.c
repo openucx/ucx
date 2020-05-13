@@ -441,8 +441,8 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                                        msg->conn_sn ^ (remote_uuid == worker->uuid));
         if (ep == NULL) {
             /* Create a new endpoint if does not exist */
-            status = ucp_ep_new(worker, remote_address->name, "remote-request",
-                                &ep);
+            status = ucp_worker_create_ep(worker, remote_address->name,
+                                          "remote-request", &ep);
             if (status != UCS_OK) {
                 return;
             }

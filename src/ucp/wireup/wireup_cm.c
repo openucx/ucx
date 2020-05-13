@@ -243,12 +243,11 @@ ucp_cm_client_connect_prog_arg_free(ucp_cm_client_connect_progress_arg_t *arg)
     ucs_free(arg);
 }
 
-static uint64_t ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep,
-                                         ucp_ep_h ucp_ep)
+static void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep,
+                                     ucp_ep_h ucp_ep)
 {
     ucp_ep_h tmp_ep = wireup_cm_ep->tmp_ep;
     ucp_wireup_ep_t *w_ep;
-    uint64_t tl_bitmap;
     ucp_lane_index_t lane_idx;
 
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(tmp_ep); ++lane_idx) {
@@ -260,12 +259,8 @@ static uint64_t ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep,
         }
     }
 
-    tl_bitmap = ucp_ep_get_tl_bitmap(tmp_ep);
-    ucs_assert(tl_bitmap != 0);
-    ucp_ep_delete_base(tmp_ep); /* not needed anymore */
+    ucp_ep_delete(tmp_ep); /* not needed anymore */
     wireup_cm_ep->tmp_ep = NULL;
-
-    return tl_bitmap;
 }
 
 /*
@@ -314,11 +309,15 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
 
-    /* Restore initial configuration from tmp_ep created for packing local
-     * addresses and get its tl bitmap. */
-    tl_bitmap = ucp_cm_client_restore_ep(wireup_ep, ucp_ep);
+    /* Get tl bitmap from tmp_ep, because it contains initial configuration. */
+    tl_bitmap = ucp_ep_get_tl_bitmap(wireup_ep->tmp_ep);
+    ucs_assert(tl_bitmap != 0);
     rsc_index = ucs_ffs64(tl_bitmap);
     dev_index = context->tl_rscs[rsc_index].dev_index;
+
+    /* Restore initial configuration from tmp_ep created for packing local
+     * addresses. */
+    ucp_cm_client_restore_ep(wireup_ep, ucp_ep);
 
 #ifdef ENABLE_ASSERT
     ucs_for_each_bit(rsc_index, tl_bitmap) {
