@@ -177,7 +177,8 @@ gtest_SOURCES += \
 	uct/ib/test_ib_md.cc \
 	uct/ib/test_cq_moderation.cc \
 	uct/ib/test_ib_xfer.cc \
-	uct/ib/test_ib_pkey.cc
+	uct/ib/test_ib_pkey.cc \
+	uct/ib/test_ib_event.cc
 gtest_CPPFLAGS += \
 	$(IBVERBS_CPPFLAGS)
 gtest_LDADD += \
@@ -185,8 +186,7 @@ gtest_LDADD += \
 	$(top_builddir)/src/uct/ib/libuct_ib.la
 if HAVE_DEVX
 gtest_SOURCES += \
-	uct/ib/test_devx.cc \
-	uct/ib/test_ib_event.cc
+	uct/ib/test_devx.cc
 endif
 if HAVE_TL_UD
 gtest_SOURCES += \

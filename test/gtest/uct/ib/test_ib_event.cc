@@ -3,17 +3,49 @@
 * See file LICENSE for terms.
 */
 
+#define __STDC_LIMIT_MACROS
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <infiniband/verbs.h>
 
 extern "C" {
+#if HAVE_MLX5_HW
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/rc/accel/rc_mlx5.h>
+#endif
 #include <uct/ib/rc/verbs/rc_verbs.h>
 }
 
 #include <uct/uct_p2p_test.h>
 
 class uct_p2p_test_event : public uct_p2p_test {
+private:
+    void rc_mlx5_ep_to_err(entity &e, uint32_t *qp_num_p) {
+#if HAVE_MLX5_HW
+        uct_rc_mlx5_ep_t *ep = (uct_rc_mlx5_ep_t *)e.ep(0);
+        uct_ib_mlx5_qp_t *qp = &ep->tx.wq.super;
+
+        if (qp->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
+            uct_ib_mlx5_devx_modify_qp_state(qp, IBV_QPS_ERR);
+        } else {
+            uct_ib_modify_qp(qp->verbs.qp, IBV_QPS_ERR);
+        }
+
+        *qp_num_p = qp->qp_num;
+#endif
+    }
+
+    void rc_verbs_ep_to_err(entity &e, uint32_t *qp_num_p) {
+        uct_rc_verbs_ep_t *ep = (uct_rc_verbs_ep_t *)e.ep(0);
+
+        uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
+
+        *qp_num_p = ep->qp->qp_num;
+    }
+
 public:
     uct_p2p_test_event(): uct_p2p_test(0) {}
 
@@ -27,14 +59,11 @@ public:
                        const char *message, va_list ap)
     {
         std::string msg = format_message(message, ap);
-        int ret;
 
-        ret = sscanf(msg.c_str(),
-                     "IB Async event on %*s SRQ-attached QP 0x%x was flushed",
-                     &flushed_qp_num);
-        if (ret) {
-            UCS_TEST_MESSAGE << msg.c_str();
-        }
+        UCS_TEST_MESSAGE << msg.c_str();
+        sscanf(msg.c_str(),
+               "IB Async event on %*s SRQ-attached QP 0x%x was flushed",
+               &flushed_qp_num);
 
         return (level <= orig_log_level) ? UCS_LOG_FUNC_RC_CONTINUE
             : UCS_LOG_FUNC_RC_STOP;
@@ -43,21 +72,12 @@ public:
     int wait_for_last_wqe_event(entity &e) {
         const resource *r = dynamic_cast<const resource*>(GetParam());
         flushed_qp_num = -1;
-        uint32_t qp_num;
+        uint32_t qp_num = 0;
 
         if (r->tl_name == "rc_mlx5") {
-            uct_rc_mlx5_ep_t *ep = (uct_rc_mlx5_ep_t *)e.ep(0);
-            uct_ib_mlx5_qp_t *qp = &ep->tx.wq.super;
-            qp_num = qp->qp_num;
-            if (qp->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
-                uct_ib_mlx5_devx_modify_qp_state(qp, IBV_QPS_ERR);
-            } else {
-                uct_ib_modify_qp(qp->verbs.qp, IBV_QPS_ERR);
-            }
+            rc_mlx5_ep_to_err(e, &qp_num);
         } else {
-            uct_rc_verbs_ep_t *ep = (uct_rc_verbs_ep_t *)e.ep(0);
-            uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
-            qp_num = ep->qp->qp_num;
+            rc_verbs_ep_to_err(e, &qp_num);
         }
 
         ucs_time_t deadline = ucs_get_time() +
@@ -85,7 +105,7 @@ UCS_TEST_P(uct_p2p_test_event, last_wqe, "ASYNC_EVENTS=y")
     orig_log_level = ucs_global_opts.log_component.log_level;
     ucs_global_opts.log_component.log_level = UCS_LOG_LEVEL_DEBUG;
     if (!ucs_log_is_enabled(UCS_LOG_LEVEL_DEBUG)) {
-        UCS_TEST_SKIP_R("Debug disabled");
+        UCS_TEST_SKIP_R("Debug logging is disabled");
     }
 
     UCS_TEST_SCOPE_EXIT() {
