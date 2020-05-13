@@ -66,7 +66,7 @@ uct_ud_ep_resend_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 
     if (UCT_UD_PSN_COMPARE(ep->tx.acked_psn, <, ep->resend.max_psn)) {
         /* new ack arrived that acked something in our resend window. */
-        if (UCT_UD_PSN_COMPARE(ep->resend.psn, <=, ep->tx.acked_psn + 1)) {
+        if (UCT_UD_PSN_COMPARE(ep->resend.psn, <=, ep->tx.acked_psn)) {
             ucs_debug("ep(%p): ack received during resend resend.psn=%d tx.acked_psn=%d",
                       ep, ep->resend.psn, ep->tx.acked_psn);
             ep->resend.pos = ucs_queue_iter_begin(&ep->tx.window);
@@ -155,12 +155,16 @@ uct_ud_skb_is_completed(uct_ud_send_skb_t *skb, uct_ud_psn_t ack_psn)
 static UCS_F_ALWAYS_INLINE void
 uct_ud_ep_window_release_inline(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                                 uct_ud_psn_t ack_psn, ucs_status_t status,
-                                int is_async)
+                                int is_async, int invalidate_resend)
 {
     uct_ud_send_skb_t *skb;
 
     ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
                                uct_ud_skb_is_completed(skb, ack_psn)) {
+        if (invalidate_resend && (ep->resend.pos == &skb->queue.next)) {
+            ep->resend.pos = ucs_queue_iter_begin(&ep->tx.window);
+            ep->resend.psn = ep->tx.acked_psn + 1;
+        }
         if (ucs_likely(!(skb->flags & UCT_UD_SEND_SKB_FLAG_COMP))) {
             /* fast path case: skb without completion callback */
             uct_ud_skb_release(skb, 1);
@@ -183,19 +187,14 @@ uct_ud_ep_window_release(uct_ud_ep_t *ep, ucs_status_t status, int is_async)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
 
-    uct_ud_ep_window_release_inline(iface, ep, ep->tx.acked_psn, status, is_async);
+    uct_ud_ep_window_release_inline(iface, ep, ep->tx.acked_psn, status, is_async, 0);
 }
 
 void uct_ud_ep_window_release_completed(uct_ud_ep_t *ep, int is_async)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
 
-    uct_ud_ep_window_release(ep, UCS_OK, is_async);
-
-    /* Since we could have released some skb's from the window, make sure there
-     * are no resend operations which can still be using them.
-     */
-    uct_ud_ep_resend_ack(iface, ep);
+    uct_ud_ep_window_release_inline(iface, ep, ep->tx.acked_psn, UCS_OK, is_async, 1);
 }
 
 static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
@@ -565,7 +564,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ep->tx.acked_psn = ack_psn;
 
-    uct_ud_ep_window_release_inline(iface, ep, ack_psn, UCS_OK, is_async);
+    uct_ud_ep_window_release_inline(iface, ep, ack_psn, UCS_OK, is_async, 0);
     uct_ud_ep_ca_ack(ep);
     uct_ud_ep_resend_ack(iface, ep);
 
