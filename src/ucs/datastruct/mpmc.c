@@ -23,7 +23,9 @@ ucs_status_t ucs_mpmc_queue_init(ucs_mpmc_queue_t *mpmc, uint32_t length)
 
     mpmc->length   = ucs_roundup_pow2(length);
     mpmc->shift    = ucs_ilog2(mpmc->length);
-    UCS_STATIC_ASSERT(mpmc->length < UCS_BIT(UCS_MPMC_VALID_SHIFT));
+    if (mpmc->shift >= UCS_MPMC_VALID_SHIFT) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     mpmc->consumer = 0;
     mpmc->producer = 0;
