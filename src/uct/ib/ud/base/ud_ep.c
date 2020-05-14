@@ -230,7 +230,7 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
     ucs_status_t status;
 
     if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
-        ucs_assert(ucs_queue_is_empty(&ep->tx.window));
+        uct_ud_ep_purge(ep, UCS_ERR_ENDPOINT_TIMEOUT);
         return 0;
     }
 
