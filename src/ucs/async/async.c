@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -20,12 +21,12 @@
  * The handlers are used for timers and asynchronous events and are
  * saved in an internal data structure according to the handler->id which
  * must be unique. In case of a timer-handler, the handler id reuses the
- * unique timer->id assigned by the timerq implemetation.
- * In case of an asinchronous event, the handler->id is the event_fd.
+ * unique timer->id assigned by the timerq implementation.
+ * In case of an asynchronous event, the handler->id is the event_fd.
  * Since both begin from 0, in order to distinction between the two,
- * timer-handler ids begin at UCS_ASYNC_TIMER_ID_MIN, and are assigned
+ * timer-handler IDs begin at UCS_ASYNC_TIMER_ID_MIN, and are assigned
  * the value of timer->id + UCS_ASYNC_TIMER_ID_MIN.
- * When workig with the handler, the distinction between an event handler
+ * When working with the handler, the distinction between an event handler
  * and a timer handler occurs according to the handler->id:
  * if (handler->id > UCS_ASYNC_TIMER_ID_MIN) this is a timer
  */
@@ -497,22 +498,23 @@ ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
                                  ucs_async_event_cb_t cb, void *arg,
                                  ucs_async_context_t *async, int *timer_id_p)
 {
+    static short unsigned tmp_timer_idx = 0;
     ucs_status_t status;
-    static int tmp_timer_idx = 0;
     int handler_id;
 
     *timer_id_p = -1;
+
     status = ucs_async_method_call(mode, add_timer, async, interval, timer_id_p);
     if (status != UCS_OK) {
         goto err;
     }
 	
     if (*timer_id_p < 0) {
-        /* 
-         * This is the case if add_timer is set to 
+        /*
+         * This is the case if add_timer is set to
          * ucs_empty_function_return_success()
          */
-         *timer_id_p = tmp_timer_idx++;
+         *timer_id_p = (int)tmp_timer_idx++;
     } 
     handler_id = *timer_id_p + UCS_ASYNC_TIMER_ID_MIN;
 

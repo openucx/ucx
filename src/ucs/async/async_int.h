@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -70,7 +71,7 @@ typedef struct ucs_async_ops {
                                     int events);
 
     ucs_status_t (*add_timer)(ucs_async_context_t *async, ucs_time_t interval,
-                                int *timer_id_p);
+                              int *timer_id_p);
     ucs_status_t (*remove_timer)(ucs_async_context_t *async, int timer_id);
 } ucs_async_ops_t;
 
