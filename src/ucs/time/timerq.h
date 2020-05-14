@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -26,8 +27,8 @@ typedef struct ucs_timer {
 
 typedef struct ucs_timer_queue {
     ucs_time_t                 min_interval; /* Expiration of next timer */
-    ucs_ptr_array_locked_t     *timers;      /* Array of timers */
-    ucs_mpool_t                timers_mp;   /* Mem pool for the timers */
+    ucs_ptr_array_locked_t     timers;       /* Array of timers */
+    ucs_mpool_t                timers_mp;    /* Mem pool for the timers */
 } ucs_timer_queue_t;
 
 
@@ -35,7 +36,7 @@ typedef struct ucs_timer_queue {
  * Initialize the timer queue.
  *
  * @param timerq        Timer queue to initialize.
- * @param name		Name for the timer queue
+ * @param name          Name for the timer queue
  */
 ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq, const char *name);
 
@@ -56,7 +57,7 @@ void ucs_timerq_cleanup(ucs_timer_queue_t *timerq);
  * @param timer_id_p Filled with the ID of the new timer in the queue.
  */
 ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq,
-                        ucs_time_t interval, int *timer_id_p);
+                            ucs_time_t interval, int *timer_id_p);
 
 /**
  * Remove a timer.
@@ -78,8 +79,8 @@ static inline ucs_time_t ucs_timerq_min_interval(ucs_timer_queue_t *timerq) {
 /**
  * @return Number of timers in the queue.
  */
-static inline int ucs_timerq_size(ucs_timer_queue_t *timerq) {
-    return ucs_ptr_array_locked_get_elem_count(timerq->timers);
+static inline unsigned ucs_timerq_size(ucs_timer_queue_t *timerq) {
+    return ucs_ptr_array_locked_get_elem_count(&timerq->timers);
 }
 
 
@@ -87,7 +88,7 @@ static inline int ucs_timerq_size(ucs_timer_queue_t *timerq) {
  * @return Whether there are no timers.
  */
 static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
-    return ucs_timerq_size(timerq) == 0;
+    return ucs_ptr_array_locked_is_empty(&timerq->timers);
 }
 
 
@@ -104,11 +105,11 @@ static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
 #define ucs_timerq_for_each_expired(_timer, _timerq, _current_time, _code) \
     { \
         ucs_time_t __current_time = _current_time; \
-        unsigned _index;	\
-        void *_ptr;	\
-        ucs_ptr_array_locked_for_each(_ptr, _index, (_timerq)->timers)	\
+        unsigned _index; \
+        void *_ptr; \
+        ucs_ptr_array_locked_for_each(_ptr, _index, &(_timerq)->timers) \
         { \
-            timer = (ucs_timer_t *)_ptr;	\
+            timer = (ucs_timer_t *)_ptr; \
             if (__current_time >= (_timer)->expiration) { \
                 /* Update expiration time */ \
                 (_timer)->expiration = __current_time + (_timer)->interval; \

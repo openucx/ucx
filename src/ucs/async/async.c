@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -21,19 +22,20 @@
  * The handlers are used for timers and asynchronous events and are
  * saved in an internal data structure according to the handler->id which
  * must be unique. In case of a timer-handler, the handler id reuses the
- * unique timer->id assigned by the timerq implemetation.
- * In case of an asinchronous event, the handler->id is the event_fd.
+ * unique timer->id assigned by the timerq implementation.
+ * In case of an asynchronous event, the handler->id is the event_fd.
  * Since both begin from 0, in order to distinction between the two,
- * timer-handler ids begin at UCS_ASYNC_TIMER_ID_MIN, and are assigned
+ * timer-handler IDs begin at UCS_ASYNC_TIMER_ID_MIN, and are assigned
  * the value of timer->id + UCS_ASYNC_TIMER_ID_MIN.
- * When workig with the handler, the distinction between an event handler
+ * When working with the handler, the distinction between an event handler
  * and a timer handler occurs according to the handler->id:
  * if (handler->id > UCS_ASYNC_TIMER_ID_MIN) this is a timer
  */
 #define UCS_ASYNC_TIMER_ID_MIN          1000001u
 
-#define UCS_ASYNC_HANDLER_FMT           "%p [id=%d ref %d] %s()"
-#define UCS_ASYNC_HANDLER_ARG(_h)       (_h), (_h)->id, (_h)->refcount, \
+#define UCS_ASYNC_HANDLER_FMT           "%p [id=%d timer_id=%d ref %d] %s()"
+#define UCS_ASYNC_HANDLER_ARG(_h)       (_h), (_h)->id, (_h)->timer_id, \
+                                        (_h)->refcount, \
                                         ucs_debug_get_symbol_name((_h)->cb)
 
 #define UCS_ASYNC_MISSED_QUEUE_SHIFT    32
@@ -52,7 +54,7 @@ typedef struct ucs_async_global_context {
 
 static ucs_async_global_context_t ucs_async_global_context = {
     .handlers_lock   = PTHREAD_RWLOCK_INITIALIZER,
-    .handler_id      = UCS_ASYNC_TIMER_ID_MIN - 1
+    .handler_id      = UCS_ASYNC_TIMER_ID_MIN
 };
 
 
@@ -194,7 +196,9 @@ static void ucs_async_handler_put(ucs_async_handler_t *handler)
  */
 static ucs_status_t ucs_async_handler_add(ucs_async_handler_t *handler)
 {
-    int hash_extra_status;
+    int is_handler_id_set = handler->id >= 0;
+    int hash_extra_status = UCS_KH_PUT_KEY_PRESENT;
+    ucs_async_handler_t *handler_from_hash;
     ucs_status_t status;
     khiter_t hash_it;
 
@@ -202,20 +206,35 @@ static ucs_status_t ucs_async_handler_add(ucs_async_handler_t *handler)
 
     ucs_assert_always(handler->refcount == 1);
 
-    /* Try to add handler with the requested id */
-    hash_it = kh_put(ucs_async_handler, &ucs_async_global_context.handlers,
-                     handler->id, &hash_extra_status);
-    if (hash_extra_status == -1) {
-        ucs_error("Failed to add async handler " UCS_ASYNC_HANDLER_FMT
-                  " to hash", UCS_ASYNC_HANDLER_ARG(handler));
-        status = UCS_ERR_NO_MEMORY;
-        goto out_unlock;
-    } else if (hash_extra_status == 0) {
-        ucs_error("Cannot add async handler %s() - id with id %d",
-                  ucs_debug_get_symbol_name(handler->cb), handler->id);
-        status = UCS_ERR_ALREADY_EXISTS;
-        goto out_unlock;
-    }
+    do {
+        if (!is_handler_id_set) {
+            /* ucs_async_global_context.handler_id is used for unique keys */
+            handler->id = ucs_atomic_fadd32(&ucs_async_global_context.handler_id,
+                                            1);
+            if (ucs_unlikely(handler->id == 0)) {
+                ucs_atomic_fadd32(&ucs_async_global_context.handler_id,
+                                  UCS_ASYNC_TIMER_ID_MIN);
+                continue;
+            }
+        }
+
+        hash_it = kh_put(ucs_async_handler, &ucs_async_global_context.handlers,
+                         handler->id, &hash_extra_status);
+        if (hash_extra_status == UCS_KH_PUT_FAILED) {
+            ucs_error("Failed to add async handler " UCS_ASYNC_HANDLER_FMT
+                      " to hash", UCS_ASYNC_HANDLER_ARG(handler));
+            status = UCS_ERR_NO_MEMORY;
+            goto out_unlock;
+        } else if (hash_extra_status == UCS_KH_PUT_KEY_PRESENT) {
+            handler_from_hash = kh_value(&ucs_async_global_context.handlers,
+                                         hash_it);
+            ucs_trace("async handler %s() uses id %d,"
+                      " new async handler %s couldn't use this id",
+                      ucs_debug_get_symbol_name(handler_from_hash->cb),
+                      handler->id,
+                      ucs_debug_get_symbol_name(handler->cb));
+        }
+    } while (hash_extra_status == UCS_KH_PUT_KEY_PRESENT);
 
     ucs_assert_always(!ucs_async_handler_kh_is_end(hash_it));
     kh_value(&ucs_async_global_context.handlers, hash_it) = handler;
@@ -307,20 +326,27 @@ ucs_status_t ucs_async_dispatch_handlers(int *handler_ids, size_t count,
 ucs_status_t ucs_async_dispatch_timerq(ucs_timer_queue_t *timerq,
                                        ucs_time_t current_time)
 {
-    size_t max_timers, num_timers = 0;
+    unsigned max_timers;
+    unsigned num_timers;
     int *expired_timers;
     ucs_timer_t *timer;
 
-    max_timers     = ucs_max(1, ucs_timerq_size(timerq));
+    max_timers = ucs_timerq_size(timerq);
+    if (ucs_likely(max_timers == 0)) {
+        return UCS_OK;
+    }
+
+    num_timers     = 0;
     expired_timers = ucs_alloca(max_timers * sizeof(*expired_timers));
 
     ucs_timerq_for_each_expired(timer, timerq, current_time, {
-        expired_timers[num_timers++] = timer->id + UCS_ASYNC_TIMER_ID_MIN;
-        if (num_timers >= max_timers) {
-            break; /* Keep timers which we don't have room for in the queue */
+        if (ucs_likely(num_timers < max_timers)) {
+            expired_timers[num_timers++] = UCS_ASYNC_TIMER_ID_MIN + timer->id;
         }
+        /* Note: shouldn't jump out of this loop to ensure timerq unlocking */
     })
 
+max_reached:
     return ucs_async_dispatch_handlers(expired_timers, num_timers,
                                        UCS_ASYNC_EVENT_DUMMY);
 }
@@ -410,7 +436,8 @@ int ucs_async_is_from_async(const ucs_async_context_t *async)
 static ucs_status_t
 ucs_async_alloc_handler(ucs_async_mode_t mode,
                         ucs_event_set_types_t events, ucs_async_event_cb_t cb,
-                        void *arg, ucs_async_context_t *async, int id)
+                        void *arg, ucs_async_context_t *async, int *handler_id,
+                        int **timer_id)
 {
     ucs_async_handler_t *handler;
     ucs_status_t status;
@@ -438,12 +465,18 @@ ucs_async_alloc_handler(ucs_async_mode_t mode,
     handler->async    = async;
     handler->missed   = 0;
     handler->refcount = 1;
-    handler->id       = id;
+    handler->id       = *handler_id;
     ucs_async_method_call(mode, block);
     status = ucs_async_handler_add(handler);
     ucs_async_method_call(mode, unblock);
     if (status != UCS_OK) {
         goto err_free;
+    }
+
+    ucs_assert((*handler_id < 0) || (handler->id == *handler_id));
+    *handler_id = handler->id;
+    if (timer_id) {
+        *timer_id = &handler->timer_id;
     }
 
     return UCS_OK;
@@ -467,8 +500,7 @@ ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
         goto err;
     }
 
-    status = ucs_async_alloc_handler(mode, events, cb,
-                                     arg, async, event_fd);
+    status = ucs_async_alloc_handler(mode, events, cb, arg, async, &event_fd, NULL);
     if (status != UCS_OK) {
         goto err;
     }
@@ -491,40 +523,25 @@ ucs_status_t ucs_async_add_timer(ucs_async_mode_t mode, ucs_time_t interval,
                                  ucs_async_event_cb_t cb, void *arg,
                                  ucs_async_context_t *async, int *timer_id_p)
 {
+    int handler_id = -1; /* forces ucs_async_alloc_handler() to generate it */
     ucs_status_t status;
-    static int tmp_timer_idx = 0;
-    int handler_id;
+    int *timer_id;
 
-    *timer_id_p = -1;
-    status = ucs_async_method_call(mode, add_timer, async, interval, timer_id_p);
+    status = ucs_async_alloc_handler(mode, 1, cb, arg, async, &handler_id, &timer_id);
     if (status != UCS_OK) {
         goto err;
     }
-	
-    if (*timer_id_p < 0) {
-        /* 
-         * This is the case if add_timer is set to 
-         * ucs_empty_function_return_success()
-         */
-         *timer_id_p = tmp_timer_idx++;
-    } 
-    handler_id = *timer_id_p + UCS_ASYNC_TIMER_ID_MIN;
 
-    status = ucs_async_alloc_handler(mode, 1, cb, arg, async, handler_id);
+    status = ucs_async_method_call(mode, add_timer, async, interval, timer_id);
     if (status != UCS_OK) {
-        goto err_remove_timer;
+        goto err_destroy_handler;
     }
 
     *timer_id_p = handler_id;
     return UCS_OK;
 
-err_remove_timer:
-    /* 
-     * Return true status that brought us here, so ignore
-     * return value of ucs_async_method_call
-     */
-    ucs_async_method_call(mode, remove_timer,
-                        async, *timer_id_p);
+err_destroy_handler:
+    ucs_async_handler_put(ucs_async_handler_extract(handler_id));
 err:
     return status;
 }
@@ -549,7 +566,7 @@ ucs_status_t ucs_async_remove_handler(int id, int is_sync)
               UCS_ASYNC_HANDLER_ARG(handler));
     if (handler->id >= UCS_ASYNC_TIMER_ID_MIN) {
         status = ucs_async_method_call(handler->mode, remove_timer,
-                                       handler->async, handler->id - UCS_ASYNC_TIMER_ID_MIN);
+                                       handler->async, handler->timer_id);
     } else {
         status = ucs_async_method_call(handler->mode, remove_event_fd,
                                        handler->async, handler->id);

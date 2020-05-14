@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -16,15 +17,16 @@
 /* Async event handler */
 typedef struct ucs_async_handler ucs_async_handler_t;
 struct ucs_async_handler {
-    int                        id;      /* Event/Timer ID */
-    ucs_async_mode_t           mode;    /* Event delivery mode */
-    ucs_event_set_types_t      events;  /* Bitmap of events */
-    pthread_t                  caller;  /* Thread which invokes the callback */
-    ucs_async_event_cb_t       cb;      /* Callback function */
-    void                       *arg;    /* Callback argument */
-    ucs_async_context_t        *async;  /* Async context for the handler. Can be NULL */
-    volatile uint32_t          missed;  /* Protect against adding to miss queue multiple times */
-    volatile uint32_t          refcount;
+    int                        id;       /* Event/Timer ID */
+    int                        timer_id; /* Timer ID (unused for events) */
+    ucs_async_mode_t           mode;     /* Event delivery mode */
+    ucs_event_set_types_t      events;   /* Bitmap of events */
+    pthread_t                  caller;   /* Thread which invokes the callback */
+    ucs_async_event_cb_t       cb;       /* Callback function */
+    void                       *arg;     /* Callback argument */
+    ucs_async_context_t        *async;   /* Async context for the handler. Can be NULL */
+    volatile uint32_t          missed;   /* Protect against adding to miss queue multiple times */
+    volatile uint32_t          refcount; /* Counts references for destroy flow */
 };
 
 
