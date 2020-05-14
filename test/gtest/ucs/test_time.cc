@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -90,7 +91,7 @@ UCS_TEST_F(test_time, timerq) {
         counter2 = 0;
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
-	    ucs_timerq_for_each_expired(timer, &timerq, current_time, {
+            ucs_timerq_for_each_expired(timer, &timerq, current_time, {
                 if (timer->id == timer_id1) ++counter1;
                 if (timer->id == timer_id2) ++counter2;
             })
