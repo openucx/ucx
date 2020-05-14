@@ -732,6 +732,22 @@ slice_affinity() {
 	echo "${cpulist}" | head -n $((n + 1)) | tail -1
 }
 
+#
+# `rename` has a binary and Perl flavors. Ubuntu comes with Perl one and
+# requires different usage.
+#
+rename_files() {
+	expr=$1; shift
+	replacement=$1; shift
+	files=$*
+	if rename --version | grep 'util-linux'; then
+		rename "${expr}" "${replacement}" $files
+		return
+	fi
+
+	rename "s/\\${expr}\$/${replacement}/" "${files}"
+}
+
 run_client_server_app() {
 	test_name=$1
 	test_args=$2
@@ -1460,7 +1476,7 @@ run_gtest() {
 
 	echo "==== Running unit tests, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT make -C test/gtest test
-	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
+	(cd test/gtest && rename_files .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
 	# gtest returns with non zero exit code if there were no
@@ -1474,7 +1490,7 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mallopt \
 		make -C test/gtest test
-	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
+	(cd test/gtest && rename_files .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT \
@@ -1483,7 +1499,7 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 		make -C test/gtest test
-	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
+	(cd test/gtest && rename_files .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
 	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
@@ -1497,7 +1513,7 @@ run_gtest() {
 		fi
 
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
-		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
+		(cd test/gtest && rename_files .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 		module unload tools/valgrind-latest
 	else
 		echo "==== Not running valgrind tests with $compiler_name compiler ===="
