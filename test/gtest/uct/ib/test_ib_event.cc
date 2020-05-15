@@ -3,13 +3,12 @@
 * See file LICENSE for terms.
 */
 
-#define __STDC_LIMIT_MACROS
-
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
 
 #include <infiniband/verbs.h>
+#include <common/test.h>
 
 extern "C" {
 #if HAVE_MLX5_HW
@@ -25,14 +24,11 @@ class uct_p2p_test_event : public uct_p2p_test {
 private:
     void rc_mlx5_ep_to_err(entity &e, uint32_t *qp_num_p) {
 #if HAVE_MLX5_HW
+        uct_ib_mlx5_md_t *md = (uct_ib_mlx5_md_t *)e.md();
         uct_rc_mlx5_ep_t *ep = (uct_rc_mlx5_ep_t *)e.ep(0);
         uct_ib_mlx5_qp_t *qp = &ep->tx.wq.super;
 
-        if (qp->type == UCT_IB_MLX5_OBJ_TYPE_DEVX) {
-            uct_ib_mlx5_devx_modify_qp_state(qp, IBV_QPS_ERR);
-        } else {
-            uct_ib_modify_qp(qp->verbs.qp, IBV_QPS_ERR);
-        }
+        uct_ib_mlx5_modify_qp_state(md, qp, IBV_QPS_ERR);
 
         *qp_num_p = qp->qp_num;
 #endif
