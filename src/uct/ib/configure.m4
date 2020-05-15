@@ -203,6 +203,7 @@ AS_IF([test "x$with_ib" = "xyes"],
                            mlx5dv_init_obj,
                            mlx5dv_create_qp,
                            mlx5dv_is_supported,
+                           mlx5dv_devx_subscribe_devx_event,
                            MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
                            MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE],
                                   [], [], [[#include <infiniband/mlx5dv.h>]])

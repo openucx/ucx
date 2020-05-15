@@ -477,6 +477,19 @@ protected:
 #define UCT_INSTANTIATE_SOCKADDR_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_SOCKADDR_TLS)
 
+/**
+ * Instantiate the parametrized test case for the RC/DC transports.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_verbs) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5)
+
+#define UCT_INSTANTIATE_RC_DC_TEST_CASE(_test_case) \
+    UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
+    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
+
 std::ostream& operator<<(std::ostream& os, const uct_tl_resource_desc_t& resource);
 
 #endif

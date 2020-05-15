@@ -419,6 +419,9 @@ typedef struct uct_rc_mlx5_iface_common {
                                                     const void *data, size_t length);
     } dm;
 #endif
+#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
+    struct mlx5dv_devx_event_channel   *event_channel;
+#endif
     struct {
         uint8_t                        atomic_fence_flag;
         uint8_t                        put_fence_flag;
@@ -721,6 +724,16 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     return UCS_ERR_UNSUPPORTED;
 }
 #endif
+
+ucs_status_t uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface);
+
+void uct_rc_mlx5_devx_iface_free_events(uct_rc_mlx5_iface_common_t *iface);
+
+ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
+                                                    uct_ib_mlx5_qp_t *qp,
+                                                    unsigned event_num,
+                                                    enum ibv_event_type event_type,
+                                                    unsigned event_data);
 
 void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_qp_attr_t *qp_attr,

@@ -133,6 +133,9 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(_obj) \
     UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(UCS_BIT(UCT_IB_DEVX_OBJ_ ## _obj))
 
+#define UCT_IB_MLX5_DEVX_EVENT_TYPE_MASK  0xffff
+#define UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT 16
+
 enum {
     /* Device supports KSM */
     UCT_IB_MLX5_MD_FLAG_KSM              = UCS_BIT(0),
@@ -471,6 +474,10 @@ void uct_ib_mlx5_iface_put_res_domain(uct_ib_mlx5_qp_t *qp);
 ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uct_ib_mlx5_qp_attr_t *attr);
+
+ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md,
+                                         uct_ib_mlx5_qp_t *qp,
+                                         enum ibv_qp_state state);
 
 /**
  * Create CQ with DV

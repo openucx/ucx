@@ -161,12 +161,11 @@ static void uct_ib_device_get_locality(const char *dev_name,
 static void uct_ib_async_event_handler(int fd, void *arg)
 {
     uct_ib_device_t *dev = arg;
-    struct ibv_async_event event;
-    ucs_log_level_t level;
-    char event_info[200];
+    struct ibv_async_event ibevent;
+    uct_ib_async_event_t event;
     int ret;
 
-    ret = ibv_get_async_event(dev->ibv_context, &event);
+    ret = ibv_get_async_event(dev->ibv_context, &ibevent);
     if (ret != 0) {
         if (errno != EAGAIN) {
             ucs_warn("ibv_get_async_event() failed: %m");
@@ -174,10 +173,65 @@ static void uct_ib_async_event_handler(int fd, void *arg)
         return;
     }
 
+    event.event_type = ibevent.event_type;
     switch (event.event_type) {
     case IBV_EVENT_CQ_ERR:
+        event.cookie = ibevent.element.cq;
+        break;
+    case IBV_EVENT_QP_FATAL:
+    case IBV_EVENT_QP_REQ_ERR:
+    case IBV_EVENT_QP_ACCESS_ERR:
+    case IBV_EVENT_COMM_EST:
+    case IBV_EVENT_SQ_DRAINED:
+    case IBV_EVENT_PATH_MIG:
+    case IBV_EVENT_PATH_MIG_ERR:
+    case IBV_EVENT_QP_LAST_WQE_REACHED:
+        event.qp_num = ibevent.element.qp->qp_num;
+        break;
+    case IBV_EVENT_SRQ_ERR:
+    case IBV_EVENT_SRQ_LIMIT_REACHED:
+        event.cookie = ibevent.element.srq;
+        break;
+    case IBV_EVENT_DEVICE_FATAL:
+    case IBV_EVENT_PORT_ERR:
+    case IBV_EVENT_PORT_ACTIVE:
+#if HAVE_DECL_IBV_EVENT_GID_CHANGE
+    case IBV_EVENT_GID_CHANGE:
+#endif
+    case IBV_EVENT_LID_CHANGE:
+    case IBV_EVENT_PKEY_CHANGE:
+    case IBV_EVENT_SM_CHANGE:
+    case IBV_EVENT_CLIENT_REREGISTER:
+        event.port_num = ibevent.element.port_num;
+        break;
+#ifdef HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
+    case IBV_EXP_EVENT_DCT_KEY_VIOLATION:
+    case IBV_EXP_EVENT_DCT_ACCESS_ERR:
+    case IBV_EXP_EVENT_DCT_REQ_ERR:
+        if (ibevent.element.dct) {
+            event.dct_num = ibevent.element.dct->dct_num;
+        } else {
+            event.dct_num = 0;
+        }
+        break;
+#endif
+    default:
+        break;
+    };
+
+    uct_ib_handle_async_event(dev, &event);
+    ibv_ack_async_event(&ibevent);
+}
+
+void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event)
+{
+    char event_info[200];
+    ucs_log_level_t level;
+
+    switch (event->event_type) {
+    case IBV_EVENT_CQ_ERR:
         snprintf(event_info, sizeof(event_info), "%s on CQ %p",
-                 ibv_event_type_str(event.event_type), event.element.cq);
+                 ibv_event_type_str(event->event_type), event->cookie);
         level = UCS_LOG_LEVEL_ERROR;
         break;
     case IBV_EVENT_QP_FATAL:
@@ -188,28 +242,28 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
         snprintf(event_info, sizeof(event_info), "%s on QPN 0x%x",
-                 ibv_event_type_str(event.event_type), event.element.qp->qp_num);
+                 ibv_event_type_str(event->event_type), event->qp_num);
         level = UCS_LOG_LEVEL_ERROR;
         break;
     case IBV_EVENT_QP_LAST_WQE_REACHED:
         snprintf(event_info, sizeof(event_info), "SRQ-attached QP 0x%x was flushed",
-                 event.element.qp->qp_num);
+                 event->qp_num);
         level = UCS_LOG_LEVEL_DEBUG;
         break;
     case IBV_EVENT_SRQ_ERR:
         level = UCS_LOG_LEVEL_ERROR;
         snprintf(event_info, sizeof(event_info), "%s on SRQ %p",
-                 ibv_event_type_str(event.event_type), event.element.srq);
+                 ibv_event_type_str(event->event_type), event->cookie);
         break;
     case IBV_EVENT_SRQ_LIMIT_REACHED:
         snprintf(event_info, sizeof(event_info), "%s on SRQ %p",
-                 ibv_event_type_str(event.event_type), event.element.srq);
+                 ibv_event_type_str(event->event_type), event->cookie);
         level = UCS_LOG_LEVEL_DEBUG;
         break;
     case IBV_EVENT_DEVICE_FATAL:
     case IBV_EVENT_PORT_ERR:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
-                 ibv_event_type_str(event.event_type), event.element.port_num);
+                 ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_ERROR;
         break;
     case IBV_EVENT_PORT_ACTIVE:
@@ -221,19 +275,19 @@ static void uct_ib_async_event_handler(int fd, void *arg)
     case IBV_EVENT_SM_CHANGE:
     case IBV_EVENT_CLIENT_REREGISTER:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
-                 ibv_event_type_str(event.event_type), event.element.port_num);
+                 ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_WARN;
         break;
 #ifdef HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
     case IBV_EXP_EVENT_DCT_KEY_VIOLATION:
         snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
-                 "DCT key violation", event.element.dct->dct_num);
+                 "DCT key violation", event->dct_num);
         level = UCS_LOG_LEVEL_ERROR;
         break;
     case IBV_EXP_EVENT_DCT_ACCESS_ERR:
-        if (event.element.dct) {
+        if (event->dct_num) {
             snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
-                     "DCT access error", event.element.dct->dct_num);
+                     "DCT access error", event->dct_num);
         } else {
             snprintf(event_info, sizeof(event_info), "%s on DCTN UNKNOWN",
                      "DCT access error");
@@ -242,20 +296,19 @@ static void uct_ib_async_event_handler(int fd, void *arg)
         break;
     case IBV_EXP_EVENT_DCT_REQ_ERR:
         snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
-                 "DCT requester error", event.element.dct->dct_num);
+                 "DCT requester error", event->dct_num);
         level = UCS_LOG_LEVEL_ERROR;
         break;
 #endif
     default:
         snprintf(event_info, sizeof(event_info), "%s (%d)",
-                 ibv_event_type_str(event.event_type), event.event_type);
+                 ibv_event_type_str(event->event_type), event->event_type);
         level = UCS_LOG_LEVEL_INFO;
         break;
     };
 
     UCS_STATS_UPDATE_COUNTER(dev->stats, UCT_IB_DEVICE_STAT_ASYNC_EVENT, +1);
     ucs_log(level, "IB Async event on %s: %s", uct_ib_device_name(dev), event_info);
-    ibv_ack_async_event(&event);
 }
 
 static void uct_ib_device_get_ids(uct_ib_device_t *dev)
