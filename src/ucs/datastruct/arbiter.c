@@ -70,8 +70,7 @@ void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
     ucs_arbiter_elem_set_scheduled(elem, group);
 }
 
-void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
-                                             ucs_arbiter_group_t *group,
+void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_group_t *group,
                                              ucs_arbiter_elem_t *elem)
 {
     ucs_arbiter_elem_t *tail = group->tail;

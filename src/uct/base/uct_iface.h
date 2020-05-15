@@ -420,8 +420,8 @@ uct_pending_req_priv_arb_elem(uct_pending_req_t *req)
 #define uct_pending_req_arb_group_push(_arbiter_group, _req) \
     do { \
         ucs_arbiter_elem_init(uct_pending_req_priv_arb_elem(_req)); \
-        ucs_arbiter_group_push_elem(_arbiter_group, \
-                                    uct_pending_req_priv_arb_elem(_req)); \
+        ucs_arbiter_group_push_elem_always(_arbiter_group, \
+                                           uct_pending_req_priv_arb_elem(_req)); \
     } while (0)
 
 
@@ -431,8 +431,8 @@ uct_pending_req_priv_arb_elem(uct_pending_req_t *req)
 #define uct_pending_req_arb_group_push_head(_arbiter, _arbiter_group, _req) \
     do { \
         ucs_arbiter_elem_init(uct_pending_req_priv_arb_elem(_req)); \
-        ucs_arbiter_group_push_head_elem(_arbiter, _arbiter_group, \
-                                         uct_pending_req_priv_arb_elem(_req)); \
+        ucs_arbiter_group_push_head_elem_always(_arbiter_group, \
+                                                uct_pending_req_priv_arb_elem(_req)); \
     } while (0)
 
 
