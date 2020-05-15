@@ -301,6 +301,15 @@ public:
         }
     }
 
+    void flush()
+    {
+        if (m_perf.params.flags & UCX_PERF_TEST_FLAG_FLUSH_EP) {
+            ucp_ep_flush(m_perf.ucp.ep);
+        } else {
+            ucp_worker_flush(m_perf.ucp.worker);
+        }
+    }
+
     ucs_status_t run_pingpong()
     {
         const psn_t unknown_psn = std::numeric_limits<psn_t>::max();
@@ -367,7 +376,7 @@ public:
         }
 
         wait_window(m_max_outstanding, true);
-        ucp_worker_flush(m_perf.ucp.worker);
+        flush();
 
         ucx_perf_omp_barrier(&m_perf);
 
@@ -433,7 +442,7 @@ public:
         }
 
         wait_window(m_max_outstanding, true);
-        ucp_worker_flush(m_perf.ucp.worker);
+        flush();
 
         ucx_perf_omp_barrier(&m_perf);
 

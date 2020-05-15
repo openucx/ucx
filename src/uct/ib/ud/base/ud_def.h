@@ -131,7 +131,6 @@ enum {
     UCT_UD_SEND_SKB_FLAG_COMP       = UCS_BIT(1), /* This skb contains a completion */
     UCT_UD_SEND_SKB_FLAG_ZCOPY      = UCS_BIT(2), /* This skb contains a zero-copy segment */
     UCT_UD_SEND_SKB_FLAG_RESENDING  = UCS_BIT(3), /* An active control skb refers to this skb */
-    UCT_UD_SEND_SKB_FLAG_ACKED      = UCS_BIT(4), /* Acknowledged but not released yet */
 
 #if UCS_ENABLE_ASSERT
     UCT_UD_SEND_SKB_FLAG_CTL_ACK    = UCS_BIT(5), /* This is a control-ack skb */

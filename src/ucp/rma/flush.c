@@ -78,8 +78,9 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         }
         status = uct_ep_flush(uct_ep, req->send.flush.uct_flags,
                               &req->send.state.uct_comp);
-        ucs_trace("flushing ep %p lane[%d]: %s", ep, lane,
-                  ucs_status_string(status));
+        ucp_trace_req(req, "ep %p flush lane[%d]=%p flags 0x%x: %s",
+                      ep, lane, uct_ep, req->send.flush.uct_flags,
+                      ucs_status_string(status));
         if (status == UCS_OK) {
             req->send.flush.started_lanes |= UCS_BIT(lane);
             --req->send.state.uct_comp.count;
@@ -220,7 +221,7 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     }
 }
 
-static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
+void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
@@ -242,6 +243,29 @@ static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
 
     ucs_trace_req("flush completion req=%p comp_count=%d", req, req->send.state.uct_comp.count);
     ucp_flush_check_completion(req);
+}
+
+void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
+{
+    /* Calculate how many completions to emulate: 1 for every lane we did not
+     * start to flush yet, plus one for the lane from which we just removed
+     * this request from its pending queue
+     */
+    int num_comps = req->send.flush.num_lanes -
+                    ucs_popcount(req->send.flush.started_lanes)
+                    + 1;
+
+    ucp_trace_req(req, "fast-forward flush, comp-=%d num_lanes %d started 0x%x",
+                  num_comps, req->send.flush.num_lanes,
+                  req->send.flush.started_lanes);
+
+    req->send.flush.started_lanes = UCS_MASK(req->send.flush.num_lanes);
+
+    ucs_assert(req->send.state.uct_comp.count >= num_comps);
+    req->send.state.uct_comp.count -= num_comps;
+    if (req->send.state.uct_comp.count == 0) {
+        req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
+    }
 }
 
 void ucp_ep_flush_remote_completed(ucp_request_t *req)

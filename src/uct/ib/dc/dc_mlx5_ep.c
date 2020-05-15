@@ -513,7 +513,7 @@ ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     UCT_CHECK_IOV_SIZE(iovcnt, UCT_RC_MLX5_RMA_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE),
                        "uct_dc_mlx5_ep_get_zcopy");
     UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt),
-                     iface->super.super.super.config.max_inl_resp + 1,
+                     iface->super.super.super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
                      iface->super.super.config.max_get_zcopy, "get_zcopy");
     UCT_DC_MLX5_CHECK_RMA_RES(iface, ep);
 
@@ -831,6 +831,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         if (dc_req->sender.global.is_global) {
             uct_ib_iface_fill_ah_attr_from_gid_lid(ib_iface, dc_req->lid,
                                                    ucs_unaligned_ptr(&dc_req->sender.global.gid),
+                                                   iface->super.super.super.gid_info.gid_index,
                                                    0, &ah_attr);
 
             status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);

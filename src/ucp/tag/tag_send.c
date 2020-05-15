@@ -58,7 +58,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     size_t rndv_rma_thresh;
     size_t rndv_am_thresh;
 
-    if (param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {
+    if ((param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
         rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv_send_nbr.rma_thresh;
         rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv_send_nbr.am_thresh;
     } else {
@@ -118,10 +119,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
         ucp_request_imm_cmpl_param(param, req, status, send);
     }
 
-    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-        ucp_request_set_callback(req, send.cb, param->cb.send, param->user_data);
-    }
-
+    ucp_request_set_send_callback_param(param, req);
     ucs_trace_req("returning send request %p", req);
     return req + 1;
 }

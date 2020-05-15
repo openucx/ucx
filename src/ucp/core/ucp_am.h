@@ -17,7 +17,7 @@ typedef union {
                                    * or b/zcopy MTU
                                    * should be much smaller than this anyway */
         uint16_t     am_id;       /* Index into callback array */
-        uint16_t     flags;       /* currently unused in this header 
+        uint16_t     flags;       /* currently unused in this header
                                      because replies require long header
                                      defined by @ref ucp_am_send_flags */
     } am_hdr;
@@ -34,7 +34,7 @@ typedef struct {
 typedef struct {
     size_t            total_size; /* length of buffer needed for all data */
     uint64_t          msg_id;     /* method to match parts of the same AM */
-    uintptr_t         ep;         /* end point ptr, used for maintaing list 
+    uintptr_t         ep;         /* end point ptr, used for maintaing list
                                      of arrivals */
     size_t            offset;     /* how far this message goes into large
                                      the entire AM buffer */

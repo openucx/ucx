@@ -53,37 +53,36 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
     {NULL}
 };
 
-ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
-                                   struct ibv_comp_channel *channel,
-                                   int comp_vector, int ignore_overrun,
-                                   size_t *inl, struct ibv_cq **cq_p)
+ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                   const uct_ib_iface_init_attr_t *init_attr,
+                                   int preferred_cpu, size_t inl)
 {
 #if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+    uct_ib_device_t *dev = uct_ib_iface_device(iface);
     struct ibv_cq *cq;
     struct ibv_cq_init_attr_ex cq_attr = {};
     struct mlx5dv_cq_init_attr dv_attr = {};
 
-    cq_attr.cqe = cqe;
-    cq_attr.channel = channel;
-    cq_attr.comp_vector = comp_vector;
-    if (ignore_overrun) {
+    cq_attr.cqe         = init_attr->cq_len[dir];
+    cq_attr.channel     = iface->comp_channel;
+    cq_attr.comp_vector = preferred_cpu;
+    if (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN) {
         cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
-        cq_attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
+        cq_attr.flags     = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
     }
     dv_attr.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE;
-    dv_attr.cqe_size  = uct_ib_get_cqe_size(*inl > 32 ? 128 : 64);
-    cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(context, &cq_attr, &dv_attr));
+    dv_attr.cqe_size  = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
+    cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
     if (!cq) {
-        ucs_error("mlx5dv_create_cq(cqe=%d) failed: %m", cqe);
+        ucs_error("mlx5dv_create_cq(cqe=%d) failed: %m", cq_attr.cqe);
         return UCS_ERR_IO_ERROR;
     }
 
-    *cq_p = cq;
-    *inl  = dv_attr.cqe_size / 2;
+    iface->cq[dir]                 = cq;
+    iface->config.max_inl_cqe[dir] = dv_attr.cqe_size / 2;
     return UCS_OK;
 #else
-    return uct_ib_verbs_create_cq(context, cqe, channel, comp_vector,
-                                  ignore_overrun, inl, cq_p);
+    return uct_ib_verbs_create_cq(iface, dir, init_attr, preferred_cpu, inl);
 #endif
 }
 
@@ -304,6 +303,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
     uct_ib_address_t   *ib_addr;
     ucs_status_t        status;
     struct ibv_ah_attr  ah_attr;
+    enum ibv_mtu        path_mtu;
 
     /* coverity[result_independent_of_operands] */
     ib_addr = ucs_alloca((size_t)iface->addr_size);
@@ -314,7 +314,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
         return status;
     }
 
-    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, &ah_attr);
+    uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, &ah_attr, &path_mtu);
     ah_attr.is_global = iface->config.force_global_addr;
     status = uct_ib_iface_create_ah(iface, &ah_attr, &ah);
     if (status != UCS_OK) {

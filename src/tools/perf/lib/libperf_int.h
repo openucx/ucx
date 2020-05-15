@@ -138,6 +138,9 @@ struct ucp_perf_request {
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf);
 
 
+void uct_perf_ep_flush_b(ucx_perf_context_t *perf, int peer_index);
+
+
 void uct_perf_iface_flush_b(ucx_perf_context_t *perf);
 
 

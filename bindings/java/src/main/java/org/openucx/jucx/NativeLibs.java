@@ -64,14 +64,13 @@ public class NativeLibs {
             try { // Load shared object to JVM
                 System.load(filename);
             } catch (UnsatisfiedLinkError ex) {
-                errorMessage = "Native code library failed to load: "
-                    + resourceName;
+                errorMessage = "Native code library failed to load: " + file.getName()
+                    + ". " + ex.getLocalizedMessage();
             }
 
             file.deleteOnExit();
         }
     }
-
 
     /**
      * Extracts a resource into a temp directory.

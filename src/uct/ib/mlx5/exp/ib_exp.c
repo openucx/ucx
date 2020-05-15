@@ -38,7 +38,7 @@ void uct_ib_exp_qp_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
 
 #if HAVE_STRUCT_IBV_EXP_QP_INIT_ATTR_MAX_INL_RECV
     attr->ibv.comp_mask           |= IBV_EXP_QP_INIT_ATTR_INL_RECV;
-    attr->ibv.max_inl_recv         = attr->max_inl_recv;
+    attr->ibv.max_inl_recv         = attr->max_inl_cqe[UCT_IB_DIR_RX];
 #endif
 }
 

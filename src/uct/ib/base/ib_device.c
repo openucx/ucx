@@ -968,29 +968,13 @@ static ucs_status_t uct_ib_device_create_ah(uct_ib_device_t *dev,
                                             struct ibv_pd *pd,
                                             struct ibv_ah **ah_p)
 {
-    char buf[128];
-    char *p, *endp;
     struct ibv_ah *ah;
+    char buf[128];
 
     ah = ibv_create_ah(pd, ah_attr);
     if (ah == NULL) {
-        p    = buf;
-        endp = buf + sizeof(buf);
-        snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
-                 ah_attr->dlid, ah_attr->sl,
-                 ah_attr->port_num, ah_attr->src_path_bits);
-        p += strlen(p);
-
-        if (ah_attr->is_global) {
-            snprintf(p, endp - p, " dgid=");
-            p += strlen(p);
-            uct_ib_gid_str(&ah_attr->grh.dgid, p, endp - p);
-            p += strlen(p);
-            snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
-                     ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
-        }
-
-        ucs_error("ibv_create_ah(%s) failed: %m", buf);
+        ucs_error("ibv_create_ah(%s) failed: %m",
+                  uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
         return UCS_ERR_INVALID_ADDR;
     }
 
@@ -1120,4 +1104,27 @@ unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num
     ucs_debug("RoCE LAG level on %s:%d (%s) is %u", uct_ib_device_name(dev),
               port_num, ndev_name, roce_lag_level);
     return roce_lag_level;
+}
+
+const char* uct_ib_ah_attr_str(char *buf, size_t max,
+                               const struct ibv_ah_attr *ah_attr)
+{
+    char *p    = buf;
+    char *endp = buf + max;
+
+    snprintf(p, endp - p, "dlid=%d sl=%d port=%d src_path_bits=%d",
+             ah_attr->dlid, ah_attr->sl,
+             ah_attr->port_num, ah_attr->src_path_bits);
+    p += strlen(p);
+
+    if (ah_attr->is_global) {
+        snprintf(p, endp - p, " dgid=");
+        p += strlen(p);
+        uct_ib_gid_str(&ah_attr->grh.dgid, p, endp - p);
+        p += strlen(p);
+        snprintf(p, endp - p, " sgid_index=%d traffic_class=%d",
+                 ah_attr->grh.sgid_index, ah_attr->grh.traffic_class);
+    }
+
+    return buf;
 }

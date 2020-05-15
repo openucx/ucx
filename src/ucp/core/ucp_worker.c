@@ -467,20 +467,20 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 
     ucp_ep->am_lane = 0;
 
-    if (!(ucp_ep->flags & UCP_EP_FLAG_USED)) {
+    if (ucp_ep->flags & UCP_EP_FLAG_USED) {
+        if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+            ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
+            /* Promote close operation to CANCEL in case of transport error,
+             * since the disconnect event may never arrive. */
+            close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
+            close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
+            ucp_ep_local_disconnect_progress(close_req);
+        } else {
+            ucp_ep_invoke_err_cb(ucp_ep, key.status);
+        }
+    } else {
         ucs_debug("ep %p: destroy internal endpoint due to peer failure", ucp_ep);
         ucp_ep_disconnected(ucp_ep, 1);
-    } else {
-        ucp_ep_invoke_err_cb(ucp_ep, key.status);
-    }
-
-    if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
-        /* Promote close operation to CANCEL in case of transport error, since
-         * the disconnect event may never arrive.
-         */
-        close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
-        close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
-        ucp_ep_local_disconnect_progress(close_req);
     }
 
     ucs_free(err_handle_arg);

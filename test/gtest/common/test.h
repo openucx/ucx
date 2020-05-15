@@ -7,6 +7,12 @@
 #ifndef UCS_TEST_BASE_H
 #define UCS_TEST_BASE_H
 
+/* gcc 4.3.4 compilation */
+#ifndef UINT8_MAX
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
+#endif
+
 #include "test_helpers.h"
 
 #include <ucs/debug/log.h>

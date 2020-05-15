@@ -130,14 +130,17 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
                                                  uct_device_addr_t **dev_addr_p,
                                                  size_t *dev_addr_len_p)
 {
+    uct_ib_address_pack_params_t params;
     struct ibv_port_attr port_attr;
     uct_ib_address_t *dev_addr;
     struct ibv_qp_attr qp_attr;
     size_t addr_length;
     int qp_attr_mask;
     char dev_name[UCT_DEVICE_NAME_MAX];
+    char ah_attr_str[128];
     uct_ib_roce_version_info_t roce_info;
-    unsigned address_pack_flags;
+
+    params.flags = 0;
 
     /* get the qp attributes in order to modify the qp state.
      * the ah_attr fields from them are required to extract the device address
@@ -160,33 +163,42 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         ucs_assert(!memcmp(&cm_id->route.addr.addr.ibaddr.dgid,
                            &qp_attr.ah_attr.grh.dgid,
                            sizeof(qp_attr.ah_attr.grh.dgid)));
+        params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
+        params.gid_index = qp_attr.ah_attr.grh.sgid_index;
     }
+
+    ucs_debug("cm_id %p: ah_attr %s", cm_id,
+              uct_ib_ah_attr_str(ah_attr_str, sizeof(ah_attr_str),
+                                 &qp_attr.ah_attr));
+    ucs_assert_always(qp_attr.path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
+    params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
+    params.path_mtu = qp_attr.path_mtu;
 
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
         /* Ethernet address */
         ucs_assert(qp_attr.ah_attr.is_global);
-        address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_ETH;
 
         /* pack the remote RoCE version as ANY assuming that rdmacm guarantees
          * that the remote peer is reachable to the local one */
         roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
         roce_info.addr_family = 0;
+        params.roce_info      = &roce_info;
+        params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_ETH;
     } else {
-        address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
-                             UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
+        params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
+                                UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
     }
 
-    addr_length = uct_ib_address_size(&cm_id->route.addr.addr.ibaddr.dgid,
-                                      address_pack_flags);
+    params.gid  = &cm_id->route.addr.addr.ibaddr.dgid;
+    params.lid  = qp_attr.ah_attr.dlid;
+    addr_length = uct_ib_address_size(&params);
     dev_addr    = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
         ucs_error("failed to allocate IB device address");
         return UCS_ERR_NO_MEMORY;
     }
 
-    uct_ib_address_pack(&cm_id->route.addr.addr.ibaddr.dgid,
-                        qp_attr.ah_attr.dlid, address_pack_flags, &roce_info,
-                        dev_addr);
+    uct_ib_address_pack(&params, dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
     *dev_addr_len_p = addr_length;
@@ -327,7 +339,7 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
     ucs_debug("%s: got disconnect event, status %d peer %s",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               event->status, ucs_sockaddr_str(remote_addr, ip_port_str,
-                                             UCS_SOCKADDR_STRING_LEN));
+                                              UCS_SOCKADDR_STRING_LEN));
 
     cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT;
     /* calling error_cb instead of disconnect CB directly handles out-of-order
@@ -368,8 +380,16 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
             ucs_sockaddr_str(remote_addr, ip_port_str,
                              UCS_SOCKADDR_STRING_LEN));
 
-    remote_data.field_mask = 0;
-    uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+    if ((cep->flags & UCT_RDMACM_CM_EP_CONN_CB_INVOKED) &&
+        !(cep->flags & UCT_RDMACM_CM_EP_FAILED)) {
+        /* first failure on connected EP has to be reported as disconnect event
+         * to allow user to call disconnect due to UCT API limitation -
+         * disconnect callback does not have status arg */
+        uct_rdmacm_cm_handle_event_disconnected(event);
+    } else {
+        remote_data.field_mask = 0;
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+    }
 }
 
 static void
@@ -424,13 +444,13 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
          * After the timewait state has completed, the rdma_cm will report this event.*/
         break;
         /* client error events */
-    case RDMA_CM_EVENT_REJECTED:
     case RDMA_CM_EVENT_UNREACHABLE:
     case RDMA_CM_EVENT_ADDR_ERROR:
     case RDMA_CM_EVENT_ROUTE_ERROR:
     case RDMA_CM_EVENT_DEVICE_REMOVAL:
     case RDMA_CM_EVENT_ADDR_CHANGE:
         /* client and server error events */
+    case RDMA_CM_EVENT_REJECTED:
     case RDMA_CM_EVENT_CONNECT_ERROR:
         uct_rdmacm_cm_handle_error_event(event);
         break;

@@ -12,15 +12,22 @@
 #include <ucs/type/status.h>
 #include <stdio.h>
 
+/* TODO: can this conflict with a valid BDF? */
+ucs_sys_bus_id_t ucs_sys_bus_id_unknown = { .domain   = 0xffff,
+                                            .bus      = 0xff,
+                                            .slot     = 0xff,
+                                            .function = 0xff
+                                          };
+
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
-                                            const ucs_sys_device_t **sys_dev)
+                                            ucs_sys_device_t *sys_dev)
 {
     return UCS_OK;
 }
 
 
-ucs_status_t ucs_topo_get_distance(const ucs_sys_device_t *device1,
-                                   const ucs_sys_device_t *device2,
+ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
+                                   ucs_sys_device_t device2,
                                    ucs_sys_dev_distance_t *distance)
 {
     return UCS_OK;

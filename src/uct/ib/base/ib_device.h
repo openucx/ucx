@@ -86,17 +86,25 @@ enum {
  * Flags which specify which address fields are present
  */
 enum {
+    /* GID index, used for both ETH or IB link layer.  */
+    UCT_IB_ADDRESS_FLAG_GID_INDEX      = UCS_BIT(0),
+    /* Defines path MTU size, used for both ETH or IB link layer. */
+    UCT_IB_ADDRESS_FLAG_PATH_MTU       = UCS_BIT(1),
+
     /* If set - ETH link layer, else- IB link layer */
-    UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH = UCS_BIT(0),
+    UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH = UCS_BIT(2),
+
     /* Used for ETH link layer */
-    UCT_IB_ADDRESS_FLAG_ROCE_IPV6      = UCS_BIT(1),
+    UCT_IB_ADDRESS_FLAG_ROCE_IPV6      = UCS_BIT(3),
+    /* Used for ETH link layer, following bits are used to pack RoCE version */
+    UCT_IB_ADDRESS_FLAG_ETH_LAST       = UCS_BIT(4),
+
     /* Used for IB link layer */
-    UCT_IB_ADDRESS_FLAG_SUBNET16       = UCS_BIT(2),
+    UCT_IB_ADDRESS_FLAG_SUBNET16       = UCS_BIT(3),
     /* Used for IB link layer */
-    UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(3),
+    UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(4),
     /* Used for IB link layer */
-    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(4),
-    UCT_IB_ADDRESS_FLAG_LAST           = UCS_BIT(5)
+    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(5),
 };
 
 
@@ -342,6 +350,9 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
                                       uint8_t gid_index);
 
 int uct_ib_get_cqe_size(int cqe_size_min);
+
+const char* uct_ib_ah_attr_str(char *buf, size_t max,
+                               const struct ibv_ah_attr *ah_attr);
 
 static inline ucs_status_t uct_ib_poll_cq(struct ibv_cq *cq, unsigned *count, struct ibv_wc *wcs)
 {

@@ -451,8 +451,8 @@ public:
         connect_and_reject(wakeup);
     }
 
-    void one_sided_disconnect(entity &e) {
-        void *req           = e.disconnect_nb();
+    void one_sided_disconnect(entity &e, enum ucp_ep_close_mode mode) {
+        void *req           = e.disconnect_nb(0, 0, mode);
         ucs_time_t deadline = ucs_time_from_sec(10.0) + ucs_get_time();
         while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
@@ -463,15 +463,15 @@ public:
         e.close_ep_req_free(req);
     }
 
-    void concurrent_disconnect() {
+    void concurrent_disconnect(enum ucp_ep_close_mode mode) {
         ASSERT_EQ(2ul, entities().size());
         ASSERT_EQ(1, sender().get_num_workers());
         ASSERT_EQ(1, sender().get_num_eps());
         ASSERT_EQ(1, receiver().get_num_workers());
         ASSERT_EQ(1, receiver().get_num_eps());
 
-        void *sender_ep_close_req   = sender().disconnect_nb();
-        void *receiver_ep_close_req = receiver().disconnect_nb();
+        void *sender_ep_close_req   = sender().disconnect_nb(0, 0, mode);
+        void *receiver_ep_close_req = receiver().disconnect_nb(0, 0, mode);
 
         ucs_time_t deadline = ucs::get_deadline();
         while ((!is_request_completed(sender_ep_close_req) ||
@@ -554,46 +554,69 @@ UCS_TEST_P(test_ucp_sockaddr, listen_bidi) {
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect,
                      no_close_protocol()) {
     listen_and_communicate(false, 0);
-    one_sided_disconnect(sender());
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_c2s) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
-    one_sided_disconnect(sender());
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect_s2c,
                      no_close_protocol()) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
-    one_sided_disconnect(sender());
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    one_sided_disconnect(sender());
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect,
                      no_close_protocol()) {
     listen_and_communicate(false, 0);
-    concurrent_disconnect();
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_c2s,
                      no_close_protocol()) {
     listen_and_communicate(false, SEND_DIRECTION_C2S);
-    concurrent_disconnect();
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_s2c,
                      no_close_protocol()) {
     listen_and_communicate(false, SEND_DIRECTION_S2C);
-    concurrent_disconnect();
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    concurrent_disconnect();
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_force,
+                     no_close_protocol()) {
+    listen_and_communicate(false, 0);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_force_c2s,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect_force_s2c,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_S2C);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+}
+
+UCS_TEST_P(test_ucp_sockaddr, concurrent_disconnect_force_bidi) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen_inaddr_any) {
@@ -658,6 +681,13 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
 
 class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
 public:
+    test_ucp_sockaddr_destroy_ep_on_err() {
+        /* Set small TL timeouts to reduce testing time */
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
+    }
+
     virtual ucp_ep_params_t get_server_ep_params() {
         ucp_ep_params_t params = test_ucp_sockaddr::get_server_ep_params();
 
@@ -676,6 +706,9 @@ public:
         entity *e = reinterpret_cast<entity *>(arg);
         e->disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
     }
+
+private:
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, empty,
@@ -696,6 +729,70 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, c2s,
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, bidi,
                      no_close_protocol()) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_client_cforce,
+                     no_close_protocol()) {
+    listen_and_communicate(false, 0);
+    scoped_log_handler slh(wrap_errors_logger);
+    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FORCE);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_c2s_cforce,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+    scoped_log_handler slh(wrap_errors_logger);
+    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FORCE);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_s2c_cforce,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_S2C);
+    scoped_log_handler slh(wrap_errors_logger);
+    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FORCE);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_cforce,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    scoped_log_handler slh(wrap_errors_logger);
+    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FORCE);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_client_sforce,
+                     no_close_protocol()) {
+    listen_and_communicate(false, 0);
+    scoped_log_handler slh(wrap_errors_logger);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
+    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_c2s_sforce,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+    scoped_log_handler slh(wrap_errors_logger);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
+    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_s2c_sforce,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_S2C);
+    scoped_log_handler slh(wrap_errors_logger);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
+    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_sforce,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    scoped_log_handler slh(wrap_errors_logger);
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
+    one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_destroy_ep_on_err)
@@ -782,7 +879,7 @@ public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features    |= UCP_FEATURE_RMA;
+        params.features    |= UCP_FEATURE_RMA | UCP_FEATURE_AM;
         /* Atomics not supported for now because need to emulate the case
          * of using different device than the one selected by default on the
          * worker for atomic operations */
@@ -951,6 +1048,32 @@ protected:
         ASSERT_UCS_OK(status);
     }
 
+    void test_am_send_recv(size_t size)
+    {
+        std::string sb(size, 'x');
+
+        bool am_received = false;
+        ucp_worker_set_am_handler(receiver().worker(), 0,
+                                  rx_am_msg_cb, &am_received, 0);
+
+        ucs_status_ptr_t sreq = ucp_am_send_nb(sender().ep(), 0, &sb[0], size,
+                                               ucp_dt_make_contig(1),
+                                               scomplete_cb, 0);
+        wait(sreq);
+        wait_for_flag(&am_received);
+        EXPECT_TRUE(am_received);
+
+        ucp_worker_set_am_handler(receiver().worker(), 0, NULL, NULL, 0);
+    }
+
+private:
+    static ucs_status_t rx_am_msg_cb(void *arg, void *data, size_t length,
+                                     ucp_ep_h reply_ep, unsigned flags) {
+        volatile bool *am_rx = reinterpret_cast<volatile bool*>(arg);
+        EXPECT_FALSE(*am_rx);
+        *am_rx = true;
+        return UCS_OK;
+    }
 };
 
 UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_4k_exp,
@@ -1073,6 +1196,22 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, put_zcopy, "ZCOPY_THRESH=10k")
 {
     test_rma(64 * UCS_KBYTE, &test_ucp_sockaddr_protocols::put_nb);
 }
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_short)
+{
+    test_am_send_recv(1);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_1k, "ZCOPY_THRESH=inf")
+{
+    test_am_send_recv(1 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_64k, "ZCOPY_THRESH=inf")
+{
+    test_am_send_recv(64 * UCS_KBYTE);
+}
+
 
 /* Only IB transports support CM for now
  * For DC case, allow fallback to UD if DC is not supported

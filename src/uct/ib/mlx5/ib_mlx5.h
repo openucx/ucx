@@ -475,10 +475,9 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
 /**
  * Create CQ with DV
  */
-ucs_status_t uct_ib_mlx5_create_cq(struct ibv_context *context, int cqe,
-                                   struct ibv_comp_channel *channel,
-                                   int comp_vector, int ignore_overrun,
-                                   size_t *inl, struct ibv_cq **cq_p);
+ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                   const uct_ib_iface_init_attr_t *init_attr,
+                                   int preferred_cpu, size_t inl);
 
 extern ucs_config_field_t uct_ib_mlx5_iface_config_table[];
 
