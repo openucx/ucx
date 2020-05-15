@@ -448,6 +448,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     self->config.max_window = config->max_window;
 
+    self->rx.async_max_poll = config->rx_async_max_poll;
+
     if (config->timer_tick <= 0.) {
         ucs_error("The timer tick should be > 0 (%lf)",
                   config->timer_tick);
@@ -594,6 +596,10 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
       UCS_PP_MAKE_STRING(UCT_UD_CA_MIN_WINDOW) " and <= "
       UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
      ucs_offsetof(uct_ud_iface_config_t, max_window), UCS_CONFIG_TYPE_UINT},
+
+    {"RX_ASYNC_MAX_POLL", "64",
+     "Max number of receive completions to pick during asynchronous TX poll",
+     ucs_offsetof(uct_ud_iface_config_t, rx_async_max_poll), UCS_CONFIG_TYPE_UINT},
 
     {NULL}
 };
