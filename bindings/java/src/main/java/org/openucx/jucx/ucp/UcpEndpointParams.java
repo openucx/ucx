@@ -5,7 +5,6 @@
 
 package org.openucx.jucx.ucp;
 
-import org.openucx.jucx.UcxException;
 import org.openucx.jucx.UcxParams;
 
 import java.net.InetSocketAddress;
@@ -17,14 +16,34 @@ import java.nio.ByteBuffer;
 public class UcpEndpointParams extends UcxParams {
 
     @Override
+    public String toString() {
+        String result = "UcpEndpointParams{";
+        if (ucpAddress != null) {
+            result += "ucpAddress,";
+        }
+        result += "errorHandlingMode="
+            + ((errorHandlingMode == 0) ? "UCP_ERR_HANDLING_MODE_NONE," :
+                                          "UCP_ERR_HANDLING_MODE_PEER,");
+
+        if (socketAddress != null) {
+            result += "socketAddress=" + socketAddress.toString() + ",";
+        }
+
+        if (connectionRequest != 0) {
+            result += "connectionRequest,";
+        }
+        return result;
+    }
+
+    @Override
     public UcpEndpointParams clear() {
         super.clear();
         ucpAddress = null;
         errorHandlingMode = 0;
-        userData = null;
         flags = 0;
         socketAddress = null;
         connectionRequest = 0;
+        errorHandler = null;
         return this;
     }
 
@@ -32,13 +51,13 @@ public class UcpEndpointParams extends UcxParams {
 
     private int errorHandlingMode;
 
-    private ByteBuffer userData;
-
     private long flags;
 
     private InetSocketAddress socketAddress;
 
     private long connectionRequest;
+
+    UcpEndpointErrorHandler errorHandler;
 
     /**
      * Destination address in form of workerAddress.
@@ -57,18 +76,6 @@ public class UcpEndpointParams extends UcxParams {
     public UcpEndpointParams setPeerErrorHadnlingMode() {
         this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
         this.errorHandlingMode = UcpConstants.UCP_ERR_HANDLING_MODE_PEER;
-        return this;
-    }
-
-    /**
-     * User data associated with an endpoint.
-     */
-    public UcpEndpointParams setUserData(ByteBuffer userData) {
-        if (!userData.isDirect()) {
-            throw new UcxException("User data must be of type DirectByteBuffer.");
-        }
-        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_USER_DATA;
-        this.userData = userData;
         return this;
     }
 
@@ -100,6 +107,15 @@ public class UcpEndpointParams extends UcxParams {
     public UcpEndpointParams setConnectionRequest(UcpConnectionRequest connectionRequest) {
         this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_CONN_REQUEST;
         this.connectionRequest = connectionRequest.getNativeId();
+        return this;
+    }
+
+    /**
+     * Handler to process transport level failure.
+     */
+    public UcpEndpointParams setErrorHandler(UcpEndpointErrorHandler errorHandler) {
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        this.errorHandler = errorHandler;
         return this;
     }
 }
