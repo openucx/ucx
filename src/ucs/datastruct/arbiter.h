@@ -215,8 +215,7 @@ void ucs_arbiter_group_push_elem_always(ucs_arbiter_group_t *group,
 /**
  * Add a new work element to the head of a group - internal function
  */
-void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_t *arbiter,
-                                             ucs_arbiter_group_t *group,
+void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_group_t *group,
                                              ucs_arbiter_elem_t *elem);
 
 
@@ -340,22 +339,18 @@ ucs_arbiter_group_push_elem(ucs_arbiter_group_t *group,
 /**
  * Add a new work element to the head of a group if it is not already there
  *
- * @param [in]  arbiter  Arbiter object the group is on (since we modify the head
- *                       element of a potentially scheduled group). If the group
- *                       is not scheduled, arbiter may be NULL.
  * @param [in]  group    Group to add the element to.
  * @param [in]  elem     Work element to add.
  */
 static inline void
-ucs_arbiter_group_push_head_elem(ucs_arbiter_t *arbiter,
-                                 ucs_arbiter_group_t *group,
+ucs_arbiter_group_push_head_elem(ucs_arbiter_group_t *group,
                                  ucs_arbiter_elem_t *elem)
 {
     if (ucs_arbiter_elem_is_scheduled(elem)) {
         return;
     }
 
-    ucs_arbiter_group_push_head_elem_always(arbiter, group, elem);
+    ucs_arbiter_group_push_head_elem_always(group, elem);
 }
 
 

@@ -74,7 +74,7 @@ protected:
             for (j = 0; j < nelems_per_group; j++) {
                 if (push_head) {
                     int rev_j = nelems_per_group - 1 - j;
-                    ucs_arbiter_group_push_head_elem(NULL, &groups[i],
+                    ucs_arbiter_group_push_head_elem(&groups[i],
                                                      &elems[nelems_per_group*i+rev_j]);
                 } else {
                     ucs_arbiter_group_push_elem(&groups[i],
@@ -570,8 +570,8 @@ UCS_TEST_F(test_arbiter, push_head_scheduled) {
     ucs_arbiter_elem_init(&elem3.elem);
     elem1.count = elem2.count = elem3.count = 0;
 
-    ucs_arbiter_group_push_head_elem(&m_arb1, &group1, &elem1.elem);
-    ucs_arbiter_group_push_head_elem(&m_arb1, &group2, &elem2.elem);
+    ucs_arbiter_group_push_head_elem(&group1, &elem1.elem);
+    ucs_arbiter_group_push_head_elem(&group2, &elem2.elem);
 
     ucs_arbiter_group_schedule(&m_arb1, &group1);
     ucs_arbiter_group_schedule(&m_arb1, &group2);
@@ -584,7 +584,7 @@ UCS_TEST_F(test_arbiter, push_head_scheduled) {
     EXPECT_EQ(0, elem3.count);
 
     /* Adding new head elem to group2 */
-    ucs_arbiter_group_push_head_elem(&m_arb1, &group2, &elem3.elem);
+    ucs_arbiter_group_push_head_elem(&group2, &elem3.elem);
 
     m_count = 0;
     ucs_arbiter_dispatch(&m_arb1, 1, count_cb, this);
@@ -598,9 +598,9 @@ UCS_TEST_F(test_arbiter, push_head_scheduled) {
     EXPECT_EQ(3, m_count);
 
     /* Add to single scheduled group */
-    ucs_arbiter_group_push_head_elem(&m_arb1, &group2, &elem2.elem);
+    ucs_arbiter_group_push_head_elem(&group2, &elem2.elem);
     ucs_arbiter_group_schedule(&m_arb1, &group2);
-    ucs_arbiter_group_push_head_elem(&m_arb1, &group2, &elem3.elem);
+    ucs_arbiter_group_push_head_elem(&group2, &elem3.elem);
 
     m_count = 0;
     elem2.count = elem3.count = 0;
