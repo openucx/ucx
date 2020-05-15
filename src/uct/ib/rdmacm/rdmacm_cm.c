@@ -339,7 +339,7 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
     ucs_debug("%s: got disconnect event, status %d peer %s",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               event->status, ucs_sockaddr_str(remote_addr, ip_port_str,
-                                             UCS_SOCKADDR_STRING_LEN));
+                                              UCS_SOCKADDR_STRING_LEN));
 
     cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT;
     /* calling error_cb instead of disconnect CB directly handles out-of-order
