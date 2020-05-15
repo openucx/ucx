@@ -14,6 +14,11 @@ class test_mem : public testing::TestWithParam<uct_alloc_method_t>,
 public:
     UCS_TEST_BASE_IMPL;
 
+    virtual void init() {
+        ucs::skip_on_address_sanitizer();
+        uct_test_base::init();
+    }
+
 protected:
 
     void check_mem(const uct_allocated_memory &mem, size_t min_length) {

@@ -172,6 +172,7 @@
         }
 
 
+
 namespace ucs {
 
 extern const double test_timeout_in_sec;
@@ -851,6 +852,12 @@ void cartesian_product(std::vector<std::vector<T> > &output,
                        const std::vector<std::vector<T> > &input);
 
 std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs();
+
+
+/**
+ * Skip test if address sanitizer is enabled
+ */
+void skip_on_address_sanitizer();
 
 } // ucs
 
