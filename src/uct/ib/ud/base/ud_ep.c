@@ -674,8 +674,8 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ucs_trace_func("");
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREP);
-    ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID ||
-                      ep->dest_ep_id == ctl->conn_rep.src_ep_id);
+    ucs_assert_always(!uct_ud_ep_is_connected(ep) ||
+                      (ep->dest_ep_id == ctl->conn_rep.src_ep_id));
 
     /* Discard duplicate CREP */
     if (UCT_UD_PSN_COMPARE(neth->psn, <, ep->rx.ooo_pkts.head_sn)) {
@@ -762,7 +762,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
     } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
-               ep->ep_id != dest_id))
+                            (ep->ep_id != dest_id)))
     {
         /* Drop the packet because it is
          * allowed to do disconnect without flush/barrier. So it
@@ -795,8 +795,8 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
 
     ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &skb->u.ooo.elem, neth->psn);
     if (ucs_unlikely(ooo_type != UCS_FRAG_LIST_INSERT_FAST)) {
-        if (ooo_type != UCS_FRAG_LIST_INSERT_DUP &&
-            ooo_type != UCS_FRAG_LIST_INSERT_FAIL) {
+        if ((ooo_type != UCS_FRAG_LIST_INSERT_DUP) &&
+            (ooo_type != UCS_FRAG_LIST_INSERT_FAIL)) {
             ucs_fatal("Out of order is not implemented: got %d", ooo_type);
         }
         ucs_trace_data("DUP/OOB - schedule ack, head_sn=%d sn=%d",
@@ -1070,8 +1070,8 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
 
     /* creq/crep must remove creq packet from window */
     ucs_assertv_always(!(uct_ud_ep_is_connected(ep) &&
-                       (uct_ud_neth_get_dest_id(sent_skb->neth) == UCT_UD_EP_NULL_ID) &&
-                       !(sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_AM)),
+                         (uct_ud_neth_get_dest_id(sent_skb->neth) == UCT_UD_EP_NULL_ID) &&
+                         !(sent_skb->neth->packet_type & UCT_UD_PACKET_FLAG_AM)),
                        "ep(%p): CREQ resend on endpoint which is already connected", ep);
 
     /* Allocate a control skb which would refer to the original skb.
@@ -1259,13 +1259,12 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                      ucs_arbiter_elem_t *elem,
                      void *arg)
 {
-    uct_pending_req_t *req      = ucs_container_of(elem, uct_pending_req_t,
-                                                   priv);
     uct_ud_ep_t *ep             = ucs_container_of(group, uct_ud_ep_t,
                                                    tx.pending.group);
     uct_ud_iface_t *iface       = ucs_container_of(arbiter, uct_ud_iface_t,
                                                    tx.pending_q);
     uintptr_t in_async_progress = (uintptr_t)arg;
+    uct_pending_req_t *req;
     int allow_callback;
     int async_before_pending;
     ucs_status_t status;
@@ -1293,10 +1292,9 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
     /* we can desched group: iff
      * - no control
      * - no ep resources (connect or window)
-     **/
-
+     */
     if (!uct_ud_ep_ctl_op_isany(ep) &&
-       (!uct_ud_ep_is_connected(ep) ||
+        (!uct_ud_ep_is_connected(ep) ||
          uct_ud_ep_no_window(ep))) {
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
@@ -1316,6 +1314,8 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
      * - not in async progress
      * - there are no high priority pending control messages
      */
+    
+    req            = ucs_container_of(elem, uct_pending_req_t, priv);
     allow_callback = !in_async_progress ||
                      (uct_ud_pending_req_priv(req)->flags & UCT_CB_FLAG_ASYNC);
     if (allow_callback && !uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CTL_HI_PRIO)) {
@@ -1360,7 +1360,7 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
 ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
                                    unsigned flags)
 {
-    uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
+    uct_ud_ep_t *ep       = ucs_derived_of(ep_h, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
 
@@ -1428,18 +1428,16 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
 void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_purge_callback_t cb,
                              void *arg)
 {
-    uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
-    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                           uct_ud_iface_t);
+    uct_ud_ep_t *ep          = ucs_derived_of(ep_h, uct_ud_ep_t);
+    uct_ud_iface_t *iface    = ucs_derived_of(ep->super.super.iface,
+                                              uct_ud_iface_t);
     uct_purge_cb_args_t args = {cb, arg};
 
     uct_ud_enter(iface);
     ucs_arbiter_group_purge(&iface->tx.pending_q, &ep->tx.pending.group,
                             uct_ud_ep_pending_purge_cb, &args);
     if (uct_ud_ep_ctl_op_isany(ep)) {
-        ucs_arbiter_group_push_elem(&ep->tx.pending.group,
-                                    &ep->tx.pending.elem);
-        ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
+        uct_ud_ep_ctl_op_schedule(iface, ep);
     }
     uct_ud_leave(iface);
 }
