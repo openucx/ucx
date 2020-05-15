@@ -155,6 +155,15 @@ out:
     return status_p;
 }
 
+ucs_status_ptr_t
+ucp_atomic_fetch_nbx(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
+                     const void *buffer, void *result, size_t count,
+                     uint64_t remote_addr, ucp_rkey_h rkey,
+                     const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
 ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t value,
                              size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey)
 {
