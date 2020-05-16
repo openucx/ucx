@@ -1212,6 +1212,16 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_64k, "ZCOPY_THRESH=inf")
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_1k, "ZCOPY_THRESH=512")
+{
+    test_am_send_recv(1 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_64k, "ZCOPY_THRESH=512")
+{
+    test_am_send_recv(64 * UCS_KBYTE);
+}
+
 
 /* Only IB transports support CM for now
  * For DC case, allow fallback to UD if DC is not supported

@@ -82,8 +82,8 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     memset(key->amo_lanes,    UCP_NULL_LANE, sizeof(key->amo_lanes));
 }
 
-ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
-                        const char *message, ucp_ep_h *ep_p)
+ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
+                                const char *message, ucp_ep_h *ep_p)
 {
     ucs_status_t status;
     ucp_ep_config_key_t key;
@@ -136,7 +136,8 @@ ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    ucs_list_head_init(&ucp_ep_ext_gen(ep)->ep_list);
+
     *ep_p = ep;
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
     return UCS_OK;
@@ -145,6 +146,24 @@ err_free_ep:
     ucs_strided_alloc_put(&worker->ep_alloc, ep);
 err:
     return status;
+}
+
+ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, const char *peer_name,
+                                  const char *message, ucp_ep_h *ep_p)
+{
+    ucs_status_t status;
+    ucp_ep_h ep;
+
+    status = ucp_ep_create_base(worker, peer_name, message, &ep);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+
+    *ep_p = ep;
+
+    return UCS_OK;
 }
 
 void ucp_ep_delete(ucp_ep_h ep)
@@ -166,7 +185,7 @@ ucp_ep_create_sockaddr_aux(ucp_worker_h worker, unsigned ep_init_flags,
     ucp_ep_h ep;
 
     /* allocate endpoint */
-    status = ucp_ep_new(worker, remote_address->name, "listener", &ep);
+    status = ucp_worker_create_ep(worker, remote_address->name, "listener", &ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -335,7 +354,7 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ucp_ep_h ep;
 
     /* allocate endpoint */
-    status = ucp_ep_new(worker, remote_address->name, message, &ep);
+    status = ucp_worker_create_ep(worker, remote_address->name, message, &ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -378,7 +397,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     /* allocate endpoint */
     ucs_sockaddr_str(params->sockaddr.addr, peer_name, sizeof(peer_name));
 
-    status = ucp_ep_new(worker, peer_name, "from api call", &ep);
+    status = ucp_worker_create_ep(worker, peer_name, "from api call", &ep);
     if (status != UCS_OK) {
         goto err;
     }
