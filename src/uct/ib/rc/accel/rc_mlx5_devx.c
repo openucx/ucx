@@ -45,7 +45,7 @@ ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(uct_rc_mlx5_iface_common_t *
 }
 
 #if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
-static void uct_rc_mlx5_devx_iface_event_handler(int fd, void *arg)
+static void uct_rc_mlx5_devx_iface_event_handler(int fd, int events, void *arg)
 {
     uct_rc_mlx5_iface_common_t *iface = arg;
     uct_ib_md_t *md                   = uct_ib_iface_md(&iface->super.super);
