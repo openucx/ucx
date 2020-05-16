@@ -27,7 +27,10 @@ protected:
     }
 
     virtual void cleanup() {
-        ucs_memtype_cache_destroy(m_memtype_cache);
+        if (m_memtype_cache != NULL) {
+            ucs_memtype_cache_destroy(m_memtype_cache);
+        }
+
         ucs::test_with_param<ucs_memory_type_t>::cleanup();
     }
 
