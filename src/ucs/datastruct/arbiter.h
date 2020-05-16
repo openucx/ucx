@@ -102,13 +102,27 @@ typedef enum {
 } ucs_arbiter_cb_result_t;
 
 #if UCS_ENABLE_ASSERT
-#define UCS_ARBITER_GROUP_GUARD_DEFINE          int guard
+#define UCS_ARBITER_GROUP_GUARD_DEFINE          int guard; ucs_arbiter_elem_t *head
 #define UCS_ARBITER_GROUP_GUARD_INIT(_group)    (_group)->guard = 0
-#define UCS_ARBITER_GROUP_GUARD_ENTER(_group)   (_group)->guard++
-#define UCS_ARBITER_GROUP_GUARD_EXIT(_group)    (_group)->guard--
+#define UCS_ARBITER_GROUP_GUARD_ENTER(_group, _head_elem)  \
+    do { \
+        (_group)->guard++; \
+        (_group)->head = _head_elem; \
+    } while (0)
+#define UCS_ARBITER_GROUP_GUARD_EXIT(_group) \
+    do { \
+        (_group)->head = NULL; \
+        (_group)->guard--; \
+    } while (0)
 #define UCS_ARBITER_GROUP_GUARD_CHECK(_group) \
     ucs_assertv((_group)->guard == 0, \
-                "scheduling arbiter group %p while it's being dispatched", _group)
+                "mustn't call this routine for group %p " \
+                "while it's being dispatched", _group)
+#define UCS_ARBITER_GROUP_ELEM_GUARD_CHECK(_group, _elem) \
+    ucs_assertv(((_group)->guard == 0) || ((_group)->head == _elem), \
+                "mustn't call this routine (element=%p) for group %p " \
+                "while it's being dispatched", _elem, _group)
+
 #define UCS_ARBITER_GROUP_ARBITER_DEFINE        ucs_arbiter_t *arbiter
 #define UCS_ARBITER_GROUP_ARBITER_SET(_group, _arbiter) \
     (_group)->arbiter = (_arbiter)
@@ -117,9 +131,11 @@ typedef enum {
 #else
 #define UCS_ARBITER_GROUP_GUARD_DEFINE
 #define UCS_ARBITER_GROUP_GUARD_INIT(_group)
-#define UCS_ARBITER_GROUP_GUARD_ENTER(_group)
+#define UCS_ARBITER_GROUP_GUARD_ENTER(_group, _head_elem)
 #define UCS_ARBITER_GROUP_GUARD_EXIT(_group)
 #define UCS_ARBITER_GROUP_GUARD_CHECK(_group)
+#define UCS_ARBITER_GROUP_ELEM_GUARD_CHECK(_group, _elem)
+
 #define UCS_ARBITER_GROUP_ARBITER_DEFINE
 #define UCS_ARBITER_GROUP_ARBITER_SET(_group, _arbiter)
 #define UCS_ARBITER_GROUP_ARBITER_CHECK(_group, _arbiter)
@@ -346,6 +362,9 @@ static inline void
 ucs_arbiter_group_push_head_elem(ucs_arbiter_group_t *group,
                                  ucs_arbiter_elem_t *elem)
 {
+    /* it's not allowed to push elem to head during dispatch */
+    UCS_ARBITER_GROUP_GUARD_CHECK(group);
+
     if (ucs_arbiter_elem_is_scheduled(elem)) {
         return;
     }
@@ -381,8 +400,10 @@ ucs_arbiter_dispatch(ucs_arbiter_t *arbiter, unsigned per_group,
  * @return true if element is the only one in the group
  */
 static inline int
-ucs_arbiter_elem_is_only(ucs_arbiter_elem_t *elem)
+ucs_arbiter_group_elem_is_only(ucs_arbiter_group_t *group,
+                               ucs_arbiter_elem_t *elem)
 {
+    UCS_ARBITER_GROUP_ELEM_GUARD_CHECK(group, elem);
     return elem->next == elem;
 }
 

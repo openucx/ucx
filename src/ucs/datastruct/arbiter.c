@@ -258,6 +258,7 @@ ucs_arbiter_group_head_replace(ucs_arbiter_group_t *group,
     ucs_assert(group->tail->next == group_head);
 
     if (group_head->next == group_head) {
+        /* the group head is the last element */
         group->tail          = new_group_head;
     } else {
         new_group_head->next = group_head->next;
@@ -316,7 +317,7 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
 
             /* dispatch the element */
             ucs_trace_poll("dispatching arbiter element %p", group_head);
-            UCS_ARBITER_GROUP_GUARD_ENTER(group);
+            UCS_ARBITER_GROUP_GUARD_ENTER(group, group_head);
             result = cb(arbiter, group, group_head, cb_arg);
             UCS_ARBITER_GROUP_GUARD_EXIT(group);
             ucs_trace_poll("dispatch result: %d", result);

@@ -898,10 +898,10 @@ test_arbiter_random_resched::dispatch(ucs_arbiter_group_t *_group,
     /* We should be able to reschedule this group to another place */
     EXPECT_FALSE(ucs_arbiter_group_is_scheduled(&group->super));
 
-    /* Test ucs_arbiter_elem_is_only() */
+    /* Test ucs_arbiter_group_elem_is_only() */
     if (group->num_elems == 1) {
         ++m_num_only;
-        EXPECT_TRUE(ucs_arbiter_elem_is_only(elem));
+        EXPECT_TRUE(ucs_arbiter_group_elem_is_only(_group, elem));
     }
 
     /* Randomly add few more elements to same group */
