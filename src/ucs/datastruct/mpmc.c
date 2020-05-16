@@ -23,7 +23,7 @@ ucs_status_t ucs_mpmc_queue_init(ucs_mpmc_queue_t *mpmc, uint32_t length)
 
     mpmc->length   = ucs_roundup_pow2(length);
     mpmc->shift    = ucs_ilog2(mpmc->length);
-    if (mpmc->length >= UCS_BIT(UCS_MPMC_VALID_SHIFT)) {
+    if (mpmc->shift >= UCS_MPMC_VALID_SHIFT) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -46,12 +46,12 @@ void ucs_mpmc_queue_cleanup(ucs_mpmc_queue_t *mpmc)
     ucs_free(mpmc->queue);
 }
 
-static inline uint32_t __ucs_mpmc_queue_valid_bit(ucs_mpmc_queue_t *mpmc, uint32_t location)
+static inline uint64_t __ucs_mpmc_queue_valid_bit(ucs_mpmc_queue_t *mpmc, uint32_t location)
 {
-    return (location >> mpmc->shift) & 1;
+    return ((uint64_t)location >> mpmc->shift) & 1;
 }
 
-ucs_status_t ucs_mpmc_queue_push(ucs_mpmc_queue_t *mpmc, uint32_t value)
+ucs_status_t ucs_mpmc_queue_push(ucs_mpmc_queue_t *mpmc, uint64_t value)
 {
     uint32_t location;
 
@@ -71,9 +71,10 @@ ucs_status_t ucs_mpmc_queue_push(ucs_mpmc_queue_t *mpmc, uint32_t value)
 }
 
 
-ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint32_t *value_p)
+ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint64_t *value_p)
 {
-    uint32_t location, value;
+    uint32_t location;
+    uint64_t value;
 
     location = mpmc->consumer;
     if (location == mpmc->producer) {

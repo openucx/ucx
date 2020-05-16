@@ -835,7 +835,7 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucp_worker_iface_event_common(wiface);
 }
 
-static void ucp_worker_iface_async_fd_event(int fd, void *arg)
+static void ucp_worker_iface_async_fd_event(int fd, int events, void *arg)
 {
     ucp_worker_iface_t *wiface = arg;
     int event_fd               = ucp_worker_iface_get_event_fd(wiface);;

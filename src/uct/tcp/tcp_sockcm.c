@@ -55,7 +55,7 @@ static void uct_tcp_close_ep(uct_tcp_sockcm_ep_t *ep)
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 }
 
-void uct_tcp_sa_data_handler(int fd, void *arg)
+void uct_tcp_sa_data_handler(int fd, int events, void *arg)
 {
     uct_tcp_sockcm_ep_t *ep = (uct_tcp_sockcm_ep_t*)arg;
     ucs_status_t status;

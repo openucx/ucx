@@ -40,7 +40,7 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
                                         UCT_UD_HASH_SIZE,
                                         uct_ud_iface_peer_hash)
 
-static void uct_ud_iface_timer(int timer_id, void *arg);
+static void uct_ud_iface_timer(int timer_id, int events, void *arg);
 
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
@@ -822,7 +822,7 @@ static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
     }
 }
 
-static void uct_ud_iface_timer(int timer_id, void *arg)
+static void uct_ud_iface_timer(int timer_id, int events, void *arg)
 {
     uct_ud_iface_t *iface = arg;
 
