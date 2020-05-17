@@ -46,9 +46,11 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
         .min = 1 * UCS_KBYTE,
         .max = 8 * UCS_MBYTE
     },
+    /* TODO: investigate why `rep movsb` is slow for shared buffers
+     * on some AMD configurations */
     [UCS_CPU_VENDOR_AMD] = {
-        .min = 1 * UCS_KBYTE,
-        .max = 136 * UCS_KBYTE
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
     },
     [UCS_CPU_VENDOR_GENERIC_ARM] = {
         .min = UCS_MEMUNITS_INF,
