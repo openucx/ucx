@@ -170,4 +170,4 @@ stages:
       parameters:
         name: hwi
         demands: ucx_hwi -equals yes
-
+    - template: io-demo.yml
