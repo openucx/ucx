@@ -37,5 +37,5 @@ UCS_TEST_F(test_topo, get_distance) {
 }
 
 UCS_TEST_F(test_topo, print_info) {
-    ucs_topo_print_info(NULL);
+    ucs_topo_print_info(stderr);
 }
