@@ -300,8 +300,6 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
                   ucs_sockaddr_str(remote_addr, ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
         uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
-        /* notify remote side about local error */
-        rdma_disconnect(cep->id);
         return;
     }
 
@@ -399,8 +397,9 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
     uint8_t         ack_event    = 1;
     char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    ucs_trace("rdmacm event (fd=%d cm_id %p cm %p event_channel %p): %s. Peer: %s.",
-              cm->ev_ch->fd, event->id, cm, cm->ev_ch, rdma_event_str(event->event),
+    ucs_trace("rdmacm event (fd=%d cm_id %p cm %p event_channel %p status %s): %s. Peer: %s.",
+              cm->ev_ch->fd, event->id, cm, cm->ev_ch, strerror(event->status),
+              rdma_event_str(event->event),
               ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
 
     /* The following applies for rdma_cm_id of type RDMA_PS_TCP only */

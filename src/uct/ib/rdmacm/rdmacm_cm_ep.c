@@ -110,6 +110,15 @@ ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               cep->id, rdmacm_cm, rdmacm_cm->ev_ch);
 
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
+    if (cep->flags & (UCT_RDMACM_CM_EP_FAILED |
+                      UCT_RDMACM_CM_EP_GOT_DISCONNECT)) {
+        UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
+        return cep->status;
+    }
+
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
+
     if (rdma_establish(cep->id)) {
         ucs_error("rdma_establish on ep %p (to server addr=%s) failed: %m",
                   cep, ucs_sockaddr_str(remote_addr, ip_port_str,
