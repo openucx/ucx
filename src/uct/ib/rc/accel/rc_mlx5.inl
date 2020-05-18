@@ -328,7 +328,7 @@ uct_rc_mlx5_iface_single_frag_context(uct_rc_mlx5_iface_common_t *iface,
 static UCS_F_ALWAYS_INLINE void*
 uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
                                  struct mlx5_cqe64 *cqe, unsigned byte_len,
-                                 unsigned *flags, int poll_flags, int tag_cqe,
+                                 unsigned *flags, int poll_flags,
                                  uct_rc_mlx5_mp_context_t **context_p)
 {
     uct_ib_mlx5_srq_seg_t *seg;
@@ -345,13 +345,14 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
     ucs_assert(byte_len <= UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK);
     *flags = 0;
 
-    if (tag_cqe) {
-        if (poll_flags & UCT_RC_MLX5_POLL_FLAG_HAS_EP) {
-            *context_p = uct_rc_mlx5_iface_rx_mp_context_from_ep(iface, cqe, flags);
-        } else {
-            *context_p = uct_rc_mlx5_iface_rx_mp_context_from_hash(iface, cqe, flags);
-        }
+    if (ucs_test_all_flags(poll_flags, UCT_RC_MLX5_POLL_FLAG_HAS_EP |
+                                       UCT_RC_MLX5_POLL_FLAG_TAG_CQE)) {
+        *context_p = uct_rc_mlx5_iface_rx_mp_context_from_ep(iface, cqe, flags);
+    } else if (poll_flags & UCT_RC_MLX5_POLL_FLAG_TAG_CQE) {
+        *context_p = uct_rc_mlx5_iface_rx_mp_context_from_hash(iface, cqe, flags);
     } else {
+        /* Non-tagged messages (AM, RNDV Fin) should always arrive in
+         * a single frgament */
         *context_p = uct_rc_mlx5_iface_single_frag_context(iface, flags);
     }
 
@@ -1233,7 +1234,9 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_mp_context_t *msg_ctx;
 
     tmh = uct_rc_mlx5_iface_tm_common_data(iface, cqe, byte_len, &flags,
-                                           poll_flags, 1, &msg_ctx);
+                                           poll_flags |
+                                           UCT_RC_MLX5_POLL_FLAG_TAG_CQE,
+                                           &msg_ctx);
 
     /* Fast path: single fragment eager message */
     if (ucs_likely(UCT_RC_MLX5_SINGLE_FRAG_MSG(flags) &&
@@ -1415,7 +1418,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     case UCT_RC_MLX5_CQE_APP_OP_TM_NO_TAG:
         /* TODO: optimize */
         tmh = uct_rc_mlx5_iface_tm_common_data(iface, cqe, byte_len, &flags,
-                                               poll_flags, 0, &dummy_ctx);
+                                               poll_flags, &dummy_ctx);
 
         /* With MP XRQ, AM can be single-fragment only */
         ucs_assert(UCT_RC_MLX5_SINGLE_FRAG_MSG(flags));

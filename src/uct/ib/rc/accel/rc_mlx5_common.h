@@ -147,7 +147,8 @@ enum {
 
 enum {
     UCT_RC_MLX5_POLL_FLAG_TM                 = UCS_BIT(0),
-    UCT_RC_MLX5_POLL_FLAG_HAS_EP             = UCS_BIT(1)
+    UCT_RC_MLX5_POLL_FLAG_HAS_EP             = UCS_BIT(1),
+    UCT_RC_MLX5_POLL_FLAG_TAG_CQE            = UCS_BIT(2)
 };
 
 
