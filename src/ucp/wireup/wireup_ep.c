@@ -349,6 +349,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 
     self->aux_ep             = NULL;
     self->sockaddr_ep        = NULL;
+    self->tmp_ep             = NULL;
     self->aux_rsc_index      = UCP_NULL_RESOURCE;
     self->sockaddr_rsc_index = UCP_NULL_RESOURCE;
     self->pending_count      = 0;
@@ -383,6 +384,10 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     }
     if (self->sockaddr_ep != NULL) {
         uct_ep_destroy(self->sockaddr_ep);
+    }
+
+    if (self->tmp_ep != NULL) {
+        ucp_ep_disconnected(self->tmp_ep, 1);
     }
 
     UCS_ASYNC_BLOCK(&worker->async);

@@ -80,6 +80,10 @@ public class NativeLibs {
      * @throws IOException if fails to extract resource properly
      */
     private static File extractResource(URL resourceURL) throws IOException {
+        if (!resourceURL.getProtocol().equals("jar")) {
+            return new File(resourceURL.getPath());
+        }
+
         InputStream is = resourceURL.openStream();
         if (is == null) {
             errorMessage = "Error extracting native library content";

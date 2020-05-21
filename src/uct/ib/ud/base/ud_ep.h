@@ -215,17 +215,17 @@ struct uct_ud_ep {
     uint32_t                ep_id;
     uint32_t                dest_ep_id;
     struct {
-         uct_ud_psn_t           psn;          /* Next PSN to send */
-         uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent */
-         uct_ud_psn_t           acked_psn;    /* last psn that was acked by remote side */
-         uint16_t               resend_count; /* number of in-flight resends on the ep */
-         ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
-         uct_ud_ep_pending_op_t pending;      /* pending ops */
-         ucs_time_t             send_time;    /* tx time of last packet */
-         ucs_time_t             resend_time;  /* tx time of last resent packet */
-         ucs_time_t             tick;         /* timeout to trigger timer */
-         UCS_STATS_NODE_DECLARE(stats)
-         UCT_UD_EP_HOOK_DECLARE(tx_hook)
+        uct_ud_psn_t           psn;          /* Next PSN to send */
+        uct_ud_psn_t           max_psn;      /* Largest PSN that can be sent */
+        uct_ud_psn_t           acked_psn;    /* last psn that was acked by remote side */
+        uint16_t               resend_count; /* number of in-flight resends on the ep */
+        ucs_queue_head_t       window;       /* send window: [acked_psn+1, psn-1] */
+        uct_ud_ep_pending_op_t pending;      /* pending ops */
+        ucs_time_t             send_time;    /* tx time of last packet */
+        ucs_time_t             resend_time;  /* tx time of last resent packet */
+        ucs_time_t             tick;         /* timeout to trigger timer */
+        UCS_STATS_NODE_DECLARE(stats)
+        UCT_UD_EP_HOOK_DECLARE(tx_hook)
     } tx;
     struct {
         uct_ud_psn_t        acked_psn;    /* Last psn we acked */

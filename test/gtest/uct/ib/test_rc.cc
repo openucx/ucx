@@ -9,14 +9,6 @@
 #include <uct/ib/rc/verbs/rc_verbs.h>
 
 
-#define UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_verbs) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, rc_mlx5)
-
-#define UCT_INSTANTIATE_RC_DC_TEST_CASE(_test_case) \
-    UCT_INSTANTIATE_RC_TEST_CASE(_test_case) \
-    _UCT_INSTANTIATE_TEST_CASE(_test_case, dc_mlx5)
-
 void test_rc::init()
 {
     uct_test::init();

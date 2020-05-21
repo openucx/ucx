@@ -403,7 +403,7 @@ static unsigned uct_ud_verbs_iface_async_progress(uct_ud_iface_t *ud_iface)
     do {
         n = uct_ud_verbs_iface_poll_rx(iface, 1);
         count += n;
-    } while (n > 0);
+    } while ((n > 0) && (count < iface->super.rx.async_max_poll));
 
     count += uct_ud_verbs_iface_poll_tx(iface, 1);
 

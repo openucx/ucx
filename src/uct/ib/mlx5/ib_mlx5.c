@@ -668,3 +668,13 @@ void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq,
                        srq->tail, srq_info.dv.tail);
 }
 
+ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md,
+                                         uct_ib_mlx5_qp_t *qp,
+                                         enum ibv_qp_state state)
+{
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_ib_mlx5_devx_modify_qp_state(qp, state);
+    } else {
+        return uct_ib_modify_qp(qp->verbs.qp, state);
+    }
+}

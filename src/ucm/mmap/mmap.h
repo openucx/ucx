@@ -38,11 +38,15 @@ ucs_status_t ucm_mmap_test_installed_events(int events);
 
 static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t ucm_mmap_hook_mode(void)
 {
+#ifdef __SANITIZE_ADDRESS__
+    return UCM_MMAP_HOOK_NONE;
+#else
     if (RUNNING_ON_VALGRIND && (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO)) {
         return UCM_MMAP_HOOK_RELOC;
     }
 
     return ucm_global_opts.mmap_hook_mode;
+#endif
 }
 
 #endif

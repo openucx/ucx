@@ -11,6 +11,7 @@
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
+#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
@@ -262,7 +263,19 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
         attr->mmio_mode = iface->tx.mmio_mode;
-        return uct_ib_mlx5_devx_create_qp(ib_iface, qp, txwq, attr);
+        status = uct_ib_mlx5_devx_create_qp(ib_iface, qp, txwq, attr);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = uct_rc_mlx5_devx_iface_subscribe_event(iface, qp,
+                UCT_IB_MLX5_EVENT_TYPE_SRQ_LAST_WQE,
+                IBV_EVENT_QP_LAST_WQE_REACHED, qp->qp_num);
+        if (status != UCS_OK) {
+            goto err_destory_qp;
+        }
+
+        return UCS_OK;
     }
 
     status = uct_ib_mlx5_iface_fill_attr(ib_iface, qp, attr);
@@ -309,7 +322,7 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 
 err_destory_qp:
-    ibv_destroy_qp(qp->verbs.qp);
+    uct_ib_mlx5_destroy_qp(qp);
 err:
     return status;
 }
@@ -668,6 +681,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_dm;
     }
 
+#if HAVE_DEVX
+    status = uct_rc_mlx5_devx_iface_init_events(self);
+    if (status != UCS_OK) {
+        goto cleanup_dm;
+    }
+#endif
+
     /* For little-endian atomic reply, override the default functions, to still
      * treat the response as big-endian when it arrives in the CQE.
      */
@@ -694,6 +714,9 @@ cleanup_stats:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 {
+#if HAVE_DEVX
+    uct_rc_mlx5_devx_iface_free_events(self);
+#endif
     ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
     uct_rc_mlx5_iface_common_dm_cleanup(self);
     uct_rc_mlx5_iface_common_tag_cleanup(self);
