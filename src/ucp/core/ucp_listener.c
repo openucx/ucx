@@ -341,6 +341,9 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 
 err_destroy_listeners:
     ucp_listener_close_uct_listeners(listener);
+    ucs_free(uct_listeners);
+    listener->listeners = NULL;
+    listener->num_rscs  = 0;
     return status;
 }
 
