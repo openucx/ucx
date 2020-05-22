@@ -209,14 +209,14 @@ UCS_TEST_F(test_math, linear_func) {
 
     x = ucs::rand();
     for (unsigned i = 0; i < 2; ++i) {
-        func[i].m = ucs::rand() / (double)RAND_MAX;
-        func[i].c = ucs::rand() / (double)RAND_MAX;
-        y[i]      = ucs_linear_func_apply(&func[i], x);
+        func[i] = ucs_linear_func_make(ucs::rand() / (double)RAND_MAX,
+                                       ucs::rand() / (double)RAND_MAX);
+        y[i]    = ucs_linear_func_apply(func[i], x);
     }
 
     ucs_linear_func_t sum_func;
-    ucs_linear_func_add(&sum_func, &func[0], &func[1]);
-    double y_sum = ucs_linear_func_apply(&sum_func, x);
+    sum_func = ucs_linear_func_add(func[0], func[1]);
+    double y_sum = ucs_linear_func_apply(sum_func, x);
 
     EXPECT_NEAR(y[0] + y[1], y_sum, fabs(y_sum * 1e-6));
 }

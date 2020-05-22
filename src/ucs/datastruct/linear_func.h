@@ -20,6 +20,26 @@ typedef struct {
 
 
 /**
+ * Construct a linear function
+ *
+ * @param [in]  c  Linear function constant functor
+ * @param [in]  m  Linear function mutiplicative functor
+ *
+ * @return A linear function which represents f(x) = c + x * m
+ */
+static UCS_F_ALWAYS_INLINE ucs_linear_func_t
+ucs_linear_func_make(double c, double m)
+{
+    ucs_linear_func_t result;
+
+    result.c = c;
+    result.m = m;
+
+    return result;
+}
+
+
+/**
  * Calculate the linear function value for a specific point.
  *
  * @param [in] func    Linear function to apply.
@@ -28,9 +48,9 @@ typedef struct {
  * @return f(x)
  */
 static UCS_F_ALWAYS_INLINE double
-ucs_linear_func_apply(const ucs_linear_func_t *func, double x)
+ucs_linear_func_apply(ucs_linear_func_t f, double x)
 {
-    return func->c + (func->m * x);
+    return f.c + (f.m * x);
 }
 
 
@@ -41,13 +61,10 @@ ucs_linear_func_apply(const ucs_linear_func_t *func, double x)
  * @param [in]  func1    First function to add.
  * @param [in]  func2    Second function to add.
  */
-static UCS_F_ALWAYS_INLINE void
-ucs_linear_func_add(ucs_linear_func_t *result, const ucs_linear_func_t *func1,
-                    const ucs_linear_func_t *func2)
+static UCS_F_ALWAYS_INLINE ucs_linear_func_t
+ucs_linear_func_add(ucs_linear_func_t func1, ucs_linear_func_t func2)
 {
-    result->m = func1->m + func2->m;
-    result->c = func1->c + func2->c;
+    return ucs_linear_func_make(func1.c + func2.c, func1.m + func2.m);
 }
-
 
 #endif
