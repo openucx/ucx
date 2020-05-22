@@ -77,8 +77,7 @@ void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_att
                                           UCT_IFACE_FLAG_PUT_ZCOPY |
                                           UCT_IFACE_FLAG_PENDING   |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-    iface_attr->latency.overhead        = 80e-9; /* 80 ns */
-    iface_attr->latency.growth          = 0;
+    iface_attr->latency                 = ucs_linear_func_make(80e-9, 0); /* 80 ns */
 }
 
 UCS_CLASS_INIT_FUNC(uct_scopy_iface_t, uct_scopy_iface_ops_t *ops, uct_md_h md,

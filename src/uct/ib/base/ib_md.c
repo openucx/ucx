@@ -69,10 +69,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
 
     {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
-     ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.overhead), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.c), UCS_CONFIG_TYPE_TIME},
 
     {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
-     ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_ib_md_config_t, uc_reg_cost.m), UCS_CONFIG_TYPE_TIME},
 
     {"FORK_INIT", "try",
      "Initialize a fork-safe IB library with ibv_fork_init().",
@@ -1159,9 +1159,8 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
                 continue;
             }
 
-            md->super.ops         = &uct_ib_md_rcache_ops;
-            md->reg_cost.overhead = md_config->rcache.overhead;
-            md->reg_cost.growth   = 0; /* It's close enough to 0 */
+            md->super.ops = &uct_ib_md_rcache_ops;
+            md->reg_cost  = ucs_linear_func_make(md_config->rcache.overhead, 0);
             ucs_debug("%s: using registration cache",
                       uct_ib_device_name(&md->dev));
             return UCS_OK;
@@ -1178,9 +1177,8 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
                 continue;
             }
 
-            md->super.ops            = &uct_ib_md_global_odp_ops;
-            md->reg_cost.overhead    = 10e-9;
-            md->reg_cost.growth      = 0;
+            md->super.ops = &uct_ib_md_global_odp_ops;
+            md->reg_cost  = ucs_linear_func_make(10e-9, 0);
             ucs_debug("%s: using odp global key", uct_ib_device_name(&md->dev));
             return UCS_OK;
 #endif

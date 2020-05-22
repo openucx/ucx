@@ -47,8 +47,7 @@ ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = 0;
     md_attr->rkey_packed_size     = 0;
-    md_attr->reg_cost.overhead    = 0;
-    md_attr->reg_cost.growth      = 0;
+    md_attr->reg_cost             = ucs_linear_func_make(0, 0);
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }

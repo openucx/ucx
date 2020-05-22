@@ -464,8 +464,8 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
                                                  const uct_iface_attr_t *iface_attr,
                                                  const ucp_address_iface_attr_t *remote_iface_attr)
 {
-    return ucs_max(iface_attr->latency.overhead, remote_iface_attr->lat_ovh) +
-           (iface_attr->latency.growth * context->config.est_num_eps);
+    return ucs_max(iface_attr->latency.c, remote_iface_attr->lat_ovh) +
+           (iface_attr->latency.m * context->config.est_num_eps);
 }
 
 static UCS_F_NOINLINE void
@@ -932,8 +932,9 @@ static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
                 ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
                         ucp_tl_iface_bandwidth(context, &remote_iface_attr->bandwidth))) +
                 ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-                iface_attr->overhead + md_attr->reg_cost.overhead +
-                (UCP_WIREUP_RMA_BW_TEST_MSG_SIZE * md_attr->reg_cost.growth));
+                iface_attr->overhead +
+                ucs_linear_func_apply(md_attr->reg_cost,
+                                      UCP_WIREUP_RMA_BW_TEST_MSG_SIZE));
 }
 
 static inline int

@@ -1061,8 +1061,8 @@ static void ucp_ep_config_calc_params(ucp_worker_h worker,
             md_map |= UCS_BIT(md_index);
             md_attr = &context->tl_mds[md_index].attr;
             if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
-                params->reg_growth   += md_attr->reg_cost.growth;
-                params->reg_overhead += md_attr->reg_cost.overhead;
+                params->reg_growth   += md_attr->reg_cost.m;
+                params->reg_overhead += md_attr->reg_cost.c;
                 params->overhead     += iface_attr->overhead;
                 params->latency      += ucp_tl_iface_latency(context,
                                                              &iface_attr->latency);
@@ -2041,15 +2041,15 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 }
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
-                                           const uct_linear_growth_t *reg_cost,
+                                           const ucs_linear_func_t *reg_cost,
                                            const ucp_context_h context,
                                            double bandwidth)
 {
     double zcopy_thresh;
     double bcopy_bw = context->config.ext.bcopy_bw;
 
-    zcopy_thresh = (iovcnt * reg_cost->overhead) /
-                   ((1.0 / bcopy_bw) - (1.0 / bandwidth) - (iovcnt * reg_cost->growth));
+    zcopy_thresh = (iovcnt * reg_cost->c) /
+                   ((1.0 / bcopy_bw) - (1.0 / bandwidth) - (iovcnt * reg_cost->m));
 
     if (zcopy_thresh < 0.0) {
         return SIZE_MAX;

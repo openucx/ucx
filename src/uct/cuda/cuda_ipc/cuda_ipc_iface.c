@@ -89,27 +89,24 @@ static double uct_cuda_ipc_iface_get_bw()
 
     status = UCT_CUDADRV_FUNC(cuDeviceGet(&cu_device, 0));
     if (status != UCS_OK) {
-        goto err;
+        return 0;
     }
 
     status = UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&major_version,
                 CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cu_device));
     if (status != UCS_OK) {
-        goto err;
+        return 0;
     }
 
+    /* TODO: Detect nvswitch */
     switch (major_version) {
     case UCT_CUDA_BASE_GEN_PASCAL:
-        return 20000 * 1024.0 * 1024.0;
+        return 20000.0 * UCS_MBYTE;
     case UCT_CUDA_BASE_GEN_VOLTA:
-        return 25000 * 1024.0 * 1024.0;
+        return 25000.0 * UCS_MBYTE;
     default:
-        return 6911 * 1024.0 * 1024.0;
+        return 6911.0  * UCS_MBYTE;
     }
-    /* TODO: Detect nvswitch */
-
-err:
-    return 0;
 }
 
 static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
@@ -147,8 +144,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
 
-    iface_attr->latency.overhead        = 1e-9;
-    iface_attr->latency.growth          = 0;
+    iface_attr->latency                 = ucs_linear_func_make(1e-9, 0);
     iface_attr->bandwidth.dedicated     = 0;
     iface_attr->bandwidth.shared        = uct_cuda_ipc_iface_get_bw();
     iface_attr->overhead                = 0;

@@ -504,7 +504,7 @@ int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
                                       ucp_lane_index_t lane);
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
-                                           const uct_linear_growth_t *reg_cost,
+                                           const ucs_linear_func_t *reg_cost,
                                            const ucp_context_h context,
                                            double bandwidth);
 

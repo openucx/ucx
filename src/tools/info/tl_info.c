@@ -46,6 +46,16 @@
     print_atomic_info(UCT_ATOMIC_OP_##_name, #_name, _suffix, \
                       _cap.atomic32.fop_flags, _cap.atomic64.fop_flags);
 
+#define PRINT_LINEAR_FUNC_NS(_func) \
+    { \
+        printf("%.0f", (_func)->c * 1e9); \
+        if ((_func)->m * 1e9 > 1e-3) { \
+            printf(" + %.3f * N", (_func)->m * 1e9); \
+        } \
+        printf(" nsec\n"); \
+    }
+
+
 static char *strduplower(const char *str)
 {
     char *s, *p;
@@ -154,12 +164,8 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         printf("#            bandwidth: %-.2f/ppn + %-.2f MB/sec\n",
                iface_attr.bandwidth.shared / UCS_MBYTE,
                iface_attr.bandwidth.dedicated / UCS_MBYTE);
-        printf("#              latency: %-.0f nsec", iface_attr.latency.overhead * 1e9);
-        if (iface_attr.latency.growth > 0) {
-            printf(" + %.0f * N\n", iface_attr.latency.growth * 1e9);
-        } else {
-            printf("\n");
-        }
+        printf("#              latency: ");
+        PRINT_LINEAR_FUNC_NS(&iface_attr.latency);
         printf("#             overhead: %-.0f nsec\n", iface_attr.overhead * 1e9);
 
         PRINT_CAP(PUT_SHORT, iface_attr.cap.flags, iface_attr.cap.put.max_short);
@@ -419,13 +425,9 @@ static void print_md_info(uct_component_h component,
                    size_limit_to_str(0, md_attr.cap.max_alloc));
         }
         if (md_attr.cap.flags & UCT_MD_FLAG_REG) {
-            printf("#             register: %s, cost: %.0f",
-                   size_limit_to_str(0, md_attr.cap.max_reg),
-                   md_attr.reg_cost.overhead * 1e9);
-            if (md_attr.reg_cost.growth * 1e9 > 1e-3) {
-                printf("+(%.3f*<SIZE>)", md_attr.reg_cost.growth * 1e9);
-            }
-            printf(" nsec\n");
+            printf("#             register: %s, cost: ",
+                   size_limit_to_str(0, md_attr.cap.max_reg));
+            PRINT_LINEAR_FUNC_NS(&md_attr.reg_cost);
         }
         if (md_attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) {
             printf("#           remote key: %zu bytes\n", md_attr.rkey_packed_size);
