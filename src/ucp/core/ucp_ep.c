@@ -87,9 +87,8 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
                                 const char *message, ucp_ep_h *ep_p)
 {
-    ucs_status_t status;
-    ucp_ep_config_key_t key;
     ucp_lane_index_t lane;
+    ucs_status_t status;
     ucp_ep_h ep;
 
     ep = ucs_strided_alloc_get(&worker->ep_alloc, "ucp_ep");
@@ -99,13 +98,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err;
     }
 
-    ucp_ep_config_key_reset(&key);
-
-    status = ucp_worker_get_ep_config(worker, &key, 0, &ep->cfg_index);
-    if (status != UCS_OK) {
-        goto err_free_ep;
-    }
-
+    ep->cfg_index                   = UCP_NULL_CFG_INDEX;
     ep->worker                      = worker;
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
@@ -1411,7 +1404,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
     status = ucp_ep_config_key_copy(&config->key, key);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     /* Default settings */
@@ -1746,6 +1739,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     }
 
     return UCS_OK;
+
+err:
+    return status;
 }
 
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config)
@@ -2059,8 +2055,13 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
 
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
 {
-    const ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
+    ucp_lane_index_t lane;
 
+    if (ep->cfg_index == UCP_NULL_CFG_INDEX) {
+        return NULL;
+    }
+
+    lane = ucp_ep_get_cm_lane(ep);
     if (lane == UCP_NULL_LANE) {
         return NULL;
     }

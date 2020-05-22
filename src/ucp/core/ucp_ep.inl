@@ -18,6 +18,7 @@
 
 static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
 {
+    ucs_assert(ep->cfg_index != UCP_NULL_CFG_INDEX);
     return &ep->worker->ep_config[ep->cfg_index];
 }
 

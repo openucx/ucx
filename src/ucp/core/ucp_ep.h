@@ -24,6 +24,7 @@
 
 /* Configuration */
 typedef uint16_t                   ucp_ep_cfg_index_t;
+#define UCP_NULL_CFG_INDEX         UINT16_MAX
 
 
 /* Endpoint flags type */
