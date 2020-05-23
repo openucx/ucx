@@ -329,9 +329,25 @@ static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
 }
 
 static UCS_F_ALWAYS_INLINE
+int ucp_worker_iface_has_event_notify(const ucp_worker_iface_t *wiface)
+{
+    return (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) ||
+           (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
+}
+
+static UCS_F_ALWAYS_INLINE
+int ucp_worker_iface_use_event_fd(const ucp_worker_iface_t *wiface)
+{
+    /* use iface's fd if it is supported by UCT iface and asynchronous
+     * callback mechanism isn't supported (this is preferred mechanism) */
+    return (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) &&
+           !(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
+}
+
+static UCS_F_ALWAYS_INLINE
 int ucp_worker_iface_get_event_fd(const ucp_worker_iface_t *wiface)
 {
-    ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD);
+    ucs_assert(ucp_worker_iface_use_event_fd(wiface));
     return wiface->event_fd;
 }
 
@@ -349,7 +365,9 @@ void ucp_worker_iface_event_fd_ctl(ucp_worker_iface_t *wiface,
 static void ucp_worker_iface_disarm(ucp_worker_iface_t *wiface)
 {
     if (wiface->flags & UCP_WORKER_IFACE_FLAG_ON_ARM_LIST) {
-        ucp_worker_iface_event_fd_ctl(wiface, UCP_WORKER_EPFD_OP_DEL);
+        if (ucp_worker_iface_use_event_fd(wiface)) {
+            ucp_worker_iface_event_fd_ctl(wiface, UCP_WORKER_EPFD_OP_DEL);
+        }
         ucs_list_del(&wiface->arm_list);
         wiface->flags &= ~UCP_WORKER_IFACE_FLAG_ON_ARM_LIST;
     }
@@ -639,9 +657,13 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
     /* Set default active message handlers */
     ucp_worker_set_am_handlers(wiface, 0);
 
-    /* Add to user wakeup */
-    if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
-        ucp_worker_iface_event_fd_ctl(wiface, UCP_WORKER_EPFD_OP_ADD);
+    if (ucp_worker_iface_has_event_notify(wiface)) {
+        if (ucp_worker_iface_use_event_fd(wiface)) {
+            /* Add to user wakeup */
+            ucp_worker_iface_event_fd_ctl(wiface, UCP_WORKER_EPFD_OP_ADD);
+        }
+
+        /* Add to the list of UCT ifaces that should be armed */
         wiface->flags |= UCP_WORKER_IFACE_FLAG_ON_ARM_LIST;
         ucs_list_add_tail(&worker->arm_ifaces, &wiface->arm_list);
     }
@@ -686,7 +708,7 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
         if (status == UCS_OK) {
             ucs_trace("armed iface %p", wiface->iface);
 
-            if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
+            if (ucp_worker_iface_use_event_fd(wiface)) {
                 /* re-enable events, which were disabled by
                  * ucp_worker_iface_async_fd_event() */
                 status = ucs_async_modify_handler(wiface->event_fd,
@@ -1210,7 +1232,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     ucs_assert(wiface != NULL);
 
     /* Set wake-up handlers */
-    if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
+    if (ucp_worker_iface_use_event_fd(wiface)) {
         status = uct_iface_event_fd_get(wiface->iface, &wiface->event_fd);
         if (status != UCS_OK) {
             goto out_close_iface;
@@ -1266,7 +1288,7 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
     ucp_worker_iface_disarm(wiface);
 
     if ((wiface->event_fd != -1) &&
-        (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD)) {
+        ucp_worker_iface_use_event_fd(wiface)) {
         status = ucs_async_remove_handler(wiface->event_fd, 1);
         if (status != UCS_OK) {
             ucs_warn("failed to remove event handler for fd %d: %s",
@@ -2143,6 +2165,12 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
         pfd = ucs_alloca(sizeof(*pfd) * worker->context->num_tls);
         nfds = 0;
         ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
+            if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB) {
+                /* if UCT iface supports asynchronous event callback, we
+                 * prefer this method and no need to get event fd. */
+                continue;
+            }
+
             pfd[nfds].fd     = ucp_worker_iface_get_event_fd(wiface);
             pfd[nfds].events = POLLIN;
             ++nfds;
