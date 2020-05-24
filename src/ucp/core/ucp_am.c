@@ -94,9 +94,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
 static UCS_F_ALWAYS_INLINE void
 ucp_am_fill_header(ucp_am_hdr_t *hdr, ucp_request_t *req)
 {
-    hdr->u64          = 0ul;
-    hdr->am_hdr.am_id = req->send.msg_proto.am.am_id;
-    hdr->am_hdr.flags = req->send.msg_proto.am.flags;
+    hdr->am_hdr.am_id   = req->send.msg_proto.am.am_id;
+    hdr->am_hdr.flags   = req->send.msg_proto.am.flags;
+    hdr->am_hdr.padding = 0;
 }
 
 static size_t

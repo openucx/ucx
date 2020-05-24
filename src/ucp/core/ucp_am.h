@@ -15,6 +15,7 @@ typedef union {
         uint16_t     flags;       /* currently unused in this header
                                      because replies require long header
                                      defined by @ref ucp_am_send_flags */
+        uint32_t     padding;
     } am_hdr;
 
     uint64_t u64;                 /* This is used to ensure the size of
