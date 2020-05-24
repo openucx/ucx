@@ -331,15 +331,16 @@ static void ucp_worker_wakeup_cleanup(ucp_worker_h worker)
 static UCS_F_ALWAYS_INLINE
 int ucp_worker_iface_has_event_notify(const ucp_worker_iface_t *wiface)
 {
-    return (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) ||
-           (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
+    return (wiface->attr.cap.event_flags & (UCT_IFACE_FLAG_EVENT_FD |
+                                            UCT_IFACE_FLAG_EVENT_ASYNC_CB));
 }
 
 static UCS_F_ALWAYS_INLINE
 int ucp_worker_iface_use_event_fd(const ucp_worker_iface_t *wiface)
 {
     /* use iface's fd if it is supported by UCT iface and asynchronous
-     * callback mechanism isn't supported (this is preferred mechanism) */
+     * callback mechanism isn't supported (this is preferred mechanism,
+     * since it will be called anyway) */
     return (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) &&
            !(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB);
 }
@@ -1287,8 +1288,10 @@ void ucp_worker_iface_cleanup(ucp_worker_iface_t *wiface)
 
     ucp_worker_iface_disarm(wiface);
 
-    if ((wiface->event_fd != -1) &&
-        ucp_worker_iface_use_event_fd(wiface)) {
+    if (wiface->event_fd != -1) {
+        ucs_assertv(ucp_worker_iface_use_event_fd(wiface),
+                    "%p: has event fd %d, but it has to not use this mechanism",
+                    wiface, wiface->event_fd);
         status = ucs_async_remove_handler(wiface->event_fd, 1);
         if (status != UCS_OK) {
             ucs_warn("failed to remove event handler for fd %d: %s",
@@ -2165,9 +2168,10 @@ ucs_status_t ucp_worker_wait(ucp_worker_h worker)
         pfd = ucs_alloca(sizeof(*pfd) * worker->context->num_tls);
         nfds = 0;
         ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
-            if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB) {
+            if (!ucp_worker_iface_use_event_fd(wiface)) {
                 /* if UCT iface supports asynchronous event callback, we
-                 * prefer this method and no need to get event fd. */
+                 * prefer this method, since it will be called anyway. So,
+                 * no need to get event fd. */
                 continue;
             }
 
