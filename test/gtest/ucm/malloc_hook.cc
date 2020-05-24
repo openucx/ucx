@@ -771,7 +771,17 @@ public:
 
         /* 8. sbrk call - single thread only */
         {
-            if (!RUNNING_ON_VALGRIND && m_num_threads < 2) {
+            int num_threads = 0;
+            ucs::enum_threads(enum_threads_cb, &num_threads);
+            // check for real number of threads:
+            // test is actual only in case if 3 threads are in process:
+            // 1. main thread
+            // 2. watchdog thread
+            // 3. test thread
+
+            if (!RUNNING_ON_VALGRIND &&
+                (m_num_threads < 2) &&
+                (num_threads <= 3)) {
                 /* valgrind failed when sbrk is called directly,
                  * also sbrk is not thread safe */
 
@@ -798,6 +808,12 @@ protected:
     std::string             m_name;
     pthread_barrier_t       *m_barrier;
     mmap_event<mmap_hooks>  m_event;
+
+    static bool enum_threads_cb(pid_t tid, void *ctx)
+    {
+        (*(int*)ctx)++;
+        return false;
+    }
 };
 
 
