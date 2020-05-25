@@ -13,6 +13,20 @@
 #include <ucs/arch/bitops.h>
 
 
+static UCS_F_ALWAYS_INLINE
+uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
+{
+    /* return the rdmacm connection manager this ep is using */
+    return ucs_container_of(cep->super.super.super.iface, uct_rdmacm_cm_t,
+                            super.iface);
+}
+
+static UCS_F_ALWAYS_INLINE
+ucs_async_context_t *uct_rdmacm_cm_ep_get_async(uct_rdmacm_cm_ep_t *cep)
+{
+    return uct_rdmacm_cm_get_async(uct_rdmacm_cm_ep_get_cm(cep));
+}
+
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
                                  size_t max_len)
 {
@@ -79,22 +93,10 @@ void uct_rdmacm_cm_ep_set_failed(uct_rdmacm_cm_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,
                                  ucs_status_t status)
 {
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
     uct_rdmacm_cm_ep_error_cb(cep, remote_data, status);
     cep->flags |= UCT_RDMACM_CM_EP_FAILED;
-}
-
-static UCS_F_ALWAYS_INLINE
-uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
-{
-    /* return the rdmacm connection manager this ep is using */
-    return ucs_container_of(cep->super.super.super.iface, uct_rdmacm_cm_t,
-                            super.iface);
-}
-
-static UCS_F_ALWAYS_INLINE
-ucs_async_context_t *uct_rdmacm_cm_ep_get_async(uct_rdmacm_cm_ep_t *cep)
-{
-    return uct_rdmacm_cm_get_async(uct_rdmacm_cm_ep_get_cm(cep));
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 
 ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)

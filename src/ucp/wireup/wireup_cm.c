@@ -311,6 +311,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     status = uct_cm_client_ep_conn_notify(uct_cm_ep);
     if (status != UCS_OK) {
+        /* connection can't be established by UCT, no need to disconnect */
         ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         goto out_free_addr;
     }
@@ -367,6 +368,7 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     status      = connect_args->status;
 
     if (status != UCS_OK) {
+        /* connection can't be established by UCT, no need to disconnect */
         ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         goto err_out;
     }
