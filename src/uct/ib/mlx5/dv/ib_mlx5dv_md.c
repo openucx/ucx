@@ -241,7 +241,10 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
 
     reg_length = UCT_IB_MD_MAX_MR_SIZE;
     addr       = (intptr_t)mr->addr & ~(reg_length - 1);
-    length     = mr->length + (intptr_t)mr->addr - addr;
+    /* FW requires indirect atomic MR addr and length to be aligned
+     * to max supported atomic argument size */
+    length     = ucs_align_up(mr->length + (intptr_t)mr->addr - addr,
+                              md->super.dev.atomic_align);
     list_size  = ucs_div_round_up(length, reg_length);
 
     status = uct_ib_mlx5_alloc_mkey_inbox(list_size, &in);
@@ -671,6 +674,8 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                 dev->atomic_arg_sizes_be = sizeof(uint64_t);
             }
         }
+
+        dev->atomic_align = ucs_rounddown_pow2(arg_size);
 
         ops |= UCT_IB_MLX5_ATOMIC_OPS_MASKED_CMP_SWAP |
                UCT_IB_MLX5_ATOMIC_OPS_MASKED_FETCH_ADD;

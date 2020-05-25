@@ -173,6 +173,7 @@ typedef struct uct_ib_device {
     uint8_t                     ext_atomic_arg_sizes_be;
     uint8_t                     pci_fadd_arg_sizes;
     uint8_t                     pci_cswap_arg_sizes;
+    uint8_t                     atomic_align;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
