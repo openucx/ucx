@@ -86,8 +86,7 @@ public:
         uint16_t lid_out;
         enum ibv_mtu mtu;
         uint8_t gid_index;
-
-        ib_addr = (uct_ib_address_t*)malloc(uct_ib_iface_address_size(iface));
+        size_t address_size;
 
         gid_in.global.subnet_prefix = subnet_prefix;
         gid_in.global.interface_id  = 0xdeadbeef;
@@ -100,6 +99,9 @@ public:
         /* to suppress gcc 4.3.4 warning */
         params.path_mtu  = (enum ibv_mtu)0;
         params.gid_index = std::numeric_limits<uint8_t>::max();
+        address_size     = uct_ib_address_size(&params);
+        ib_addr          = (uct_ib_address_t*)malloc(address_size);
+
         uct_ib_address_pack(&params, ib_addr);
         uct_ib_address_unpack(ib_addr, &lid_out, &gid_out, &gid_index, &mtu);
 

@@ -316,7 +316,7 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
         ptr = UCS_PTR_TYPE_OFFSET(ptr, params->gid->raw);
     } else {
         /* IB, LID */
-        ib_addr->flags   = !UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH;
+        ib_addr->flags   = 0;
         *(uint16_t*)ptr  = params->lid;
         ptr              = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
 
