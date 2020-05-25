@@ -195,8 +195,9 @@ static ucs_status_t ucp_am_send_short(ucp_ep_h ep, uint16_t id,
     uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
     ucp_am_hdr_t hdr;
 
-    hdr.am_hdr.am_id = id;
-    hdr.am_hdr.flags = 0;
+    hdr.am_hdr.am_id   = id;
+    hdr.am_hdr.flags   = 0;
+    hdr.am_hdr.padding = 0;
     ucs_assert(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
 
     return uct_ep_am_short(am_ep, UCP_AM_ID_SINGLE, hdr.u64,
