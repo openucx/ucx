@@ -60,6 +60,11 @@ struct {
     [UCS_SYS_NS_TYPE_UTS]  = {.name = "uts",  .dflt = UCS_PROCESS_NS_FIRST - 2}
 };
 
+typedef struct {
+    void *ctx;
+    int  (*cb)(pid_t pid, void *ctx);
+} ucs_sys_enum_threads_t;
+
 
 const char *ucs_get_tmpdir()
 {
@@ -1265,4 +1270,50 @@ ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)
     }
 
     return status;
+}
+
+int ucs_sys_readdir(const char *path, int (cb)(struct dirent *entry, void *ctx),
+                    void *ctx)
+{
+    int res = 0;
+    DIR *dir;
+    struct dirent *entry;
+    struct dirent *_entry;
+    size_t entry_len;
+
+    dir = opendir(path);
+    if (dir == NULL) {
+        return 0; /* failed to open directory */
+    }
+
+    entry_len = ucs_offsetof(struct dirent, d_name) +
+                fpathconf(dirfd(dir), _PC_NAME_MAX) + 1;
+    entry     = (struct dirent*)malloc(entry_len);
+
+    while (!readdir_r(dir, entry, &_entry) && (_entry != NULL)) {
+        res = cb(entry, ctx);
+        if (res) {
+            break;
+        }
+    }
+
+    free(entry);
+    closedir(dir);
+    return res;
+}
+
+static int ucs_sys_enum_threads_cb(struct dirent *entry, void *_ctx)
+{
+    ucs_sys_enum_threads_t *ctx = (ucs_sys_enum_threads_t*)_ctx;
+
+    return strncmp(entry->d_name, ".", 1) ?
+           ctx->cb((pid_t)atoi(entry->d_name), ctx->ctx) : 0;
+}
+
+int ucs_sys_enum_threads(int (cb)(pid_t tid, void *ctx), void *ctx)
+{
+    static const char *task_dir  = "/proc/self/task";
+    ucs_sys_enum_threads_t param = {.ctx = ctx, .cb = cb};
+
+    return ucs_sys_readdir(task_dir, &ucs_sys_enum_threads_cb, &param);
 }

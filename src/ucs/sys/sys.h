@@ -48,6 +48,7 @@
 #include <net/if_arp.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <dirent.h>
 
 
 #include <sys/types.h>
@@ -469,6 +470,42 @@ int ucs_sys_ns_is_default(ucs_sys_namespace_type_t name);
  * @return UCS_OK or error in case of failure.
  */
 ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low);
+
+
+/**
+ * Read directory
+ *
+ * @param [in]  path       Path to directory to read
+ * @param [in]  cb         Callback function, see NOTES
+ * @param [in]  ctx        Context pointer passed to callback
+ *
+ * @return 0 if directory is not found or no more entries are found, non-zero in
+ *         all other cases, see NOTES.
+ * 
+ * @note ucs_sys_readdir function reads directory pointed by @a path argument
+ *       and calls @a cb function for every entry in directory, including
+ *       '.' and '..'. In case if @a cb function returns non-zero value then
+ *       function breaks immediately and this value is returned from
+ *       ucs_sys_readdir.
+ */
+int ucs_sys_readdir(const char *path, int (cb)(struct dirent *entry, void *ctx),
+                    void *ctx);
+
+/**
+ * Enumerate process threads
+ *
+ * @param [in]  cb         Callback function, see NOTES
+ * @param [in]  ctx        Context pointer passed to callback
+ *
+ * @return 0 if directory is not found or no more entries are found, non-zero in
+ *         all other cases, see NOTES.
+ * 
+ * @note ucs_sys_enum_threads function enumerates current process threads
+ *       and calls @a cb function for every thread. In case if @a cb function
+ *       returns non-zero value then function breaks immediately and this
+ *       value is returned from ucs_sys_enum_threads.
+ */
+int ucs_sys_enum_threads(int (cb)(pid_t tid, void *ctx), void *ctx);
 
 END_C_DECLS
 

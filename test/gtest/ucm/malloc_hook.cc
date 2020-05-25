@@ -685,6 +685,7 @@ public:
         void *buffer;
         int shmid;
         ucs_status_t status;
+        int num_threads;
 
         EXPECT_EQ(0u, m_mapped_size) << m_name;
         EXPECT_EQ(0u, m_unmapped_size) << m_name;
@@ -770,18 +771,17 @@ public:
         }
 
         /* 8. sbrk call - single thread only */
-        {
-            int num_threads = 0;
-            ucs::enum_threads(enum_threads_cb, &num_threads);
-            // check for real number of threads:
-            // test is actual only in case if 3 threads are in process:
-            // 1. main thread
-            // 2. watchdog thread
-            // 3. test thread
+        if (!RUNNING_ON_VALGRIND && (m_num_threads < 2)) {
+            num_threads = 0;
+            ucs_sys_enum_threads(enum_threads_cb, &num_threads);
+            // use sbrk() only if there are 3 threads in the system:
+            //   1. main thread
+            //   2. watchdog thread
+            //   3. test thread
+            // otherwise, another thread can call use malloc/free in same time,
+            // leading to heap corruption
 
-            if (!RUNNING_ON_VALGRIND &&
-                (m_num_threads < 2) &&
-                (num_threads <= 3)) {
+            if (num_threads <= 3) {
                 /* valgrind failed when sbrk is called directly,
                  * also sbrk is not thread safe */
 
@@ -809,10 +809,10 @@ protected:
     pthread_barrier_t       *m_barrier;
     mmap_event<mmap_hooks>  m_event;
 
-    static bool enum_threads_cb(pid_t tid, void *ctx)
+    static int enum_threads_cb(pid_t tid, void *ctx)
     {
         (*(int*)ctx)++;
-        return false;
+        return 0;
     }
 };
 

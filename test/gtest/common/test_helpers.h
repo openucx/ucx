@@ -859,11 +859,6 @@ std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs();
  */
 void skip_on_address_sanitizer();
 
-bool read_directory(const char *path, bool (cb)(struct dirent *entry, void *ctx),
-                    void *ctx);
-
-bool enum_threads(bool (cb)(pid_t tid, void *ctx), void *ctx);
-
 } // ucs
 
 #endif /* UCS_TEST_HELPERS_H */

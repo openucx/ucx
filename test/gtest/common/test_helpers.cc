@@ -13,8 +13,6 @@
 
 #include <sys/resource.h>
 #include <set>
-#include <dirent.h>
-#include <unistd.h>
 
 namespace ucs {
 
@@ -706,61 +704,6 @@ void skip_on_address_sanitizer()
 #ifdef __SANITIZE_ADDRESS__
     UCS_TEST_SKIP_R("Address sanitizer");
 #endif
-}
-
-bool read_directory(const char *path, bool (cb)(struct dirent *entry, void *ctx),
-                    void *ctx)
-{
-    bool res = false;
-    DIR *dir;
-    struct dirent *entry;
-    struct dirent *_entry;
-    size_t entry_len;
-
-    dir = opendir(path);
-    if (dir == NULL) {
-        return false; // failed to open directory
-    }
-
-    entry_len = ucs_offsetof(struct dirent, d_name) +
-                fpathconf(dirfd(dir), _PC_NAME_MAX) + 1;
-    entry     = (struct dirent*)malloc(entry_len);
-
-    while (!readdir_r(dir, entry, &_entry) && (_entry != NULL)) {
-        res = cb(entry, ctx);
-        if (res) {
-            break;
-        }
-    }
-
-    free(entry);
-    closedir(dir);
-    return res;
-}
-
-bool enum_threads(bool (cb)(pid_t tid, void *ctx), void *ctx)
-{
-    class read_dir {
-    public:
-        read_dir(bool (_cb)(pid_t tid, void *ctx), void *_ctx):
-            m_ctx(_ctx), m_cb(_cb) {}
-
-        static bool read_dir_cb(struct dirent *entry, void *_ctx)
-        {
-            pid_t tid = atoi(entry->d_name);
-
-            read_dir *ctx = (read_dir*)_ctx;
-            return tid ? ctx->m_cb(tid, ctx->m_ctx) : false;
-        }
-
-    protected:
-        void *m_ctx;
-        bool (*m_cb)(pid_t pid, void *ctx);
-    };
-
-    read_dir dir(cb, ctx);
-
-    return read_directory("/proc/self/task", &dir.read_dir_cb, &dir);
 }
 
 } // ucs
