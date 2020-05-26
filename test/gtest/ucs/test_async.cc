@@ -759,24 +759,33 @@ typedef test_async_mt<local_timer> test_async_timer_mt;
  */
 UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread,
                      !(HAVE_DECL_F_SETOWN_EX)) {
-    spawn();
-
-    for (int j = 0; j < COUNT; ++j) {
-        for (unsigned i = 0; i < NUM_THREADS; ++i) {
-            event(i)->push_event();
-            suspend();
+    const int exp_min_count = (int)(COUNT * 0.5);
+    int min_count = 0;
+    for (int retry = 0; retry < NUM_RETRIES; ++retry) {
+        spawn();
+        for (int j = 0; j < COUNT; ++j) {
+            for (unsigned i = 0; i < NUM_THREADS; ++i) {
+                event(i)->push_event();
+                suspend();
+            }
         }
+        suspend();
+        stop();
+
+        min_count = std::numeric_limits<int>::max();
+        for (unsigned i = 0; i < NUM_THREADS; ++i) {
+            int count = thread_count(i);
+            min_count = ucs_min(count, min_count);
+        }
+        if (min_count >= exp_min_count) {
+            break;
+        }
+
+        UCS_TEST_MESSAGE << "retry " << (retry + 1);
     }
-
-    suspend();
-
-    stop();
-
-    for (unsigned i = 0; i < NUM_THREADS; ++i) {
-        int count = thread_count(i);
-        EXPECT_GE(count, (int)(COUNT * 0.4));
-    }
+    EXPECT_GE(min_count, exp_min_count);
 }
+
 UCS_TEST_P(test_async_timer_mt, multithread) {
     const int exp_min_count = (int)(COUNT * 0.10);
     int min_count = 0;
