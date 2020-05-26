@@ -2275,7 +2275,7 @@ ucs_status_t uct_mem_alloc_mem_type(void *addr, size_t min_length,
                                     unsigned flags, uct_alloc_method_t *methods,
                                     unsigned num_methods, uct_md_h *mds,
                                     unsigned num_mds,
-                                    ucs_memorty_type_t mem_type,
+                                    ucs_memory_type_t mem_type,
                                     const char *name,
                                     uct_allocated_memory_t *mem);
 
