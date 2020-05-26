@@ -214,9 +214,8 @@ UCS_TEST_F(test_math, linear_func) {
         y[i]    = ucs_linear_func_apply(func[i], x);
     }
 
-    ucs_linear_func_t sum_func;
-    sum_func = ucs_linear_func_add(func[0], func[1]);
-    double y_sum = ucs_linear_func_apply(sum_func, x);
+    ucs_linear_func_t sum_func = ucs_linear_func_add(func[0], func[1]);
+    double y_sum               = ucs_linear_func_apply(sum_func, x);
 
     EXPECT_NEAR(y[0] + y[1], y_sum, fabs(y_sum * 1e-6));
 }
