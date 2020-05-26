@@ -30,7 +30,8 @@ void ucp_tag_offload_iface_activate(ucp_worker_iface_t *iface)
         ucs_assert(worker->tm.offload.zcopy_thresh == SIZE_MAX);
         ucs_assert(worker->tm.offload.iface        == NULL);
 
-        worker->tm.offload.thresh       = context->config.ext.tm_thresh;
+        worker->tm.offload.thresh       = ucs_max(context->config.ext.tm_thresh,
+                                                  iface->attr.cap.tag.recv.min_recv);
         worker->tm.offload.zcopy_thresh = context->config.ext.tm_max_bb_size;
 
         /* Cache active offload iface. Can use it if this will be the only

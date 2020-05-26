@@ -536,6 +536,26 @@ UCS_TEST_P(test_ucp_tag_offload_cuda, sw_rndv_to_cuda_mem, "TM_SW_RNDV=y")
     wait_and_validate(sreq);
 }
 
+// Test that small buffers wich can be scattered to CQE are not posted to the
+// HW. Otherwise it may segfault, while copying data from CQE to the
+// (potentially) GPU buffer.
+UCS_TEST_P(test_ucp_tag_offload_cuda, rx_scatter_to_cqe, "TM_THRESH=1")
+{
+    activate_offload(sender());
+
+    size_t size   = 8;
+    ucp_tag_t tag = 0xCAFEBABEul;
+    // Test will be skipped here if CUDA mem is not supported
+    mem_buffer rbuf(size, UCS_MEMORY_TYPE_CUDA);
+    request *rreq = recv_nb_exp(rbuf.ptr(), size, DATATYPE, tag,
+                                UCP_TAG_MASK_FULL);
+    uint64_t sbuf = 0ul;
+    request *sreq = (request*)ucp_tag_send_nb(sender().ep(), &sbuf, sizeof(sbuf),
+                                              DATATYPE, tag, send_callback);
+    wait_and_validate(rreq);
+    wait_and_validate(sreq);
+}
+
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_cuda, rc_dc_cuda,
                               "dc_x,rc_x,cuda_copy")
 
@@ -647,14 +667,14 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=1")
+UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=128")
 {
-    uint64_t dummy;
     uint64_t tag = 0x11;
+    std::vector<char> dummy(256, 0);
 
     activate_offload(sender());
 
-    request *rreq = recv_nb(&dummy, sizeof(dummy), DATATYPE, tag,
+    request *rreq = recv_nb(dummy.data(), dummy.size(), DATATYPE, tag,
                             UCP_TAG_MASK_FULL);
 
     wait_counter(worker_offload_stats(receiver()),
@@ -666,10 +686,10 @@ UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=1")
                  UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED);
 }
 
-UCS_TEST_P(test_ucp_tag_offload_stats, block, "TM_THRESH=1")
+UCS_TEST_P(test_ucp_tag_offload_stats, block, "TM_THRESH=128")
 {
     uint64_t tag = 0x11;
-    std::vector<char> buf(64, 0);
+    std::vector<char> buf(256, 0);
 
     activate_offload(sender());
 
@@ -760,7 +780,7 @@ public:
 };
 
 UCS_TEST_P(test_ucp_tag_offload_stats_cuda, block_cuda_no_gpu_direct,
-           "TM_THRESH=1")
+           "TM_THRESH=128")
 {
     activate_offload(sender());
 
