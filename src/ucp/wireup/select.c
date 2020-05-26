@@ -530,7 +530,7 @@ out_add_lane:
     lane_desc->path_index   = select_info->path_index;
     lane_desc->proxy_lane   = proxy_lane;
     lane_desc->dst_md_index = dst_md_index;
-    lane_desc->lane_types    = UCS_BIT(lane_type);
+    lane_desc->lane_types   = UCS_BIT(lane_type);
     for (lane_type_iter = 0; lane_type_iter < UCP_LANE_TYPE_LAST;
          ++lane_type_iter) {
         lane_desc->score[lane_type_iter] = 0.0;
@@ -580,8 +580,8 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
 static int ucp_wireup_compare_score(const void *elem1, const void *elem2,
                                     void *arg, ucp_lane_type_t lane_type)
 {
-    const ucp_lane_index_t *lane1 = elem1;
-    const ucp_lane_index_t *lane2 = elem2;
+    const ucp_lane_index_t *lane1       = elem1;
+    const ucp_lane_index_t *lane2       = elem2;
     const ucp_wireup_lane_desc_t *lanes = arg;
     double score1, score2;
 

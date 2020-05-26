@@ -27,7 +27,7 @@ const ucp_lane_type_info_t ucp_lane_type_info[] = {
         .short_name = "rma_bw"
     },
     [UCP_LANE_TYPE_RKEY_PTR] = {
-        .short_name = "rk_ptr"
+        .short_name = "rkey_ptr"
     },
     [UCP_LANE_TYPE_AMO] = {
         .short_name = "amo"
@@ -36,7 +36,7 @@ const ucp_lane_type_info_t ucp_lane_type_info[] = {
         .short_name = "tag"
     },
     [UCP_LANE_TYPE_CM] = {
-        .short_name = ""
+        .short_name = "cm"
     },
     [UCP_LANE_TYPE_LAST] = {
         .short_name = NULL
