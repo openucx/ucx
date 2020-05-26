@@ -37,7 +37,11 @@ typedef uint16_t                   ucp_ep_flags_t;
  * Endpoint flags
  */
 enum {
-    UCP_EP_FLAG_LOCAL_CONNECTED        = UCS_BIT(0), /* All local endpoints are connected */
+    UCP_EP_FLAG_LOCAL_CONNECTED        = UCS_BIT(0), /* All local endpoints are connected,
+                                                        for CM case - local address was packed,
+                                                        UCT did not report errors during
+                                                        connection establishment protocol
+                                                        and disconnect not called yet */
     UCP_EP_FLAG_REMOTE_CONNECTED       = UCS_BIT(1), /* All remote endpoints are connected */
     UCP_EP_FLAG_CONNECT_REQ_QUEUED     = UCS_BIT(2), /* Connection request was queued */
     UCP_EP_FLAG_FAILED                 = UCS_BIT(3), /* EP is in failed state */

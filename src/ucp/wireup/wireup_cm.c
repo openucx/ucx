@@ -282,8 +282,11 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
 
+    UCS_ASYNC_BLOCK(&worker->async);
+
     wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
     ucs_assert(wireup_ep != NULL);
+    ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
 
     status = ucp_address_unpack(worker, progress_arg->sa_data + 1,
                                 UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
@@ -302,12 +305,8 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         addr.address_list[addr_idx].dev_index = progress_arg->sa_data->dev_index;
     }
 
-    UCS_ASYNC_BLOCK(&worker->async);
-
-    ucp_ep_update_dest_ep_ptr(ucp_ep, progress_arg->sa_data->ep_ptr);
-
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
-    ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
+    ucp_ep_update_dest_ep_ptr(ucp_ep, progress_arg->sa_data->ep_ptr);
 
     /* Get tl bitmap from tmp_ep, because it contains initial configuration. */
     tl_bitmap = ucp_ep_get_tl_bitmap(wireup_ep->tmp_ep);
@@ -329,34 +328,33 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     status    = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
                                       tl_bitmap, &addr, addr_indices);
     if (status != UCS_OK) {
-        goto out_unblock;
+        goto out_free_addr;
     }
 
     status = ucp_wireup_connect_local(ucp_ep, &addr, NULL);
     if (status != UCS_OK) {
-        goto out_unblock;
+        goto out_free_addr;
     }
 
     status = uct_cm_client_ep_conn_notify(uct_cm_ep);
     if (status != UCS_OK) {
-        goto out_unblock;
+        /* connection can't be established by UCT, no need to disconnect */
+        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+        goto out_free_addr;
     }
 
     ucp_wireup_remote_connected(ucp_ep);
 
-out_unblock:
-    UCS_ASYNC_UNBLOCK(&worker->async);
 out_free_addr:
     ucs_free(addr.address_list);
 out:
-    ucp_cm_client_connect_prog_arg_free(progress_arg);
-
     if (status != UCS_OK) {
-        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         ucp_worker_set_ep_failed(worker, ucp_ep, &wireup_ep->super.super,
                                  ucp_ep_get_cm_lane(ucp_ep), status);
     }
 
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    ucp_cm_client_connect_prog_arg_free(progress_arg);
     return 1;
 }
 
@@ -397,6 +395,8 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     status      = connect_args->status;
 
     if (status != UCS_OK) {
+        /* connection can't be established by UCT, no need to disconnect */
+        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         goto err_out;
     }
 
@@ -444,9 +444,10 @@ err_free_sa_data:
 err_free_arg:
     ucs_free(progress_arg);
 err_out:
-    ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+    UCS_ASYNC_BLOCK(&worker->async);
     ucp_worker_set_ep_failed(worker, ucp_ep, uct_cm_ep,
                              ucp_ep_get_cm_lane(ucp_ep), status);
+    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 /*
@@ -547,7 +548,8 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
 
     UCS_ASYNC_BLOCK(async);
 
-    ucs_trace("ep %p: got remote disconnect, cm_ep %p", ucp_ep, uct_cm_ep);
+    ucs_trace("ep %p: got remote disconnect, cm_ep %p, flags 0x%x", ucp_ep,
+              uct_cm_ep, ucp_ep->flags);
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == uct_cm_ep);
 
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
@@ -582,7 +584,7 @@ static void ucp_cm_disconnect_cb(uct_ep_h uct_cm_ep, void *arg)
     ucp_ep_h ucp_ep            = arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
 
-    ucs_debug("ep %p: CM remote disconnect callback invoked, flags 0x%x",
+    ucs_trace("ep %p: CM remote disconnect callback invoked, flags 0x%x",
               ucp_ep, ucp_ep->flags);
 
     uct_worker_progress_register_safe(ucp_ep->worker->uct,
@@ -882,7 +884,6 @@ static void ucp_cm_server_conn_notify_cb(uct_ep_h ep, void *arg,
         /* if reject is arrived on server side, then UCT does something wrong */
         ucs_assert(status != UCS_ERR_REJECTED);
         cm_lane = ucp_ep_get_cm_lane(ucp_ep);
-        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
         ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
                                  ucp_ep->uct_eps[cm_lane], cm_lane, status);
     }

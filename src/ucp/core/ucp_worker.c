@@ -522,6 +522,9 @@ int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
     return 0;
 }
 
+/*
+ * Caller must acquire lock
+ */
 ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
                                       uct_ep_h uct_ep, ucp_lane_index_t lane,
                                       ucs_status_t status)
@@ -533,16 +536,16 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
     ucp_worker_err_handle_arg_t *err_handle_arg;
     ucs_log_level_t             log_level;
 
-    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        goto out_ok;
-    }
-
     /* In case if this is a local failure we need to notify remote side */
     if (ucp_ep_is_cm_local_connected(ucp_ep)) {
         ucp_ep_cm_disconnect_cm_lane(ucp_ep);
     }
 
     /* set endpoint to failed to prevent wireup_ep switch */
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        goto out_ok;
+    }
+
     ucp_ep->flags |= UCP_EP_FLAG_FAILED;
 
     if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
