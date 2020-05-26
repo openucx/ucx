@@ -367,6 +367,23 @@ static ucs_status_t uct_mem_check_flags(unsigned flags)
     return UCS_OK;
 }
 
+ucs_status_t uct_md_mem_alloc_mem_type(uct_md_h md, size_t *length_p,
+                                       void **address_p, unsigned flags,
+                                       ucs_memory_type_t mem_type,
+                                       const char *alloc_name,
+                                       uct_mem_h *memh_p)
+{
+    ucs_status_t status;
+
+    status = uct_mem_check_flags(flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return md->ops->mem_alloc_mem_type(md, length_p, address_p, flags,
+                                       mem_type, alloc_name, memh_p);
+}
+
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
                               unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
 {

@@ -175,6 +175,7 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
         .close                  = uct_mm_md_close,
         .query                  = uct_sysv_md_query,
         .mem_alloc              = uct_sysv_mem_alloc,
+        .mem_alloc_mem_type     = (uct_md_mem_alloc_mem_type_func_t)ucs_empty_function_return_unsupported,
         .mem_free               = uct_sysv_mem_free,
         .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg                = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
