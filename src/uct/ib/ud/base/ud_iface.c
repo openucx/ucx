@@ -267,8 +267,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.cap.max_recv_wr     = config->super.rx.queue_len;
     qp_init_attr.cap.max_send_sge    = 2;
     qp_init_attr.cap.max_recv_sge    = 1;
-    qp_init_attr.cap.max_inline_data = ucs_max(config->super.tx.min_inline,
-                                               UCT_UD_MIN_INLINE);
+    qp_init_attr.cap.max_inline_data = config->super.tx.min_inline;
 
     status = ops->create_qp(&self->super, &qp_init_attr, &self->qp);
     if (status != UCS_OK) {
@@ -512,8 +511,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     if (status != UCS_OK) {
         goto err_rx_mpool;
     }
-
-    ucs_assert_always(data_size >= UCT_UD_MIN_INLINE);
 
     self->tx.skb                  = NULL;
     self->tx.async_before_pending = 0;
