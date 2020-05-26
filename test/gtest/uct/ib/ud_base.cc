@@ -49,7 +49,7 @@ void ud_base_test::cleanup()
 ucs_status_t ud_base_test::tx(entity *e) 
 {
     ucs_status_t err;
-    err = uct_ep_put_short(e->ep(0), &m_dummy, sizeof(m_dummy), (uint64_t)&m_dummy, 0);
+    err = uct_ep_put_short(e->ep(0), &m_dummy, sizeof(m_dummy), (uint64_t)&m_dummy, UCT_NULL_RKEY);
     return err;
 }
 

@@ -218,7 +218,7 @@ static ucs_status_t uct_knem_rkey_unpack(uct_component_t *component,
     key->cookie = packed->cookie;
     key->address = packed->address;
     *handle_p = NULL;
-    *rkey_p = (uintptr_t)key;
+    rkey_p->u64 = (uintptr_t)key;
     ucs_trace("unpacked rkey: key %p cookie 0x%"PRIx64" address %"PRIxPTR,
               key, key->cookie, key->address);
     return UCS_OK;
@@ -228,7 +228,7 @@ static ucs_status_t uct_knem_rkey_release(uct_component_t *component,
                                           uct_rkey_t rkey, void *handle)
 {
     ucs_assert(NULL == handle);
-    ucs_free((void *)rkey);
+    ucs_free((void *)rkey.u64);
     return UCS_OK;
 }
 

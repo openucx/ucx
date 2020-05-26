@@ -850,8 +850,8 @@ static ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
 {
     uint64_t packed_rkey = *(const uint64_t*)rkey_buffer;
 
-    *rkey_p   = packed_rkey;
-    *handle_p = NULL;
+    rkey_p->u64 = packed_rkey;
+    *handle_p   = NULL;
     ucs_trace("unpacked rkey 0x%llx: direct 0x%x indirect 0x%x",
               (unsigned long long)packed_rkey,
               uct_ib_md_direct_rkey(*rkey_p), uct_ib_md_indirect_rkey(*rkey_p));

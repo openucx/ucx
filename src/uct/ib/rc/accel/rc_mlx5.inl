@@ -500,7 +500,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                              uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                              unsigned opcode, const void *buffer, unsigned length,
                   /* SEND */ uint8_t am_id, uint64_t am_hdr, uint32_t imm_val_be,
-                  /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
+                  /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rkey,
                   /* AV   */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
                              size_t av_size, unsigned fm_ce_se, int max_log_sge)
 {
@@ -511,6 +511,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     uct_rc_mlx5_hdr_t            *rc_hdr;
     size_t wqe_size, ctrl_av_size;
     void *next_seg;
+    uint32_t rdma_rkey;
 
     ctrl         = txwq->curr;
     ctrl_av_size = sizeof(*ctrl) + av_size;
@@ -550,6 +551,7 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
             wqe_size     = ctrl_av_size + sizeof(*raddr) + sizeof(*inl) + length;
         }
         raddr            = next_seg;
+        rdma_rkey        = uct_ib_md_direct_rkey(rkey);
         uct_ib_mlx5_ep_set_rdma_seg(raddr, rdma_raddr, rdma_rkey);
         inl              = uct_ib_mlx5_txwq_wrap_none(txwq, raddr + 1);
         inl->byte_count  = htonl(length | MLX5_INLINE_SEG);
@@ -596,7 +598,7 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                            uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
                            unsigned opcode_flags, const void *buffer,
                            unsigned length, uint32_t *lkey_p,
-         /* RDMA/ATOMIC */ uint64_t remote_addr, uct_rkey_t rkey,
+         /* RDMA/ATOMIC */ uint64_t remote_addr, uint32_t rkey,
          /* ATOMIC      */ uint64_t compare_mask, uint64_t compare,
          /* ATOMIC      */ uint64_t swap_mask, uint64_t swap_add,
          /* AV          */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
@@ -772,7 +774,7 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
                                     unsigned opcode_flags,
                          /* IOV  */ const uct_iov_t *iov, size_t iovcnt,
                          /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
-                         /* RDMA */ uint64_t remote_addr, uct_rkey_t rkey,
+                         /* RDMA */ uint64_t remote_addr, uint32_t rkey,
                          /* TAG  */ uct_tag_t tag, uint32_t app_ctx, uint32_t ib_imm_be,
                          /* AV   */ uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
                                     size_t av_size, uint8_t fm_ce_se, int max_log_sge)

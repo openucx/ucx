@@ -18,7 +18,7 @@
                    uct_iov_iter_flat_offset((_tx)->iov, (_tx)->iov_cnt, \
                                             &(_tx)->iov_iter), \
                    uct_iov_total_length((_tx)->iov, (_tx)->iov_cnt), \
-                   (_tx)->remote_addr, (_tx)->rkey)
+                   (_tx)->remote_addr, (_tx)->rkey.u64)
 
 
 extern ucs_config_field_t uct_scopy_iface_config_table[];

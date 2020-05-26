@@ -24,7 +24,9 @@
 #define UCT_AM_ID_BITS             5
 #define UCT_AM_ID_MAX              UCS_BIT(UCT_AM_ID_BITS)
 #define UCT_MEM_HANDLE_NULL        NULL
-#define UCT_INVALID_RKEY           ((uintptr_t)(-1))
+#define UCT_NULL_RKEY              ((uct_rkey_t){})
+#define UCT_INVALID_RKEY           ((uct_rkey_t){{-1UL}})
+#define UCT_RKEY_IS_VALID(_key)    ((_key).u64 != -1)
 #define UCT_INLINE_API             static UCS_F_ALWAYS_INLINE
 
 
@@ -80,7 +82,7 @@ typedef struct uct_md_config       uct_md_config_t;
 typedef struct uct_cm_config       uct_cm_config_t;
 typedef struct uct_ep              *uct_ep_h;
 typedef void *                     uct_mem_h;
-typedef uintptr_t                  uct_rkey_t;
+typedef struct uct_rkey            uct_rkey_t;
 typedef struct uct_md              *uct_md_h;          /**< @brief Memory domain handler */
 typedef struct uct_md_ops          uct_md_ops_t;
 typedef void                       *uct_rkey_ctx_h;

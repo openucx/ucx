@@ -314,33 +314,33 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, check_rma_ops,
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), 1, sendbuf.memh(), 1);
     uct_ep_h ep = m_e1->ep(0);
 
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_short(ep, NULL, 0, 0, 0));
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_bcopy(ep, NULL, NULL, 0, 0));
-    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_zcopy(ep, iov, iovcnt, 0, 0,
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_short(ep, NULL, 0, 0, UCT_NULL_RKEY));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_bcopy(ep, NULL, NULL, 0, UCT_NULL_RKEY));
+    EXPECT_EQ(UCS_ERR_NO_RESOURCE, uct_ep_put_zcopy(ep, iov, iovcnt, 0, UCT_NULL_RKEY,
                                                     NULL));
 
     if (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP64)) {
         ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP64));
         ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP64));
         EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-                  uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, 0));
+                  uct_ep_atomic64_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, UCT_NULL_RKEY));
         EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-                  uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0,
+                  uct_ep_atomic64_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, UCT_NULL_RKEY,
                                         NULL));
         EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-                  uct_ep_atomic_cswap64(ep, 0, 0, 0, 0, NULL, NULL));
+                  uct_ep_atomic_cswap64(ep, 0, 0, 0, UCT_NULL_RKEY, NULL, NULL));
     }
 
     if (check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), FOP32)) {
         ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_ADD), OP32));
         ASSERT_TRUE(check_atomics(UCS_BIT(UCT_ATOMIC_OP_CSWAP), FOP32));
         EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-                  uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, 0));
+                  uct_ep_atomic32_post(ep, UCT_ATOMIC_OP_ADD, 0, 0, UCT_NULL_RKEY));
         EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-                  uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0,
+                  uct_ep_atomic32_fetch(ep, UCT_ATOMIC_OP_ADD, 0, NULL, 0, UCT_NULL_RKEY,
                                         NULL));
         EXPECT_EQ(UCS_ERR_NO_RESOURCE,
-                  uct_ep_atomic_cswap32(ep, 0, 0, 0, 0, NULL, NULL));
+                  uct_ep_atomic_cswap32(ep, 0, 0, 0, UCT_NULL_RKEY, NULL, NULL));
     }
 
     EXPECT_UCS_OK(uct_ep_am_short(ep, 0, 0, NULL, 0));

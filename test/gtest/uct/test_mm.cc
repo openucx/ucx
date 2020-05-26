@@ -174,7 +174,7 @@ public:
         /* For shared memory transports, rkey is the offset between local and
          * remote pointers.
          */
-        test_attach_ptr(ptr, UCS_PTR_BYTE_OFFSET(ptr, rkey_ob.rkey),
+        test_attach_ptr(ptr, UCS_PTR_BYTE_OFFSET(ptr, rkey_ob.rkey.u64),
                         0xdeadbeef22222);
 
         uct_rkey_release(GetParam()->component, &rkey_ob);

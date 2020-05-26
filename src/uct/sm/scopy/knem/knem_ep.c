@@ -59,7 +59,7 @@ ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt
     uct_knem_iface_t *knem_iface = ucs_derived_of(tl_ep->iface,
                                                   uct_knem_iface_t);
     int knem_fd                  = knem_iface->knem_md->knem_fd;
-    uct_knem_key_t *key          = (uct_knem_key_t*)rkey;
+    uct_knem_key_t *key          = (uct_knem_key_t*)rkey.u64;
     size_t local_iov_cnt         = UCT_SM_MAX_IOV;
     struct knem_cmd_param_iovec local_iov[UCT_SM_MAX_IOV];
     size_t UCS_V_UNUSED total_iov_length;

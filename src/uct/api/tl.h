@@ -399,6 +399,20 @@ typedef struct uct_listener {
 } uct_listener_t;
 
 
+/**
+ * Remote key
+ */
+struct uct_rkey {
+    union {
+        uintptr_t            u64;
+        struct {
+            uint32_t         key;
+            uint32_t         atomic_key;
+        };
+    };
+};
+
+
 typedef struct uct_recv_desc uct_recv_desc_t;
 typedef void (*uct_desc_release_callback_t)(uct_recv_desc_t *self, void * desc);
 

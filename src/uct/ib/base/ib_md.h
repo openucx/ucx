@@ -340,22 +340,23 @@ extern uct_component_t uct_ib_component;
 
 static inline uint32_t uct_ib_md_direct_rkey(uct_rkey_t uct_rkey)
 {
-    return (uint32_t)uct_rkey;
+    return uct_rkey.key;
 }
 
 
 static uint32_t uct_ib_md_indirect_rkey(uct_rkey_t uct_rkey)
 {
-    return uct_rkey >> 32;
+    return uct_rkey.atomic_key;
 }
 
 
 static UCS_F_ALWAYS_INLINE void
 uct_ib_md_pack_rkey(uint32_t rkey, uint32_t atomic_rkey, void *rkey_buffer)
 {
-    uint64_t *rkey_p = (uint64_t*)rkey_buffer;
-    *rkey_p = (((uint64_t)atomic_rkey) << 32) | rkey;
-     ucs_trace("packed rkey: direct 0x%x indirect 0x%x", rkey, atomic_rkey);
+    uct_rkey_t *rkey_p = (uct_rkey_t *)rkey_buffer;
+    rkey_p->key        = rkey;
+    rkey_p->atomic_key = atomic_rkey;
+    ucs_trace("packed rkey: direct 0x%x indirect 0x%x", rkey, atomic_rkey);
 }
 
 

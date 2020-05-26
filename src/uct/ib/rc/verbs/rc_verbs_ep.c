@@ -389,7 +389,7 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
-        status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
+        status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, UCT_NULL_RKEY);
         if (status != UCS_OK) {
             return status;
         }

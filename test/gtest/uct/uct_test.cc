@@ -901,7 +901,7 @@ void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
 
 void uct_test::entity::rkey_release(const uct_rkey_bundle *rkey_bundle) const
 {
-    if (rkey_bundle->rkey != UCT_INVALID_RKEY) {
+    if (UCT_RKEY_IS_VALID(rkey_bundle->rkey)) {
         ucs_status_t status = uct_rkey_release(m_resource.component, rkey_bundle);
         ASSERT_UCS_OK(status);
     }

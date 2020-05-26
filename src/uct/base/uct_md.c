@@ -161,8 +161,8 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p)
 {
-    *rkey_p   = 0xdeadbeef;
-    *handle_p = NULL;
+    rkey_p->u64 = 0xdeadbeef;
+    *handle_p   = NULL;
     return UCS_OK;
 }
 

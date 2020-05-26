@@ -258,12 +258,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
             status = uct_rkey_unpack(tl_rkey->cmpt, p, &tl_rkey->rkey);
             if (status == UCS_OK) {
                 ucs_trace("rkey[%d] for remote md %d is 0x%lx", rkey_index,
-                          remote_md_index, tl_rkey->rkey.rkey);
+                          remote_md_index, tl_rkey->rkey.rkey.u64);
                 ++rkey_index;
             } else if (status == UCS_ERR_UNREACHABLE) {
                 rkey->md_map &= ~UCS_BIT(remote_md_index);
                 ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable",
-                          rkey_index, remote_md_index, tl_rkey->rkey.rkey);
+                          rkey_index, remote_md_index, tl_rkey->rkey.rkey.u64);
                 /* FIXME this can make malloc allocated key be released to mpool */
             } else {
                 ucs_error("failed to unpack remote key from remote md[%d]: %s",
@@ -492,6 +492,6 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
     ucs_trace("rkey %p ep %p @ cfg[%d] %s: lane[%d] rkey 0x%"PRIx64" "
               "%s: lane[%d] rkey 0x%"PRIx64"",
               rkey, ep, ep->cfg_index,
-              rkey->cache.rma_proto->name, rkey->cache.rma_lane, rkey->cache.rma_rkey,
-              rkey->cache.amo_proto->name, rkey->cache.amo_lane, rkey->cache.amo_rkey);
+              rkey->cache.rma_proto->name, rkey->cache.rma_lane, rkey->cache.rma_rkey.u64,
+              rkey->cache.amo_proto->name, rkey->cache.amo_lane, rkey->cache.amo_rkey.u64);
 }

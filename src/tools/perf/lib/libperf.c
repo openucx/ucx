@@ -899,7 +899,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
 err_destroy_eps:
     for (i = 0; i < group_size; ++i) {
-        if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
+        if (UCT_RKEY_IS_VALID(perf->uct.peers[i].rkey.rkey)) {
             uct_rkey_release(perf->uct.cmpt, &perf->uct.peers[i].rkey);
         }
         if (perf->uct.peers[i].ep != NULL) {
@@ -926,7 +926,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 
     for (i = 0; i < group_size; ++i) {
         if (i != group_index) {
-            if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
+            if (UCT_RKEY_IS_VALID(perf->uct.peers[i].rkey.rkey)) {
                 uct_rkey_release(perf->uct.cmpt, &perf->uct.peers[i].rkey);
             }
             if (perf->uct.peers[i].ep) {

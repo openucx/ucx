@@ -217,7 +217,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
         scoped_log_handler slh(wrap_errors_logger);
 
         kill_receiver();
-        EXPECT_EQ(UCS_OK, uct_ep_put_short(ep0(), NULL, 0, 0, 0));
+        EXPECT_EQ(UCS_OK, uct_ep_put_short(ep0(), NULL, 0, 0, UCT_NULL_RKEY));
 
         flush();
     }
@@ -229,23 +229,23 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
     EXPECT_EQ(uct_ep_am_bcopy(ep0(), 0, NULL, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_am_zcopy(ep0(), 0, NULL, 0, iov, iovcnt, 0, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_bcopy(ep0(), NULL, NULL, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_zcopy(ep0(), iov, iovcnt, 0, 0, NULL),
+    EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, UCT_NULL_RKEY), UCS_ERR_ENDPOINT_TIMEOUT);
+    EXPECT_EQ(uct_ep_put_bcopy(ep0(), NULL, NULL, 0, UCT_NULL_RKEY), UCS_ERR_ENDPOINT_TIMEOUT);
+    EXPECT_EQ(uct_ep_put_zcopy(ep0(), iov, iovcnt, 0, UCT_NULL_RKEY, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_get_bcopy(ep0(), NULL, NULL, 0, 0, 0, NULL),
+    EXPECT_EQ(uct_ep_get_bcopy(ep0(), NULL, NULL, 0, 0, UCT_NULL_RKEY, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_get_zcopy(ep0(), iov, iovcnt, 0, 0, NULL),
+    EXPECT_EQ(uct_ep_get_zcopy(ep0(), iov, iovcnt, 0, UCT_NULL_RKEY, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0, NULL),
+    EXPECT_EQ(uct_ep_atomic64_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, UCT_NULL_RKEY), UCS_ERR_ENDPOINT_TIMEOUT);
+    EXPECT_EQ(uct_ep_atomic32_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, UCT_NULL_RKEY), UCS_ERR_ENDPOINT_TIMEOUT);
+    EXPECT_EQ(uct_ep_atomic64_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, UCT_NULL_RKEY, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0, NULL),
+    EXPECT_EQ(uct_ep_atomic32_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, UCT_NULL_RKEY, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic_cswap64(ep0(), 0, 0, 0, 0, NULL, NULL),
+    EXPECT_EQ(uct_ep_atomic_cswap64(ep0(), 0, 0, 0, UCT_NULL_RKEY, NULL, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic_cswap32(ep0(), 0, 0, 0, 0, NULL, NULL),
+    EXPECT_EQ(uct_ep_atomic_cswap32(ep0(), 0, 0, 0, UCT_NULL_RKEY, NULL, NULL),
               UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_flush(ep0(), 0, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
     EXPECT_EQ(uct_ep_get_address(ep0(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
@@ -370,7 +370,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_cb, desproy_ep_cb,
 {
     scoped_log_handler slh(wrap_errors_logger);
     kill_receiver();
-    EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_OK);
+    EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, UCT_NULL_RKEY), UCS_OK);
     flush();
 }
 

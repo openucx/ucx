@@ -372,8 +372,8 @@ static ucs_status_t uct_self_md_rkey_unpack(uct_component_t *component,
      * Pseudo stub function for the key unpacking
      * Need rkey == 0 due to work with same process to reuse uct_base_[put|get|atomic]*
      */
-    *rkey_p   = 0;
-    *handle_p = NULL;
+    rkey_p->u64 = 0;
+    *handle_p   = NULL;
     return UCS_OK;
 }
 

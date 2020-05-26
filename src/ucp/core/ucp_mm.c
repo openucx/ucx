@@ -523,7 +523,7 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
     ucp_context_h context = worker->context;
     ucp_rsc_index_t cmpt_index;
 
-    if (rkey_bundle->rkey != UCT_INVALID_RKEY) {
+    if (UCT_RKEY_IS_VALID(rkey_bundle->rkey)) {
         cmpt_index = context->tl_mds[md_index].cmpt_index;
         uct_rkey_release(context->tl_cmpts[cmpt_index].cmpt, rkey_bundle);
     }

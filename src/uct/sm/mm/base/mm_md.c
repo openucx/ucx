@@ -89,7 +89,7 @@ ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                              void *handle, uint64_t raddr, void **laddr_p)
 {
     /* rkey stores offset from the remote va */
-    *laddr_p = UCS_PTR_BYTE_OFFSET(raddr, (ptrdiff_t)rkey);
+    *laddr_p = UCS_PTR_BYTE_OFFSET(raddr, (ptrdiff_t)rkey.u64);
     return UCS_OK;
 }
 

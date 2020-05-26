@@ -200,7 +200,7 @@ static inline void
 uct_mm_md_make_rkey(void *local_address, uintptr_t remote_address,
                     uct_rkey_t *rkey_p)
 {
-    *rkey_p = (uintptr_t)local_address - remote_address;
+    rkey_p->u64 = (uintptr_t)local_address - remote_address;
 }
 
 #endif

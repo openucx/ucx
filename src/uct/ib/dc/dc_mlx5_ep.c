@@ -253,7 +253,7 @@ uct_dc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  txqp, txwq,
                                  MLX5_OPCODE_SEND,
                                  buffer, length, id, hdr, 0,
-                                 0, 0,
+                                 0, UCT_NULL_RKEY,
                                  &ep->av, uct_dc_mlx5_ep_get_grh(ep),
                                  uct_ib_mlx5_wqe_av_size(&ep->av),
                                  MLX5_WQE_CTRL_SOLICITED, INT_MAX);
@@ -320,7 +320,7 @@ ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     status = uct_dc_mlx5_ep_short_dm(ep, &cache, sizeof(cache.am_hdr), buffer, length,
                                      MLX5_OPCODE_SEND,
                                      MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE,
-                                     0, 0);
+                                     0, UCT_NULL_RKEY);
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     }
@@ -346,7 +346,7 @@ ssize_t uct_dc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                       pack_cb, arg, &length);
 
     uct_dc_mlx5_iface_bcopy_post(iface, ep, MLX5_OPCODE_SEND,
-                                 sizeof(uct_rc_mlx5_hdr_t) + length, 0, 0, desc,
+                                 sizeof(uct_rc_mlx5_hdr_t) + length, 0, UCT_NULL_RKEY, desc,
                                  MLX5_WQE_CTRL_SOLICITED, 0, desc + 1, NULL);
 
     UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->fc);
@@ -370,7 +370,7 @@ ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
     UCT_DC_CHECK_RES_AND_FC(iface, ep);
 
     uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_SEND, iov, iovcnt,
-                                 id, header, header_length, 0, 0, 0ul, 0, 0,
+                                 id, header, header_length, 0, UCT_NULL_RKEY, 0ul, 0, 0,
                                  uct_rc_ep_send_op_completion_handler,
                                  comp, MLX5_WQE_CTRL_SOLICITED);
 
@@ -398,7 +398,7 @@ uct_dc_mlx5_ep_put_short_inline(uct_ep_h tl_ep, const void *buffer,
                                  txqp, txwq,
                                  MLX5_OPCODE_RDMA_WRITE,
                                  buffer, length, 0, 0, 0,
-                                 remote_addr, uct_ib_md_direct_rkey(rkey),
+                                 remote_addr, rkey,
                                  &ep->av, uct_dc_mlx5_ep_get_grh(ep),
                                  uct_ib_mlx5_wqe_av_size(&ep->av), 0, INT_MAX);
 
@@ -636,7 +636,7 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
     status = uct_dc_mlx5_ep_short_dm(ep, &cache, sizeof(cache.tm_hdr), data,
                                      length, MLX5_OPCODE_SEND,
                                      MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE,
-                                     0, 0);
+                                     0, UCT_NULL_RKEY);
     if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(&ep->super, TAG, SHORT, length);
     }
@@ -669,7 +669,7 @@ ssize_t uct_dc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     uct_dc_mlx5_iface_bcopy_post(iface, ep, opcode,
                                  sizeof(struct ibv_tmh) + length,
-                                 0, 0, desc, MLX5_WQE_CTRL_SOLICITED, ib_imm,
+                                 0, UCT_NULL_RKEY, desc, MLX5_WQE_CTRL_SOLICITED, ib_imm,
                                  desc + 1, NULL);
 
     UCT_TL_EP_STAT_OP(&ep->super, TAG, BCOPY, length);
@@ -698,7 +698,7 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     UCT_RC_MLX5_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND, _IMM);
 
     uct_dc_mlx5_iface_zcopy_post(iface, ep, opcode|UCT_RC_MLX5_OPCODE_FLAG_TM,
-                                 iov, iovcnt, 0, "", 0, 0, 0, tag, app_ctx,
+                                 iov, iovcnt, 0, "", 0, 0, UCT_NULL_RKEY, tag, app_ctx,
                                  ib_imm, uct_rc_ep_send_op_completion_handler,
                                  comp, MLX5_WQE_CTRL_SOLICITED);
 
@@ -861,7 +861,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
                                      txqp, txwq, MLX5_OPCODE_SEND,
                                      &av /*dummy*/, 0, op, sender_ep, 0,
-                                     0, 0,
+                                     0, UCT_NULL_RKEY,
                                      &av, ah_attr.is_global ? mlx5_av_grh(&mlx5_av) : NULL,
                                      uct_ib_mlx5_wqe_av_size(&av), 0, INT_MAX);
     } else {
@@ -877,7 +877,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      txqp, txwq, MLX5_OPCODE_SEND_IMM,
                                      &sender.global, sizeof(sender.global), op, sender.ep,
                                      iface->rx.dct.qp_num,
-                                     0, 0,
+                                     0, UCT_NULL_RKEY,
                                      &dc_ep->av,
                                      uct_dc_mlx5_ep_get_grh(dc_ep),
                                      uct_ib_mlx5_wqe_av_size(&dc_ep->av),
