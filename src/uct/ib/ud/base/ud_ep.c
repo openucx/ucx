@@ -353,6 +353,19 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE int
+uct_ud_ep_is_last_pending_elem(uct_ud_ep_t *ep, ucs_arbiter_elem_t *elem)
+{
+    return (/* this is the only one pending element in the group */
+            (ucs_arbiter_elem_is_only(elem)) ||
+            (/* the next element in the group is control operation */
+             (elem->next == &ep->tx.pending.elem) &&
+             /* only two elements are in the group (the 1st element is the
+              * current one, the 2nd (or the last) element is the control one) */
+             (ucs_arbiter_group_tail(&ep->tx.pending.group) == &ep->tx.pending.elem)));
+            
+}
+
 static ucs_arbiter_cb_result_t
 uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                             ucs_arbiter_elem_t *elem, void *arg)
@@ -369,6 +382,10 @@ uct_ud_ep_pending_cancel_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
     /* uct user should not have anything pending */
     req = ucs_container_of(elem, uct_pending_req_t, priv);
     ucs_warn("ep=%p removing user pending req=%p", ep, req);
+
+    if (uct_ud_ep_is_last_pending_elem(ep, elem)) {
+        uct_ud_ep_remove_has_pending_flag(ep);
+    }
 
     /* return ignored by arbiter */
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
@@ -458,7 +475,9 @@ static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
 
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_ud_ep_reset(ep);
+
     ep->dest_ep_id = UCT_UD_EP_NULL_ID;
+    ep->flags     &= ~UCT_UD_EP_FLAG_CONNECTED;
 
     return UCS_OK;
 }
@@ -539,7 +558,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
     ucs_trace_func("");
 
-    ep->dest_ep_id = uct_ib_unpack_uint24(ep_addr->ep_id);
+    uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ep_addr->ep_id));
 
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_ud_ep_reset(ep);
@@ -549,7 +568,8 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
               dev->port_attr[iface->super.config.port_num - dev->first_port].lid,
               iface->qp->qp_num, ep->ep_id,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
-              uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num), ep->dest_ep_id);
+              uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num),
+              ep->dest_ep_id);
     return UCS_OK;
 }
 
@@ -629,7 +649,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     } else {
         if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
             /* simultanuous CREQ */
-            ep->dest_ep_id = uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id);
+            uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
             ep->rx.ooo_pkts.head_sn = neth->psn;
             uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
             ucs_debug("simultanuous CREQ ep=%p"
@@ -682,7 +702,7 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     }
 
     ep->rx.ooo_pkts.head_sn = neth->psn;
-    ep->dest_ep_id = ctl->conn_rep.src_ep_id;
+    uct_ud_ep_set_dest_ep_id(ep, ctl->conn_rep.src_ep_id);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
     uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
     uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREP_RCVD);
@@ -1267,6 +1287,7 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
     int allow_callback;
     int async_before_pending;
     ucs_status_t status;
+    int is_last_pending_elem;
 
     /* check if we have global resources
      * - tx_wqe
@@ -1313,7 +1334,6 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
      * - not in async progress
      * - there are no high priority pending control messages
      */
-    
     req            = ucs_container_of(elem, uct_pending_req_t, priv);
     allow_callback = !in_async_progress ||
                      (uct_ud_pending_req_priv(req)->flags & UCT_CB_FLAG_ASYNC);
@@ -1325,7 +1345,22 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
             /* temporary reset the flag to unblock sends from async context */
             iface->tx.async_before_pending = 0;
         }
+        /* temporary reset `UCT_UD_EP_HAS_PENDING` flag to unblock sends */
+        uct_ud_ep_remove_has_pending_flag(ep);
+
+        is_last_pending_elem = uct_ud_ep_is_last_pending_elem(ep, elem);
+
         status = req->func(req);
+#if UCS_ENABLE_ASSERT
+        /* do not touch the request (or the arbiter element) after
+         * calling the callback if UCS_OK is returned from the callback */
+        if (status == UCS_OK) {
+            req  = NULL;
+            elem = NULL;
+        }
+#endif
+
+        uct_ud_ep_set_has_pending_flag(ep);
         iface->tx.async_before_pending = async_before_pending;
         ep->flags &= ~UCT_UD_EP_FLAG_IN_PENDING;
 
@@ -1339,6 +1374,11 @@ uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
             uct_ud_ep_do_pending_ctl(ep, iface);
             return uct_ud_ep_ctl_op_next(ep);
         }
+
+        if (is_last_pending_elem) {
+            uct_ud_ep_remove_has_pending_flag(ep);
+        }
+
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
@@ -1377,7 +1417,7 @@ ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
 
     if (uct_ud_iface_can_tx(iface) &&
         uct_ud_iface_has_skbs(iface) &&
-        uct_ud_ep_is_connected(ep) &&
+        uct_ud_ep_is_connected_and_no_pending(ep) &&
         !uct_ud_ep_no_window(ep)) {
 
         uct_ud_leave(iface);
@@ -1388,6 +1428,7 @@ add_req:
     UCS_STATIC_ASSERT(sizeof(uct_ud_pending_req_priv_t) <=
                       UCT_PENDING_REQ_PRIV_LEN);
     uct_ud_pending_req_priv(req)->flags = flags;
+    uct_ud_ep_set_has_pending_flag(ep);
     uct_pending_req_arb_group_push(&ep->tx.pending.group, req);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
     ucs_trace_data("ud ep %p: added pending req %p tx_psn %d acked_psn %d cwnd %d",
@@ -1407,16 +1448,25 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
     uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
     uct_pending_req_t *req;
+    int is_last_pending_elem;
 
     if (&ep->tx.pending.elem == elem) {
         /* return ignored by arbiter */
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
+
+    is_last_pending_elem = uct_ud_ep_is_last_pending_elem(ep, elem);
+
     req = ucs_container_of(elem, uct_pending_req_t, priv);
     if (cb) {
         cb(req, cb_args->arg);
     } else {
         ucs_debug("ep=%p cancelling user pending request %p", ep, req);
+    }
+
+    fprintf(stderr, "%p: remove %p", ep, req);
+    if (is_last_pending_elem) {
+        uct_ud_ep_remove_has_pending_flag(ep);
     }
 
     /* return ignored by arbiter */

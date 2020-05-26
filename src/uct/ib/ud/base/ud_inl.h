@@ -79,11 +79,38 @@ uct_ud_skb_release(uct_ud_send_skb_t *skb, int is_inline)
     }
 }
 
+#if UCS_ENABLE_ASSERT
+static UCS_F_ALWAYS_INLINE int uct_ud_ep_has_pending(uct_ud_ep_t *ep)
+{
+    return !ucs_arbiter_group_is_empty(&ep->tx.pending.group) &&
+           !ucs_arbiter_elem_is_only(&ep->tx.pending.elem);
+}
+#endif
+
+static UCS_F_ALWAYS_INLINE void uct_ud_ep_set_has_pending_flag(uct_ud_ep_t *ep)
+{
+    ep->flags |= UCT_UD_EP_FLAG_HAS_PENDING;
+}
+
+static UCS_F_ALWAYS_INLINE void uct_ud_ep_remove_has_pending_flag(uct_ud_ep_t *ep)
+{
+    ucs_assert(ep->flags & UCT_UD_EP_FLAG_HAS_PENDING);
+    ep->flags &= ~UCT_UD_EP_FLAG_HAS_PENDING;
+}
+
+static UCS_F_ALWAYS_INLINE void uct_ud_ep_set_dest_ep_id(uct_ud_ep_t *ep,
+                                                         uint32_t dest_id)
+{
+    ucs_assert(dest_id != UCT_UD_EP_NULL_ID);
+    ep->dest_ep_id = dest_id;
+    ep->flags     |= UCT_UD_EP_FLAG_CONNECTED;
+}
+
 /* same as above but also check ep resources: window&connection state */
 static UCS_F_ALWAYS_INLINE uct_ud_send_skb_t *
 uct_ud_ep_get_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    if (ucs_unlikely(!uct_ud_ep_is_connected(ep) ||
+    if (ucs_unlikely(!uct_ud_ep_is_connected_and_no_pending(ep) ||
                      uct_ud_ep_no_window(ep) ||
                      uct_ud_iface_has_pending_async_ev(iface))) {
         ucs_trace_poll("iface=%p ep=%p (%d->%d) no ep resources (psn=%u max_psn=%u)",
@@ -186,8 +213,7 @@ uct_ud_am_skb_common(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uint8_t id,
      * (we don't care about reordering with respect to control messages)
      */
     ucs_assertv((ep->flags & UCT_UD_EP_FLAG_IN_PENDING) ||
-                ucs_arbiter_group_is_empty(&ep->tx.pending.group) ||
-                ucs_arbiter_elem_is_only(&ep->tx.pending.elem),
+                !uct_ud_ep_has_pending(ep),
                 "out-of-order send detected for ep %p am %d ep_pending %d arbelem %p",
                 ep, id, (ep->flags & UCT_UD_EP_FLAG_IN_PENDING),
                 &ep->tx.pending.elem);
