@@ -106,7 +106,8 @@ ucs_status_t uct_md_query_tl_resources(uct_md_h md,
                              sizeof(tmp[num_resources + i].tl_name));
             ucs_strncpy_zero(tmp[num_resources + i].dev_name, tl_devices[i].name,
                              sizeof(tmp[num_resources + i].dev_name));
-            tmp[num_resources + i].dev_type = tl_devices[i].type;
+            tmp[num_resources + i].dev_type   = tl_devices[i].type;
+            tmp[num_resources + i].sys_device = tl_devices[i].sys_device;
         }
 
         resources      = tmp;

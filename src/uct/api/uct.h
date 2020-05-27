@@ -317,7 +317,10 @@ typedef enum {
 typedef struct uct_tl_resource_desc {
     char                     tl_name[UCT_TL_NAME_MAX];   /**< Transport name */
     char                     dev_name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
-    uct_device_type_t        dev_type;     /**< Device type. To which UCT group it belongs to */
+    uct_device_type_t        dev_type;     /**< The device represented by this resource
+                                                (e.g. UCT_DEVICE_TYPE_NET for a network interface) */
+    ucs_sys_device_t         sys_device;   /**< The identifier associated with the device
+                                                bus_id as captured in ucs_sys_bus_id_t struct */
 } uct_tl_resource_desc_t;
 
 #define UCT_TL_RESOURCE_DESC_FMT              "%s/%s"
