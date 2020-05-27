@@ -411,7 +411,8 @@ uct_posix_segment_open(uct_mm_md_t *md, uct_mm_seg_id_t *seg_id_p, int *fd_p)
 
 static ucs_status_t
 uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                    unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
+                    uct_mem_alloc_param_t *param, const char *alloc_name,
+                    uct_mem_h *memh_p)
 {
     uct_mm_md_t                     *md = ucs_derived_of(tl_md, uct_mm_md_t);
     uct_posix_md_config_t *posix_config = ucs_derived_of(md->config,
@@ -457,7 +458,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     }
 
     /* mmap the shared memory segment that was created by shm_open */
-    if (flags & UCT_MD_MEM_FLAG_FIXED) {
+    if (param->flags & UCT_MD_MEM_FLAG_FIXED) {
         mmap_flags   = MAP_FIXED;
     } else {
         seg->address = NULL;
@@ -654,7 +655,6 @@ static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
         .close                  = uct_mm_md_close,
         .query                  = uct_posix_md_query,
         .mem_alloc              = uct_posix_mem_alloc,
-	.mem_alloc_mem_type     = (uct_md_mem_alloc_mem_type_func_t)ucs_empty_function_return_unsupported,
         .mem_free               = uct_posix_mem_free,
         .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg                = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,

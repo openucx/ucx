@@ -841,7 +841,12 @@ void uct_test::entity::mem_alloc_host(size_t length,
         ASSERT_UCS_OK(status);
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
-        status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_ALL, &method, 1,
+	uct_mem_alloc_param_t param;
+
+	param.alloc_attr_mask = UCT_ALLOC_ATTR_FIELD_FLAGS;
+	param.flags           = UCT_MD_MEM_ACCESS_ALL;
+
+        status = uct_mem_alloc(NULL, length, &param, &method, 1,
                                NULL, 0, "uct_test", mem);
         ASSERT_UCS_OK(status);
         ucs_assert(mem->memh == UCT_MEM_HANDLE_NULL);

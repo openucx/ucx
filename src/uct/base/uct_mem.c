@@ -67,7 +67,8 @@ ucs_status_t uct_mem_alloc_mem_type(void *addr, size_t min_length,
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
-ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
+ucs_status_t uct_mem_alloc(void *addr, size_t min_length,
+                           uct_mem_alloc_param_t *param,
                            uct_alloc_method_t *methods, unsigned num_methods,
                            uct_md_h *mds, unsigned num_mds,
                            const char *alloc_name, uct_allocated_memory_t *mem)
@@ -98,7 +99,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
+    if ((param->flags & UCT_MD_MEM_FLAG_FIXED) &&
         (!addr || ((uintptr_t)addr % ucs_get_page_size()))) {
         ucs_debug("UCT_MD_MEM_FLAG_FIXED requires valid page size aligned address");
         return UCS_ERR_INVALID_PARAM;
@@ -125,7 +126,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
                 /* Check if MD supports allocation with fixed address
                  * if it's requested */
-                if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
+                if ((param->flags & UCT_MD_MEM_FLAG_FIXED) &&
                     !(md_attr.cap.flags & UCT_MD_FLAG_FIXED)) {
                     continue;
                 }
@@ -137,7 +138,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                  */
                 alloc_length = min_length;
                 address = addr;
-                status = uct_md_mem_alloc(md, &alloc_length, &address, flags,
+                status = uct_md_mem_alloc(md, &alloc_length, &address, param,
                                           alloc_name, &memh);
                 if (status != UCS_OK) {
                     ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
@@ -158,7 +159,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
         case UCT_ALLOC_METHOD_THP:
 #ifdef MADV_HUGEPAGE
             /* Fixed option is not supported for thp allocation*/
-            if (flags & UCT_MD_MEM_FLAG_FIXED) {
+            if (param->flags & UCT_MD_MEM_FLAG_FIXED) {
                 break;
             }
 
@@ -197,7 +198,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             /* Allocate aligned memory using libc allocator */
 
             /* Fixed option is not supported for heap allocation*/
-            if (flags & UCT_MD_MEM_FLAG_FIXED) {
+            if (param->flags & UCT_MD_MEM_FLAG_FIXED) {
                 break;
             }
 
@@ -217,7 +218,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             address      = addr;
 
             status = ucs_mmap_alloc(&alloc_length, &address,
-                                    uct_mem_get_mmap_flags(flags)
+                                    uct_mem_get_mmap_flags(param->flags)
                                     UCS_MEMTRACK_VAL);
             if (status== UCS_OK) {
                 goto allocated_without_md;
@@ -231,7 +232,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 #ifdef SHM_HUGETLB
             /* Allocate huge pages */
             alloc_length = min_length;
-            address = (flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
+            address = (param->flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
             status = ucs_sysv_alloc(&alloc_length, min_length * 2, &address,
                                     SHM_HUGETLB, alloc_name, &shmid);
             if (status == UCS_OK) {
@@ -297,8 +298,12 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
     uct_md_attr_t md_attr;
     ucs_status_t status;
+    uct_mem_alloc_param_t param;
 
-    status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_ALL,
+    param.alloc_attr_mask = UCT_ALLOC_ATTR_FIELD_FLAGS;
+    param.flags           = UCT_MD_MEM_ACCESS_ALL;
+
+    status = uct_mem_alloc(NULL, length, &param,
                            iface->config.alloc_methods,
                            iface->config.num_alloc_methods, &iface->md, 1,
                            name, mem);

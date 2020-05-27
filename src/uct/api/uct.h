@@ -2064,6 +2064,50 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
 /**
  * @ingroup UCT_MD
+ * @brief UCT allocation parameter specification field
+ *
+ * The enumeration allows specifying which fields in @ref uct_mem_alloc_param_t
+ * are present.
+ */
+typedef enum {
+    UCT_ALLOC_ATTR_FIELD_FLAGS    = UCS_BIT(0), /**< Allocation flags field*/
+    UCT_ALLOC_ATTR_FIELD_MEM_TYPE = UCS_BIT(1)  /**< Memory type field */
+} uct_alloc_attr_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Allocation characteristics parameter passed to @ref uct_mem_alloc,
+ *        @ref uct_md_mem_alloc
+ *
+ * The structure @ref uct_mem_alloc_param_t is used to specify the memory type
+ * of the allocation, and flags indicating other characteristics of the
+ * allocation.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_alloc_attr_t. Fields not specified in this mask will be
+     * ignored
+     */
+    uint32_t       alloc_attr_mask;
+
+    /**
+     * Type of memory to be allocated.
+     * E.g. UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_ROCM.
+     */
+    ucs_memory_type_t mem_type;
+
+    /**
+     * Memory allocation flags, see @ref uct_md_mem_flags
+     */
+    unsigned flags;
+
+} uct_mem_alloc_param_t;
+
+
+/**
+ * @ingroup UCT_MD
  * @brief Allocate memory for zero-copy sends and remote access.
  *
  * Allocate memory on the memory domain. In order to use this function, MD
@@ -2074,44 +2118,15 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr);
  *                             return, filled with the actual size that was allocated,
  *                             which may be larger than the one requested. Must be >0.
  * @param [in,out] address_p   The address
- * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
+ * @param [in]     param       Memory allocation characteristics, see
+ *                             @ref uct_mem_alloc_param_t.
  * @param [in]     name        Name of the allocated region, used to track memory
  *                             usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
  */
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              unsigned flags, const char *name, uct_mem_h *memh_p);
-
-
-/**
- * @ingroup UCT_MD
- * @brief Allocate memory of a specified memory type for zero-copy sends and
- * remote access.
- *
- * Allocate memory on the memory domain. In order to use this function, MD
- * must support @ref UCT_MD_FLAG_ALLOC flag on the specified memory type.
- *
- * @param [in]     md          Memory domain to allocate memory on.
- * @param [in,out] length_p    Points to the size of memory to allocate. Upon successful
- *                             return, filled with the actual size that was allocated,
- *                             which may be larger than the one requested. Must be >0.
- * @param [in,out] address_p   The address
- * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
- *                             Note that if UCT_MD_MEM_FLAG_FIXED is provided
- *                             and the underlying allocator is unable to
- *                             gaurantee an allocation starting at the specified
- *                             address, an appropritate error is returned.
- * @param [in]     mem_type    Type of memory to be allocated.
- *                             E.g. UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA,
- *                             UCS_MEMORY_TYPE_ROCM, etc.
- * @param [in]     name        Name of the allocated region, used to track memory
- *                             usage for debugging and profiling.
- * @param [out]    memh_p      Filled with handle for allocated region.
- */
-ucs_status_t uct_md_mem_alloc_mem_type(uct_md_h md, size_t *length_p,
-                                       void **address_p, unsigned flags,
-                                       ucs_memory_type_t mem_type,
-                                       const char *name, uct_mem_h *memh_p);
+                              uct_mem_alloc_param_t *param, const char *name,
+                              uct_mem_h *memh_p);
 
 
 /**
@@ -2212,7 +2227,8 @@ ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
  *                             cannot be made, the allocation request fails.
  * @param [in]     min_length  Minimal size to allocate. The actual size may be
  *                             larger, for example because of alignment restrictions.
- * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
+ * @param [in]     param       Memory allocation characteristics, see
+ *                             @ref uct_mem_alloc_param_t.
  * @param [in]     methods     Array of memory allocation methods to attempt.
  * @param [in]     num_methods Length of 'methods' array.
  * @param [in]     mds         Array of memory domains to attempt to allocate
@@ -2224,60 +2240,11 @@ ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
  * @param [out]    mem         In case of success, filled with information about
  *                              the allocated memory. @ref uct_allocated_memory_t.
  */
-ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
+ucs_status_t uct_mem_alloc(void *addr, size_t min_length,
+                           uct_mem_alloc_param_t *param,
                            uct_alloc_method_t *methods, unsigned num_methods,
                            uct_md_h *mds, unsigned num_mds, const char *name,
                            uct_allocated_memory_t *mem);
-
-
-/**
- * @ingroup UCT_MD
- * @brief Allocate memory of a specified memory type for zero-copy communications
- * and remote access.
- *
- * Allocate potentially registered memory. Every one of the provided allocation
- * methods will be used, in turn, to perform the allocation, until one succeeds.
- * Note that if underlying allocators for the specified memory type cannot honor
- * the requested method, then an error such as UCS_INVALID_PARAM maybe returned.
- * Whenever the MD method is encountered, every one of the provided MDs will be
- * used, in turn, to allocate the memory, until one succeeds, or they are
- * exhausted. In this case the next allocation method from the initial list will
- * be attempted.
- *
- * @param [in]     addr        If @a addr is NULL, the underlying allocation routine
- *                             will choose the address at which to create the mapping.
- *                             If @a addr is non-NULL but UCT_MD_MEM_FLAG_FIXED is
- *                             not set, the address will be interpreted as a hint
- *                             as to where to establish the mapping. If @a addr is
- *                             non-NULL and UCT_MD_MEM_FLAG_FIXED is set, then
- *                             the specified address is interpreted as a requirement.
- *                             In this case, if the mapping to the exact address
- *                             cannot be made, the allocation request fails.
- * @param [in]     min_length  Minimal size to allocate. The actual size may be
- *                             larger, for example because of alignment restrictions.
- * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
- * @param [in]     methods     Array of memory allocation methods to attempt.
- * @param [in]     num_methods Length of 'methods' array.
- * @param [in]     mds         Array of memory domains to attempt to allocate
- *                             the memory with, for MD allocation method. If
- *                             none of the provided mds can allocate memory of
- *                             the specified memory type, then allocation fails
- *                             if MD allocation method is requested.
- * @param [in]     num_mds     Length of 'mds' array. May be empty, in such case
- *                             'mds' may be NULL, and MD allocation method will
- *                             be skipped.
- * @param [in]     mem_type    Type of memory to be allocated.
- * @param [in]     name        Name of the allocation. Used for memory statistics.
- * @param [out]    mem         In case of success, filled with information about
- *                              the allocated memory. @ref uct_allocated_memory_t.
- */
-ucs_status_t uct_mem_alloc_mem_type(void *addr, size_t min_length,
-                                    unsigned flags, uct_alloc_method_t *methods,
-                                    unsigned num_methods, uct_md_h *mds,
-                                    unsigned num_mds,
-                                    ucs_memory_type_t mem_type,
-                                    const char *name,
-                                    uct_allocated_memory_t *mem);
 
 
 /**

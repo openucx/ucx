@@ -226,8 +226,13 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, alloc,
     void   *address     = NULL;
     size_t alloc_length = size;
     uct_mem_h memh;
+    uct_mem_alloc_param_t param;
+
+    param.alloc_attr_mask = UCT_ALLOC_ATTR_FIELD_FLAGS;
+    param.flags           = UCT_MD_MEM_ACCESS_ALL;
+
     status = uct_md_mem_alloc(m_e1->md(), &alloc_length, &address,
-                              UCT_MD_MEM_ACCESS_ALL, "test_mm", &memh);
+                              &param, "test_mm", &memh);
     ASSERT_UCS_OK(status);
 
     test_memh(address, memh, size);

@@ -59,7 +59,8 @@ static ucs_status_t uct_sysv_mem_attach_common(int shmid, void **address_p)
 
 static ucs_status_t
 uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                   unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
+                   uct_mem_alloc_param_t *param, const char *alloc_name,
+                   uct_mem_h *memh_p)
 {
     uct_mm_md_t *md = ucs_derived_of(tl_md, uct_mm_md_t);
     ucs_status_t status;
@@ -175,7 +176,6 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
         .close                  = uct_mm_md_close,
         .query                  = uct_sysv_md_query,
         .mem_alloc              = uct_sysv_mem_alloc,
-        .mem_alloc_mem_type     = (uct_md_mem_alloc_mem_type_func_t)ucs_empty_function_return_unsupported,
         .mem_free               = uct_sysv_mem_free,
         .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
         .mem_reg                = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
