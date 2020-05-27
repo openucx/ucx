@@ -338,7 +338,7 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
                 /* Global */
                 ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET64;
                 *(uint64_t*)ptr = params->gid->global.subnet_prefix;
-                ptr             = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
+                ptr             = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
             }
         }
     }
