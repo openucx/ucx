@@ -2103,7 +2103,7 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
  *                             address, an appropritate error is returned.
  * @param [in]     mem_type    Type of memory to be allocated.
  *                             E.g. UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA,
- *                             UCS_MEMORY_TYPE_ROCM, etc. Refer @ucs_memory_type_t
+ *                             UCS_MEMORY_TYPE_ROCM, etc.
  * @param [in]     name        Name of the allocated region, used to track memory
  *                             usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
