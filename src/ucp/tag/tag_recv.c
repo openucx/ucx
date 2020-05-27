@@ -50,7 +50,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
             ucp_tag_eager_sync_send_ack(worker, rdesc + 1, rdesc->flags);
         }
 
-        req->flags                    = UCP_REQUEST_FLAG_RECV | req_flags;
+        req->flags                    = UCP_REQUEST_FLAG_COMPLETED |
+                                        UCP_REQUEST_FLAG_RECV;
         hdr_len                       = rdesc->payload_offset;
         recv_len                      = rdesc->length - hdr_len;
         req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
@@ -64,7 +65,6 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         ucp_recv_desc_release(rdesc);
 
         req->status = status;
-        req->flags |= UCP_REQUEST_FLAG_COMPLETED;
         UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 
         ucp_request_imm_cmpl_param(param, req, status, recv,
