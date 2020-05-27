@@ -143,13 +143,6 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     }
 }
 
-static void ucp_ep_flush_slow_path_remove(ucp_request_t *req)
-{
-    ucp_ep_h ep = req->send.ep;
-    uct_worker_progress_unregister_safe(ep->worker->uct,
-                                        &req->send.flush.prog_id);
-}
-
 static int ucp_flush_check_completion(ucp_request_t *req)
 {
     /* Check if flushed all lanes */
@@ -158,7 +151,8 @@ static int ucp_flush_check_completion(ucp_request_t *req)
     }
 
     ucs_trace_req("flush req %p completed", req);
-    ucp_ep_flush_slow_path_remove(req);
+    uct_worker_progress_unregister_safe(req->send.ep->worker->uct,
+                                        &req->send.flush.prog_id);
     req->send.flush.flushed_cb(req);
     return 1;
 }
@@ -167,7 +161,6 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
 {
     ucp_request_t *req = arg;
 
-    ucp_ep_flush_slow_path_remove(req);
     ucp_ep_flush_progress(req);
     ucp_flush_check_completion(req);
     return 0;
