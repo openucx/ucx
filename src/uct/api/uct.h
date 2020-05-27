@@ -2093,16 +2093,15 @@ typedef struct {
     uint32_t       alloc_attr_mask;
 
     /**
-     * Type of memory to be allocated.
-     * E.g. UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_ROCM.
-     */
-    ucs_memory_type_t mem_type;
-
-    /**
      * Memory allocation flags, see @ref uct_md_mem_flags
      */
     unsigned flags;
 
+    /**
+     * Type of memory to be allocated.
+     * E.g. UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_CUDA, UCS_MEMORY_TYPE_ROCM.
+     */
+    ucs_memory_type_t mem_type;
 } uct_mem_alloc_param_t;
 
 

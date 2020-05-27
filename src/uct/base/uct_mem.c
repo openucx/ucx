@@ -56,17 +56,6 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
     return mm_flags;
 }
 
-ucs_status_t uct_mem_alloc_mem_type(void *addr, size_t min_length,
-                                    unsigned flags, uct_alloc_method_t *methods,
-                                    unsigned num_methods, uct_md_h *mds,
-                                    unsigned num_mds,
-                                    ucs_memory_type_t mem_type,
-                                    const char *alloc_name,
-                                    uct_allocated_memory_t *mem)
-{
-    return UCS_ERR_NOT_IMPLEMENTED;
-}
-
 ucs_status_t uct_mem_alloc(void *addr, size_t min_length,
                            uct_mem_alloc_param_t *param,
                            uct_alloc_method_t *methods, unsigned num_methods,
