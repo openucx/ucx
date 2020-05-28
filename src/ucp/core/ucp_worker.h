@@ -196,6 +196,7 @@ typedef struct ucp_worker_am_entry {
     ucp_am_callback_t     cb;
     void                 *context;
     uint32_t              flags;
+    size_t                iovec_size;
 } ucp_worker_am_entry_t;
 
 /**

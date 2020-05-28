@@ -57,6 +57,7 @@ UCS_PROFILE_FUNC_VOID(ucp_am_data_release, (worker, data),
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
 
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
                  (worker, id, cb, arg, flags),
                  ucp_worker_h worker, uint16_t id,
