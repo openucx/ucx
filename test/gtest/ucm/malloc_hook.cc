@@ -809,10 +809,10 @@ protected:
     pthread_barrier_t       *m_barrier;
     mmap_event<mmap_hooks>  m_event;
 
-    static int enum_threads_cb(pid_t tid, void *ctx)
+    static ucs_status_t enum_threads_cb(pid_t tid, void *ctx)
     {
         (*(int*)ctx)++;
-        return 0;
+        return UCS_OK;
     }
 };
 

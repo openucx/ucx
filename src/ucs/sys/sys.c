@@ -61,8 +61,8 @@ struct {
 };
 
 typedef struct {
-    void *ctx;
-    int  (*cb)(pid_t pid, void *ctx);
+    void                     *ctx;
+    ucs_sys_enum_threads_cb_t cb;
 } ucs_sys_enum_threads_t;
 
 
@@ -1272,37 +1272,41 @@ ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)
     return status;
 }
 
-int ucs_sys_readdir(const char *path, int (cb)(struct dirent *entry, void *ctx),
-                    void *ctx)
+ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ctx)
 {
-    int res = 0;
+    ucs_status_t res = 0;
     DIR *dir;
     struct dirent *entry;
-    struct dirent *_entry;
+    struct dirent *entry_out;
     size_t entry_len;
 
     dir = opendir(path);
     if (dir == NULL) {
-        return 0; /* failed to open directory */
+        return UCS_ERR_NO_ELEM; /* failed to open directory */
     }
 
     entry_len = ucs_offsetof(struct dirent, d_name) +
                 fpathconf(dirfd(dir), _PC_NAME_MAX) + 1;
     entry     = (struct dirent*)malloc(entry_len);
+    if (entry == NULL) {
+        res = UCS_ERR_NO_MEMORY;
+        goto failed_no_mem;
+    }
 
-    while (!readdir_r(dir, entry, &_entry) && (_entry != NULL)) {
+    while (!readdir_r(dir, entry, &entry_out) && (entry_out != NULL)) {
         res = cb(entry, ctx);
-        if (res) {
+        if (res != UCS_OK) {
             break;
         }
     }
 
     free(entry);
+failed_no_mem:
     closedir(dir);
     return res;
 }
 
-static int ucs_sys_enum_threads_cb(struct dirent *entry, void *_ctx)
+static ucs_status_t ucs_sys_enum_threads_cb(struct dirent *entry, void *_ctx)
 {
     ucs_sys_enum_threads_t *ctx = (ucs_sys_enum_threads_t*)_ctx;
 
@@ -1310,7 +1314,7 @@ static int ucs_sys_enum_threads_cb(struct dirent *entry, void *_ctx)
            ctx->cb((pid_t)atoi(entry->d_name), ctx->ctx) : 0;
 }
 
-int ucs_sys_enum_threads(int (cb)(pid_t tid, void *ctx), void *ctx)
+ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx)
 {
     static const char *task_dir  = "/proc/self/task";
     ucs_sys_enum_threads_t param = {.ctx = ctx, .cb = cb};

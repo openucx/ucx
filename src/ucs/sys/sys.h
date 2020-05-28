@@ -84,6 +84,18 @@ typedef enum {
 
 
 /**
+ * Callback function type used in ucs_sys_readdir.
+ */
+typedef ucs_status_t (*ucs_sys_readdir_cb_t)(struct dirent *entry, void *ctx);
+
+
+/**
+ * Callback function type used in ucs_sys_enum_threads.
+ */
+typedef ucs_status_t (*ucs_sys_enum_threads_cb_t)(pid_t pid, void *ctx);
+
+
+/**
  * @return TMPDIR environment variable if set. Otherwise, return "/tmp".
  */
 const char *ucs_get_tmpdir();
@@ -479,17 +491,16 @@ ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low);
  * @param [in]  cb         Callback function, see NOTES
  * @param [in]  ctx        Context pointer passed to callback
  *
- * @return 0 if directory is not found or no more entries are found, non-zero in
- *         all other cases, see NOTES.
+ * @return UCS_OK if directory is found and successfully iterated thought all
+ *         entries, error code in all other cases, see NOTES.
  * 
  * @note ucs_sys_readdir function reads directory pointed by @a path argument
  *       and calls @a cb function for every entry in directory, including
- *       '.' and '..'. In case if @a cb function returns non-zero value then
- *       function breaks immediately and this value is returned from
- *       ucs_sys_readdir.
+ *       '.' and '..'. In case if @a cb function returns value different from
+ *       UCS_OK then function breaks immediately and this value is returned
+ *       from ucs_sys_readdir.
  */
-int ucs_sys_readdir(const char *path, int (cb)(struct dirent *entry, void *ctx),
-                    void *ctx);
+ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ctx);
 
 /**
  * Enumerate process threads
@@ -497,15 +508,15 @@ int ucs_sys_readdir(const char *path, int (cb)(struct dirent *entry, void *ctx),
  * @param [in]  cb         Callback function, see NOTES
  * @param [in]  ctx        Context pointer passed to callback
  *
- * @return 0 if directory is not found or no more entries are found, non-zero in
- *         all other cases, see NOTES.
+ * @return UCS_OK if directory is found and successfully iterated thought all
+ *         entries, error code in all other cases, see NOTES.
  * 
  * @note ucs_sys_enum_threads function enumerates current process threads
  *       and calls @a cb function for every thread. In case if @a cb function
- *       returns non-zero value then function breaks immediately and this
- *       value is returned from ucs_sys_enum_threads.
+ *       returns value different from UCS_OK then function breaks
+ *       immediately and this value is returned from ucs_sys_enum_threads.
  */
-int ucs_sys_enum_threads(int (cb)(pid_t tid, void *ctx), void *ctx);
+ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx);
 
 END_C_DECLS
 

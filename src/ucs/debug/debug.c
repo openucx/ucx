@@ -826,18 +826,18 @@ static void ucs_debug_stop_handler(int signo)
     ucs_debug_freeze();
 }
 
-static int ucs_debug_enum_threads_cb(pid_t tid, void *ctx)
+static ucs_status_t ucs_debug_enum_threads_cb(pid_t tid, void *ctx)
 {
     int ret;
 
     if ((tid != 0) && (tid != ucs_get_tid())) {
         ret = ucs_tgkill(getpid(), tid, SIGUSR1);
         if (ret < 0) {
-            return ret;
+            return UCS_ERR_NO_MESSAGE;
         }
     }
 
-    return 0;
+    return UCS_OK;
 }
 
 static void ucs_debug_stop_other_threads()
