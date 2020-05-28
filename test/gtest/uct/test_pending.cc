@@ -415,9 +415,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending_another_ep,
     } while ((num_ep_pending < num_eps) &&
              (i < n_iters) && (ucs_get_time() < loop_end_limit));
 
-    std::stringstream ss;
-    ss << "done=" << num_ep_pending << ", expected=" << num_eps;
-    UCS_TEST_MESSAGE << ss.str();
+    UCS_TEST_MESSAGE << "done=" << num_ep_pending << ", expected=" << num_eps;
 
     flush();
 
