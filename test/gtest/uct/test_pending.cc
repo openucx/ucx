@@ -415,14 +415,9 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending_another_ep,
     } while ((num_ep_pending < num_eps) &&
              (i < n_iters) && (ucs_get_time() < loop_end_limit));
 
-    if (num_ep_pending == 0) {
-        UCS_TEST_SKIP_R("can't fill UCT resources for at least one EP in the given time");
-    } else if (num_ep_pending != num_eps) {
-        std::stringstream ss;
-        ss << "can't fill UCT resources for all EPs in the given time "
-           << "(done=" << num_ep_pending << ", expected=" << num_eps << ")";
-        UCS_TEST_MESSAGE << ss.str();
-    }
+    std::stringstream ss;
+    ss << "done=" << num_ep_pending << ", expected=" << num_eps;
+    UCS_TEST_MESSAGE << ss.str();
 
     flush();
 
