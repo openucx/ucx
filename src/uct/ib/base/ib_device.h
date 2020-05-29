@@ -90,21 +90,23 @@ enum {
     UCT_IB_ADDRESS_FLAG_GID_INDEX      = UCS_BIT(0),
     /* Defines path MTU size, used for both ETH or IB link layer. */
     UCT_IB_ADDRESS_FLAG_PATH_MTU       = UCS_BIT(1),
+    /* PKEY value, used for both ETH or IB link layer. */
+    UCT_IB_ADDRESS_FLAG_PKEY           = UCS_BIT(2),
 
-    /* If set - ETH link layer, else- IB link layer */
-    UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH = UCS_BIT(2),
+    /* If set - ETH link layer, else- IB link layer. */
+    UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH = UCS_BIT(3),
 
-    /* Used for ETH link layer */
-    UCT_IB_ADDRESS_FLAG_ROCE_IPV6      = UCS_BIT(3),
-    /* Used for ETH link layer, following bits are used to pack RoCE version */
-    UCT_IB_ADDRESS_FLAG_ETH_LAST       = UCS_BIT(4),
+    /* Used for ETH link layer. */
+    UCT_IB_ADDRESS_FLAG_ROCE_IPV6      = UCS_BIT(4),
+    /* Used for ETH link layer, following bits are used to pack RoCE version. */
+    UCT_IB_ADDRESS_FLAG_ETH_LAST       = UCS_BIT(5),
 
-    /* Used for IB link layer */
-    UCT_IB_ADDRESS_FLAG_SUBNET16       = UCS_BIT(3),
-    /* Used for IB link layer */
-    UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(4),
-    /* Used for IB link layer */
-    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(5),
+    /* Used for IB link layer. */
+    UCT_IB_ADDRESS_FLAG_SUBNET16       = UCS_BIT(4),
+    /* Used for IB link layer. */
+    UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(5),
+    /* Used for IB link layer. */
+    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6)
 };
 
 

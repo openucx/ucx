@@ -184,7 +184,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {"PKEY", "auto",
    "Which pkey value to use. Should be between 0 and 0x7fff.\n"
    "\"auto\" option selects a first valid pkey value with full membership.",
-   ucs_offsetof(uct_ib_iface_config_t, pkey_value), UCS_CONFIG_TYPE_HEX},
+   ucs_offsetof(uct_ib_iface_config_t, pkey), UCS_CONFIG_TYPE_HEX},
 
 #ifdef HAVE_IBV_EXP_RES_DOMAIN
   {"RESOURCE_DOMAIN", "y",
@@ -251,6 +251,21 @@ void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
     ucs_mpool_put_inline(ib_desc);
 }
 
+static inline uct_ib_roce_version_t
+uct_ib_address_flags_get_roce_version(uint8_t flags)
+{
+    ucs_assert(flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH);
+    return (uct_ib_roce_version_t)(flags >> ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
+}
+
+static inline sa_family_t
+uct_ib_address_flags_get_roce_af(uint8_t flags)
+{
+    ucs_assert(flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH);
+    return (flags & UCT_IB_ADDRESS_FLAG_ROCE_IPV6) ?
+           AF_INET6 : AF_INET;
+}
+
 size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
 {
     size_t size = sizeof(uct_ib_address_t);
@@ -264,16 +279,16 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
 
         if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) {
             /* Add GUID */
-            UCS_STATIC_ASSERT(sizeof(params->gid->global.interface_id) == sizeof(uint64_t));
+            UCS_STATIC_ASSERT(sizeof(params->gid.global.interface_id) == sizeof(uint64_t));
             size += sizeof(uint64_t);
         }
 
         if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX) {
-            if ((params->gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
-                                                     UCT_IB_SITE_LOCAL_PREFIX) {
+            if ((params->gid.global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+                                                    UCT_IB_SITE_LOCAL_PREFIX) {
                 /* 16-bit subnet prefix */
                 size += sizeof(uint16_t);
-            } else if (params->gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
+            } else if (params->gid.global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
                 /* 64-bit subnet prefix */
                 size += sizeof(uint64_t);
             }
@@ -291,6 +306,10 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
         size += sizeof(uint8_t);
     }
 
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) {
+        size += sizeof(uint16_t);
+    }
+
     return size;
 }
 
@@ -300,20 +319,19 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
     void *ptr = ib_addr + 1;
 
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
-        ucs_assert(params->roce_info != NULL);
         /* RoCE, in this case we don't use the lid, we pack the gid, the RoCE
          * version, address family and set the ETH flag */
         ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH |
-                         (params->roce_info->ver <<
+                         (params->roce_info.ver <<
                           ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
 
-        if (params->roce_info->addr_family == AF_INET6) {
+        if (params->roce_info.addr_family == AF_INET6) {
             ib_addr->flags |= UCT_IB_ADDRESS_FLAG_ROCE_IPV6;
         }
 
         /* uint8_t raw[16]; */
-        memcpy(ptr, params->gid->raw, sizeof(params->gid->raw));
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, params->gid->raw);
+        memcpy(ptr, params->gid.raw, sizeof(params->gid.raw));
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, params->gid.raw);
     } else {
         /* IB, LID */
         ib_addr->flags   = 0;
@@ -323,21 +341,21 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
         if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) {
             /* Pack GUID */
             ib_addr->flags  |= UCT_IB_ADDRESS_FLAG_IF_ID;
-            *(uint64_t*) ptr = params->gid->global.interface_id;
+            *(uint64_t*) ptr = params->gid.global.interface_id;
             ptr              = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
         }
 
         if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX) {
-            if ((params->gid->global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
-                                                     UCT_IB_SITE_LOCAL_PREFIX) {
+            if ((params->gid.global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
+                                                    UCT_IB_SITE_LOCAL_PREFIX) {
                 /* Site-local */
                 ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET16;
-                *(uint16_t*)ptr = params->gid->global.subnet_prefix >> 48;
+                *(uint16_t*)ptr = params->gid.global.subnet_prefix >> 48;
                 ptr             = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
-            } else if (params->gid->global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
+            } else if (params->gid.global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
                 /* Global */
                 ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET64;
-                *(uint64_t*)ptr = params->gid->global.subnet_prefix;
+                *(uint64_t*)ptr = params->gid.global.subnet_prefix;
                 ptr             = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
             }
         }
@@ -354,21 +372,35 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
         ib_addr->flags |= UCT_IB_ADDRESS_FLAG_GID_INDEX;
         *(uint8_t*)ptr  = params->gid_index;
     }
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) {
+        ucs_assert(params->pkey != UCT_IB_ADDRESS_DEFAULT_PKEY);
+        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_PKEY;
+        *(uint16_t*)ptr = params->pkey;
+    }
 }
 
 unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
 {
+    unsigned pack_flags = 0;
+
+    if (iface->pkey != UCT_IB_ADDRESS_DEFAULT_PKEY) {
+        pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_PKEY;
+    }
+
     if (uct_ib_iface_is_roce(iface)) {
         /* pack Ethernet address */
-        return UCT_IB_ADDRESS_PACK_FLAG_ETH;
+        pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_ETH;
     } else if (iface->config.force_global_addr) {
         /* pack full IB address */
-        return UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
-               UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
+        pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
+                      UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
     } else {
         /* pack only subnet prefix for reachability test */
-        return UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
+        pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
     }
+
+    return pack_flags;
 }
 
 size_t uct_ib_iface_address_size(uct_ib_iface_t *iface)
@@ -376,8 +408,8 @@ size_t uct_ib_iface_address_size(uct_ib_iface_t *iface)
     uct_ib_address_pack_params_t params;
 
     params.flags     = uct_ib_iface_address_pack_flags(iface);
-    params.gid       = &iface->gid_info.gid;
-    params.roce_info = &iface->gid_info.roce_info;
+    params.gid       = iface->gid_info.gid;
+    params.roce_info = iface->gid_info.roce_info;
     return uct_ib_address_size(&params);
 }
 
@@ -386,94 +418,122 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
     uct_ib_address_pack_params_t params;
 
     params.flags     = uct_ib_iface_address_pack_flags(iface);
-    params.gid       = &iface->gid_info.gid;
+    params.gid       = iface->gid_info.gid;
     params.lid       = uct_ib_iface_port_attr(iface)->lid;
-    params.roce_info = &iface->gid_info.roce_info;
+    params.roce_info = iface->gid_info.roce_info;
     /* to suppress gcc 4.3.4 warning */
     params.path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
     params.gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
+    params.pkey      = iface->pkey;
     uct_ib_address_pack(&params, ib_addr);
 }
 
-void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
-                           union ibv_gid *gid, uint8_t *gid_index,
-                           enum ibv_mtu *path_mtu)
+void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
+                           uct_ib_address_pack_params_t *params_p)
 {
-    const void *ptr = ib_addr + 1;
+    const void *ptr                     = ib_addr + 1;
+    /* silence cppcheck warning */
+    uct_ib_address_pack_params_t params = {0};
 
-    *lid       = 0;
-    *gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
-    *path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
+    params.gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
+    params.path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
+    params.pkey      = UCT_IB_ADDRESS_DEFAULT_PKEY;
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) {
         /* uint8_t raw[16]; */
-        memcpy(gid->raw, ptr, sizeof(gid->raw)); 
-        ptr = UCS_PTR_BYTE_OFFSET(ptr, sizeof(gid->raw));
-    } else {
-        gid->global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX; /* Default prefix */
-        gid->global.interface_id  = 0;
+        memcpy(params.gid.raw, ptr, sizeof(params.gid.raw));
+        ptr           = UCS_PTR_BYTE_OFFSET(ptr, sizeof(params.gid.raw));
+        params.flags |= UCT_IB_ADDRESS_PACK_FLAG_ETH;
 
-        /* If the link layer is not ETHERNET, then it is IB and a lid must be present */
-        *lid = *(const uint16_t*)ptr;
-        ptr  = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
+        params.roce_info.addr_family =
+            uct_ib_address_flags_get_roce_af(ib_addr->flags);
+        params.roce_info.ver         =
+            uct_ib_address_flags_get_roce_version(ib_addr->flags);
+    } else {
+        /* Default prefix */
+        params.gid.global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX;
+        params.gid.global.interface_id  = 0;
+        params.flags                   |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
+                                          UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
+
+        /* If the link layer is not ETHERNET, then it is IB and a lid
+         * must be present */
+        params.lid                      = *(const uint16_t*)ptr;
+        ptr                             = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
 
         if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
-            gid->global.interface_id = *(uint64_t*)ptr;
-            ptr                      = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+            params.gid.global.interface_id = *(uint64_t*)ptr;
+            ptr                            = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
         }
 
         if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
-            gid->global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
-                                        ((uint64_t) *(uint16_t*) ptr << 48);
-            ptr                       = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
+            params.gid.global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
+                                              ((uint64_t)*(uint16_t*)ptr << 48);
+            ptr                             = UCS_PTR_TYPE_OFFSET(ptr, uint16_t);
             ucs_assert(!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64));
         }
 
         if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
-            gid->global.subnet_prefix = *(uint64_t*)ptr;
-            ptr                       = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+            params.gid.global.subnet_prefix = *(uint64_t*)ptr;
+            ptr                             = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+            params.flags                   |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
         }
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_PATH_MTU) {
-        *path_mtu = *(const uint8_t*)ptr;
-        ptr       = UCS_PTR_TYPE_OFFSET(ptr, const uint8_t);
+        params.path_mtu = *(const uint8_t*)ptr;
+        ptr             = UCS_PTR_TYPE_OFFSET(ptr, const uint8_t);
+        params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
     }
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID_INDEX) {
-        *gid_index = *(const uint8_t*)ptr;
+        params.gid_index = *(const uint8_t*)ptr;
+        ptr              = UCS_PTR_TYPE_OFFSET(ptr, const uint16_t);
+        params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
     }
+
+    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_PKEY) {
+        params.pkey = *(const uint16_t*)ptr;
+    }
+    /* PKEY is always in params */
+    params.flags |= UCT_IB_ADDRESS_PACK_FLAG_PKEY;
+
+    *params_p = params;
 }
 
 const char *uct_ib_address_str(const uct_ib_address_t *ib_addr, char *buf,
                                size_t max)
 {
-    union ibv_gid gid;
-    uint16_t lid;
-    enum ibv_mtu mtu;
-    uint8_t gid_index;
+    uct_ib_address_pack_params_t params;
     char *p, *endp;
 
-    uct_ib_address_unpack(ib_addr, &lid, &gid, &gid_index, &mtu);
+    uct_ib_address_unpack(ib_addr, &params);
 
     p    = buf;
     endp = buf + max;
-    if (lid != 0) {
-        snprintf(p, endp - p, "lid %d ", lid);
+    if (params.lid != 0) {
+        snprintf(p, endp - p, "lid %d ", params.lid);
         p += strlen(p);
     }
 
-    uct_ib_gid_str(&gid, p, endp - p);
+    uct_ib_gid_str(&params.gid, p, endp - p);
     p += strlen(p);
 
-    if (gid_index != UCT_IB_ADDRESS_INVALID_GID_INDEX) {
-        snprintf(p, endp - p, "gid index %u ", gid_index);
+    if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
+        ucs_assert(params.gid_index != UCT_IB_ADDRESS_INVALID_GID_INDEX);
+        snprintf(p, endp - p, "gid index %u ", params.gid_index);
         p += strlen(p);
     }
 
-    if (mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU) {
-        snprintf(p, endp - p, "mtu %zu ", uct_ib_mtu_value(mtu));
+    if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
+        ucs_assert(params.path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
+        snprintf(p, endp - p, "mtu %zu ", uct_ib_mtu_value(params.path_mtu));
+        p += strlen(p);
     }
+
+    ucs_assert((params.flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) &&
+               (params.flags != UCT_IB_ADDRESS_INVALID_PKEY));
+    snprintf(p, endp - p, "pkey 0x%x ", params.pkey);
 
     return buf;
 }
@@ -486,14 +546,6 @@ ucs_status_t uct_ib_iface_get_device_address(uct_iface_h tl_iface,
     uct_ib_iface_address_pack(iface, (void*)dev_addr);
 
     return UCS_OK;
-}
-
-static inline uct_ib_roce_version_t
-uct_ib_address_flags_get_roce_version(uint8_t flags)
-{
-    ucs_assert(flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH);
-
-    return (uct_ib_roce_version_t)(flags >> ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
 }
 
 static int uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_gid_info,
@@ -512,8 +564,7 @@ static int uct_ib_iface_roce_is_reachable(const uct_ib_device_gid_info_t *local_
     }
 
     /* check the address family */
-    remote_ib_addr_af = (remote_ib_addr_flags & UCT_IB_ADDRESS_FLAG_ROCE_IPV6) ?
-                        AF_INET6 : AF_INET;
+    remote_ib_addr_af = uct_ib_address_flags_get_roce_af(remote_ib_addr_flags);
 
     if (local_ib_addr_af != remote_ib_addr_af) {
         ucs_assert(local_ib_addr_af != 0);
@@ -547,19 +598,24 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,
                               const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr)
 {
-    uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);
-    int is_local_eth = uct_ib_iface_is_roce(iface);
+    uct_ib_iface_t *iface           = ucs_derived_of(tl_iface, uct_ib_iface_t);
+    int is_local_eth                = uct_ib_iface_is_roce(iface);
     const uct_ib_address_t *ib_addr = (const void*)dev_addr;
-    union ibv_gid gid;
-    uint8_t gid_index;
-    uint16_t lid;
-    enum ibv_mtu mtu;
+    uct_ib_address_pack_params_t params;
 
-    uct_ib_address_unpack(ib_addr, &lid, &gid, &gid_index, &mtu);
+    uct_ib_address_unpack(ib_addr, &params);
+
+    if (/* at least one PKEY has to be with full membership */
+        !((params.pkey | iface->pkey) & UCT_IB_PKEY_MEMBERSHIP_MASK) ||
+        /* PKEY values have to be equal */
+        ((params.pkey ^ iface->pkey) & UCT_IB_PKEY_PARTITION_MASK)) {
+        return 0;
+    }
 
     if (!is_local_eth && !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* same subnet prefix */
-        return gid.global.subnet_prefix == iface->gid_info.gid.global.subnet_prefix;
+        return params.gid.global.subnet_prefix ==
+               iface->gid_info.gid.global.subnet_prefix;
     } else if (is_local_eth && (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH)) {
         /* there shouldn't be a lid and the UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH
          * flag should be on. If reachable, the remote and local RoCE versions
@@ -626,38 +682,45 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          struct ibv_ah_attr *ah_attr,
                                          enum ibv_mtu *path_mtu)
 {
-    union ibv_gid  gid;
-    uint8_t        gid_index;
-    uint16_t       lid;
+    uct_ib_address_pack_params_t params;
 
     ucs_assert(!uct_ib_iface_is_roce(iface) ==
                !(ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH));
 
-    uct_ib_address_unpack(ib_addr, &lid, &gid, &gid_index, path_mtu);
-    if (*path_mtu == UCT_IB_ADDRESS_INVALID_PATH_MTU) {
+    uct_ib_address_unpack(ib_addr, &params);
+
+    if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
+        ucs_assert(params.path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
+        *path_mtu = params.path_mtu;
+    } else {
         *path_mtu = iface->config.path_mtu;
     }
 
-    if (gid_index == UCT_IB_ADDRESS_INVALID_GID_INDEX) {
-        gid_index = iface->gid_info.gid_index;
+    if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
+        ucs_assert(params.gid_index != UCT_IB_ADDRESS_INVALID_GID_INDEX);
+    } else {
+        params.gid_index = iface->gid_info.gid_index;
     }
 
-    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, gid_index,
-                                           path_index, ah_attr);
+    uct_ib_iface_fill_ah_attr_from_gid_lid(iface, params.lid, &params.gid,
+                                           params.gid_index, path_index,
+                                           ah_attr);
 }
 
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
                                            const uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev  = uct_ib_iface_device(iface);
-    uint16_t pkey_tbl_len = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
-    int pkey_found        = 0;
+    uct_ib_device_t *dev    = uct_ib_iface_device(iface);
+    uint16_t pkey_tbl_len   = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
+    int pkey_found          = 0;
+    uint16_t lim_pkey       = UCT_IB_ADDRESS_INVALID_PKEY;
+    uint16_t lim_pkey_index = UINT16_MAX;
     uint16_t pkey_index, port_pkey, pkey;
 
-    if ((config->pkey_value != UCS_HEXUNITS_AUTO) &&
-        (config->pkey_value > UCT_IB_PKEY_PARTITION_MASK)) {
-        ucs_error("Requested pkey 0x%x is invalid, should be in the range 0..0x%x",
-                  config->pkey_value, UCT_IB_PKEY_PARTITION_MASK);
+    if ((config->pkey != UCS_HEXUNITS_AUTO) &&
+        (config->pkey > UCT_IB_PKEY_PARTITION_MASK)) {
+        ucs_error("requested pkey 0x%x is invalid, should be in the range 0..0x%x",
+                  config->pkey, UCT_IB_PKEY_PARTITION_MASK);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -673,40 +736,52 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
         }
 
         pkey = ntohs(port_pkey);
-        if (!(pkey & UCT_IB_PKEY_MEMBERSHIP_MASK)) {
-            /* if pkey = 0x0, just skip it w/o debug trace, because 0x0
-             * means that there is no real pkey configured at this index */
-            if (pkey) {
-                ucs_trace("skipping send-only pkey[%d]=0x%x on "UCT_IB_IFACE_FMT,
-                          pkey_index, pkey, UCT_IB_IFACE_ARG(iface));
-            }
+        /* if pkey = 0x0, just skip it w/o debug trace, because 0x0
+         * means that there is no real pkey configured at this index */
+        if (pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
             continue;
         }
 
-        /* take only the lower 15 bits for the comparison */
-        if ((config->pkey_value == UCS_HEXUNITS_AUTO) ||
-            ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey_value)) {
+        if ((config->pkey == UCS_HEXUNITS_AUTO) ||
+            /* take only the lower 15 bits for the comparison */
+            ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey)) {
+            if (!(pkey & UCT_IB_PKEY_MEMBERSHIP_MASK) &&
+                /* limited PKEY has not yet been found */ 
+                (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY)) {
+                lim_pkey_index = pkey_index;
+                lim_pkey       = pkey;
+                continue;
+            }
+
             iface->pkey_index = pkey_index;
-            iface->pkey_value = pkey;
+            iface->pkey       = pkey;
             pkey_found        = 1;
             break;
         }
     }
 
     if (!pkey_found) {
-        if (config->pkey_value == UCS_HEXUNITS_AUTO) {
-            ucs_error("There is no valid pkey with full membership on "
-                      UCT_IB_IFACE_FMT, UCT_IB_IFACE_ARG(iface));
-        } else {
-            ucs_error("Unable to find specified pkey 0x%x on "UCT_IB_IFACE_FMT,
-                      config->pkey_value, UCT_IB_IFACE_ARG(iface));
-        }
+        if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
+            /* PKEY neither with full nor with limited membership was found */
+            if (config->pkey == UCS_HEXUNITS_AUTO) {
+                ucs_error("there is no valid pkey to use on "
+                          UCT_IB_IFACE_FMT, UCT_IB_IFACE_ARG(iface));
+            } else {
+                ucs_error("unable to find specified pkey 0x%x on "UCT_IB_IFACE_FMT,
+                          config->pkey, UCT_IB_IFACE_ARG(iface));
+            }
 
-        return UCS_ERR_INVALID_PARAM;
+            return UCS_ERR_NO_ELEM;
+        } else {
+            ucs_assert(lim_pkey_index != UINT16_MAX);
+            iface->pkey_index = lim_pkey_index;
+            iface->pkey       = lim_pkey;
+        }
     }
 
     ucs_debug("using pkey[%d] 0x%x on "UCT_IB_IFACE_FMT, iface->pkey_index,
-              iface->pkey_value, UCT_IB_IFACE_ARG(iface));
+              iface->pkey, UCT_IB_IFACE_ARG(iface));
+
     return UCS_OK;
 }
 

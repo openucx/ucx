@@ -102,13 +102,11 @@ uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface,
                              const uct_ud_iface_addr_t *src_if_addr)
 {
     uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
-    union ibv_gid dgid;
-    uint16_t dlid;
-    enum ibv_mtu mtu;
-    uint8_t gid_index;
+    uct_ib_address_pack_params_t params;
 
-    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid, &gid_index, &mtu);
-    return uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
+    uct_ib_address_unpack(src_ib_addr, &params);
+    return uct_ud_iface_cep_lookup_addr(iface, params.lid,
+                                        &params.gid, dest_qpn);
 }
 
 static uct_ud_ep_t *
@@ -153,23 +151,21 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
                                      uct_ud_ep_t *ep, uint32_t conn_id)
 {
     uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
+    uct_ib_address_pack_params_t params;
     uct_ud_iface_peer_t *peer;
-    union ibv_gid dgid;
     uct_ud_ep_t *cep;
-    uint16_t dlid;
-    enum ibv_mtu mtu;
-    uint8_t gid_index;
 
-    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid, &gid_index, &mtu);
-    peer = uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
+    uct_ib_address_unpack(src_ib_addr, &params);
+    peer = uct_ud_iface_cep_lookup_addr(iface, params.lid,
+                                        &params.gid, dest_qpn);
     if (peer == NULL) {
         peer = malloc(sizeof *peer);
         if (peer == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
 
-        peer->dlid    = dlid;
-        peer->dgid    = dgid;
+        peer->dlid    = params.lid;
+        peer->dgid    = params.gid;
         peer->dst_qpn = dest_qpn;
         sglib_hashed_uct_ud_iface_peer_t_add(iface->peers, peer);
         ucs_list_head_init(&peer->ep_list);
@@ -182,8 +178,8 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
     }
 
     if (ucs_list_is_empty(&peer->ep_list)) {
-            ucs_list_add_head(&peer->ep_list, &ep->cep_list);
-            return UCS_OK;
+        ucs_list_add_head(&peer->ep_list, &ep->cep_list);
+        return UCS_OK;
     }
     ucs_list_for_each(cep, &peer->ep_list, cep_list) {
         ucs_assert_always(cep->conn_id != ep->conn_id);

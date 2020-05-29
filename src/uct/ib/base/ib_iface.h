@@ -22,6 +22,8 @@
 #define UCT_IB_MAX_ATOMIC_SIZE             sizeof(uint64_t)
 #define UCT_IB_ADDRESS_INVALID_GID_INDEX   UINT8_MAX
 #define UCT_IB_ADDRESS_INVALID_PATH_MTU    0
+#define UCT_IB_ADDRESS_INVALID_PKEY        0
+#define UCT_IB_ADDRESS_DEFAULT_PKEY        0xffff
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -69,26 +71,30 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID  = UCS_BIT(1),
     UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2),
     UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU      = UCS_BIT(3),
-    UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX     = UCS_BIT(4)
+    UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX     = UCS_BIT(4),
+    UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
 };
 
 
 typedef struct uct_ib_address_pack_params {
     /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
     uint64_t                          flags;
-    /* GID address to pack. */
-    const union ibv_gid               *gid;
-    /* LID address to pack. */
+    /* GID address to pack/unpack. */
+    union ibv_gid                     gid;
+    /* LID address to pack/unpack. */
     uint16_t                          lid;
-    /* RoCE version to pack in case of an Ethernet link layer,
+    /* RoCE version to pack/unpack in case of an Ethernet link layer,
        must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_ETH is set. */
-    const uct_ib_roce_version_info_t  *roce_info;
+    uct_ib_roce_version_info_t        roce_info;
     /* path MTU size as defined in enum ibv_mtu,
        must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU is set. */
     enum ibv_mtu                      path_mtu;
     /* GID index,
        must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX is set. */
     uint8_t                           gid_index;
+    /* PKEY value,
+       must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_PKEY is set. */
+    uint16_t                          pkey;
 } uct_ib_address_pack_params_t;
 
 
@@ -149,7 +155,7 @@ struct uct_ib_iface_config {
     UCS_CONFIG_ARRAY_FIELD(ucs_range_spec_t, ranges) lid_path_bits;
 
     /* IB PKEY to use */
-    unsigned                pkey_value;
+    unsigned                pkey;
 
     /* Multiple resource domains */
     int                     enable_res_domain;
@@ -235,7 +241,7 @@ struct uct_ib_iface {
     unsigned                  path_bits_count;
     unsigned                  num_paths;
     uint16_t                  pkey_index;
-    uint16_t                  pkey_value;
+    uint16_t                  pkey;
     uint8_t                   addr_size;
     uct_ib_device_gid_info_t  gid_info;
 
@@ -414,16 +420,11 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
  * Unpack IB address.
  *
  * @param [in]  ib_addr    IB address to unpack.
- * @param [out] lid        Filled with address LID, or 0 if not present.
- * @param [out] gid        Filled with address GID, or 0 if not present.
- * @param [out] gid_index  Filled with GID index, or
- *                         @ref UCT_IB_ADDRESS_INVALID_GID_INDEX if not present.
- * @param [out] path_mtu   Filled with address path MTU, or
- *                         @ref UCT_IB_ADDRESS_INVALID_PATH_MTU if not present.
+ * @param [out] params_p   Filled with address attributes as in
+ *                         @ref uct_ib_address_pack_params_t.
  */
-void uct_ib_address_unpack(const uct_ib_address_t *ib_addr, uint16_t *lid,
-                           union ibv_gid *gid, uint8_t *gid_index,
-                           enum ibv_mtu *path_mtu);
+void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
+                           uct_ib_address_pack_params_t *params_p);
 
 
 /**
