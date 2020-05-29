@@ -228,11 +228,17 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, alloc,
     uct_mem_h memh;
     uct_mem_alloc_param_t param;
 
-    param.alloc_attr_mask = UCT_ALLOC_ATTR_FIELD_FLAGS;
-    param.flags           = UCT_MD_MEM_ACCESS_ALL;
+    param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
+                        UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |
+                        UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR |
+                        UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-    status = uct_md_mem_alloc(m_e1->md(), &alloc_length, &address,
-                              &param, "test_mm", &memh);
+    param.flags       = UCT_MD_MEM_ACCESS_ALL;
+    param.address_p   = &address;
+    param.length_p    = &alloc_length;
+    param.name        = "test_mm";
+
+    status = uct_md_mem_alloc(m_e1->md(), &param, &memh);
     ASSERT_UCS_OK(status);
 
     test_memh(address, memh, size);

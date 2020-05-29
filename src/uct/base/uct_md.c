@@ -367,9 +367,8 @@ static ucs_status_t uct_mem_check_flags(unsigned flags)
     return UCS_OK;
 }
 
-ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              uct_mem_alloc_param_t *param,
-                              const char *alloc_name, uct_mem_h *memh_p)
+ucs_status_t uct_md_mem_alloc(uct_md_h md, uct_mem_alloc_param_t *param,
+                              uct_mem_h *memh_p)
 {
     ucs_status_t status;
 
@@ -378,7 +377,7 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
         return status;
     }
 
-    return md->ops->mem_alloc(md, length_p, address_p, param, alloc_name, memh_p);
+    return md->ops->mem_alloc(md, param, memh_p);
 }
 
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)

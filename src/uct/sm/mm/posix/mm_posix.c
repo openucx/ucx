@@ -410,8 +410,7 @@ uct_posix_segment_open(uct_mm_md_t *md, uct_mm_seg_id_t *seg_id_p, int *fd_p)
 }
 
 static ucs_status_t
-uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                    uct_mem_alloc_param_t *param, const char *alloc_name,
+uct_posix_mem_alloc(uct_md_h tl_md, uct_mem_alloc_param_t *param,
                     uct_mem_h *memh_p)
 {
     uct_mm_md_t                     *md = ucs_derived_of(tl_md, uct_mm_md_t);
@@ -424,7 +423,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     void *address;
     int fd;
 
-    status = uct_mm_seg_new(*address_p, *length_p, &seg);
+    status = uct_mm_seg_new(*param->address_p, *param->length_p, &seg);
     if (status != UCS_OK) {
         goto err;
     }
@@ -471,7 +470,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
         force_hugetlb = (posix_config->super.hugetlb_mode == UCS_YES);
 #ifdef MAP_HUGETLB
         status = uct_posix_mmap(&seg->address, &seg->length,
-                                mmap_flags | MAP_HUGETLB, fd, alloc_name,
+                                mmap_flags | MAP_HUGETLB, fd, param->name,
                                 force_hugetlb ? UCS_LOG_LEVEL_ERROR :
                                                 UCS_LOG_LEVEL_DEBUG);
 #else
@@ -492,7 +491,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     if (address == MAP_FAILED) {
         ucs_assert(posix_config->super.hugetlb_mode != UCS_YES);
         status = uct_posix_mmap(&seg->address, &seg->length, mmap_flags, fd,
-                                alloc_name, UCS_LOG_LEVEL_ERROR);
+                                param->name, UCS_LOG_LEVEL_ERROR);
         if (status != UCS_OK) {
             goto err_close;
         }
@@ -507,9 +506,9 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
         close(fd);
     }
 
-    *address_p = seg->address;
-    *length_p  = seg->length;
-     *memh_p   = seg;
+    *param->address_p = seg->address;
+    *param->length_p  = seg->length;
+    *memh_p           = seg;
     return UCS_OK;
 
 err_close:

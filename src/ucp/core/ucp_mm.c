@@ -204,11 +204,26 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
             }
         }
 
-        param.alloc_attr_mask = UCT_ALLOC_ATTR_FIELD_FLAGS;
-        param.flags           = uct_flags;
 
-        status = uct_mem_alloc(memh->address, length, &param, &method, 1, mds,
-                               num_mds, name, &mem);
+        param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS       |
+                            UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR    |
+                            UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR  |
+                            UCT_MEM_ALLOC_PARAM_FIELD_METHODS     |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NUM_METHODS |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MDS         |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NUM_MDS     |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+
+        param.flags       = uct_flags;
+        param.address_p   = &memh->address;
+        param.length_p    = &length;
+        param.methods     = &method;
+        param.num_methods = 1;
+        param.mds         = mds;
+        param.num_mds     = num_mds;
+        param.name        = name;
+
+        status = uct_mem_alloc(&param, &mem);
         if (status == UCS_OK) {
             goto allocated;
         }

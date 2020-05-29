@@ -58,8 +58,7 @@ static ucs_status_t uct_sysv_mem_attach_common(int shmid, void **address_p)
 }
 
 static ucs_status_t
-uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                   uct_mem_alloc_param_t *param, const char *alloc_name,
+uct_sysv_mem_alloc(uct_md_h tl_md, uct_mem_alloc_param_t *param,
                    uct_mem_h *memh_p)
 {
     uct_mm_md_t *md = ucs_derived_of(tl_md, uct_mm_md_t);
@@ -67,7 +66,7 @@ uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     uct_mm_seg_t *seg;
     int shmid;
 
-    status = uct_mm_seg_new(*address_p, *length_p, &seg);
+    status = uct_mm_seg_new(*param->address_p, *param->length_p, &seg);
     if (status != UCS_OK) {
         return status;
     }
@@ -75,7 +74,7 @@ uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
 #ifdef SHM_HUGETLB
     if (md->config->hugetlb_mode != UCS_NO) {
         status = ucs_sysv_alloc(&seg->length, seg->length * 2, &seg->address,
-                                UCT_MM_SYSV_MSTR | SHM_HUGETLB, alloc_name,
+                                UCT_MM_SYSV_MSTR | SHM_HUGETLB, param->name,
                                 &shmid);
         if (status == UCS_OK) {
             goto out_ok;
@@ -89,7 +88,7 @@ uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
 
     if (md->config->hugetlb_mode != UCS_YES) {
         status = ucs_sysv_alloc(&seg->length, SIZE_MAX, &seg->address,
-                                UCT_MM_SYSV_MSTR, alloc_name, &shmid);
+                                UCT_MM_SYSV_MSTR, param->name, &shmid);
         if (status == UCS_OK) {
             goto out_ok;
         }
@@ -98,15 +97,15 @@ uct_sysv_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     }
 
     ucs_error("failed to allocate %zu bytes with mm for %s", seg->length,
-              alloc_name);
+              param->name);
     ucs_free(seg);
     return status;
 
 out_ok:
-    seg->seg_id = shmid;
-    *address_p  = seg->address;
-    *length_p   = seg->length;
-    *memh_p     = seg;
+    seg->seg_id       = shmid;
+    *param->address_p = seg->address;
+    *param->length_p  = seg->length;
+    *memh_p           = seg;
     return UCS_OK;
 }
 

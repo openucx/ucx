@@ -136,12 +136,17 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
     size = sizeof(unsigned) * UCS_MBYTE;
     rva  = NULL;
 
-    param.alloc_attr_mask = UCT_ALLOC_ATTR_FIELD_FLAGS;
-    param.flags           = UCT_MD_MEM_ACCESS_ALL;
+    param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
+                        UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |
+                        UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR |
+                        UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-    status = uct_md_mem_alloc(md(), &size, (void **)&rva,
-                              &param,
-                              "test", &memh);
+    param.flags       = UCT_MD_MEM_ACCESS_ALL;
+    param.address_p   = (void **)&rva;
+    param.length_p    = &size;
+    param.name        = "test_mm";
+
+    status = uct_md_mem_alloc(md(), &param, &memh);
     ASSERT_UCS_OK(status);
     EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, size);
 
@@ -211,11 +216,17 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
 
         address = NULL;
 
-        param.alloc_attr_mask = UCT_ALLOC_ATTR_FIELD_FLAGS;
-        param.flags           = UCT_MD_MEM_ACCESS_ALL;
+        param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
+                            UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |
+                            UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-        status = uct_md_mem_alloc(md(), &size, &address,
-                                  &param, "test", &memh);
+        param.flags       = UCT_MD_MEM_ACCESS_ALL;
+        param.address_p   = &address;
+        param.length_p    = &size;
+        param.name        = "test";
+
+        status = uct_md_mem_alloc(md(), &param, &memh);
         EXPECT_GT(size, 0ul);
 
         ASSERT_UCS_OK(status);
@@ -390,12 +401,17 @@ UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
     orig_size = size = 128 * UCS_MBYTE;
     address   = NULL;
 
-    param.alloc_attr_mask = UCT_ALLOC_ATTR_FIELD_FLAGS;
-    param.flags           = UCT_MD_MEM_FLAG_NONBLOCK | UCT_MD_MEM_ACCESS_ALL;
+    param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
+                        UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |
+                        UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR |
+                        UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-    status = uct_md_mem_alloc(md(), &size, &address,
-                              &param,
-                              "test", &memh);
+    param.flags       = UCT_MD_MEM_FLAG_NONBLOCK | UCT_MD_MEM_ACCESS_ALL;
+    param.address_p   = &address;
+    param.length_p    = &size;
+    param.name        = "test";
+
+    status = uct_md_mem_alloc(md(), &param, &memh);
     ASSERT_UCS_OK(status);
     EXPECT_GE(size, orig_size);
     EXPECT_TRUE(address != NULL);

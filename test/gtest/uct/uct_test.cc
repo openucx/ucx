@@ -841,13 +841,28 @@ void uct_test::entity::mem_alloc_host(size_t length,
         ASSERT_UCS_OK(status);
     } else {
         uct_alloc_method_t method = UCT_ALLOC_METHOD_MMAP;
+        void *addr                = NULL;
         uct_mem_alloc_param_t param;
 
-        param.alloc_attr_mask = UCT_ALLOC_ATTR_FIELD_FLAGS;
-        param.flags           = UCT_MD_MEM_ACCESS_ALL;
+        param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS       |
+                            UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR    |
+                            UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR  |
+                            UCT_MEM_ALLOC_PARAM_FIELD_METHODS     |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NUM_METHODS |
+                            UCT_MEM_ALLOC_PARAM_FIELD_MDS         |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NUM_MDS     |
+                            UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-        status = uct_mem_alloc(NULL, length, &param, &method, 1,
-                               NULL, 0, "uct_test", mem);
+        param.flags       = UCT_MD_MEM_ACCESS_ALL;
+        param.address_p   = &addr;
+        param.length_p    = &length;
+        param.methods     = &method;
+        param.num_methods = 1;
+        param.mds         = NULL;
+        param.num_mds     = 0;
+        param.name        = "uct_test";
+
+        status = uct_mem_alloc(&param, mem);
         ASSERT_UCS_OK(status);
         ucs_assert(mem->memh == UCT_MEM_HANDLE_NULL);
     }

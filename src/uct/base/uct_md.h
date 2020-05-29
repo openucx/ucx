@@ -43,10 +43,7 @@ typedef ucs_status_t (*uct_md_query_func_t)(uct_md_h md,
                                             uct_md_attr_t *md_attr);
 
 typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
-                                                size_t *length_p,
-                                                void **address_p,
                                                 uct_mem_alloc_param_t *param,
-                                                const char *alloc_name,
                                                 uct_mem_h *memh_p);
 
 typedef ucs_status_t (*uct_md_mem_free_func_t)(uct_md_h md, uct_mem_h memh);
