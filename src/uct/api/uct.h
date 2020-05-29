@@ -2110,12 +2110,12 @@ typedef struct {
      * @ref uct_mem_alloc_param_field_t. Fields not specified in this mask will
      * be ignored
      */
-    uint64_t field_mask;
+    uint64_t           field_mask;
 
     /**
      * Memory allocation flags, see @ref uct_md_mem_flags
      */
-    unsigned flags;
+    unsigned           flags;
 
     /**
      * The address. Valid to use with @ref uct_md_mem_alloc
@@ -2126,7 +2126,7 @@ typedef struct {
      * example because of alignment restrictions. Upon successful return,
      * filled with the actual size that was allocated. Must be >0.
      */
-    size_t *length_p;
+    size_t             *length_p;
 
     /**
      * If @a address_p content is NULL, the underlying allocation routine will
@@ -2138,7 +2138,7 @@ typedef struct {
      * mapping to the exact address cannot be made, the allocation request
      * fails.
      */
-    void **address_p;
+    void               **address_p;
 
     /**
      * Array of memory allocation methods to attempt. Every one of the provided
@@ -2153,31 +2153,31 @@ typedef struct {
     /**
      * Length of 'methods' array
      */
-    unsigned num_methods;
+    unsigned           num_methods;
 
     /**
      * Array of memory domains to attempt to allocate
      * the memory with, for MD allocation method.
      */
-    uct_md_h *mds;
+    uct_md_h           *mds;
 
     /**
      *  Length of 'mds' array. May be empty, in such case
      *  'mds' may be NULL, and MD allocation method will
      *  be skipped.
      */
-    unsigned num_mds;
+    unsigned           num_mds;
 
     /**
      * Type of memory to be allocated.
      */
-    ucs_memory_type_t mem_type;
+    ucs_memory_type_t  mem_type;
 
     /**
      * Name of the allocated region, used to track memory
      * usage for debugging and profiling.
      */
-    const char *name;
+    const char         *name;
 } uct_mem_alloc_param_t;
 
 
