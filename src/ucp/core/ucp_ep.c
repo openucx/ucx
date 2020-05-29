@@ -59,11 +59,13 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 {
     ucp_lane_index_t i;
+
     memset(key, 0, sizeof(*key));
     key->num_lanes        = 0;
     for (i = 0; i < UCP_MAX_LANES; ++i) {
         key->lanes[i].rsc_index    = UCP_NULL_RESOURCE;
         key->lanes[i].proxy_lane   = UCP_NULL_LANE;
+        key->lanes[i].lane_types   = 0;
         key->lanes[i].dst_md_index = UCP_MAX_MDS;
     }
     key->am_lane          = UCP_NULL_LANE;
@@ -1012,7 +1014,9 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     for (lane = 0; lane < key1->num_lanes; ++lane) {
         if ((key1->lanes[lane].rsc_index != key2->lanes[lane].rsc_index) ||
             (key1->lanes[lane].proxy_lane != key2->lanes[lane].proxy_lane) ||
-            (key1->lanes[lane].dst_md_index != key2->lanes[lane].dst_md_index))
+            (key1->lanes[lane].dst_md_index != key2->lanes[lane].dst_md_index) ||
+            (key1->lanes[lane].path_index != key2->lanes[lane].path_index) ||
+            (key1->lanes[lane].lane_types  != key2->lanes[lane].lane_types))
         {
             return 0;
         }
