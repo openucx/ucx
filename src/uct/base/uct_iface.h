@@ -526,7 +526,11 @@ typedef struct {
             _priv = (typeof(_priv))(_base_priv); \
             if (_cond) { \
                 ucs_queue_del_iter(_queue, _iter); \
-                (void)_cb(ucs_container_of(_base_priv, uct_pending_req_t, priv), _arg); \
+                if ((_cb) != NULL) { \
+                    (void)_cb(ucs_container_of(_base_priv, \
+                                               uct_pending_req_t, \
+                                               priv), _arg); \
+                } \
             } \
         } \
     }
