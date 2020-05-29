@@ -59,6 +59,7 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
                            uct_allocated_memory_t *mem)
 {
+    const char *alloc_name = param->name;
     uct_alloc_method_t *method;
     uct_md_attr_t md_attr;
     ucs_status_t status;
@@ -163,8 +164,8 @@ ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
                 break;
             }
 
-            ret = ucs_posix_memalign(&address, huge_page_size, alloc_length,
-                                     param->name);
+            ret = ucs_posix_memalign(&address, huge_page_size, alloc_length
+                                     UCS_MEMTRACK_VAL);
             if (ret != 0) {
                 ucs_trace("failed to allocate %zu bytes using THP: %m", alloc_length);
             } else {
@@ -190,7 +191,7 @@ ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
 
             alloc_length = *param->length_p;
             ret = ucs_posix_memalign(&address, UCS_SYS_CACHE_LINE_SIZE,
-                                     alloc_length, param->name);
+                                     alloc_length UCS_MEMTRACK_VAL);
             if (ret == 0) {
                 goto allocated_without_md;
             }
@@ -204,8 +205,8 @@ ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
             address      = *param->address_p;
 
             status = ucs_mmap_alloc(&alloc_length, &address,
-                                    uct_mem_get_mmap_flags(param->flags),
-                                    param->name);
+                                    uct_mem_get_mmap_flags(param->flags)
+                                    UCS_MEMTRACK_VAL);
             if (status== UCS_OK) {
                 goto allocated_without_md;
             }
