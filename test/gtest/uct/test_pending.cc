@@ -387,7 +387,6 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending_another_ep,
 
         for (unsigned idx = 0; idx < num_eps; ++idx) {
             if (ep_pending_idx[idx]) {
-                num_ep_pending++;
                 continue;
             }
 
@@ -397,6 +396,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending_another_ep,
             if (status != UCS_OK) {
                 ASSERT_EQ(UCS_ERR_NO_RESOURCE, status);
                 ep_pending_idx[idx] = true;
+                num_ep_pending++;
 
                 /* schedule pending req to send data on the another EP */
                 pending_send_request_t *preq =
@@ -415,12 +415,8 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_pending_another_ep,
     } while ((num_ep_pending < num_eps) &&
              (i < n_iters) && (ucs_get_time() < loop_end_limit));
 
-    if (num_ep_pending != num_eps) {
-        std::stringstream ss;
-        ss << "can't fill UCT resources for all EPs in the given time "
-           << "(done=" << num_ep_pending << ", expected=" << num_eps << ")";
-        UCS_TEST_SKIP_R(ss.str());
-    }
+    UCS_TEST_MESSAGE << "eps with pending: " << num_ep_pending << "/" << num_eps
+                     << ", current pending: " << n_pending;
 
     flush();
 
