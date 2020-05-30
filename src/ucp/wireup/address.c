@@ -216,13 +216,12 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
 
         dev = ucp_address_get_device(context, rsc_index, devices, &num_devices);
 
-        if ((flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) &&
-            ucp_worker_iface_is_tl_p2p(iface_attr)) {
+        if (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) {
+            ucs_assert(ep != NULL);
             /* Each lane which matches the resource index adds an ep address
              * entry. The length and flags is packed in non-unified mode only.
              */
-            ucs_assert(ep != NULL);
-            for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
                 if (ucp_ep_get_rsc_index(ep, lane) == rsc_index) {
                     dev->tl_addrs_size += !ucp_worker_unified_mode(worker);
                     dev->tl_addrs_size += iface_attr->ep_addr_len;
@@ -731,14 +730,12 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
              * one is marked with UCP_ADDRESS_FLAG_LAST in its length field.
              */
             num_ep_addrs = 0;
-            if ((pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) &&
-                ucp_worker_iface_is_tl_p2p(iface_attr)) {
-
+            if (pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) {
                 ucs_assert(ep != NULL);
                 ep_addr_len = iface_attr->ep_addr_len;
                 ep_lane_ptr = NULL;
 
-                for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+                ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
                     if (ucp_ep_get_rsc_index(ep, lane) != rsc_index) {
                         continue;
                     }

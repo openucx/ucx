@@ -182,7 +182,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
         dev_index = worker->context->tl_rscs[rsc_idx].dev_index;
 
         tl_bitmap |= UCS_BIT(rsc_idx);
-        if (ucp_worker_is_tl_p2p(worker, rsc_idx)) {
+        if (ucp_ep_config(tmp_ep)->p2p_lanes & UCS_BIT(lane_idx)) {
             tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
                                       UCT_EP_PARAM_FIELD_PATH_INDEX;
             tl_ep_params.iface      = ucp_worker_iface(worker, rsc_idx)->iface;
@@ -195,8 +195,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
             ucp_wireup_ep_set_next_ep(tmp_ep->uct_eps[lane_idx], tl_ep);
         } else {
-            ucs_assert(ucp_worker_iface_get_attr(worker, rsc_idx)->cap.flags &
-                       UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+            ucs_assert(ucp_worker_is_tl_2iface(worker, rsc_idx));
         }
     }
 
