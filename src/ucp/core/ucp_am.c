@@ -503,7 +503,7 @@ ucp_am_handler_common(ucp_worker_h worker, void *hdr_end, size_t hdr_size,
                                 UCT_CB_PARAM_FLAG_DESC, /* pass as a const */
                                 0, 0, -hdr_size, &desc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        ucs_error("worker %p  could not allocate descriptor for active"
+        ucs_error("worker %p could not allocate descriptor for active"
                   " message on callback : %u", worker, am_id);
         return UCS_OK;
     }
