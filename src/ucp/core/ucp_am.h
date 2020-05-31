@@ -1,8 +1,12 @@
 /**
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2020. ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
+
+#ifndef UCP_AM_H_
+#define UCP_AM_H_
 
 #include "ucp_ep.h"
 
@@ -47,3 +51,5 @@ typedef struct {
 void ucp_am_ep_init(ucp_ep_h ep);
 
 void ucp_am_ep_cleanup(ucp_ep_h ep);
+
+#endif
