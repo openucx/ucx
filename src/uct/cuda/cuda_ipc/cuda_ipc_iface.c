@@ -84,7 +84,6 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
 static double uct_cuda_ipc_iface_get_bw()
 {
     CUdevice cu_device;
-    int count;
     int major_version;
     ucs_status_t status;
 
