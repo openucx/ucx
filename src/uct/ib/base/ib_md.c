@@ -178,7 +178,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
 
     {"REG_MT_CHUNK", "2G",
      "Size of single chunk used in multithreaded registration.\n"
-     "Must by power of 2.",
+     "Must be power of 2.",
      ucs_offsetof(uct_ib_md_config_t, ext.mt_reg_chunk), UCS_CONFIG_TYPE_MEMUNITS},
 
     {"REG_MT_BIND", "n",
