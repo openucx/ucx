@@ -83,26 +83,34 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
 
 static double uct_cuda_ipc_iface_get_bw()
 {
-    double bw = 6911 * 1024.0 * 1024.0;
-    CUdevice_attribute attrib = CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR;
     CUdevice cu_device;
     int count;
     int major_version;
+    ucs_status_t status;
 
-    UCT_CUDADRV_FUNC(cuDeviceGetCount(&count));
-    ucs_assert(count > 0);
+    status = UCT_CUDADRV_FUNC(cuDeviceGet(&cu_device, 0));
+    if (status != UCS_OK) {
+        goto err;
+    }
 
-    UCT_CUDADRV_FUNC(cuDeviceGet(&cu_device, 0));
-    UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&major_version, attrib, cu_device));
+    status = UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&major_version,
+                CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cu_device));
+    if (status != UCS_OK) {
+        goto err;
+    }
 
-    if (major_version == 7) {
-        bw = 25000 * 1024.0 * 1024.0; /* Volta */
-    } else if (major_version == 6) {
-        bw = 20000 * 1024.0 * 1024.0; /* Pascal */
+    switch(major_version) {
+        case 6 /* Pascal */:
+            return 20000 * 1024.0 * 1024.0;
+        case 7 /* Volta */:
+            return 25000 * 1024.0 * 1024.0;
+        default:
+            return 6911 * 1024.0 * 1024.0;
     }
     /* TODO: Detect nvswitch */
 
-    return bw;
+err:
+    return 0;
 }
 
 static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
