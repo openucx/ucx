@@ -463,39 +463,20 @@ void ucm_event_handler_remove(ucm_event_handler_t *handler)
     ucm_event_leave();
 }
 
-static int ucm_events_to_native_events(int events)
-{
-    int native_events;
-
-    native_events = events & ~(UCM_EVENT_VM_MAPPED | UCM_EVENT_VM_UNMAPPED |
-                               UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE);
-    if (events & UCM_EVENT_VM_MAPPED) {
-        native_events |= UCM_NATIVE_EVENT_VM_MAPPED;
-    }
-    if (events & UCM_EVENT_VM_UNMAPPED) {
-        native_events |= UCM_NATIVE_EVENT_VM_UNMAPPED;
-    }
-
-    return native_events;
-}
-
 static ucs_status_t ucm_event_install(int events)
 {
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     UCS_MODULE_FRAMEWORK_DECLARE(ucm);
     ucm_event_installer_t *event_installer;
-    int native_events, malloc_events;
+    int malloc_events;
     ucs_status_t status;
 
     UCS_INIT_ONCE(&init_once) {
         ucm_prevent_dl_unload();
     }
 
-    /* Replace aggregate events with the native events which make them */
-    native_events = ucm_events_to_native_events(events);
-
     /* TODO lock */
-    status = ucm_mmap_install(native_events);
+    status = ucm_mmap_install(events);
     if (status != UCS_OK) {
         ucm_debug("failed to install mmap events");
         goto out_unlock;
@@ -626,7 +607,7 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
 
 ucs_status_t ucm_test_events(int events)
 {
-    return ucm_mmap_test_installed_events(ucm_events_to_native_events(events));
+    return ucm_mmap_test_installed_events(events);
 }
 
 UCS_STATIC_INIT {
