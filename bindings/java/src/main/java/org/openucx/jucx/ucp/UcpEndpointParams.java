@@ -73,7 +73,7 @@ public class UcpEndpointParams extends UcxParams {
      * case of remote failure, disables protocols and APIs which may cause a hang or undefined
      * behavior in case of peer failure, may affect performance and memory footprint.
      */
-    public UcpEndpointParams setPeerErrorHadnlingMode() {
+    public UcpEndpointParams setPeerErrorHandlingMode() {
         this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
         this.errorHandlingMode = UcpConstants.UCP_ERR_HANDLING_MODE_PEER;
         return this;

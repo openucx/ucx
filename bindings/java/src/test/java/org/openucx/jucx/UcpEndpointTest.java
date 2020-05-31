@@ -22,7 +22,7 @@ public class UcpEndpointTest extends UcxTest {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
         UcpEndpointParams epParams = new UcpEndpointParams().setUcpAddress(worker.getAddress())
-            .setPeerErrorHadnlingMode().setNoLoopbackMode();
+            .setPeerErrorHandlingMode().setNoLoopbackMode();
         UcpEndpoint endpoint = worker.newEndpoint(epParams);
         assertNotNull(endpoint.getNativeId());
 
@@ -41,7 +41,7 @@ public class UcpEndpointTest extends UcxTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         // Create endpoint worker1 -> worker2
-        UcpEndpointParams epParams = new UcpEndpointParams().setPeerErrorHadnlingMode()
+        UcpEndpointParams epParams = new UcpEndpointParams().setPeerErrorHandlingMode()
             .setUcpAddress(worker2.getAddress());
         UcpEndpoint endpoint = worker1.newEndpoint(epParams);
 
@@ -197,7 +197,7 @@ public class UcpEndpointTest extends UcxTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
-            .setPeerErrorHadnlingMode()
+            .setPeerErrorHandlingMode()
             .setUcpAddress(worker2.getAddress()));
 
         ByteBuffer src1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
@@ -328,7 +328,7 @@ public class UcpEndpointTest extends UcxTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
-            .setUcpAddress(worker2.getAddress()).setPeerErrorHadnlingMode());
+            .setUcpAddress(worker2.getAddress()).setPeerErrorHandlingMode());
         UcpRemoteKey rkey = ep.unpackRemoteKey(memory.getRemoteKeyBuffer());
 
         int blockSize = UcpMemoryTest.MEM_SIZE / numRequests;
@@ -459,7 +459,7 @@ public class UcpEndpointTest extends UcxTest {
 
         AtomicBoolean errorHandlerCalled = new AtomicBoolean(false);
         UcpEndpointParams epParams = new UcpEndpointParams()
-            .setPeerErrorHadnlingMode()
+            .setPeerErrorHandlingMode()
             .setErrorHandler((ep, status, errorMsg) -> errorHandlerCalled.set(true))
             .setUcpAddress(worker2.getAddress());
         UcpEndpoint ep =

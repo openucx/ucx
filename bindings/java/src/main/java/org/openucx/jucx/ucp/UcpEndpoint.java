@@ -253,7 +253,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      * Releases the endpoint without any confirmation from the peer. All
      * outstanding requests will be completed with UCS_ERR_CANCELED error.
      * This mode may cause transport level errors on remote side, so it requires set
-     * {@link UcpEndpointParams#setPeerErrorHadnlingMode()} for all endpoints created on
+     * {@link UcpEndpointParams#setPeerErrorHandlingMode()} for all endpoints created on
      * both (local and remote) sides to avoid undefined behavior.
      */
     public UcpRequest closeNonBlockingForce() {

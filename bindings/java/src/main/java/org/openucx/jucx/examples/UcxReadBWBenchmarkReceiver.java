@@ -40,7 +40,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
             .setConnectionRequest(connRequest.get())
-            .setPeerErrorHadnlingMode());
+            .setPeerErrorHandlingMode());
 
         // Temporary workaround until new connection establishment protocol in UCX.
         for (int i = 0; i < 10; i++) {
