@@ -59,7 +59,9 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
 ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
                            uct_allocated_memory_t *mem)
 {
+#ifdef ENABLE_MEMTRACK
     const char *alloc_name = param->name;
+#endif
     uct_alloc_method_t *method;
     uct_md_attr_t md_attr;
     ucs_status_t status;
