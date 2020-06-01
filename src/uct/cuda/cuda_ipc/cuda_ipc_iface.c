@@ -98,13 +98,13 @@ static double uct_cuda_ipc_iface_get_bw()
         goto err;
     }
 
-    switch(major_version) {
-        case 6 /* Pascal */:
-            return 20000 * 1024.0 * 1024.0;
-        case 7 /* Volta */:
-            return 25000 * 1024.0 * 1024.0;
-        default:
-            return 6911 * 1024.0 * 1024.0;
+    switch (major_version) {
+    case UCT_CUDA_BASE_GEN_PASCAL:
+        return 20000 * 1024.0 * 1024.0;
+    case UCT_CUDA_BASE_GEN_VOLTA:
+        return 25000 * 1024.0 * 1024.0;
+    default:
+        return 6911 * 1024.0 * 1024.0;
     }
     /* TODO: Detect nvswitch */
 

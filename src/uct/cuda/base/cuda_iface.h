@@ -68,6 +68,11 @@
     }
 
 
+typedef enum uct_cuda_base_gen {
+    UCT_CUDA_BASE_GEN_PASCAL = 6,
+    UCT_CUDA_BASE_GEN_VOLTA  = 7
+} uct_cuda_base_gen_t;
+
 ucs_status_t
 uct_cuda_base_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p);
