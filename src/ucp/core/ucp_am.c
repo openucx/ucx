@@ -471,6 +471,7 @@ ucp_am_handler_common(ucp_worker_h worker, void *hdr_end, size_t hdr_size,
 {
     ucp_recv_desc_t *desc = NULL;
     ucs_status_t status;
+    unsigned flags;
 
     if (ucs_unlikely((am_id >= worker->am_cb_array_len) ||
                      (worker->am_cbs[am_id].cb == NULL))) {
@@ -479,29 +480,36 @@ ucp_am_handler_common(ucp_worker_h worker, void *hdr_end, size_t hdr_size,
         return UCS_OK;
     }
 
-    status = ucp_recv_desc_init(worker, hdr_end, total_length, 0, am_flags,
+    if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
+        flags = UCP_CB_PARAM_FLAG_DATA;
+    } else {
+        flags = 0;
+    }
+
+    status = worker->am_cbs[am_id].cb(worker->am_cbs[am_id].context,
+                                      hdr_end, total_length - hdr_size,
+                                      reply_ep, flags);
+    if (status != UCS_INPROGRESS) {
+        return UCS_OK; /* we do not need UCT desc, just return UCS_OK */
+    }
+
+    if (ucs_unlikely(!(flags & UCP_CB_PARAM_FLAG_DATA))) {
+        ucs_error("can't hold data, UCP_CB_PARAM_FLAG_DATA flag is not set");
+        return UCS_OK;
+    }
+
+    ucs_assert(am_flags & UCT_CB_PARAM_FLAG_DESC);
+    status = ucp_recv_desc_init(worker, hdr_end, total_length, 0,
+                                UCT_CB_PARAM_FLAG_DESC, /* pass as a const */
                                 0, 0, -hdr_size, &desc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        ucs_error("worker %p  could not allocate descriptor for active message"
-                  " on callback : %u", worker, am_id);
+        ucs_error("worker %p could not allocate descriptor for active"
+                  " message on callback : %u", worker, am_id);
         return UCS_OK;
     }
     ucs_assert(desc != NULL);
 
-    status = worker->am_cbs[am_id].cb(worker->am_cbs[am_id].context,
-                                      desc + 1,
-                                      total_length - hdr_size,
-                                      reply_ep,
-                                      UCP_CB_PARAM_FLAG_DATA);
-    if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
-        return status;
-    }
-
-    if (status == UCS_OK) {
-        ucp_recv_desc_release(desc);
-    }
-
-    return UCS_OK;
+    return UCS_INPROGRESS;
 }
 
 static ucs_status_t

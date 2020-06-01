@@ -90,11 +90,13 @@ ucs_status_t test_ucp_am_base::am_handler(test_ucp_am_base *me, void *data,
     memcpy(&databuf[0], data, length);
 
     EXPECT_EQ(cmp, databuf);
+
+    bool has_desc = flags & UCP_CB_PARAM_FLAG_DATA;
     if (me->release) {
-        me->for_release[me->recv_ams] = data;
-        status                        = UCS_INPROGRESS;
+        me->for_release[me->recv_ams] = has_desc ? data : NULL;
+        status                        = has_desc ? UCS_INPROGRESS : UCS_OK;
     } else {
-        status = UCS_OK;
+        status                        = UCS_OK;
     }
 
     me->recv_ams++;
