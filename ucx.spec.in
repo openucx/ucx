@@ -13,7 +13,6 @@
 %bcond_with    rocm
 %bcond_with    ugni
 %bcond_with    xpmem
-%bcond_without java
 
 Name: ucx
 Version: @VERSION@
@@ -60,10 +59,6 @@ BuildRequires: hsa-rocr-dev
 %if %{with xpmem}
 BuildRequires: xpmem-devel
 %endif
-%if %{with java}
-BuildRequires: maven
-BuildRequires: java-1.8.0-openjdk-devel
-%endif
 
 %description
 UCX stands for Unified Communication X. UCX provides an optimized communication
@@ -100,6 +95,7 @@ Provides header files and examples for developing with UCX.
            --disable-assertions \
            --disable-params-check \
            --enable-examples \
+           --without-java \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
            %_with_arg gdrcopy gdrcopy \
@@ -110,7 +106,6 @@ Provides header files and examples for developing with UCX.
            %_with_arg rocm rocm \
            %_with_arg xpmem xpmem \
            %_with_arg ugni ugni \
-           %_with_arg java java \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -299,18 +294,6 @@ process to map the memory of another process into its virtual address space.
 %{_libdir}/ucx/libuct_xpmem.so.*
 %endif
 
-%if %{with java}
-%package java
-Requires: %{name}%{?_isa} = %{version}-%{release}
-Summary: UCX Java bindings
-Group: System Environment/Libraries
-
-%description java
-Provides java bindings for UCX.
-
-%files java
-%{_libdir}/jucx-*.jar
-%endif
 
 %changelog
 * Mon Feb 10 2020 Yossi Itigin <yosefe@mellanox.com> 1.9.0-1
