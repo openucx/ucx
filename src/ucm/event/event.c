@@ -265,6 +265,25 @@ void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
     return event.mremap.result;
 }
 
+static int ucm_shm_del_entry_from_khash(const void *addr, size_t *size)
+{ /* must be called in locked ucm_kh_lock */
+    khiter_t iter;
+
+    ucs_recursive_spin_lock(&ucm_kh_lock);
+    iter = kh_get(ucm_ptr_size, &ucm_shmat_ptrs, addr);
+    if (iter != kh_end(&ucm_shmat_ptrs)) {
+        if (size != NULL) {
+            *size = kh_value(&ucm_shmat_ptrs, iter);
+        }
+        kh_del(ucm_ptr_size, &ucm_shmat_ptrs, iter);
+        ucs_recursive_spin_unlock(&ucm_kh_lock);
+        return 1;
+    }
+
+    ucs_recursive_spin_unlock(&ucm_kh_lock);
+    return 0;
+}
+
 void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
 {
     uintptr_t attach_addr;
@@ -286,6 +305,7 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
             attach_addr -= attach_addr % SHMLBA;
         }
         ucm_dispatch_vm_munmap((void*)attach_addr, size);
+        ucm_shm_del_entry_from_khash((void*)attach_addr, NULL);
     }
 
     event.shmat.result  = MAP_FAILED;
@@ -294,16 +314,14 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
     event.shmat.shmflg  = shmflg;
     ucm_event_dispatch(UCM_EVENT_SHMAT, &event);
 
-    ucs_recursive_spin_lock(&ucm_kh_lock);
     if (event.shmat.result != MAP_FAILED) {
+        ucs_recursive_spin_lock(&ucm_kh_lock);
         iter = kh_put(ucm_ptr_size, &ucm_shmat_ptrs, event.mmap.result, &result);
         if (result != -1) {
             kh_value(&ucm_shmat_ptrs, iter) = size;
         }
         ucs_recursive_spin_unlock(&ucm_kh_lock);
         ucm_dispatch_vm_mmap(event.shmat.result, size);
-    } else {
-        ucs_recursive_spin_unlock(&ucm_kh_lock);
     }
 
     ucm_event_leave();
@@ -314,22 +332,15 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
 int ucm_shmdt(const void *shmaddr)
 {
     ucm_event_t event;
-    khiter_t iter;
     size_t size;
 
     ucm_event_enter();
 
     ucm_debug("ucm_shmdt(shmaddr=%p)", shmaddr);
 
-    ucs_recursive_spin_lock(&ucm_kh_lock);
-    iter = kh_get(ucm_ptr_size, &ucm_shmat_ptrs, shmaddr);
-    if (iter != kh_end(&ucm_shmat_ptrs)) {
-        size = kh_value(&ucm_shmat_ptrs, iter);
-        kh_del(ucm_ptr_size, &ucm_shmat_ptrs, iter);
-    } else {
+    if (!ucm_shm_del_entry_from_khash(shmaddr, &size)) {
         size = ucm_get_shm_seg_size(shmaddr);
     }
-    ucs_recursive_spin_unlock(&ucm_kh_lock);
 
     ucm_dispatch_vm_munmap((void*)shmaddr, size);
 
