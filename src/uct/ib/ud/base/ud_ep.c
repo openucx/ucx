@@ -1464,7 +1464,6 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
         ucs_debug("ep=%p cancelling user pending request %p", ep, req);
     }
 
-    fprintf(stderr, "%p: remove %p", ep, req);
     if (is_last_pending_elem) {
         uct_ud_ep_remove_has_pending_flag(ep);
     }
