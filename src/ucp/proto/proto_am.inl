@@ -19,8 +19,6 @@
 
 #define UCP_STATUS_PENDING_SWITCH (UCS_ERR_LAST - 1)
 
-typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
-
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
@@ -244,31 +242,14 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     status = uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
                              hdr_size, iov, iovcnt, 0,
                              &req->send.state.uct_comp);
-    if (status == UCS_OK) {
-        complete(req, UCS_OK);
-    } else {
-        ucp_request_send_state_advance(req, &state,
-                                       UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
-                                       status);
+    if (ucs_likely(!UCS_STATUS_IS_ERR(status))) {
+        ucp_request_zcopy_complete_last_stage(req, &state,
+                                              UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                              status, complete);
+        return UCS_OK;
     }
-    return UCS_STATUS_IS_ERR(status) ? status : UCS_OK;
-}
 
-static UCS_F_ALWAYS_INLINE
-void ucp_am_zcopy_complete_last_stage(ucp_request_t *req, ucp_dt_state_t *state,
-                                      ucp_req_complete_func_t complete)
-{
-    ucp_request_send_state_advance(req, state,
-                                   UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
-                                   UCS_OK);
-
-    /* Complete a request on a last stage if all previous AM
-     * Zcopy operations completed successfully. If there are
-     * operations that are in progress on other lanes, the last
-     * completed operation will complete the request */
-    if (req->send.state.uct_comp.count == 0) {
-        complete(req, UCS_OK);
-    }
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -337,7 +318,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         } else {
             /* Middle or last stage */
             mid_len = ucs_min(max_middle, req->send.length - offset);
-            ucs_assert(offset + mid_len <= req->send.length);
+            ucs_assert((offset + mid_len) <= req->send.length);
             ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &state,
                                 req->send.buffer, req->send.datatype, mid_len,
                                 ucp_ep_md_index(ep, req->send.lane), NULL);
@@ -346,9 +327,11 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                 status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
                                          hdr_size_middle, iov, iovcnt, 0,
                                          &req->send.state.uct_comp);
-            } else if (state.offset == req->send.length) {
+            } else if (req->send.state.dt.offset == req->send.length) {
                 /* Empty IOVs on last stage */
-                ucp_am_zcopy_complete_last_stage(req, &state, complete);
+                ucp_request_zcopy_complete_last_stage(req, &state,
+                                                      UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                                      UCS_OK, complete);
                 return UCS_OK;
             } else {
                 ucs_assert(offset == state.offset);
@@ -362,27 +345,20 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_zcopy_middle",
                                                    iov[0].length, status);
 
-            if (!flag_iov_mid && (offset + mid_len == req->send.length)) {
+            if (!flag_iov_mid && ((offset + mid_len) == req->send.length)) {
                 /* Last stage */
-                if (status == UCS_OK) {
-                    ucp_am_zcopy_complete_last_stage(req, &state, complete);
-                    return UCS_OK;
-                }
-
-                ucp_request_send_state_advance(req, &state,
-                                               UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
-                                               status);
                 if (!UCS_STATUS_IS_ERR(status)) {
-                    if (enable_am_bw) {
-                        ucp_send_request_next_am_bw_lane(req);
-                    }
+                    ucp_request_zcopy_complete_last_stage(req, &state,
+                                                          UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                                          status, complete);
                     return UCS_OK;
                 }
             }
         }
 
-        if (status == UCS_ERR_NO_RESOURCE) {
-            if (req->send.lane != req->send.pending_lane) {
+        if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+            if ((status == UCS_ERR_NO_RESOURCE) &&
+                (req->send.lane != req->send.pending_lane)) {
                 /* switch to new pending lane */
                 pending_add_res = ucp_request_pending_add(req, &status, 0);
                 if (!pending_add_res) {
@@ -392,19 +368,16 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                 ucs_assert(status == UCS_INPROGRESS);
                 return UCS_OK;
             }
+            return status;
         }
 
         ucp_request_send_state_advance(req, &state,
                                        UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
                                        status);
-        if (UCS_STATUS_IS_ERR(status)) {
-            return status;
-        } else {
-            if (enable_am_bw) {
-                ucp_send_request_next_am_bw_lane(req);
-            }
-            return UCS_INPROGRESS;
+        if (enable_am_bw) {
+            ucp_send_request_next_am_bw_lane(req);
         }
+        return UCS_INPROGRESS;
     }
 }
 

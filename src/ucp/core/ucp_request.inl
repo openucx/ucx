@@ -120,6 +120,9 @@
     return UCS_STATUS_PTR(_status);
 
 
+typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
@@ -346,12 +349,7 @@ ucp_request_send_state_advance(ucp_request_t *req,
                                const ucp_dt_state_t *new_dt_state,
                                unsigned proto, ucs_status_t status)
 {
-    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        /* Don't advance after failed operation in order to continue on next try
-         * from last valid point.
-         */
-        return;
-    }
+    ucs_assert(!UCS_STATUS_IS_ERR(status));
 
     switch (proto) {
     case UCP_REQUEST_SEND_PROTO_RMA:
@@ -382,6 +380,24 @@ ucp_request_send_state_advance(ucp_request_t *req,
     /* offset is not used for RMA */
     ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RMA) ||
                (req->send.state.dt.offset <= req->send.length));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_zcopy_complete_last_stage(ucp_request_t *req, ucp_dt_state_t *state,
+                                      unsigned proto, ucs_status_t status,
+                                      ucp_req_complete_func_t complete)
+{
+    ucs_assert(!UCS_STATUS_IS_ERR(status));
+    ucp_request_send_state_advance(req, state, proto, status);
+
+    /* Complete a request on a last stage if all previous AM
+     * Zcopy operations completed successfully. If there are
+     * operations that are in progress on other lanes, the last
+     * completed operation will complete the request */
+    if (req->send.state.uct_comp.count == 0) {
+        ucs_assert(status != UCS_INPROGRESS);
+        complete(req, status);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

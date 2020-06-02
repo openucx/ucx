@@ -66,8 +66,10 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
                                   req->send.rma.remote_addr,
                                   rkey->cache.rma_rkey,
                                   &req->send.state.uct_comp);
-        ucp_request_send_state_advance(req, NULL, UCP_REQUEST_SEND_PROTO_RMA,
-                                       status);
+        if (ucs_likely(!UCS_STATUS_IS_ERR(status))) {
+            ucp_request_send_state_advance(req, NULL, UCP_REQUEST_SEND_PROTO_RMA,
+                                           status);
+        }
     }
 
     return ucp_rma_request_advance(req, packed_len, status);
