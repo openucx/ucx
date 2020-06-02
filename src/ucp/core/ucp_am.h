@@ -10,43 +10,74 @@
 
 #include "ucp_ep.h"
 
+
 #define UCP_AM_CB_BLOCK_SIZE 16
+
+
+/**
+ * Data that is stored about each callback registered with a worker
+ */
+typedef struct ucp_am_entry {
+    ucp_am_callback_t        cb;       /* user defined callback*/
+    void                     *context; /* user defined callback argument */
+    unsigned                 flags;    /* flags affecting callback behavior */
+} ucp_am_entry_t;
+
+
+typedef struct ucp_am_context {
+    ucp_am_entry_t           *cbs;          /* array of callbacks and their data */
+    size_t                   cbs_array_len; /* len of callbacks array */
+} ucp_am_context_t;
 
 
 typedef union {
     struct {
-        uint16_t     am_id;       /* Index into callback array */
-        uint16_t     flags;       /* currently unused in this header
-                                     because replies require long header
-                                     defined by @ref ucp_am_send_flags */
-        uint32_t     padding;
-    } am_hdr;
+        uint16_t             am_id;   /* index into callback array */
+        uint16_t             flags;   /* operation flags */
+        uint32_t             padding;
+    };
 
-    uint64_t u64;                 /* This is used to ensure the size of
-                                     the header is 64 bytes and aligned */
+    uint64_t                 u64;     /* this is used to ensure the size of
+                                         the header is 64 bytes and aligned */
 } UCS_S_PACKED ucp_am_hdr_t;
 
+
 typedef struct {
-    ucp_am_hdr_t super;
-    uintptr_t    ep_ptr;
+    ucp_am_hdr_t             super;
+    uintptr_t                ep_ptr; /* ep which can be used for reply */
 } UCS_S_PACKED ucp_am_reply_hdr_t;
 
-typedef struct {
-    size_t            total_size; /* length of buffer needed for all data */
-    uint64_t          msg_id;     /* method to match parts of the same AM */
-    uintptr_t         ep;         /* end point ptr, used for maintaing list
-                                     of arrivals */
-    size_t            offset;     /* how far this message goes into large
-                                     the entire AM buffer */
-    uint16_t          am_id;      /* index into callback array */
-} UCS_S_PACKED ucp_am_long_hdr_t;
 
 typedef struct {
-    ucs_list_link_t   list;       /* entry into list of unfinished AM's */
-    ucp_recv_desc_t  *all_data;   /* buffer for all parts of the AM */
-    uint64_t          msg_id;     /* way to match up all parts of AM */
-    size_t            left;
+    ucp_am_reply_hdr_t       super;
+    uint64_t                 msg_id;     /* method to match parts of the same AM */
+    size_t                   total_size; /* length of buffer needed for all data */
+} UCS_S_PACKED ucp_am_first_hdr_t;
+
+
+typedef struct {
+    uint64_t                 msg_id;     /* method to match parts of the same AM */
+    size_t                   offset;     /* offset in the entire AM buffer */
+    uintptr_t                ep_ptr;     /* ep which can be used for reply */
+} UCS_S_PACKED ucp_am_mid_hdr_t;
+
+
+typedef struct {
+    ucs_list_link_t          list;        /* entry into list of unfinished AM's */
+    ucs_queue_head_t         mid_rdesc_q; /* queue of middle fragments, which
+                                             arrived before the first one */
+    ucp_recv_desc_t          *all_data;   /* buffer for all parts of the AM */
+    ucp_ep_h                 reply_ep;    /* reply ep if requested by the sender */
+    uint64_t                 msg_id;      /* way to match up all parts of AM */
+    size_t                   left;        /* how many bytes left to receive */
+    size_t                   total_size;  /* total size of the message */
+    int                      am_id;       /* index into callback array */
 } ucp_am_unfinished_t;
+
+
+ucs_status_t ucp_am_init(ucp_worker_h worker);
+
+void ucp_am_cleanup(ucp_worker_h worker);
 
 void ucp_am_ep_init(ucp_ep_h ep);
 
