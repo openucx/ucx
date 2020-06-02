@@ -6,6 +6,8 @@
 #ifndef UCT_TCP_MD_H
 #define UCT_TCP_MD_H
 
+#include "tcp_base.h"
+
 #include <uct/base/uct_md.h>
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_iov.inl>
@@ -351,21 +353,20 @@ typedef struct uct_tcp_iface {
  * TCP interface configuration
  */
 typedef struct uct_tcp_iface_config {
-    uct_iface_config_t            super;
-    size_t                        tx_seg_size;
-    size_t                        rx_seg_size;
-    size_t                        max_iov;
-    size_t                        sendv_thresh;
-    int                           prefer_default;
-    int                           put_enable;
-    int                           conn_nb;
-    unsigned                      max_poll;
-    unsigned                      max_conn_retries;
-    int                           sockopt_nodelay;
-    size_t                        sockopt_sndbuf;
-    size_t                        sockopt_rcvbuf;
-    uct_iface_mpool_config_t      tx_mpool;
-    uct_iface_mpool_config_t      rx_mpool;
+    uct_iface_config_t             super;
+    size_t                         tx_seg_size;
+    size_t                         rx_seg_size;
+    size_t                         max_iov;
+    size_t                         sendv_thresh;
+    int                            prefer_default;
+    int                            put_enable;
+    int                            conn_nb;
+    unsigned                       max_poll;
+    unsigned                       max_conn_retries;
+    int                            sockopt_nodelay;
+    uct_tcp_send_recv_buf_config_t sockopt;
+    uct_iface_mpool_config_t       tx_mpool;
+    uct_iface_mpool_config_t       rx_mpool;
 } uct_tcp_iface_config_t;
 
 

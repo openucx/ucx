@@ -174,6 +174,8 @@ uct_test::uct_test() {
     status = uct_component_query(GetParam()->component, &component_attr);
     ASSERT_UCS_OK(status);
 
+    UCS_TEST_MESSAGE << "Testing component: " << component_attr.name;
+
     if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
         status = uct_cm_config_read(GetParam()->component, NULL, NULL, &m_cm_config);
         ASSERT_UCS_OK(status);
@@ -493,6 +495,7 @@ bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
     return true;
 }
 
+/* modify the config of all the matching environment parameters */
 void uct_test::modify_config(const std::string& name, const std::string& value,
                              bool optional) {
     ucs_status_t status = UCS_OK;
@@ -500,7 +503,7 @@ void uct_test::modify_config(const std::string& name, const std::string& value,
     if (m_cm_config != NULL) {
         status = uct_config_modify(m_cm_config, name.c_str(), value.c_str());
         if (status == UCS_OK) {
-            return;
+            optional = true;
         } else if (status != UCS_ERR_NO_ELEM) {
             UCS_TEST_ABORT("Couldn't modify cm config parameter: " << name.c_str() <<
                            " to " << value.c_str() << ": " << ucs_status_string(status));
@@ -510,17 +513,18 @@ void uct_test::modify_config(const std::string& name, const std::string& value,
     if (m_iface_config != NULL) {
         status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
         if (status == UCS_OK) {
-            return;
+            optional = true;
         } else if (status != UCS_ERR_NO_ELEM) {
             UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
                            " to " << value.c_str() << ": " << ucs_status_string(status));
         }
     }
 
-    ucs_assert(status == UCS_ERR_NO_ELEM);
-
     status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
-    if (status == UCS_ERR_NO_ELEM) {
+    if (status == UCS_OK) {
+        optional = true;
+    }
+    if ((status == UCS_OK) || (status == UCS_ERR_NO_ELEM)) {
         test_base::modify_config(name, value, optional);
     } else if (status != UCS_OK) {
         UCS_TEST_ABORT("Couldn't modify md config parameter: " << name.c_str() <<
@@ -719,8 +723,6 @@ int uct_test::max_connect_batch()
     }
 }
 
-const std::string uct_test::entity::server_priv_data = "Server private data";
-std::string uct_test::entity::client_priv_data = "";
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          uct_iface_params_t *params, uct_md_config_t *md_config) :
@@ -1006,6 +1008,10 @@ size_t uct_test::entity::num_eps() const {
     return m_eps.size();
 }
 
+uct_test::entity::eps_vec_t& uct_test::entity::eps() {
+    return m_eps;
+}
+
 void uct_test::entity::reserve_ep(unsigned index) {
     if (index >= m_eps.size()) {
         m_eps.resize(index + 1);
@@ -1079,27 +1085,6 @@ void uct_test::entity::destroy_eps() {
         }
         m_eps[index].reset();
     }
-}
-
-size_t uct_test::entity::priv_data_do_pack(void *priv_data)
-{
-    size_t priv_data_len;
-
-    client_priv_data = "Client private data";
-    priv_data_len = 1 + client_priv_data.length();
-
-    memcpy(priv_data, client_priv_data.c_str(), priv_data_len);
-    return priv_data_len;
-}
-
-ssize_t uct_test::entity::server_priv_data_cb(void *arg,
-                                              const uct_cm_ep_priv_data_pack_args_t
-                                              *pack_args, void *priv_data)
-{
-    const size_t priv_data_len = server_priv_data.length() + 1;
-
-    memcpy(priv_data, server_priv_data.c_str(), priv_data_len);
-    return priv_data_len;
 }
 
 void
@@ -1244,39 +1229,6 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
     } else {
         UCS_TEST_SKIP_R("cannot connect");
     }
-}
-
-void uct_test::entity::accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                              uct_cm_ep_server_conn_notify_callback_t notify_cb,
-                              uct_ep_disconnect_cb_t disconnect_cb,
-                              void *user_data)
-{
-    uct_ep_params_t ep_params;
-    ucs_status_t status;
-    uct_ep_h ep;
-
-    ASSERT_TRUE(m_listener);
-    reserve_ep(m_eps.size());
-
-    ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                     |
-                           UCT_EP_PARAM_FIELD_CONN_REQUEST           |
-                           UCT_EP_PARAM_FIELD_USER_DATA              |
-                           UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    |
-                           UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB |
-                           UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS      |
-                           UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
-
-    ep_params.cm                         = cm;
-    ep_params.conn_request               = conn_request;
-    ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
-    ep_params.sockaddr_pack_cb           = server_priv_data_cb;
-    ep_params.sockaddr_connect_cb.server = notify_cb;
-    ep_params.disconnect_cb              = disconnect_cb;
-    ep_params.user_data                  = user_data;
-
-    status = uct_ep_create(&ep_params, &ep);
-    ASSERT_UCS_OK(status);
-    m_eps.back().reset(ep, uct_ep_destroy);
 }
 
 void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,

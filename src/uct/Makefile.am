@@ -38,6 +38,7 @@ noinst_HEADERS = \
 	sm/scopy/base/scopy_iface.h \
 	sm/scopy/base/scopy_ep.h \
 	sm/self/self.h \
+	tcp/tcp_base.h \
 	tcp/tcp.h \
 	tcp/tcp_sockcm.h \
 	tcp/tcp_listener.h \

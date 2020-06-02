@@ -65,8 +65,12 @@ static void uct_tcp_listener_conn_req_handler(int fd, int events, void *arg)
 
     /* coverity[uninit_use] */
     ep->fd       = conn_fd;
-    ep->state   |= UCT_TCP_SOCKCM_EP_CONNECTED;
     ep->listener = listener;
+
+    status = uct_tcp_sockcm_ep_set_sockopt(ep);
+    if (status != UCS_OK) {
+        goto err_delete_ep;
+    }
 
     /* Adding the ep to a list on the cm for cleanup purposes */
     ucs_list_add_tail(&listener->sockcm->ep_list, &ep->list);
@@ -86,7 +90,7 @@ static void uct_tcp_listener_conn_req_handler(int fd, int events, void *arg)
 err_delete_ep:
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 err:
-    close(conn_fd);
+    ucs_close_fd(&conn_fd);
 }
 
 UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
@@ -129,7 +133,7 @@ UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
     return UCS_OK;
 
 err_close_socket:
-    close(self->listen_fd);
+    ucs_close_fd(&self->listen_fd);
 err:
     return status;
 }
@@ -144,7 +148,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_listener_t)
                  self->listen_fd, ucs_status_string(status));
     }
 
-    close(self->listen_fd);
+    ucs_close_fd(&self->listen_fd);
 }
 
 ucs_status_t uct_tcp_listener_reject(uct_listener_h listener,

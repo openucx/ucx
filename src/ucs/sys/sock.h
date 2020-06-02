@@ -50,6 +50,14 @@ typedef ucs_status_t (*ucs_socket_io_err_cb_t)(void *arg,
 
 
 /**
+ * Close the given file descriptor.
+ *
+ * @param [in] fd_p   pointer to the file descriptor to close.
+ */
+void ucs_close_fd(int *fd_p);
+
+
+/**
  * Check if the given (interface) flags represent an active interface.
  *
  * @param [in] flags  Interface flags (Can be obtained using getifaddrs
@@ -175,6 +183,22 @@ ucs_status_t ucs_socket_getpeername(int fd, struct sockaddr_storage *peer_addr,
  * @return 1 - connected, 0 - not connected.
  */
 int ucs_socket_is_connected(int fd);
+
+
+/**
+ * Set options on a socket for its send and receive buffers.
+ * Set the options only if the given buffers sizes are not set to UCS_MEMUNITS_AUTO.
+ *
+ * @param [in]  fd                 Socket fd.
+ * @param [in]  sockopt_sndbuf     Send buffer in which the value for the
+ *                                 option is specified.
+ * @param [in]  sockopt_rcvbuf     Receive buffer in which the value for the
+ *                                 option is specified.
+ *
+ * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure.
+ */
+ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
+                                        size_t sockopt_rcvbuf);
 
 
 /**

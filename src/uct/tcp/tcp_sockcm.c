@@ -12,6 +12,7 @@
 
 #include <ucs/async/async.h>
 #include <ucs/sys/sock.h>
+#include <ucs/arch/bitops.h>
 
 
 ucs_config_field_t uct_tcp_sockcm_config_table[] = {
@@ -21,6 +22,8 @@ ucs_config_field_t uct_tcp_sockcm_config_table[] = {
   {"PRIV_DATA_LEN", "2048",
    "TCP CM private data length",
    ucs_offsetof(uct_tcp_sockcm_config_t, priv_data_len), UCS_CONFIG_TYPE_MEMUNITS},
+
+   UCT_TCP_SEND_RECV_BUF_FIELDS(ucs_offsetof(uct_tcp_sockcm_config_t, sockopt)),
 
   {NULL}
 };
@@ -46,13 +49,33 @@ static uct_cm_ops_t uct_tcp_sockcm_ops = {
     .ep_create        = uct_tcp_sockcm_ep_create
 };
 
-static void uct_tcp_close_ep(uct_tcp_sockcm_ep_t *ep)
+static void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep)
 {
+    ucs_free(ep->comm_ctx.buf);
     ucs_list_del(&ep->list);
     ucs_async_remove_handler(ep->fd, 1);
-    close(ep->fd);
-    ep->fd = -1;
+    ucs_close_fd(&ep->fd);
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
+}
+
+static inline void uct_tcp_sockcm_ep_handle_status(uct_tcp_sockcm_ep_t *ep,
+                                                   ucs_status_t status,
+                                                   int events, const char *reason)
+{
+    if (status != UCS_OK) {
+        ucs_trace("removing ep %p (fd=%d state=%d events=%d) async events handler "
+                  "because %s: %s ",
+                  ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
+        ucs_async_modify_handler(ep->fd, 0);
+
+        /* if the ep is on the server side but uct_ep_create wasn't called yet,
+         * destroy the ep here since uct_ep_destroy won't be called either */
+        if ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
+            !(ep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED)) {
+            ucs_assert(events == UCS_EVENT_SET_EVREAD);
+            uct_tcp_sockcm_close_ep(ep);
+        }
+    }
 }
 
 void uct_tcp_sa_data_handler(int fd, int events, void *arg)
@@ -62,60 +85,46 @@ void uct_tcp_sa_data_handler(int fd, int events, void *arg)
 
     ucs_assertv(ep->fd == fd, "ep->fd %d fd %d, ep_state %d", ep->fd, fd, ep->state);
 
+    ucs_trace("ep %p on %s received event (state = %d)", ep,
+              (ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
+              ep->state);
+
     if (!ucs_socket_is_connected(fd)) {
-        ucs_debug("fd %d is not connected. ep state: %d", fd, ep->state);
         /* coverity[check_return] */
-        ucs_async_modify_handler(fd, 0);
+        uct_tcp_sockcm_ep_handle_status(ep, UCS_ERR_IO_ERROR, events,
+                                        "fd is not connected");
         return;
     }
 
-    switch (ep->state) {
-    case UCT_TCP_SOCKCM_EP_ON_CLIENT:
-        /* connect() completed, send data to the server */
-        ep->state |= UCT_TCP_SOCKCM_EP_CONNECTED;
+    if (events & UCS_EVENT_SET_EVERR) {
+        ucs_error("error event on %s ep %p (state=%d) events=%d",
+                  (ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
+                  ep, ep->state, events);
+        return;
+    }
 
-        status = uct_tcp_sockcm_ep_send_priv_data(ep);
-        if (status != UCS_OK) {
-            ucs_async_modify_handler(fd, 0);
-        }
-        break;
-    case UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_CONN_SENDING:
-         /* can send, progress the sending */
-         status = uct_tcp_sockcm_ep_progress_send(ep);
-         if (status != UCS_OK) {
-             ucs_async_modify_handler(fd, 0);
-         }
-         break;
-    case UCT_TCP_SOCKCM_EP_ON_CLIENT | UCT_TCP_SOCKCM_EP_CONN_SENT:
-         /* finished sending. TODO recv data from the server */
-         ucs_async_modify_handler(fd, 0);
-         break;
-    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONNECTED:
-        /* receive data from the client */
+    /* handle a READ event first in case it is a disconnect notice from the peer */
+    if (events & UCS_EVENT_SET_EVREAD) {
         status = uct_tcp_sockcm_ep_recv(ep);
+        uct_tcp_sockcm_ep_handle_status(ep, status, events, "failed to receive");
         if (status != UCS_OK) {
-            uct_tcp_close_ep(ep);
+            return;
         }
-        break;
-    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONN_RECEIVING:
-         /* can read, progress the receving */
-         status = uct_tcp_sockcm_ep_progress_recv(ep);
-         if (status != UCS_OK) {
-             uct_tcp_close_ep(ep);
-         }
-         break;
-    case UCT_TCP_SOCKCM_EP_ON_SERVER | UCT_TCP_SOCKCM_EP_CONN_RECEIVED:
-         /* finished recv, can send. TODO send data to the client */
-         ucs_async_modify_handler(fd, 0);
-         break;
-    default:
-        ucs_error("unexpected event on client ep %p (state=%d)", ep, ep->state);
+    }
+
+    if (events & UCS_EVENT_SET_EVWRITE) {
+        status = uct_tcp_sockcm_ep_send(ep);
+        uct_tcp_sockcm_ep_handle_status(ep, status, events, "failed to send");
+        if (status != UCS_OK) {
+            return;
+        }
     }
 }
 
 static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
     .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
     .ep_disconnect            = uct_tcp_sockcm_ep_disconnect,
+    .cm_ep_conn_notify        = uct_tcp_sockcm_cm_ep_conn_notify,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_sockcm_ep_t),
     .ep_put_short             = (uct_ep_put_short_func_t)ucs_empty_function_return_unsupported,
     .ep_put_bcopy             = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_unsupported,
@@ -129,7 +138,7 @@ static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
     .ep_atomic32_post         = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_unsupported,
     .ep_atomic32_fetch        = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_unsupported,
     .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_unsupported,
-    .ep_flush                 = (uct_ep_flush_func_t)ucs_empty_function_return_unsupported,
+    .ep_flush                 = (uct_ep_flush_func_t)ucs_empty_function_return_success,
     .ep_fence                 = (uct_ep_fence_func_t)ucs_empty_function_return_unsupported,
     .ep_check                 = (uct_ep_check_func_t)ucs_empty_function_return_unsupported,
     .ep_create                = (uct_ep_create_func_t)ucs_empty_function_return_unsupported,
@@ -156,8 +165,10 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_tcp_sockcm_ops,
                               &uct_tcp_sockcm_iface_ops, worker, component);
 
-    self->priv_data_len = cm_config->priv_data_len -
-                          sizeof(uct_tcp_sockcm_priv_data_hdr_t);
+    self->priv_data_len  = cm_config->priv_data_len -
+                           sizeof(uct_tcp_sockcm_priv_data_hdr_t);
+    self->sockopt_sndbuf = cm_config->sockopt.sndbuf;
+    self->sockopt_rcvbuf = cm_config->sockopt.rcvbuf;
 
     ucs_list_head_init(&self->ep_list);
 
@@ -173,7 +184,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_t)
     UCS_ASYNC_BLOCK(self->super.iface.worker->async);
 
     ucs_list_for_each_safe(ep, tmp, &self->ep_list, list) {
-        uct_tcp_close_ep(ep);
+        uct_tcp_sockcm_close_ep(ep);
     }
 
     UCS_ASYNC_UNBLOCK(self->super.iface.worker->async);

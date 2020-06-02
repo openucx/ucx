@@ -123,6 +123,7 @@ protected:
     class entity {
     public:
         typedef uct_test::atomic_mode atomic_mode;
+        typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
 
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
@@ -170,7 +171,9 @@ protected:
 
         uct_ep_h ep(unsigned index) const;
 
+        eps_vec_t& eps();
         size_t num_eps() const;
+        void reserve_ep(unsigned index);
 
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
@@ -193,19 +196,12 @@ protected:
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_sata);
 
-        static size_t priv_data_do_pack(void *priv_data);
-        void accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                    uct_cm_ep_server_conn_notify_callback_t notify_cb,
-                    uct_ep_disconnect_cb_t disconnect_cb,
-                    void *user_data);
         void listen(const ucs::sock_addr_storage &listen_addr,
                     const uct_listener_params_t &params);
         void disconnect(uct_ep_h ep);
 
         void flush() const;
 
-        static const std::string server_priv_data;
-        static std::string       client_priv_data;
         size_t                   max_conn_priv;
 
         class scoped_async_lock {
@@ -226,19 +222,13 @@ protected:
         private:
             async_wrapper(const async_wrapper &);
         };
-        typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
 
         entity(const entity&);
 
-        void reserve_ep(unsigned index);
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
         void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
-        static ssize_t server_priv_data_cb(void *arg,
-                                           const uct_cm_ep_priv_data_pack_args_t
-                                           *pack_args, void *priv_data);
-
 
         const resource              m_resource;
         ucs::handle<uct_md_h>       m_md;
