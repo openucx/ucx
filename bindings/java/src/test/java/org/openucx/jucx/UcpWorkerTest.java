@@ -137,7 +137,7 @@ public class UcpWorkerTest extends UcxTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         UcpEndpoint ep = worker1.newEndpoint( new UcpEndpointParams()
-            .setUcpAddress(worker2.getAddress()).setPeerErrorHadnlingMode());
+            .setUcpAddress(worker2.getAddress()).setPeerErrorHandlingMode());
         UcpRemoteKey rkey = ep.unpackRemoteKey(memory.getRemoteKeyBuffer());
 
         int blockSize = UcpMemoryTest.MEM_SIZE / numRequests;

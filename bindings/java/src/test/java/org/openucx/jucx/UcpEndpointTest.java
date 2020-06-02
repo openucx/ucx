@@ -8,13 +8,8 @@ package org.openucx.jucx;
 import org.junit.Test;
 import org.openucx.jucx.ucp.*;
 
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
-import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -27,7 +22,7 @@ public class UcpEndpointTest extends UcxTest {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
         UcpEndpointParams epParams = new UcpEndpointParams().setUcpAddress(worker.getAddress())
-            .setPeerErrorHadnlingMode().setNoLoopbackMode();
+            .setPeerErrorHandlingMode().setNoLoopbackMode();
         UcpEndpoint endpoint = worker.newEndpoint(epParams);
         assertNotNull(endpoint.getNativeId());
 
@@ -46,7 +41,7 @@ public class UcpEndpointTest extends UcxTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         // Create endpoint worker1 -> worker2
-        UcpEndpointParams epParams = new UcpEndpointParams().setPeerErrorHadnlingMode()
+        UcpEndpointParams epParams = new UcpEndpointParams().setPeerErrorHandlingMode()
             .setUcpAddress(worker2.getAddress());
         UcpEndpoint endpoint = worker1.newEndpoint(epParams);
 
@@ -202,7 +197,7 @@ public class UcpEndpointTest extends UcxTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
-            .setPeerErrorHadnlingMode()
+            .setPeerErrorHandlingMode()
             .setUcpAddress(worker2.getAddress()));
 
         ByteBuffer src1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
@@ -333,7 +328,7 @@ public class UcpEndpointTest extends UcxTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
-            .setUcpAddress(worker2.getAddress()).setPeerErrorHadnlingMode());
+            .setUcpAddress(worker2.getAddress()).setPeerErrorHandlingMode());
         UcpRemoteKey rkey = ep.unpackRemoteKey(memory.getRemoteKeyBuffer());
 
         int blockSize = UcpMemoryTest.MEM_SIZE / numRequests;
@@ -446,5 +441,58 @@ public class UcpEndpointTest extends UcxTest {
         Collections.addAll(resources, context1, context2, worker1, worker2, clientToServer,
             serverToClient);
         closeResources();
+    }
+
+    @Test
+    public void testEpErrorHandler() {
+        // Crerate 2 contexts + 2 workers
+        UcpParams params = new UcpParams().requestTagFeature();
+        UcpWorkerParams workerParams = new UcpWorkerParams();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+        UcpWorker worker1 = context1.newWorker(workerParams);
+        UcpWorker worker2 = context2.newWorker(workerParams);
+
+        ByteBuffer src = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        ByteBuffer dst = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
+        src.asCharBuffer().put(UcpMemoryTest.RANDOM_TEXT);
+
+        AtomicBoolean errorHandlerCalled = new AtomicBoolean(false);
+        UcpEndpointParams epParams = new UcpEndpointParams()
+            .setPeerErrorHandlingMode()
+            .setErrorHandler((ep, status, errorMsg) -> errorHandlerCalled.set(true))
+            .setUcpAddress(worker2.getAddress());
+        UcpEndpoint ep =
+            worker1.newEndpoint(epParams);
+
+        UcpRequest recv = worker2.recvTaggedNonBlocking(dst, null);
+        UcpRequest send = ep.sendTaggedNonBlocking(src, null);
+
+        while (!send.isCompleted() || !recv.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        // Closing receiver worker & context
+        worker2.close();
+        context2.close();
+        assertNull(context2.getNativeId());
+
+        AtomicBoolean errorCallabackCalled = new AtomicBoolean(false);
+
+        ep.sendTaggedNonBlocking(src, null);
+        worker1.progressRequest(ep.flushNonBlocking(new UcxCallback() {
+            @Override
+            public void onError(int ucsStatus, String errorMsg) {
+                errorCallabackCalled.set(true);
+            }
+        }));
+
+        assertTrue(errorHandlerCalled.get());
+        assertTrue(errorCallabackCalled.get());
+
+        ep.close();
+        worker1.close();
+        context1.close();
     }
 }
