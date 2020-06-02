@@ -76,7 +76,7 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
 
     if (cep->flags & UCT_RDMACM_CM_EP_CONN_CB_INVOKED) {
         /* already connected, so call disconnect callback */
-        cep->super.disconnect_cb(&cep->super.super.super, cep->super.user_data);
+        uct_cm_ep_disconnect_cb(&cep->super);
     } else if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
         /* not connected yet, so call client side connect callback with err
          * status */
@@ -268,13 +268,17 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
                                                  const uct_ep_params_t *params)
 {
     uct_rdmacm_cm_t *rdmacm_cm = uct_rdmacm_cm_ep_get_cm(cep);
+    uct_cm_base_ep_t *cm_ep    = &cep->super;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     ucs_status_t status;
 
     cep->flags |= UCT_RDMACM_CM_EP_ON_CLIENT;
 
-    status = uct_cm_ep_client_set_connect_cb(params, &cep->super);
+    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB,
+                           cm_ep->client.connect_cb, params->sockaddr_connect_cb.client,
+                           uct_cm_ep_client_connect_callback_t,
+                           ucs_empty_function);
     if (status != UCS_OK) {
         goto err;
     }
@@ -318,6 +322,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
 {
     struct rdma_cm_event   *event = (struct rdma_cm_event *)params->conn_request;
     uct_rdmacm_cm_t        *cm    = uct_rdmacm_cm_ep_get_cm(cep);
+    uct_cm_base_ep_t       *cm_ep = &cep->super;
     struct rdma_conn_param conn_param;
     ucs_status_t           status;
     char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
@@ -342,7 +347,10 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                   event->id, event->listen_id->channel, cm, cm->ev_ch);
     }
 
-    status = uct_cm_ep_server_set_notify_cb(params, &cep->super);
+    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB,
+                           cm_ep->server.notify_cb, params->sockaddr_connect_cb.server,
+                           uct_cm_ep_server_conn_notify_callback_t,
+                           ucs_empty_function);
     if (status != UCS_OK) {
         goto err_server_cb;
     }
