@@ -4,9 +4,6 @@
  * See file LICENSE for terms.
  */
 
-extern "C" {
-#include <uct/api/uct.h>
-}
 #include <uct/uct_test.h>
 #include <ucs/time/time.h>
 #include <poll.h>
@@ -37,16 +34,23 @@ protected:
             set_config("RC_FC_ENABLE=n");
         }
 
-        set_config(std::string("IB_TX_EVENT_MOD_PERIOD=") + ucs::to_string(moderation_period_usec) + "us");
-        set_config(std::string("IB_RX_EVENT_MOD_PERIOD=") + ucs::to_string(moderation_period_usec) + "us");
+        set_config(std::string("IB_TX_EVENT_MOD_PERIOD=") +
+                   ucs::to_string(moderation_period_usec) + "us");
+        set_config(std::string("IB_RX_EVENT_MOD_PERIOD=") +
+                   ucs::to_string(moderation_period_usec) + "us");
 
-        m_sender = uct_test::create_entity(0);
+        m_sender = uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
+                                           send_async_event_handler, this);
         m_entities.push_back(m_sender);
+
+        m_receiver = uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
+                                             recv_async_event_handler, this);
+        m_entities.push_back(m_receiver);
 
         check_skip_test();
 
-        m_receiver = uct_test::create_entity(0);
-        m_entities.push_back(m_receiver);
+        m_send_async_event_ctx.wait_for_event(*m_sender, 0);
+        m_recv_async_event_ctx.wait_for_event(*m_receiver, 0);
     }
 
     void connect() {
@@ -62,24 +66,26 @@ protected:
         m_sender->destroy_ep(0);
     }
 
-    void iface_arm(uct_iface_h iface) {
-        struct pollfd pfd;
-        int fd;
+    static void send_async_event_handler(void *arg, unsigned flags) {
+        test_uct_cq_moderation *self = static_cast<test_uct_cq_moderation*>(arg);
+        self->m_send_async_event_ctx.signal();
+    }
 
+    static void recv_async_event_handler(void *arg, unsigned flags) {
+        test_uct_cq_moderation *self = static_cast<test_uct_cq_moderation*>(arg);
+        self->m_recv_async_event_ctx.signal();
+    }
+
+    void iface_arm(entity &test_e, async_event_ctx &ctx) {
         /* wait for all messages are arrived */
         while (m_recv < m_send) {
             progress();
         }
 
-        uct_iface_event_fd_get(iface, &fd);
-
-        pfd.fd = fd;
-        pfd.events = POLLIN;
-
         do {
             /* arm all event types */
             while (1) {
-                if (uct_iface_event_arm(iface,
+                if (uct_iface_event_arm(test_e.iface(),
                                         UCT_EVENT_SEND_COMP |
                                         UCT_EVENT_RECV      |
                                         UCT_EVENT_RECV_SIG) != UCS_ERR_BUSY) {
@@ -87,8 +93,8 @@ protected:
                 }
                 progress();
             }
-            /* repeat till FD is in active state */
-        } while (poll(&pfd, 1, 0) > 0);
+            /* repeat till there are events */
+        } while (ctx.wait_for_event(test_e, 0));
     }
 
     static ucs_status_t am_cb(void *arg, void *data, size_t len, unsigned flags) {
@@ -100,21 +106,20 @@ protected:
         return UCS_OK;
     }
 
-    void run_test(uct_iface_h iface);
+    void run_test(entity &test_e, async_event_ctx &ctx);
 
     entity * m_sender;
     entity * m_receiver;
 
     unsigned m_send;
     unsigned m_recv;
+
+    uct_test::async_event_ctx m_send_async_event_ctx;
+    uct_test::async_event_ctx m_recv_async_event_ctx;
 };
 
-void test_uct_cq_moderation::run_test(uct_iface_h iface) {
-    unsigned events;
-    int fd;
-    unsigned i;
-    int polled;
-    struct pollfd pfd;
+void test_uct_cq_moderation::run_test(entity &test_e, async_event_ctx &ctx) {
+    unsigned events, i;
     ucs_status_t status;
 
     uct_iface_set_am_handler(m_receiver->iface(), 0, am_cb, this, 0);
@@ -124,23 +129,19 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
     m_send = 0;
     m_recv = 0;
 
-    uct_iface_event_fd_get(iface, &fd);
-    pfd.fd = fd;
-    pfd.events = POLLIN;
-
     /* repeat test till at least one iteration is successful
      * to exclude random fluctuations */
     for (i = 0; i < max_repeats; i++) {
         events = 0;
-        iface_arm(iface);
+        iface_arm(test_e, ctx);
 
         ucs_time_t tm = ucs_get_time();
 
-        while ((ucs_time_to_usec(ucs_get_time()) - ucs_time_to_usec(tm)) < test_period_usec) {
-            polled = poll(&pfd, 1, 0);
-            if (polled > 0) {
+        while ((ucs_time_to_usec(ucs_get_time()) -
+                ucs_time_to_usec(tm)) < test_period_usec) {
+            if (ctx.wait_for_event(test_e, 0)) {
                 events++;
-                iface_arm(iface);
+                iface_arm(test_e, ctx);
             }
 
             do {
@@ -165,12 +166,12 @@ void test_uct_cq_moderation::run_test(uct_iface_h iface) {
 
 UCS_TEST_SKIP_COND_P(test_uct_cq_moderation, send_period,
                      !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP)) {
-    run_test(m_sender->iface());
+    run_test(*m_sender, m_send_async_event_ctx);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_cq_moderation, recv_period,
                      !check_event_caps(UCT_IFACE_FLAG_EVENT_RECV)) {
-    run_test(m_receiver->iface());
+    run_test(*m_receiver, m_recv_async_event_ctx);
 }
 
 #if HAVE_DECL_IBV_EXP_CQ_MODERATION

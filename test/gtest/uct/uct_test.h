@@ -12,9 +12,11 @@
 
 #include <common/test.h>
 
+#include <poll.h>
 #include <uct/api/uct.h>
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
+#include <ucs/async/pipe.h>
 #include <common/mem_buffer.h>
 #include <common/test.h>
 #include <vector>
@@ -272,6 +274,33 @@ protected:
         uct_rkey_bundle_t       m_rkey;
         uct_allocated_memory_t  m_mem;
         uct_iov_t               m_iov;
+    };
+
+    class async_event_ctx {
+    public:
+        async_event_ctx() {
+            wakeup_fd.fd      = -1;
+            wakeup_fd.events  = POLLIN;
+            wakeup_fd.revents = 0;
+            aux_pipe_init     = false;
+            memset(&aux_pipe, 0, sizeof(aux_pipe));
+        }
+
+        ~async_event_ctx() {
+            if (aux_pipe_init) {
+                ucs_async_pipe_destroy(&aux_pipe);
+            }
+        }
+
+        void signal();
+        bool wait_for_event(entity &e, int timeout);
+
+    private:
+        struct pollfd    wakeup_fd;
+        /* this used for UCT TLs that support async event cb
+         * for event notification */
+        ucs_async_pipe_t aux_pipe;
+        bool             aux_pipe_init;
     };
 
     template <typename T>
