@@ -113,7 +113,12 @@ public:
     static inline int rand(int min = std::numeric_limits<int>::min(),
                            int max = std::numeric_limits<int>::max()) {
         _seed = (_seed * _A + _C) & _M;
-        return (int)_seed % (max - min + 1) + min;
+        /* To resolve that LCG returns alternating even/odd values */
+        if (max - min == 1) {
+            return (_seed & 0x100) ? max : min;
+        } else {
+            return (int)_seed % (max - min + 1) + min;
+        }
     }
 
 private:
