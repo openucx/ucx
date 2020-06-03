@@ -519,6 +519,7 @@ typedef enum {
     UCP_OP_ATTR_FIELD_CALLBACK      = UCS_BIT(1),  /**< cb field */
     UCP_OP_ATTR_FIELD_USER_DATA     = UCS_BIT(2),  /**< user_data field */
     UCP_OP_ATTR_FIELD_DATATYPE      = UCS_BIT(3),  /**< datatype field */
+    UCP_OP_ATTR_FIELD_FLAGS         = UCS_BIT(4),  /**< operation specific flags */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
