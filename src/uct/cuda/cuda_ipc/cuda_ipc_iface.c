@@ -15,6 +15,7 @@
 #include <uct/cuda/base/cuda_iface.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
+#include <ucs/debug/assert.h>
 #include <sys/eventfd.h>
 
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
@@ -80,6 +81,37 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
             *((const uint64_t *)dev_addr)) && ((getpid() != *(pid_t *)iface_addr)));
 }
 
+static double uct_cuda_ipc_iface_get_bw()
+{
+    CUdevice cu_device;
+    int major_version;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC(cuDeviceGet(&cu_device, 0));
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&major_version,
+                CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cu_device));
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    switch (major_version) {
+    case UCT_CUDA_BASE_GEN_PASCAL:
+        return 20000 * 1024.0 * 1024.0;
+    case UCT_CUDA_BASE_GEN_VOLTA:
+        return 25000 * 1024.0 * 1024.0;
+    default:
+        return 6911 * 1024.0 * 1024.0;
+    }
+    /* TODO: Detect nvswitch */
+
+err:
+    return 0;
+}
+
 static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                              uct_iface_attr_t *iface_attr)
 {
@@ -118,7 +150,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->latency.overhead        = 1e-9;
     iface_attr->latency.growth          = 0;
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = 24000 * 1024.0 * 1024.0;
+    iface_attr->bandwidth.shared        = uct_cuda_ipc_iface_get_bw();
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
 
