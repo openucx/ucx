@@ -889,13 +889,14 @@ static void ucp_wireup_print_config(ucp_context_h context,
 }
 
 int ucp_wireup_is_reachable(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
-                            const ucp_address_entry_t *ae)
+                            const ucp_address_entry_t *ae, int test_iface)
 {
     ucp_context_h context      = worker->context;
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
 
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr);
+           (!test_iface ||
+            uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr));
 }
 
 static void
@@ -916,7 +917,8 @@ ucp_wireup_get_reachable_mds(ucp_worker_h worker,
     ae_dst_md_map = 0;
     ucs_for_each_bit(rsc_index, context->tl_bitmap) {
         ucp_unpacked_address_for_each(ae, remote_address) {
-            if (ucp_wireup_is_reachable(worker, rsc_index, ae)) {
+            if (ucp_wireup_is_reachable(worker, rsc_index, ae,
+                                        key->cm_lane == UCP_NULL_LANE)) {
                 ae_dst_md_map         |= UCS_BIT(ae->md_index);
                 dst_md_index           = context->tl_rscs[rsc_index].md_index;
                 ae_cmpts[ae->md_index] = context->tl_mds[dst_md_index].cmpt_index;

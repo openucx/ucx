@@ -270,7 +270,7 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
     p            = tls_info;
     endp         = tls_info + sizeof(tls_info) - 1;
     tls_info[0]  = '\0';
-    tl_bitmap   &= select_params->tl_bitmap;
+    tl_bitmap   &= (select_params->tl_bitmap & context->tl_bitmap);
     show_error   = (select_params->show_error && show_error);
 
     /* Check which remote addresses satisfy the criteria */
@@ -338,7 +338,7 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
      * Pick the best local resource to satisfy the criteria.
      * best one has the highest score (from the dedicated score_func) and
      * has a reachable tl on the remote peer */
-    ucs_for_each_bit(rsc_index, context->tl_bitmap) {
+    ucs_for_each_bit(rsc_index, tl_bitmap) {
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
@@ -398,7 +398,10 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
         ucp_unpacked_address_for_each(ae, select_params->address) {
             addr_index = ucp_unpacked_address_index(select_params->address, ae);
             if (!(addr_index_map & UCS_BIT(addr_index)) ||
-                !ucp_wireup_is_reachable(worker, rsc_index, ae))
+                !ucp_wireup_is_reachable(worker, rsc_index, ae,
+                                         !(select_params->ep_init_flags &
+                                           (UCP_EP_INIT_CM_WIREUP_CLIENT |
+                                            UCP_EP_INIT_CM_WIREUP_SERVER))))
             {
                 /* Must be reachable device address, on same transport */
                 continue;
