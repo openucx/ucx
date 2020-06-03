@@ -81,27 +81,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
 
     UCS_ASYNC_BLOCK(&worker->async);
     status = ucp_ep_create_server_accept(worker, conn_request, &ep);
-
     if (status != UCS_OK) {
-        goto out;
-    }
-
-    if (ep->flags & UCP_EP_FLAG_LISTENER) {
-        status = ucp_wireup_send_pre_request(ep);
-    } else {
-        /* send wireup request message, to connect the client to the server's
-           new endpoint */
-        ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
-        status = ucp_wireup_send_request(ep);
-    }
-
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    status = uct_iface_accept(conn_request->uct.iface, conn_request->uct_req);
-    if (status != UCS_OK) {
-        ucp_ep_destroy_internal(ep);
         goto out;
     }
 
@@ -116,14 +96,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     }
 
 out:
-    if (status != UCS_OK) {
-        ucs_error("connection request failed on listener %p with status %s",
-                  listener, ucs_status_string(status));
-        uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
-    }
-
     UCS_ASYNC_UNBLOCK(&worker->async);
-    ucs_free(conn_request);
     return 1;
 }
 

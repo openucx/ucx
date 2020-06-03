@@ -456,7 +456,8 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
     /* coverity[overrun-local] */
     status = ucp_address_unpack(worker, sa_data + 1, addr_flags, &remote_addr);
     if (status != UCS_OK) {
-        goto out;
+        ucp_listener_reject(conn_request->listener, conn_request);
+        return status;
     }
 
     switch (sa_data->addr_mode) {
@@ -467,18 +468,25 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                               UCP_EP_INIT_CREATE_AM_LANE,
                                               "listener", ep_p);
         if (status != UCS_OK) {
-            goto out_free_address;
+            goto non_cm_err_reject;
         }
 
         ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
         ucp_ep_flush_state_reset(*ep_p);
         ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
+        /* send wireup request message, to connect the client to the server's
+           new endpoint */
+        ucs_assert(!((*ep_p)->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
+        status = ucp_wireup_send_request(*ep_p);
+        if (status != UCS_OK) {
+            goto non_cm_err_destroy_ep;
+        }
         break;
     case UCP_WIREUP_SA_DATA_PARTIAL_ADDR:
         status = ucp_ep_create_sockaddr_aux(worker, ep_init_flags,
                                             &remote_addr, ep_p);
         if (status != UCS_OK) {
-            goto out_free_address;
+            goto non_cm_err_reject;
         }
 
         ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
@@ -487,6 +495,10 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         /* NOTE: protect union */
         ucs_assert(!((*ep_p)->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
                                        UCP_EP_FLAG_FLUSH_STATE_VALID)));
+        status = ucp_wireup_send_pre_request(*ep_p);
+        if (status != UCS_OK) {
+            goto non_cm_err_destroy_ep;
+        }
         break;
     case UCP_WIREUP_SA_DATA_CM_ADDR:
         ucs_assert(ucp_worker_sockaddr_is_cm_proto(worker));
@@ -499,21 +511,28 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                                    UCP_EP_INIT_CM_WIREUP_SERVER,
                                                    &remote_addr, conn_request,
                                                    ep_p);
-        if (status != UCS_OK) {
-            goto out_free_address;
-        }
-
-        (*ep_p)->flags                 |= UCP_EP_FLAG_LISTENER;
-        ucp_ep_ext_gen(*ep_p)->listener = conn_request->listener;
-        break;
+        ucs_free(remote_addr.address_list);
+        return status;
     default:
         ucs_fatal("client sockaddr data contains invalid address mode %d",
                   sa_data->addr_mode);
     }
 
-out_free_address:
+    /* common non-CM flow */
+    status = uct_iface_accept(conn_request->uct.iface,
+                              conn_request->uct_req);
+    goto non_cm_out;
+
+non_cm_err_destroy_ep:
+    ucp_ep_destroy_internal(*ep_p);
+non_cm_err_reject:
+    ucs_error("connection request failed on listener %p with status %s",
+              conn_request->listener, ucs_status_string(status));
+    uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
+non_cm_out:
+    ucs_free(conn_request);
     ucs_free(remote_addr.address_list);
-out:
+    ucs_assert(!ucp_worker_sockaddr_is_cm_proto(worker));
     return status;
 }
 
@@ -527,49 +546,14 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
 
     status = ucp_ep_create_server_accept(worker, conn_request, &ep);
     if (status != UCS_OK) {
-        goto out;
+        return status;
     }
 
     status = ucp_ep_adjust_params(ep, params);
-    if (status != UCS_OK) {
-        goto out_ep_destroy;
-    }
-
-    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
-        goto out;
-    }
-
-    if (ep->flags & UCP_EP_FLAG_LISTENER) {
-        status = ucp_wireup_send_pre_request(ep);
-    } else {
-        /* send wireup request message, to connect the client to the server's
-           new endpoint */
-        ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
-        status = ucp_wireup_send_request(ep);
-    }
-
-    if (status == UCS_OK) {
-        goto out;
-    }
-
-out_ep_destroy:
-    ucp_ep_destroy_internal(ep);
-out:
-    if (ucp_worker_sockaddr_is_cm_proto(worker)) {
-        ucs_free(conn_request->remote_dev_addr);
-    } else {
-        if (status == UCS_OK) {
-            status = uct_iface_accept(conn_request->uct.iface,
-                                      conn_request->uct_req);
-        } else {
-            uct_iface_reject(conn_request->uct.iface, conn_request->uct_req);
-        }
-    }
-
-    ucs_free(conn_request);
-
     if (status == UCS_OK) {
         *ep_p = ep;
+    } else {
+        ucp_ep_destroy_internal(ep);
     }
 
     return status;
