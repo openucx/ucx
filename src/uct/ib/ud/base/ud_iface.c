@@ -18,11 +18,7 @@
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
 #include <sys/poll.h>
-#include <linux/ip.h>
 
-
-#define UCT_UD_IPV4_ADDR_LEN sizeof(struct in_addr)
-#define UCT_UD_IPV6_ADDR_LEN sizeof(struct in6_addr)
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ud_iface_stats_class = {
@@ -412,37 +408,53 @@ void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
     }
 }
 
-/* Calculate real GIDs len. Can be either 16 (RoCEv1 or RoCEv2/IPv6)
- * or 4 (RoCEv2/IPv4). This len is used for packets filtering by DGIDs.
- *
- * According to Annex17_RoCEv2 (A17.4.5.2):
- * "The first 40 bytes of user posted UD Receive Buffers are reserved for the L3
- * header of the incoming packet (as per the InfiniBand Spec Section 11.4.1.2).
- * In RoCEv2, this area is filled up with the IP header. IPv6 header uses the
- * entire 40 bytes. IPv4 headers use the 20 bytes in the second half of the
- * reserved 40 bytes area (i.e. offset 20 from the beginning of the receive
- * buffer). In this case, the content of the first 20 bytes is undefined." */
-static void uct_ud_iface_calc_gid_len(uct_ud_iface_t *iface)
+static ucs_status_t uct_ud_iface_gid_hash_init(uct_ud_iface_t *iface,
+                                               uct_md_h md)
 {
-    uint16_t *local_gid_u16 = (uint16_t*)iface->super.gid_info.gid.raw;
+    static const union ibv_gid zero_gid = { .raw = {0} };
+    uct_ib_device_t *dev                = &ucs_derived_of(md, uct_ib_md_t)->dev;
+    int port                            = iface->super.config.port_num;
+    uct_ib_device_gid_info_t gid_info;
+    int gid_idx, gid_tbl_len, kh_ret;
+    ucs_status_t status;
+    char gid_str[128];
 
-    /* Make sure that daddr in IPv4 resides in the last 4 bytes in GRH */
-    UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - (20 + offsetof(struct iphdr, daddr))) ==
-                      UCT_UD_IPV4_ADDR_LEN);
+    kh_init_inplace(uct_ud_iface_gid, &iface->gid_table.hash);
 
-    /* Make sure that dgid resides in the last 16 bytes in GRH */
-    UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - offsetof(struct ibv_grh, dgid)) ==
-                      UCT_UD_IPV6_ADDR_LEN);
+    gid_tbl_len = uct_ib_device_port_attr(dev, port)->gid_tbl_len;
+    for (gid_idx = 0; gid_idx < gid_tbl_len; ++gid_idx) {
+        status = uct_ib_device_query_gid_info(dev->ibv_context,
+                                              uct_ib_device_name(dev),
+                                              port, gid_idx, &gid_info);
+        if (status != UCS_OK) {
+            goto err;
+        }
 
-    /* IPv4 mapped to IPv6 looks like: 0000:0000:0000:0000:0000:ffff:????:????,
-     * so check for leading zeroes and verify that 11-12 bytes are 0xff.
-     * Otherwise either RoCEv1 or RoCEv2/IPv6 are used. */
-    if (local_gid_u16[0] == 0x0000) {
-        ucs_assert_always(local_gid_u16[5] == 0xffff);
-        iface->config.gid_len = UCT_UD_IPV4_ADDR_LEN;
-    } else {
-        iface->config.gid_len = UCT_UD_IPV6_ADDR_LEN;
+        if (!memcmp(&gid_info.gid, &zero_gid, sizeof(zero_gid))) {
+            continue;
+        }
+
+        ucs_debug("iface %p: adding gid %s to hash on device %s port %d index "
+                  "%d)", iface, uct_ib_gid_str(&gid_info.gid, gid_str,
+                                                sizeof(gid_str)),
+                  uct_ib_device_name(dev), port, gid_idx);
+        kh_put(uct_ud_iface_gid, &iface->gid_table.hash, gid_info.gid,
+               &kh_ret);
+        if (kh_ret < 0) {
+            ucs_error("failed to add gid to hash on device %s port %d index %d",
+                      uct_ib_device_name(dev), port, gid_idx);
+            status = UCS_ERR_NO_MEMORY;
+            goto err;
+        }
     }
+
+    iface->gid_table.last     = zero_gid;
+    iface->gid_table.last_len = sizeof(zero_gid);
+    return UCS_OK;
+
+err:
+    kh_destroy_inplace(uct_ud_iface_gid, &iface->gid_table.hash);
+    return status;
 }
 
 UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
@@ -601,16 +613,21 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     ucs_queue_head_init(&self->tx.async_comp_q);
     ucs_queue_head_init(&self->rx.pending_q);
 
-    uct_ud_iface_calc_gid_len(self);
-
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_ud_iface_stats_class,
                                   self->super.super.stats);
     if (status != UCS_OK) {
         goto err_tx_mpool;
     }
 
+    status = uct_ud_iface_gid_hash_init(self, md);
+    if (status != UCS_OK) {
+        goto err_release_stats;
+    }
+
     return UCS_OK;
 
+err_release_stats:
+    UCS_STATS_NODE_FREE(self->stats);
 err_tx_mpool:
     ucs_mpool_cleanup(&self->tx.mp, 1);
 err_rx_mpool:
@@ -640,6 +657,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_ptr_array_cleanup(&self->eps);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     UCS_STATS_NODE_FREE(self->stats);
+    kh_destroy_inplace(uct_ud_iface_gid, &self->gid_table.hash);
     uct_ud_leave(self);
 }
 
@@ -1035,4 +1053,42 @@ void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
                                UCS_CIRCULAR_COMPARE16(cdesc->sn, <=, sn)) {
         uct_ud_iface_ctl_skb_complete(iface, cdesc, is_async);
     }
+}
+
+union ibv_gid* uct_ud_grh_get_dgid(struct ibv_grh *grh, size_t dgid_len)
+{
+    size_t i;
+
+    /* Make sure that daddr in IPv4 resides in the last 4 bytes in GRH */
+    UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - (20 + offsetof(struct iphdr, daddr))) ==
+                      UCS_IPV4_ADDR_LEN);
+
+    /* Make sure that dgid resides in the last 16 bytes in GRH */
+    UCS_STATIC_ASSERT((UCT_IB_GRH_LEN - offsetof(struct ibv_grh, dgid)) ==
+                      UCS_IPV6_ADDR_LEN);
+
+    ucs_assert((dgid_len == UCS_IPV4_ADDR_LEN) ||
+               (dgid_len == UCS_IPV6_ADDR_LEN));
+
+    /*
+    * According to Annex17_RoCEv2 (A17.4.5.2):
+    * "The first 40 bytes of user posted UD Receive Buffers are reserved for the L3
+    * header of the incoming packet (as per the InfiniBand Spec Section 11.4.1.2).
+    * In RoCEv2, this area is filled up with the IP header. IPv6 header uses the
+    * entire 40 bytes. IPv4 headers use the 20 bytes in the second half of the
+    * reserved 40 bytes area (i.e. offset 20 from the beginning of the receive
+    * buffer). In this case, the content of the first 20 bytes is undefined. "
+    */
+    if (dgid_len == UCS_IPV4_ADDR_LEN) {
+        /* IPv4 mapped to IPv6 looks like: 0000:0000:0000:0000:0000:ffff:????:????
+           reset begin to make hash function working */
+        for (i = 0; i < (sizeof(union ibv_gid) - UCS_IPV4_ADDR_LEN - 2);) {
+            grh->dgid.raw[i++] = 0x00;
+        }
+
+        grh->dgid.raw[i++]     = 0xff;
+        grh->dgid.raw[i++]     = 0xff;
+    }
+
+    return &grh->dgid;
 }

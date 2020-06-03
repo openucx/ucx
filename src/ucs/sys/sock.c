@@ -750,7 +750,7 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
     return memcmp(ucs_sockaddr_get_inet_addr(sa1),
                   ucs_sockaddr_get_inet_addr(sa2),
                   (sa1->sa_family == AF_INET) ?
-                  sizeof(struct in_addr) : sizeof(struct in6_addr));
+                  UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN);
 }
 
 int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)

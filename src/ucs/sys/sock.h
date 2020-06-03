@@ -20,6 +20,9 @@
 BEGIN_C_DECLS
 
 
+#define UCS_IPV4_ADDR_LEN            sizeof(struct in_addr)
+#define UCS_IPV6_ADDR_LEN            sizeof(struct in6_addr)
+
 /* A string to hold the IP address and port from a sockaddr */
 #define UCS_SOCKADDR_STRING_LEN      60
 
