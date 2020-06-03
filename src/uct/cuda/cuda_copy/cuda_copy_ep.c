@@ -132,7 +132,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_zcopy,
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
-    uct_cuda_copy_trace_data(remote_addr, rkey, "GET_ZCOPY [length %zu]",
+    uct_cuda_copy_trace_data(remote_addr, rkey, "PUT_ZCOPY [length %zu]",
                              uct_iov_total_length(iov, iovcnt));
     return status;
 
