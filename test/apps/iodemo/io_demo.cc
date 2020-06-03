@@ -58,6 +58,47 @@ typedef struct {
 #define LOG         UcxLog("[DEMO]", true)
 #define VERBOSE_LOG UcxLog("[DEMO]", _test_opts.verbose)
 
+template<class T>
+class MemoryPool {
+public:
+    MemoryPool(size_t buffer_size = 0) :
+        _num_allocated(0), _buffer_size(buffer_size) {
+    }
+
+    ~MemoryPool() {
+        if (_num_allocated != _freelist.size()) {
+            LOG << "Some items were not freed. Total:" << _num_allocated
+                << ", current:" << _freelist.size() << ".";
+        }
+        
+        for (size_t i = 0; i < _freelist.size(); i++) {
+            delete _freelist[i];
+        }
+    }
+
+    T * get() {
+        T * item;
+        
+        if (_freelist.empty()) {
+            item = new T(_buffer_size, this);
+            _num_allocated++;
+        } else {
+            item = _freelist.back();
+            _freelist.pop_back();
+        }
+        return item;
+    }
+
+    void put(T * item) {
+        _freelist.push_back(item);
+    }
+
+private:
+    std::vector<T*> _freelist;
+    uint32_t        _num_allocated;
+    size_t          _buffer_size;
+};
+
 /**
  * Linear congruential generator (LCG):
  * n[i + 1] = (n[i] * A + C) % M
@@ -99,10 +140,15 @@ protected:
     /* Asynchronous IO message */
     class IoMessage : public UcxCallback {
     public:
-        IoMessage(size_t buffer_size, io_op_t op, uint32_t sn, size_t data_size) :
-            _buffer(malloc(buffer_size)) {
+        IoMessage(size_t buffer_size, MemoryPool<IoMessage>* pool) {
+            _buffer      = malloc(buffer_size);
+            _pool        = pool;
+            _buffer_size = buffer_size;
+        }
+        
+        void init(io_op_t op, uint32_t sn, size_t data_size) {
             iomsg_hdr_t *hdr = reinterpret_cast<iomsg_hdr_t*>(_buffer);
-            assert(sizeof(*hdr) <= buffer_size);
+            assert(sizeof(*hdr) <= _buffer_size);
             hdr->op          = op;
             hdr->sn          = sn;
             hdr->data_size   = data_size;
@@ -113,7 +159,7 @@ protected:
         }
 
         virtual void operator()(ucs_status_t status) {
-            delete this;
+            _pool->put(this);
         }
 
         void *buffer() {
@@ -121,12 +167,14 @@ protected:
         }
 
     private:
-        void *_buffer;
+        void*                  _buffer;
+        MemoryPool<IoMessage>* _pool;
+        size_t                 _buffer_size;
     };
 
     P2pDemoCommon(const options_t& test_opts) :
         UcxContext(test_opts.iomsg_size), _test_opts(test_opts),
-        _cur_buffer_idx(0), _padding(0) {
+        _io_msg_pool(opts().iomsg_size), _cur_buffer_idx(0), _padding(0) {
 
         _data_buffers.resize(opts().num_buffers);
         for (size_t i = 0; i < _data_buffers.size(); ++i) {
@@ -157,8 +205,8 @@ protected:
 
     bool send_io_message(UcxConnection *conn, io_op_t op,
                          uint32_t sn, size_t data_size) {
-        IoMessage *m = new IoMessage(opts().iomsg_size, op, sn,
-                                     data_size);
+        IoMessage *m = _io_msg_pool.get();
+        m->init(op, sn, data_size);
         VERBOSE_LOG << "sending IO " << io_op_names[op] << ", sn " << sn
                     << " data size " << data_size;
         return conn->send_io_message(m->buffer(), opts().iomsg_size, m);
@@ -166,6 +214,7 @@ protected:
 
 protected:
     const options_t          _test_opts;
+    MemoryPool<IoMessage>    _io_msg_pool;
 
 private:
     std::vector<std::string> _data_buffers;
@@ -179,26 +228,37 @@ public:
     // sends an IO response when done
     class IoWriteResponseCallback : public UcxCallback {
     public:
-        IoWriteResponseCallback(DemoServer *server, UcxConnection* conn,
-                                uint32_t sn, size_t data_size) :
-            _server(server), _conn(conn), _sn(sn), _data_size(data_size) {
+        IoWriteResponseCallback(size_t buffer_size,
+            MemoryPool<IoWriteResponseCallback>* pool) :
+            _server(NULL), _conn(NULL), _sn(0), _data_size(0) {
+            _pool = pool;
+        }
+
+        void init(DemoServer *server, UcxConnection* conn, uint32_t sn,
+                  size_t data_size) {
+             _server    = server;
+             _conn      = conn;
+             _sn        = sn;
+             _data_size = data_size;
         }
 
         virtual void operator()(ucs_status_t status) {
             if (status == UCS_OK) {
                 _server->send_io_message(_conn, IO_COMP, _sn, _data_size);
             }
-            delete this;
+            _pool->put(this);
         }
 
     private:
-        DemoServer*     _server;
-        UcxConnection*  _conn;
-        uint32_t        _sn;
-        size_t          _data_size;
+        DemoServer*                          _server;
+        UcxConnection*                       _conn;
+        uint32_t                             _sn;
+        size_t                               _data_size;
+        MemoryPool<IoWriteResponseCallback>* _pool;
     };
 
-    DemoServer(const options_t& test_opts) : P2pDemoCommon(test_opts) {
+    DemoServer(const options_t& test_opts) :
+        P2pDemoCommon(test_opts), _callback_pool(0) {
     }
 
     void run() {
@@ -226,8 +286,8 @@ public:
 
         // send response as data
         VERBOSE_LOG << "sending IO read response";
-        IoMessage *response = new IoMessage(opts().iomsg_size, IO_COMP, hdr->sn,
-                                            0);
+        IoMessage *response = _io_msg_pool.get();
+        response->init(IO_COMP, hdr->sn, 0);
         conn->send_data(response->buffer(), opts().iomsg_size, hdr->sn,
                         response);
 
@@ -237,10 +297,9 @@ public:
     void handle_io_write_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
         VERBOSE_LOG << "receiving IO write data";
         assert(opts().max_data_size >= hdr->data_size);
-        conn->recv_data(buffer(), hdr->data_size, hdr->sn,
-                        new IoWriteResponseCallback(this, conn, hdr->sn,
-                                                     hdr->data_size));
-
+        IoWriteResponseCallback *w = _callback_pool.get();
+        w->init(this, conn, hdr->sn, hdr->data_size);       
+        conn->recv_data(buffer(), hdr->data_size, hdr->sn, w);
         next_buffer();
     }
 
@@ -265,6 +324,8 @@ public:
             LOG << "Invalid opcode: " << hdr->op;
         }
     }
+protected:
+    MemoryPool<IoWriteResponseCallback> _callback_pool;    
 };
 
 
@@ -272,8 +333,16 @@ class DemoClient : public P2pDemoCommon {
 public:
     class IoReadResponseCallback : public UcxCallback {
     public:
-        IoReadResponseCallback(long *counter, size_t iomsg_size) :
-            _counter(0), _io_counter(counter), _buffer(malloc(iomsg_size)) {
+        IoReadResponseCallback(size_t buffer_size,
+            MemoryPool<IoReadResponseCallback>* pool) :
+            _counter(0), _io_counter(0) {
+            _buffer = malloc(buffer_size);
+            _pool   = pool;
+        }
+        
+        void init(long *counter) {
+            _counter    = 0;
+            _io_counter = counter;
         }
 
         ~IoReadResponseCallback() {
@@ -287,7 +356,7 @@ public:
             }
 
             ++(*_io_counter);
-            delete this;
+            _pool->put(this);
         }
 
         void* buffer() {
@@ -295,16 +364,16 @@ public:
         }
 
     private:
-        long  _counter;
-        long* _io_counter;
-        void* _buffer;
+        long                                _counter;
+        long*                               _io_counter;
+        void*                               _buffer;
+        MemoryPool<IoReadResponseCallback>* _pool;
     };
 
     DemoClient(const options_t& test_opts) :
         P2pDemoCommon(test_opts),
-        _num_sent(0), _num_completed(0), _status(OK),
-        _start_time(get_time()), _retry(0)
-    {
+        _num_sent(0), _num_completed(0), _status(OK), _start_time(get_time()),
+        _retry(0), _callback_pool(opts().iomsg_size) {
         _status_str[OK]                    = "ok";
         _status_str[ERROR]                 = "error";
         _status_str[RUNTIME_EXCEEDED]      = "run-time exceeded";
@@ -326,10 +395,10 @@ public:
         }
 
         ++_num_sent;
-        IoReadResponseCallback *response =
-                new IoReadResponseCallback(&_num_completed, opts().iomsg_size);
-        conn->recv_data(buffer(), data_size, sn, response);
-        conn->recv_data(response->buffer(), opts().iomsg_size, sn, response);
+        IoReadResponseCallback *r = _callback_pool.get();
+        r->init(&_num_completed);
+        conn->recv_data(buffer(), data_size, sn, r);
+        conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
 
         next_buffer();
 
@@ -598,13 +667,14 @@ private:
     }
 
 private:
-    long                  _num_sent;
-    long                  _num_completed;
-    status_t              _status;
-    std::map<status_t,
-             std::string> _status_str;
-    double                _start_time;
-    unsigned              _retry;
+    long                               _num_sent;
+    long                               _num_completed;
+    status_t                           _status;
+    std::map<status_t, std::string>    _status_str;
+    double                             _start_time;
+    unsigned                           _retry;
+protected:    
+    MemoryPool<IoReadResponseCallback> _callback_pool;
 };
 
 static int set_data_size(char *str, options_t *test_opts)

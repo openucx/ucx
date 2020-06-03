@@ -14,13 +14,13 @@
 #include <map>
 #include <sstream>
 #include <string>
-#include <list>
+#include <ucs/datastruct/list.h>
 
+#define MAX_LOG_PREFIX_SIZE   64
 
 /* Forward declarations */
 class UcxConnection;
 struct ucx_request;
-typedef std::list<ucx_request*> ucx_request_list_t;
 
 /*
  * UCX callback for send/receive completion
@@ -49,7 +49,7 @@ public:
  */
 class UcxLog {
 public:
-    UcxLog(const std::string& prefix, bool enable);
+    UcxLog(const char* prefix, bool enable);
 
     ~UcxLog();
 
@@ -227,10 +227,10 @@ private:
     UcxContext&        _context;
     uint32_t           _conn_id;
     uint32_t           _remote_conn_id;
-    std::string        _log_prefix;
+    char               _log_prefix[MAX_LOG_PREFIX_SIZE];
     ucp_ep_h           _ep;
     void*              _close_request;
-    ucx_request_list_t _all_requests;
+    ucs_list_link_t    _all_requests;
 };
 
 #endif
