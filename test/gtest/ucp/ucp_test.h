@@ -211,7 +211,6 @@ protected:
     bool is_self() const;
     virtual void cleanup();
     virtual bool has_transport(const std::string& tl_name) const;
-    bool has_only_transports(const std::vector<std::string>& tl_names) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
     unsigned progress(int worker_index = 0) const;
