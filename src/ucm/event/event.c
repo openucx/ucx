@@ -621,6 +621,11 @@ ucs_status_t ucm_test_events(int events)
     return ucm_mmap_test_installed_events(events);
 }
 
+ucs_status_t ucm_test_external_events(int events)
+{
+    return ucm_mmap_test_events(events & ucm_external_events, "external");
+}
+
 UCS_STATIC_INIT {
     ucs_recursive_spinlock_init(&ucm_kh_lock, 0);
     kh_init_inplace(ucm_ptr_size, &ucm_shmat_ptrs);

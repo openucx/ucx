@@ -104,13 +104,14 @@ protected:
 template <class T>
 class mmap_event {
 public:
-    mmap_event(T *test): m_test(test), m_events(0)
+    mmap_event(T *test): m_test(test), m_events(0), m_external_events(0)
     {
     }
 
     ~mmap_event()
     {
         unset();
+        unset_external();
     }
 
     ucs_status_t set(int events)
@@ -124,6 +125,13 @@ public:
         return status;
     }
 
+    ucs_status_t set_external(int events)
+    {
+        ucm_set_external_event(events);
+        m_external_events |= events;
+        return UCS_OK;
+    }
+
     void unset()
     {
         if (m_events) {
@@ -133,9 +141,18 @@ public:
         }
     }
 
+    void unset_external()
+    {
+        if (m_external_events) {
+            ucm_unset_external_event(m_external_events);
+            m_external_events = 0;
+        }
+    }
+
 protected:
     T   *m_test;
     int m_events;
+    int m_external_events;
 
     static void mem_event_callback(ucm_event_type_t event_type,
                                    ucm_event_t *event,
@@ -1090,12 +1107,70 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_failed,
         bistro_patch patch(symbol_munmap, (void*)bistro_hook<0>::munmap);
         EXPECT_TRUE(ucm_test_events(UCM_EVENT_MUNMAP)      == UCS_ERR_UNSUPPORTED);
         EXPECT_TRUE(ucm_test_events(UCM_EVENT_VM_UNMAPPED) == UCS_ERR_UNSUPPORTED);
+        EXPECT_TRUE(ucm_test_events(UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED) ==
+                    UCS_ERR_UNSUPPORTED);
     }
     /* set hook to madvise call */
     {
         bistro_patch patch(symbol_madvise, (void*)bistro_hook<0>::madvise);
         EXPECT_TRUE(ucm_test_events(UCM_EVENT_MADVISE)     == UCS_ERR_UNSUPPORTED);
         EXPECT_TRUE(ucm_test_events(UCM_EVENT_VM_UNMAPPED) == UCS_ERR_UNSUPPORTED);
+    }
+}
+
+UCS_TEST_SKIP_COND_F(malloc_hook, test_external_event,
+                     RUNNING_ON_VALGRIND || !skip_on_bistro()) {
+    mmap_event<malloc_hook> event(this);
+    ucs_status_t status;
+    const char *symbol_munmap  = "munmap";
+    const char *symbol_madvise = "madvise";
+
+    status = event.set_external(UCM_EVENT_VM_UNMAPPED);
+    ASSERT_UCS_OK(status);
+
+    /* set hook to munmap call */
+    {
+        bistro_patch patch(symbol_munmap, (void*)bistro_hook<0>::munmap);
+        /* OK due to UCM_EVENT_MUNMAP is not external */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_MUNMAP)      == UCS_OK);
+        /* should fail */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_VM_UNMAPPED) == UCS_ERR_UNSUPPORTED);
+        /* should fail */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED) ==
+                    UCS_ERR_UNSUPPORTED);
+    }
+    /* set hook to madvise call */
+    {
+        bistro_patch patch(symbol_madvise, (void*)bistro_hook<0>::madvise);
+        /* OK due to UCM_EVENT_MADVISE is not external */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_MADVISE)     == UCS_OK);
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_VM_UNMAPPED) == UCS_ERR_UNSUPPORTED);
+    }
+    /* set hook to munmap/madvise call which notify vm_unmap */
+    {
+        bistro_patch patch_unmap(symbol_munmap, (void*)bistro_hook<1>::munmap);
+        bistro_patch patch_advise(symbol_madvise, (void*)bistro_hook<1>::madvise);
+        /* OK due to UCM_EVENT_MUNMAP is not external */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_MUNMAP)      == UCS_OK);
+        /* OK due to UCM_EVENT_MADVISE is not external */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_MADVISE)     == UCS_OK);
+        /* should be OK */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_VM_UNMAPPED) == UCS_OK);
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED) ==
+                    UCS_OK);
+    }
+    /* set hook to munmap & madvise call, but madvise does NOT notify vm_unmap */
+    {
+        bistro_patch patch_unmap(symbol_munmap, (void*)bistro_hook<1>::munmap);
+        bistro_patch patch_advise(symbol_madvise, (void*)bistro_hook<0>::madvise);
+        /* OK due to UCM_EVENT_MUNMAP is not external */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_MUNMAP)      == UCS_OK);
+        /* OK due to UCM_EVENT_MADVISE is not external */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_MADVISE)     == UCS_OK);
+        /* should fail */
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_VM_UNMAPPED) == UCS_ERR_UNSUPPORTED);
+        EXPECT_TRUE(ucm_test_external_events(UCM_EVENT_MUNMAP | UCM_EVENT_VM_UNMAPPED) ==
+                    UCS_ERR_UNSUPPORTED);
     }
 }
 
