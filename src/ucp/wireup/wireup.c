@@ -788,8 +788,7 @@ ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
         if (!(ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT))) {
             ucs_trace("ep %p: connect uct_ep[%d]=%p to addr[%d] wireup", ep,
                       lane, uct_ep, addr_index);
-            connect_aux = !(ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
-                                             UCP_EP_INIT_CM_WIREUP_SERVER)) &&
+            connect_aux = !ucp_ep_init_flags_has_cm(ep_init_flags) &&
                           (lane == ucp_ep_get_wireup_msg_lane(ep));
             status = ucp_wireup_ep_connect(ep->uct_eps[lane], ep_init_flags,
                                            rsc_index,

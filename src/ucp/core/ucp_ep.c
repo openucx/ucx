@@ -896,8 +896,7 @@ static ucs_status_t ucp_ep_close_nb_check_params(ucp_ep_h ep, unsigned mode)
 {
     /* CM lane tracks remote state, so it can be used with any modes of close
      * and error handling */
-    if ((mode == UCP_EP_CLOSE_MODE_FLUSH) ||
-        (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE)) {
+    if ((mode == UCP_EP_CLOSE_MODE_FLUSH) || ucp_ep_has_cm_lane(ep)) {
         return UCS_OK;
     }
 
@@ -2086,8 +2085,7 @@ uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
 
 int ucp_ep_is_cm_local_connected(ucp_ep_h ep)
 {
-    return (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) &&
-           (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
+    return ucp_ep_has_cm_lane(ep) && (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 }
 
 uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
