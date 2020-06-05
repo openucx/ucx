@@ -398,11 +398,7 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
         ucp_unpacked_address_for_each(ae, select_params->address) {
             addr_index = ucp_unpacked_address_index(select_params->address, ae);
             if (!(addr_index_map & UCS_BIT(addr_index)) ||
-                !ucp_wireup_is_reachable(worker, rsc_index, ae,
-                                         !(select_params->ep_init_flags &
-                                           (UCP_EP_INIT_CM_WIREUP_CLIENT |
-                                            UCP_EP_INIT_CM_WIREUP_SERVER))))
-            {
+                !ucp_wireup_is_reachable(ep, rsc_index, ae)) {
                 /* Must be reachable device address, on same transport */
                 continue;
             }
