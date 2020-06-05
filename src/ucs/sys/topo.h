@@ -14,7 +14,10 @@
 
 BEGIN_C_DECLS
 
-#define UCS_SYS_DEVICE_ID_UNKNOWN UINT_MAX /* indicate ucs_sys_bus_id_unknown */
+#define UCS_SYS_DEVICE_ID_UNKNOWN UINT_MAX /* Indicate that the ucs_sys_device_t
+                                              for the device has no real bus_id
+                                              E.g. virtual devices like CMA/knem
+                                            */
 
 /** @file topo.h */
 
@@ -25,7 +28,6 @@ typedef struct ucs_sys_bus_id {
     uint8_t  function; /* range: 0 to 7 */
 } ucs_sys_bus_id_t;
 
-extern ucs_sys_bus_id_t ucs_sys_bus_id_unknown;
 
 /**
  * @ingroup UCS_RESOURCE
