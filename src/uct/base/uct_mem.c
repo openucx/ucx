@@ -126,8 +126,9 @@ ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
                  * fall-back, because this MD already exposed support for memory
                  * allocation.
                  */
-                alloc_length = *param->length_p;
-                address = *param->address_p;
+                alloc_length     = *param->length_p;
+                address          = *param->address_p;
+                param->address_p = &address;
                 status = uct_md_mem_alloc(md, param, &memh);
                 if (status != UCS_OK) {
                     ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
