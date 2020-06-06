@@ -668,8 +668,16 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 
     ++ep->rx_creq_count;
 
-    ucs_assert_always(ctl->conn_req.conn_id == ep->conn_id);
-    ucs_assert_always(uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) == ep->dest_ep_id);
+    ucs_assertv_always(ctl->conn_req.conn_id == ep->conn_id,
+                       "creq->conn_id=%d ep->conn_id=%d",
+                       ctl->conn_req.conn_id, ep->conn_id);
+
+    ucs_assertv_always(uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) ==
+                       ep->dest_ep_id,
+                       "creq->ep_addr.ep_id=%d ep->dest_ep_id=%d",
+                       uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id),
+                       ep->dest_ep_id);
+
     /* creq must always have same psn */
     ucs_assertv_always(ep->rx.ooo_pkts.head_sn == neth->psn,
                        "iface=%p ep=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
@@ -693,8 +701,14 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ucs_trace_func("");
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREP);
-    ucs_assert_always(!uct_ud_ep_is_connected(ep) ||
-                      (ep->dest_ep_id == ctl->conn_rep.src_ep_id));
+
+    if (uct_ud_ep_is_connected(ep)) {
+        ucs_assertv_always(ep->dest_ep_id == ctl->conn_rep.src_ep_id,
+                           "ep [id=%d dest_ep_id=%d flags=0x%x] "
+                           "crep [neth->dest=%d dst_ep_id=%d src_ep_id=%d]",
+                           ep->ep_id, ep->dest_ep_id, ep->path_index, ep->flags,
+                           uct_ud_neth_get_dest_id(neth), ctl->conn_rep.src_ep_id);
+    }
 
     /* Discard duplicate CREP */
     if (UCT_UD_PSN_COMPARE(neth->psn, <, ep->rx.ooo_pkts.head_sn)) {
