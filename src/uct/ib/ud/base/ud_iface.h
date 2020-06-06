@@ -61,20 +61,26 @@ struct uct_ud_iface_peer {
     union ibv_gid          dgid;
     uint16_t               dlid;
     uint32_t               dst_qpn;
+    uint8_t                path_index;
     uint32_t               conn_id_last;
     ucs_list_link_t        ep_list; /* ep list ordered by connection id */
 };
 
 
-static inline int uct_ud_iface_peer_cmp(uct_ud_iface_peer_t *a, uct_ud_iface_peer_t *b) {
+static inline int
+uct_ud_iface_peer_cmp(uct_ud_iface_peer_t *a, uct_ud_iface_peer_t *b)
+{
     return (int)a->dst_qpn - (int)b->dst_qpn ||
            memcmp(a->dgid.raw, b->dgid.raw, sizeof(union ibv_gid)) ||
-           (int)a->dlid - (int)b->dlid;
+           ((int)a->dlid - (int)b->dlid) ||
+           ((int)a->path_index - (int)b->path_index);
 }
 
-static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a) {
-    return (a->dlid + a->dgid.global.interface_id + a->dgid.global.subnet_prefix)
-                    % UCT_UD_HASH_SIZE;
+static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a)
+{
+    return (a->dlid + a->dgid.global.interface_id +
+            a->dgid.global.subnet_prefix + (a->path_index * 137)) %
+           UCT_UD_HASH_SIZE;
 }
 
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
@@ -185,6 +191,7 @@ struct uct_ud_ctl_hdr {
         struct {
             uct_ud_ep_addr_t   ep_addr;
             uint32_t           conn_id;
+            uint8_t            path_index;
         } conn_req;
         struct {
             uint32_t           src_ep_id;
@@ -361,7 +368,7 @@ void uct_ud_iface_cep_init(uct_ud_iface_t *iface);
 uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *src_ib_addr,
                                      const uct_ud_iface_addr_t *src_if_addr,
-                                     uint32_t conn_id);
+                                     uint32_t conn_id, int path_index);
 
 /* remove ep */
 void uct_ud_iface_cep_remove(uct_ud_ep_t *ep);
@@ -378,7 +385,8 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *src_ib_addr,
                                      const uct_ud_iface_addr_t *src_if_addr,
-                                     uct_ud_ep_t *ep, uint32_t conn_id);
+                                     uct_ud_ep_t *ep, uint32_t conn_id,
+                                     int path_index);
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
 

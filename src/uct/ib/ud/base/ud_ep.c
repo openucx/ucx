@@ -494,7 +494,8 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
     uct_ud_ep_t *ep;
     uct_ep_h new_ep_h;
 
-    ep = uct_ud_iface_cep_lookup(iface, ib_addr, if_addr, UCT_UD_EP_CONN_ID_MAX);
+    ep = uct_ud_iface_cep_lookup(iface, ib_addr, if_addr, UCT_UD_EP_CONN_ID_MAX,
+                                 path_index);
     if (ep) {
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
         ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
@@ -519,7 +520,8 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
         return status;
     }
 
-    status = uct_ud_iface_cep_insert(iface, ib_addr, if_addr, ep, UCT_UD_EP_CONN_ID_MAX);
+    status = uct_ud_iface_cep_insert(iface, ib_addr, if_addr, ep,
+                                     UCT_UD_EP_CONN_ID_MAX, path_index);
     if (status != UCS_OK) {
         goto err_cep_insert;
     }
@@ -622,9 +624,11 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
                                   (void*)&ctl->conn_req.ep_addr);
     ucs_assert_always(status == UCS_OK);
 
+    ep->path_index = ctl->conn_req.path_index;
+
     status = uct_ud_iface_cep_insert(iface, uct_ud_creq_ib_addr(ctl),
                                      &ctl->conn_req.ep_addr.iface_addr,
-                                     ep, ctl->conn_req.conn_id);
+                                     ep, ctl->conn_req.conn_id, ep->path_index);
     ucs_assert_always(status == UCS_OK);
     return ep;
 }
@@ -638,7 +642,8 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 
     ep = uct_ud_iface_cep_lookup(iface, uct_ud_creq_ib_addr(ctl),
                                  &ctl->conn_req.ep_addr.iface_addr,
-                                 ctl->conn_req.conn_id);
+                                 ctl->conn_req.conn_id,
+                                 ctl->conn_req.path_index);
     if (!ep) {
         ep = uct_ud_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
@@ -671,6 +676,10 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     ucs_assertv_always(ctl->conn_req.conn_id == ep->conn_id,
                        "creq->conn_id=%d ep->conn_id=%d",
                        ctl->conn_req.conn_id, ep->conn_id);
+
+    ucs_assertv_always(ctl->conn_req.path_index == ep->path_index,
+                       "creq->path_index=%d ep->path_index=%d",
+                       ctl->conn_req.path_index, ep->path_index);
 
     ucs_assertv_always(uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) ==
                        ep->dest_ep_id,
@@ -755,8 +764,9 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
 
     creq = (uct_ud_ctl_hdr_t *)(neth + 1);
 
-    creq->type                    = UCT_UD_PACKET_CREQ;
-    creq->conn_req.conn_id        = ep->conn_id;
+    creq->type                = UCT_UD_PACKET_CREQ;
+    creq->conn_req.conn_id    = ep->conn_id;
+    creq->conn_req.path_index = ep->path_index;
 
     status = uct_ud_ep_get_address(&ep->super.super,
                                    (void*)&creq->conn_req.ep_addr);

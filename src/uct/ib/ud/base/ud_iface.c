@@ -85,26 +85,29 @@ void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface)
 
 static uct_ud_iface_peer_t *
 uct_ud_iface_cep_lookup_addr(uct_ud_iface_t *iface, uint16_t dlid,
-                             const union ibv_gid *dgid, uint32_t dest_qpn)
+                             const union ibv_gid *dgid, uint32_t dest_qpn,
+                             int path_index)
 {
     uct_ud_iface_peer_t key;
-    key.dlid    = dlid;
-    key.dgid    = *dgid;
-    key.dst_qpn = dest_qpn;
+    key.dlid       = dlid;
+    key.dgid       = *dgid;
+    key.dst_qpn    = dest_qpn;
+    key.path_index = path_index;
     return sglib_hashed_uct_ud_iface_peer_t_find_member(iface->peers, &key);
 }
 
 static uct_ud_iface_peer_t *
 uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface,
                              const uct_ib_address_t *src_ib_addr,
-                             const uct_ud_iface_addr_t *src_if_addr)
+                             const uct_ud_iface_addr_t *src_if_addr,
+                             int path_index)
 {
     uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
     uct_ib_address_pack_params_t params;
 
     uct_ib_address_unpack(src_ib_addr, &params);
-    return uct_ud_iface_cep_lookup_addr(iface, params.lid,
-                                        &params.gid, dest_qpn);
+    return uct_ud_iface_cep_lookup_addr(iface, params.lid, &params.gid,
+                                        dest_qpn, path_index);
 }
 
 static uct_ud_ep_t *
@@ -146,7 +149,8 @@ uct_ud_iface_cep_getid(uct_ud_iface_peer_t *peer, uint32_t conn_id)
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *src_ib_addr,
                                      const uct_ud_iface_addr_t *src_if_addr,
-                                     uct_ud_ep_t *ep, uint32_t conn_id)
+                                     uct_ud_ep_t *ep, uint32_t conn_id,
+                                     int path_index)
 {
     uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
     uct_ib_address_pack_params_t params;
@@ -154,17 +158,18 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
     uct_ud_ep_t *cep;
 
     uct_ib_address_unpack(src_ib_addr, &params);
-    peer = uct_ud_iface_cep_lookup_addr(iface, params.lid,
-                                        &params.gid, dest_qpn);
+    peer = uct_ud_iface_cep_lookup_addr(iface, params.lid, &params.gid,
+                                        dest_qpn, path_index);
     if (peer == NULL) {
         peer = malloc(sizeof *peer);
         if (peer == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
 
-        peer->dlid    = params.lid;
-        peer->dgid    = params.gid;
-        peer->dst_qpn = dest_qpn;
+        peer->dlid       = params.lid;
+        peer->dgid       = params.gid;
+        peer->dst_qpn    = dest_qpn;
+        peer->path_index = path_index;
         sglib_hashed_uct_ud_iface_peer_t_add(iface->peers, peer);
         ucs_list_head_init(&peer->ep_list);
         peer->conn_id_last = 0;
@@ -202,12 +207,13 @@ void uct_ud_iface_cep_remove(uct_ud_ep_t *ep)
 uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *src_ib_addr,
                                      const uct_ud_iface_addr_t *src_if_addr,
-                                     uint32_t conn_id)
+                                     uint32_t conn_id, int path_index)
 {
     uct_ud_iface_peer_t *peer;
     uct_ud_ep_t *ep;
 
-    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr,
+                                        path_index);
     if (peer == NULL) {
         return NULL;
     }
@@ -226,7 +232,8 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
 {
     uct_ud_iface_peer_t *peer;
 
-    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr,
+                                        ep->path_index);
     ucs_assert_always(peer != NULL);
     ucs_assert_always(peer->conn_id_last > 0);
     ucs_assert_always(ep->conn_id + 1 == peer->conn_id_last);
