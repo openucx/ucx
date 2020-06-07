@@ -70,10 +70,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
     ucs_kh_put_t kh_put_status;
     ucs_bus_id_bit_rep_t bus_id_bit_rep;
 
-    *sys_dev        = UCS_SYS_DEVICE_ID_UNKNOWN;
     bus_id_bit_rep  = ucs_topo_get_bus_id_bit_repr(bus_id);
-
-    ucs_debug("find device index for bus id %ld", bus_id_bit_rep);
 
     ucs_spin_lock(&ucs_topo_ctx.lock);
     hash_it = kh_put(bus_to_sys_dev /*name*/,
