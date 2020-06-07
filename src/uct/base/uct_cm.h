@@ -15,6 +15,24 @@
 
 UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
 
+#define UCT_CM_SET_CB(_params, _flag, _cep_cb, _params_cb, _function_type, _default_cb) \
+    ({ \
+        ucs_status_t _status; \
+        \
+        if (!((_params)->field_mask & (_flag))) { \
+            (_cep_cb) = (_function_type) (_default_cb); \
+            _status = UCS_OK; \
+        } else if ((_params_cb) == NULL) { \
+            ucs_error(UCS_PP_MAKE_STRING(_flag) " is set but the callback is NULL"); \
+            _status = UCS_ERR_INVALID_PARAM; \
+        } else { \
+            (_cep_cb) = (_params_cb); \
+            _status = UCS_OK; \
+        } \
+        \
+        (_status); \
+    })
+
 /**
  * "Base" structure which defines CM configuration options.
  * Specific CMs extend this structure.
@@ -90,7 +108,7 @@ extern ucs_config_field_t uct_cm_config_table[];
 UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
                   uct_component_h);
 
-void uct_cm_set_common_data(uct_cm_base_ep_t *ep, const uct_ep_params_t *params);
+ucs_status_t uct_cm_set_common_data(uct_cm_base_ep_t *ep, const uct_ep_params_t *params);
 
 ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params);
 
@@ -99,11 +117,19 @@ ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
                                void *priv_data, size_t priv_data_max,
                                size_t *priv_data_ret);
 
+ucs_status_t uct_cm_ep_set_pack_cb(const uct_ep_params_t *params,
+                                   uct_cm_base_ep_t *cep);
+
+ucs_status_t uct_cm_ep_set_disconnect_cb(const uct_ep_params_t *params,
+                                         uct_cm_base_ep_t *cep);
+
 ucs_status_t uct_cm_ep_client_set_connect_cb(const uct_ep_params_t *params,
                                              uct_cm_base_ep_t *cep);
 
 ucs_status_t uct_cm_ep_server_set_notify_cb(const uct_ep_params_t *params,
                                             uct_cm_base_ep_t *cep);
+
+void uct_cm_ep_disconnect_cb(uct_cm_base_ep_t *cep);
 
 void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,

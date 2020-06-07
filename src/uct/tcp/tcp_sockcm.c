@@ -12,7 +12,6 @@
 
 #include <ucs/async/async.h>
 #include <ucs/sys/sock.h>
-#include <ucs/arch/bitops.h>
 
 
 ucs_config_field_t uct_tcp_sockcm_config_table[] = {
