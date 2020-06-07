@@ -263,8 +263,8 @@ struct uct_ud_ep {
 #  define UCT_UD_EP_PEER_NAME_FMT        "%s:%d"
 #  define UCT_UD_EP_PEER_NAME_ARG(_ep)   (_ep)->peer.name, (_ep)->peer.pid
 #else
-#  define UCT_UD_EP_PEER_NAME_FMT        "<no debug data>"
-#  define UCT_UD_EP_PEER_NAME_ARG(_ep)
+#  define UCT_UD_EP_PEER_NAME_FMT        "%s"
+#  define UCT_UD_EP_PEER_NAME_ARG(_ep)   "<no debug data>"
 #endif
 
 
