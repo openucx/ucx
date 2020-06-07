@@ -14,6 +14,8 @@
 
 BEGIN_C_DECLS
 
+#define UCS_SYS_DEVICE_ID_UNKNOWN UINT_MAX /* indicate ucs_sys_bus_id_unknown */
+
 /** @file topo.h */
 
 typedef struct ucs_sys_bus_id {
@@ -77,6 +79,16 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
  * devices discovered
  */
 void ucs_topo_print_info(FILE *stream);
+
+/**
+ * Initialize UCS topology subsystem.
+ */
+void ucs_topo_init();
+
+/**
+ * Cleanup UCS topology subsystem.
+ */
+void ucs_topo_cleanup();
 
 END_C_DECLS
 
