@@ -238,4 +238,9 @@ static inline ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.cm_lane;
 }
 
+static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
+{
+    return ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE;
+}
+
 #endif

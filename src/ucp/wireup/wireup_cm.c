@@ -35,6 +35,12 @@ ucp_cm_ep_init_flags(const ucp_worker_h worker, const ucp_ep_params_t *params)
     return 0;
 }
 
+int ucp_ep_init_flags_has_cm(unsigned ep_init_flags)
+{
+    return !!(ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
+                               UCP_EP_INIT_CM_WIREUP_SERVER));
+}
+
 static ucs_status_t
 ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
                                     ucp_ep_config_key_t *key)
@@ -132,8 +138,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     }
 
     /* At this point the ep has only CM lane */
-    ucs_assert((ucp_ep_num_lanes(ep) == 1) &&
-               (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE));
+    ucs_assert((ucp_ep_num_lanes(ep) == 1) && ucp_ep_has_cm_lane(ep));
     cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     ucs_assert(cm_wireup_ep != NULL);
 
