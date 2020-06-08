@@ -509,8 +509,8 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
 
     cep->state |= UCT_TCP_SOCKCM_EP_ON_CLIENT;
 
-    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB,
-                           cm_ep->client.connect_cb, params->sockaddr_connect_cb.client,
+    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT,
+                           cm_ep->client.connect_cb, params->sockaddr_cb_client,
                            uct_cm_ep_client_connect_callback_t,
                            ucs_empty_function);
     if (status != UCS_OK) {
@@ -618,8 +618,8 @@ ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h *e
         }
 
         cm_ep = &tcp_ep->super;
-        status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB,
-                               cm_ep->server.notify_cb, params->sockaddr_connect_cb.server,
+        status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER,
+                               cm_ep->server.notify_cb, params->sockaddr_cb_server,
                                uct_cm_ep_server_conn_notify_callback_t,
                                ucs_empty_function);
         if (status != UCS_OK) {
