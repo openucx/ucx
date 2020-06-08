@@ -1960,11 +1960,11 @@ void ucp_worker_destroy(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucp_worker_destroy_ep_configs(worker);
+    ucp_tag_match_cleanup(&worker->tm);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
     ucp_worker_close_ifaces(worker);
-    ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_wakeup_cleanup(worker);
     ucs_mpool_cleanup(&worker->rkey_mp, 1);
     ucs_mpool_cleanup(&worker->req_mp, 1);
