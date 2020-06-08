@@ -378,7 +378,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
             ucs_sockaddr_str(remote_addr, ip_port_str,
                              UCS_SOCKADDR_STRING_LEN));
 
-    if ((cep->flags & UCT_RDMACM_CM_EP_CONN_CB_INVOKED) &&
+    if (uct_rdmacm_ep_is_connected(cep) &&
         !(cep->flags & UCT_RDMACM_CM_EP_FAILED)) {
         /* first failure on connected EP has to be reported as disconnect event
          * to allow user to call disconnect due to UCT API limitation -
