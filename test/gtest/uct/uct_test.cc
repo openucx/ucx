@@ -1107,13 +1107,13 @@ uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
 
     /* Connect to the server */
     if (m_cm) {
-        params.field_mask = UCT_EP_PARAM_FIELD_CM                     |
-                            UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    |
-                            UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB |
+        params.field_mask = UCT_EP_PARAM_FIELD_CM                         |
+                            UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT |
+                            UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB     |
                             UCT_EP_PARAM_FIELD_USER_DATA;
-        params.cm                         = m_cm;
-        params.sockaddr_connect_cb.client = connect_cb;
-        params.disconnect_cb              = disconnect_cb;
+        params.cm                 = m_cm;
+        params.sockaddr_cb_client = connect_cb;
+        params.disconnect_cb      = disconnect_cb;
     } else {
         params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
         params.iface      = m_iface;

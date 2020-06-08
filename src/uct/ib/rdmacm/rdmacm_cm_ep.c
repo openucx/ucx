@@ -282,8 +282,8 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
 
     cep->flags |= UCT_RDMACM_CM_EP_ON_CLIENT;
 
-    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB,
-                           cm_ep->client.connect_cb, params->sockaddr_connect_cb.client,
+    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT,
+                           cm_ep->client.connect_cb, params->sockaddr_cb_client,
                            uct_cm_ep_client_connect_callback_t,
                            ucs_empty_function);
     if (status != UCS_OK) {
@@ -354,8 +354,8 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
                   event->id, event->listen_id->channel, cm, cm->ev_ch);
     }
 
-    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB,
-                           cm_ep->server.notify_cb, params->sockaddr_connect_cb.server,
+    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER,
+                           cm_ep->server.notify_cb, params->sockaddr_cb_server,
                            uct_cm_ep_server_conn_notify_callback_t,
                            ucs_empty_function);
     if (status != UCS_OK) {

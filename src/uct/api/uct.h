@@ -778,40 +778,43 @@ enum uct_listener_params_field {
  */
 enum uct_ep_params_field {
     /** Enables @ref uct_ep_params::iface */
-    UCT_EP_PARAM_FIELD_IFACE                  = UCS_BIT(0),
+    UCT_EP_PARAM_FIELD_IFACE                      = UCS_BIT(0),
 
     /** Enables @ref uct_ep_params::user_data */
-    UCT_EP_PARAM_FIELD_USER_DATA              = UCS_BIT(1),
+    UCT_EP_PARAM_FIELD_USER_DATA                  = UCS_BIT(1),
 
     /** Enables @ref uct_ep_params::dev_addr */
-    UCT_EP_PARAM_FIELD_DEV_ADDR               = UCS_BIT(2),
+    UCT_EP_PARAM_FIELD_DEV_ADDR                   = UCS_BIT(2),
 
     /** Enables @ref uct_ep_params::iface_addr */
-    UCT_EP_PARAM_FIELD_IFACE_ADDR             = UCS_BIT(3),
+    UCT_EP_PARAM_FIELD_IFACE_ADDR                 = UCS_BIT(3),
 
     /** Enables @ref uct_ep_params::sockaddr */
-    UCT_EP_PARAM_FIELD_SOCKADDR               = UCS_BIT(4),
+    UCT_EP_PARAM_FIELD_SOCKADDR                   = UCS_BIT(4),
 
     /** Enables @ref uct_ep_params::sockaddr_cb_flags */
-    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS      = UCS_BIT(5),
+    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS          = UCS_BIT(5),
 
     /** Enables @ref uct_ep_params::sockaddr_pack_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB       = UCS_BIT(6),
+    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB           = UCS_BIT(6),
 
     /** Enables @ref uct_ep_params::cm */
-    UCT_EP_PARAM_FIELD_CM                     = UCS_BIT(7),
+    UCT_EP_PARAM_FIELD_CM                         = UCS_BIT(7),
 
     /** Enables @ref uct_ep_params::conn_request */
-    UCT_EP_PARAM_FIELD_CONN_REQUEST           = UCS_BIT(8),
+    UCT_EP_PARAM_FIELD_CONN_REQUEST               = UCS_BIT(8),
 
-    /** Enables @ref uct_ep_params::sockaddr_connect_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    = UCS_BIT(9),
+    /** Enables @ref uct_ep_params::sockaddr_cb_client */
+    UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT = UCS_BIT(9),
+
+    /** Enables @ref uct_ep_params::sockaddr_cb_server */
+    UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER  = UCS_BIT(10),
 
     /** Enables @ref uct_ep_params::disconnect_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB = UCS_BIT(10),
+    UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB     = UCS_BIT(11),
 
     /** Enables @ref uct_ep_params::path_index */
-    UCT_EP_PARAM_FIELD_PATH_INDEX             = UCS_BIT(11)
+    UCT_EP_PARAM_FIELD_PATH_INDEX                 = UCS_BIT(12)
 };
 
 
@@ -1114,19 +1117,17 @@ struct uct_ep_params {
      */
     uct_conn_request_h                conn_request;
 
-    union {
-        /**
-         * Callback that will be invoked when the endpoint on the client side
-         * is being connected to the server by a connection manager @ref uct_cm_h .
-         */
-        uct_cm_ep_client_connect_callback_t      client;
+    /**
+     * Callback that will be invoked when the endpoint on the client side
+     * is being connected to the server by a connection manager @ref uct_cm_h .
+     */
+    uct_cm_ep_client_connect_callback_t      sockaddr_cb_client;
 
-        /**
-         * Callback that will be invoked when the endpoint on the server side
-         * is being connected to a client by a connection manager @ref uct_cm_h .
-         */
-        uct_cm_ep_server_conn_notify_callback_t  server;
-    } sockaddr_connect_cb;
+    /**
+     * Callback that will be invoked when the endpoint on the server side
+     * is being connected to a client by a connection manager @ref uct_cm_h .
+     */
+    uct_cm_ep_server_conn_notify_callback_t  sockaddr_cb_server;
 
     /**
      * Callback that will be invoked when the endpoint is disconnected.
