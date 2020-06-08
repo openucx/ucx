@@ -727,7 +727,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
     iface_attr->max_conn_priv          = 0;
 
     /* UD lacks of scatter to CQE support */
-    iface_attr->latency.overhead      += 10e-9;
+    iface_attr->latency.c             += 30e-9;
 
     if (iface_attr->cap.am.max_short) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;

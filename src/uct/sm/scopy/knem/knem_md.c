@@ -339,11 +339,10 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    knem_md->super.ops         = &md_ops;
-    knem_md->super.component   = &uct_knem_component;
-    knem_md->reg_cost.overhead = 1200.0e-9;
-    knem_md->reg_cost.growth   = 0.007e-9;
-    knem_md->rcache            = NULL;
+    knem_md->super.ops       = &md_ops;
+    knem_md->super.component = &uct_knem_component;
+    knem_md->reg_cost        = ucs_linear_func_make(1200.0e-9, 0.007e-9);
+    knem_md->rcache          = NULL;
 
     knem_md->knem_fd = open("/dev/knem", O_RDWR);
     if (knem_md->knem_fd < 0) {
@@ -363,9 +362,9 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
         status = ucs_rcache_create(&rcache_params, "knem rcache device",
                                    ucs_stats_get_root(), &knem_md->rcache);
         if (status == UCS_OK) {
-            knem_md->super.ops         = &uct_knem_md_rcache_ops;
-            knem_md->reg_cost.overhead = md_config->rcache.overhead;
-            knem_md->reg_cost.growth   = 0; /* It's close enough to 0 */
+            knem_md->super.ops = &uct_knem_md_rcache_ops;
+            knem_md->reg_cost  = ucs_linear_func_make(md_config->rcache.overhead,
+                                                      0);
         } else {
             ucs_assert(knem_md->rcache == NULL);
             if (md_config->rcache_enable == UCS_YES) {

@@ -161,12 +161,12 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     }
 
     /* fixup flags and address lengths */
-    iface_attr->cap.flags &= ~UCT_IFACE_FLAG_CONNECT_TO_EP;
-    iface_attr->cap.flags |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-    iface_attr->ep_addr_len       = 0;
-    iface_attr->max_conn_priv     = 0;
-    iface_attr->iface_addr_len    = sizeof(uct_dc_mlx5_iface_addr_t);
-    iface_attr->latency.overhead += 60e-9; /* connect packet + cqe */
+    iface_attr->cap.flags     &= ~UCT_IFACE_FLAG_CONNECT_TO_EP;
+    iface_attr->cap.flags     |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    iface_attr->ep_addr_len    = 0;
+    iface_attr->max_conn_priv  = 0;
+    iface_attr->iface_addr_len = sizeof(uct_dc_mlx5_iface_addr_t);
+    iface_attr->latency.c     += 60e-9; /* connect packet + cqe */
 
     uct_rc_mlx5_iface_common_query(&iface->super.super.super, iface_attr,
                                    max_am_inline,

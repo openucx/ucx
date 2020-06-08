@@ -35,10 +35,10 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_md_config_rcache_table)},
 
     {"MEM_REG_OVERHEAD", "16us", "Memory registration overhead", /* TODO take default from device */
-     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.overhead), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.m), UCS_CONFIG_TYPE_TIME},
 
     {"MEM_REG_GROWTH", "0.06ns", "Memory registration growth rate", /* TODO take default from device */
-     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.growth), UCS_CONFIG_TYPE_TIME},
+     ucs_offsetof(uct_gdr_copy_md_config_t, uc_reg_cost.c), UCS_CONFIG_TYPE_TIME},
 
     {NULL}
 };
@@ -53,8 +53,7 @@ static ucs_status_t uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_gdr_copy_key_t);
-    md_attr->reg_cost.overhead    = 0;
-    md_attr->reg_cost.growth      = 0;
+    md_attr->reg_cost             = ucs_linear_func_make(0, 0);
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
@@ -394,9 +393,8 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
         rcache_params.ops                = &uct_gdr_copy_rcache_ops;
         status = ucs_rcache_create(&rcache_params, "gdr_copy", NULL, &md->rcache);
         if (status == UCS_OK) {
-            md->super.ops         = &md_rcache_ops;
-            md->reg_cost.overhead = 0;
-            md->reg_cost.growth   = 0;
+            md->super.ops = &md_rcache_ops;
+            md->reg_cost  = ucs_linear_func_make(0, 0);
         } else {
             ucs_assert(md->rcache == NULL);
             if (md_config->enable_rcache == UCS_YES) {

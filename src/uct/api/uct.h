@@ -16,6 +16,7 @@
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
 #include <ucs/datastruct/callbackq.h>
+#include <ucs/datastruct/linear_func.h>
 #include <ucs/memory/memory_type.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
@@ -816,20 +817,6 @@ enum uct_ep_params_field {
 
 /*
  * @ingroup UCT_RESOURCE
- * @brief Linear growth specification: f(x) = overhead + growth * x
- *
- *  This structure specifies a linear function which is used as basis for time
- * estimation of various UCT operations. This information can be used to select
- * the best performing combination of UCT operations.
- */
-typedef struct uct_linear_growth {
-    double                   overhead;  /**< Constant overhead factor */
-    double                   growth;    /**< Growth rate factor */
-} uct_linear_growth_t;
-
-
-/*
- * @ingroup UCT_RESOURCE
  * @brief Process Per Node (PPN) bandwidth specification: f(ppn) = dedicated + shared / ppn
  *
  *  This structure specifies a function which is used as basis for bandwidth
@@ -958,7 +945,8 @@ struct uct_iface_attr {
      */
     double                   overhead;     /**< Message overhead, seconds */
     uct_ppn_bandwidth_t      bandwidth;    /**< Bandwidth model */
-    uct_linear_growth_t      latency;      /**< Latency model */
+    ucs_linear_func_t        latency;      /**< Latency as function of number of
+                                                active endpoints */
     uint8_t                  priority;     /**< Priority of device */
     size_t                   max_num_eps;  /**< Maximum number of endpoints */
     unsigned                 dev_num_paths;/**< How many network paths can be
@@ -1238,10 +1226,10 @@ struct uct_md_attr {
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
-        ucs_memory_type_t    access_mem_type; /**< Memory type MD can access */
+        ucs_memory_type_t    access_mem_type; /**< Memory type that Memory Domain can access */
     } cap;
 
-    uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
+    ucs_linear_func_t        reg_cost;  /**< Memory registration cost estimation
                                              (time,seconds) as a linear function
                                              of the buffer size. */
 

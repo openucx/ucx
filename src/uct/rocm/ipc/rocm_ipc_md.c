@@ -33,8 +33,7 @@ static ucs_status_t uct_rocm_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.max_reg          = ULONG_MAX;
 
     /* TODO: get accurate number */
-    md_attr->reg_cost.overhead    = 9e-9;
-    md_attr->reg_cost.growth      = 0;
+    md_attr->reg_cost             = ucs_linear_func_make(9e-9, 0);
 
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;

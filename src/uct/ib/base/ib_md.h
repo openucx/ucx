@@ -102,7 +102,7 @@ typedef struct uct_ib_md {
     uct_mem_h                global_odp;/**< Implicit ODP memory handle */
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
-    uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
+    ucs_linear_func_t        reg_cost;  /**< Memory registration cost */
     struct uct_ib_md_ops     *ops;
     UCS_STATS_NODE_DECLARE(stats)
     uct_ib_md_ext_config_t   config;    /* IB external configuration */
@@ -127,7 +127,7 @@ typedef struct uct_ib_md_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(rmtd) reg_methods;
 
     uct_md_rcache_config_t   rcache;       /**< Registration cache config */
-    uct_linear_growth_t      uc_reg_cost;  /**< Memory registration cost estimation
+    ucs_linear_func_t        uc_reg_cost;  /**< Memory registration cost estimation
                                                 without using the cache */
     unsigned                 fork_init;    /**< Use ibv_fork_init() */
     int                      async_events; /**< Whether async events should be delivered */

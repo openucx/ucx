@@ -179,8 +179,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCS_BIT(UCT_ATOMIC_OP_SWAP)        |
                                           UCS_BIT(UCT_ATOMIC_OP_CSWAP);
 
-    iface_attr->latency.overhead        = 80e-9; /* 80 ns */
-    iface_attr->latency.growth          = 0;
+    iface_attr->latency                 = ucs_linear_func_make(80e-9, 0); /* 80 ns */
     iface_attr->bandwidth.dedicated     = iface->super.config.bandwidth;
     iface_attr->bandwidth.shared        = 0;
     iface_attr->overhead                = 10e-9; /* 10 ns */

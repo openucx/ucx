@@ -119,7 +119,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     uct_base_iface_query(&iface->super, attr);
 
-    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
+    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.c,
                                 &attr->bandwidth.shared);
     if (status != UCS_OK) {
         return status;
@@ -161,7 +161,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     }
 
     attr->bandwidth.dedicated = 0;
-    attr->latency.growth      = 0;
+    attr->latency.m           = 0;
     attr->overhead            = 50e-6;  /* 50 usec */
 
     if (iface->config.prefer_default) {
