@@ -360,7 +360,13 @@ typedef struct uct_cm_ep_client_connect_args {
     const uct_cm_remote_data_t *remote_data;
 
     /**
-     * Indicates the server's @ref ucs_status_t status.
+     * Indicates the connection establishment response from the remote server:
+     * UCS_OK                   - the remote server accepted the connection request.
+     * UCS_ERR_REJECTED         - the remote server rejected the connection request.
+     * UCS_ERR_CONNECTION_RESET - the server's connection was reset during
+     *                            the connection establishment to the client.
+     * Otherwise                - indicates an internal connection establishment
+     *                            error on the local (client) side.
      */
     ucs_status_t               status;
 } uct_cm_ep_client_connect_args_t;
@@ -398,7 +404,14 @@ typedef struct uct_cm_ep_server_conn_notify_args {
     uint64_t                   field_mask;
 
     /**
-     * Indicates the client's @ref ucs_status_t status.
+     * Indicates the client's @ref ucs_status_t status:
+     * UCS_OK                   - the client completed its connection
+     *                            establishment and called
+     *                            @ref uct_cm_client_ep_conn_notify
+     * UCS_ERR_CONNECTION_RESET - the client's connection was reset during
+     *                            the connection establishment to the server.
+     * Otherwise                - indicates an internal connection establishment
+     *                            error on the local (server) side.
      */
     ucs_status_t               status;
 } uct_cm_ep_server_conn_notify_args_t;
@@ -600,13 +613,18 @@ typedef void
  * @brief Callback to process an incoming connection establishment acknowledgment
  *        on the server side listener, from the client, which indicates that the
  *        client side is connected.
+ *        The callback also notifies the server side of a local error on a
+ *        not-yet-connected endpoint.
  *
  * This callback routine will be invoked on the server side upon receiving an
  * incoming connection establishment acknowledgment from the client, which is sent
  * from it once the client is connected to the server. Used to connect the server
  * side to the client or handle an error from it - depending on the status field.
+ * This callback will also be invoked in the event of an internal local error
+ * with a failed @ref uct_cm_ep_server_conn_notify_args::status if the endpoint
+ * was not connected yet.
  * This callback has to be thread safe.
- * Other than communication progress routines, it is allowed to call other UCT
+ * Other than communication progress routines, it is permissible to call other UCT
  * communication routines from this callback.
  *
  * @param [in]  ep               Transport endpoint.
@@ -622,13 +640,16 @@ typedef void (*uct_cm_ep_server_conn_notify_callback_t)
 /**
  * @ingroup UCT_CLIENT_SERVER
  * @brief Callback to process an incoming connection response on the client side
- *        from the server.
+ *        from the server or handle a local error on a not-yet-connected endpoint.
  *
  * This callback routine will be invoked on the client side upon receiving an
  * incoming connection response from the server. Used to connect the client side
  * to the server or handle an error from it - depending on the status field.
+ * This callback will also be invoked in the event of an internal local error
+ * with a failed @ref uct_cm_ep_client_connect_args::status if the endpoint was
+ * not connected yet.
  * This callback has to be thread safe.
- * Other than communication progress routines, it is allowed to call other UCT
+ * Other than communication progress routines, it is permissible to call other UCT
  * communication routines from this callback.
  *
  * @param [in]  ep               Transport endpoint.
@@ -648,10 +669,10 @@ typedef void (*uct_cm_ep_client_connect_callback_t)(uct_ep_h ep, void *arg,
  * This callback routine will be invoked on the client and server sides upon
  * a disconnect of the remote peer. It will disconnect the given endpoint from
  * the remote peer.
- * This callback won't be invoked if @ref uct_ep_disconnect was called locally
- * with a completion that is not NULL.
+ * This callback won't be invoked if the endpoint was not connected to the remote
+ * peer yet.
  * This callback has to be thread safe.
- * Other than communication progress routines, it is allowed to call other UCT
+ * Other than communication progress routines, it is permissible to call other UCT
  * communication routines from this callback.
  *
  * @param [in]  ep               Transport endpoint to disconnect.
