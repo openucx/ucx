@@ -324,6 +324,20 @@ ucs_status_t ucm_test_events(int events);
 
 
 /**
+ * @brief Test event external handlers
+ *
+ * This routine checks if external events, as set by @ref ucm_set_external_event,
+ * are actually being reported (by calling APIs such as @ref ucm_vm_munmap).
+ *
+ * @param [in]  events    Bit-mask of events which are supposed to be handled
+ *                        externally.
+ *
+ * @return Status code.
+ */
+ucs_status_t ucm_test_external_events(int events);
+
+
+/**
  * @brief Call the original implementation of @ref mmap without triggering events.
  */
 void *ucm_orig_mmap(void *addr, size_t length, int prot, int flags, int fd,
