@@ -265,8 +265,8 @@ enum ucp_ep_params_flags_field {
  *
  * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
  */
-enum ucp_ep_close_mode {
-    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
+enum ucp_ep_close_flags_t {
+    UCP_EP_CLOSE_FLAG_FORCE         = 0, /**< @ref ucp_ep_close_nbx releases
                                               the endpoint without any
                                               confirmation from the peer. All
                                               outstanding requests will be
@@ -279,7 +279,35 @@ enum ucp_ep_close_mode {
                                               for all endpoints created on
                                               both (local and remote) sides to
                                               avoid undefined behavior. */
-    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
+    UCP_EP_CLOSE_FLAG_FLUSH         = 1  /**< @ref ucp_ep_close_nbx schedules
+                                              flushes on all outstanding
+                                              operations. */
+};
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Close UCP endpoint modes.
+ *
+ * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
+ */
+enum ucp_ep_close_mode {
+    UCP_EP_CLOSE_MODE_FORCE         = UCP_EP_CLOSE_FLAG_FORCE,
+                                         /**< @ref ucp_ep_close_nb releases
+                                              the endpoint without any
+                                              confirmation from the peer. All
+                                              outstanding requests will be
+                                              completed with
+                                              @ref UCS_ERR_CANCELED error.
+                                              @note This mode may cause
+                                              transport level errors on remote
+                                              side, so it requires set
+                                              @ref UCP_ERR_HANDLING_MODE_PEER
+                                              for all endpoints created on
+                                              both (local and remote) sides to
+                                              avoid undefined behavior. */
+    UCP_EP_CLOSE_MODE_FLUSH         = UCP_EP_CLOSE_FLAG_FLUSH
+                                         /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
 };
@@ -1927,7 +1955,7 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
  *
  * @note This operation supports specific flags, which can be passed
  *       in @a param by @ref ucp_request_param_t.flags. The exact set of flags
- *       is defined by @ref ucp_ep_close_mode.
+ *       is defined by @ref ucp_ep_close_flags_t.
  *
  * @param [in]  ep      Handle to the endpoint to close.
  * @param [in]  param   Operation parameters, see @ref ucp_request_param_t
@@ -2046,10 +2074,6 @@ ucs_status_ptr_t ucp_ep_flush_nb(ucp_ep_h ep, unsigned flags,
  * @ref ucp_ep_h "endpoint". All the AMO and RMA operations issued on the
  * @a ep prior to this call are completed both at the origin and at the target
  * @ref ucp_ep_h "endpoint" when this call returns.
- *
- * @note This operation supports specific flags, which can be passed
- *       in @a param by @ref ucp_request_param_t.flags. Should be 0, reserved
- *       for future use.
  *
  * @param [in] ep        UCP endpoint.
  * @param [in] param     Operation parameters, see @ref ucp_request_param_t.
@@ -3645,10 +3669,6 @@ ucs_status_ptr_t ucp_worker_flush_nb(ucp_worker_h worker, unsigned flags,
  * @note For description of the differences between @ref ucp_worker_flush_nb
  * "flush" and @ref ucp_worker_fence "fence" operations please see
  * @ref ucp_worker_fence "ucp_worker_fence()"
- *
- * @note This operation supports specific flags, which can be passed
- *       in @a param by @ref ucp_request_param_t.flags. Should be 0, reserved
- *       for future use.
  *
  * @param [in] worker    UCP worker.
  * @param [in] param     Operation parameters, see @ref ucp_request_param_t
