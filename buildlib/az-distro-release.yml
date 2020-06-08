@@ -1,0 +1,78 @@
+jobs:
+  - job: distro_release
+    displayName: distro
+
+    pool:
+      name: MLNX
+      demands:
+        - harbor_registry -equals yes
+
+    strategy:
+      matrix:
+        centos7_cuda10_1:
+          build_container: centos7_cuda10_1
+          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-centos7-mofed5.0-cuda10.1.tar.bz2
+        centos7_cuda10_2:
+          build_container: centos7_cuda10_2
+          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-centos7-mofed5.0-cuda10.2.tar.bz2
+        ubuntu16_cuda10_1:
+          build_container: ubuntu16_cuda10_1
+          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-ubuntu16.04-mofed5.0-cuda10.1.deb
+        ubuntu16_cuda10_2:
+          build_container: ubuntu16_cuda10_2
+          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-ubuntu16.04-mofed5.0-cuda10.2.deb
+        ubuntu18_cuda10_1:
+          build_container: ubuntu18_cuda10_1
+          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-ubuntu18.04-mofed5.0-cuda10.1.deb
+        ubuntu18_cuda10_2:
+          build_container: ubuntu18_cuda10_2
+          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-ubuntu18.04-mofed5.0-cuda10.2.deb
+
+    container: $[ variables['build_container'] ]
+
+    steps:
+      - checkout: self
+        clean: true
+        path: "we/need/to/go/deeper"
+        # ^ Avoid rpmbuild error: Dest dir longer than base dir is not supported
+
+      - bash: |
+          set -eE
+          ./autogen.sh
+          ./contrib/configure-release --with-cuda
+        displayName: Configure
+
+      - bash: |
+          set -eE
+          ./contrib/buildrpm.sh -s -t -b --strict-ibverbs-dep
+          cd rpm-dist/`uname -m`
+          tar -cjf "../../${AZ_ARTIFACT_NAME}" *.rpm
+          cd ../..
+          ls -l "${AZ_ARTIFACT_NAME}"
+          tar -tjf "${AZ_ARTIFACT_NAME}"
+        displayName: Build RPM package
+        condition: and(succeeded(), contains(variables['artifact_name'], 'centos'))
+        env:
+          AZ_ARTIFACT_NAME: $(artifact_name)
+
+      - bash: |
+          set -eE
+          dpkg-buildpackage -us -uc
+          find .. -name '*.deb' -exec cp {} "${AZ_ARTIFACT_NAME}" \;
+          ls -l "${AZ_ARTIFACT_NAME}"
+        displayName: Build DEB package
+        condition: and(succeeded(), contains(variables['artifact_name'], 'ubuntu'))
+        env:
+          AZ_ARTIFACT_NAME: $(artifact_name)
+
+      - task: GithubRelease@0
+        displayName: Upload artifacts to draft release
+        inputs:
+          githubConnection: release
+          repositoryName: openucx/ucx
+          action: edit
+          tag: $(Build.SourceBranchName)
+          isDraft: true
+          addChangeLog: false
+          assetUploadMode: replace
+          assets: "./$(artifact_name)"
