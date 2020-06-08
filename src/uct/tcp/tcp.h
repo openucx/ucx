@@ -52,6 +52,10 @@
 
 #define UCT_TCP_CONFIG_MAX_CONN_RETRIES      "MAX_CONN_RETRIES"
 
+/* TX and RX caps */
+#define UCT_TCP_EP_CTX_CAPS                  (UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX) | \
+                                              UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX))
+
 
 /**
  * TCP context type
