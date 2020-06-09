@@ -184,8 +184,7 @@ test_ucp_peer_failure::warn_unreleased_rdesc_handler(const char *file, unsigned 
     if (level == UCS_LOG_LEVEL_WARN) {
         std::string err_str = format_message(message, ap);
 
-        if (err_str.find("receive descriptor") != std::string::npos) {
-            UCS_TEST_MESSAGE << err_str;
+        if (err_str.find("unexpected tag-receive descriptor") != std::string::npos) {
             return UCS_LOG_FUNC_RC_STOP;
         }
     }
