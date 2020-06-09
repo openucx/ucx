@@ -649,7 +649,9 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 
     if (msg->dest_ep_ptr != 0) {
         ep = ucp_worker_get_ep_by_ptr(worker, msg->dest_ep_ptr);
-        ucs_assert(ucp_ep_get_cm_lane(ep) == UCP_NULL_LANE);
+        /* Current CM connection establishment does not use extra wireup
+           messages */
+        ucs_assert(!ucp_ep_has_cm_lane(ep));
     }
 
     status = ucp_address_unpack(worker, msg + 1, UCP_ADDRESS_PACK_FLAGS_ALL,
@@ -1060,7 +1062,7 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     ucs_status_t status;
     uint64_t tl_bitmap;
 
-    ucs_assert(ucp_ep_get_cm_lane(ep) == UCP_NULL_LANE);
+    ucs_assert(!ucp_ep_has_cm_lane(ep));
 
     tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, UCS_MASK(ucp_ep_num_lanes(ep)));
 
@@ -1091,11 +1093,11 @@ static void ucp_wireup_connect_remote_purge_cb(uct_pending_req_t *self, void *ar
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
 {
-    ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
     uint64_t tl_bitmap = UINT64_MAX;  /* pack full worker address */
+    ucp_rsc_index_t rsc_tli[UCP_MAX_LANES];
     ucs_status_t status;
 
-    ucs_assert(ucp_ep_get_cm_lane(ep) == UCP_NULL_LANE);
+    ucs_assert(!ucp_ep_has_cm_lane(ep));
     ucs_assert(ep->flags & UCP_EP_FLAG_LISTENER);
     ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED));
     memset(rsc_tli, UCP_NULL_RESOURCE, sizeof(rsc_tli));
