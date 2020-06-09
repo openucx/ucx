@@ -263,9 +263,9 @@ enum ucp_ep_params_flags_field {
  * @ingroup UCP_ENDPOINT
  * @brief Close UCP endpoint modes.
  *
- * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
+ * The enumeration is used to specify the behavior of @ref ucp_ep_close_nbx.
  */
-enum ucp_ep_close_flags_t {
+typedef enum {
     UCP_EP_CLOSE_FLAG_FORCE         = 0, /**< @ref ucp_ep_close_nbx releases
                                               the endpoint without any
                                               confirmation from the peer. All
@@ -282,7 +282,7 @@ enum ucp_ep_close_flags_t {
     UCP_EP_CLOSE_FLAG_FLUSH         = 1  /**< @ref ucp_ep_close_nbx schedules
                                               flushes on all outstanding
                                               operations. */
-};
+} ucp_ep_close_flags_t;
 
 
 /**
