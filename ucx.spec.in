@@ -13,7 +13,6 @@
 %bcond_with    rocm
 %bcond_with    ugni
 %bcond_with    xpmem
-%bcond_without java
 
 Name: ucx
 Version: @VERSION@
@@ -29,6 +28,10 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 # UCX currently supports only the following architectures
 ExclusiveArch: aarch64 ppc64le x86_64
+
+%if %{defined extra_deps}
+Requires: %{?extra_deps}
+%endif
 
 BuildRequires: automake autoconf libtool gcc-c++
 %if "%{_vendor}" == "suse"
@@ -59,9 +62,6 @@ BuildRequires: hsa-rocr-dev
 %endif
 %if %{with xpmem}
 BuildRequires: xpmem-devel
-%endif
-%if %{with java}
-BuildRequires: maven
 %endif
 
 %description
@@ -98,6 +98,8 @@ Provides header files and examples for developing with UCX.
            --disable-debug \
            --disable-assertions \
            --disable-params-check \
+           --enable-examples \
+           --without-java \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
            %_with_arg gdrcopy gdrcopy \
@@ -108,7 +110,6 @@ Provides header files and examples for developing with UCX.
            %_with_arg rocm rocm \
            %_with_arg xpmem xpmem \
            %_with_arg ugni ugni \
-           %_with_arg java java \
            %{?configure_options}
 make %{?_smp_mflags} V=1
 
@@ -297,20 +298,10 @@ process to map the memory of another process into its virtual address space.
 %{_libdir}/ucx/libuct_xpmem.so.*
 %endif
 
-%if %{with java}
-%package java
-Requires: %{name}%{?_isa} = %{version}-%{release}
-Summary: UCX Java bindings
-Group: System Environment/Libraries
-
-%description java
-Provides java bindings for UCX.
-
-%files java
-%{_libdir}/jucx-*.jar
-%endif
 
 %changelog
+* Mon Feb 10 2020 Yossi Itigin <yosefe@mellanox.com> 1.9.0-1
+- Bump version to 1.9.0
 * Sun Sep 22 2019 Yossi Itigin <yosefe@mellanox.com> 1.8.0-1
 - Bump version to 1.8.0
 * Sun Mar 24 2019 Yossi Itigin <yosefe@mellanox.com> 1.7.0-1
