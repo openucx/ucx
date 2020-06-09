@@ -857,6 +857,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->client_runtime_limit = std::numeric_limits<double>::max();
     test_opts->min_data_size        = 4096;
     test_opts->max_data_size        = 4096;
+    test_opts->chunk_size           = std::numeric_limits<unsigned>::max();
     test_opts->num_buffers          = 1;
     test_opts->iomsg_size           = 256;
     test_opts->iter_count           = 1000;
