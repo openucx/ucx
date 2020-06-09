@@ -894,8 +894,8 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, ucp_rsc_index_t rsc_index,
     ucp_worker_iface_t *wiface = ucp_worker_iface(ep->worker, rsc_index);
 
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           ((ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) ||
-             uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr));
+           (ucp_ep_has_cm_lane(ep) || /* assume reachability is checked by CM */
+            uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr));
 }
 
 static void
