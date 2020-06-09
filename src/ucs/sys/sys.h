@@ -96,6 +96,13 @@ typedef ucs_status_t (*ucs_sys_enum_threads_cb_t)(pid_t pid, void *ctx);
 
 
 /**
+ * Callback function type used in ucs_sys_enum_pfn.
+ */
+typedef void (*ucs_sys_enum_pfn_cb_t)(unsigned page_number, unsigned long pfn,
+                                      void *ctx);
+
+
+/**
  * @return TMPDIR environment variable if set. Otherwise, return "/tmp".
  */
 const char *ucs_get_tmpdir();
@@ -324,10 +331,28 @@ int ucs_get_mem_prot(unsigned long start, unsigned long end);
  * If the page map file is non-readable (for example, due to permissions), or
  * the page is not present, this function returns 0.
  *
- * @param address  Virtual address to get the PFN for
- * @return PFN number, or 0 if failed.
+ * @param address    Virtual address to get the. PFN for.
+ * @param page_count Number of pages to process
+ * @param data       Result buffer.
+ * @return UCS_OK if all pages are processed, else error code.
  */
-unsigned long ucs_sys_get_pfn(uintptr_t address);
+ucs_status_t ucs_sys_get_pfn(uintptr_t address, unsigned page_count,
+                             unsigned long *data);
+
+
+/**
+ * Enums the physical page frame numbers of a given virtual address range.
+ * If the page map file is non-readable (for example, due to permissions), or
+ * the page is not present, this function returns error.
+ *
+ * @param address     Virtual address to get the PFN for.
+ * @param page_number Number of pages to process.
+ * @param cb          Callback function which is called for every page.
+ * @param ctx         Context argument passed to @a cb call.
+ * @return error code if failed to enumerate or UCS_OK.
+ */
+ucs_status_t ucs_sys_enum_pfn(uintptr_t address, unsigned page_count,
+                              ucs_sys_enum_pfn_cb_t cb, void *ctx);
 
 
 /**

@@ -66,6 +66,9 @@ typedef struct {
 } ucs_sys_enum_threads_t;
 
 
+static const char *ucs_pagemap_file = "/proc/self/pagemap";
+
+
 const char *ucs_get_tmpdir()
 {
     char *env_tmpdir;
@@ -954,41 +957,85 @@ const char* ucs_get_process_cmdline()
     return cmdline;
 }
 
-unsigned long ucs_sys_get_pfn(uintptr_t address)
+static ucs_status_t
+ucs_sys_enum_pfn_internal(int pagemap_fd, unsigned start_page, uint64_t *data,
+                          uintptr_t address, unsigned page_count,
+                          ucs_sys_enum_pfn_cb_t cb, void *ctx)
 {
-    static const char *pagemap_file = "/proc/self/pagemap";
-    static int initialized = 0;
-    static int pagemap_fd;
-    uint64_t data;
     off_t offset;
     ssize_t ret;
+    size_t len;
+    unsigned i;
+
+    offset = ((address / ucs_get_page_size()) + start_page) * sizeof(*data);
+    len    = page_count * sizeof(*data);
+    ret    = pread(pagemap_fd, data, len, offset);
+    if (ret < 0) {
+        ucs_warn("pread(file=%s offset=%zu) failed: %m", ucs_pagemap_file, offset);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    for (i = 0; i < ret / sizeof(*data); i++) {
+        if (!(data[i] & UCS_BIT(63))) {
+            ucs_trace("address 0x%lx not present",
+                      address + (ucm_get_page_size() * (i + start_page)));
+            return UCS_ERR_IO_ERROR;
+        }
+
+        cb(i + start_page, data[i] & UCS_MASK(55), ctx);
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_sys_enum_pfn(uintptr_t address, unsigned page_count,
+                              ucs_sys_enum_pfn_cb_t cb, void *ctx)
+{
+    /* by default use 1K buffer on stack */
+    const int UCS_SYS_ENUM_PFN_ELEM_CNT = ucs_min(128, UCS_ALLOCA_MAX_SIZE /
+                                                  sizeof(uint64_t));
+    static int initialized              = 0;
+    ucs_status_t status                 = UCS_OK;
+    static int pagemap_fd;
+    uint64_t *data;
+    unsigned page_num;
 
     if (!initialized) {
-        pagemap_fd = open(pagemap_file, O_RDONLY);
+        pagemap_fd = open(ucs_pagemap_file, O_RDONLY);
         if (pagemap_fd < 0) {
-            ucs_warn("failed to open %s: %m", pagemap_file);
+            ucs_warn("failed to open %s: %m", ucs_pagemap_file);
         }
         initialized = 1;
     }
 
     if (pagemap_fd < 0) {
-        return 0; /* could not open file */
+        return UCS_ERR_IO_ERROR; /* could not open file */
     }
 
-    offset = (address / ucs_get_page_size()) * sizeof(data);
-    data   = 0;
-    ret    = pread(pagemap_fd, &data, sizeof(data), offset);
-    if (ret < 0) {
-        ucs_warn("pread(file=%s offset=%zu) failed: %m", pagemap_file, offset);
-        return 0;
+    data = ucs_alloca(ucs_min(UCS_SYS_ENUM_PFN_ELEM_CNT, page_count) *
+                      sizeof(*data));
+
+    for (page_num = 0; (page_num < page_count) && (status == UCS_OK);
+         page_num += UCS_SYS_ENUM_PFN_ELEM_CNT) {
+         status = ucs_sys_enum_pfn_internal(pagemap_fd, page_num, data, address,
+                                            ucs_min(UCS_SYS_ENUM_PFN_ELEM_CNT,
+                                                    page_count - page_num),
+                                            cb, ctx);
     }
 
-    if (!(data & UCS_BIT(63))) {
-        ucs_trace("address 0x%lx not present", address);
-        return 0;
-    }
+    return status;
+}
 
-    return data & UCS_MASK(55);
+static void ucs_sys_get_pfn_cb(unsigned page_number, unsigned long pfn,
+                               void *ctx)
+{
+    ((unsigned long*)ctx)[page_number] = pfn;
+}
+
+ucs_status_t ucs_sys_get_pfn(uintptr_t address, unsigned page_count,
+                             unsigned long *data)
+{
+    return ucs_sys_enum_pfn(address, page_count, ucs_sys_get_pfn_cb, data);
 }
 
 ucs_status_t ucs_sys_fcntl_modfl(int fd, int add, int rem)

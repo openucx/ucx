@@ -14,6 +14,7 @@ extern "C" {
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 }
+#include <set>
 
 
 class test_rcache_basic : public ucs::test {
@@ -828,3 +829,81 @@ UCS_TEST_F(test_rcache_stats, hits_slow) {
     munmap(mem2, size1);
 }
 #endif
+
+
+class test_rcache_pfn : public ucs::test {
+public:
+    void test_pfn(void *address, unsigned page_num)
+    {
+        pfn_enum_t ctx;
+        ucs_status_t status;
+
+        ctx.page_num = page_num;
+        status       = ucs_sys_enum_pfn((uintptr_t)address,
+                                        page_num, enum_pfn_cb, &ctx);
+        ASSERT_UCS_OK(status);
+        /* we expect that we got exact page_num PFN calls */
+        ASSERT_EQ(page_num, ctx.page.size());
+        ASSERT_EQ(page_num, ctx.pfn.size());
+    }
+
+protected:
+    typedef std::set<unsigned> page_set_t;
+    typedef std::set<unsigned long> pfn_set_t;
+    typedef struct {
+        unsigned   page_num;
+        page_set_t page;
+        pfn_set_t  pfn;
+    } pfn_enum_t;
+
+    static void enum_pfn_cb(unsigned page_num, unsigned long pfn, void *ctx)
+    {
+        pfn_enum_t *data = (pfn_enum_t*)ctx;
+
+        EXPECT_LT(page_num, data->page_num);
+        /* we expect that every page will have a unique page_num and a
+         * unique PFN */
+        EXPECT_EQ(data->pfn.end(), data->pfn.find(pfn));
+        EXPECT_EQ(data->page.end(), data->page.find(page_num));
+        data->pfn.insert(pfn);
+        data->page.insert(page_num);
+    }
+};
+
+UCS_TEST_F(test_rcache_pfn, enum_pfn) {
+    const int MAX_PAGE_NUM = 1024 * 100; /* 400Mb max buffer */
+    size_t page_size       = ucs_get_page_size();
+    void *region;
+    unsigned i;
+    size_t len;
+    unsigned long pfn;
+    ucs_status_t status;
+
+    /* stack page could not be mapped into zero region, if we get 0 here it
+     * means the kernel does not provide PFNs */
+    status = ucs_sys_get_pfn((uintptr_t)&pfn, 1, &pfn);
+    ASSERT_UCS_OK(status);
+    if (pfn == 0) {
+        /* stack page could not be mapped into zero region */
+        UCS_TEST_SKIP_R("PFN is not supported");
+    }
+
+    /* initialize stream here to avoid incorrect debug output */
+    ucs::detail::message_stream ms("PAGES");
+
+    for (i = 1; i < MAX_PAGE_NUM; i *= 2) {
+        len = page_size * i;
+        ms << i << " ";
+        region = mmap(NULL, len, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        ASSERT_TRUE(region != MAP_FAILED);
+        memset(region, 0, len); /* ensure that pages are mapped */
+        /* test region aligned by page size */
+        test_pfn(region, i);
+        if (i > 1) { /* test pfn on mid-of-page address */
+            test_pfn(UCS_PTR_BYTE_OFFSET(region, page_size / 2), i - 1);
+        }
+
+        munmap(region, len);
+    }
+}
