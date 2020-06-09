@@ -435,15 +435,45 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
 
 bool is_rdmacm_netdev(const char *ifa_name) {
     struct dirent *entry;
+    ucs_status_t status;
+    long roce_lag_enable;
     char path[PATH_MAX];
     char dev_name[16];
     char guid_buf[32];
+    char bond_buf[128];
+    char *p, *saveptr;
+    int num_slaves;
+    ssize_t nread;
     DIR *dir;
 
+    /* Check for bonding interface */
+    nread = ucs_read_file_str(bond_buf, sizeof(bond_buf), 1,
+                              "/sys/class/net/%s/bonding/slaves", ifa_name);
+    if (nread > 0) {
+        num_slaves = 0;
+        p          = strtok_r(bond_buf, " \n\r\t", &saveptr);
+        while (p != NULL) {
+            if (!is_rdmacm_netdev(p)) {
+                return false;
+            }
+            ++num_slaves;
+            p = strtok_r(NULL, " \n\r\t", &saveptr);
+        }
+
+        return num_slaves > 0;
+    }
+
+    /* Check for RDMA support */
     snprintf(path, PATH_MAX, "/sys/class/net/%s/device/infiniband", ifa_name);
     dir = opendir(path);
     if (dir == NULL) {
-        return false;
+        /* Check bonding slave - it will only have 'roce_lag_enable' file, and
+         * no 'infiniband' sub-directory.
+         */
+        status = ucs_read_file_number(&roce_lag_enable, 1,
+                                      "/sys/class/net/%s/device/roce_lag_enable",
+                                      ifa_name);
+        return (status == UCS_OK) && roce_lag_enable;
     }
 
     /* read IB device name */
@@ -461,8 +491,8 @@ bool is_rdmacm_netdev(const char *ifa_name) {
 
     /* read node guid */
     memset(guid_buf, 0, sizeof(guid_buf));
-    ssize_t nread = ucs_read_file(guid_buf, sizeof(guid_buf), 1,
-                                  "/sys/class/infiniband/%s/node_guid", dev_name);
+    nread = ucs_read_file(guid_buf, sizeof(guid_buf), 1,
+                          "/sys/class/infiniband/%s/node_guid", dev_name);
     if (nread < 0) {
         return false;
     }
