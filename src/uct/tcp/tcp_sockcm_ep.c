@@ -501,6 +501,7 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
                                                   const uct_ep_params_t *params)
 {
     uct_tcp_sockcm_t *tcp_sockcm = uct_tcp_sockcm_ep_get_cm(cep);
+    uct_cm_base_ep_t *cm_ep      = &cep->super;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     const struct sockaddr *server_addr;
     ucs_async_context_t *async_ctx;
@@ -508,7 +509,10 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
 
     cep->state |= UCT_TCP_SOCKCM_EP_ON_CLIENT;
 
-    status = uct_cm_ep_client_set_connect_cb(params, &cep->super);
+    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT,
+                           cm_ep->client.connect_cb, params->sockaddr_cb_client,
+                           uct_cm_ep_client_connect_callback_t,
+                           ucs_empty_function);
     if (status != UCS_OK) {
         goto err;
     }
@@ -593,6 +597,7 @@ ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h *e
 {
     uct_tcp_sockcm_ep_t *tcp_ep;
     uct_tcp_sockcm_t *tcp_sockcm;
+    uct_cm_base_ep_t *cm_ep;
     ucs_status_t status;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
@@ -607,12 +612,18 @@ ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h *e
         *ep_p  = &tcp_ep->super.super.super;
 
         /* fill the tcp_ep fields from the caller's params */
-        uct_cm_set_common_data(&tcp_ep->super, params);
-
-        status = uct_cm_ep_server_set_notify_cb(params, &tcp_ep->super);
+        status = uct_cm_set_common_data(&tcp_ep->super, params);
         if (status != UCS_OK) {
-            UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
-            return status;
+            goto err;
+        }
+
+        cm_ep = &tcp_ep->super;
+        status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER,
+                               cm_ep->server.notify_cb, params->sockaddr_cb_server,
+                               uct_cm_ep_server_conn_notify_callback_t,
+                               ucs_empty_function);
+        if (status != UCS_OK) {
+            goto err;
         }
 
         tcp_ep->state |= UCT_TCP_SOCKCM_EP_SERVER_CREATED;
@@ -627,6 +638,10 @@ ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h *e
                   "has to be provided");
         return UCS_ERR_INVALID_PARAM;
     }
+
+err:
+    UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
+    return status;
 }
 
 UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_ep_t)

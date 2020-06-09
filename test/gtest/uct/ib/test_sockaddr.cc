@@ -517,21 +517,21 @@ protected:
         ASSERT_TRUE(m_server->listener());
         m_server->reserve_ep(m_server->num_eps());
 
-        ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                     |
-                               UCT_EP_PARAM_FIELD_CONN_REQUEST           |
-                               UCT_EP_PARAM_FIELD_USER_DATA              |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS      |
+        ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                        |
+                               UCT_EP_PARAM_FIELD_CONN_REQUEST              |
+                               UCT_EP_PARAM_FIELD_USER_DATA                 |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB    |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS         |
                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
 
-        ep_params.cm                         = cm;
-        ep_params.conn_request               = conn_request;
-        ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
-        ep_params.sockaddr_pack_cb           = server_priv_data_cb;
-        ep_params.sockaddr_connect_cb.server = notify_cb;
-        ep_params.disconnect_cb              = disconnect_cb;
-        ep_params.user_data                  = user_data;
+        ep_params.cm                 = cm;
+        ep_params.conn_request       = conn_request;
+        ep_params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
+        ep_params.sockaddr_pack_cb   = server_priv_data_cb;
+        ep_params.sockaddr_cb_server = notify_cb;
+        ep_params.disconnect_cb      = disconnect_cb;
+        ep_params.user_data          = user_data;
 
         status = uct_ep_create(&ep_params, &ep);
         ASSERT_UCS_OK(status);

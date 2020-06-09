@@ -35,6 +35,12 @@ ucp_cm_ep_init_flags(const ucp_worker_h worker, const ucp_ep_params_t *params)
     return 0;
 }
 
+int ucp_ep_init_flags_has_cm(unsigned ep_init_flags)
+{
+    return !!(ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
+                               UCP_EP_INIT_CM_WIREUP_SERVER));
+}
+
 static ucs_status_t
 ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
                                     ucp_ep_config_key_t *key)
@@ -132,8 +138,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     }
 
     /* At this point the ep has only CM lane */
-    ucs_assert((ucp_ep_num_lanes(ep) == 1) &&
-               (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE));
+    ucs_assert((ucp_ep_num_lanes(ep) == 1) && ucp_ep_has_cm_lane(ep));
     cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     ucs_assert(cm_wireup_ep != NULL);
 
@@ -605,22 +610,22 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
 
     wireup_ep->ep_init_flags  = ucp_ep_init_flags(ucp_ep->worker, params);
 
-    cm_lane_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
-                                UCT_EP_PARAM_FIELD_USER_DATA             |
-                                UCT_EP_PARAM_FIELD_SOCKADDR              |
-                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS     |
-                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB      |
-                                UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB   |
+    cm_lane_params.field_mask = UCT_EP_PARAM_FIELD_CM                         |
+                                UCT_EP_PARAM_FIELD_USER_DATA                  |
+                                UCT_EP_PARAM_FIELD_SOCKADDR                   |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS          |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB           |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT |
                                 UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB;
 
-    cm_lane_params.user_data                  = ucp_ep;
-    cm_lane_params.sockaddr                   = &params->sockaddr;
-    cm_lane_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
-    cm_lane_params.sockaddr_pack_cb           = ucp_cm_client_priv_pack_cb;
-    cm_lane_params.sockaddr_connect_cb.client = ucp_cm_client_connect_cb;
-    cm_lane_params.disconnect_cb              = ucp_cm_disconnect_cb;
+    cm_lane_params.user_data          = ucp_ep;
+    cm_lane_params.sockaddr           = &params->sockaddr;
+    cm_lane_params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
+    cm_lane_params.sockaddr_pack_cb   = ucp_cm_client_priv_pack_cb;
+    cm_lane_params.sockaddr_cb_client = ucp_cm_client_connect_cb;
+    cm_lane_params.disconnect_cb      = ucp_cm_disconnect_cb;
     ucs_assert_always(ucp_worker_num_cm_cmpts(worker) == 1);
-    cm_lane_params.cm                         = worker->cms[0].cm;
+    cm_lane_params.cm                 = worker->cms[0].cm;
 
     status = uct_ep_create(&cm_lane_params, &cm_ep);
     if (status != UCS_OK) {
@@ -909,23 +914,23 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
 
     /* create a server side CM endpoint */
     ucs_trace("ep %p: uct_ep[%d]", ep, lane);
-    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                    |
-                               UCT_EP_PARAM_FIELD_CONN_REQUEST          |
-                               UCT_EP_PARAM_FIELD_USER_DATA             |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS     |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB      |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB   |
+    uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                        |
+                               UCT_EP_PARAM_FIELD_CONN_REQUEST              |
+                               UCT_EP_PARAM_FIELD_USER_DATA                 |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS         |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB          |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER |
                                UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB;
 
     ucs_assertv_always(ucp_worker_num_cm_cmpts(worker) == 1,
                        "multiple CMs are not supported");
-    uct_ep_params.cm                         = worker->cms[0].cm;
-    uct_ep_params.user_data                  = ep;
-    uct_ep_params.conn_request               = conn_request->uct_req;
-    uct_ep_params.sockaddr_cb_flags          = UCT_CB_FLAG_ASYNC;
-    uct_ep_params.sockaddr_pack_cb           = ucp_cm_server_priv_pack_cb;
-    uct_ep_params.sockaddr_connect_cb.server = ucp_cm_server_conn_notify_cb;
-    uct_ep_params.disconnect_cb              = ucp_cm_disconnect_cb;
+    uct_ep_params.cm                 = worker->cms[0].cm;
+    uct_ep_params.user_data          = ep;
+    uct_ep_params.conn_request       = conn_request->uct_req;
+    uct_ep_params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
+    uct_ep_params.sockaddr_pack_cb   = ucp_cm_server_priv_pack_cb;
+    uct_ep_params.sockaddr_cb_server = ucp_cm_server_conn_notify_cb;
+    uct_ep_params.disconnect_cb      = ucp_cm_disconnect_cb;
 
     status = uct_ep_create(&uct_ep_params, &uct_ep);
     if (status != UCS_OK) {

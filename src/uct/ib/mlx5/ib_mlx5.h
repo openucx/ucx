@@ -175,8 +175,10 @@ typedef struct uct_ib_mlx5_md {
     uint32_t                 flags;
     ucs_mpool_t              dbrec_pool;
     ucs_recursive_spinlock_t dbrec_lock;
+#if HAVE_EXP_UMR
     struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
+#endif
 
     void                     *zero_buf;
     struct mlx5dv_devx_umem  *zero_mem;
@@ -442,10 +444,12 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
  */
 static inline uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
 {
-#ifdef HAVE_EXP_UMR
+#if HAVE_EXP_UMR
     if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
         return 0;
     }
+#endif
+#if HAVE_EXP_UMR || HAVE_DEVX
     /* Generate atomic UMR id. We want umrs for same virtual addresses to have
      * different ids across processes.
      *

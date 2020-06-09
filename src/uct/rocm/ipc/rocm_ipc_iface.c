@@ -88,9 +88,8 @@ static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
     /* TODO: get accurate info */
-    iface_attr->latency.overhead        = 80e-9; /* 80 ns */
-    iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth.dedicated     = 10240 * 1024.0 * 1024.0; /* 10240 MB*/
+    iface_attr->latency                 = ucs_linear_func_make(80e-9, 0);
+    iface_attr->bandwidth.dedicated     = 10.0 * UCS_GBYTE; /* 10 GB */
     iface_attr->bandwidth.shared        = 0;
     iface_attr->overhead                = 0.4e-6; /* 0.4 us */
 

@@ -50,6 +50,15 @@
         (_data)->out_events &= ~exp_events | (_data)->fired_events;           \
     } while(0)
 
+#define UCM_MMAP_EVENT_NAME_ENTRY(_event) \
+    [ucs_ilog2(UCM_EVENT_##_event)] = #_event
+
+#define UCM_MMAP_MAX_EVENT_NAME_LEN sizeof("VM_UNMAPPED")
+
+#define UCM_MMAP_REPORT_BUF_LEN \
+    ((UCM_MMAP_MAX_EVENT_NAME_LEN + 2) * \
+    ucs_array_size(ucm_mmap_event_name))
+
 extern const char *ucm_mmap_hook_modes[];
 
 typedef enum ucm_mmap_hook_type {
@@ -89,6 +98,21 @@ static ucm_mmap_func_t ucm_mmap_funcs[] = {
 
 static pthread_mutex_t ucm_mmap_install_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int ucm_mmap_installed_events = 0; /* events that were reported as installed */
+
+static const char *ucm_mmap_event_name[] = {
+    /* Native events */
+    UCM_MMAP_EVENT_NAME_ENTRY(MMAP),
+    UCM_MMAP_EVENT_NAME_ENTRY(MUNMAP),
+    UCM_MMAP_EVENT_NAME_ENTRY(MREMAP),
+    UCM_MMAP_EVENT_NAME_ENTRY(SHMAT),
+    UCM_MMAP_EVENT_NAME_ENTRY(SHMDT),
+    UCM_MMAP_EVENT_NAME_ENTRY(SBRK),
+    UCM_MMAP_EVENT_NAME_ENTRY(MADVISE),
+
+    /* Aggregate events */
+    UCM_MMAP_EVENT_NAME_ENTRY(VM_MAPPED),
+    UCM_MMAP_EVENT_NAME_ENTRY(VM_UNMAPPED),
+};
 
 static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
                                          ucm_event_t *event, void *arg)
@@ -194,8 +218,39 @@ void ucm_fire_mmap_events(int events)
     ucm_fire_mmap_events_internal(events, &data);
 }
 
+static void ucm_mmap_event_report_missing(int expected, int actual,
+                                          const char *event_type)
+{
+    int events_count = 0;
+    int missing_events;
+    int idx;
+    char *buf;
+    char *buf_p;
+    char *end_p;
+
+    UCS_STATIC_ASSERT(UCM_MMAP_REPORT_BUF_LEN <= UCS_ALLOCA_MAX_SIZE)
+
+    buf            = buf_p = ucs_alloca(UCM_MMAP_REPORT_BUF_LEN);
+    end_p          = buf_p + UCM_MMAP_REPORT_BUF_LEN;
+    missing_events = expected & ~actual &
+                     UCS_MASK(ucs_array_size(ucm_mmap_event_name));
+
+    ucs_for_each_bit(idx, missing_events) {
+        /* coverity[overrun-local] */
+        snprintf(buf_p, end_p - buf_p, "%s%s", ((events_count > 0) ? ", " : ""),
+                 ucm_mmap_event_name[idx]);
+        events_count++;
+        buf_p += strlen(buf_p);
+    }
+
+    if (events_count) {
+        ucm_diag("missing %s memory events: %s", event_type, buf);
+    }
+}
+
 /* Called with lock held */
-static ucs_status_t ucm_mmap_test_events(int events)
+static ucs_status_t
+ucm_mmap_test_events_nolock(int events, const char *event_type)
 {
     ucm_event_handler_t handler;
     ucm_mmap_test_events_data_t data;
@@ -215,25 +270,34 @@ static ucs_status_t ucm_mmap_test_events(int events)
 
     /* Return success if we caught all wanted events */
     if (!ucs_test_all_flags(data.out_events, events)) {
+        ucm_mmap_event_report_missing(events, data.out_events, event_type);
         return UCS_ERR_UNSUPPORTED;
     }
 
     return UCS_OK;
 }
 
-ucs_status_t ucm_mmap_test_installed_events(int events)
+ucs_status_t ucm_mmap_test_events(int events, const char *event_type)
 {
     ucs_status_t status;
 
     /*
-     * return UCS_OK iff all installed events are actually working
-     * we don't check the status of events which were not successfully installed
+     * return UCS_OK iff all events are actually working
      */
     pthread_mutex_lock(&ucm_mmap_install_mutex);
-    status = ucm_mmap_test_events(events & ucm_mmap_installed_events);
+    status = ucm_mmap_test_events_nolock(events, event_type);
     pthread_mutex_unlock(&ucm_mmap_install_mutex);
 
     return status;
+}
+
+ucs_status_t ucm_mmap_test_installed_events(int events)
+{
+    /*
+     * return UCS_OK iff all installed events are actually working
+     * we don't check the status of events which were not successfully installed
+     */
+    return ucm_mmap_test_events(events & ucm_mmap_installed_events, "internal");
 }
 
 /* Called with lock held */
@@ -312,7 +376,7 @@ ucs_status_t ucm_mmap_install(int events)
         /* if we already installed these events, check that they are still
          * working, and if not - reinstall them.
          */
-        status = ucm_mmap_test_events(native_events);
+        status = ucm_mmap_test_events_nolock(native_events, 0);
         if (status == UCS_OK) {
             goto out_unlock;
         }
@@ -324,7 +388,7 @@ ucs_status_t ucm_mmap_install(int events)
         goto out_unlock;
     }
 
-    status = ucm_mmap_test_events(native_events);
+    status = ucm_mmap_test_events_nolock(native_events, 0);
     if (status != UCS_OK) {
         ucm_debug("failed to install mmap events");
         goto out_unlock;

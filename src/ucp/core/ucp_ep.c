@@ -901,8 +901,7 @@ static ucs_status_t ucp_ep_close_nb_check_params(ucp_ep_h ep, unsigned mode)
 {
     /* CM lane tracks remote state, so it can be used with any modes of close
      * and error handling */
-    if ((mode == UCP_EP_CLOSE_MODE_FLUSH) ||
-        (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE)) {
+    if ((mode == UCP_EP_CLOSE_MODE_FLUSH) || ucp_ep_has_cm_lane(ep)) {
         return UCS_OK;
     }
 
@@ -1066,8 +1065,8 @@ static void ucp_ep_config_calc_params(ucp_worker_h worker,
             md_map |= UCS_BIT(md_index);
             md_attr = &context->tl_mds[md_index].attr;
             if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
-                params->reg_growth   += md_attr->reg_cost.growth;
-                params->reg_overhead += md_attr->reg_cost.overhead;
+                params->reg_growth   += md_attr->reg_cost.m;
+                params->reg_overhead += md_attr->reg_cost.c;
                 params->overhead     += iface_attr->overhead;
                 params->latency      += ucp_tl_iface_latency(context,
                                                              &iface_attr->latency);
@@ -2046,15 +2045,15 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 }
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
-                                           const uct_linear_growth_t *reg_cost,
+                                           const ucs_linear_func_t *reg_cost,
                                            const ucp_context_h context,
                                            double bandwidth)
 {
     double zcopy_thresh;
     double bcopy_bw = context->config.ext.bcopy_bw;
 
-    zcopy_thresh = (iovcnt * reg_cost->overhead) /
-                   ((1.0 / bcopy_bw) - (1.0 / bandwidth) - (iovcnt * reg_cost->growth));
+    zcopy_thresh = (iovcnt * reg_cost->c) /
+                   ((1.0 / bcopy_bw) - (1.0 / bandwidth) - (iovcnt * reg_cost->m));
 
     if (zcopy_thresh < 0.0) {
         return SIZE_MAX;
@@ -2091,8 +2090,7 @@ uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
 
 int ucp_ep_is_cm_local_connected(ucp_ep_h ep)
 {
-    return (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) &&
-           (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
+    return ucp_ep_has_cm_lane(ep) && (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 }
 
 uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)

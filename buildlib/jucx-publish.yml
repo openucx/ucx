@@ -3,44 +3,64 @@ parameters:
   temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/tmp-settings.xml
   gpg_dir: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/gpg
 
-steps:
-  - bash: |
-      set -eE
-      {
-        echo -e "<settings><servers><server>"
-        echo -e "<id>ossrh</id><username>\${env.SONATYPE_USERNAME}</username>"
-        echo -e "<password>\${env.SONATYPE_PASSWORD}</password>"
-        echo -e "</server></servers></settings>"
-      } > ${{ parameters.temp_cfg }}
-    displayName: Generate temporary config
+jobs:
+  - job: jucx_release
 
-  - task: DownloadSecureFile@1
-    displayName: Download Secure file
-    inputs:
-      secureFile: sparkucx-secret.gpg
-    name: privateKey
+    container: centos7
 
-  - task: DownloadSecureFile@1
-    displayName: Download Secure file
-    inputs:
-      secureFile: sparkucx-public.gpg
-    name: publicKey
+    steps:
+      - checkout: self
+        clean: true
 
-  - bash: |
-      mkdir ${{ parameters.gpg_dir }}
-      export GPG_TTY=`tty`
-      chmod 700 ${{ parameters.gpg_dir }}
-      cp $(publicKey.secureFilePath)  ${{ parameters.gpg_dir }}/pubring.gpg
-      cp $(privateKey.secureFilePath) ${{ parameters.gpg_dir }}/secring.gpg
-      export GNUPGHOME=${{ parameters.gpg_dir }}
-      TAG=`git describe --tags`
-      # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
-      # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
-      MAVEN_VERSION=${TAG:1}
-      make -C bindings/java/src/main/native/ ${{ parameters.target }} \
-          ARGS="--settings ${{ parameters.temp_cfg }}" JUCX_VERSION=${MAVEN_VERSION}
-    displayName: Publish JUCX jar to maven central
-    env:
-      GPG_PASSPHRASE: $(GPG_PASSPHRASE)
-      SONATYPE_PASSWORD: $(SONATYPE_PASSWORD)
-      SONATYPE_USERNAME: $(SONATYPE_USERNAME)
+      - bash: |
+          set -eE
+          gcc --version
+          ./autogen.sh
+          ./contrib/configure-release --with-java
+        displayName: Configure
+
+      - bash: |
+          set -eE
+          make -s -j`nproc`
+        displayName: Build ucx
+
+      - bash: |
+          set -eE
+          {
+            echo -e "<settings><servers><server>"
+            echo -e "<id>ossrh</id><username>\${env.SONATYPE_USERNAME}</username>"
+            echo -e "<password>\${env.SONATYPE_PASSWORD}</password>"
+            echo -e "</server></servers></settings>"
+          } > ${{ parameters.temp_cfg }}
+        displayName: Generate temporary config
+
+      - task: DownloadSecureFile@1
+        displayName: Download Secure file
+        inputs:
+          secureFile: sparkucx-secret.gpg
+        name: privateKey
+
+      - task: DownloadSecureFile@1
+        displayName: Download Secure file
+        inputs:
+          secureFile: sparkucx-public.gpg
+        name: publicKey
+
+      - bash: |
+          mkdir ${{ parameters.gpg_dir }}
+          export GPG_TTY=`tty`
+          chmod 700 ${{ parameters.gpg_dir }}
+          cp $(publicKey.secureFilePath)  ${{ parameters.gpg_dir }}/pubring.gpg
+          cp $(privateKey.secureFilePath) ${{ parameters.gpg_dir }}/secring.gpg
+          export GNUPGHOME=${{ parameters.gpg_dir }}
+          TAG=`git describe --tags`
+          # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
+          # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
+          MAVEN_VERSION=${TAG:1}
+          make -C bindings/java/src/main/native/ ${{ parameters.target }} \
+              ARGS="--settings ${{ parameters.temp_cfg }}" JUCX_VERSION=${MAVEN_VERSION}
+        displayName: Publish JUCX jar to maven central
+        env:
+          GPG_PASSPHRASE: $(GPG_PASSPHRASE)
+          SONATYPE_PASSWORD: $(SONATYPE_PASSWORD)
+          SONATYPE_USERNAME: $(SONATYPE_USERNAME)

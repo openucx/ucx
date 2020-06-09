@@ -1479,46 +1479,46 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     switch (active_speed) {
     case 1: /* SDR */
-        iface_attr->latency.overhead = 5000e-9;
-        signal_rate                  = 2.5e9;
-        encoding                     = 8.0/10.0;
+        iface_attr->latency.c = 5000e-9;
+        signal_rate           = 2.5e9;
+        encoding              = 8.0/10.0;
         break;
     case 2: /* DDR */
-        iface_attr->latency.overhead = 2500e-9;
-        signal_rate                  = 5.0e9;
-        encoding                     = 8.0/10.0;
+        iface_attr->latency.c = 2500e-9;
+        signal_rate           = 5.0e9;
+        encoding              = 8.0/10.0;
         break;
     case 4:
-        iface_attr->latency.overhead = 1300e-9;
+        iface_attr->latency.c = 1300e-9;
         if (uct_ib_iface_is_roce(iface)) {
             /* 10/40g Eth  */
-            signal_rate              = 10.3125e9;
-            encoding                 = 64.0/66.0;
+            signal_rate       = 10.3125e9;
+            encoding          = 64.0/66.0;
         } else {
             /* QDR */
-            signal_rate              = 10.0e9;
-            encoding                 = 8.0/10.0;
+            signal_rate       = 10.0e9;
+            encoding          = 8.0/10.0;
         }
         break;
     case 8: /* FDR10 */
-        iface_attr->latency.overhead = 700e-9;
-        signal_rate                  = 10.3125e9;
-        encoding                     = 64.0/66.0;
+        iface_attr->latency.c = 700e-9;
+        signal_rate           = 10.3125e9;
+        encoding              = 64.0/66.0;
         break;
     case 16: /* FDR */
-        iface_attr->latency.overhead = 700e-9;
-        signal_rate                  = 14.0625e9;
-        encoding                     = 64.0/66.0;
+        iface_attr->latency.c = 700e-9;
+        signal_rate           = 14.0625e9;
+        encoding              = 64.0/66.0;
         break;
     case 32: /* EDR / 100g Eth */
-        iface_attr->latency.overhead = 600e-9;
-        signal_rate                  = 25.78125e9;
-        encoding                     = 64.0/66.0;
+        iface_attr->latency.c = 600e-9;
+        signal_rate           = 25.78125e9;
+        encoding              = 64.0/66.0;
         break;
     case 64: /* 50g Eth */
-        iface_attr->latency.overhead = 600e-9;
-        signal_rate                  = 25.78125e9 * 2;
-        encoding                     = 64.0/66.0;
+        iface_attr->latency.c = 600e-9;
+        signal_rate           = 25.78125e9 * 2;
+        encoding              = 64.0/66.0;
         break;
     default:
         ucs_error("Invalid active_speed on %s:%d: %d",
@@ -1531,8 +1531,8 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         return status;
     }
 
-    iface_attr->latency.overhead += numa_latency;
-    iface_attr->latency.growth    = 0;
+    iface_attr->latency.c += numa_latency;
+    iface_attr->latency.m  = 0;
 
     /* Wire speed calculation: Width * SignalRate * Encoding */
     width                 = ib_port_widths[width_idx];
@@ -1546,7 +1546,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     if (uct_ib_iface_is_roce(iface)) {
         extra_pkt_len += UCT_IB_GRH_LEN + UCT_IB_ROCE_LEN;
-        iface_attr->latency.overhead += 200e-9;
+        iface_attr->latency.c += 200e-9;
     } else {
         /* TODO check if UCT_IB_DELIM_LEN is present in RoCE as well */
         extra_pkt_len += UCT_IB_LRH_LEN;

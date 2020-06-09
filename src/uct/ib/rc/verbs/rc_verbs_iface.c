@@ -169,8 +169,8 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
         return status;
     }
 
-    iface_attr->latency.growth += 1e-9;            /* 1 ns per each extra QP */
-    iface_attr->overhead        = 75e-9;           /* Software overhead */
+    iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
+    iface_attr->overhead   = 75e-9; /* Software overhead */
 
     return UCS_OK;
 }

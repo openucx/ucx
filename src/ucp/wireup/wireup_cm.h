@@ -22,6 +22,8 @@ typedef struct ucp_cm_client_connect_progress_arg {
 unsigned ucp_cm_ep_init_flags(const ucp_worker_h worker,
                               const ucp_ep_params_t *params);
 
+int ucp_ep_init_flags_has_cm(unsigned ep_init_flags);
+
 ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                            ucp_conn_request_h conn_request);
 

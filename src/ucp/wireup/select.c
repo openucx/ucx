@@ -10,6 +10,7 @@
 #endif
 
 #include "wireup.h"
+#include "wireup_cm.h"
 #include "address.h"
 
 #include <ucs/algorithm/qsort_r.h>
@@ -270,7 +271,7 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
     p            = tls_info;
     endp         = tls_info + sizeof(tls_info) - 1;
     tls_info[0]  = '\0';
-    tl_bitmap   &= select_params->tl_bitmap;
+    tl_bitmap   &= (select_params->tl_bitmap & context->tl_bitmap);
     show_error   = (select_params->show_error && show_error);
 
     /* Check which remote addresses satisfy the criteria */
@@ -338,7 +339,7 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
      * Pick the best local resource to satisfy the criteria.
      * best one has the highest score (from the dedicated score_func) and
      * has a reachable tl on the remote peer */
-    ucs_for_each_bit(rsc_index, context->tl_bitmap) {
+    ucs_for_each_bit(rsc_index, tl_bitmap) {
         resource   = &context->tl_rscs[rsc_index].tl_rsc;
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
@@ -398,8 +399,7 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
         ucp_unpacked_address_for_each(ae, select_params->address) {
             addr_index = ucp_unpacked_address_index(select_params->address, ae);
             if (!(addr_index_map & UCS_BIT(addr_index)) ||
-                !ucp_wireup_is_reachable(worker, rsc_index, ae))
-            {
+                !ucp_wireup_is_reachable(ep, rsc_index, ae)) {
                 /* Must be reachable device address, on same transport */
                 continue;
             }
@@ -464,8 +464,8 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
                                                  const uct_iface_attr_t *iface_attr,
                                                  const ucp_address_iface_attr_t *remote_iface_attr)
 {
-    return ucs_max(iface_attr->latency.overhead, remote_iface_attr->lat_ovh) +
-           (iface_attr->latency.growth * context->config.est_num_eps);
+    return ucs_max(iface_attr->latency.c, remote_iface_attr->lat_ovh) +
+           (iface_attr->latency.m * context->config.est_num_eps);
 }
 
 static UCS_F_NOINLINE void
@@ -781,8 +781,7 @@ static int ucp_wireup_allow_am_emulation_layer(unsigned ep_init_flags)
      * keep alive protocol, unless we have CM which handles disconnect
      */
     if ((ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
-        !(ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
-                           UCP_EP_INIT_CM_WIREUP_SERVER))) {
+        !ucp_ep_init_flags_has_cm(ep_init_flags)) {
         return 0;
     }
 
@@ -802,8 +801,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
 {
     ucp_wireup_select_info_t select_info;
 
-    if (!(select_params->ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
-                                          UCP_EP_INIT_CM_WIREUP_SERVER))) {
+    if (!ucp_ep_init_flags_has_cm(select_params->ep_init_flags)) {
         return UCS_OK;
     }
 
@@ -932,8 +930,9 @@ static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
                 ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
                         ucp_tl_iface_bandwidth(context, &remote_iface_attr->bandwidth))) +
                 ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-                iface_attr->overhead + md_attr->reg_cost.overhead +
-                (UCP_WIREUP_RMA_BW_TEST_MSG_SIZE * md_attr->reg_cost.growth));
+                iface_attr->overhead +
+                ucs_linear_func_apply(md_attr->reg_cost,
+                                      UCP_WIREUP_RMA_BW_TEST_MSG_SIZE));
 }
 
 static inline int
@@ -1564,8 +1563,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     ucs_qsort_r(key->amo_lanes, UCP_MAX_LANES, sizeof(ucp_lane_index_t),
                 ucp_wireup_compare_lane_amo_score, select_ctx->lane_descs);
 
-    if (!(select_params->ep_init_flags & (UCP_EP_INIT_CM_WIREUP_CLIENT |
-                                          UCP_EP_INIT_CM_WIREUP_SERVER))) {
+    if (!ucp_ep_init_flags_has_cm(select_params->ep_init_flags)) {
         /* Select lane for wireup messages */
         key->wireup_lane =
         ucp_wireup_select_wireup_msg_lane(worker,
