@@ -389,6 +389,8 @@ typedef struct {
 
     struct {
         ucs_list_link_t           started_ams;
+        ucs_queue_head_t          mid_rdesc_q; /* queue of middle fragments, which
+                                                  arrived before the first one */
     } am;
 } ucp_ep_ext_proto_t;
 
