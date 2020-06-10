@@ -32,8 +32,9 @@ static int ucp_ep_flush_is_completed(ucp_request_t *req)
 
 static void ucp_ep_flush_progress(ucp_request_t *req)
 {
-    ucp_ep_h       ep        = req->send.ep;
-    ucp_lane_map_t all_lanes = UCS_MASK(ucp_ep_num_lanes(ep));
+    ucp_ep_h ep              = req->send.ep;
+    unsigned num_lanes       = ucp_ep_num_lanes(ep);
+    ucp_lane_map_t all_lanes = UCS_MASK(num_lanes);
     ucp_ep_flush_state_t *flush_state;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -42,19 +43,23 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
     /* If the number of lanes changed since flush operation was submitted, adjust
      * the number of expected completions */
-    if (ucs_unlikely(req->send.flush.num_lanes != ucp_ep_num_lanes(ep))) {
-        diff                            = ucp_ep_num_lanes(ep) -
-                                          req->send.flush.num_lanes;
-        if (diff < 0) {
-            ucs_fatal("ep %p: unsupported endpoint reconfiguration from %d to %d"
-                      " lanes during flush", ep, req->send.flush.num_lanes,
-                      ucp_ep_num_lanes(ep));
+    if (ucs_unlikely(req->send.flush.num_lanes != num_lanes)) {
+        req->send.flush.num_lanes = num_lanes;
+        diff                      = num_lanes - req->send.flush.num_lanes;
+        if (diff >= 0) {
+            ucp_trace_req(req,
+                          "ep %p: adjusting expected flush completion count by %d",
+                          ep, diff);
+            req->send.state.uct_comp.count += diff;
+        } else {
+            /* If we have less lanes, it means we are in error flow and
+             * ucp_worker_set_ep_failed() was completed, so we should have
+             * completed the flush on all lanes.
+             */
+            ucs_assertv(req->send.state.uct_comp.count == 0,
+                        "uct_comp.count=%d num_lanes=%d",
+                        req->send.state.uct_comp.count, num_lanes);
         }
-
-        req->send.state.uct_comp.count += diff;
-        req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
-        ucs_trace_req("flush req %p: adjusting expected completion count by %d",
-                      req, diff);
     }
 
     ucs_trace("ep %p: progress flush req %p, started_lanes 0x%x count %d", ep,
