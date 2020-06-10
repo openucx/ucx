@@ -1266,7 +1266,7 @@ enum uct_md_mem_attr_field {
 struct uct_md_mem_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_md_mem_attr_t. The field mask is populated by the
+     * @ref uct_md_mem_attr_field. The field mask is populated by the
      * user. Fields not specified will be ignored by uct_md_mem_query
      */
     uint64_t          field_mask;
