@@ -466,8 +466,6 @@ static std::set<std::string> get_all_rdmacm_net_devices()
                 continue;
             }
 
-            ;
-
             memset(guid_buf, 0, sizeof(guid_buf));
             nread = ucs_read_file_str(guid_buf, sizeof(guid_buf), 1,
                                       IB_SYSFS_DIR "/%s/node_guid", entry->d_name);
