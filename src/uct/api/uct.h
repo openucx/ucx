@@ -1227,6 +1227,7 @@ struct uct_md_attr {
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
+        uint64_t             detect_sys_types; /**< Bitmap of memory types for which MD can detect ucs_sys_device_t of */
         ucs_memory_type_t    access_mem_type; /**< Memory type that Memory Domain can access */
     } cap;
 
