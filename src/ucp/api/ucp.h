@@ -1953,12 +1953,12 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
  *
  * @brief Non-blocking @ref ucp_ep_h "endpoint" closure.
  *
- * @note This operation supports specific flags, which can be passed
- *       in @a param by @ref ucp_request_param_t.flags. The exact set of flags
- *       is defined by @ref ucp_ep_close_flags_t.
- *
  * @param [in]  ep      Handle to the endpoint to close.
- * @param [in]  param   Operation parameters, see @ref ucp_request_param_t
+ * @param [in]  param   Operation parameters, see @ref ucp_request_param_t.
+ *                      This operation supports specific flags, which can be
+ *                      passed in @a param by @ref ucp_request_param_t.flags.
+ *                      The exact set of flags is defined
+ *                      by @ref ucp_ep_close_flags_t.
  *
  * @return NULL                 - The endpoint is closed successfully.
  * @return UCS_PTR_IS_ERR(_ptr) - The closure failed and an error code indicates
