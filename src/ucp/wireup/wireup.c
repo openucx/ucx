@@ -153,7 +153,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
     ucs_status_t status;
     void *address;
 
-    ucs_assert(ep->cfg_index != (uint8_t)-1);
+    ucs_assert(ep->cfg_index != UCP_NULL_CFG_INDEX);
 
     /* We cannot allocate from memory pool because it's not thread safe
      * and this function may be called from any thread
@@ -894,8 +894,8 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, ucp_rsc_index_t rsc_index,
     ucp_worker_iface_t *wiface = ucp_worker_iface(ep->worker, rsc_index);
 
     return (context->tl_rscs[rsc_index].tl_name_csum == ae->tl_name_csum) &&
-           ((ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE) ||
-             uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr));
+           (ucp_ep_has_cm_lane(ep) || /* assume reachability is checked by CM */
+            uct_iface_is_reachable(wiface->iface, ae->dev_addr, ae->iface_addr));
 }
 
 static void
@@ -903,14 +903,15 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep,
                              const ucp_unpacked_address_t *remote_address,
                              ucp_ep_config_key_t *key)
 {
-    const ucp_ep_config_key_t *prev_key = &ucp_ep_config(ep)->key;
-    ucp_context_h context               = ep->worker->context;
+    ucp_context_h context = ep->worker->context;
+    const ucp_ep_config_key_t *prev_config_key;
     ucp_rsc_index_t ae_cmpts[UCP_MAX_MDS]; /* component index for each address entry */
     const ucp_address_entry_t *ae;
     ucp_rsc_index_t cmpt_index;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t dst_md_index;
     ucp_md_map_t ae_dst_md_map, dst_md_map;
+    ucp_md_map_t prev_dst_md_map;
     unsigned num_dst_mds;
 
     ae_dst_md_map = 0;
@@ -924,8 +925,16 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep,
         }
     }
 
+    if (ep->cfg_index == UCP_NULL_CFG_INDEX) {
+        prev_config_key = NULL;
+        prev_dst_md_map = 0;
+    } else {
+        prev_config_key = &ucp_ep_config(ep)->key;
+        prev_dst_md_map = prev_config_key->reachable_md_map;
+    }
+
     /* merge with previous configuration */
-    dst_md_map  = ae_dst_md_map | prev_key->reachable_md_map;
+    dst_md_map  = ae_dst_md_map | prev_dst_md_map;
     num_dst_mds = 0;
     ucs_for_each_bit(dst_md_index, dst_md_map) {
         cmpt_index = UCP_NULL_RESOURCE;
@@ -934,8 +943,9 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep,
             cmpt_index = ae_cmpts[dst_md_index];
         }
         /* remote md is reachable by previous ep configuration */
-        if (UCS_BIT(dst_md_index) & prev_key->reachable_md_map) {
-            cmpt_index = ucp_ep_config_get_dst_md_cmpt(prev_key, dst_md_index);
+        if (UCS_BIT(dst_md_index) & prev_dst_md_map) {
+            ucs_assert(prev_config_key != NULL);
+            cmpt_index = ucp_ep_config_get_dst_md_cmpt(prev_config_key, dst_md_index);
             if (UCS_BIT(dst_md_index) & ae_dst_md_map) {
                 /* we expect previous configuration will not conflict with the
                  * new one
@@ -978,7 +988,9 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         return status;
     }
 
-    /* Get all reachable MDs from full remote address list */
+    /* Get all reachable MDs from full remote address list and join with
+     * current ep configuration
+     */
     key.dst_md_cmpts = ucs_alloca(sizeof(*key.dst_md_cmpts) * UCP_MAX_MDS);
     ucp_wireup_get_reachable_mds(ep, remote_address, &key);
 
@@ -992,7 +1004,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         return UCS_OK; /* No change */
     }
 
-    if ((ep->cfg_index != 0) && !ucp_ep_is_sockaddr_stub(ep)) {
+    if ((ep->cfg_index != UCP_NULL_CFG_INDEX) && !ucp_ep_is_sockaddr_stub(ep)) {
         /*
          * TODO handle a case where we have to change lanes and reconfigure the ep:
          *
