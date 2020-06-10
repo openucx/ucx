@@ -118,8 +118,8 @@ public:
 
     bool do_grep(const std::string &needle) {
         unsigned num_retries = 0;
-        std::string cmd_str = "";
-        int errno_val = 0;
+        std::string cmd_str  = "";
+        int errno_val        = 0;
 
         while (num_retries++ < GREP_RETRIES) {
             /* if this is the last retry, allow printing the grep output */
@@ -131,6 +131,8 @@ public:
                 return true;
             }
 
+            /* save errno value to report it when the maximum number of
+             * `grep` retries has been reached */
             errno_val = errno;
 
             ucs_log_flush();
