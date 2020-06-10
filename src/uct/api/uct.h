@@ -1248,12 +1248,11 @@ struct uct_md_attr {
  * are present.
  */
 enum uct_md_mem_attr_field {
-    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE = UCS_BIT(0), /**< Indicate if memory type
-                                                      is populated. E.g. CPU/GPU */
-    UCT_MD_MEM_ATTR_FIELD_SYS_DEV  = UCS_BIT(1)  /**< Indicate if details of
-                                                      system device backing
-                                                      the pointer are populated.
-                                                      E.g. NUMA/GPU */
+    /** Enables @ref uct_md_mem_attr_t::mem_type */
+    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE = UCS_BIT(0),
+
+    /** Enables @ref uct_md_mem_attr_t::sys_dev */
+    UCT_MD_MEM_ATTR_FIELD_SYS_DEV  = UCS_BIT(1)
 };
 
 
@@ -1261,11 +1260,10 @@ enum uct_md_mem_attr_field {
  * @ingroup UCT_MD
  * @brief  Memory domain attributes.
  *
- * This structure defines the attributes of a memory pointer which may
- * include the memory type of the pointer, and the system device that backs
- * the pointer depending on the bit fields populated in field_mask.
+ * This structure is used to request attributes of a memory range from
+ * uct_md_mem_query through bit fields populated in field_mask.
  */
-typedef struct uct_md_mem_attr {
+struct uct_md_mem_attr {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref uct_md_mem_attr_t. The field mask is populated by the
@@ -1282,15 +1280,15 @@ typedef struct uct_md_mem_attr {
      * Index of the system device on which the buffer resides. E.g. NUMA/GPU
      */
     ucs_sys_device_t  sys_dev;
-} uct_md_mem_attr_t;
+};
 
 
 /**
  * @ingroup UCT_MD
  * @brief Query attributes of a given pointer
  *
- * Return attributes such as memory type, and system device for the
- * given pointer of specific length depending on fields requested in mem_attr.
+ * Return attributes of a memory range based on the fields requested in
+ * @ref uct_md_mem_attr_t::field_mask.
  *
  * @param [in]     md          Memory domain to run the query on.
  * @param [in]     address     The address of the pointer. Must be non-NULL
@@ -1299,7 +1297,8 @@ typedef struct uct_md_mem_attr {
  *                             Must be nonzero else UCS_ERR_INVALID_PARAM error
  *                             is returned.
  * @param [inout]  mem_attr    MD attribute param specifying fields of interest.
- *                             If successful, filled with ptr attributes.
+ *                             If successful, the structure is filled with
+ *                             requested attributes of the memory range.
  *
  * @return This function returns an appropriate error code if the md does not
  *         recognize the pointer or if all of the requested fields in mem_attr
