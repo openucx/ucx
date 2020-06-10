@@ -458,7 +458,7 @@ static std::set<std::string> get_all_rdmacm_net_devices()
             continue;
         }
 
-        for (port_num = 1; port_num < 2; ++port_num) {
+        for (port_num = 1; port_num <= 2; ++port_num) {
             nread = ucs_read_file_str(dev_name, sizeof(dev_name), 1,
                                       IB_SYSFS_DIR "/%s/ports/%d/gid_attrs/ndevs/0",
                                       entry->d_name, port_num);
