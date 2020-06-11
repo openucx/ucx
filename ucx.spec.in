@@ -61,7 +61,7 @@ BuildRequires: xpmem-devel
 %endif
 
 %description
-UCX an optimized communication framework for high-performance distributed
+UCX is an optimized communication framework for high-performance distributed
 applications. UCX utilizes high-speed networks, such as RDMA (InfiniBand, RoCE,
 etc), Cray Gemini or Aries, for inter-node communication. If no such network is
 available, TCP is used instead. UCX supports efficient transfer of data in
