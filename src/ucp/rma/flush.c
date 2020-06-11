@@ -44,6 +44,8 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     /* If the number of lanes changed since flush operation was submitted, adjust
      * the number of expected completions */
     if (ucs_unlikely(req->send.flush.num_lanes != num_lanes)) {
+        ucp_trace_req(req, "ep %p: number of lanes changed from %d to %d",
+                      ep, req->send.flush.num_lanes, num_lanes);
         diff                      = num_lanes - req->send.flush.num_lanes;
         req->send.flush.num_lanes = num_lanes;
         if (diff >= 0) {
