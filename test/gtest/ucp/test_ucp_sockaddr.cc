@@ -137,8 +137,8 @@ public:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    void get_sockaddr()
-    {
+    void get_sockaddr() {
+        std::vector<ucs::sock_addr_storage> saddrs;
         struct ifaddrs* ifaddrs;
         ucs_status_t status;
         size_t size;
@@ -150,17 +150,33 @@ public:
                 ucs::is_inet_addr(ifa->ifa_addr) &&
                 ucs::is_rdmacm_netdev(ifa->ifa_name))
             {
+                saddrs.push_back(ucs::sock_addr_storage());
                 status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
                 ASSERT_UCS_OK(status);
-                m_test_addr.set_sock_addr(*ifa->ifa_addr, size);
-                m_test_addr.set_port(0); /* listen on any port then update */
-
-                freeifaddrs(ifaddrs);
-                return;
+                saddrs.back().set_sock_addr(*ifa->ifa_addr, size);
+                saddrs.back().set_port(0); /* listen on any port then update */
             }
         }
+
         freeifaddrs(ifaddrs);
-        UCS_TEST_SKIP_R("No interface for testing");
+
+        if (saddrs.empty()) {
+            UCS_TEST_SKIP_R("No interface for testing");
+        }
+
+        static const std::string ud_or_dc_tls[] = { "ud", "ud_v", "ud_x",
+                                                    "dc", "dc_x", "ib" };
+
+        bool has_dc_or_ud = has_any_transport(
+                        std::vector<std::string>(ud_or_dc_tls,
+                                                 ud_or_dc_tls +
+                                                 ucs_array_size(ud_or_dc_tls)));
+
+        /* FIXME: select random interface, except for UD and DC transports,
+                  which do not yet support having different gid_index for
+                  different UCT endpoints on same iface */
+        int saddr_idx = has_dc_or_ud ? 0 : (ucs::rand() % saddrs.size());
+        m_test_addr   = saddrs[saddr_idx];
     }
 
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type)
@@ -927,7 +943,7 @@ protected:
     {
         EXPECT_TRUE(send_buf == recv_buf)
             << "send_buf: '" << ucs::compact_string(send_buf, 20) << "', "
-            << "recv_buf: '" << ucs::compact_string(send_buf, 20) << "'";
+            << "recv_buf: '" << ucs::compact_string(recv_buf, 20) << "'";
     }
 
     void test_tag_send_recv(size_t size, bool is_exp, bool is_sync = false)
