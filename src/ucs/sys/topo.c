@@ -35,13 +35,6 @@ typedef struct ucs_topo_global_ctx {
 
 static ucs_topo_global_ctx_t ucs_topo_ctx;
 
-/* TODO: can this conflict with a valid BDF? */
-ucs_sys_bus_id_t ucs_sys_bus_id_unknown = { .domain   = 0xffff,
-                                            .bus      = 0xff,
-                                            .slot     = 0xff,
-                                            .function = 0xff
-                                          };
-
 static ucs_bus_id_bit_rep_t ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
 {
     return (((uint64_t)bus_id->domain << 24) |
@@ -70,15 +63,6 @@ void ucs_topo_cleanup()
     }
 }
 
-static int ucs_topo_compare_bus_id(const ucs_sys_bus_id_t *bus_id1, 
-                                   const ucs_sys_bus_id_t *bus_id2)
-{
-    return ((bus_id1->domain == bus_id2->domain) &&
-            (bus_id1->bus == bus_id2->bus) &&
-            (bus_id1->slot == bus_id2->slot) &&
-            (bus_id1->function == bus_id2->function));
-}
-
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
@@ -86,16 +70,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
     ucs_kh_put_t kh_put_status;
     ucs_bus_id_bit_rep_t bus_id_bit_rep;
 
-    *sys_dev        = UCS_SYS_DEVICE_ID_UNKNOWN;
     bus_id_bit_rep  = ucs_topo_get_bus_id_bit_repr(bus_id);
-
-    if (ucs_topo_compare_bus_id(bus_id, &ucs_sys_bus_id_unknown)) {
-        ucs_debug("found unknown device index %u for bus id %ld",
-                  *sys_dev, bus_id_bit_rep);
-        return UCS_OK;
-    }
-    
-    ucs_debug("find device index for bus id %ld", bus_id_bit_rep);
 
     ucs_spin_lock(&ucs_topo_ctx.lock);
     hash_it = kh_put(bus_to_sys_dev /*name*/,
