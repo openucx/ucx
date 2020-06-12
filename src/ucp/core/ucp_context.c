@@ -15,7 +15,6 @@
 
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>
-#include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/string_set.h>
 #include <ucs/debug/log.h>

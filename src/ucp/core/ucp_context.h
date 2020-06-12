@@ -15,7 +15,6 @@
 
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
-#include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
@@ -234,7 +233,7 @@ typedef struct ucp_context {
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
-        
+
         /* Config environment prefix used to create the context */
         char                      *env_prefix;
 

@@ -117,9 +117,6 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_RMA | UCP_FEATURE_AMO,
                                     return UCS_ERR_INVALID_PARAM);
 
-    /* always acquire context lock */
-    UCP_THREAD_CS_ENTER(&context->mt_lock);
-
     ucs_trace("packing rkeys for buffer %p memh %p md_map 0x%lx",
               memh->address, memh, memh->md_map);
 
@@ -157,7 +154,6 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
 err_destroy:
     ucs_free(rkey_buffer);
 out:
-    UCP_THREAD_CS_EXIT(&context->mt_lock);
     return status;
 }
 
