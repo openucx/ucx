@@ -90,6 +90,14 @@ bool ucp_test::has_transport(const std::string& tl_name) const {
     return check_transport(tl_name, GetParam().transports);
 }
 
+bool ucp_test::has_any_transport(const std::vector<std::string>& tl_names) const {
+    const std::vector<std::string>& all_tl_names = GetParam().transports;
+
+    return std::find_first_of(all_tl_names.begin(), all_tl_names.end(),
+                              tl_names.begin(),     tl_names.end()) !=
+           all_tl_names.end();
+}
+
 bool ucp_test::is_self() const {
     return "self" == GetParam().transports.front();
 }
