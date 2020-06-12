@@ -327,7 +327,9 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ep->am_lane = key.am_lane;
-    ep->flags  |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
+    if (!ucp_ep_has_cm_lane(ep)) {
+        ep->flags |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
+    }
 
     status = ucp_wireup_ep_create(ep, &ep->uct_eps[0]);
     if (status != UCS_OK) {
@@ -797,8 +799,11 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     ep->flags &= ~UCP_EP_FLAG_USED;
 
-    if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED|UCP_EP_FLAG_REMOTE_CONNECTED))
-        && !force) {
+    if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED |
+                      UCP_EP_FLAG_REMOTE_CONNECTED)) && !force) {
+        /* in case of CM connection ep has to be disconnected */
+        ucs_assert(!ucp_ep_has_cm_lane(ep));
+
         /* Endpoints which have remote connection are destroyed only when the
          * worker is destroyed, to enable remote endpoints keep sending
          * TODO negotiate disconnect.
