@@ -1205,6 +1205,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     unsigned ep_init_flags       = ucp_wireup_ep_init_flags(select_params,
                                                             select_ctx);
     uint64_t iface_rma_flags     = 0;
+    uint64_t local_event_flags   = 0;
     ucp_rndv_mode_t rndv_modes[] = {
         context->config.ext.rndv_mode,
         UCP_RNDV_MODE_GET_ZCOPY,
@@ -1221,6 +1222,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     } else if (ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) {
         /* if needed for RNDV, need only access for remote registered memory */
         md_reg_flag = UCT_MD_FLAG_REG;
+        if (ucp_ep_get_context_features(ep) & UCP_FEATURE_WAKEUP) {
+            local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+        }
     } else {
         return UCS_OK;
     }
@@ -1228,17 +1232,12 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.criteria.remote_iface_flags = 0;
     bw_info.criteria.local_iface_flags  = UCT_IFACE_FLAG_PENDING;
     bw_info.criteria.remote_event_flags = 0;
-    bw_info.criteria.local_event_flags  = 0;
+    bw_info.criteria.local_event_flags  = local_event_flags;
     bw_info.criteria.calc_score         = ucp_wireup_rma_bw_score_func;
     bw_info.criteria.tl_rsc_flags       = 0;
     bw_info.criteria.remote_md_flags    = md_reg_flag;
     ucp_wireup_clean_amo_criteria(&bw_info.criteria);
     ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
-
-    if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
-                           UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-        bw_info.criteria.local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
-    }
 
     bw_info.local_dev_bitmap  = UINT64_MAX;
     bw_info.remote_dev_bitmap = UINT64_MAX;
