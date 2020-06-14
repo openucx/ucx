@@ -14,6 +14,7 @@
 #include <uct/cuda/base/cuda_iface.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
+#include <ucs/async/async.h>
 #include <ucs/arch/cpu.h>
 
 
@@ -75,6 +76,10 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_PUT_ZCOPY |
                                           UCT_IFACE_FLAG_PENDING;
 
+    iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                          UCT_IFACE_FLAG_EVENT_RECV      |
+                                          UCT_IFACE_FLAG_EVENT_ASYNC_CB;
+
     iface_attr->cap.put.max_short       = UINT_MAX;
     iface_attr->cap.put.max_bcopy       = 0;
     iface_attr->cap.put.min_zcopy       = 0;
@@ -118,8 +123,8 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (ucs_queue_is_empty(&iface->outstanding_d2h_cuda_event_q) &&
-        ucs_queue_is_empty(&iface->outstanding_h2d_cuda_event_q)) {
+    if (ucs_queue_is_empty(&iface->outstanding_event_q[UCT_CUDA_COPY_H2D_STREAM]) &&
+        ucs_queue_is_empty(&iface->outstanding_event_q[UCT_CUDA_COPY_D2H_STREAM])) {
         UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
         return UCS_OK;
     }
@@ -129,23 +134,27 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_cuda_copy_progress_event_queue(ucs_queue_head_t *event_queue, unsigned max_events)
+uct_cuda_copy_progress_event_queue(uct_cuda_copy_iface_t *iface,
+                                   uct_cuda_copy_stream_t index,
+                                   unsigned max_events)
 {
     unsigned count = 0;
     cudaError_t result = cudaSuccess;
     uct_cuda_copy_event_desc_t *cuda_event;
     ucs_queue_iter_t iter;
 
-    ucs_queue_for_each_safe(cuda_event, iter, event_queue, queue) {
+    ucs_queue_for_each_safe(cuda_event, iter,
+                            &iface->outstanding_event_q[index], queue) {
         result = cudaEventQuery(cuda_event->event);
         if (cudaSuccess != result) {
             break;
         }
-        ucs_queue_del_iter(event_queue, iter);
+        ucs_queue_del_iter(&iface->outstanding_event_q[index], iter);
         if (cuda_event->comp != NULL) {
             uct_invoke_completion(cuda_event->comp, UCS_OK);
         }
         ucs_trace_poll("CUDA Event Done :%p", cuda_event);
+        iface->stream_refcount[cuda_event->stream_id]--;
         ucs_mpool_put(cuda_event);
         count++;
         if (count >= max_events) {
@@ -161,11 +170,63 @@ static unsigned uct_cuda_copy_iface_progress(uct_iface_h tl_iface)
     unsigned max_events = iface->config.max_poll;
     unsigned count;
 
-    count = uct_cuda_copy_progress_event_queue(&iface->outstanding_d2h_cuda_event_q,
+    count = uct_cuda_copy_progress_event_queue(iface, UCT_CUDA_COPY_D2H_STREAM,
                                                max_events);
-    count += uct_cuda_copy_progress_event_queue(&iface->outstanding_h2d_cuda_event_q,
+    count += uct_cuda_copy_progress_event_queue(iface, UCT_CUDA_COPY_H2D_STREAM,
                                                 (max_events - count));
     return count;
+}
+
+#if (__CUDACC_VER_MAJOR__ >= 100000)
+static void CUDA_CB myHostFn(void *cuda_copy_iface)
+#else
+static void CUDA_CB myHostCallback(CUstream hStream,  CUresult status,
+                                   void *cuda_copy_iface)
+#endif
+{
+    uct_cuda_copy_iface_t *iface = cuda_copy_iface;
+
+    ucs_assert(iface->async.event_cb != NULL);
+    /* notify user */
+    UCS_ASYNC_BLOCK(iface->super.worker->async);
+    iface->async.event_cb(iface->async.event_arg, 0);
+    UCS_ASYNC_UNBLOCK(iface->super.worker->async);
+}
+
+static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
+                                                    unsigned events)
+{
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
+    int i;
+    ucs_status_t status;
+
+    if (uct_cuda_copy_progress_event_queue(iface, UCT_CUDA_COPY_H2D_STREAM,
+                                           iface->config.max_poll)) {
+        return UCS_ERR_BUSY;
+    }
+
+    if (uct_cuda_copy_progress_event_queue(iface, UCT_CUDA_COPY_D2H_STREAM,
+                                           iface->config.max_poll)) {
+        return UCS_ERR_BUSY;
+    }
+
+    for (i = 0; i < UCT_CUDA_COPY_LAST_STREAM; i++) {
+        if (iface->stream_refcount[i]) {
+            status =
+#if (__CUDACC_VER_MAJOR__ >= 100000)
+                UCT_CUDADRV_FUNC_LOG_ERR(cuLaunchHostFunc(iface->stream[i],
+                                         myHostFn, iface));
+#else
+                UCT_CUDADRV_FUNC_LOG_ERR(cuStreamAddCallback(iface->stream[i],
+                                         myHostCallback, iface, 0));
+#endif
+            if (UCS_OK != status) {
+                return status;
+            }
+        }
+    }
+
+    return UCS_OK;
 }
 
 static uct_iface_ops_t uct_cuda_copy_iface_ops = {
@@ -184,6 +245,8 @@ static uct_iface_ops_t uct_cuda_copy_iface_ops = {
     .iface_progress_enable    = uct_base_iface_progress_enable,
     .iface_progress_disable   = uct_base_iface_progress_disable,
     .iface_progress           = uct_cuda_copy_iface_progress,
+    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)ucs_empty_function_return_success,
+    .iface_event_arm          = uct_cuda_copy_iface_event_fd_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_copy_iface_t),
     .iface_query              = uct_cuda_copy_iface_query,
     .iface_get_device_address = (uct_iface_get_device_address_func_t)ucs_empty_function_return_success,
@@ -229,6 +292,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 {
     uct_cuda_copy_iface_config_t *config = ucs_derived_of(tl_config,
                                                           uct_cuda_copy_iface_config_t);
+    int i;
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_copy_iface_ops, md, worker,
@@ -260,11 +324,23 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         return UCS_ERR_IO_ERROR;
     }
 
-    self->stream_d2h = 0;
-    self->stream_h2d = 0;
+    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB) {
+        self->async.event_cb = params->async_event_cb;
+    } else {
+        self->async.event_cb = NULL;
+    }
 
-    ucs_queue_head_init(&self->outstanding_d2h_cuda_event_q);
-    ucs_queue_head_init(&self->outstanding_h2d_cuda_event_q);
+    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG) {
+        self->async.event_arg = params->async_event_arg;
+    } else {
+        self->async.event_arg = NULL;
+    }
+
+    for (i = 0; i < UCT_CUDA_COPY_LAST_STREAM; i++) {
+        self->stream[i]          = 0;
+        self->stream_refcount[i] = 0;
+        ucs_queue_head_init(&self->outstanding_event_q[i]);
+    }
 
     return UCS_OK;
 }
@@ -272,18 +348,18 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
     int active;
+    int i;
 
     UCT_CUDADRV_CTX_ACTIVE(active);
 
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     if (active) {
-        if (self->stream_h2d != 0) {
-            UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(self->stream_h2d));
-        }
-
-        if (self->stream_d2h != 0) {
-            UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(self->stream_d2h));
+        for (i = 0; i < UCT_CUDA_COPY_LAST_STREAM; i++) {
+            if (self->stream[i] != 0) {
+                ucs_assert(self->stream_refcount[i] == 0);
+                UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(self->stream[i]));
+            }
         }
     }
 
