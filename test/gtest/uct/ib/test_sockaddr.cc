@@ -635,7 +635,6 @@ protected:
         test_uct_cm_sockaddr *self = reinterpret_cast<test_uct_cm_sockaddr *>(arg);
 
         if (notify_args->field_mask & UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS) {
-            /* TODO handle status that is not UCS_OK - when disconnecting */
             EXPECT_EQ(UCS_OK, notify_args->status);
         }
 
@@ -897,13 +896,11 @@ UCS_TEST_P(test_uct_cm_sockaddr, listener_query)
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close)
 {
-    skip_tcp_sockcm();  /* disconnect for tcp_sockcm isn't implemented yet */
     basic_listen_connect_disconnect();
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close_large_priv_data)
 {
-    skip_tcp_sockcm();
     m_entities.clear();
 
     /* Set the values for max send/recv socket buffers (for tcp_sockcm) to
@@ -927,7 +924,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_close_large_priv_data)
 
 UCS_TEST_P(test_uct_cm_sockaddr, cm_open_listen_kill_server)
 {
-    skip_tcp_sockcm();
     listen_and_connect();
 
     wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
@@ -967,7 +963,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
     m_server_start_disconnect = true;
 
-    skip_tcp_sockcm();
     /* Listen */
     start_listen(conn_request_cb);
 
@@ -1082,7 +1077,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
 
 UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
 {
-    skip_tcp_sockcm();
     test_delayed_server_response(false);
 
     cm_disconnect(m_client);
@@ -1098,7 +1092,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, ep_disconnect_err_codes)
 {
     bool disconnecting = false;
 
-    skip_tcp_sockcm();
     listen_and_connect();
 
     {
@@ -1269,7 +1262,6 @@ UCS_TEST_P(test_uct_cm_sockaddr_stress, many_clients_to_one_server)
     time_t seed = time(0);
     ucs_time_t deadline;
 
-    skip_tcp_sockcm();
     /* Listen */
     start_listen(test_uct_cm_sockaddr_stress::conn_request_cb);
 

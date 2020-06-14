@@ -52,8 +52,7 @@ static void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep)
 {
     ucs_free(ep->comm_ctx.buf);
     ucs_list_del(&ep->list);
-    ucs_async_remove_handler(ep->fd, 1);
-    ucs_close_fd(&ep->fd);
+    uct_tcp_sockcm_ep_close_fd(&ep->fd);
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 }
 
@@ -87,13 +86,6 @@ void uct_tcp_sa_data_handler(int fd, int events, void *arg)
     ucs_trace("ep %p on %s received event (state = %d)", ep,
               (ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
               ep->state);
-
-    if (!ucs_socket_is_connected(fd)) {
-        /* coverity[check_return] */
-        uct_tcp_sockcm_ep_handle_status(ep, UCS_ERR_IO_ERROR, events,
-                                        "fd is not connected");
-        return;
-    }
 
     if (events & UCS_EVENT_SET_EVERR) {
         ucs_error("error event on %s ep %p (state=%d) events=%d",

@@ -18,7 +18,9 @@ typedef enum uct_tcp_sockcm_ep_state {
     UCT_TCP_SOCKCM_EP_CLIENT_CONNECTED_CB_INVOKED = UCS_BIT(7),  /* ep invoked the connect_cb on the client side */
     UCT_TCP_SOCKCM_EP_SERVER_NOTIFY_CB_INVOKED    = UCS_BIT(8),  /* ep invoked the notify_cb on the server side */
     UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_CALLED        = UCS_BIT(9),  /* ep on the client called notify API call */
-    UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_SENT          = UCS_BIT(10)  /* ep on the client sent the notify message to the server */
+    UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_SENT          = UCS_BIT(10), /* ep on the client sent the notify message to the server */
+    UCT_TCP_SOCKCM_EP_DISCONNECTING               = UCS_BIT(11), /* @ref uct_ep_disconnect was called on the ep */
+    UCT_TCP_SOCKCM_EP_GOT_DISCONNECT              = UCS_BIT(12)  /* ep received a disconnect notice from the remote peer */
 } uct_tcp_sockcm_ep_state_t;
 
 
@@ -41,6 +43,8 @@ struct uct_tcp_sockcm_ep {
 UCS_CLASS_DECLARE(uct_tcp_sockcm_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_tcp_sockcm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_tcp_sockcm_ep_t, uct_ep_t);
+
+void uct_tcp_sockcm_ep_close_fd(int *fd);
 
 ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h* ep_p);
 
