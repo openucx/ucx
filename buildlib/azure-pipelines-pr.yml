@@ -166,4 +166,8 @@ stages:
       parameters:
         name: new
         demands: ucx_new -equals yes
+    - template: tests.yml
+      parameters:
+        name: hwi
+        demands: ucx_hwi -equals yes
 

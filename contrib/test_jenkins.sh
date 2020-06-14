@@ -111,6 +111,14 @@ module_load() {
 }
 
 #
+# Safe unload for env modules (even if it doesn't exist)
+#
+module_unload() {
+	module=$1
+	module unload "${module}" || true
+}
+
+#
 # try load cuda modules if nvidia driver is installed
 #
 try_load_cuda_env() {
@@ -127,8 +135,8 @@ try_load_cuda_env() {
 }
 
 unload_cuda_env() {
-	module unload $CUDA_MODULE
-	module unload $GDRCOPY_MODULE
+	module_unload $CUDA_MODULE
+	module_unload $GDRCOPY_MODULE
 }
 
 #
@@ -408,7 +416,7 @@ build_icc() {
 		echo "==== Not building with Intel compiler ===="
 		echo "ok 1 - # SKIP because Intel compiler not installed" >> build_icc.tap
 	fi
-	module unload intel/ics
+	module_unload intel/ics
 }
 
 #
@@ -437,7 +445,7 @@ build_pgi() {
 	fi
 
 	rm -rf ${pgi_test_file} ${pgi_test_file}.out
-	module unload pgi/latest
+	module_unload pgi/latest
 }
 
 #
@@ -486,7 +494,7 @@ build_ugni() {
 	$MAKE  distcheck
 	make_clean distclean
 
-	module unload dev/cray-ugni
+	module_unload dev/cray-ugni
 	echo "ok 1 - build successful " >> build_ugni.tap
 }
 
@@ -651,7 +659,7 @@ build_armclang() {
 	fi
 
 	rm -rf ${armclang_test_file} ${armclang_test_file}.out
-	module unload arm-compiler/latest
+	module_unload arm-compiler/latest
 }
 
 check_inst_headers() {
@@ -693,7 +701,7 @@ check_config_h() {
 	echo "==== Checking for config.h files in directory $srcdir ===="
 
 	missing=`find $srcdir -name \*.c -o -name \*.cc | xargs grep -LP '\#\s*include\s+"config.h"'`
-	
+
 	if [ `echo $missing | wc -w` -eq 0 ]
 	then
 		echo "ok 1 - check successful " >> check_config_h.tap
@@ -733,6 +741,22 @@ slice_affinity() {
 	cpulist=$(expand_cpulist ${compact_cpulist})
 
 	echo "${cpulist}" | head -n $((n + 1)) | tail -1
+}
+
+#
+# `rename` has a binary and Perl flavors. Ubuntu comes with Perl one and
+# requires different usage.
+#
+rename_files() {
+	expr=$1; shift
+	replacement=$1; shift
+	files=$*
+	if rename --version | grep 'util-linux'; then
+		rename "${expr}" "${replacement}" $files
+		return
+	fi
+
+	rename "s/\\${expr}\$/${replacement}/" "${files}"
 }
 
 run_client_server_app() {
@@ -1473,7 +1497,7 @@ run_gtest() {
 
 	echo "==== Running unit tests, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT make -C test/gtest test
-	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
+	(cd test/gtest && rename_files .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
 	# gtest returns with non zero exit code if there were no
@@ -1487,7 +1511,7 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mallopt \
 		make -C test/gtest test
-	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
+	(cd test/gtest && rename_files .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT \
@@ -1496,7 +1520,7 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 		make -C test/gtest test
-	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
+	(cd test/gtest && rename_files .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
 	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
@@ -1510,7 +1534,7 @@ run_gtest() {
 		fi
 
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
-		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
+		(cd test/gtest && rename_files .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 		module unload tools/valgrind-latest
 	else
 		echo "==== Not running valgrind tests with $compiler_name compiler ===="
