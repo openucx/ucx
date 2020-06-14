@@ -499,7 +499,7 @@ ucs_socket_do_io_b(int fd, void *data, size_t length,
 
     do {
         status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func,
-                                     name, err_cb, err_cb);
+                                     name, err_cb, err_cb_arg);
         done_cnt += cur_cnt;
         ucs_assert(done_cnt <= length);
         cur_cnt = length - done_cnt;
