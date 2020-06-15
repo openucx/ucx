@@ -263,10 +263,10 @@ enum ucp_ep_params_flags_field {
  * @ingroup UCP_ENDPOINT
  * @brief Close UCP endpoint modes.
  *
- * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
+ * The enumeration is used to specify the behavior of @ref ucp_ep_close_nbx.
  */
-enum ucp_ep_close_mode {
-    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
+typedef enum {
+    UCP_EP_CLOSE_FLAG_FORCE         = 0, /**< @ref ucp_ep_close_nbx releases
                                               the endpoint without any
                                               confirmation from the peer. All
                                               outstanding requests will be
@@ -279,7 +279,35 @@ enum ucp_ep_close_mode {
                                               for all endpoints created on
                                               both (local and remote) sides to
                                               avoid undefined behavior. */
-    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
+    UCP_EP_CLOSE_FLAG_FLUSH         = 1  /**< @ref ucp_ep_close_nbx schedules
+                                              flushes on all outstanding
+                                              operations. */
+} ucp_ep_close_flags_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Close UCP endpoint modes.
+ *
+ * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
+ */
+enum ucp_ep_close_mode {
+    UCP_EP_CLOSE_MODE_FORCE         = UCP_EP_CLOSE_FLAG_FORCE,
+                                         /**< @ref ucp_ep_close_nb releases
+                                              the endpoint without any
+                                              confirmation from the peer. All
+                                              outstanding requests will be
+                                              completed with
+                                              @ref UCS_ERR_CANCELED error.
+                                              @note This mode may cause
+                                              transport level errors on remote
+                                              side, so it requires set
+                                              @ref UCP_ERR_HANDLING_MODE_PEER
+                                              for all endpoints created on
+                                              both (local and remote) sides to
+                                              avoid undefined behavior. */
+    UCP_EP_CLOSE_MODE_FLUSH         = UCP_EP_CLOSE_FLAG_FLUSH
+                                         /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
 };
@@ -519,6 +547,7 @@ typedef enum {
     UCP_OP_ATTR_FIELD_CALLBACK      = UCS_BIT(1),  /**< cb field */
     UCP_OP_ATTR_FIELD_USER_DATA     = UCS_BIT(2),  /**< user_data field */
     UCP_OP_ATTR_FIELD_DATATYPE      = UCS_BIT(3),  /**< datatype field */
+    UCP_OP_ATTR_FIELD_FLAGS         = UCS_BIT(4),  /**< operation specific flags */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
@@ -1162,7 +1191,7 @@ struct ucp_tag_recv_info {
  *          operation completed immediately (status == UCS_OK) then
  *          callback is not called.
  *
- * \code{.c}
+ * @code{.c}
  * ucs_status_ptr_t send_data(ucp_ep_h ep, void *buffer, size_t length,
  *                            ucp_tag_t tag, void *request)
  * {
@@ -1185,7 +1214,7 @@ struct ucp_tag_recv_info {
  *
  *     return status;
  * }
- * \endcode
+ * @endcode
  */
 typedef struct {
     /**
@@ -1194,6 +1223,9 @@ typedef struct {
      * ignored. Provides ABI compatibility with respect to adding new fields.
      */
     uint32_t       op_attr_mask;
+
+    /* Operation specific flags. */
+    uint32_t       flags;
 
     /**
      * Request handle allocated by the user. There should
@@ -1917,6 +1949,32 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode);
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ *
+ * @brief Non-blocking @ref ucp_ep_h "endpoint" closure.
+ *
+ * @param [in]  ep      Handle to the endpoint to close.
+ * @param [in]  param   Operation parameters, see @ref ucp_request_param_t.
+ *                      This operation supports specific flags, which can be
+ *                      passed in @a param by @ref ucp_request_param_t.flags.
+ *                      The exact set of flags is defined
+ *                      by @ref ucp_ep_close_flags_t.
+ *
+ * @return NULL                 - The endpoint is closed successfully.
+ * @return UCS_PTR_IS_ERR(_ptr) - The closure failed and an error code indicates
+ *                                the transport level status. However, resources
+ *                                are released and the @a endpoint can no longer
+ *                                be used.
+ * @return otherwise            - The closure process is started, and can be
+ *                                completed at any point in time. A request
+ *                                handle is returned to the application in order
+ *                                to track progress of the endpoint closure.
+ */
+ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep,
+                                  const ucp_request_param_t *param);
+
+
+/**
  * @ingroup UCP_WORKER
  *
  * @brief Reject an incoming connection request.
@@ -2004,6 +2062,30 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream);
  * @endcode */
 ucs_status_ptr_t ucp_ep_flush_nb(ucp_ep_h ep, unsigned flags,
                                  ucp_send_callback_t cb);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ *
+ * @brief Non-blocking flush of outstanding AMO and RMA operations on the
+ * @ref ucp_ep_h "endpoint".
+ *
+ * This routine flushes all outstanding AMO and RMA communications on the
+ * @ref ucp_ep_h "endpoint". All the AMO and RMA operations issued on the
+ * @a ep prior to this call are completed both at the origin and at the target
+ * @ref ucp_ep_h "endpoint" when this call returns.
+ *
+ * @param [in] ep        UCP endpoint.
+ * @param [in] param     Operation parameters, see @ref ucp_request_param_t.
+ *
+ * @return NULL                 - The flush operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The flush operation failed.
+ * @return otherwise            - Flush operation was scheduled and can be
+ *                                completed in any point in time. The request
+ *                                handle is returned to the application in
+ *                                order to track progress.
+ */
+ucs_status_ptr_t ucp_ep_flush_nbx(ucp_ep_h ep, const ucp_request_param_t *param);
 
 
 /**
@@ -3571,6 +3653,35 @@ ucs_status_t ucp_worker_fence(ucp_worker_h worker);
  */
 ucs_status_ptr_t ucp_worker_flush_nb(ucp_worker_h worker, unsigned flags,
                                      ucp_send_callback_t cb);
+
+
+/**
+ * @ingroup UCP_WORKER
+ *
+ * @brief Flush outstanding AMO and RMA operations on the @ref ucp_worker_h
+ * "worker"
+ *
+ * This routine flushes all outstanding AMO and RMA communications on the
+ * @ref ucp_worker_h "worker". All the AMO and RMA operations issued on the
+ * @a worker prior to this call are completed both at the origin and at the
+ * target when this call returns.
+ *
+ * @note For description of the differences between @ref ucp_worker_flush_nb
+ * "flush" and @ref ucp_worker_fence "fence" operations please see
+ * @ref ucp_worker_fence "ucp_worker_fence()"
+ *
+ * @param [in] worker    UCP worker.
+ * @param [in] param     Operation parameters, see @ref ucp_request_param_t
+ *
+ * @return NULL                 - The flush operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The flush operation failed.
+ * @return otherwise            - Flush operation was scheduled and can be
+ *                                completed in any point in time. The request
+ *                                handle is returned to the application in order
+ *                                to track progress.
+ */
+ucs_status_ptr_t ucp_worker_flush_nbx(ucp_worker_h worker,
+                                      const ucp_request_param_t *param);
 
 
 /**

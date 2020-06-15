@@ -368,6 +368,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
     return request;
 }
 
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nbx, (ep, param),
+                 ucp_ep_h ep, const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
 static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
 {
     ucp_rsc_index_t iface_id;
@@ -514,6 +520,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_worker_flush_nb, (worker, flags, cb),
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return request;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_worker_flush_nbx, (worker, param),
+                 ucp_worker_h worker, const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }
 
 static ucs_status_t ucp_flush_wait(ucp_worker_h worker, void *request)
