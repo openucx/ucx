@@ -73,7 +73,7 @@ ucs_status_t ucs_string_buffer_appendf(ucs_string_buffer_t *strb,
     int ret;
 
     /* set minimal initial size */
-    if (strb->capacity - strb->length <= 1) {
+    if ((strb->capacity - strb->length) <= 1) {
         status = ucs_string_buffer_grow(strb,
                                         strb->capacity + UCS_STRING_BUFFER_GROW);
         if (status != UCS_OK) {
