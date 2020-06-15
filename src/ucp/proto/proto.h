@@ -46,15 +46,15 @@ typedef uint64_t ucp_proto_id_mask_t;
  * Key for looking up protocol configuration by operation parameters
  */
 typedef struct {
-    uint8_t                 op_id;    /* operation ID */
-    uint8_t                 op_flags; /* operation flags */
-    uint8_t                 dt_class; /* Datatype */
-    uint8_t                 mem_type; /* Memory type */
-    uint8_t                 sys_dev;  /* System device */
-    uint8_t                 sg_count; /* Number of non-contig scatter/gather
-                                         entries. if the actual number is larger
-                                         than UINT8_max, UINT8_MAX is used. */
-    uint16_t                padding;  /* Make structure size be sizeof(uint64_t) */
+    uint8_t                 op_id;      /* operation ID */
+    uint8_t                 op_flags;   /* operation flags */
+    uint8_t                 dt_class;   /* Datatype */
+    uint8_t                 mem_type;   /* Memory type */
+    uint8_t                 sys_dev;    /* System device */
+    uint8_t                 sg_count;   /* Number of non-contig scatter/gather
+                                           entries. if the actual number is larger
+                                           than UINT8_MAX, UINT8_MAX is used. */
+    uint8_t                 padding[2]; /* Make structure size be sizeof(uint64_t) */
 } UCS_S_PACKED ucp_proto_select_param_t;
 
 
@@ -78,13 +78,16 @@ typedef struct {
 
 
 /**
- * UCP protocol capabilities (per buffer type)
+ * UCP protocol capabilities (per operation parameters)
  */
 typedef struct {
     size_t                  cfg_thresh; /* Configured protocol threshold */
     size_t                  min_length; /* Minimal message size */
     unsigned                num_ranges; /* Number of entries in 'ranges' */
+
+    /* Performance estimation function for different message sizes */
     ucp_proto_perf_range_t  ranges[UCP_PROTO_MAX_PERF_RANGES];
+
 } ucp_proto_caps_t;
 
 
@@ -92,14 +95,15 @@ typedef struct {
  * Parameters for protocol initialization function
  */
 typedef struct {
-    ucp_worker_h                   worker;
-    const ucp_proto_select_param_t *sel_param;
-    const ucp_ep_config_key_t      *ep_config_key;
+    /* Input parameters */
+    ucp_worker_h                   worker;         /* Worker to initialize on */
+    const ucp_proto_select_param_t *sel_param;     /* Operation parameters */
+    const ucp_ep_config_key_t      *ep_config_key; /* Endpoint configuration */
 
-    /* output */
-    void                           *priv;
-    size_t                         *priv_size;
-    ucp_proto_caps_t               *caps;
+    /* Output parameters */
+    void                           *priv;       /* Pointer to priv buffer */
+    size_t                         *priv_size;  /* Occupied size in priv buffer */
+    ucp_proto_caps_t               *caps;       /* Protocol capabilities */
 } ucp_proto_init_params_t;
 
 
@@ -151,7 +155,7 @@ struct ucp_proto {
 
 
 /**
- * Retried a protocol field by protocol id.
+ * Retrieve a protocol field by protocol id.
  */
 #define ucp_proto_id_field(_proto_id, _field) \
     (ucp_protocols[(_proto_id)]->_field)
