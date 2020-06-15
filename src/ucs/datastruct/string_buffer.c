@@ -18,7 +18,7 @@
 #include <ctype.h>
 
 
-#define UCS_STRING_BUFFER_INITIAL_CAPACITY    32
+#define UCS_STRING_BUFFER_GROW                32
 #define UCS_STRING_BUFFER_ALLOC_NAME          "string_buffer"
 
 
@@ -41,11 +41,14 @@ void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb)
 }
 
 static ucs_status_t ucs_string_buffer_grow(ucs_string_buffer_t *strb,
-                                           size_t new_capacity)
+                                           size_t min_capacity)
 {
+    size_t new_capacity;
     char *new_buffer;
 
-    ucs_assert(new_capacity > strb->capacity);
+    new_capacity = ucs_max(strb->capacity * 2, min_capacity);
+    ucs_assertv(new_capacity > strb->capacity, "min_capacity=%zu",
+                new_capacity);
 
     new_buffer = ucs_realloc(strb->buffer, new_capacity,
                              UCS_STRING_BUFFER_ALLOC_NAME);
@@ -72,7 +75,7 @@ ucs_status_t ucs_string_buffer_appendf(ucs_string_buffer_t *strb,
     /* set minimal initial size */
     if (strb->capacity - strb->length <= 1) {
         status = ucs_string_buffer_grow(strb,
-                                        UCS_STRING_BUFFER_INITIAL_CAPACITY);
+                                        strb->capacity + UCS_STRING_BUFFER_GROW);
         if (status != UCS_OK) {
             return status;
         }
@@ -87,20 +90,18 @@ ucs_status_t ucs_string_buffer_appendf(ucs_string_buffer_t *strb,
     /* if failed, grow the buffer to at least the required size and at least
      * double the previous size (to reduce the amortized cost of realloc) */
     if (ret >= max_print) {
-        status = ucs_string_buffer_grow(strb, ucs_max(strb->capacity * 2,
-                                                      strb->length + ret + 1));
+        status = ucs_string_buffer_grow(strb, strb->length + ret + 1);
         if (status != UCS_OK) {
             return status;
         }
 
         va_start(ap, fmt);
-        max_print = strb->capacity - strb->length - 1;
-        ret       = vsnprintf(strb->buffer + strb->length, strb->capacity - 1, fmt,
-                              ap);
+        max_print = strb->capacity - strb->length;
+        ret       = vsnprintf(strb->buffer + strb->length, max_print, fmt, ap);
         va_end(ap);
 
         /* since we've grown the buffer, it should be sufficient now */
-        ucs_assert(ret < max_print);
+        ucs_assertv(ret < max_print, "ret=%d max_print=%zu", ret, max_print);
     }
 
     /* string length grows by the amount of characters written by vsnprintf */
