@@ -349,7 +349,9 @@ ucp_request_send_state_advance(ucp_request_t *req,
                                const ucp_dt_state_t *new_dt_state,
                                unsigned proto, ucs_status_t status)
 {
-    ucs_assert(!UCS_STATUS_IS_ERR(status));
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        return;
+    }
 
     switch (proto) {
     case UCP_REQUEST_SEND_PROTO_RMA:
@@ -387,13 +389,12 @@ ucp_request_zcopy_complete_last_stage(ucp_request_t *req, ucp_dt_state_t *state,
                                       unsigned proto, ucs_status_t status,
                                       ucp_req_complete_func_t complete)
 {
-    ucs_assert(!UCS_STATUS_IS_ERR(status));
     ucp_request_send_state_advance(req, state, proto, status);
 
-    /* Complete a request on a last stage if all previous AM
-     * Zcopy operations completed successfully. If there are
-     * operations that are in progress on other lanes, the last
-     * completed operation will complete the request */
+    /* Complete a request on a last stage if all previous PUT/GET/AM Zcopy
+     * operations completed successfully. If there are operations that are
+     * in progress on other lanes, the last completed operation will complete
+     * the request */
     if (req->send.state.uct_comp.count == 0) {
         ucs_assert(status != UCS_INPROGRESS);
         complete(req, status);

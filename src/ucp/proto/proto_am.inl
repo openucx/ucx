@@ -327,7 +327,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                 status = uct_ep_am_zcopy(uct_ep, am_id_middle, (void*)hdr_middle,
                                          hdr_size_middle, iov, iovcnt, 0,
                                          &req->send.state.uct_comp);
-            } else if (req->send.state.dt.offset == req->send.length) {
+            } else if (state.offset == req->send.length) {
                 /* Empty IOVs on last stage */
                 ucp_request_zcopy_complete_last_stage(req, &state,
                                                       UCP_REQUEST_SEND_PROTO_ZCOPY_AM,

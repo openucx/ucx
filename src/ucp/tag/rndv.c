@@ -535,7 +535,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                                   rndv_req->send.rndv_get.remote_address + offset,
                                   uct_rkey,
                                   &rndv_req->send.state.uct_comp);
-        if (ucs_likely(!UCS_STATUS_IS_ERR(status))) {
+        if (!UCS_STATUS_IS_ERR(status)) {
             if (state.offset == rndv_req->send.length) {
                 ucp_request_zcopy_complete_last_stage(rndv_req, &state,
                                                       UCP_REQUEST_SEND_PROTO_RNDV_GET,
@@ -551,10 +551,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                 ucp_rndv_get_zcopy_next_lane(rndv_req);
                 return UCS_INPROGRESS;
             }
-        }
-
-        if (status == UCS_ERR_NO_RESOURCE) {
-            if (lane != rndv_req->send.pending_lane) {
+        } else {
+            if ((status == UCS_ERR_NO_RESOURCE) &&
+                (lane != rndv_req->send.pending_lane)) {
                 /* switch to new pending lane */
                 pending_add_res = ucp_request_pending_add(rndv_req, &status, 0);
                 if (!pending_add_res) {
@@ -564,8 +563,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                 ucs_assert(status == UCS_INPROGRESS);
                 return UCS_OK;
             }
+            return status;
         }
-        return status;
     }
 }
 
@@ -1067,7 +1066,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
                               sreq->send.rndv_put.remote_address + offset,
                               sreq->send.rndv_put.uct_rkey,
                               &sreq->send.state.uct_comp);
-    if (ucs_likely(!UCS_STATUS_IS_ERR(status))) {
+    if (!UCS_STATUS_IS_ERR(status)) {
         if (state.offset == sreq->send.length) {
             ucp_request_zcopy_complete_last_stage(sreq, &state,
                                                   UCP_REQUEST_SEND_PROTO_RNDV_PUT,
