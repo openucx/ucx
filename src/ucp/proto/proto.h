@@ -46,13 +46,13 @@ typedef uint64_t ucp_proto_id_mask_t;
  * Key for looking up protocol configuration by operation parameters
  */
 typedef struct {
-    uint8_t                 op_id;      /* operation ID */
-    uint8_t                 op_flags;   /* operation flags */
+    uint8_t                 op_id;      /* Operation ID */
+    uint8_t                 op_flags;   /* Operation flags */
     uint8_t                 dt_class;   /* Datatype */
     uint8_t                 mem_type;   /* Memory type */
     uint8_t                 sys_dev;    /* System device */
     uint8_t                 sg_count;   /* Number of non-contig scatter/gather
-                                           entries. if the actual number is larger
+                                           entries. If the actual number is larger
                                            than UINT8_MAX, UINT8_MAX is used. */
     uint8_t                 padding[2]; /* Make structure size be sizeof(uint64_t) */
 } UCS_S_PACKED ucp_proto_select_param_t;
@@ -68,12 +68,12 @@ typedef struct {
 
 
 /*
- * Performance estimation for a range of message sizes.
+ * Performance estimation for a range of message sizes
  */
 typedef struct {
     size_t                  max_length; /* Maximal message size */
     ucs_linear_func_t       perf;       /* Estimated time in seconds, as a
-                                             function of message size in bytes */
+                                           function of message size in bytes */
 } ucp_proto_perf_range_t;
 
 
@@ -145,7 +145,7 @@ struct ucp_proto {
 
 
 /**
- * Register a protocol definition
+ * Register a protocol definition.
  */
 #define UCP_PROTO_REGISTER(_proto) \
     UCS_STATIC_INIT { \

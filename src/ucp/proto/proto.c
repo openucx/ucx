@@ -4,9 +4,13 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "proto.h"
 
 
 const ucp_proto_t *ucp_protocols[UCP_PROTO_MAX_COUNT] = {};
-unsigned ucp_protocols_count = 0;
+unsigned ucp_protocols_count                          = 0;
 
