@@ -21,6 +21,18 @@ void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_ep_fence_put(uct_rc_verbs_iface_t *iface, uct_rc_verbs_ep_t *ep,
+                          uct_rkey_t *rkey)
+{
+    if ((uct_ib_md_indirect_rkey(*rkey) != UCT_IB_INVALID_RKEY) &&
+        uct_rc_ep_fm(&iface->super, &ep->fi, 1)) {
+        *rkey = uct_ib_md_indirect_rkey(*rkey);
+    } else {
+        *rkey = uct_ib_md_direct_rkey(*rkey);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
                           struct ibv_send_wr *wr, int send_flags, int max_log_sge)
 {
@@ -142,6 +154,7 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
     UCT_CHECK_LENGTH(length, 0, iface->config.max_inline, "put_short");
 
     UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
+    uct_rc_verbs_ep_fence_put(iface, ep, &rkey);
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_rwrite_wr,
@@ -162,6 +175,7 @@ ssize_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                        pack_cb, arg, length);
+    uct_rc_verbs_ep_fence_put(iface, ep, &rkey);
     UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.opcode, IBV_WR_RDMA_WRITE, sge,
                               length, remote_addr, rkey);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, BCOPY, length);
@@ -181,6 +195,7 @@ ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
 
     UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge,
                        "uct_rc_verbs_ep_put_zcopy");
+    uct_rc_verbs_ep_fence_put(iface, ep, &rkey);
     status = uct_rc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, remote_addr, rkey, comp,
                                         uct_rc_ep_send_op_completion_handler,
                                         IBV_WR_RDMA_WRITE);
@@ -207,7 +222,7 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
                                        unpack_cb, comp, arg, length);
 
     UCT_RC_VERBS_FILL_RDMA_WR(wr, wr.opcode, IBV_WR_RDMA_READ, sge, length, remote_addr,
-                              rkey);
+                              uct_ib_md_direct_rkey(rkey));
 
     UCT_TL_EP_STAT_OP(&ep->super.super, GET, BCOPY, length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, IBV_SEND_SIGNALED, INT_MAX);
@@ -231,7 +246,7 @@ ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                      iface->super.config.max_get_zcopy, "get_zcopy");
 
     status = uct_rc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, remote_addr,
-                                        rkey, comp,
+                                        uct_ib_md_direct_rkey(rkey), comp,
                                         uct_rc_ep_get_zcopy_completion_handler,
                                         IBV_WR_RDMA_READ);
     if (!UCS_STATUS_IS_ERR(status)) {

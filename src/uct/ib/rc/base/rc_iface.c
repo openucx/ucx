@@ -281,12 +281,21 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                 uct_completion_t *comp)
 {
     uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    uct_ib_md_t *md       = ucs_derived_of(iface->super.super.md,
+                                           uct_ib_md_t);
     ucs_status_t status;
     unsigned count;
     uct_rc_ep_t *ep;
 
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (md->relaxed_order) {
+        status = uct_rc_iface_fence(tl_iface, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     count = 0;
