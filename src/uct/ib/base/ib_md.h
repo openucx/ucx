@@ -303,6 +303,18 @@ typedef ucs_status_t (*uct_ib_md_mem_prefetch_func_t)(uct_ib_md_t *md,
                                                       uct_ib_mem_t *memh,
                                                       void *addr, size_t length);
 
+/**
+ * Memory domain method to get unique atomic mr id.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [out] mr_id   id to access atomic MR.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_ib_md_get_atomic_mr_id_func_t)(uct_ib_md_t *md,
+                                                          uint8_t *mr_id);
+
 typedef struct uct_ib_md_ops {
     uct_ib_md_open_func_t                open;
     uct_ib_md_cleanup_func_t             cleanup;
@@ -313,6 +325,7 @@ typedef struct uct_ib_md_ops {
     uct_ib_md_reg_multithreaded_func_t   reg_multithreaded;
     uct_ib_md_dereg_multithreaded_func_t dereg_multithreaded;
     uct_ib_md_mem_prefetch_func_t        mem_prefetch;
+    uct_ib_md_get_atomic_mr_id_func_t    get_atomic_mr_id;
 } uct_ib_md_ops_t;
 
 

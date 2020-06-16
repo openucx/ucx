@@ -678,3 +678,32 @@ ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md,
         return uct_ib_modify_qp(qp->verbs.qp, state);
     }
 }
+
+ucs_status_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_md_t *ibmd, uint8_t *mr_id)
+{
+    uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
+
+#if HAVE_EXP_UMR
+    if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
+        goto unsupported;
+    }
+#else
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+        goto unsupported;
+    }
+#endif
+
+    /* Generate atomic UMR id. We want umrs for same virtual addresses to have
+     * different ids across processes.
+     *
+     * Usually parallel processes running on the same node as part of a single
+     * job will have consecutive PIDs. For example MPI ranks, slurm spawned tasks...
+     */
+    *mr_id = getpid() % 256;
+    return UCS_OK;
+
+unsupported:
+    *mr_id = 0;
+    return UCS_ERR_UNSUPPORTED;
+}
+
