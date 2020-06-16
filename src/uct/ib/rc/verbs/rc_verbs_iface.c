@@ -226,11 +226,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
         self->super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
     } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_NONE) {
         self->super.config.fence_mode = UCT_RC_FENCE_MODE_NONE;
-    } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_STRONG) {
-        /* TODO: for now strong fence mode is not supported by verbs */
-        ucs_error("fence mode 'strong' is not supported by verbs");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
     } else {
         ucs_error("incorrect fence value: %d", self->super.config.fence_mode);
         status = UCS_ERR_INVALID_PARAM;

@@ -133,7 +133,6 @@ typedef struct uct_rc_fc_request {
 typedef enum uct_rc_fence_mode {
     UCT_RC_FENCE_MODE_NONE,
     UCT_RC_FENCE_MODE_WEAK,
-    UCT_RC_FENCE_MODE_STRONG,
     UCT_RC_FENCE_MODE_AUTO,
     UCT_RC_FENCE_MODE_LAST
 } uct_rc_fence_mode_t;
@@ -453,5 +452,20 @@ uct_rc_iface_atomic_handler(uct_rc_iface_t *iface, int ext, unsigned length)
                      iface->config.atomic64_handler;
     }
     return NULL;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_iface_fence_relaxed_order(uct_iface_h tl_iface)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_ib_md_t *md         = ucs_derived_of(iface->md, uct_ib_md_t);
+
+    ucs_assert(tl_iface->ops.iface_fence == uct_rc_iface_fence);
+
+    if (!md->relaxed_order) {
+        return UCS_OK;
+    }
+
+    return uct_rc_iface_fence(tl_iface, 0);
 }
 #endif
