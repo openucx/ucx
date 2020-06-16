@@ -1139,6 +1139,13 @@ test_malloc_hooks_mpi() {
 }
 
 #
+# Due to issue in OMPI finalize we have to relaunch app in case of failure
+#
+run_mpi_app() {
+	for i in `seq 1 5`; do mpirun $* && break; done
+}
+
+#
 # Run tests with MPI library
 #
 run_mpi_tests() {
@@ -1154,7 +1161,7 @@ run_mpi_tests() {
 		$MAKEP install
 		$MAKEP installcheck # check whether installation is valid (it compiles examples at least)
 
-		MPIRUN="mpirun \
+		MPIRUN="run_mpi_app \
 				--bind-to none \
 				-x UCX_ERROR_SIGNALS \
 				-x UCX_HANDLE_ERRORS \
