@@ -40,6 +40,10 @@ void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb)
     ucs_string_buffer_reset(strb);
 }
 
+/*
+ * Grow the buffer to at least the required size and at least double the
+ * previous size (to reduce the amortized cost of realloc)
+ */
 static ucs_status_t ucs_string_buffer_grow(ucs_string_buffer_t *strb,
                                            size_t min_capacity)
 {
@@ -47,11 +51,8 @@ static ucs_status_t ucs_string_buffer_grow(ucs_string_buffer_t *strb,
     char *new_buffer;
 
     new_capacity = ucs_max(strb->capacity * 2, min_capacity);
-    ucs_assertv(new_capacity > strb->capacity, "min_capacity=%zu",
-                new_capacity);
-
-    new_buffer = ucs_realloc(strb->buffer, new_capacity,
-                             UCS_STRING_BUFFER_ALLOC_NAME);
+    new_buffer   = ucs_realloc(strb->buffer, new_capacity,
+                               UCS_STRING_BUFFER_ALLOC_NAME);
     if (new_buffer == NULL) {
         ucs_error("failed to grow string from %zu to %zu characters",
                   strb->capacity, new_capacity);
@@ -87,8 +88,7 @@ ucs_status_t ucs_string_buffer_appendf(ucs_string_buffer_t *strb,
     ret       = vsnprintf(strb->buffer + strb->length, max_print, fmt, ap);
     va_end(ap);
 
-    /* if failed, grow the buffer to at least the required size and at least
-     * double the previous size (to reduce the amortized cost of realloc) */
+    /* if failed, grow the buffer accommodate for the expected extra length */
     if (ret >= max_print) {
         status = ucs_string_buffer_grow(strb, strb->length + ret + 1);
         if (status != UCS_OK) {
