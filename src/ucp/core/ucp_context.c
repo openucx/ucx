@@ -1004,9 +1004,8 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
                 !strncmp(sockaddr_cm_names[cm_idx],
                          context->tl_cmpts[cmpt_idx].attr.name,
                          UCT_COMPONENT_NAME_MAX)) {
-                context->config.cm_cmpt_idxs[cm_idx] = cmpt_idx;
+                context->config.cm_cmpt_idxs[context->config.num_cm_cmpts++] = cmpt_idx;
                 cm_cmpts_bitmap &= ~UCS_BIT(cmpt_idx);
-                ++context->config.num_cm_cmpts;
             }
         }
     }
