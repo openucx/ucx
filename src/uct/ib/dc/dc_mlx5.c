@@ -849,12 +849,16 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
 {
     uct_dc_mlx5_iface_t      *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_iface_addr_t *addr  = (uct_dc_mlx5_iface_addr_t *)iface_addr;
+    uct_ib_mlx5_md_t         *md    = ucs_derived_of(iface->super.super.super.super.md,
+                                                     uct_ib_mlx5_md_t);
 
     uct_ib_pack_uint24(addr->qp_num, iface->rx.dct.qp_num);
-    addr->atomic_mr_id = uct_ib_mlx5_iface_get_atomic_mr_id(&iface->super.super.super);
-    addr->flags        = iface->version_flag;
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        addr->atomic_mr_id = uct_ib_mlx5_iface_get_atomic_mr_id(&iface->super.super.super);
+    }
+    addr->flags            = iface->version_flag;
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
-        addr->flags   |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;
+        addr->flags       |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;
     }
 
     return UCS_OK;
@@ -882,11 +886,22 @@ static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *ifa
 ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_completion_t *comp)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    uct_ib_mlx5_md_t *md       = ucs_derived_of(iface->super.super.super.super.md,
+                                                uct_ib_mlx5_md_t);
+
     ucs_status_t status;
 
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
+
+    if (md->super.relaxed_order) {
+        status = uct_rc_iface_fence(tl_iface, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
     status = uct_dc_mlx5_iface_flush_dcis(iface);
     if (status == UCS_OK) {
         UCT_TL_IFACE_STAT_FLUSH(&iface->super.super.super.super);
