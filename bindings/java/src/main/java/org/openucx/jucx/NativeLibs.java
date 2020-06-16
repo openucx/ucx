@@ -64,14 +64,11 @@ public class NativeLibs {
             try { // Load shared object to JVM
                 System.load(filename);
             } catch (UnsatisfiedLinkError ex) {
-                errorMessage = "Native code library failed to load: "
-                    + resourceName;
+                errorMessage = "Native code library failed to load: " + file.getName()
+                    + ". " + ex.getLocalizedMessage();
             }
-
-            file.deleteOnExit();
         }
     }
-
 
     /**
      * Extracts a resource into a temp directory.
@@ -81,6 +78,10 @@ public class NativeLibs {
      * @throws IOException if fails to extract resource properly
      */
     private static File extractResource(URL resourceURL) throws IOException {
+        if (!resourceURL.getProtocol().equals("jar")) {
+            return new File(resourceURL.getPath());
+        }
+
         InputStream is = resourceURL.openStream();
         if (is == null) {
             errorMessage = "Error extracting native library content";

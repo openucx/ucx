@@ -27,6 +27,11 @@ public:
         }
     }
 
+    virtual void init() {
+        ucs::skip_on_address_sanitizer();
+        test_ucp_memheap::init();
+    }
+
 protected:
     bool resolve_rma(entity *e, ucp_rkey_h rkey);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);

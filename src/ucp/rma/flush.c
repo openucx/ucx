@@ -32,8 +32,9 @@ static int ucp_ep_flush_is_completed(ucp_request_t *req)
 
 static void ucp_ep_flush_progress(ucp_request_t *req)
 {
-    ucp_ep_h       ep        = req->send.ep;
-    ucp_lane_map_t all_lanes = UCS_MASK(ucp_ep_num_lanes(ep));
+    ucp_ep_h ep              = req->send.ep;
+    unsigned num_lanes       = ucp_ep_num_lanes(ep);
+    ucp_lane_map_t all_lanes = UCS_MASK(num_lanes);
     ucp_ep_flush_state_t *flush_state;
     ucp_lane_index_t lane;
     ucs_status_t status;
@@ -42,19 +43,25 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
     /* If the number of lanes changed since flush operation was submitted, adjust
      * the number of expected completions */
-    if (ucs_unlikely(req->send.flush.num_lanes != ucp_ep_num_lanes(ep))) {
-        diff                            = ucp_ep_num_lanes(ep) -
-                                          req->send.flush.num_lanes;
-        if (diff < 0) {
-            ucs_fatal("ep %p: unsupported endpoint reconfiguration from %d to %d"
-                      " lanes during flush", ep, req->send.flush.num_lanes,
-                      ucp_ep_num_lanes(ep));
+    if (ucs_unlikely(req->send.flush.num_lanes != num_lanes)) {
+        ucp_trace_req(req, "ep %p: number of lanes changed from %d to %d",
+                      ep, req->send.flush.num_lanes, num_lanes);
+        diff                      = num_lanes - req->send.flush.num_lanes;
+        req->send.flush.num_lanes = num_lanes;
+        if (diff >= 0) {
+            ucp_trace_req(req,
+                          "ep %p: adjusting expected flush completion count by %d",
+                          ep, diff);
+            req->send.state.uct_comp.count += diff;
+        } else {
+            /* If we have less lanes, it means we are in error flow and
+             * ucp_worker_set_ep_failed() was completed, so we should have
+             * completed the flush on all lanes.
+             */
+            ucs_assertv(req->send.state.uct_comp.count == 0,
+                        "uct_comp.count=%d num_lanes=%d",
+                        req->send.state.uct_comp.count, num_lanes);
         }
-
-        req->send.state.uct_comp.count += diff;
-        req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
-        ucs_trace_req("flush req %p: adjusting expected completion count by %d",
-                      req, diff);
     }
 
     ucs_trace("ep %p: progress flush req %p, started_lanes 0x%x count %d", ep,
@@ -78,8 +85,9 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         }
         status = uct_ep_flush(uct_ep, req->send.flush.uct_flags,
                               &req->send.state.uct_comp);
-        ucs_trace("flushing ep %p lane[%d]: %s", ep, lane,
-                  ucs_status_string(status));
+        ucp_trace_req(req, "ep %p flush lane[%d]=%p flags 0x%x: %s",
+                      ep, lane, uct_ep, req->send.flush.uct_flags,
+                      ucs_status_string(status));
         if (status == UCS_OK) {
             req->send.flush.started_lanes |= UCS_BIT(lane);
             --req->send.state.uct_comp.count;
@@ -220,7 +228,7 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     }
 }
 
-static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
+void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
@@ -242,6 +250,29 @@ static void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
 
     ucs_trace_req("flush completion req=%p comp_count=%d", req, req->send.state.uct_comp.count);
     ucp_flush_check_completion(req);
+}
+
+void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
+{
+    /* Calculate how many completions to emulate: 1 for every lane we did not
+     * start to flush yet, plus one for the lane from which we just removed
+     * this request from its pending queue
+     */
+    int num_comps = req->send.flush.num_lanes -
+                    ucs_popcount(req->send.flush.started_lanes)
+                    + 1;
+
+    ucp_trace_req(req, "fast-forward flush, comp-=%d num_lanes %d started 0x%x",
+                  num_comps, req->send.flush.num_lanes,
+                  req->send.flush.started_lanes);
+
+    req->send.flush.started_lanes = UCS_MASK(req->send.flush.num_lanes);
+
+    ucs_assert(req->send.state.uct_comp.count >= num_comps);
+    req->send.state.uct_comp.count -= num_comps;
+    if (req->send.state.uct_comp.count == 0) {
+        req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
+    }
 }
 
 void ucp_ep_flush_remote_completed(ucp_request_t *req)
@@ -335,6 +366,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nb, (ep, flags, cb),
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
 
     return request;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nbx, (ep, param),
+                 ucp_ep_h ep, const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }
 
 static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
@@ -483,6 +520,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_worker_flush_nb, (worker, flags, cb),
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return request;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_worker_flush_nbx, (worker, param),
+                 ucp_worker_h worker, const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }
 
 static ucs_status_t ucp_flush_wait(ucp_worker_h worker, void *request)

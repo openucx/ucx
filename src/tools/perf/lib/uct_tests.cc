@@ -361,6 +361,15 @@ public:
         };
     }
 
+    void flush(int peer_index)
+    {
+        if (m_perf.params.flags & UCX_PERF_TEST_FLAG_FLUSH_EP) {
+            uct_perf_ep_flush_b(&m_perf, peer_index);
+        } else {
+            uct_perf_iface_flush_b(&m_perf);
+        }
+    }
+
     ucs_status_t run_pingpong()
     {
         psn_t send_sn, *recv_sn, sn;
@@ -435,7 +444,7 @@ public:
             }
         }
 
-        uct_perf_iface_flush_b(&m_perf);
+        flush(1 - my_index);
         ucx_perf_get_time(&m_perf);
         return UCS_OK;
     }
@@ -591,7 +600,7 @@ public:
             }
         }
 
-        uct_perf_iface_flush_b(&m_perf);
+        flush(1 - my_index);
         ucx_perf_get_time(&m_perf);
         ucs_assert(outstanding() == 0);
         if (my_index == 1) {

@@ -12,45 +12,39 @@ resources:
     - container: centos7
       image: ucfconsort.azurecr.io/ucx/centos7:1
       endpoint: ucfconsort_registry
+    - container: centos7_cuda10_1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.1:1
+    - container: centos7_cuda10_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.2:1
+    - container: ubuntu16_cuda10_1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5.0-cuda10.1:1
+    - container: ubuntu16_cuda10_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5.0-cuda10.2:1
+    - container: ubuntu18_cuda10_1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.1:1
+    - container: ubuntu18_cuda10_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.2:1
 
 stages:
+  # Create an empty draft to avoid race condition in distro releases
+  - stage: GitHubDraft
+    jobs:
+      - job: DraftRelease
+        steps:
+        - task: GithubRelease@0
+          displayName: Create/edit GitHub Draft Release
+          inputs:
+            githubConnection: release
+            repositoryName: openucx/ucx
+            action: edit
+            tag: $(Build.SourceBranchName)
+            isDraft: true
+            addChangeLog: false
+            assetUploadMode: replace
+
   - stage: Release
     jobs:
-      - job: release
-        displayName: build tarball and source rpm
-        container: fedora
-        steps:
-          - checkout: self
-            clean: true
-
-          - bash: ./autogen.sh
-            displayName: Setup autotools
-
-          - bash: |
-              set -eE
-              gcc --version
-              ./contrib/configure-release --with-java
-              ./contrib/buildrpm.sh -s -t -b
-            displayName: Build tarball
-
-          - task: GithubRelease@0
-            displayName: Create/edit GitHub Draft Release
-            inputs:
-              githubConnection: release
-              repositoryName: openucx/ucx
-              action: edit
-              tag: $(Build.SourceBranchName)
-              isDraft: true
-              addChangeLog: false
-              assets: |
-                ./ucx-*.tar.gz
-                ./rpm-dist/ucx-*.src.rpm
-
-          - bash: |
-              set -eE
-              make -s -j`nproc`
-            displayName: Build ucx
-
-          - template: jucx-publish.yml
-            parameters:
-              target: publish-release
+      - template: az-distro-release.yml
+      - template: jucx-publish.yml
+        parameters:
+          target: publish-release

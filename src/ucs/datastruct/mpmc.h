@@ -10,7 +10,7 @@
 #include <ucs/type/status.h>
 #include <ucs/sys/math.h>
 
-#define UCS_MPMC_VALID_SHIFT        31
+#define UCS_MPMC_VALID_SHIFT        63
 #define UCS_MPMC_VALUE_MAX          UCS_BIT(UCS_MPMC_VALID_SHIFT)
 
 /**
@@ -25,7 +25,7 @@ typedef struct ucs_mpmc_queue {
     int                shift;
     volatile uint32_t  producer;    /* Producer index */
     volatile uint32_t  consumer;    /* Consumer index */
-    uint32_t           *queue;      /* Array of data */
+    uint64_t           *queue;      /* Array of data */
 } ucs_mpmc_queue_t;
 
 
@@ -49,7 +49,7 @@ void ucs_mpmc_queue_cleanup(ucs_mpmc_queue_t *mpmc);
  * @param value Value to push.
  * @return UCS_ERR_EXCEEDS_LIMIT if the queue is full.
  */
-ucs_status_t ucs_mpmc_queue_push(ucs_mpmc_queue_t *mpmc, uint32_t value);
+ucs_status_t ucs_mpmc_queue_push(ucs_mpmc_queue_t *mpmc, uint64_t value);
 
 
 /**
@@ -59,7 +59,7 @@ ucs_status_t ucs_mpmc_queue_push(ucs_mpmc_queue_t *mpmc, uint32_t value);
  * @param UCS_ERR_NO_PROGRESS if there is currently no available item to retrieve,
  *                            or another thread removed the current item.
  */
-ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint32_t *value_p);
+ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint64_t *value_p);
 
 
 /**

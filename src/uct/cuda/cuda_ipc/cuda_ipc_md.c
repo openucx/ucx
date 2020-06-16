@@ -37,8 +37,7 @@ static ucs_status_t uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_cuda_ipc_key_t);
-    md_attr->reg_cost.overhead    = 0;
-    md_attr->reg_cost.growth      = 0;
+    md_attr->reg_cost             = ucs_linear_func_make(0, 0);
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
@@ -50,7 +49,6 @@ static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
     uct_cuda_ipc_key_t *mem_hndl = (uct_cuda_ipc_key_t *) memh;
 
     *packed          = *mem_hndl;
-    packed->d_mapped = 0;
 
     return UCT_CUDADRV_FUNC(cuDeviceGetUuid(&packed->uuid, mem_hndl->dev_num));
 }
@@ -126,6 +124,7 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
     int peer_idx;
     int num_devices;
     char* accessible;
+    CUdeviceptr d_mapped;
 
     status = uct_cuda_ipc_get_unique_index_for_uuid(&peer_idx, mdc->md, rkey);
     if (ucs_unlikely(status != UCS_OK)) {
@@ -142,12 +141,15 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
 
     accessible = &mdc->md->peer_accessible_cache[peer_idx * num_devices + this_device];
     if (*accessible == (char)0xFF) { /* unchecked, add to cache */
-        /* rkey->d_mapped is picked up in uct_cuda_ipc_map_memhandle */
-        CUresult result = cuIpcOpenMemHandle(&rkey->d_mapped,
+        CUresult result = cuIpcOpenMemHandle(&d_mapped,
                                              rkey->ph,
                                              CU_IPC_MEM_LAZY_ENABLE_PEER_ACCESS);
         *accessible = ((result != CUDA_SUCCESS) && (result != CUDA_ERROR_ALREADY_MAPPED))
                     ? 0 : 1;
+        if (result == CUDA_SUCCESS) {
+            result = cuIpcCloseMemHandle(d_mapped);
+            if (result != CUDA_SUCCESS) ucs_fatal("Unable to close memhandle");
+        }
     }
 
     return (*accessible == 1) ? UCS_OK : UCS_ERR_UNREACHABLE;
@@ -211,7 +213,6 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
                                           &(key->b_len),
                                           (CUdeviceptr) addr));
     key->dev_num  = (int) cu_device;
-    key->d_mapped = 0;
     ucs_trace("registered memory:%p..%p length:%lu dev_num:%d",
               addr, UCS_PTR_BYTE_OFFSET(addr, length), length, (int) cu_device);
     return UCS_OK;

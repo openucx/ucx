@@ -183,16 +183,15 @@ static ucs_status_t uct_ugni_udt_iface_query(uct_iface_h tl_iface, uct_iface_att
                                          UCT_IFACE_FLAG_CB_ASYNC;
 
     iface_attr->overhead               = 1e-6;  /* 1 usec */
-    iface_attr->latency.overhead       = 40e-6; /* 40 usec */
-    iface_attr->latency.growth         = 0;
-    iface_attr->bandwidth.dedicated    = pow(1024, 2); /* bytes */
+    iface_attr->latency                = ucs_linear_func_make(40e-6, 0); /* 40 usec */
+    iface_attr->bandwidth.dedicated    = 1.0 * UCS_MBYTE; /* bytes */
     iface_attr->bandwidth.shared       = 0;
     iface_attr->priority               = 0;
 
     return UCS_OK;
 }
 
-void uct_ugni_proccess_datagram_pipe(int event_id, void *arg) {
+void uct_ugni_proccess_datagram_pipe(int event_id, int events, void *arg) {
     uct_ugni_udt_iface_t *iface = (uct_ugni_udt_iface_t *)arg;
     uct_ugni_udt_ep_t *ep;
     uct_ugni_udt_desc_t *datagram;
@@ -337,7 +336,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_udt_iface_t)
     uct_ugni_udt_clean_wildcard(self);
     ucs_async_remove_handler(ucs_async_pipe_rfd(&self->event_pipe),1);
     if (self->events_ready) {
-        uct_ugni_proccess_datagram_pipe(ucs_async_pipe_rfd(&self->event_pipe),self);
+        uct_ugni_proccess_datagram_pipe(ucs_async_pipe_rfd(&self->event_pipe),
+                                        UCS_EVENT_SET_EVREAD, self);
     }
     uct_ugni_udt_terminate_thread(self);
     pthread_join(self->event_thread, &dummy);

@@ -40,8 +40,6 @@ SGLIB_DEFINE_HASHED_CONTAINER_FUNCTIONS(uct_ud_iface_peer_t,
                                         UCT_UD_HASH_SIZE,
                                         uct_ud_iface_peer_hash)
 
-static void uct_ud_iface_timer(int timer_id, void *arg);
-
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
 
@@ -87,26 +85,29 @@ void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface)
 
 static uct_ud_iface_peer_t *
 uct_ud_iface_cep_lookup_addr(uct_ud_iface_t *iface, uint16_t dlid,
-                             const union ibv_gid *dgid, uint32_t dest_qpn)
+                             const union ibv_gid *dgid, uint32_t dest_qpn,
+                             int path_index)
 {
     uct_ud_iface_peer_t key;
-    key.dlid    = dlid;
-    key.dgid    = *dgid;
-    key.dst_qpn = dest_qpn;
+    key.dlid       = dlid;
+    key.dgid       = *dgid;
+    key.dst_qpn    = dest_qpn;
+    key.path_index = path_index;
     return sglib_hashed_uct_ud_iface_peer_t_find_member(iface->peers, &key);
 }
 
 static uct_ud_iface_peer_t *
 uct_ud_iface_cep_lookup_peer(uct_ud_iface_t *iface,
                              const uct_ib_address_t *src_ib_addr,
-                             const uct_ud_iface_addr_t *src_if_addr)
+                             const uct_ud_iface_addr_t *src_if_addr,
+                             int path_index)
 {
     uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
-    union ibv_gid dgid;
-    uint16_t dlid;
+    uct_ib_address_pack_params_t params;
 
-    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid);
-    return uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
+    uct_ib_address_unpack(src_ib_addr, &params);
+    return uct_ud_iface_cep_lookup_addr(iface, params.lid, &params.gid,
+                                        dest_qpn, path_index);
 }
 
 static uct_ud_ep_t *
@@ -148,25 +149,27 @@ uct_ud_iface_cep_getid(uct_ud_iface_peer_t *peer, uint32_t conn_id)
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *src_ib_addr,
                                      const uct_ud_iface_addr_t *src_if_addr,
-                                     uct_ud_ep_t *ep, uint32_t conn_id)
+                                     uct_ud_ep_t *ep, uint32_t conn_id,
+                                     int path_index)
 {
     uint32_t dest_qpn = uct_ib_unpack_uint24(src_if_addr->qp_num);
+    uct_ib_address_pack_params_t params;
     uct_ud_iface_peer_t *peer;
-    union ibv_gid dgid;
     uct_ud_ep_t *cep;
-    uint16_t dlid;
 
-    uct_ib_address_unpack(src_ib_addr, &dlid, &dgid);
-    peer = uct_ud_iface_cep_lookup_addr(iface, dlid, &dgid, dest_qpn);
+    uct_ib_address_unpack(src_ib_addr, &params);
+    peer = uct_ud_iface_cep_lookup_addr(iface, params.lid, &params.gid,
+                                        dest_qpn, path_index);
     if (peer == NULL) {
         peer = malloc(sizeof *peer);
         if (peer == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
 
-        peer->dlid    = dlid;
-        peer->dgid    = dgid;
-        peer->dst_qpn = dest_qpn;
+        peer->dlid       = params.lid;
+        peer->dgid       = params.gid;
+        peer->dst_qpn    = dest_qpn;
+        peer->path_index = path_index;
         sglib_hashed_uct_ud_iface_peer_t_add(iface->peers, peer);
         ucs_list_head_init(&peer->ep_list);
         peer->conn_id_last = 0;
@@ -178,8 +181,8 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
     }
 
     if (ucs_list_is_empty(&peer->ep_list)) {
-            ucs_list_add_head(&peer->ep_list, &ep->cep_list);
-            return UCS_OK;
+        ucs_list_add_head(&peer->ep_list, &ep->cep_list);
+        return UCS_OK;
     }
     ucs_list_for_each(cep, &peer->ep_list, cep_list) {
         ucs_assert_always(cep->conn_id != ep->conn_id);
@@ -204,12 +207,13 @@ void uct_ud_iface_cep_remove(uct_ud_ep_t *ep)
 uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *src_ib_addr,
                                      const uct_ud_iface_addr_t *src_if_addr,
-                                     uint32_t conn_id)
+                                     uint32_t conn_id, int path_index)
 {
     uct_ud_iface_peer_t *peer;
     uct_ud_ep_t *ep;
 
-    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr,
+                                        path_index);
     if (peer == NULL) {
         return NULL;
     }
@@ -228,7 +232,8 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
 {
     uct_ud_iface_peer_t *peer;
 
-    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr);
+    peer = uct_ud_iface_cep_lookup_peer(iface, src_ib_addr, src_if_addr,
+                                        ep->path_index);
     ucs_assert_always(peer != NULL);
     ucs_assert_always(peer->conn_id_last > 0);
     ucs_assert_always(ep->conn_id + 1 == peer->conn_id_last);
@@ -263,8 +268,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.cap.max_recv_wr     = config->super.rx.queue_len;
     qp_init_attr.cap.max_send_sge    = 2;
     qp_init_attr.cap.max_recv_sge    = 1;
-    qp_init_attr.cap.max_inline_data = ucs_max(config->super.tx.min_inline,
-                                               UCT_UD_MIN_INLINE);
+    qp_init_attr.cap.max_inline_data = config->super.tx.min_inline;
 
     status = ops->create_qp(&self->super, &qp_init_attr, &self->qp);
     if (status != UCS_OK) {
@@ -309,11 +313,53 @@ err_destroy_qp:
     return UCS_ERR_INVALID_PARAM;
 }
 
+static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
+{
+    uct_ud_iface_ops_t *ops =
+        ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
+    unsigned ev_count;
+
+    if (ucs_unlikely(iface->async.disable)) {
+        return;
+    }
+
+    ev_count = ops->async_progress(iface);
+    if (ev_count > 0) {
+        uct_ud_iface_raise_pending_async_ev(iface);
+    }
+}
+
+static void uct_ud_iface_async_handler(int fd, int events, void *arg)
+{
+    uct_ud_iface_t *iface = arg;
+
+    uct_ud_iface_async_progress(iface);
+
+    /* arm for new solicited events
+     * if user asks to provide notifications for all completion
+     * events by calling uct_iface_event_arm(), RX CQ will be
+     * armed again with solicited flag = 0 */
+    uct_ib_iface_pre_arm(&iface->super);
+    iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 1);
+
+    ucs_assert(iface->async.event_cb != NULL);
+    /* notify user */
+    iface->async.event_cb(iface->async.event_arg, 0);
+}
+
+static void uct_ud_iface_timer(int timer_id, int events, void *arg)
+{
+    uct_ud_iface_t *iface = arg;
+
+    uct_ud_iface_async_progress(iface);
+}
+
 ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
 {
     ucs_async_context_t *async = iface->super.super.worker->async;
     ucs_async_mode_t async_mode = async->mode;
     ucs_status_t status;
+    int event_fd;
 
     status = ucs_twheel_init(&iface->tx.timer, iface->tx.tick / 4,
                              uct_ud_iface_get_time(iface));
@@ -321,11 +367,25 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
         goto err;
     }
 
-    status = ucs_async_add_timer(async_mode, iface->async.tick,
-                                 uct_ud_iface_timer, iface, async,
-                                 &iface->async.timer_id);
+    status = uct_ib_iface_event_fd_get(&iface->super.super.super, &event_fd);
     if (status != UCS_OK) {
         goto err_twheel_cleanup;
+    }
+
+    if (iface->async.event_cb != NULL) {
+        status = ucs_async_set_event_handler(async_mode, event_fd,
+                                             UCS_EVENT_SET_EVREAD |
+                                             UCS_EVENT_SET_EVERR,
+                                             uct_ud_iface_async_handler,
+                                             iface, async);
+        if (status != UCS_OK) {
+            goto err_twheel_cleanup;
+        }
+
+        status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 1);
+        if (status != UCS_OK) {
+            goto err_twheel_cleanup;
+        }
     }
 
     return UCS_OK;
@@ -338,9 +398,18 @@ err:
 
 void uct_ud_iface_remove_async_handlers(uct_ud_iface_t *iface)
 {
-    uct_base_iface_progress_disable(&iface->super.super.super,
-                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    ucs_async_remove_handler(iface->async.timer_id, 1);
+    ucs_status_t status;
+    int event_fd;
+
+    uct_ud_iface_progress_disable(&iface->super.super.super,
+                                  UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    if (iface->async.event_cb != NULL) {
+        status = uct_ib_iface_event_fd_get(&iface->super.super.super,
+                                           &event_fd);
+        if (status == UCS_OK) {
+            ucs_async_remove_handler(event_fd, 1);
+        }
+    }
 }
 
 /* Calculate real GIDs len. Can be either 16 (RoCEv1 or RoCEv2/IPv6)
@@ -426,7 +495,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     self->tx.unsignaled          = 0;
     self->tx.available           = config->super.tx.queue_len;
     self->tx.timer_sweep_count   = 0;
-    self->tx.timer_disable       = 0;
+    self->async.disable          = 0;
 
     self->rx.available           = config->super.rx.queue_len;
     self->rx.quota               = 0;
@@ -443,6 +512,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     }
 
     self->config.max_window = config->max_window;
+
+    self->rx.async_max_poll = config->rx_async_max_poll;
 
     if (config->timer_tick <= 0.) {
         ucs_error("The timer tick should be > 0 (%lf)",
@@ -468,12 +539,27 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         self->async.tick = ucs_time_from_sec(config->event_timer_tick);
     }
 
+    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB) {
+        self->async.event_cb = params->async_event_cb;
+    } else {
+        self->async.event_cb = NULL;
+    }
+
+    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG) {
+        self->async.event_arg = params->async_event_arg;
+    } else {
+        self->async.event_arg = NULL;
+    }
+
+    self->async.timer_id = 0;
+
     /* Redefine receive desc release callback */
-    self->super.release_desc.cb  = uct_ud_iface_release_desc;
+    self->super.release_desc.cb = uct_ud_iface_release_desc;
 
     UCT_UD_IFACE_HOOK_INIT(self);
 
-    if (uct_ud_iface_create_qp(self, config) != UCS_OK) {
+    status = uct_ud_iface_create_qp(self, config);
+    if (status != UCS_OK) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -506,8 +592,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     if (status != UCS_OK) {
         goto err_rx_mpool;
     }
-
-    ucs_assert_always(data_size >= UCT_UD_MIN_INLINE);
 
     self->tx.skb                  = NULL;
     self->tx.async_before_pending = 0;
@@ -591,6 +675,10 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
       UCS_PP_MAKE_STRING(UCT_UD_CA_MAX_WINDOW),
      ucs_offsetof(uct_ud_iface_config_t, max_window), UCS_CONFIG_TYPE_UINT},
 
+    {"RX_ASYNC_MAX_POLL", "64",
+     "Max number of receive completions to pick during asynchronous TX poll",
+     ucs_offsetof(uct_ud_iface_config_t, rx_async_max_poll), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -618,7 +706,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
     iface_attr->cap.event_flags        = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                          UCT_IFACE_FLAG_EVENT_RECV      |
-                                         UCT_IFACE_FLAG_EVENT_FD;
+                                         UCT_IFACE_FLAG_EVENT_ASYNC_CB;
 
     iface_attr->cap.am.max_short       = uct_ib_iface_hdr_size(iface->config.max_inline,
                                                                sizeof(uct_ud_neth_t));
@@ -639,7 +727,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
     iface_attr->max_conn_priv          = 0;
 
     /* UD lacks of scatter to CQE support */
-    iface_attr->latency.overhead      += 10e-9;
+    iface_attr->latency.c             += 30e-9;
 
     if (iface_attr->cap.am.max_short) {
         iface_attr->cap.flags |= UCT_IFACE_FLAG_AM_SHORT;
@@ -675,7 +763,8 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
     uct_ud_enter(iface);
 
-    if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
+    if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface) ||
+                     !ucs_queue_is_empty(&iface->tx.outstanding_q))) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
         uct_ud_leave(iface);
         return UCS_INPROGRESS;
@@ -740,21 +829,15 @@ uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface)
     return skb;
 }
 
-static void uct_ud_iface_dispatch_skb_comp(uct_ud_iface_t *iface,
-                                           uct_ud_send_skb_t *skb)
-{
-    uct_ud_comp_desc_t *cdesc = uct_ud_comp_desc(skb);
-
-    uct_ud_iface_dispatch_comp(iface, cdesc->comp, cdesc->status);
-}
-
 void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 {
+    uct_ud_comp_desc_t *cdesc;
     uct_ud_send_skb_t *skb;
 
     ucs_queue_for_each_extract(skb, &iface->tx.async_comp_q, queue, 1) {
-        uct_ud_iface_dispatch_skb_comp(iface, skb);
         ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING));
+        cdesc = uct_ud_comp_desc(skb);
+        uct_ud_iface_dispatch_comp(iface, cdesc->comp, cdesc->status);
         uct_ud_skb_release(skb, 0);
     }
 }
@@ -803,27 +886,6 @@ static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface)
         skb = ucs_queue_pull_elem_non_empty(&iface->rx.pending_q, uct_ud_recv_skb_t, u.am.queue);
         ucs_mpool_put(skb);
     }
-}
-
-static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
-{
-    unsigned ev_count;
-    uct_ud_iface_ops_t *ops;
-
-    ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
-    ev_count = ops->async_progress(iface);
-    if (ev_count > 0) {
-        uct_ud_iface_raise_pending_async_ev(iface);
-    }
-}
-
-static void uct_ud_iface_timer(int timer_id, void *arg)
-{
-    uct_ud_iface_t *iface = arg;
-
-    uct_ud_enter(iface);
-    uct_ud_iface_async_progress(iface);
-    uct_ud_leave(iface);
 }
 
 void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc)
@@ -887,33 +949,54 @@ out:
 
 void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
 {
-    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    uct_ud_iface_t *iface       = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    ucs_async_context_t *async  = iface->super.super.worker->async;
+    ucs_async_mode_t async_mode = async->mode;
+    ucs_status_t status;
+
+    uct_ud_enter(iface);
 
     if (flags & UCT_PROGRESS_RECV) {
-        uct_ud_enter(iface);
         iface->rx.available += iface->rx.quota;
         iface->rx.quota      = 0;
         /* let progress (possibly async) post the missing receives */
-        uct_ud_leave(iface);
     }
+
+    if (iface->async.timer_id == 0) {
+        status = ucs_async_add_timer(async_mode, iface->async.tick,
+                                     uct_ud_iface_timer, iface, async,
+                                     &iface->async.timer_id);
+        if (status != UCS_OK) {
+            ucs_fatal("iface(%p): unable to add iface timer handler - %s",
+                      iface, ucs_status_string(status));
+        }
+        ucs_assert(iface->async.timer_id != 0);
+    }
+
+    uct_ud_leave(iface);
 
     uct_base_iface_progress_enable(tl_iface, flags);
 }
 
-static void uct_ud_iface_resent_skb_complete(uct_ud_iface_t *iface,
-                                             uct_ud_send_skb_t *skb,
-                                             int is_async)
+void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
 {
-    if (skb->flags & UCT_UD_SEND_SKB_FLAG_COMP) {
-        if (!is_async) {
-            ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
-            return;
-        }
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+    ucs_status_t status;
 
-        uct_ud_iface_dispatch_skb_comp(iface, skb);
+    uct_ud_enter(iface);
+
+    if (iface->async.timer_id != 0) {
+        status = ucs_async_remove_handler(iface->async.timer_id, 1);
+        if (status != UCS_OK) {
+            ucs_fatal("iface(%p): unable to remove iface timer handler (%d) - %s",
+                      iface, iface->async.timer_id, ucs_status_string(status));
+        }
+        iface->async.timer_id = 0;
     }
 
-    uct_ud_skb_release(skb, 0);
+    uct_ud_leave(iface);
+
+    uct_base_iface_progress_disable(tl_iface, flags);
 }
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
@@ -932,12 +1015,9 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
         ucs_assert(resent_skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING);
 
         resent_skb->flags &= ~UCT_UD_SEND_SKB_FLAG_RESENDING;
-        if (resent_skb->flags & UCT_UD_SEND_SKB_FLAG_ACKED) {
-            /* skb was acknowledged, so we can complete it */
-            uct_ud_iface_resent_skb_complete(iface, resent_skb, is_async);
-        }
-
         --cdesc->ep->tx.resend_count;
+
+        uct_ud_ep_window_release_completed(cdesc->ep, is_async);
     } else {
         ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL_ACK);
     }

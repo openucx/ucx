@@ -11,6 +11,7 @@
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
+#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
@@ -176,9 +177,9 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
     uct_rc_mlx5_iface_common_query(&rc_iface->super, iface_attr, max_am_inline,
                                    UCT_RC_MLX5_TM_EAGER_ZCOPY_MAX_IOV(0));
-    iface_attr->latency.growth += 1e-9; /* 1 ns per each extra QP */
-    iface_attr->ep_addr_len     = sizeof(uct_rc_mlx5_ep_address_t);
-    iface_attr->iface_addr_len  = sizeof(uint8_t);
+    iface_attr->latency.m     += 1e-9; /* 1 ns per each extra QP */
+    iface_attr->ep_addr_len    = sizeof(uct_rc_mlx5_ep_address_t);
+    iface_attr->iface_addr_len = sizeof(uint8_t);
     return UCS_OK;
 }
 
@@ -262,7 +263,19 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
         attr->mmio_mode = iface->tx.mmio_mode;
-        return uct_ib_mlx5_devx_create_qp(ib_iface, qp, txwq, attr);
+        status = uct_ib_mlx5_devx_create_qp(ib_iface, qp, txwq, attr);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = uct_rc_mlx5_devx_iface_subscribe_event(iface, qp,
+                UCT_IB_MLX5_EVENT_TYPE_SRQ_LAST_WQE,
+                IBV_EVENT_QP_LAST_WQE_REACHED, qp->qp_num);
+        if (status != UCS_OK) {
+            goto err_destory_qp;
+        }
+
+        return UCS_OK;
     }
 
     status = uct_ib_mlx5_iface_fill_attr(ib_iface, qp, attr);
@@ -309,7 +322,7 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 
 err_destory_qp:
-    ibv_destroy_qp(qp->verbs.qp);
+    uct_ib_mlx5_destroy_qp(qp);
 err:
     return status;
 }
@@ -411,9 +424,10 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
      * - up to 3 CQEs for every posted tag: ADD, TM_CONSUMED and MSG_ARRIVED
      * - one SYNC CQE per every IBV_DEVICE_MAX_UNEXP_COUNT unexpected receives */
     UCS_STATIC_ASSERT(IBV_DEVICE_MAX_UNEXP_COUNT);
-    init_attr->rx_cq_len     = rc_config->super.rx.queue_len + iface->tm.num_tags * 3 +
-                               rc_config->super.rx.queue_len /
-                               IBV_DEVICE_MAX_UNEXP_COUNT;
+    init_attr->cq_len[UCT_IB_DIR_RX] = rc_config->super.rx.queue_len +
+                                       iface->tm.num_tags * 3 +
+                                       rc_config->super.rx.queue_len /
+                                       IBV_DEVICE_MAX_UNEXP_COUNT;
     init_attr->seg_size      = ucs_max(mlx5_config->tm.seg_size,
                                        rc_config->super.seg_size);
     iface->tm.mp.num_strides = 1;
@@ -451,11 +465,11 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
 
 out_tm_disabled:
 #else
-    iface->tm.enabled        = 0;
+    iface->tm.enabled                = 0;
 #endif
-    init_attr->rx_cq_len     = rc_config->super.rx.queue_len;
-    init_attr->seg_size      = rc_config->super.seg_size;
-    iface->tm.mp.num_strides = 1;
+    init_attr->cq_len[UCT_IB_DIR_RX] = rc_config->super.rx.queue_len;
+    init_attr->seg_size              = rc_config->super.seg_size;
+    iface->tm.mp.num_strides         = 1;
 
 #if IBV_HW_TM
 out_mp_disabled:
@@ -667,6 +681,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
         goto cleanup_dm;
     }
 
+#if HAVE_DEVX
+    status = uct_rc_mlx5_devx_iface_init_events(self);
+    if (status != UCS_OK) {
+        goto cleanup_dm;
+    }
+#endif
+
     /* For little-endian atomic reply, override the default functions, to still
      * treat the response as big-endian when it arrives in the CQE.
      */
@@ -693,6 +714,9 @@ cleanup_stats:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 {
+#if HAVE_DEVX
+    uct_rc_mlx5_devx_iface_free_events(self);
+#endif
     ucs_mpool_cleanup(&self->tx.atomic_desc_mp, 1);
     uct_rc_mlx5_iface_common_dm_cleanup(self);
     uct_rc_mlx5_iface_common_tag_cleanup(self);
@@ -716,11 +740,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
 
-    init_attr.fc_req_size = sizeof(uct_rc_fc_request_t);
-    init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.rx_hdr_len  = sizeof(uct_rc_mlx5_hdr_t);
-    init_attr.tx_cq_len   = config->super.tx_cq_len;
-    init_attr.qp_type     = IBV_QPT_RC;
+    init_attr.fc_req_size           = sizeof(uct_rc_fc_request_t);
+    init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.rx_hdr_len            = sizeof(uct_rc_mlx5_hdr_t);
+    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
+    init_attr.qp_type               = IBV_QPT_RC;
 
     if (IBV_DEVICE_TM_FLAGS(&md->super.dev)) {
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;

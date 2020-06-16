@@ -82,6 +82,13 @@ then
 fi
 echo "==== Running on $(hostname), worker $worker / $nworkers ===="
 
+#
+# cleanup ucx
+#
+make_clean() {
+        rm -rf ${ucx_inst}
+        $MAKEP ${1:-clean}
+}
 
 #
 # Test if an environment module exists and load it if yes.
@@ -104,6 +111,14 @@ module_load() {
 }
 
 #
+# Safe unload for env modules (even if it doesn't exist)
+#
+module_unload() {
+	module=$1
+	module unload "${module}" || true
+}
+
+#
 # try load cuda modules if nvidia driver is installed
 #
 try_load_cuda_env() {
@@ -120,8 +135,8 @@ try_load_cuda_env() {
 }
 
 unload_cuda_env() {
-	module unload $CUDA_MODULE
-	module unload $GDRCOPY_MODULE
+	module_unload $CUDA_MODULE
+	module_unload $GDRCOPY_MODULE
 }
 
 #
@@ -285,9 +300,9 @@ build_docs() {
 	then
 		echo " ==== Build docs only ===="
 		../configure --prefix=$ucx_inst --with-docs-only
-		$MAKEP clean
+		make_clean
 		$MAKE  docs
-		$MAKEP clean # FIXME distclean does not work with docs-only
+		make_clean # FIXME distclean does not work with docs-only
 	fi
 }
 
@@ -313,9 +328,9 @@ build_java_docs() {
 build_no_verbs() {
 	echo "==== Build without IB verbs ===="
 	../contrib/configure-release --prefix=$ucx_inst --without-verbs
-	$MAKEP clean
+	make_clean
 	$MAKEP
-	$MAKEP distclean
+	make_clean distclean
 }
 
 #
@@ -324,9 +339,9 @@ build_no_verbs() {
 build_disable_numa() {
 	echo "==== Check --disable-numa compilation option ===="
 	../contrib/configure-release --prefix=$ucx_inst --disable-numa
-	$MAKEP clean
+	make_clean
 	$MAKEP
-	$MAKEP distclean
+	make_clean distclean
 }
 
 #
@@ -335,7 +350,7 @@ build_disable_numa() {
 build_release_pkg() {
 	echo "==== Build release ===="
 	../contrib/configure-release
-	$MAKEP clean
+	make_clean
 	$MAKEP
 	$MAKEP distcheck
 
@@ -376,7 +391,7 @@ build_release_pkg() {
 	fi
 	cd -
 
-	$MAKEP distclean
+	make_clean distclean
 }
 
 #
@@ -388,20 +403,20 @@ build_icc() {
 	then
 		echo "==== Build with Intel compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
-		$MAKEP clean
+		make_clean
 		$MAKEP
-		$MAKEP distclean
+		make_clean distclean
 		echo "==== Build with Intel compiler (clang) ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
-		$MAKEP clean
+		make_clean
 		$MAKEP
-		$MAKEP distclean
+		make_clean distclean
 		echo "ok 1 - build successful " >> build_icc.tap
 	else
 		echo "==== Not building with Intel compiler ===="
 		echo "ok 1 - # SKIP because Intel compiler not installed" >> build_icc.tap
 	fi
-	module unload intel/ics
+	module_unload intel/ics
 }
 
 #
@@ -420,9 +435,9 @@ build_pgi() {
 		#       in next versions.
 		#       Switch to default CC compiler after pgcc18 is default for pgi module
 		../contrib/configure-devel --prefix=$ucx_inst CC=pgcc18 --without-valgrind
-		$MAKEP clean
+		make_clean
 		$MAKEP
-		$MAKEP distclean
+		make_clean distclean
 		echo "ok 1 - build successful " >> build_pgi.tap
 	else
 		echo "==== Not building with PGI compiler ===="
@@ -430,7 +445,7 @@ build_pgi() {
 	fi
 
 	rm -rf ${pgi_test_file} ${pgi_test_file}.out
-	module unload pgi/latest
+	module_unload pgi/latest
 }
 
 #
@@ -439,9 +454,9 @@ build_pgi() {
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
 	../contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
-	$MAKEP clean
+	make_clean
 	$MAKEP
-	$MAKEP distclean
+	make_clean distclean
 }
 
 #
@@ -450,9 +465,9 @@ build_debug() {
 build_prof() {
 	echo "==== Build configure-prof ===="
 	../contrib/configure-prof --prefix=$ucx_inst
-	$MAKEP clean
+	make_clean
 	$MAKEP
-	$MAKEP distclean
+	make_clean distclean
 }
 
 #
@@ -470,16 +485,16 @@ build_ugni() {
 	../contrib/configure-devel --prefix=$ucx_inst --with-ugni \
 		PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$PWD/../contrib/cray-ugni-mock \
 		PKG_CONFIG_TOP_BUILD_DIR=$PWD/..
-	$MAKEP clean
+	make_clean
 	$MAKEP
 
 	# make sure UGNI transport is enabled
 	grep '#define HAVE_TL_UGNI 1' config.h
 
 	$MAKE  distcheck
-	$MAKEP distclean
+	make_clean distclean
 
-	module unload dev/cray-ugni
+	module_unload dev/cray-ugni
 	echo "ok 1 - build successful " >> build_ugni.tap
 }
 
@@ -494,20 +509,20 @@ build_cuda() {
 		then
 			echo "==== Build with enable cuda, gdr_copy ===="
 			../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
-			$MAKEP clean
+			make_clean
 			$MAKEP
-			$MAKEP distclean
+			make_clean distclean
 
 			../contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
-			$MAKEP clean
+			make_clean
 			$MAKEP
-			$MAKEP distclean
+			make_clean distclean
 			module unload $GDRCOPY_MODULE
 		fi
 
 		echo "==== Build with enable cuda, w/o gdr_copy ===="
 		../contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
-		$MAKEP clean
+		make_clean
 		$MAKEP
 
 		module unload $CUDA_MODULE
@@ -515,7 +530,7 @@ build_cuda() {
 		echo "==== Running test_link_map with cuda build but no cuda module ===="
 		env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
 
-		$MAKEP distclean
+		make_clean distclean
 		echo "ok 1 - build successful " >> build_cuda.tap
 	else
 		echo "==== Not building with cuda flags ===="
@@ -533,11 +548,11 @@ build_clang() {
 	then
 		echo "==== Build with clang compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
-		$MAKEP clean
+		make_clean
 		$MAKEP
 		$MAKEP install
 		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-		$MAKEP distclean
+		make_clean distclean
 		echo "ok 1 - build successful " >> build_clang.tap
 	else
 		echo "==== Not building with clang compiler ===="
@@ -562,11 +577,11 @@ build_gcc_latest() {
 		then
 			echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
 			../contrib/configure-devel --prefix=$ucx_inst
-			$MAKEP clean
+			make_clean
 			$MAKEP
 			$MAKEP install
 			UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-			$MAKEP distclean
+			make_clean distclean
 			echo "ok 1 - build successful " >> build_gcc_latest.tap
 			module unload dev/gcc-latest
 		else
@@ -587,14 +602,14 @@ build_experimental_api() {
 	# Experimental header file should not be installed by regular build
 	echo "==== Install WITHOUT experimental API ===="
 	../contrib/configure-release --prefix=$ucx_inst
-	$MAKEP clean
+	make_clean
 	$MAKEP install
 	! test -e $ucx_inst/include/ucp/api/ucpx.h
 
 	# Experimental header file should be installed by --enable-experimental-api
 	echo "==== Install WITH experimental API ===="
 	../contrib/configure-release --prefix=$ucx_inst --enable-experimental-api
-	$MAKEP clean
+	make_clean
 	$MAKEP install
 	test -e $ucx_inst/include/ucp/api/ucpx.h
 }
@@ -608,10 +623,10 @@ build_jucx() {
 	then
 		echo "==== Building JUCX bindings (java api for ucx) ===="
 		../contrib/configure-release --prefix=$ucx_inst --with-java
-		$MAKEP clean
+		make_clean
 		$MAKEP
 		$MAKEP install
-		$MAKEP distclean
+		make_clean distclean
 		echo "ok 1 - build successful " >> build_jucx.tap
 		module unload dev/jdk
 		module unload dev/mvn
@@ -632,11 +647,11 @@ build_armclang() {
 	then
 		echo "==== Build with armclang compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
-		$MAKEP clean
+		make_clean
 		$MAKEP
 		$MAKEP install
 		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-		$MAKEP distclean
+		make_clean distclean
 		echo "ok 1 - build successful " >> build_armclang.tap
 	else
 		echo "==== Not building with armclang compiler ===="
@@ -644,7 +659,7 @@ build_armclang() {
 	fi
 
 	rm -rf ${armclang_test_file} ${armclang_test_file}.out
-	module unload arm-compiler/latest
+	module_unload arm-compiler/latest
 }
 
 check_inst_headers() {
@@ -652,10 +667,10 @@ check_inst_headers() {
 	echo "==== Testing installed headers ===="
 
 	../contrib/configure-release --prefix=$PWD/install
-	$MAKEP clean
+	make_clean
 	$MAKEP install
 	../contrib/check_inst_headers.sh $PWD/install/include
-	$MAKEP distclean
+	make_clean distclean
 
 	echo "ok 1 - build successful " >> inst_headers.tap
 }
@@ -669,7 +684,7 @@ check_make_distcheck() {
 	if (echo "4.8.5"; gcc --version | head -1 | awk '{print $3}') | sort -CV
 	then
 		echo "==== Testing make distcheck ===="
-		$MAKEP clean && $MAKEP distclean
+		make_clean && make_clean distclean
 		../contrib/configure-release --prefix=$PWD/install
 		$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
 	else
@@ -686,7 +701,7 @@ check_config_h() {
 	echo "==== Checking for config.h files in directory $srcdir ===="
 
 	missing=`find $srcdir -name \*.c -o -name \*.cc | xargs grep -LP '\#\s*include\s+"config.h"'`
-	
+
 	if [ `echo $missing | wc -w` -eq 0 ]
 	then
 		echo "ok 1 - check successful " >> check_config_h.tap
@@ -726,6 +741,22 @@ slice_affinity() {
 	cpulist=$(expand_cpulist ${compact_cpulist})
 
 	echo "${cpulist}" | head -n $((n + 1)) | tail -1
+}
+
+#
+# `rename` has a binary and Perl flavors. Ubuntu comes with Perl one and
+# requires different usage.
+#
+rename_files() {
+	expr=$1; shift
+	replacement=$1; shift
+	files=$*
+	if rename --version | grep 'util-linux'; then
+		rename "${expr}" "${replacement}" $files
+		return
+	fi
+
+	rename "s/\\${expr}\$/${replacement}/" "${files}"
 }
 
 run_client_server_app() {
@@ -902,7 +933,7 @@ run_io_demo() {
 
 	echo "==== Running UCP IO demo  ===="
 
-	test_args="$@"
+	test_args="$@ -o write,read -d 128:4194304 -i 10000 -w 10"
 	test_name=io_demo
 
 	if [ ! -x ${test_name} ]
@@ -914,7 +945,7 @@ run_io_demo() {
 	run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
 
 	unset UCX_SOCKADDR_CM_ENABLE
-	make clean
+	make_clean
 }
 
 #
@@ -1119,7 +1150,7 @@ run_mpi_tests() {
 		export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
 
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
-		$MAKEP clean
+		make_clean
 		$MAKEP install
 		$MAKEP installcheck # check whether installation is valid (it compiles examples at least)
 
@@ -1138,7 +1169,7 @@ run_mpi_tests() {
 		test_malloc_hooks_mpi
 		echo "ok 2 - malloc hooks" >> mpi_tests.tap
 
-		$MAKEP distclean
+		make_clean distclean
 
 		module unload hpcx-gcc
 	else
@@ -1162,7 +1193,7 @@ test_profiling() {
 
 	# configure release mode, application profiling should work
 	../contrib/configure-release --prefix=$ucx_inst
-	$MAKEP clean
+	make_clean
 	$MAKEP
 	$MAKEP install
 
@@ -1178,7 +1209,7 @@ test_profiling() {
 
 test_ucs_load() {
 	../contrib/configure-release --prefix=$ucx_inst
-	$MAKEP clean
+	make_clean
 	$MAKEP
 	$MAKEP install
 
@@ -1204,8 +1235,9 @@ test_ucs_dlopen() {
 
 test_ucp_dlopen() {
 	../contrib/configure-release --prefix=$ucx_inst
-	$MAKEP clean
+	make_clean
 	$MAKEP
+        $MAKEP install
 
 	# Make sure UCP library, when opened with dlopen(), loads CMA module
 	LIB_CMA=`find ${ucx_inst} -name libuct_cma.so.0`
@@ -1221,7 +1253,7 @@ test_ucp_dlopen() {
 
 test_memtrack() {
 	../contrib/configure-devel --prefix=$ucx_inst
-	$MAKEP clean
+	make_clean
 	$MAKEP
 
 	echo "==== Running memtrack test ===="
@@ -1349,7 +1381,7 @@ run_coverity() {
 
 		echo "==== Running coverity ===="
 		../contrib/configure-$ucx_build_type --prefix=$ucx_inst
-		$MAKEP clean
+		make_clean
 		cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
 		cov_build="$WORKSPACE/$cov_build_id"
 		rm -rf $cov_build
@@ -1431,7 +1463,7 @@ run_gtest() {
 	compiler_name=$1
 	shift
 	../contrib/configure-devel --prefix=$ucx_inst $@
-	$MAKEP clean
+	make_clean
 	$MAKEP
 
 	echo "==== Running watchdog timeout test, $compiler_name compiler ===="
@@ -1465,7 +1497,7 @@ run_gtest() {
 
 	echo "==== Running unit tests, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT make -C test/gtest test
-	(cd test/gtest && rename .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
+	(cd test/gtest && rename_files .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
 	# gtest returns with non zero exit code if there were no
@@ -1479,7 +1511,7 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mallopt \
 		make -C test/gtest test
-	(cd test/gtest && rename .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
+	(cd test/gtest && rename_files .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT \
@@ -1488,7 +1520,7 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 		make -C test/gtest test
-	(cd test/gtest && rename .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
+	(cd test/gtest && rename_files .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
 	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
@@ -1502,7 +1534,7 @@ run_gtest() {
 		fi
 
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
-		(cd test/gtest && rename .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
+		(cd test/gtest && rename_files .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 		module unload tools/valgrind-latest
 	else
 		echo "==== Not running valgrind tests with $compiler_name compiler ===="
@@ -1547,7 +1579,7 @@ run_gtest_release() {
 	echo "1..1" > gtest_release.tap
 
 	../contrib/configure-release --prefix=$ucx_inst --enable-gtest
-	$MAKEP clean
+	make_clean
 	$MAKEP
 
 	export GTEST_SHARD_INDEX=0

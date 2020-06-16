@@ -826,48 +826,24 @@ static void ucs_debug_stop_handler(int signo)
     ucs_debug_freeze();
 }
 
-static void ucs_debug_stop_other_threads()
+static ucs_status_t ucs_debug_enum_threads_cb(pid_t tid, void *ctx)
 {
-    static const char *task_dir = "/proc/self/task";
-    struct dirent *entry;
-    DIR *dir;
     int ret;
-    int tid;
 
-    dir = opendir(task_dir);
-    if (dir == NULL) {
-        ucs_log_fatal_error("Unable to open %s: %m", task_dir);
-        return;
-    }
-
-    signal(SIGUSR1, ucs_debug_stop_handler);
-
-    for (;;) {
-        errno = 0;
-        entry = readdir(dir);
-        if (entry == NULL) {
-            if (errno != 0) {
-                ucs_log_fatal_error("Unable to read from %s: %m", task_dir);
-            }
-            break;
-        }
-
-        if (!strncmp(entry->d_name, ".", 1)) {
-            continue;
-        }
-
-        tid = atoi(entry->d_name);
-        if ((tid == 0) || (tid == ucs_get_tid())) {
-            continue;
-        }
-
+    if ((tid != 0) && (tid != ucs_get_tid())) {
         ret = ucs_tgkill(getpid(), tid, SIGUSR1);
         if (ret < 0) {
-             break;
+            return UCS_ERR_NO_MESSAGE;
         }
     }
 
-    closedir(dir);
+    return UCS_OK;
+}
+
+static void ucs_debug_stop_other_threads()
+{
+    signal(SIGUSR1, ucs_debug_stop_handler);
+    ucs_sys_enum_threads(ucs_debug_enum_threads_cb, NULL);
 }
 
 static void ucs_debug_send_mail(const char *message)

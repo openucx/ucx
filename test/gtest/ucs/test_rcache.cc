@@ -659,7 +659,7 @@ protected:
     }
 
     int get_counter(int stat) {
-        return (int)UCS_STATS_GET_COUNTER(m_rcache.get()->stats, stat);
+        return (int)UCS_STATS_GET_COUNTER(m_rcache->stats, stat);
     }
 
     /* a helper function for stats tests debugging */
@@ -717,11 +717,37 @@ UCS_TEST_F(test_rcache_stats, unmap_dereg) {
     r1 = get(mem, size1);
     put(r1);
 
+    /* Should generate umap event and invalidate the memory */
+    munmap(mem, size1);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
+
+    /* when doing another rcache operation, the region is actually destroyed */
+    mem = alloc_pages(size1, PROT_READ|PROT_WRITE);
+    r1 = get(mem, size1);
+    put(r1);
+    EXPECT_GE(get_counter(UCS_RCACHE_UNMAPS), 1);
+    EXPECT_EQ(1, get_counter(UCS_RCACHE_DEREGS));
+
+    /* cleanup */
+    munmap(mem, size1);
+}
+
+UCS_TEST_F(test_rcache_stats, unmap_dereg_with_lock) {
+    static const size_t size1 = 1024 * 1024;
+    void *mem = alloc_pages(size1, PROT_READ|PROT_WRITE);
+    region *r1;
+
+    r1 = get(mem, size1);
+    put(r1);
+
     /* Should generate umap event but no dereg or unmap invalidation.
      * We can have more unmap events if releasing the region structure triggers
      * releasing memory back to the OS.
      */
+    pthread_rwlock_wrlock(&m_rcache->pgt_lock);
     munmap(mem, size1);
+    pthread_rwlock_unlock(&m_rcache->pgt_lock);
+
     EXPECT_GE(get_counter(UCS_RCACHE_UNMAPS), 1);
     EXPECT_EQ(0, get_counter(UCS_RCACHE_UNMAP_INVALIDATES));
     EXPECT_EQ(0, get_counter(UCS_RCACHE_DEREGS));
@@ -771,8 +797,11 @@ UCS_TEST_F(test_rcache_stats, hits_slow) {
     mem2 = alloc_pages(size1, PROT_READ|PROT_WRITE);
     r1 = get(mem2, size1);
 
-    /* generate unmap event */
+    /* generate unmap event under lock, to roce using invalidation queue */
+    pthread_rwlock_rdlock(&m_rcache->pgt_lock);
     munmap(mem1, size1);
+    pthread_rwlock_unlock(&m_rcache->pgt_lock);
+
     EXPECT_EQ(1, get_counter(UCS_RCACHE_UNMAPS));
 
     EXPECT_EQ(2, get_counter(UCS_RCACHE_GETS));

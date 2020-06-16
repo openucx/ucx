@@ -41,6 +41,21 @@
  * Therefore, we can rely on the free_size_ahead field to tell how many free
  * elements are from any index in the freelist.
  *
+ * To clarify, "free_ahead" is a best-effort optimization, so when it is not
+ * updated on removal - the for-each code runs slower, but still correctly.
+ * This decision was made in order to preserve the O(1) performance of
+ * ucs_ptr_array_remove() - at the expense of ptr_array_for_each() performance.
+ * If we wanted to favor ptr_array_for_each() we had to update "free_ahead"
+ * values in all the empty cells before the changed one, a noticeable overhead.
+ * Instead, the for-each checks if the cell is empty even if it's indicated as
+ * such by "free_ahead". As for insert() - a new cell can be either inserted
+ * right after an occupied cell (no need to update "free_ahead") or instead of
+ * a removed cell (so that "free_ahead" already points to it). The resulting
+ * effect is that "free_ahead" may have "false positives" but never "false
+ * negatives". Set() is different, because it "messes" with this logic - and
+ * can create that "false negative". This is why it requires such a complicated
+ * update of the "free_ahead" (unless the set overwrites an occupied cell).
+ *
  */
 typedef uint64_t ucs_ptr_array_elem_t;
 
@@ -106,6 +121,19 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value);
 
 
 /**
+ * Set a pointer in the array, overwriting the contents of the slot.
+ *
+ * @param [in] ptr_array      Pointer to a ptr array.
+ * @param [in] element_index  Index of slot.
+ * @param [in] new_val        Value to put into slot given by index.
+ *
+ * Complexity: O(n)
+ */
+void ucs_ptr_array_set(ucs_ptr_array_t *ptr_array, unsigned element_index,
+                       void *new_val);
+
+
+/**
  * Remove a pointer from the array.
  *
  * @param [in] ptr_array      Pointer to a ptr array.
@@ -117,7 +145,7 @@ void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned element_index);
 
 
 /**
- * Replace pointer in the array
+ * Replace pointer in the array, assuming the slot is occupied.
  *
  * @param [in] ptr_array      Pointer to a ptr array.
  * @param [in] element_index  Index of slot.
@@ -262,6 +290,19 @@ unsigned ucs_ptr_array_locked_insert(ucs_ptr_array_locked_t *locked_ptr_array,
 
 
 /**
+ * Set a pointer in the array, overwriting the contents of the slot.
+ *
+ * @param [in] locked_ptr_array  Pointer to a locked ptr array.
+ * @param [in] element_index     Index of slot.
+ * @param [in] new_val           Value to put into slot given by index.
+ *
+ * Complexity: O(n)
+ */
+void ucs_ptr_array_locked_set(ucs_ptr_array_locked_t *locked_ptr_array,
+                              unsigned element_index, void *new_val);
+
+
+/**
  * Remove a pointer from the locked array.
  *
  * @param [in] locked_ptr_array  Pointer to a locked ptr array.
@@ -274,11 +315,11 @@ void ucs_ptr_array_locked_remove(ucs_ptr_array_locked_t *locked_ptr_array,
 
 
 /**
- * Replace pointer in the locked array
+ * Replace pointer in the locked array, assuming the slot is occupied.
  *
  * @param [in] locked_ptr_array  Pointer to a locked ptr array.
- * @param [in] element_index     Index of slot
- * @param [in] new_val           Value to put into slot given by index
+ * @param [in] element_index     Index of slot.
+ * @param [in] new_val           Value to put into slot given by index.
  *
  * @return Old value of the slot
  *
@@ -288,7 +329,8 @@ void *ucs_ptr_array_locked_replace(ucs_ptr_array_locked_t *locked_ptr_array,
                                    unsigned element_index, void *new_val);
 
 
-/** Acquire the ptr_array lock
+/**
+ * Acquire the ptr_array lock.
  *
  * @param [in] _locked_ptr_array  Pointer to a locked ptr array.
  */
@@ -296,7 +338,8 @@ void *ucs_ptr_array_locked_replace(ucs_ptr_array_locked_t *locked_ptr_array,
     ucs_recursive_spin_lock(&(_locked_ptr_array)->lock)
 
 
-/** Release the ptr_array lock
+/**
+ * Release the ptr_array lock.
  *
  * @param [in] _locked_ptr_array  Pointer to a locked ptr array.
  */

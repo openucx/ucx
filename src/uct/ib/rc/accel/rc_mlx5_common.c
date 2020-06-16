@@ -224,7 +224,8 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     ah_attr.port_num      = dev->first_port;
     status = uct_rc_mlx5_iface_common_devx_connect_qp(
             iface, &iface->tm.cmd_wq.super.super,
-            iface->tm.cmd_wq.super.super.qp_num, &ah_attr);
+            iface->tm.cmd_wq.super.super.qp_num, &ah_attr,
+            iface->super.super.config.path_mtu);
     if (status != UCS_OK) {
         goto err_destroy_qp;
     }
@@ -910,7 +911,8 @@ static void uct_rc_mlx5_tag_query(uct_rc_mlx5_iface_common_t *iface,
     iface_attr->cap.tag.rndv.max_iov         = 1;
     iface_attr->cap.tag.recv.max_zcopy       = port_attr->max_msg_sz;
     iface_attr->cap.tag.recv.max_iov         = 1;
-    iface_attr->cap.tag.recv.min_recv        = 0;
+    iface_attr->cap.tag.recv.min_recv        =
+                       iface->super.super.config.max_inl_cqe[UCT_IB_DIR_RX] + 1;
     iface_attr->cap.tag.recv.max_outstanding = iface->tm.num_tags;
     iface_attr->cap.tag.eager.max_iov        = max_tag_eager_iov;
     iface_attr->cap.tag.eager.max_bcopy      = iface->tm.max_bcopy - eager_hdr_size;

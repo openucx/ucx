@@ -184,17 +184,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
             /* close memhandle */
             UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)
                                                  region->mapped_addr));
-            key->d_mapped = 0;
             ucs_free(region);
         }
     }
 
-    status = (key->d_mapped == 0) /* potentially already opened in rkey_unpack */
-           ? uct_cuda_ipc_open_memhandle(key->ph, &key->d_mapped)
-           : UCS_OK;
-
-    *mapped_addr = (void *)key->d_mapped;
-
+    status = uct_cuda_ipc_open_memhandle(key->ph, (CUdeviceptr *)mapped_addr);
     if (ucs_unlikely(status != UCS_OK)) {
         if (ucs_likely(status == UCS_ERR_ALREADY_EXISTS)) {
             /* unmap all overlapping regions and retry*/

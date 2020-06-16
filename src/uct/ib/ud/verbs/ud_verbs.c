@@ -403,7 +403,7 @@ static unsigned uct_ud_verbs_iface_async_progress(uct_ud_iface_t *ud_iface)
     do {
         n = uct_ud_verbs_iface_poll_rx(iface, 1);
         count += n;
-    } while (n > 0);
+    } while ((n > 0) && (count < iface->super.rx.async_max_poll));
 
     count += uct_ud_verbs_iface_poll_tx(iface, 1);
 
@@ -472,6 +472,7 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     uct_ud_send_skb_t *skb;
     ucs_status_t status, status_ah;
     struct ibv_ah_attr ah_attr;
+    enum ibv_mtu path_mtu;
 
     uct_ud_enter(&iface->super);
     status = uct_ud_ep_create_connected_common(&iface->super, ib_addr, if_addr,
@@ -494,7 +495,7 @@ uct_ud_verbs_ep_create_connected(uct_iface_h iface_h, const uct_device_addr_t *d
     ucs_assert_always(ep->ah == NULL);
 
     uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, ep->super.path_index,
-                                        &ah_attr);
+                                        &ah_attr, &path_mtu);
     status_ah = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ep->ah);
     if (status_ah != UCS_OK) {
         uct_ud_ep_destroy_connected(&ep->super, ib_addr, if_addr);
@@ -527,6 +528,7 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     const uct_ud_ep_addr_t *ud_ep_addr = (const uct_ud_ep_addr_t *)ep_addr;
     ucs_status_t status;
     struct ibv_ah_attr ah_attr;
+    enum ibv_mtu path_mtu;
 
     status = uct_ud_ep_connect_to_ep(&ep->super, ib_addr, ud_ep_addr);
     if (status != UCS_OK) {
@@ -536,7 +538,7 @@ uct_ud_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ep->dest_qpn = uct_ib_unpack_uint24(ud_ep_addr->iface_addr.qp_num);
 
     uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, ep->super.path_index,
-                                        &ah_attr);
+                                        &ah_attr, &path_mtu);
     return uct_ib_iface_create_ah(iface, &ah_attr, &ep->ah);
 }
 
@@ -574,9 +576,10 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_flush              = uct_ud_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_ud_iface_progress_enable,
-    .iface_progress_disable   = uct_base_iface_progress_disable,
+    .iface_progress_disable   = uct_ud_iface_progress_disable,
     .iface_progress           = uct_ud_verbs_iface_progress,
-    .iface_event_fd_get       = uct_ib_iface_event_fd_get,
+    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)
+                                ucs_empty_function_return_unsupported,
     .iface_event_arm          = uct_ud_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t),
     .iface_query              = uct_ud_verbs_iface_query,
@@ -661,8 +664,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
 
     ucs_trace_func("");
 
-    init_attr.tx_cq_len = config->super.tx.queue_len;
-    init_attr.rx_cq_len = config->super.rx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_TX]   = config->super.tx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_RX]   = config->super.rx.queue_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, md,
                               worker, params, config, &init_attr);

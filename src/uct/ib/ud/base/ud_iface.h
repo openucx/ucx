@@ -52,6 +52,7 @@ typedef struct uct_ud_iface_config {
     double                        event_timer_tick;
     int                           dgid_check;
     unsigned                      max_window;
+    unsigned                      rx_async_max_poll;
 } uct_ud_iface_config_t;
 
 
@@ -60,20 +61,26 @@ struct uct_ud_iface_peer {
     union ibv_gid          dgid;
     uint16_t               dlid;
     uint32_t               dst_qpn;
+    uint8_t                path_index;
     uint32_t               conn_id_last;
     ucs_list_link_t        ep_list; /* ep list ordered by connection id */
 };
 
 
-static inline int uct_ud_iface_peer_cmp(uct_ud_iface_peer_t *a, uct_ud_iface_peer_t *b) {
+static inline int
+uct_ud_iface_peer_cmp(uct_ud_iface_peer_t *a, uct_ud_iface_peer_t *b)
+{
     return (int)a->dst_qpn - (int)b->dst_qpn ||
            memcmp(a->dgid.raw, b->dgid.raw, sizeof(union ibv_gid)) ||
-           (int)a->dlid - (int)b->dlid;
+           ((int)a->dlid - (int)b->dlid) ||
+           ((int)a->path_index - (int)b->path_index);
 }
 
-static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a) {
-    return (a->dlid + a->dgid.global.interface_id + a->dgid.global.subnet_prefix)
-                    % UCT_UD_HASH_SIZE;
+static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a)
+{
+    return (a->dlid + a->dgid.global.interface_id +
+            a->dgid.global.subnet_prefix + (a->path_index * 137)) %
+           UCT_UD_HASH_SIZE;
 }
 
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
@@ -131,6 +138,7 @@ struct uct_ud_iface {
         ucs_mpool_t          mp;
         unsigned             available;
         unsigned             quota;
+        unsigned             async_max_poll;
         ucs_queue_head_t     pending_q;
         UCT_UD_IFACE_HOOK_DECLARE(hook)
     } rx;
@@ -148,7 +156,6 @@ struct uct_ud_iface {
         ucs_time_t             tick;
         double                 timer_backoff;
         unsigned               timer_sweep_count;
-        unsigned               timer_disable;
     } tx;
     struct {
         ucs_time_t           peer_timeout;
@@ -166,6 +173,9 @@ struct uct_ud_iface {
     struct {
         ucs_time_t                tick;
         int                       timer_id;
+        void                      *event_arg;
+        uct_async_event_cb_t      event_cb;
+        unsigned                  disable;
     } async;
 };
 
@@ -181,6 +191,7 @@ struct uct_ud_ctl_hdr {
         struct {
             uct_ud_ep_addr_t   ep_addr;
             uint32_t           conn_id;
+            uint8_t            path_index;
         } conn_req;
         struct {
             uint32_t           src_ep_id;
@@ -357,7 +368,7 @@ void uct_ud_iface_cep_init(uct_ud_iface_t *iface);
 uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *src_ib_addr,
                                      const uct_ud_iface_addr_t *src_if_addr,
-                                     uint32_t conn_id);
+                                     uint32_t conn_id, int path_index);
 
 /* remove ep */
 void uct_ud_iface_cep_remove(uct_ud_ep_t *ep);
@@ -374,7 +385,8 @@ void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
 ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *src_ib_addr,
                                      const uct_ud_iface_addr_t *src_if_addr,
-                                     uct_ud_ep_t *ep, uint32_t conn_id);
+                                     uct_ud_ep_t *ep, uint32_t conn_id,
+                                     int path_index);
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
 
@@ -469,6 +481,8 @@ ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 
 void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
+
+void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
                                    uct_ud_ctl_desc_t *cdesc, int is_async);

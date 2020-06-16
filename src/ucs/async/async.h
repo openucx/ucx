@@ -20,6 +20,9 @@ BEGIN_C_DECLS
 
 /** @file async.h */
 
+#define UCS_ASYNC_EVENT_DUMMY   0
+
+
 /**
  * Async event context. Manages timer and fd notifications.
  */

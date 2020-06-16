@@ -384,8 +384,8 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
          * depends on device NUMA locality. */
         unified            = ptr;
         unified->rsc_index = rsc_index;
-        unified->lat_ovh   = enable_atomics ? -iface_attr->latency.overhead :
-                                               iface_attr->latency.overhead;
+        unified->lat_ovh   = enable_atomics ? -iface_attr->latency.c :
+                                               iface_attr->latency.c;
 
         return sizeof(*unified);
     }
@@ -394,7 +394,7 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     packed->prio_cap_flags = ((uint8_t)iface_attr->priority);
     packed->overhead       = iface_attr->overhead;
     packed->bandwidth      = iface_attr->bandwidth.dedicated - iface_attr->bandwidth.shared;
-    packed->lat_ovh        = iface_attr->latency.overhead;
+    packed->lat_ovh        = iface_attr->latency.c;
 
     ucs_assert((ucs_popcount(UCP_ADDRESS_IFACE_FLAGS) +
                 ucs_popcount(UCP_ADDRESS_IFACE_EVENT_FLAGS)) <= 22);
@@ -797,7 +797,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                           iface_attr->bandwidth.dedicated,
                           iface_attr->bandwidth.shared,
                           iface_attr->overhead,
-                          iface_attr->latency.overhead,
+                          iface_attr->latency.c,
                           iface_attr->priority,
                           iface_attr->cap.atomic32.op_flags,
                           iface_attr->cap.atomic32.fop_flags,

@@ -255,7 +255,10 @@ UCS_CLASS_DECLARE(uct_base_ep_t, uct_base_iface_t*);
  */
 typedef struct uct_tl_device_resource {
     char                     name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
-    uct_device_type_t        type;     /**< Device type. To which UCT group it belongs to */
+    uct_device_type_t        type;       /**< The device represented by this resource
+                                              (e.g. UCT_DEVICE_TYPE_NET for a network interface) */
+    ucs_sys_device_t         sys_device; /**< The identifier associated with the device
+                                              bus_id as captured in ucs_sys_bus_id_t struct */
 } uct_tl_device_resource_t;
 
 
@@ -420,8 +423,8 @@ uct_pending_req_priv_arb_elem(uct_pending_req_t *req)
 #define uct_pending_req_arb_group_push(_arbiter_group, _req) \
     do { \
         ucs_arbiter_elem_init(uct_pending_req_priv_arb_elem(_req)); \
-        ucs_arbiter_group_push_elem(_arbiter_group, \
-                                    uct_pending_req_priv_arb_elem(_req)); \
+        ucs_arbiter_group_push_elem_always(_arbiter_group, \
+                                           uct_pending_req_priv_arb_elem(_req)); \
     } while (0)
 
 
@@ -431,8 +434,8 @@ uct_pending_req_priv_arb_elem(uct_pending_req_t *req)
 #define uct_pending_req_arb_group_push_head(_arbiter, _arbiter_group, _req) \
     do { \
         ucs_arbiter_elem_init(uct_pending_req_priv_arb_elem(_req)); \
-        ucs_arbiter_group_push_head_elem(_arbiter, _arbiter_group, \
-                                         uct_pending_req_priv_arb_elem(_req)); \
+        ucs_arbiter_group_push_head_elem_always(_arbiter_group, \
+                                                uct_pending_req_priv_arb_elem(_req)); \
     } while (0)
 
 
@@ -646,6 +649,7 @@ static UCS_F_ALWAYS_INLINE
 void uct_invoke_completion(uct_completion_t *comp, ucs_status_t status)
 {
     ucs_trace_func("comp=%p, count=%d, status=%d", comp, comp->count, status);
+    ucs_assertv(comp->count > 0, "comp=%p count=%d", comp, comp->count);
     if (--comp->count == 0) {
         comp->func(comp, status);
     }

@@ -433,42 +433,69 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
            (ifa_addr->sa_family == AF_INET6);
 }
 
-bool is_rdmacm_netdev(const char *ifa_name) {
+static std::set<std::string> get_all_rdmacm_net_devices()
+{
+#define IB_SYSFS_DIR "/sys/class/infiniband"
+    std::set<std::string> devices;
     struct dirent *entry;
-    char path[PATH_MAX];
-    char dev_name[16];
+    char dev_name[32];
     char guid_buf[32];
+    ssize_t nread;
+    int port_num;
     DIR *dir;
 
-    snprintf(path, PATH_MAX, "/sys/class/net/%s/device/infiniband", ifa_name);
-    dir = opendir(path);
+    dir = opendir(IB_SYSFS_DIR);
     if (dir == NULL) {
-        return false;
+        goto out;
     }
 
     /* read IB device name */
     for (;;) {
         entry = readdir(dir);
         if (entry == NULL) {
-            closedir(dir);
-            return false;
-        } else if (entry->d_name[0] != '.') {
-            ucs_strncpy_zero(dev_name, entry->d_name, sizeof(dev_name));
-            break;
+            goto out_close;
+        } else if (entry->d_name[0] == '.') {
+            continue;
+        }
+
+        for (port_num = 1; port_num <= 2; ++port_num) {
+            nread = ucs_read_file_str(dev_name, sizeof(dev_name), 1,
+                                      IB_SYSFS_DIR "/%s/ports/%d/gid_attrs/ndevs/0",
+                                      entry->d_name, port_num);
+            if (nread <= 0) {
+                continue;
+            }
+
+            memset(guid_buf, 0, sizeof(guid_buf));
+            nread = ucs_read_file_str(guid_buf, sizeof(guid_buf), 1,
+                                      IB_SYSFS_DIR "/%s/node_guid", entry->d_name);
+            if (nread <= 0) {
+                continue;
+            }
+
+            /* use the device if node_guid != 0 */
+            if (strstr(guid_buf, "0000:0000:0000:0000") == NULL) {
+                devices.insert(ucs_strtrim(dev_name));
+            }
         }
     }
-    closedir(dir);
 
-    /* read node guid */
-    memset(guid_buf, 0, sizeof(guid_buf));
-    ssize_t nread = ucs_read_file(guid_buf, sizeof(guid_buf), 1,
-                                  "/sys/class/infiniband/%s/node_guid", dev_name);
-    if (nread < 0) {
-        return false;
+out_close:
+    closedir(dir);
+out:
+    return devices;
+}
+
+bool is_rdmacm_netdev(const char *ifa_name) {
+    static bool initialized = false;
+    static std::set<std::string> devices;
+
+    if (!initialized) {
+        devices     = get_all_rdmacm_net_devices();
+        initialized = true;
     }
 
-    /* use the device if node_guid != 0 */
-    return strstr(guid_buf, "0000:0000:0000:0000") == NULL;
+    return devices.find(ifa_name) != devices.end();
 }
 
 uint16_t get_port() {
@@ -652,51 +679,21 @@ message_stream::~message_stream() {
 
 } // detail
 
-template<typename T>
-void cartesian_product(std::vector<std::vector<T> > &final_output,
-                       std::vector<T> &cur_output,
-                       typename std::vector<std::vector<T> >
-                       ::const_iterator cur_input,
-                       typename std::vector<std::vector<T> >
-                       ::const_iterator end_input) {
-    if (cur_input == end_input) {
-        final_output.push_back(cur_output);
-        return;
-    }
-
-    const std::vector<T> &cur_vector = *cur_input;
-
-    cur_input++;
-
-    for (typename std::vector<T>::const_iterator iter =
-            cur_vector.begin(); iter != cur_vector.end(); ++iter) {
-        cur_output.push_back(*iter);
-        ucs::cartesian_product(final_output, cur_output,
-                               cur_input, end_input);
-        cur_output.pop_back();
-    }
-}
-
-template<typename T>
-void cartesian_product(std::vector<std::vector<T> > &output,
-                       const std::vector<std::vector<T> > &input) {
-    std::vector<T> cur_output;
-    cartesian_product(output, cur_output, input.begin(), input.end());
-}
-
 std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs() {
     static std::vector<std::vector<ucs_memory_type_t> > result;
 
     if (result.empty()) {
-        std::vector<std::vector<ucs_memory_type_t> > input;
-
-        input.push_back(mem_buffer::supported_mem_types());
-        input.push_back(mem_buffer::supported_mem_types());
-
-        ucs::cartesian_product(result, input);
+        result = ucs::make_pairs(mem_buffer::supported_mem_types());
     }
 
     return result;
+}
+
+void skip_on_address_sanitizer()
+{
+#ifdef __SANITIZE_ADDRESS__
+    UCS_TEST_SKIP_R("Address sanitizer");
+#endif
 }
 
 } // ucs

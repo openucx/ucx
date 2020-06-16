@@ -24,7 +24,7 @@ typedef struct uct_knem_md {
     struct uct_md       super;    /**< Domain info */
     int                 knem_fd;  /**< File descriptor for /dev/knem */
     ucs_rcache_t       *rcache;   /**< Registration cache (can be NULL) */
-    uct_linear_growth_t reg_cost; /**< Memory registration cost */
+    ucs_linear_func_t   reg_cost; /**< Memory registration cost */
 } uct_knem_md_t;
 
 /**

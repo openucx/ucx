@@ -181,6 +181,29 @@ static ucs_status_t ucs_async_signal_dispatch_timer(int uid)
     return ucs_async_dispatch_timerq(&timer->timerq, ucs_get_time());
 }
 
+static inline int ucs_signal_map_to_events(int si_code)
+{
+    int events;
+
+    switch (si_code) {
+    case POLL_IN:
+    case POLL_MSG:
+    case POLL_PRI:
+        events = UCS_EVENT_SET_EVREAD;
+        return events;
+    case POLL_OUT:
+        events = UCS_EVENT_SET_EVWRITE;
+        return events;
+    case POLL_HUP:
+    case POLL_ERR:
+        events = UCS_EVENT_SET_EVERR;
+        return events;
+    default:
+        ucs_warn("unexpected si_code %d", si_code);
+        return UCS_ASYNC_EVENT_DUMMY;
+    }
+}
+
 static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
 {
     ucs_assert(signo == ucs_global_opts.async_signo);
@@ -198,7 +221,8 @@ static void ucs_async_signal_handler(int signo, siginfo_t *siginfo, void *arg)
     case POLL_MSG:
     case POLL_PRI:
         ucs_trace_async("async signal handler called for fd %d", siginfo->si_fd);
-        ucs_async_dispatch_handlers(&siginfo->si_fd, 1);
+        ucs_async_dispatch_handlers(&siginfo->si_fd, 1,
+                                    ucs_signal_map_to_events(siginfo->si_code));
         return;
     default:
         ucs_warn("signal handler called with unexpected event code %d, ignoring",

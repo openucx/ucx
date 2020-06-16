@@ -195,7 +195,7 @@ static void uct_cm_iface_outstanding_purge(uct_cm_iface_t *iface)
     iface->num_outstanding = 0;
 }
 
-static void uct_cm_iface_event_handler(int fd, void *arg)
+static void uct_cm_iface_event_handler(int fd, int events, void *arg)
 {
     uct_cm_iface_t *iface = arg;
     struct ib_cm_event *event;
@@ -279,10 +279,10 @@ static UCS_CLASS_INIT_FUNC(uct_cm_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_trace_func("");
 
-    init_attr.tx_cq_len = 1;
-    init_attr.rx_cq_len = config->super.rx.queue_len;
-    init_attr.seg_size  = ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
-                                  config->super.seg_size);
+    init_attr.cq_len[UCT_IB_DIR_TX] = 1;
+    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.rx.queue_len;
+    init_attr.seg_size              = ucs_min(IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE,
+                                              config->super.seg_size);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &uct_cm_iface_ops, md, worker,
                               params, &config->super, &init_attr);

@@ -11,7 +11,7 @@ test_uct_ib::test_uct_ib() : m_e1(NULL), m_e2(NULL) { }
 void test_uct_ib::create_connected_entities() {
     m_e1 = uct_test::create_entity(0);
     m_e2 = uct_test::create_entity(0);
-
+    
     m_entities.push_back(m_e1);
     m_entities.push_back(m_e2);
 
@@ -81,34 +81,57 @@ public:
     void test_address_pack(uint64_t subnet_prefix) {
         uct_ib_iface_t *iface = ucs_derived_of(m_e1->iface(), uct_ib_iface_t);
         static const uint16_t lid_in = 0x1ee7;
-        union ibv_gid gid_in, gid_out;
+        union ibv_gid gid_in;
         uct_ib_address_t *ib_addr;
-        uint16_t lid_out;
+        size_t address_size;
 
         gid_in.global.subnet_prefix = subnet_prefix;
         gid_in.global.interface_id  = 0xdeadbeef;
 
-        ib_addr = (uct_ib_address_t*)malloc(
-                      uct_ib_address_size(&gid_in,
-                                          uct_ib_iface_address_pack_flags(iface)));
-        ASSERT_TRUE(ib_addr != NULL);
+        uct_ib_address_pack_params_t pack_params;
+        pack_params.flags     = uct_ib_iface_address_pack_flags(iface);
+        pack_params.gid       = gid_in;
+        pack_params.lid       = lid_in;
+        pack_params.roce_info = iface->gid_info.roce_info;
+        /* to suppress gcc 4.3.4 warning */
+        pack_params.path_mtu  = (enum ibv_mtu)0;
+        pack_params.gid_index = std::numeric_limits<uint8_t>::max();
+        pack_params.pkey      = iface->pkey;
+        address_size          = uct_ib_address_size(&pack_params);
+        ib_addr               = (uct_ib_address_t*)malloc(address_size);
+        uct_ib_address_pack(&pack_params, ib_addr);
 
-        uct_ib_address_pack(&gid_in, lid_in,
-                            uct_ib_iface_address_pack_flags(iface),
-                            &iface->gid_info.roce_info, ib_addr);
-
-        uct_ib_address_unpack(ib_addr, &lid_out, &gid_out);
+        uct_ib_address_pack_params_t unpack_params;
+        uct_ib_address_unpack(ib_addr, &unpack_params);
 
         if (uct_ib_iface_is_roce(iface)) {
             EXPECT_TRUE(iface->config.force_global_addr);
+            EXPECT_TRUE((unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) != 0);
+            EXPECT_EQ(iface->gid_info.roce_info.addr_family,
+                      unpack_params.roce_info.addr_family);
+            EXPECT_EQ(iface->gid_info.roce_info.ver,
+                      unpack_params.roce_info.ver);
         } else {
-            EXPECT_EQ(lid_in, lid_out);
+            EXPECT_EQ(lid_in, unpack_params.lid);
         }
 
-        if (ib_config()->is_global) {
-            EXPECT_EQ(gid_in.global.subnet_prefix, gid_out.global.subnet_prefix);
-            EXPECT_EQ(gid_in.global.interface_id,  gid_out.global.interface_id);
+        if (ib_config()->is_global &&
+            !(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_ETH)) {
+            EXPECT_TRUE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX);
+            EXPECT_EQ(gid_in.global.subnet_prefix, unpack_params.gid.global.subnet_prefix);
+
+            EXPECT_TRUE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID);
+            EXPECT_EQ(gid_in.global.interface_id, unpack_params.gid.global.interface_id);
         }
+
+        EXPECT_TRUE(!(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU));
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params.path_mtu);
+
+        EXPECT_TRUE(!(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX));
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, unpack_params.gid_index);
+
+        EXPECT_TRUE((unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) != 0);
+        EXPECT_EQ(iface->pkey, unpack_params.pkey);
 
         free(ib_addr);
     }
@@ -125,7 +148,9 @@ public:
         gid.global.subnet_prefix = subnet_prefix ?: iface->gid_info.gid.global.subnet_prefix;
         gid.global.interface_id  = 0xdeadbeef;
 
-        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid, 0, &ah_attr);
+        uct_ib_iface_fill_ah_attr_from_gid_lid(iface, lid, &gid,
+                                               iface->gid_info.gid_index, 0,
+                                               &ah_attr);
 
         if (uct_ib_iface_is_roce(iface)) {
             /* in case of roce, should be global */
@@ -433,27 +458,16 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
 class test_uct_event_ib : public test_uct_ib {
 public:
     test_uct_event_ib() {
-        length            = 8;
-        wakeup_fd.revents = 0;
-        wakeup_fd.events  = POLLIN;
-        wakeup_fd.fd      = 0;
-        test_ib_hdr       = 0xbeef;
-        m_buf1            = NULL;
-        m_buf2            = NULL;
+        length      = 8;
+        test_ib_hdr = 0xbeef;
+        m_buf1      = NULL;
+        m_buf2      = NULL;
     }
 
     void init() {
-        ucs_status_t status;
-
         test_uct_ib::init();
 
         check_skip_test();
-
-        /* create receiver wakeup */
-        status = uct_iface_event_fd_get(m_e1->iface(), &wakeup_fd.fd);
-        ASSERT_EQ(status, UCS_OK);
-
-        EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
 
         m_buf1 = new mapped_buffer(length, 0x1, *m_e1);
         m_buf2 = new mapped_buffer(length, 0x2, *m_e2);
@@ -463,6 +477,26 @@ public:
                                  0);
 
         test_uct_event_ib::bcopy_pack_count = 0;
+    }
+
+    /* overload `test_uct_ib` variant to pass the async event handler to
+     * the receive entity */
+    void create_connected_entities() {
+        /* `m_e1` entity is used as a receiver in UCT IB Event tests */
+        m_e1 = uct_test::create_entity(0, NULL, NULL, NULL, NULL, NULL,
+                                       async_event_handler, this);
+        m_e2 = uct_test::create_entity(0);
+
+        m_entities.push_back(m_e1);
+        m_entities.push_back(m_e2);
+
+        m_e1->connect(0, *m_e2, 0);
+        m_e2->connect(0, *m_e1, 0);
+    }
+
+    static void async_event_handler(void *arg, unsigned flags) {
+        test_uct_event_ib *self = static_cast<test_uct_event_ib*>(arg);
+        self->m_async_event_ctx.signal();
     }
 
     static size_t pack_cb(void *dest, void *arg) {
@@ -526,11 +560,11 @@ public:
 protected:
     static const unsigned EVENTS = UCT_EVENT_RECV | UCT_EVENT_SEND_COMP;
 
-    struct pollfd wakeup_fd;
     size_t length;
     uint64_t test_ib_hdr;
     mapped_buffer *m_buf1, *m_buf2;
     static size_t bcopy_pack_count;
+    uct_test::async_event_ctx m_async_event_ctx;
 };
 
 size_t test_uct_event_ib::bcopy_pack_count = 0;
@@ -548,7 +582,7 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
     ASSERT_EQ(status, UCS_OK);
 
     /* check initial state of the fd and [send|recv]_cq */
-    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
+    EXPECT_FALSE(m_async_event_ctx.wait_for_event(*m_e1, 0));
     check_send_cq(m_e1->iface(), 0);
     check_recv_cq(m_e1->iface(), 0);
 
@@ -556,7 +590,9 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
     send_msg_e1_e2();
 
     /* make sure the file descriptor is signaled once */
-    ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
+    EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e1,
+                                                 1000 *
+                                                 ucs::test_time_multiplier()));
 
     status = uct_iface_event_arm(m_e1->iface(), EVENTS);
     ASSERT_EQ(status, UCS_ERR_BUSY);
@@ -583,7 +619,7 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
     ASSERT_EQ(UCS_OK, status);
 
     /* check initial state of the fd and [send|recv]_cq */
-    EXPECT_EQ(0, poll(&wakeup_fd, 1, 0));
+    EXPECT_FALSE(m_async_event_ctx.wait_for_event(*m_e1, 0));
     check_send_cq(m_e1->iface(), 0);
     check_recv_cq(m_e1->iface(), 0);
 
@@ -600,7 +636,9 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
     }
 
     /* make sure the file descriptor is signaled */
-    ASSERT_EQ(1, poll(&wakeup_fd, 1, 1000*ucs::test_time_multiplier()));
+    EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e1,
+                                                 1000 *
+                                                 ucs::test_time_multiplier()));
 
     /* Acknowledge all the requests */
     short_progress_loop();

@@ -147,7 +147,8 @@ enum {
 
 enum {
     UCT_RC_MLX5_POLL_FLAG_TM                 = UCS_BIT(0),
-    UCT_RC_MLX5_POLL_FLAG_HAS_EP             = UCS_BIT(1)
+    UCT_RC_MLX5_POLL_FLAG_HAS_EP             = UCS_BIT(1),
+    UCT_RC_MLX5_POLL_FLAG_TAG_CQE            = UCS_BIT(2)
 };
 
 
@@ -418,6 +419,9 @@ typedef struct uct_rc_mlx5_iface_common {
         ucs_status_t                   (*tag_short)(uct_ep_h tl_ep, uct_tag_t tag,
                                                     const void *data, size_t length);
     } dm;
+#endif
+#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
+    struct mlx5dv_devx_event_channel   *event_channel;
 #endif
     struct {
         uint8_t                        atomic_fence_flag;
@@ -707,18 +711,30 @@ ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
-                                         struct ibv_ah_attr *ah_attr);
+                                         struct ibv_ah_attr *ah_attr,
+                                         enum ibv_mtu path_mtu);
 
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
-                                         struct ibv_ah_attr *ah_attr)
+                                         struct ibv_ah_attr *ah_attr,
+                                         enum ibv_mtu path_mtu)
 {
     return UCS_ERR_UNSUPPORTED;
 }
 #endif
+
+ucs_status_t uct_rc_mlx5_devx_iface_init_events(uct_rc_mlx5_iface_common_t *iface);
+
+void uct_rc_mlx5_devx_iface_free_events(uct_rc_mlx5_iface_common_t *iface);
+
+ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(uct_rc_mlx5_iface_common_t *iface,
+                                                    uct_ib_mlx5_qp_t *qp,
+                                                    unsigned event_num,
+                                                    enum ibv_event_type event_type,
+                                                    unsigned event_data);
 
 void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_qp_attr_t *qp_attr,

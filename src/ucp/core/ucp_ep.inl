@@ -18,6 +18,7 @@
 
 static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
 {
+    ucs_assert(ep->cfg_index != UCP_NULL_CFG_INDEX);
     return &ep->worker->ep_config[ep->cfg_index];
 }
 
@@ -236,6 +237,12 @@ ucp_ep_config_get_dst_md_cmpt(const ucp_ep_config_key_t *key,
 static inline ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
 {
     return ucp_ep_config(ep)->key.cm_lane;
+}
+
+static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
+{
+    return (ep->cfg_index != UCP_NULL_CFG_INDEX) &&
+           (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE);
 }
 
 #endif

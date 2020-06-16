@@ -1379,4 +1379,9 @@ struct uct_ib_mlx5_modify_qp_in_bits {
 
     uint8_t         reserved_at_60[0x20];
 };
+
+enum {
+    UCT_IB_MLX5_EVENT_TYPE_SRQ_LAST_WQE       = 0x13
+};
+
 #endif

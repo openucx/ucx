@@ -15,7 +15,7 @@ extern "C" {
 class test_mpmc : public ucs::test {
 protected:
     static const unsigned MPMC_SIZE = 100;
-    static const uint32_t SENTINEL  = 0x7fffffffu;
+    static const uint64_t SENTINEL  = 0x7fffffffu;
     static const unsigned NUM_THREADS = 4;
 
 
@@ -44,7 +44,7 @@ protected:
     static void * consumer_thread_func(void *arg) {
         ucs_mpmc_queue_t *mpmc = reinterpret_cast<ucs_mpmc_queue_t*>(arg);
         ucs_status_t status;
-        uint32_t value;
+        uint64_t value;
         size_t count;
 
         count = 0;
@@ -81,7 +81,7 @@ UCS_TEST_F(test_mpmc, basic) {
 
     EXPECT_FALSE(ucs_mpmc_queue_is_empty(&mpmc));
 
-    uint32_t value;
+    uint64_t value;
 
     status = ucs_mpmc_queue_pull(&mpmc, &value);
     ASSERT_UCS_OK(status);

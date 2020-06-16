@@ -14,6 +14,7 @@ RUN dnf install -y \
     gcc-c++ \
     git \
     glibc-devel \
+    java-1.8.0-openjdk-devel \
     libtool \
     make \
     maven \

@@ -3,12 +3,10 @@
 * See file LICENSE for terms.
 */
 
-#include <common/test.h>
 #include <uct/uct_test.h>
 
 extern "C" {
 #include <poll.h>
-#include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_iface.h>
@@ -25,7 +23,7 @@ public:
 
     test_uct_ib();
     void init();
-    void create_connected_entities();
+    virtual void create_connected_entities();
     static ucs_status_t ib_am_handler(void *arg, void *data,
                                       size_t length, unsigned flags);
     virtual void send_recv_short();

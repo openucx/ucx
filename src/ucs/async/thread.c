@@ -83,7 +83,7 @@ static void ucs_async_thread_ev_handler(void *callback_data, int event,
         return;
     }
 
-    status = ucs_async_dispatch_handlers(&fd, 1);
+    status = ucs_async_dispatch_handlers(&fd, 1, event);
     if (status == UCS_ERR_NO_PROGRESS) {
          *cb_arg->is_missed = 1;
     }

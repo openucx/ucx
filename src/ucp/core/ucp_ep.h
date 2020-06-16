@@ -10,6 +10,7 @@
 
 #include "ucp_types.h"
 
+#include <ucp/proto/lane_type.h>
 #include <ucp/wireup/ep_match.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/queue.h>
@@ -23,6 +24,7 @@
 
 /* Configuration */
 typedef uint16_t                   ucp_ep_cfg_index_t;
+#define UCP_NULL_CFG_INDEX         UINT16_MAX
 
 
 /* Endpoint flags type */
@@ -37,7 +39,11 @@ typedef uint16_t                   ucp_ep_flags_t;
  * Endpoint flags
  */
 enum {
-    UCP_EP_FLAG_LOCAL_CONNECTED        = UCS_BIT(0), /* All local endpoints are connected */
+    UCP_EP_FLAG_LOCAL_CONNECTED        = UCS_BIT(0), /* All local endpoints are connected,
+                                                        for CM case - local address was packed,
+                                                        UCT did not report errors during
+                                                        connection establishment protocol
+                                                        and disconnect not called yet */
     UCP_EP_FLAG_REMOTE_CONNECTED       = UCS_BIT(1), /* All remote endpoints are connected */
     UCP_EP_FLAG_CONNECT_REQ_QUEUED     = UCS_BIT(2), /* Connection request was queued */
     UCP_EP_FLAG_FAILED                 = UCS_BIT(3), /* EP is in failed state */
@@ -104,55 +110,57 @@ enum {
  */
 typedef struct ucp_ep_config_key {
 
-    ucp_lane_index_t       num_lanes;    /* Number of active lanes */
+    ucp_lane_index_t         num_lanes;    /* Number of active lanes */
 
     struct {
-        ucp_rsc_index_t    rsc_index;    /* Resource index */
-        ucp_lane_index_t   proxy_lane;   /* UCP_NULL_LANE - no proxy
+        ucp_rsc_index_t      rsc_index;    /* Resource index */
+        ucp_lane_index_t     proxy_lane;   /* UCP_NULL_LANE - no proxy
                                             otherwise - in which lane the real
                                             transport endpoint is stored */
-        ucp_md_index_t     dst_md_index; /* Destination memory domain index */
-        uint8_t            path_index;   /* Device path index */
+        ucp_md_index_t       dst_md_index; /* Destination memory domain index */
+        uint8_t              path_index;   /* Device path index */
+        ucp_lane_type_mask_t lane_types;   /* Which types of operations this lane
+                                              was selected for */
     } lanes[UCP_MAX_LANES];
 
-    ucp_lane_index_t       am_lane;      /* Lane for AM (can be NULL) */
-    ucp_lane_index_t       tag_lane;     /* Lane for tag matching offload (can be NULL) */
-    ucp_lane_index_t       wireup_lane;  /* Lane for wireup messages (can be NULL) */
-    ucp_lane_index_t       cm_lane;      /* Lane for holding a CM connection */
+    ucp_lane_index_t         am_lane;      /* Lane for AM (can be NULL) */
+    ucp_lane_index_t         tag_lane;     /* Lane for tag matching offload (can be NULL) */
+    ucp_lane_index_t         wireup_lane;  /* Lane for wireup messages (can be NULL) */
+    ucp_lane_index_t         cm_lane;      /* Lane for holding a CM connection */
 
     /* Lanes for remote memory access, sorted by priority, highest first */
-    ucp_lane_index_t       rma_lanes[UCP_MAX_LANES];
+    ucp_lane_index_t         rma_lanes[UCP_MAX_LANES];
 
     /* Lanes for high-bw memory access, sorted by priority, highest first */
-    ucp_lane_index_t       rma_bw_lanes[UCP_MAX_LANES];
+    ucp_lane_index_t         rma_bw_lanes[UCP_MAX_LANES];
 
     /* Lane for obtaining remote memory pointer */
-    ucp_lane_index_t       rkey_ptr_lane;
+    ucp_lane_index_t         rkey_ptr_lane;
 
     /* Lanes for atomic operations, sorted by priority, highest first */
-    ucp_lane_index_t       amo_lanes[UCP_MAX_LANES];
+    ucp_lane_index_t         amo_lanes[UCP_MAX_LANES];
 
     /* Lanes for high-bw active messages, sorted by priority, highest first */
-    ucp_lane_index_t       am_bw_lanes[UCP_MAX_LANES];
+    ucp_lane_index_t         am_bw_lanes[UCP_MAX_LANES];
 
     /* Local memory domains to send remote keys for in high-bw rma protocols
      * NOTE: potentially it can be different than what is imposed by rma_bw_lanes,
      * since these are the MDs used by remote side for accessing our memory. */
-    ucp_md_map_t           rma_bw_md_map;
+    ucp_md_map_t             rma_bw_md_map;
 
     /* Bitmap of remote mds which are reachable from this endpoint (with any set
      * of transports which could be selected in the future).
      */
-    ucp_md_map_t           reachable_md_map;
+    ucp_md_map_t             reachable_md_map;
 
     /* Array with popcount(reachable_md_map) elements, each entry holds the local
      * component index to be used for unpacking remote key from each set bit in
      * reachable_md_map */
-    ucp_rsc_index_t        *dst_md_cmpts;
+    ucp_rsc_index_t          *dst_md_cmpts;
 
     /* Error handling mode */
-    ucp_err_handling_mode_t    err_mode;
-    ucs_status_t               status;
+    ucp_err_handling_mode_t  err_mode;
+    ucs_status_t             status;
 } ucp_ep_config_key_t;
 
 
@@ -439,8 +447,11 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
                                  ucp_rsc_index_t aux_rsc_index,
                                  char *buf, size_t max);
 
-ucs_status_t ucp_ep_new(ucp_worker_h worker, const char *peer_name,
-                        const char *message, ucp_ep_h *ep_p);
+ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
+                                const char *message, ucp_ep_h *ep_p);
+
+ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, const char *peer_name,
+                                  const char *message, ucp_ep_h *ep_p);
 
 void ucp_ep_delete(ucp_ep_h ep);
 
@@ -494,7 +505,7 @@ int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
                                       ucp_lane_index_t lane);
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
-                                           const uct_linear_growth_t *reg_cost,
+                                           const ucs_linear_func_t *reg_cost,
                                            const ucp_context_h context,
                                            double bandwidth);
 
@@ -515,5 +526,9 @@ size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 
 int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
+
+void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status);
+
+void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 
 #endif

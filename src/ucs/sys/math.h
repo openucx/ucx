@@ -73,6 +73,8 @@ BEGIN_C_DECLS
         pow2; \
     })
 
+#define ucs_rounddown_pow2(_n) (ucs_roundup_pow2(_n + 1) / 2)
+
 #define ucs_signum(_n) \
     (((_n) > (typeof(_n))0) - ((_n) < (typeof(_n))0))
 

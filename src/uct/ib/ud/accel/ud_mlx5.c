@@ -535,7 +535,7 @@ static unsigned uct_ud_mlx5_iface_async_progress(uct_ud_iface_t *ud_iface)
     do {
         n = uct_ud_mlx5_iface_poll_rx(iface, 1);
         count += n;
-    } while (n > 0);
+    } while ((n > 0) && (count < iface->super.rx.async_max_poll));
 
     count += uct_ud_mlx5_iface_poll_tx(iface, 1);
 
@@ -759,9 +759,10 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .iface_flush              = uct_ud_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_ud_iface_progress_enable,
-    .iface_progress_disable   = uct_base_iface_progress_disable,
+    .iface_progress_disable   = uct_ud_iface_progress_disable,
     .iface_progress           = uct_ud_mlx5_iface_progress,
-    .iface_event_fd_get       = uct_ib_iface_event_fd_get,
+    .iface_event_fd_get       = (uct_iface_event_fd_get_func_t)
+                                ucs_empty_function_return_unsupported,
     .iface_event_arm          = uct_ud_iface_event_arm,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t),
     .iface_query              = uct_ud_mlx5_iface_query,
@@ -794,9 +795,9 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     ucs_trace_func("");
 
-    init_attr.flags     = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.tx_cq_len = config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
-    init_attr.rx_cq_len = config->super.super.rx.queue_len;
+    init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
+    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.super.rx.queue_len;
 
     self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
@@ -823,14 +824,14 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     }
 
     self->super.tx.available = self->tx.wq.bb_max;
-    ucs_assert(init_attr.tx_cq_len >= self->tx.wq.bb_max);
+    ucs_assert(init_attr.cq_len[UCT_IB_DIR_TX] >= self->tx.wq.bb_max);
 
     status = uct_ib_mlx5_get_rxwq(self->super.qp, &self->rx.wq);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucs_assert(init_attr.rx_cq_len > self->rx.wq.mask);
+    ucs_assert(init_attr.cq_len[UCT_IB_DIR_RX] > self->rx.wq.mask);
 
     status = uct_ud_mlx5_iface_common_init(&self->super.super,
                                            &self->ud_mlx5_common,
