@@ -18,15 +18,15 @@
 #define UCP_PROTO_MAX_LANES         UCP_MAX_LANES
 
 
-/* Maximal number protocol performance ranges */
-#define UCP_PROTO_MAX_PERF_RANGES   (UCP_PROTO_MAX_LANES + 1)
+/* Maximal number of protocol performance ranges */
+#define UCP_PROTO_MAX_PERF_RANGES   32
 
 
 /* Maximal size of protocol private data */
 #define UCP_PROTO_PRIV_MAX          1024
 
 
-/* Maximal number protocols in total */
+/* Maximal number of protocols in total */
 #define UCP_PROTO_MAX_COUNT         64
 
 
@@ -166,12 +166,6 @@ struct ucp_proto {
  */
 #define ucp_proto_id_call(_proto_id, _func, ...) \
     ucp_proto_id_field(_proto_id, _func)(__VA_ARGS__)
-
-
-#define ucs_proto_debug(...) \
-    ucs_debug(__VA_ARGS__)
-#define ucs_proto_trace(...) \
-    ucs_trace(__VA_ARGS__)
 
 
 /* Global array of all registered protocols */
