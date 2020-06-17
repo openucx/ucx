@@ -288,8 +288,8 @@ typedef struct uct_tcp_ep_zcopy_tx {
 struct uct_tcp_ep {
     uct_base_ep_t                 super;
     uint8_t                       ctx_caps;         /* Which contexts are supported */
-    int                           fd;               /* Socket file descriptor */
     uct_tcp_ep_conn_state_t       conn_state;       /* State of connection with peer */
+    int                           fd;               /* Socket file descriptor */
     unsigned                      conn_retries;     /* Number of connection attempts done */
     int                           events;           /* Current notifications */
     uct_tcp_ep_ctx_t              tx;               /* TX resources */
@@ -404,8 +404,8 @@ void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
 
-ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep,
-                                               ucs_status_t io_status);
+ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
+                                      ucs_status_t io_status);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,

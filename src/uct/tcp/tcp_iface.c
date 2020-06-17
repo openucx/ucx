@@ -133,7 +133,8 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_AM_SHORT         |
                              UCT_IFACE_FLAG_AM_BCOPY         |
                              UCT_IFACE_FLAG_PENDING          |
-                             UCT_IFACE_FLAG_CB_SYNC;
+                             UCT_IFACE_FLAG_CB_SYNC          |
+                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
     attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                              UCT_IFACE_FLAG_EVENT_RECV      |
                              UCT_IFACE_FLAG_EVENT_FD;
@@ -236,21 +237,13 @@ static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (iface->outstanding) {
+    if (iface->outstanding != 0) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super);
         return UCS_INPROGRESS;
     }
 
     UCT_TL_IFACE_STAT_FLUSH(&iface->super);
     return UCS_OK;
-}
-
-static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
-{
-    if (iface->listen_fd != -1) {
-        close(iface->listen_fd);
-        iface->listen_fd = -1;
-    }
 }
 
 static void uct_tcp_iface_connect_handler(int listen_fd, int events, void *arg)
@@ -269,7 +262,7 @@ static void uct_tcp_iface_connect_handler(int listen_fd, int events, void *arg)
                                     &addrlen, &fd);
         if (status != UCS_OK) {
             if (status != UCS_ERR_NO_PROGRESS) {
-                uct_tcp_iface_listen_close(iface);
+                ucs_close_fd(&iface->listen_fd);
             }
             return;
         }
@@ -577,7 +570,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
     ucs_mpool_cleanup(&self->rx_mpool, 1);
     ucs_mpool_cleanup(&self->tx_mpool, 1);
 
-    uct_tcp_iface_listen_close(self);
+    ucs_close_fd(&self->listen_fd);
     ucs_event_set_cleanup(self->event_set);
 }
 

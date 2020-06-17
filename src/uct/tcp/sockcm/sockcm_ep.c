@@ -85,7 +85,7 @@ ucs_status_t uct_sockcm_ep_send_client_info(uct_sockcm_ep_t *ep)
     ucs_assert(conn_param.length <= UCT_SOCKCM_PRIV_DATA_LEN);
 
     status = ucs_socket_send(ep->sock_id_ctx->sock_fd, &conn_param,
-                             sizeof(uct_sockcm_conn_param_t), NULL, NULL);
+                             sizeof(uct_sockcm_conn_param_t));
 
 out:
     return status;
@@ -188,7 +188,7 @@ static void uct_sockcm_handle_info_sent(uct_sockcm_ep_t *ep)
 
     recv_len = sizeof(notif_val);
     status   = ucs_socket_recv_nb(ep->sock_id_ctx->sock_fd, &notif_val,
-                                  &recv_len, NULL, NULL);
+                                  &recv_len);
     if (UCS_ERR_NO_PROGRESS == status) {
         /* will call recv again when ready */
         return;
