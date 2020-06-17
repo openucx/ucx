@@ -345,7 +345,7 @@ char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *fil
     return buffer;
 }
 
-int  ucm_get_mem_type_current_device_info(ucs_memory_type_t memtype, ucs_sys_bus_id_t *bus_id)
+ucs_status_t ucm_get_mem_type_current_device_info(ucs_memory_type_t memtype, ucs_sys_bus_id_t *bus_id)
 {
 
     if (ucm_mem_type_get_current_device_info[memtype] == NULL) {
