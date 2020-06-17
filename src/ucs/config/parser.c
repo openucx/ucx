@@ -448,7 +448,7 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     int     num_fields;
 
     if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
-        *dst = UCS_BANDWIDTH_AUTO;
+        *dst = UCS_CONFIG_BW_AUTO;
         return 1;
     }
 
@@ -489,19 +489,25 @@ int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
     return 1;
 }
 
-int ucs_config_sprintf_bw(char *buf, size_t max,
-                          const void *src, const void *arg)
+int ucs_config_sprintf_bw(char *buf, size_t max, const void *src,
+                          const void *arg)
 {
+    static const double max_value = 50000.0;
     double value = *(double*)src;
-    size_t len;
+    const char **suffix;
 
-    if (value == UCS_BANDWIDTH_AUTO) {
-        snprintf(buf, max, UCS_VALUE_AUTO_STR);
+    if (UCS_CONFIG_BW_IS_AUTO(value)) {
+        ucs_strncpy_safe(buf, UCS_VALUE_AUTO_STR, max);
+        return 1;
     }
 
-    ucs_memunits_to_str((size_t)value, buf, max);
-    len = strlen(buf);
-    snprintf(buf + len, max - len, "Bps");
+    suffix = &ucs_memunits_suffixes[0];
+    while ((value > max_value) && (*(suffix + 1) != NULL)) {
+        value /= 1024;
+        ++suffix;
+    }
+
+    ucs_snprintf_safe(buf, max, "%.2f%sBps", value, *suffix);
     return 1;
 }
 
@@ -589,15 +595,7 @@ int ucs_config_sscanf_memunits(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_memunits(char *buf, size_t max,
                                 const void *src, const void *arg)
 {
-    size_t sz = *(size_t*)src;
-
-    if (sz == UCS_MEMUNITS_INF) {
-        snprintf(buf, max, UCS_NUMERIC_INF_STR);
-    } else if (sz == UCS_MEMUNITS_AUTO) {
-        snprintf(buf, max, UCS_VALUE_AUTO_STR);
-    } else {
-        ucs_memunits_to_str(sz, buf, max);
-    }
+    ucs_memunits_to_str(*(size_t*)src, buf, max);
     return 1;
 }
 

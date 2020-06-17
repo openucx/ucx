@@ -331,6 +331,16 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 UCS_CONFIG_DECLARE_ARRAY(string)
 
+
+/*
+ * Helpers for Bandwidth units (see UCS_CONFIG_TYPE_BW)
+ */
+#define UCS_CONFIG_BW_AUTO \
+    ((double)-2)
+#define UCS_CONFIG_BW_IS_AUTO(_value) \
+    ((ssize_t)(_value) == UCS_CONFIG_BW_AUTO)
+
+
 /**
  * Set default values for options.
  *
