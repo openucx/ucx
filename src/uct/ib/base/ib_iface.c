@@ -19,8 +19,6 @@
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 #include <ucs/memory/numa.h>
-#include <ucm/api/ucm.h>
-#include <ucm/util/sys.h>
 #include <ucs/sys/sock.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1459,7 +1457,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     size_t mtu, width, extra_pkt_len;
     ucs_status_t status;
     double numa_latency;
-    ucs_sys_bus_id_t bus_id;
 
     uct_base_iface_query(&iface->super, iface_attr);
     
@@ -1528,9 +1525,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                   UCT_IB_IFACE_ARG(iface), active_speed);
         return UCS_ERR_IO_ERROR;
     }
-
-    ucm_get_mem_type_current_device_info(UCS_MEMORY_TYPE_CUDA, &bus_id);
-    ucs_debug("bus_id: %x:%x:%x:%x \n", bus_id.domain, bus_id.bus, bus_id.slot, bus_id.function);
 
     status = uct_ib_iface_get_numa_latency(iface, &numa_latency);
     if (status != UCS_OK) {
