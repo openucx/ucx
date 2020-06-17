@@ -72,6 +72,8 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 
   UCT_TCP_SEND_RECV_BUF_FIELDS(ucs_offsetof(uct_tcp_iface_config_t, sockopt)),
 
+  UCT_TCP_SYN_CNT(ucs_offsetof(uct_tcp_iface_config_t, syn_cnt)),
+
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
 
@@ -292,8 +294,13 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
         return status;
     }
 
-    return ucs_socket_set_buffer_size(fd, iface->sockopt.sndbuf,
-                                      iface->sockopt.rcvbuf);
+    status = ucs_socket_set_buffer_size(fd, iface->sockopt.sndbuf,
+                                        iface->sockopt.rcvbuf);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucs_tcp_base_set_syn_cnt(fd, iface->config.syn_cnt);
 }
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
@@ -444,6 +451,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.conn_nb           = config->conn_nb;
     self->config.max_poll          = config->max_poll;
     self->config.max_conn_retries  = config->max_conn_retries;
+    self->config.syn_cnt           = config->syn_cnt;
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;

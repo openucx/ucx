@@ -71,6 +71,7 @@ libuct_la_SOURCES = \
 	tcp/tcp_md.c \
 	tcp/tcp_net.c \
 	tcp/tcp_cm.c \
+	tcp/tcp_base.c \
 	tcp/tcp_sockcm.c \
 	tcp/tcp_listener.c \
 	tcp/tcp_sockcm_ep.c \

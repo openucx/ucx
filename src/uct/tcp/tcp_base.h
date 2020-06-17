@@ -8,6 +8,10 @@
 #define UCT_TCP_BASE_H
 
 #include <stddef.h>
+#include <netinet/tcp.h>
+#include <ucs/type/status.h>
+#include <ucs/sys/sock.h>
+#include <ucs/debug/log.h>
 
 
 /**
@@ -31,5 +35,14 @@ typedef struct uct_tcp_send_recv_buf_config {
      "Socket receive buffer size", \
      (_offset) + ucs_offsetof(uct_tcp_send_recv_buf_config_t, rcvbuf), UCS_CONFIG_TYPE_MEMUNITS}
 
+
+#define UCT_TCP_SYN_CNT(_offset) \
+    {"SYN_CNT", "6", \
+     "Number of SYN retransmits that TCP should send before aborting the attempt\n" \
+     "to connect. It cannot exceed 255. 6 is the default value on most Linux systems.", \
+     (_offset) , UCS_CONFIG_TYPE_INT}
+
+
+ucs_status_t ucs_tcp_base_set_syn_cnt(int fd, int tcp_syn_cnt);
 
 #endif /* UCT_TCP_BASE_H */

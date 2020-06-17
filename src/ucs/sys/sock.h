@@ -133,6 +133,23 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
 
 
 /**
+ * Get options of a socket.
+ *
+ * @param [in]   fd          Socket fd.
+ * @param [in]   level       The level at which the option is defined.
+ * @param [in]   optname     The socket option for which the value is fetched.
+ * @param [in]   optval      A pointer to the buffer in which the value for the
+ *                           requested option is stored.
+ * @param [in]   optlen      The size, in bytes, of information actually stored
+ *                           in optval.
+ *
+ * @return UCS_OK on success or UCS_ERR_IO_ERROR on failure
+ */
+ucs_status_t ucs_socket_getopt(int fd, int level, int optname,
+                               void *optval, socklen_t* optlen_ptr);
+
+
+/**
  * Connect the socket referred to by the file descriptor `fd`
  * to the address specified by `dest_addr`.
  *

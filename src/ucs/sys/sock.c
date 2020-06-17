@@ -144,6 +144,20 @@ ucs_status_t ucs_socket_setopt(int fd, int level, int optname,
     return UCS_OK;
 }
 
+ucs_status_t ucs_socket_getopt(int fd, int level, int optname,
+                               void *optval, socklen_t* optlen_ptr)
+{
+    int ret = getsockopt(fd, level, optname, optval, optlen_ptr);
+    if (ret < 0) {
+        ucs_error("failed to get %d option for %d level on fd %d: %m",
+                  optname, level, fd);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+
 const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
 {
     struct sockaddr_storage sock_addr = {0}; /* Suppress Clang false-positive */

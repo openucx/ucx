@@ -343,6 +343,9 @@ typedef struct uct_tcp_iface {
         unsigned                  max_conn_retries;  /* How many connection establishment attmepts
                                                       * should be done if dropped connection was
                                                       * detected due to lack of system resources */
+        unsigned                  syn_cnt;           /* Number of SYN retransmits that TCP should send
+                                                      * before aborting the attempt to connect.
+                                                      * It cannot exceed 255. */
     } config;
 
     struct {
@@ -369,6 +372,7 @@ typedef struct uct_tcp_iface_config {
     unsigned                       max_conn_retries;
     int                            sockopt_nodelay;
     uct_tcp_send_recv_buf_config_t sockopt;
+    unsigned                       syn_cnt;
     uct_iface_mpool_config_t       tx_mpool;
     uct_iface_mpool_config_t       rx_mpool;
 } uct_tcp_iface_config_t;

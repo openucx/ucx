@@ -24,6 +24,8 @@ ucs_config_field_t uct_tcp_sockcm_config_table[] = {
 
    UCT_TCP_SEND_RECV_BUF_FIELDS(ucs_offsetof(uct_tcp_sockcm_config_t, sockopt)),
 
+   UCT_TCP_SYN_CNT(ucs_offsetof(uct_tcp_sockcm_config_t, syn_cnt)),
+
   {NULL}
 };
 
@@ -50,35 +52,70 @@ static uct_cm_ops_t uct_tcp_sockcm_ops = {
 
 static void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep)
 {
-    ucs_free(ep->comm_ctx.buf);
     ucs_list_del(&ep->list);
-    uct_tcp_sockcm_ep_close_fd(&ep->fd);
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 }
 
-static inline void uct_tcp_sockcm_ep_handle_status(uct_tcp_sockcm_ep_t *ep,
-                                                   ucs_status_t status,
-                                                   int events, const char *reason)
+void uct_tcp_sockcm_handle_error(uct_tcp_sockcm_ep_t *ep, ucs_status_t status)
 {
-    if (status != UCS_OK) {
-        ucs_trace("removing ep %p (fd=%d state=%d events=%d) async events handler "
-                  "because %s: %s ",
-                  ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
-        ucs_async_modify_handler(ep->fd, 0);
+    uct_tcp_sockcm_ep_handle_error(ep, status);
+    ep->state |= UCT_TCP_SOCKCM_EP_FAILED;
+}
 
+static inline void uct_tcp_sockcm_event_handle_status(uct_tcp_sockcm_ep_t *ep,
+                                                      ucs_status_t status,
+                                                      int events, const char *reason)
+{
+    ucs_assert(!(ep->state & UCT_TCP_SOCKCM_EP_FAILED));
+
+    /* disconnect was already handled on send/recv failure */
+    if (ep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT) {
+        return;
+    }
+
+    ucs_trace("handling error on ep %p (fd=%d state=%d events=%d) because %s: %s ",
+               ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
+
+
+    if (status != UCS_OK) {
         /* if the ep is on the server side but uct_ep_create wasn't called yet,
          * destroy the ep here since uct_ep_destroy won't be called either */
         if ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
             !(ep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED)) {
             ucs_assert(events == UCS_EVENT_SET_EVREAD);
             uct_tcp_sockcm_close_ep(ep);
+        } else {
+            uct_tcp_sockcm_handle_error(ep, status);
         }
+    }
+}
+
+static ucs_status_t uct_tcp_sockcm_event_err_to_ucs_err_log(int fd,
+                                                            ucs_log_level_t* log_level)
+{
+    int error = 0;
+    socklen_t err_len = sizeof(error);
+    ucs_status_t status;
+
+    status = ucs_socket_getopt(fd, SOL_SOCKET, SO_ERROR, (void*)&error, &err_len);
+    if (status != UCS_OK) {
+        *log_level = UCS_LOG_LEVEL_ERROR;
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (error == ECONNREFUSED) {
+        *log_level = UCS_LOG_LEVEL_DEBUG;
+        return UCS_ERR_REJECTED;
+    } else {
+        *log_level = UCS_LOG_LEVEL_ERROR;
+        return UCS_ERR_IO_ERROR;
     }
 }
 
 void uct_tcp_sa_data_handler(int fd, int events, void *arg)
 {
     uct_tcp_sockcm_ep_t *ep = (uct_tcp_sockcm_ep_t*)arg;
+    ucs_log_level_t log_level;
     ucs_status_t status;
 
     ucs_assertv(ep->fd == fd, "ep->fd %d fd %d, ep_state %d", ep->fd, fd, ep->state);
@@ -88,16 +125,18 @@ void uct_tcp_sa_data_handler(int fd, int events, void *arg)
               ep->state);
 
     if (events & UCS_EVENT_SET_EVERR) {
-        ucs_error("error event on %s ep %p (state=%d) events=%d",
-                  (ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
-                  ep, ep->state, events);
+        status = uct_tcp_sockcm_event_err_to_ucs_err_log(fd, &log_level);
+        ucs_log(log_level, "error event on %s ep %p (status=%s state=%d) events=%d",
+                (ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
+                ep, ucs_status_string(status), ep->state, events);
+        uct_tcp_sockcm_event_handle_status(ep, status, events, "event set error");
         return;
     }
 
     /* handle a READ event first in case it is a disconnect notice from the peer */
     if (events & UCS_EVENT_SET_EVREAD) {
         status = uct_tcp_sockcm_ep_recv(ep);
-        uct_tcp_sockcm_ep_handle_status(ep, status, events, "failed to receive");
+        uct_tcp_sockcm_event_handle_status(ep, status, events, "failed to receive");
         if (status != UCS_OK) {
             return;
         }
@@ -105,7 +144,7 @@ void uct_tcp_sa_data_handler(int fd, int events, void *arg)
 
     if (events & UCS_EVENT_SET_EVWRITE) {
         status = uct_tcp_sockcm_ep_send(ep);
-        uct_tcp_sockcm_ep_handle_status(ep, status, events, "failed to send");
+        uct_tcp_sockcm_event_handle_status(ep, status, events, "failed to send");
         if (status != UCS_OK) {
             return;
         }
@@ -156,10 +195,11 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_tcp_sockcm_ops,
                               &uct_tcp_sockcm_iface_ops, worker, component);
 
-    self->priv_data_len  = cm_config->priv_data_len -
-                           sizeof(uct_tcp_sockcm_priv_data_hdr_t);
-    self->sockopt_sndbuf = cm_config->sockopt.sndbuf;
-    self->sockopt_rcvbuf = cm_config->sockopt.rcvbuf;
+    self->priv_data_len    = cm_config->priv_data_len -
+                             sizeof(uct_tcp_sockcm_priv_data_hdr_t);
+    self->sockopt_sndbuf   = cm_config->sockopt.sndbuf;
+    self->sockopt_rcvbuf   = cm_config->sockopt.rcvbuf;
+    self->syn_cnt          = cm_config->syn_cnt;
 
     ucs_list_head_init(&self->ep_list);
 

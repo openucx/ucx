@@ -784,7 +784,8 @@ protected:
             std::string err_str = format_message(message, ap);
             if ((strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ADDR_ERROR"))  ||
                 (strstr(err_str.c_str(), "client: got error event RDMA_CM_EVENT_ROUTE_ERROR")) ||
-                (strstr(err_str.c_str(), "rdma_resolve_route(to addr=240.0.0.0"))) {
+                (strstr(err_str.c_str(), "rdma_resolve_route(to addr=240.0.0.0")) ||
+                (strstr(err_str.c_str(), "error event on client ep"))) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
             }
@@ -998,11 +999,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, many_conns_on_client)
 
 UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
 {
-    skip_tcp_sockcm();
-
-    /* wrap errors since a reject is expected */
-    scoped_log_handler slh(detect_reject_error_logger);
-
     /* client - try to connect to a server that isn't listening */
     m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
                       client_connect_cb, client_disconnect_cb, this);
@@ -1010,14 +1006,15 @@ UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
     EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
 
     /* with the TCP port space (which is currently tested with rdmacm),
-     * in this case, a REJECT event will be generated on the client side */
+     * a REJECT event will be generated on the client side.
+     * with tcp_sockcm, an EPOLLERR event will be generated and transformed
+     * to an error code. */
     wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_REJECT);
     EXPECT_TRUE(ucs_test_all_flags(m_state, TEST_STATE_CLIENT_GOT_REJECT));
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
 {
-    skip_tcp_sockcm();
     /* Listen */
     start_listen(test_uct_cm_sockaddr::conn_request_cb);
 
@@ -1031,7 +1028,9 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
                       client_connect_cb, client_disconnect_cb, this);
 
     /* with the TCP port space (which is currently tested with rdmacm),
-     * in this case, a REJECT event will be generated on the client side */
+     * a REJECT event will be generated on the client side.
+     * with tcp_sockcm, an EPOLLERR event will be generated and transformed
+     * to an error code. */
     wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_REJECT);
     EXPECT_TRUE(ucs_test_all_flags(m_state, TEST_STATE_CLIENT_GOT_REJECT));
 }
@@ -1042,7 +1041,20 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
     ucs_status_t status;
     size_t size;
 
-    skip_tcp_sockcm();  /* error handling isn't implemented yet in tcp_sockcm  */
+    m_entities.clear();
+
+    /* tcp_sockcm requires setting this parameter to shorten the time of waiting
+     * for the connect() to fail when connecting to a non-existing ip.
+     * A transport for which this value is not configurable, like rdmacm,
+     * uct_config_modify will fail and have no effect. */
+    if (m_cm_config) {
+        /* coverity[check_return] */
+        uct_config_modify(m_cm_config, "SYN_CNT", "1");
+    }
+
+    /* recreate m_server and m_client with the above env parameter changed */
+    init();
+
     /* Listen */
     start_listen(test_uct_cm_sockaddr::conn_request_cb);
 
@@ -1066,7 +1078,7 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
         m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
                           client_connect_cb, client_disconnect_cb, this);
 
-        wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_ERROR);
+        wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_ERROR, 300);
         EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_ERROR);
 
         EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
