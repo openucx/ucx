@@ -54,7 +54,9 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
 
     uct_mem_h memh;
     status = uct_md_mem_reg(md(), buffer, size,
-                            amo_access ? UCT_MD_MEM_ACCESS_REMOTE_ATOMIC :
+                            amo_access ? (UCT_MD_MEM_ACCESS_REMOTE_ATOMIC |
+                                          UCT_MD_MEM_ACCESS_LOCAL_WRITE   |
+                                          UCT_MD_MEM_ACCESS_LOCAL_READ     ) :
                                          UCT_MD_MEM_ACCESS_RMA,
                             &memh);
     ASSERT_UCS_OK(status, << " buffer=" << buffer << " size=" << size);

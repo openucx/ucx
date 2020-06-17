@@ -250,7 +250,16 @@ ucp_mem_map_params2uct_flags(ucp_mem_map_params_t *params)
         }
     }
 
-    flags |= UCT_MD_MEM_ACCESS_ALL;
+    if ((params->flags & UCP_MEM_MAP_WRITE) && (params->flags & UCP_MEM_MAP_READ)) {
+        flags |= UCT_MD_MEM_ACCESS_ALL;
+    } else {
+        if (params->flags & UCP_MEM_MAP_WRITE) {
+            flags |= (UCT_MD_MEM_ACCESS_LOCAL_WRITE | UCT_MD_MEM_ACCESS_REMOTE_PUT);
+        }
+        if (params->flags & UCP_MEM_MAP_READ) {
+            flags |= (UCT_MD_MEM_ACCESS_LOCAL_READ | UCT_MD_MEM_ACCESS_REMOTE_GET);
+        }
+    }
     /* TODO: disable atomic if ucp context does not have it */
 
     return flags;

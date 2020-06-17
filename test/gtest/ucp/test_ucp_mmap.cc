@@ -392,4 +392,25 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
     }
 }
 
+UCS_TEST_P(test_ucp_mmap, mmap_prot) {
+    ucs_status_t status;
+    ucp_mem_h memh;
+    ucp_mem_map_params_t params;
+    int size = 4096;
+    void* buf = mmap(NULL, size, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+    sender().connect(&sender(), get_ep_params());
+    
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                        UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.address    = buf;
+    params.length     = size;
+    params.flags      = UCP_MEM_MAP_NONBLOCK | UCP_MEM_MAP_READ;
+
+    status = ucp_mem_map(sender().ucph(), &params, &memh);
+    munmap(buf, size);
+    ASSERT_UCS_OK(status);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_mmap)

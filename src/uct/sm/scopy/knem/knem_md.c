@@ -119,7 +119,8 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
     create.iovec_array = (uintptr_t) &knem_iov[0];
     create.iovec_nr = 1;
     create.flags = 0;
-    create.protection = PROT_READ | PROT_WRITE;
+    create.protection = ((flags & UCT_MD_MEM_ACCESS_LOCAL_WRITE) ? PROT_WRITE : 0) |
+                        ((flags & UCT_MD_MEM_ACCESS_LOCAL_READ ) ? PROT_READ  : 0);
 
     rc = ioctl(knem_fd, KNEM_CMD_CREATE_REGION, &create);
     if (rc < 0) {
@@ -253,8 +254,11 @@ static ucs_status_t uct_knem_mem_rcache_reg(uct_md_h uct_md, void *address,
     uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
     ucs_rcache_region_t *rregion;
     ucs_status_t status;
+    int prot;
 
-    status = ucs_rcache_get(md->rcache, address, length, PROT_READ|PROT_WRITE,
+    prot = ((flags & UCT_MD_MEM_ACCESS_LOCAL_WRITE) ? PROT_WRITE : 0) |
+           ((flags & UCT_MD_MEM_ACCESS_LOCAL_READ ) ? PROT_READ  : 0);    
+    status = ucs_rcache_get(md->rcache, address, length, prot,
                             &flags, &rregion);
     if (status != UCS_OK) {
         return status;
