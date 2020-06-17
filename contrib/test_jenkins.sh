@@ -9,13 +9,14 @@
 #
 #
 # Environment variables set by Jenkins CI:
-#  - WORKSPACE         : path to work dir
-#  - BUILD_NUMBER      : jenkins build number
-#  - JOB_URL           : jenkins job url
-#  - EXECUTOR_NUMBER   : number of executor within the test machine
-#  - JENKINS_RUN_TESTS : whether to run unit tests
-#  - RUN_TESTS         : same as JENKINS_RUN_TESTS, but for Azure
-#  - JENKINS_TEST_PERF : whether to validate performance
+#  - WORKSPACE           : path to work dir
+#  - BUILD_NUMBER        : jenkins build number
+#  - JOB_URL             : jenkins job url
+#  - EXECUTOR_NUMBER     : number of executor within the test machine
+#  - JENKINS_RUN_TESTS   : whether to run unit tests
+#  - RUN_TESTS           : same as JENKINS_RUN_TESTS, but for Azure
+#  - JENKINS_TEST_PERF   : whether to validate performance
+#  - JENKINS_NO_VALGRIND : set this to disable vagrind tests
 #
 # Optional environment variables (could be set by job configuration):
 #  - nworkers : number of parallel executors
