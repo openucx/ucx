@@ -167,11 +167,13 @@ enum {
     UCT_UD_EP_OP_ACK_REQ    = UCS_BIT(1),  /* request ack of sent packets */
     UCT_UD_EP_OP_RESEND     = UCS_BIT(2),  /* resend un acked packets */
     UCT_UD_EP_OP_CREP       = UCS_BIT(3),  /* send connection reply */
-    UCT_UD_EP_OP_CREQ       = UCS_BIT(4)   /* send connection request */
+    UCT_UD_EP_OP_CREQ       = UCS_BIT(4),  /* send connection request */
+    UCT_UD_EP_OP_NACK       = UCS_BIT(5),  /* send NACK */
 };
 
 #define UCT_UD_EP_OP_CTL_LOW_PRIO (UCT_UD_EP_OP_ACK_REQ|UCT_UD_EP_OP_ACK)
 #define UCT_UD_EP_OP_CTL_HI_PRIO  (UCT_UD_EP_OP_CREQ|UCT_UD_EP_OP_CREP|UCT_UD_EP_OP_RESEND)
+#define UCT_UD_EP_OP_CTL_ACK      (UCT_UD_EP_OP_ACK|UCT_UD_EP_OP_ACK_REQ|UCT_UD_EP_OP_NACK)
 
 typedef struct uct_ud_ep_pending_op {
     ucs_arbiter_group_t   group;
@@ -198,10 +200,11 @@ enum {
     UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(8), /* CREQ message is NOT sent, because
                                                       connection establishment process
                                                       is driven by remote side. */
+    UCT_UD_EP_FLAG_TX_NACKED         = UCS_BIT(9), /* Last psn was acked with NAK */
 
     /* Endpoint is currently executing the pending queue */
 #if UCS_ENABLE_ASSERT
-    UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(9)
+    UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(10)
 #else
     UCT_UD_EP_FLAG_IN_PENDING        = 0
 #endif

@@ -782,6 +782,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_2sided, async_connect,
     while(!(send_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) &&
           (ucs_get_time() < deadline)) {
         ucp_worker_progress(sender().worker());
+        ucp_worker_progress(receiver().worker());
     }
 
     reqs.push_back(ucp_tag_recv_nb(receiver().worker(), NULL, 0, DT_U64, 1,
