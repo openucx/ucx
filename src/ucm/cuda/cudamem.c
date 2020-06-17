@@ -19,6 +19,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
+#include <ucs/sys/topo.h>
 
 #include <sys/mman.h>
 #include <pthread.h>
@@ -63,6 +64,7 @@ UCM_OVERRIDE_FUNC(cudaHostGetDevicePointer,  cudaError_t)
 UCM_OVERRIDE_FUNC(cudaHostUnregister,        cudaError_t)
 #endif
 
+extern ucs_status_t (*ucm_mem_type_get_current_device_info[UCS_MEMORY_TYPE_LAST])(ucs_sys_bus_id_t *bus_id);
 
 static void ucm_cuda_set_ptr_attr(CUdeviceptr dptr)
 {
@@ -452,6 +454,45 @@ static void ucm_cudamem_get_existing_alloc(ucm_event_handler_t *handler)
     }
 }
 
+ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id)
+{
+    CUresult cu_err;
+    CUdevice cuda_device;
+    CUpointer_attribute attribute;
+    int attr_result;
+
+    ucm_trace("ucm_cuda_get_current_device_info");
+
+    /* Find cuda dev that the current ctx is using and find it's path*/
+    cu_err = cuCtxGetDevice(&cuda_device);
+    if (CUDA_SUCCESS != cu_err) {
+        ucm_error("no find current set device");
+        return UCS_OK;
+    }
+
+    attribute = CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID;
+    cu_err = cuDeviceGetAttribute(&attr_result, attribute, cuda_device);
+    if (CUDA_SUCCESS != cu_err) {
+        ucm_error("unable to get cuda device domain");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    bus_id->domain = (uint16_t)attr_result;
+
+    attribute = CU_DEVICE_ATTRIBUTE_PCI_BUS_ID;
+    cu_err = cuDeviceGetAttribute(&attr_result, attribute, cuda_device);
+    if (CUDA_SUCCESS != cu_err) {
+        ucm_error("unable to get cuda device bus id");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    bus_id->bus      = (uint8_t)attr_result;
+    bus_id->slot     = 0;
+    bus_id->function = 0;
+
+    return UCS_OK;
+}
+
 static ucm_event_installer_t ucm_cuda_initializer = {
     .install            = ucm_cudamem_install,
     .get_existing_alloc = ucm_cudamem_get_existing_alloc
@@ -459,6 +500,7 @@ static ucm_event_installer_t ucm_cuda_initializer = {
 
 UCS_STATIC_INIT {
     ucs_list_add_tail(&ucm_event_installer_list, &ucm_cuda_initializer.list);
+    ucm_mem_type_get_current_device_info[UCS_MEMORY_TYPE_CUDA] = &ucm_cuda_get_current_device_info;
 }
 
 UCS_STATIC_CLEANUP {

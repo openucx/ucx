@@ -9,6 +9,8 @@
 #define UCM_UTIL_SYS_H_
 
 #include <stddef.h>
+#include <ucs/sys/topo.h>
+#include <ucs/memory/memory_type.h>
 
 
 /*
@@ -86,6 +88,17 @@ void ucm_prevent_dl_unload();
  * @return Result buffer.
  */
 char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *file);
+
+
+/*
+ * Get device information associated with memory type
+ *
+ * @param memtype       Memory type.
+ * @param bus_id        Bus ID.
+ *
+ * @return A bus_id that is associated with the memory type.
+ */
+int  ucm_get_mem_type_current_device_info(ucs_memory_type_t memtype, ucs_sys_bus_id_t *bus_id);
 
 
 #endif
