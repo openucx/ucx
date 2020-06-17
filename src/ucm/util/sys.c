@@ -352,7 +352,5 @@ ucs_status_t ucm_get_mem_type_current_device_info(ucs_memory_type_t memtype, ucs
         return UCS_ERR_UNSUPPORTED;
     }
 
-    ucm_mem_type_get_current_device_info[memtype](bus_id);
-
-    return UCS_OK;
+    return ucm_mem_type_get_current_device_info[memtype](bus_id);
 }

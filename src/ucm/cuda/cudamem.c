@@ -464,10 +464,7 @@ ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id)
 
     ucm_trace("ucm_cuda_get_current_device_info");
 
-    if ((cached_bus_id.domain == 0xffff) &&
-        (cached_bus_id.bus == 0xff) &&
-        (cached_bus_id.slot == 0xff) &&
-        (cached_bus_id.function == 0xff)) {
+    if (cached_bus_id.slot == 0xff) {
         /* compute bus id and cache it*/
     } else {
         memcpy(bus_id, &cached_bus_id, sizeof(cached_bus_id));
@@ -501,6 +498,9 @@ ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id)
     bus_id->slot     = 0;
     bus_id->function = 0;
     cached_bus_id    = *bus_id;
+
+    ucm_trace("Found bus_id %x:%x:%x:%x", bus_id->domain, bus_id->bus,
+                                          bus_id->slot, bus_id->function);
 
     return UCS_OK;
 }

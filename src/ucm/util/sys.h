@@ -95,10 +95,10 @@ BEGIN_C_DECLS
 /*
  * Get device information associated with memory type
  *
- * @param memtype       Memory type.
- * @param bus_id        Bus ID.
+ * @param [in]  memtype       Memory type.
+ * @param [out] bus_id        Bus ID.
  *
- * @return A bus_id that is associated with the memory type.
+ * @return Status code
  */
 ucs_status_t ucm_get_mem_type_current_device_info(ucs_memory_type_t memtype, ucs_sys_bus_id_t *bus_id);
 
