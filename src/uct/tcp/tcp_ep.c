@@ -43,11 +43,6 @@ const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
         .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
         .rx_progress = uct_tcp_ep_progress_data_rx
     },
-    [UCT_TCP_EP_CONN_STATE_WAITING_REQ] = {
-        .name        = "WAITING_REQ",
-        .tx_progress = (uct_tcp_ep_progress_t)ucs_empty_function_return_zero,
-        .rx_progress = uct_tcp_ep_progress_data_rx
-    },
     [UCT_TCP_EP_CONN_STATE_CONNECTED]   = {
         .name        = "CONNECTED",
         .tx_progress = uct_tcp_ep_progress_data_tx,
@@ -77,8 +72,7 @@ static inline ucs_status_t uct_tcp_ep_check_tx_res(uct_tcp_ep_t *ep)
         }
 
         ucs_assertv((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
-                    (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
-                    (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ),
+                    (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK),
                     "ep=%p", ep);
         return UCS_ERR_NO_RESOURCE;
     }
@@ -659,8 +653,7 @@ ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep,
     /* if connection establishment fails, the system limits
      * may not be big enough */
     if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTING) ||
-         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK) ||
-         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_REQ)) &&
+         (ep->conn_state == UCT_TCP_EP_CONN_STATE_WAITING_ACK)) &&
         (uct_tcp_ep_is_conn_closed_by_peer(io_status) ||
          (io_status == UCS_ERR_TIMED_OUT))) {
         uct_tcp_ep_mod_events(ep, 0, ep->events);
