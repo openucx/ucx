@@ -42,6 +42,7 @@ noinst_HEADERS = \
 	proto/lane_type.h \
 	proto/proto_am.h \
 	proto/proto_am.inl \
+	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \
 	tag/eager.h \
@@ -88,6 +89,7 @@ libucp_la_SOURCES = \
 	dt/dt.c \
 	proto/lane_type.c \
 	proto/proto_am.c \
+	proto/proto.c \
 	rma/amo_basic.c \
 	rma/amo_send.c \
 	rma/amo_sw.c \
