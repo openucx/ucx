@@ -168,6 +168,8 @@ void uct_tcp_sockcm_ep_handle_error(uct_tcp_sockcm_ep_t *cep, ucs_status_t statu
 {
     ucs_status_t async_status;
 
+    ucs_assert(UCS_STATUS_IS_ERR(status));
+
     ucs_trace("removing ep %p (fd=%d state=%d) async events handler. %s ",
               cep, cep->fd, cep->state, ucs_status_string(status));
 
@@ -350,8 +352,8 @@ static int uct_tcp_sockcm_ep_send_skip_event(uct_tcp_sockcm_ep_t *cep)
     /* if the ep got a disconnect notice from the peer or had an internal local
      * error, it should have removed its fd from the async handlers.
      * therefore, no send events should get here afterwards */
-    ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT) &&
-               !(cep->state & UCT_TCP_SOCKCM_EP_FAILED));
+    ucs_assert(!(cep->state & (UCT_TCP_SOCKCM_EP_GOT_DISCONNECT |
+                               UCT_TCP_SOCKCM_EP_FAILED)));
 
     if (cep->state & UCT_TCP_SOCKCM_EP_DISCONNECTING) {
         return 1;
@@ -564,6 +566,7 @@ static ucs_status_t uct_tcp_sockcm_ep_recv_nb(uct_tcp_sockcm_ep_t *cep)
                       "(offset=%zu status=%s)", cep, cep->fd, cep->comm_ctx.offset,
                       ucs_status_string(status));
         }
+
         /* treat all recv errors as if they are disconnect from the remote peer -
          * i.e. stop sending and receiving on this endpoint */
         uct_tcp_sockcm_ep_handle_remote_disconnect(cep, status);
@@ -587,8 +590,8 @@ ucs_status_t uct_tcp_sockcm_ep_recv(uct_tcp_sockcm_ep_t *cep)
     /* if the ep got a disconnect notice from the peer or had an internal local
      * error, it should have removed its fd from the async handlers.
      * therefore, no recv events should get here afterwards */
-    ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT) &&
-               !(cep->state & UCT_TCP_SOCKCM_EP_FAILED));
+    ucs_assert(!(cep->state & (UCT_TCP_SOCKCM_EP_GOT_DISCONNECT |
+                               UCT_TCP_SOCKCM_EP_FAILED)));
 
     status = uct_tcp_sockcm_ep_recv_nb(cep);
     if (status != UCS_OK) {

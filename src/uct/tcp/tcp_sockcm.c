@@ -56,15 +56,9 @@ static void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep)
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 }
 
-void uct_tcp_sockcm_handle_error(uct_tcp_sockcm_ep_t *ep, ucs_status_t status)
-{
-    uct_tcp_sockcm_ep_handle_error(ep, status);
-    ep->state |= UCT_TCP_SOCKCM_EP_FAILED;
-}
-
-static inline void uct_tcp_sockcm_event_handle_status(uct_tcp_sockcm_ep_t *ep,
-                                                      ucs_status_t status,
-                                                      int events, const char *reason)
+static inline void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
+                                                         ucs_status_t status,
+                                                         int events, const char *reason)
 {
     ucs_assert(!(ep->state & UCT_TCP_SOCKCM_EP_FAILED));
 
@@ -73,11 +67,10 @@ static inline void uct_tcp_sockcm_event_handle_status(uct_tcp_sockcm_ep_t *ep,
         return;
     }
 
-    ucs_trace("handling error on ep %p (fd=%d state=%d events=%d) because %s: %s ",
-               ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
-
-
     if (status != UCS_OK) {
+        ucs_trace("handling error on ep %p (fd=%d state=%d events=%d) because %s: %s ",
+                  ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
+
         /* if the ep is on the server side but uct_ep_create wasn't called yet,
          * destroy the ep here since uct_ep_destroy won't be called either */
         if ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
@@ -85,7 +78,8 @@ static inline void uct_tcp_sockcm_event_handle_status(uct_tcp_sockcm_ep_t *ep,
             ucs_assert(events == UCS_EVENT_SET_EVREAD);
             uct_tcp_sockcm_close_ep(ep);
         } else {
-            uct_tcp_sockcm_handle_error(ep, status);
+            uct_tcp_sockcm_ep_handle_error(ep, status);
+            ep->state |= UCT_TCP_SOCKCM_EP_FAILED;
         }
     }
 }
@@ -99,17 +93,19 @@ static ucs_status_t uct_tcp_sockcm_event_err_to_ucs_err_log(int fd,
 
     status = ucs_socket_getopt(fd, SOL_SOCKET, SO_ERROR, (void*)&error, &err_len);
     if (status != UCS_OK) {
-        *log_level = UCS_LOG_LEVEL_ERROR;
-        return UCS_ERR_IO_ERROR;
+        goto error;
     }
 
-    if (error == ECONNREFUSED) {
-        *log_level = UCS_LOG_LEVEL_DEBUG;
-        return UCS_ERR_REJECTED;
-    } else {
-        *log_level = UCS_LOG_LEVEL_ERROR;
-        return UCS_ERR_IO_ERROR;
+    if (error != ECONNREFUSED) {
+        goto error;
     }
+
+    *log_level = UCS_LOG_LEVEL_DEBUG;
+    return UCS_ERR_REJECTED;
+
+error:
+    *log_level = UCS_LOG_LEVEL_ERROR;
+    return UCS_ERR_IO_ERROR;
 }
 
 void uct_tcp_sa_data_handler(int fd, int events, void *arg)
@@ -129,14 +125,14 @@ void uct_tcp_sa_data_handler(int fd, int events, void *arg)
         ucs_log(log_level, "error event on %s ep %p (status=%s state=%d) events=%d",
                 (ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
                 ep, ucs_status_string(status), ep->state, events);
-        uct_tcp_sockcm_event_handle_status(ep, status, events, "event set error");
+        uct_tcp_sockcm_ep_handle_event_status(ep, status, events, "event set error");
         return;
     }
 
     /* handle a READ event first in case it is a disconnect notice from the peer */
     if (events & UCS_EVENT_SET_EVREAD) {
         status = uct_tcp_sockcm_ep_recv(ep);
-        uct_tcp_sockcm_event_handle_status(ep, status, events, "failed to receive");
+        uct_tcp_sockcm_ep_handle_event_status(ep, status, events, "failed to receive");
         if (status != UCS_OK) {
             return;
         }
@@ -144,7 +140,7 @@ void uct_tcp_sa_data_handler(int fd, int events, void *arg)
 
     if (events & UCS_EVENT_SET_EVWRITE) {
         status = uct_tcp_sockcm_ep_send(ep);
-        uct_tcp_sockcm_event_handle_status(ep, status, events, "failed to send");
+        uct_tcp_sockcm_ep_handle_event_status(ep, status, events, "failed to send");
         if (status != UCS_OK) {
             return;
         }
