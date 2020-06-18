@@ -449,7 +449,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
 
     ucs_list_head_init(&self->ep_list);
-    kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
+    kh_init_inplace(uct_tcp_cm_conns, &self->cm_conn_map);
 
     if (self->config.tx_seg_size > self->config.rx_seg_size) {
         ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
@@ -506,29 +506,14 @@ err:
     return status;
 }
 
-static void uct_tcp_iface_ep_list_cleanup(uct_tcp_iface_t *iface,
-                                          ucs_list_link_t *ep_list)
+static void uct_tcp_iface_ep_list_cleanup(uct_tcp_iface_t *iface)
 {
     uct_tcp_ep_t *ep, *tmp;
 
-    ucs_list_for_each_safe(ep, tmp, ep_list, list) {
-        uct_tcp_cm_purge_ep(ep);
+    ucs_list_for_each_safe(ep, tmp, &iface->ep_list, list) {
+        uct_tcp_ep_change_ctx_caps(ep, 0);
         uct_tcp_ep_destroy_internal(&ep->super.super);
     }
-}
-
-static void uct_tcp_iface_eps_cleanup(uct_tcp_iface_t *iface)
-{
-    ucs_list_link_t *ep_list;
-
-    uct_tcp_iface_ep_list_cleanup(iface, &iface->ep_list);
-
-    kh_foreach_value(&iface->ep_cm_map, ep_list, {
-        uct_tcp_iface_ep_list_cleanup(iface, ep_list);
-        ucs_free(ep_list);
-    });
-
-    kh_destroy_inplace(uct_tcp_cm_eps, &iface->ep_cm_map);
 }
 
 void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep)
@@ -564,7 +549,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
         ucs_warn("failed to remove handler for server socket fd=%d", self->listen_fd);
     }
 
-    uct_tcp_iface_eps_cleanup(self);
+    uct_tcp_iface_ep_list_cleanup(self);
+    uct_tcp_cm_cleanup(self);
 
     ucs_mpool_cleanup(&self->rx_mpool, 1);
     ucs_mpool_cleanup(&self->tx_mpool, 1);

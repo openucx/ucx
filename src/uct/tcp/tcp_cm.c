@@ -79,13 +79,15 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
     }
 
     if (full_log) {
-        ucs_debug("tcp_ep %p: %s -> %s for the [%s]<->[%s] connection %s",
+        ucs_debug("tcp_ep %p: %s -> %s for the [%s]<->[%s] id="
+                  UCT_TCP_CM_CONN_ID_FMT" connection %s",
                   ep, uct_tcp_ep_cm_state[old_conn_state].name,
                   uct_tcp_ep_cm_state[ep->conn_state].name,
                   ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
                                    str_local_addr, UCS_SOCKADDR_STRING_LEN),
                   ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
                                    str_remote_addr, UCS_SOCKADDR_STRING_LEN),
+                  UCT_TCP_CM_CONN_ID_ARG(ep->conn_id),
                   uct_tcp_ep_ctx_caps_str(ep->ctx_caps, str_ctx_caps));
     } else {
         ucs_debug("tcp_ep %p: %s -> %s",
@@ -140,9 +142,10 @@ static void uct_tcp_cm_trace_conn_pkt(const uct_tcp_ep_t *ep,
 
     ucs_snprintf_zero(msg, sizeof(msg), fmt_str, event_str);
 
-    ucs_log(log_level, "tcp_ep %p: %s %s", ep, msg,
-            ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
-                             str_addr, UCS_SOCKADDR_STRING_LEN));
+    ucs_log(log_level, "tcp_ep %p: %s %s conn_id="UCT_TCP_CM_CONN_ID_FMT,
+            ep, msg, ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
+                                      str_addr, UCS_SOCKADDR_STRING_LEN),
+            UCT_TCP_CM_CONN_ID_ARG(ep->conn_id));
 }
 
 ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t event)
@@ -192,6 +195,8 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t eve
         conn_pkt             = (uct_tcp_cm_conn_req_pkt_t*)(pkt_hdr + 1);
         conn_pkt->event      = UCT_TCP_CM_CONN_REQ;
         conn_pkt->iface_addr = iface->config.ifaddr;
+        conn_pkt->conn_id    = ep->conn_id;
+        ucs_assertv(ep->conn_id != UCT_TCP_CM_CONN_ID_MAX, "ep=%p", ep);
     } else {
         pkt_event            = (uct_tcp_cm_conn_event_t*)(pkt_hdr + 1);
         *pkt_event           = event;
@@ -210,92 +215,131 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t eve
     return status;
 }
 
-ucs_status_t uct_tcp_cm_add_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
+static uct_tcp_cm_conn_t *uct_tcp_cm_get_conn(uct_tcp_iface_t *iface,
+                                              const struct sockaddr_in *peer_addr)
 {
-    ucs_list_link_t *ep_list;
+    uct_tcp_cm_conn_t *conn;
     khiter_t iter;
     int ret;
 
-    iter = kh_get(uct_tcp_cm_eps, &iface->ep_cm_map, ep->peer_addr);
-    if (iter == kh_end(&iface->ep_cm_map)) {
-        ep_list = ucs_malloc(sizeof(*ep_list), "tcp_ep_cm_map_entry");
-        if (ep_list == NULL) {
-            return UCS_ERR_NO_MEMORY;
+    iter = kh_get(uct_tcp_cm_conns, &iface->cm_conn_map, *peer_addr);
+    if (iter == kh_end(&iface->cm_conn_map)) {
+        conn = ucs_calloc(1, sizeof(*conn), "tcp_cm_conn_map_entry");
+        if (conn == NULL) {
+            return NULL;
         }
 
-        ucs_list_head_init(ep_list);
-        iter = kh_put(uct_tcp_cm_eps, &iface->ep_cm_map, ep->peer_addr, &ret);
-        kh_value(&iface->ep_cm_map, iter) = ep_list;
+        conn->last_id = 0;
+        kh_init_inplace(uct_tcp_cm_eps, &conn->cm_ep_map);
 
-        ucs_debug("tcp_iface %p: %p list added to map", iface, ep_list);
+        iter = kh_put(uct_tcp_cm_conns, &iface->cm_conn_map, *peer_addr, &ret);
+        kh_value(&iface->cm_conn_map, iter) = conn;
+
+        ucs_debug("tcp_iface %p: %p connection added to map", iface, conn);
     } else {
-        ep_list = kh_value(&iface->ep_cm_map, iter);
-        ucs_assertv(!ucs_list_is_empty(ep_list), "iface=%p", iface);
+        conn = kh_value(&iface->cm_conn_map, iter);
     }
 
-    uct_tcp_iface_remove_ep(ep);
+    return conn;
+}
 
-    ucs_list_add_tail(ep_list, &ep->list);
-    ucs_debug("tcp_iface %p: tcp_ep %p added to %p list",
-              iface, ep, ep_list);
+uct_tcp_cm_conn_id_t uct_tcp_cm_get_conn_id(uct_tcp_iface_t *iface,
+                                            const struct sockaddr_in *peer_addr)
+{
+    uct_tcp_cm_conn_t *conn;
+
+    conn = uct_tcp_cm_get_conn(iface, peer_addr);
+    if (conn == NULL) {
+        return UCT_TCP_CM_CONN_ID_MAX;
+    }
+
+    return conn->last_id++;
+}
+
+ucs_status_t uct_tcp_cm_add_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
+{
+    uct_tcp_cm_conn_t *conn;
+    khiter_t iter;
+    int ret;
+
+    conn = uct_tcp_cm_get_conn(iface, &ep->peer_addr);
+    if (conn == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_assertv(kh_end(&conn->cm_ep_map) ==
+                kh_get(uct_tcp_cm_eps, &conn->cm_ep_map, ep->conn_id),
+                "conn=%p ep=%p ep::conn_id="UCT_TCP_CM_CONN_ID_FMT,
+                conn, ep, UCT_TCP_CM_CONN_ID_ARG(ep->conn_id));
+    iter = kh_put(uct_tcp_cm_eps, &conn->cm_ep_map, ep->conn_id, &ret);
+    kh_value(&conn->cm_ep_map, iter) = ep;
+
+    ucs_debug("tcp_iface %p: tcp_ep %p (connection ID - %u) added to %p connection",
+              iface, ep, ep->conn_id, conn);
 
     return UCS_OK;
 }
 
 void uct_tcp_cm_remove_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
 {
-    ucs_list_link_t *ep_list;
+    uct_tcp_cm_conn_t *conn;
     khiter_t iter;
 
-    iter = kh_get(uct_tcp_cm_eps, &iface->ep_cm_map, ep->peer_addr);
-    ucs_assertv(iter != kh_end(&iface->ep_cm_map), "iface=%p", iface);
+    iter = kh_get(uct_tcp_cm_conns, &iface->cm_conn_map, ep->peer_addr);
+    ucs_assertv(iter != kh_end(&iface->cm_conn_map), "iface=%p", iface);
 
-    ep_list = kh_value(&iface->ep_cm_map, iter);
-    ucs_assertv(!ucs_list_is_empty(ep_list), "iface=%p", iface);
+    conn = kh_value(&iface->cm_conn_map, iter);
 
-    ucs_list_del(&ep->list);
-    ucs_debug("tcp_iface %p: tcp_ep %p removed from %p list",
-              iface, ep, ep_list);
+    iter = kh_get(uct_tcp_cm_eps, &conn->cm_ep_map, ep->conn_id);
+    ucs_assertv(iter != kh_end(&conn->cm_ep_map),
+                "conn=%p ep=%p ep::conn_id="UCT_TCP_CM_CONN_ID_FMT,
+                conn, ep, UCT_TCP_CM_CONN_ID_ARG(ep->conn_id));
+    ucs_assertv(kh_value(&conn->cm_ep_map, iter) == ep,
+                "conn=%p ep=%p ep::conn_id="UCT_TCP_CM_CONN_ID_FMT,
+                conn, ep, UCT_TCP_CM_CONN_ID_ARG(ep->conn_id));
+    kh_del(uct_tcp_cm_eps, &conn->cm_ep_map, iter);
 
-    uct_tcp_iface_add_ep(ep);
-
-    if (ucs_list_is_empty(ep_list)) {
-        kh_del(uct_tcp_cm_eps, &iface->ep_cm_map, iter);
-        ucs_debug("tcp_iface %p: %p list removed from map",
-                  iface, ep_list);
-        ucs_free(ep_list);
-    }
+    ucs_debug("tcp_iface %p: tcp_ep %p (connection ID -"
+              UCT_TCP_CM_CONN_ID_FMT") removed from %p connection",
+              iface, ep, UCT_TCP_CM_CONN_ID_ARG(ep->conn_id), conn);
 }
 
 uct_tcp_ep_t *uct_tcp_cm_search_ep(uct_tcp_iface_t *iface,
                                    const struct sockaddr_in *peer_addr,
-                                   uct_tcp_ep_ctx_type_t with_ctx_type)
+                                   uct_tcp_cm_conn_id_t conn_id)
 {
     uct_tcp_ep_t *ep;
-    ucs_list_link_t *ep_list;
+    uct_tcp_cm_conn_t *conn;
     khiter_t iter;
 
-    iter = kh_get(uct_tcp_cm_eps, &iface->ep_cm_map, *peer_addr);
-    if (iter != kh_end(&iface->ep_cm_map)) {
-        ep_list = kh_value(&iface->ep_cm_map, iter);
-        ucs_assertv(!ucs_list_is_empty(ep_list), "iface=%p", iface);
+    ucs_assert(conn_id != UCT_TCP_CM_CONN_ID_MAX);
 
-        ucs_list_for_each(ep, ep_list, list) {
-            if (ep->ctx_caps & UCS_BIT(with_ctx_type)) {
-                return ep;
-            }
+    iter = kh_get(uct_tcp_cm_conns, &iface->cm_conn_map, *peer_addr);
+    if (iter != kh_end(&iface->cm_conn_map)) {
+        conn = kh_value(&iface->cm_conn_map, iter);
+
+        iter = kh_get(uct_tcp_cm_eps, &conn->cm_ep_map, conn_id);
+        if (iter != kh_end(&conn->cm_ep_map)) {
+            ep = kh_value(&conn->cm_ep_map, iter);
+            ucs_assertv(ep->ctx_caps & UCT_TCP_EP_CTX_CAPS,
+                        "ep=%p ep::conn_id="UCT_TCP_CM_CONN_ID_FMT,
+                        ep, UCT_TCP_CM_CONN_ID_ARG(ep->conn_id));
+            return ep;
         }
     }
 
     return NULL;
 }
 
-void uct_tcp_cm_purge_ep(uct_tcp_ep_t *ep)
+void uct_tcp_cm_cleanup(uct_tcp_iface_t *iface)
 {
-    /* Move from a khash's EP list to iface's EP list */
-    ucs_list_del(&ep->list);
-    uct_tcp_ep_change_ctx_caps(ep, 0);
-    uct_tcp_iface_add_ep(ep);
+    uct_tcp_cm_conn_t *conn;
+
+    kh_foreach_value(&iface->cm_conn_map, conn, {
+        kh_destroy_inplace(uct_tcp_cm_eps, &conn->cm_ep_map);
+        ucs_free(conn);
+    });
+    kh_destroy_inplace(uct_tcp_cm_conns, &iface->cm_conn_map);
 }
 
 static unsigned
@@ -315,10 +359,8 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
     close(connect_ep->fd);
     connect_ep->fd = accept_ep->fd;
 
-    /* 2. Migrate RX from the EP allocated during accepting connection to
-     *    the found EP */
-    status = uct_tcp_ep_move_ctx_cap(accept_ep, connect_ep,
-                                     UCT_TCP_EP_CTX_TYPE_RX);
+    /* 2. Add RX capability to the found EP */
+    status = uct_tcp_ep_add_ctx_cap(connect_ep, UCT_TCP_EP_CTX_TYPE_RX);
     if (status != UCS_OK) {
         return 0;
     }
@@ -381,10 +423,8 @@ static unsigned uct_tcp_cm_handle_simult_conn(uct_tcp_iface_t *iface,
     }
 
     if (!accept_conn) {
-        /* Migrate RX from the EP allocated during accepting connection to
-         * the found EP. */
-        status = uct_tcp_ep_move_ctx_cap(accept_ep, connect_ep,
-                                         UCT_TCP_EP_CTX_TYPE_RX);
+        /* Add RX capability to the found EP */
+        status = uct_tcp_ep_add_ctx_cap(connect_ep, UCT_TCP_EP_CTX_TYPE_RX);
         if (status != UCS_OK) {
             return 0;
         }
@@ -417,13 +457,20 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
     uct_tcp_ep_t *peer_ep;
 
     ep->peer_addr = cm_req_pkt->iface_addr;
+
+    if (ep->conn_state == UCT_TCP_EP_CONN_STATE_ACCEPTING) {
+        ep->conn_id = cm_req_pkt->conn_id;
+    } else {
+        ucs_assertv(ep->conn_id == cm_req_pkt->conn_id,
+                    "ep=%p ep::conn_id="UCT_TCP_CM_CONN_ID_FMT
+                    " conn_id="UCT_TCP_CM_CONN_ID_FMT,
+                    ep, UCT_TCP_CM_CONN_ID_ARG(ep->conn_id),
+                    UCT_TCP_CM_CONN_ID_ARG(cm_req_pkt->conn_id));
+    }
+
     uct_tcp_cm_trace_conn_pkt(ep, UCS_LOG_LEVEL_TRACE,
                               "%s received from", UCT_TCP_CM_CONN_REQ);
 
-    status = uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_RX);
-    if (status != UCS_OK) {
-        goto out;
-    }
 
     if (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) {
         return 0;
@@ -433,12 +480,30 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
                 "ep %p mustn't have TX cap", ep);
 
     if (!uct_tcp_ep_is_self(ep) &&
-        (peer_ep = uct_tcp_cm_search_ep(iface, &ep->peer_addr,
-                                        UCT_TCP_EP_CTX_TYPE_TX))) {
+        ((peer_ep = uct_tcp_cm_search_ep(iface, &ep->peer_addr,
+                                         ep->conn_id)) != NULL)) {
+        if (peer_ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) {
+            ucs_assert(peer_ep->ctx_caps & UCT_TCP_EP_CTX_CAPS);
+            /* RX capability has already been assigned to the EP for this
+             * connection. Just release the EP allocated during accepting
+             * the connection,  this EP is a "ghost" from handling simultaneous
+             * connection establishment between two peers */
+            ucs_debug("tcp_iface %p: close ghost tcp_ep%p for conn_id"
+                      UCT_TCP_CM_CONN_ID_FMT", connection will use tcp_ep=%p",
+                      iface, ep, UCT_TCP_CM_CONN_ID_ARG(peer_ep->conn_id),
+                      peer_ep);
+            goto out;
+        }
+
         progress_count = uct_tcp_cm_handle_simult_conn(iface, ep, peer_ep);
         ucs_assert(!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)));
         goto out;
     } else {
+        status = uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_RX);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
         /* Just accept this connection and make it operational for RX events */
         status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_ACK);
         if (status != UCS_OK) {
@@ -610,7 +675,7 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
         return UCS_ERR_UNREACHABLE;
     }
 
-    status = uct_tcp_ep_init(iface, fd, NULL, &ep);
+    status = uct_tcp_ep_init(iface, fd, NULL, UCT_TCP_CM_CONN_ID_MAX, &ep);
     if (status != UCS_OK) {
         return status;
     }

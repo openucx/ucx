@@ -56,6 +56,20 @@
 #define UCT_TCP_EP_CTX_CAPS                  (UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX) | \
                                               UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX))
 
+/* Maximal value for connection ID */
+#define UCT_TCP_CM_CONN_ID_MAX               UINT32_MAX
+
+/* Helper macro to print connection ID */
+#define UCT_TCP_CM_CONN_ID_FMT               "%u"
+#define UCT_TCP_CM_CONN_ID_ARG(_conn_id)     (_conn_id)
+                                             
+
+
+/**
+ * TCP connection ID
+ */
+typedef uint32_t uct_tcp_cm_conn_id_t;
+
 
 /**
  * TCP context type
@@ -120,7 +134,8 @@ typedef enum uct_tcp_ep_conn_state {
 } uct_tcp_ep_conn_state_t;
 
 /* Forward declaration */
-typedef struct uct_tcp_ep uct_tcp_ep_t;
+typedef struct uct_tcp_ep      uct_tcp_ep_t;
+typedef struct uct_tcp_cm_conn uct_tcp_cm_conn_t;
 
 typedef unsigned (*uct_tcp_ep_progress_t)(uct_tcp_ep_t *ep);
 
@@ -148,8 +163,10 @@ static inline uint32_t uct_tcp_khash_sockaddr_in_hash(struct sockaddr_in sa)
     return ucs_crc32(0, (const void *)&sa, addr_size);
 }
 
-KHASH_INIT(uct_tcp_cm_eps, struct sockaddr_in, ucs_list_link_t*,
+KHASH_INIT(uct_tcp_cm_conns, struct sockaddr_in, uct_tcp_cm_conn_t*,
            1, uct_tcp_khash_sockaddr_in_hash, uct_tcp_khash_sockaddr_in_equal);
+
+KHASH_MAP_INIT_INT(uct_tcp_cm_eps, uct_tcp_ep_t*);
 
 
 /**
@@ -163,13 +180,25 @@ typedef struct uct_tcp_cm_state {
 
 
 /**
+ * TCP Connection Manager connection entry
+ */
+struct uct_tcp_cm_conn {
+    khash_t(uct_tcp_cm_eps) cm_ep_map; /* Map of EPs that don't have
+                                        * one ctx capability (TX or RX) */
+    uct_tcp_cm_conn_id_t    last_id;   /* Last connection ID that can be
+                                        * allocated for the EP created
+                                        * by user */
+};
+
+
+/**
  * TCP Connection Manager event
  */
 typedef enum uct_tcp_cm_conn_event {
     /* Connection request from a EP that has TX capability to a EP that
      * has to be able to receive AM data (i.e. has to have RX capability). */
     UCT_TCP_CM_CONN_REQ               = UCS_BIT(0),
-    /* Connection acknowledgment from a EP that accepts a conenction from
+    /* Connection acknowledgment from a EP that accepts a connection from
      * initiator of a connection request. */
     UCT_TCP_CM_CONN_ACK               = UCS_BIT(1),
     /* Request for waiting of a connection request.
@@ -199,6 +228,7 @@ typedef enum uct_tcp_cm_conn_event {
 typedef struct uct_tcp_cm_conn_req_pkt {
     uct_tcp_cm_conn_event_t       event;      /* Connection event ID */
     struct sockaddr_in            iface_addr; /* Socket address of UCT local iface */
+    uct_tcp_cm_conn_id_t          conn_id;    /* Connection ID between peers */
 } UCS_S_PACKED uct_tcp_cm_conn_req_pkt_t;
 
 
@@ -292,6 +322,7 @@ struct uct_tcp_ep {
     uct_tcp_ep_conn_state_t       conn_state;       /* State of connection with peer */
     unsigned                      conn_retries;     /* Number of connection attempts done */
     int                           events;           /* Current notifications */
+    uct_tcp_cm_conn_id_t          conn_id;          /* Connection ID which the EP belongs to */
     uct_tcp_ep_ctx_t              tx;               /* TX resources */
     uct_tcp_ep_ctx_t              rx;               /* RX resources */
     struct sockaddr_in            peer_addr;        /* Remote iface addr */
@@ -308,8 +339,7 @@ struct uct_tcp_ep {
 typedef struct uct_tcp_iface {
     uct_base_iface_t              super;             /* Parent class */
     int                           listen_fd;         /* Server socket */
-    khash_t(uct_tcp_cm_eps)       ep_cm_map;         /* Map of endpoints that don't
-                                                      * have one of the context cap */
+    khash_t(uct_tcp_cm_conns)     cm_conn_map;       /* Map of connections */
     ucs_list_link_t               ep_list;           /* List of endpoints */
     char                          if_name[IFNAMSIZ]; /* Network interface name */
     ucs_sys_event_set_t           *event_set;        /* Event set identifier */
@@ -405,6 +435,7 @@ ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep,
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
+                             uct_tcp_cm_conn_id_t conn_id,
                              uct_tcp_ep_t **ep_p);
 
 ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
@@ -477,15 +508,18 @@ uct_tcp_cm_set_conn_state(uct_tcp_ep_t *ep,
 void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
                                   uct_tcp_ep_conn_state_t new_conn_state);
 
+uct_tcp_cm_conn_id_t uct_tcp_cm_get_conn_id(uct_tcp_iface_t *iface,
+                                            const struct sockaddr_in *peer_addr);
+
 ucs_status_t uct_tcp_cm_add_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 void uct_tcp_cm_remove_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 uct_tcp_ep_t *uct_tcp_cm_search_ep(uct_tcp_iface_t *iface,
                                    const struct sockaddr_in *peer_addr,
-                                   uct_tcp_ep_ctx_type_t with_ctx_type);
+                                   uct_tcp_cm_conn_id_t conn_id);
 
-void uct_tcp_cm_purge_ep(uct_tcp_ep_t *ep);
+void uct_tcp_cm_cleanup(uct_tcp_iface_t *iface);
 
 ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              const struct sockaddr_in *peer_addr,
