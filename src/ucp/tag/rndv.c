@@ -50,7 +50,8 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
 
 static int ucp_rndv_is_put_pipeline_needed(uintptr_t remote_address,
                                            size_t length, size_t min_get_zcopy,
-                                           size_t max_get_zcopy) {
+                                           size_t max_get_zcopy)
+{
     /* fallback to PUT pipeline if remote mem type is non-HOST memory OR
      * can't do GET ZCOPY */
     return ((remote_address == 0) || (max_get_zcopy == 0) ||
@@ -224,6 +225,52 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     }
 
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_rndv_adjust_zcopy_length(size_t min_zcopy, size_t max_zcopy, size_t align,
+                             size_t send_length, size_t offset, size_t length)
+{
+    size_t result_length, tail;
+
+    ucs_assert(length > 0);
+
+    /* ensure that the current length is over min_zcopy */
+    result_length = ucs_max(length, min_zcopy);
+
+    /* ensure that the current length is less than max_zcopy */
+    result_length = ucs_min(result_length, max_zcopy);
+
+    /* ensure that tail (rest of message) is over min_zcopy */
+    ucs_assertv(send_length >= (offset + result_length),
+                "send_length=%zu, offset=%zu, length=%zu",
+                send_length, offset, result_length);
+    tail = send_length - (offset + result_length);
+    if (ucs_unlikely((tail != 0) && (tail < min_zcopy))) {
+        /* ok, tail is less zcopy minimal & could not be processed as
+         * standalone operation */
+        /* check if we have room to increase current part and not
+         * step over max_zcopy */
+        if (result_length < (max_zcopy - tail)) {
+            /* if we can increase length by min_zcopy - let's do it to
+             * avoid small tail (we have limitation on minimal get zcopy) */
+            result_length += tail;
+        } else {
+            /* reduce current length by align or min_zcopy value
+             * to process it on next round */
+            ucs_assert(result_length > ucs_max(min_zcopy, align));
+            result_length -= ucs_max(min_zcopy, align);
+        }
+    }
+
+    ucs_assertv(result_length >= min_zcopy, "length=%zu, min_zcopy=%zu",
+                result_length, min_zcopy);
+    ucs_assertv(((send_length - (offset + result_length)) == 0) ||
+                ((send_length - (offset + result_length)) >= min_zcopy),
+                "send_length=%zu, offset=%zu, length=%zu, min_zcopy=%zu",
+                send_length, offset, result_length, min_zcopy);
+
+    return result_length;
 }
 
 static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
@@ -449,7 +496,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     uct_rkey_t uct_rkey;
     size_t min_zcopy;
     size_t max_zcopy;
-    size_t tail;
     int pending_add_res;
     ucp_lane_index_t lane;
 
@@ -490,44 +536,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     if ((offset == 0) && (remaining > 0) && (rndv_req->send.length > ucp_mtu)) {
         length = ucp_mtu - remaining;
     } else {
-        chunk = ucs_align_up((size_t)(ucs_min(rndv_req->send.length /
-                                              rndv_req->send.rndv_get.lane_count,
-                                              max_zcopy) * config->tag.rndv.scale[lane]),
+        chunk = ucs_align_up((size_t)(rndv_req->send.length /
+                                      rndv_req->send.rndv_get.lane_count
+                                      * config->tag.rndv.scale[lane]),
                              align);
         length = ucs_min(chunk, rndv_req->send.length - offset);
     }
 
-    /* ensure that the current length is over min_zcopy */
-    length = ucs_max(length, min_zcopy);
-
-    /* ensure that tail (rest of message) is over min_zcopy */
-    ucs_assertv(rndv_req->send.length >= (offset + length),
-                "send_length=%zu, offset=%zu, length=%zu",
-                rndv_req->send.length, offset, length);
-    tail = rndv_req->send.length - (offset + length);
-    if (ucs_unlikely((tail != 0) && (tail < min_zcopy))) {
-        /* ok, tail is less get zcopy minimal & could not be processed as
-         * standalone operation */
-        /* check if we have room to increase current part and not
-         * step over max_zcopy */
-        if (length < (max_zcopy - tail)) {
-            /* if we can increase length by min_zcopy - let's do it to
-             * avoid small tail (we have limitation on minimal get zcopy) */
-            length += tail;
-        } else {
-            /* reduce current length by align or min_zcopy value
-             * to process it on next round */
-            ucs_assert(length > ucs_max(min_zcopy, align));
-            length -= ucs_max(min_zcopy, align);
-        }
-    }
-
-    ucs_assertv(length >= min_zcopy, "length=%zu, min_zcopy=%zu",
-                length, min_zcopy);
-    ucs_assertv(((rndv_req->send.length - (offset + length)) == 0) ||
-                ((rndv_req->send.length - (offset + length)) >= min_zcopy),
-                "send_length=%zu, offset=%zu, length=%zu, min_zcopy=%zu",
-                rndv_req->send.length, offset, length, min_zcopy);
+    length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_zcopy, align,
+                                          rndv_req->send.length, offset,
+                                          length);
 
     ucs_trace_data("req %p: offset %zu remainder %zu rma-get to %p len %zu lane %d",
                    rndv_req, offset, remaining,
@@ -791,11 +809,17 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
                                  const void *rkey_buffer, uint64_t remote_address,
                                  size_t size, size_t base_offset)
 {
-    ucp_context_h context = worker->context;
+    ucp_ep_h ep             = rndv_req->send.ep;
+    ucp_ep_config_t *config = ucp_ep_config(ep);
+    ucp_context_h context   = worker->context;
     ucs_status_t status;
     size_t max_frag_size, offset, length;
+    size_t min_zcopy, max_zcopy;
 
-    max_frag_size                          = context->config.ext.rndv_frag_size;
+    min_zcopy                              = config->tag.rndv.min_get_zcopy;
+    max_zcopy                              = config->tag.rndv.max_get_zcopy;
+    max_frag_size                          = ucs_min(context->config.ext.rndv_frag_size,
+                                                     max_zcopy);
     rndv_req->send.rndv_get.remote_request = remote_request;
     rndv_req->send.rndv_get.remote_address = remote_address - base_offset;
     rndv_req->send.rndv_get.rreq           = rreq;
@@ -806,7 +830,7 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
      * Step 1: GET remote fragment into HOST fragment buffer
      * Step 2: PUT from fragment buffer to MEM TYPE destination
      * Step 3: Send ATS for RNDV request
-    */
+     */
 
     status = ucp_ep_rkey_unpack(rndv_req->send.ep, rkey_buffer,
                                 &rndv_req->send.rndv_get.rkey);
@@ -817,7 +841,8 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
 
     offset = 0;
     while (offset != size) {
-        length = ucs_min(size - offset, max_frag_size);
+        length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_frag_size, 0,
+                                              size, offset, size - offset);
 
         /* GET remote fragment into HOST fragment buffer */
         ucp_rndv_send_frag_get_mem_type(rndv_req, remote_request, length,
@@ -1397,14 +1422,17 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_put_pipeline_frag_get_completion, (self, status),
 static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
                                                      ucp_rndv_rtr_hdr_t *rndv_rtr_hdr)
 {
-    ucp_worker_h worker   = sreq->send.ep->worker;
-    ucp_context_h context = worker->context;
+    ucp_ep_h ep             = sreq->send.ep;
+    ucp_ep_config_t *config = ucp_ep_config(ep);
+    ucp_worker_h worker     = sreq->send.ep->worker;
+    ucp_context_h context   = worker->context;
     const uct_md_attr_t *md_attr;
     ucp_request_t *freq;
     ucp_request_t *fsreq;
     ucp_md_index_t md_index;
     size_t max_frag_size, rndv_size, length;
     size_t offset, rndv_base_offset;
+    size_t min_zcopy, max_zcopy;
 
     ucp_trace_req(sreq, "using put rndv pipeline protocol");
 
@@ -1412,7 +1440,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
      * Step 1: GET fragment from send buffer to HOST fragment buffer
      * Step 2: PUT from fragment HOST buffer to remote HOST fragment buffer
      * Step 3: send ATP for each fragment request
-    */
+     */
 
     /* check if lane supports host memory, to stage sends through host memory */
     md_attr = ucp_ep_md_attr(sreq->send.ep, sreq->send.lane);
@@ -1420,8 +1448,10 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    min_zcopy        = config->tag.rndv.min_put_zcopy;
+    max_zcopy        = config->tag.rndv.max_put_zcopy;
     rndv_size        = ucs_min(rndv_rtr_hdr->size, sreq->send.length);
-    max_frag_size    = context->config.ext.rndv_frag_size;
+    max_frag_size    = ucs_min(context->config.ext.rndv_frag_size, max_zcopy);
     rndv_base_offset = rndv_rtr_hdr->offset;
 
     /* initialize send req state on first fragment rndv request */
@@ -1451,7 +1481,8 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
 
     offset = 0;
     while (offset != rndv_size) {
-        length = ucs_min(rndv_size - offset, max_frag_size);
+        length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_frag_size, 0,
+                                              rndv_size, offset, rndv_size - offset);
 
         if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(sreq->send.mem_type)) {
             /* sbuf is in host, directly do put */

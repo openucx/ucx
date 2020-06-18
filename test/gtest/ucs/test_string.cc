@@ -41,6 +41,24 @@ UCS_TEST_F(test_string_buffer, appendf) {
     ucs_string_buffer_cleanup(&strb);
 }
 
+UCS_TEST_F(test_string_buffer, append_long) {
+    ucs_string_buffer_t strb;
+    std::string str, exp_str;
+
+    str.resize(100);
+    std::fill(str.begin(), str.end(), 'e');
+
+    ucs_string_buffer_init(&strb);
+
+    for (unsigned i = 0; i < 10; ++i) {
+        ucs_string_buffer_appendf(&strb, "%s", str.c_str());
+        exp_str += str;
+        EXPECT_EQ(exp_str.c_str(), std::string(ucs_string_buffer_cstr(&strb)));
+    }
+
+    ucs_string_buffer_cleanup(&strb);
+}
+
 UCS_TEST_F(test_string_buffer, rtrim) {
     static const char *test_string = "wabbalubbadabdab";
     ucs_string_buffer_t strb;

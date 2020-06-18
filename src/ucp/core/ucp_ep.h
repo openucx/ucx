@@ -108,7 +108,7 @@ enum {
  * This is filled by to the transport selection logic, according to the local
  * resources and set of remote addresses.
  */
-typedef struct ucp_ep_config_key {
+struct ucp_ep_config_key {
 
     ucp_lane_index_t         num_lanes;    /* Number of active lanes */
 
@@ -161,7 +161,7 @@ typedef struct ucp_ep_config_key {
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
     ucs_status_t             status;
-} ucp_ep_config_key_t;
+};
 
 
 /*
@@ -209,7 +209,7 @@ typedef struct ucp_memtype_thresh {
 } ucp_memtype_thresh_t;
 
 
-typedef struct ucp_ep_config {
+struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
      * configuration (in the current worker) and defined only by it.
@@ -311,7 +311,7 @@ typedef struct ucp_ep_config {
         const ucp_request_send_proto_t   *reply_proto;
     } am_u;
 
-} ucp_ep_config_t;
+};
 
 
 /**
