@@ -23,14 +23,15 @@ AC_DEFUN([ROCM_PARSE_FLAGS],
         [AC_MSG_WARN([$arg of $1 not parsed])])
 done])
 
-# ROCM_BUILD_FLAGS(ARG, VAR_LIBS, VAR_LDFLAGS, VAR_CPPFLAGS)
+# ROCM_BUILD_FLAGS(ARG, VAR_LIBS, VAR_LDFLAGS, VAR_CPPFLAGS, VAR_ROOT)
 # ----------------------------------------------------------
 # Parse value of ARG into appropriate LIBS, LDFLAGS, and
 # CPPFLAGS variables.
 AC_DEFUN([ROCM_BUILD_FLAGS],
     $4="-I$1/include/hsa -I$1/include"
-    $3="-L$1/hsa/lib -L$1/lib"
-    $2="-lhsa-runtime64"
+    $3="-L$1/lib -L$1/lib64 -L$1/hsa/lib"
+    $2="-lhsa-runtime64 -lhsakmt"
+    $5="$1"
 )
 
 # HIP_BUILD_FLAGS(ARG, VAR_LIBS, VAR_LDFLAGS, VAR_CPPFLAGS)
@@ -64,11 +65,11 @@ AS_IF([test "x$with_rocm" != "xno"],
             [AC_MSG_NOTICE([ROCm path was not specified. Guessing ...])
              with_rocm="/opt/rocm"
              ROCM_BUILD_FLAGS([$with_rocm],
-                          [ROCM_LIBS], [ROCM_LDFLAGS], [ROCM_CPPFLAGS])],
+                          [ROCM_LIBS], [ROCM_LDFLAGS], [ROCM_CPPFLAGS], [ROCM_ROOT])],
         [x/*],
             [AC_MSG_NOTICE([ROCm path given as $with_rocm ...])
              ROCM_BUILD_FLAGS([$with_rocm],
-                          [ROCM_LIBS], [ROCM_LDFLAGS], [ROCM_CPPFLAGS])],
+                          [ROCM_LIBS], [ROCM_LDFLAGS], [ROCM_CPPFLAGS], [ROCM_ROOT])],
         [AC_MSG_NOTICE([ROCm flags given ...])
          ROCM_PARSE_FLAGS([$with_rocm],
                           [ROCM_LIBS], [ROCM_LDFLAGS], [ROCM_CPPFLAGS])])
@@ -92,7 +93,8 @@ AS_IF([test "x$with_rocm" != "xno"],
     AS_IF([test "x$rocm_happy" = "xyes"],
           [AC_SUBST([ROCM_CPPFLAGS])
            AC_SUBST([ROCM_LDFLAGS])
-           AC_SUBST([ROCM_LIBS])],
+           AC_SUBST([ROCM_LIBS])
+           AC_SUBST([ROCM_ROOT])],
           [AC_MSG_WARN([ROCm not found])])
 
     CPPFLAGS="$SAVE_CPPFLAGS"
