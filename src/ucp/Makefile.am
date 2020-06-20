@@ -42,6 +42,7 @@ noinst_HEADERS = \
 	proto/lane_type.h \
 	proto/proto_am.h \
 	proto/proto_am.inl \
+	proto/proto_select.h \
 	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \

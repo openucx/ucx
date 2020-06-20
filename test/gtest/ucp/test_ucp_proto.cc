@@ -8,6 +8,7 @@
 
 extern "C" {
 #include <ucp/proto/proto.h>
+#include <ucp/proto/proto_select.h>
 }
 
 class test_proto : public ucs::test {
