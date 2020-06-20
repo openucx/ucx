@@ -100,6 +100,9 @@
 #define ucs_popcount(_n) \
     ((sizeof(_n) <= 4) ? __builtin_popcount((uint32_t)(_n)) : __builtin_popcountl(_n))
 
+/* On some arch ffs64(0) returns 0, on other -1, let's unify this */
+#define ucs_ffs64_safe(_val) ((_val) ? ucs_ffs64(_val) : 64)
+
 /* Returns the number of trailing 0-bits in x, starting at the least
  * significant bit position.  If x is 0, the result is undefined.
  */
