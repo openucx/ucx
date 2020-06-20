@@ -1161,6 +1161,7 @@ run_mpi_tests() {
 				-mca pml ob1 \
 				-mca btl tcp,self \
 				-mca btl_tcp_if_include lo \
+				-mca orte_allowed_exit_without_sync 1 \
 				-mca coll ^hcoll,ml"
 
 		run_ucx_perftest 1
