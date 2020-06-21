@@ -35,7 +35,6 @@ BEGIN_C_DECLS
 #define UCS_ULUNITS_AUTO    ((unsigned long)-2)
 #define UCS_HEXUNITS_AUTO   ((uint16_t)-2)
 
-#define UCS_BANDWIDTH_AUTO  (-1.0)
 
 /**
  * Expand a partial path to full path.
@@ -197,6 +196,11 @@ const char *ucs_str_dump_hex(const void* data, size_t length, char *buf,
  */
 const char* ucs_flags_str(char *str, size_t max,
                           uint64_t flags, const char **str_table);
+
+
+/** Quantifier suffixes for memory units ("K", "M", "G", etc) */
+extern const char *ucs_memunits_suffixes[];
+
 
 END_C_DECLS
 

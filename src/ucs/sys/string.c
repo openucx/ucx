@@ -20,6 +20,9 @@
 #include <time.h>
 
 
+const char *ucs_memunits_suffixes[] = {"", "K", "M", "G", "T", "P", "E", NULL};
+
+
 void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max)
 {
     char *p, *end;
@@ -131,14 +134,14 @@ size_t ucs_string_quantity_prefix_value(char prefix)
 
 char *ucs_memunits_to_str(size_t value, char *buf, size_t max)
 {
-    static const char * suffixes[] = {"", "K", "M", "G", "T", NULL};
-
     const char **suffix;
 
-    if (value == SIZE_MAX) {
-        ucs_strncpy_safe(buf, "(inf)", max);
+    if (value == UCS_MEMUNITS_INF) {
+        ucs_strncpy_safe(buf, UCS_NUMERIC_INF_STR, max);
+    } else if (value == UCS_MEMUNITS_AUTO) {
+        ucs_strncpy_safe(buf, UCS_VALUE_AUTO_STR, max);
     } else {
-        suffix = &suffixes[0];
+        suffix = &ucs_memunits_suffixes[0];
         while ((value >= 1024) && ((value % 1024) == 0) && *(suffix + 1)) {
             value /= 1024;
             ++suffix;
@@ -162,7 +165,7 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
     }
 
     /* Special value: auto */
-    if (!strcasecmp(buf, "auto")) {
+    if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
         *(size_t*)dest = UCS_MEMUNITS_AUTO;
         return UCS_OK;
     }

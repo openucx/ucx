@@ -1400,7 +1400,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     ucs_debug("estimated number of endpoints per node is %d",
               context->config.est_num_ppn);
 
-    if (context->config.ext.bcopy_bw == UCS_BANDWIDTH_AUTO) {
+    if (UCS_CONFIG_BW_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */
         context->config.ext.bcopy_bw = ucs_cpu_get_memcpy_bw();
     }
