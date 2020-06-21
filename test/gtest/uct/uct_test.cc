@@ -723,6 +723,15 @@ int uct_test::max_connect_batch()
     }
 }
 
+void uct_test::reduce_tl_send_queues()
+{
+    /* To reduce send queues of UCT TLs to fill the resources faster */
+    set_config("RC_TX_QUEUE_LEN?=32");
+    set_config("UD_TX_QUEUE_LEN?=128");
+    set_config("RC_FC_ENABLE?=n");
+    set_config("SNDBUF?=1k");
+    set_config("RCVBUF?=128");
+}
 
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          uct_iface_params_t *params, uct_md_config_t *md_config) :

@@ -405,6 +405,8 @@ protected:
     int max_connections();
     int max_connect_batch();
 
+    void reduce_tl_send_queues();
+
     ucs_status_t send_am_message(entity *e, uint8_t am_id = 0, int ep_idx = 0);
 
     ucs::ptr_vector<entity> m_entities;

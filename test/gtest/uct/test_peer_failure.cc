@@ -56,15 +56,33 @@ public:
         return UCS_OK;
     }
 
+    typedef struct {
+        uct_pending_req_t    uct;
+        uct_ep_h             ep;
+    } pending_send_request_t;
+
     static ucs_status_t pending_cb(uct_pending_req_t *self)
     {
-        m_req_count++;
-        return UCS_OK;
+        const uint64_t send_data    = 0;
+        pending_send_request_t *req = ucs_container_of(self,
+                                                       pending_send_request_t,
+                                                       uct);
+
+        ucs_status_t status;
+        do {
+            /* Block in the pending handler (sending AM Short to fill UCT
+             * resources) to keep the pending requests in pending queue
+             * to purge them */
+            status = uct_ep_am_short(req->ep, 0, 0, &send_data,
+                                     sizeof(send_data));
+        } while (status == UCS_OK);
+
+        return status;
     }
 
     static void purge_cb(uct_pending_req_t *self, void *arg)
     {
-        m_req_count++;
+        m_req_purge_count++;
     }
 
     static ucs_status_t err_cb(void *arg, uct_ep_h ep, ucs_status_t status)
@@ -170,11 +188,11 @@ protected:
     size_t                m_tx_window;
     size_t                m_err_count;
     size_t                m_am_count;
-    static size_t         m_req_count;
+    static size_t         m_req_purge_count;
     static const uint64_t m_required_caps;
 };
 
-size_t test_uct_peer_failure::m_req_count             = 0ul;
+size_t test_uct_peer_failure::m_req_purge_count       = 0ul;
 const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
                                                         UCT_IFACE_FLAG_PENDING   |
                                                         UCT_IFACE_FLAG_CB_SYNC   |
@@ -184,14 +202,13 @@ void test_uct_peer_failure::init()
 {
     uct_test::init();
 
+    reduce_tl_send_queues();
+
     /* To reduce test execution time decrease retransmition timeouts
      * where it is relevant */
-    if (has_rc_or_dc()) {
-        set_config("RC_TIMEOUT=100us"); /* 100 us should be enough */
-        set_config("RC_RETRY_COUNT=4");
-    } else if (has_ud()) {
-        set_config("UD_TIMEOUT=3s");
-    }
+    set_config("RC_TIMEOUT?=100us"); /* 100 us should be enough */
+    set_config("RC_RETRY_COUNT?=4");
+    set_config("UD_TIMEOUT?=3s");
 
     uct_iface_params_t p = entity_params();
     p.field_mask |= UCT_IFACE_PARAM_FIELD_OPEN_MODE;
@@ -204,9 +221,9 @@ void test_uct_peer_failure::init()
         new_receiver();
     }
 
-    m_err_count = 0;
-    m_req_count = 0;
-    m_am_count  = 0;
+    m_err_count       = 0;
+    m_req_purge_count = 0;
+    m_am_count        = 0;
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
@@ -263,30 +280,41 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
     send_recv_am(0);
     send_recv_am(1);
 
-    const size_t num_pend_sends = 3ul;
-    uct_pending_req_t reqs[num_pend_sends];
+    const ucs_time_t loop_end_limit = ucs::get_deadline();
+    const size_t num_pend_sends     = 64ul;
+    const uint64_t send_data        = 0;
+    std::vector<pending_send_request_t> reqs(num_pend_sends);
+
     {
         scoped_log_handler slh(wrap_errors_logger);
 
-        kill_receiver();
-
         ucs_status_t status;
         do {
-            status = uct_ep_am_short(ep0(), 0, 0, NULL, 0);
-        } while (status == UCS_OK);
+            status = uct_ep_am_short(ep0(), 0, 0, &send_data,
+                                     sizeof(send_data));
+        } while ((status == UCS_OK) && (ucs_get_time() < loop_end_limit));
+
+        if (status == UCS_OK) {
+            UCS_TEST_SKIP_R("unable to fill the UCT resources");
+        } else if (status != UCS_ERR_NO_RESOURCE) {
+            UCS_TEST_ABORT("AM Short failed with " << ucs_status_string(status));
+        }
+
+        kill_receiver();
 
         for (size_t i = 0; i < num_pend_sends; i ++) {
-            reqs[i].func = pending_cb;
-            EXPECT_EQ(uct_ep_pending_add(ep0(), &reqs[i], 0), UCS_OK);
+            reqs[i].ep       = ep0();
+            reqs[i].uct.func = pending_cb;
+            EXPECT_EQ(UCS_OK, uct_ep_pending_add(ep0(), &reqs[i].uct, 0));
         }
 
         flush();
     }
 
-    EXPECT_EQ(uct_ep_am_short(ep0(), 0, 0, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
+    EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, uct_ep_am_short(ep0(), 0, 0, NULL, 0));
 
     uct_ep_pending_purge(ep0(), purge_cb, NULL);
-    EXPECT_EQ(num_pend_sends, m_req_count);
+    EXPECT_EQ(num_pend_sends, m_req_purge_count);
     EXPECT_GE(m_err_count, 0ul);
 }
 
