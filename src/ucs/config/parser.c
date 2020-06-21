@@ -493,7 +493,7 @@ int ucs_config_sprintf_bw(char *buf, size_t max, const void *src,
                           const void *arg)
 {
     static const double max_value = 50000.0;
-    double value = *(double*)src;
+    double value                  = *(double*)src;
     const char **suffix;
 
     if (UCS_CONFIG_BW_IS_AUTO(value)) {
