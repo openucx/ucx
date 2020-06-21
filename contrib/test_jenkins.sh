@@ -16,7 +16,7 @@
 #  - JENKINS_RUN_TESTS   : whether to run unit tests
 #  - RUN_TESTS           : same as JENKINS_RUN_TESTS, but for Azure
 #  - JENKINS_TEST_PERF   : whether to validate performance
-#  - JENKINS_NO_VALGRIND : set this to disable vagrind tests
+#  - JENKINS_NO_VALGRIND : set this to disable valgrind tests
 #
 # Optional environment variables (could be set by job configuration):
 #  - nworkers : number of parallel executors
