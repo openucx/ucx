@@ -12,12 +12,12 @@
 #include <ucs/datastruct/khash.h>
 
 
-/*
+/**
  * Some flags from ucp_request_param_t.op_attr_mask can affect protocol
  * selection decision.
  */
 #define UCP_PROTO_SELECT_OP_ATTR_BASE   UCP_OP_ATTR_FLAG_NO_IMM_CMPL
-#define UCP_PROTO_SELECT_OP_ATTR_MASK   (UCP_OP_ATTR_FLAG_FAST_CMPL)
+#define UCP_PROTO_SELECT_OP_ATTR_MASK   UCP_OP_ATTR_FLAG_FAST_CMPL
 
 
 /**
