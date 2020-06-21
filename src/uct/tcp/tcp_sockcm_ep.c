@@ -140,7 +140,8 @@ static void uct_tcp_sockcm_ep_reset_comm_ctx(uct_tcp_sockcm_ep_t *cep)
     cep->comm_ctx.length = 0;
 }
 
-void uct_tcp_sockcm_ep_invoke_error_cb(uct_tcp_sockcm_ep_t *cep, ucs_status_t status)
+static void uct_tcp_sockcm_ep_invoke_error_cb(uct_tcp_sockcm_ep_t *cep,
+                                              ucs_status_t status)
 {
     uct_cm_remote_data_t remote_data;
 
@@ -175,8 +176,8 @@ void uct_tcp_sockcm_ep_handle_error(uct_tcp_sockcm_ep_t *cep, ucs_status_t statu
 
     async_status = ucs_async_remove_handler(cep->fd, 1);
     if (async_status != UCS_OK) {
-        ucs_error("failed to remove fd %d from the async handlers: %s",
-                  cep->fd, ucs_status_string(async_status));
+        ucs_warn("failed to remove fd %d from the async handlers: %s",
+                 cep->fd, ucs_status_string(async_status));
     }
 
     uct_tcp_sockcm_ep_invoke_error_cb(cep, status);
@@ -234,6 +235,7 @@ static ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep)
                       cep, (cep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
                       cep->comm_ctx.length, cep->comm_ctx.offset, ucs_status_string(status));
         }
+
         /* treat all send errors as if they are disconnect from the remote peer -
          * i.e. stop sending and receiving on this endpoint */
         uct_tcp_sockcm_ep_handle_remote_disconnect(cep, status);

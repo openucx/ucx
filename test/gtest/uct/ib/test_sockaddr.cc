@@ -1035,58 +1035,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
     EXPECT_TRUE(ucs_test_all_flags(m_state, TEST_STATE_CLIENT_GOT_REJECT));
 }
 
-UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_ip)
-{
-    struct sockaddr_in addr;
-    ucs_status_t status;
-    size_t size;
-
-    m_entities.clear();
-
-    /* tcp_sockcm requires setting this parameter to shorten the time of waiting
-     * for the connect() to fail when connecting to a non-existing ip.
-     * A transport for which this value is not configurable, like rdmacm,
-     * uct_config_modify will fail and have no effect. */
-    if (m_cm_config) {
-        /* coverity[check_return] */
-        uct_config_modify(m_cm_config, "SYN_CNT", "1");
-    }
-
-    /* recreate m_server and m_client with the above env parameter changed */
-    init();
-
-    /* Listen */
-    start_listen(test_uct_cm_sockaddr::conn_request_cb);
-
-    /* 240.0.0.0/4 - This block, formerly known as the Class E address
-       space, is reserved for future use; see [RFC1112], Section 4.
-       therefore, this value can be used as a non-existing IP for this test */
-    memset(&addr, 0, sizeof(struct sockaddr_in));
-    addr.sin_family      = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("240.0.0.0");
-    addr.sin_port        = m_listen_addr.get_port();
-
-    status = ucs_sockaddr_sizeof((struct sockaddr*)&addr, &size);
-    ASSERT_UCS_OK(status);
-
-    m_connect_addr.set_sock_addr(*(struct sockaddr*)&addr, size);
-
-    /* wrap errors now since the client will try to connect to a non existing IP */
-    {
-        scoped_log_handler slh(detect_addr_route_error_logger);
-        /* client - try to connect to a non-existing IP */
-        m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
-                          client_connect_cb, client_disconnect_cb, this);
-
-        wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_ERROR, 300);
-        EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_ERROR);
-
-        EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
-        EXPECT_FALSE(m_state &
-                    (TEST_STATE_SERVER_CONNECTED | TEST_STATE_CLIENT_CONNECTED));
-    }
-}
-
 UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
 {
     test_delayed_server_response(false);
@@ -1159,6 +1107,60 @@ UCS_TEST_P(test_uct_cm_sockaddr, ep_disconnect_err_codes)
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr)
+
+
+class test_uct_cm_sockaddr_err_handle_non_exist_ip : public test_uct_cm_sockaddr {
+public:
+    void init() {
+        /* tcp_sockcm requires setting this parameter to shorten the time of waiting
+         * for the connect() to fail when connecting to a non-existing ip.
+         * A transport for which this value is not configurable, like rdmacm,
+         * will have no effect. */
+        modify_config("SYN_CNT", "1", true);
+
+        test_uct_cm_sockaddr::init();
+    }
+};
+
+UCS_TEST_P(test_uct_cm_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
+{
+    struct sockaddr_in addr;
+    ucs_status_t status;
+    size_t size;
+
+    /* Listen */
+    start_listen(test_uct_cm_sockaddr::conn_request_cb);
+
+    /* 240.0.0.0/4 - This block, formerly known as the Class E address
+       space, is reserved for future use; see [RFC1112], Section 4.
+       therefore, this value can be used as a non-existing IP for this test */
+    memset(&addr, 0, sizeof(struct sockaddr_in));
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = inet_addr("240.0.0.0");
+    addr.sin_port        = m_listen_addr.get_port();
+
+    status = ucs_sockaddr_sizeof((struct sockaddr*)&addr, &size);
+    ASSERT_UCS_OK(status);
+
+    m_connect_addr.set_sock_addr(*(struct sockaddr*)&addr, size);
+
+    /* wrap errors now since the client will try to connect to a non existing IP */
+    {
+        scoped_log_handler slh(detect_addr_route_error_logger);
+        /* client - try to connect to a non-existing IP */
+        m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
+                          client_connect_cb, client_disconnect_cb, this);
+
+        wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_ERROR, 300);
+        EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_ERROR);
+
+        EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
+        EXPECT_FALSE(m_state &
+                    (TEST_STATE_SERVER_CONNECTED | TEST_STATE_CLIENT_CONNECTED));
+    }
+}
+
+UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_cm_sockaddr_err_handle_non_exist_ip)
 
 
 class test_uct_cm_sockaddr_stress : public test_uct_cm_sockaddr {

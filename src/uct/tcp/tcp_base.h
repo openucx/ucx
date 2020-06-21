@@ -37,10 +37,10 @@ typedef struct uct_tcp_send_recv_buf_config {
 
 
 #define UCT_TCP_SYN_CNT(_offset) \
-    {"SYN_CNT", "6", \
+    {"SYN_CNT", "auto", \
      "Number of SYN retransmits that TCP should send before aborting the attempt\n" \
-     "to connect. It cannot exceed 255. 6 is the default value on most Linux systems.", \
-     (_offset) , UCS_CONFIG_TYPE_INT}
+     "to connect. It cannot exceed 255. auto means to use the system default.", \
+     (_offset) , UCS_CONFIG_TYPE_ULUNITS}
 
 
 ucs_status_t ucs_tcp_base_set_syn_cnt(int fd, int tcp_syn_cnt);

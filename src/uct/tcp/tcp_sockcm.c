@@ -88,24 +88,16 @@ static ucs_status_t uct_tcp_sockcm_event_err_to_ucs_err_log(int fd,
                                                             ucs_log_level_t* log_level)
 {
     int error = 0;
-    socklen_t err_len = sizeof(error);
     ucs_status_t status;
 
-    status = ucs_socket_getopt(fd, SOL_SOCKET, SO_ERROR, (void*)&error, &err_len);
-    if (status != UCS_OK) {
-        goto error;
-    }
-
-    if (error != ECONNREFUSED) {
-        goto error;
+    status = ucs_socket_getopt(fd, SOL_SOCKET, SO_ERROR, (void*)&error, sizeof(error));
+    if ((status != UCS_OK) || (error != ECONNREFUSED)) {
+        *log_level = UCS_LOG_LEVEL_ERROR;
+        return UCS_ERR_IO_ERROR;
     }
 
     *log_level = UCS_LOG_LEVEL_DEBUG;
     return UCS_ERR_REJECTED;
-
-error:
-    *log_level = UCS_LOG_LEVEL_ERROR;
-    return UCS_ERR_IO_ERROR;
 }
 
 void uct_tcp_sa_data_handler(int fd, int events, void *arg)
