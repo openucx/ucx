@@ -220,6 +220,8 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
         goto free_addr;
     }
 
+    ucs_debug("client ep %p created on device %s idx %d, tl_bitmap 0x%zx", ep,
+              dev_name, dev_index, tl_bitmap);
     /* Pass real ep (not tmp_ep), because only its pointer and err_mode is
      * taken from the config. */
     ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
@@ -645,7 +647,6 @@ static unsigned ucp_cm_server_conn_request_progress(void *arg)
     ucp_listener_h                   listener     = conn_request->listener;
     ucp_worker_h                     worker       = listener->worker;
     ucp_ep_h                         ep;
-    ucs_status_t                     status;
 
     ucs_trace_func("listener %p, connect request %p", listener, conn_request);
 
@@ -655,14 +656,8 @@ static unsigned ucp_cm_server_conn_request_progress(void *arg)
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
-    status = ucp_ep_create_server_accept(worker, conn_request, &ep);
-    if (status != UCS_OK) {
-        ucs_warn("server endpoint creation with connect request %p failed, status %s",
-                  conn_request, ucs_status_string(status));
-    }
+    ucp_ep_create_server_accept(worker, conn_request, &ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
-    ucs_free(conn_request->remote_dev_addr);
-    ucs_free(conn_request);
     return 1;
 }
 
@@ -765,23 +760,44 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                                           ep_init_flags,
                                           "conn_request on uct_listener", &ep);
     if (status != UCS_OK) {
-        return status;
+        ucs_warn("server ep %p failed to connect to worker address on device %s, tl_bitmap 0x%zx, status %s",
+                 ep, conn_request->dev_name, tl_bitmap,
+                 ucs_status_string(status));
+        uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
+        goto out;
     }
 
     status = ucp_wireup_connect_local(ep, remote_addr, NULL);
     if (status != UCS_OK) {
-        return status;
+        ucs_warn("server ep %p failed to connect to remote address on device %s, tl_bitmap 0x%zx, status %s",
+                 ep, conn_request->dev_name, tl_bitmap,
+                 ucs_status_string(status));
+        uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
+        ucp_ep_destroy_internal(ep);
+        goto out;
     }
 
-    status = ucp_ep_cm_connect_server_lane(ep, conn_request);
+    status = ucp_ep_cm_connect_server_lane(ep, conn_request->uct.listener,
+                                           conn_request->uct_req);
     if (status != UCS_OK) {
-        return status;
+        ucs_warn("server ep %p failed to connect CM lane on device %s, tl_bitmap 0x%zx, status %s",
+                 ep, conn_request->dev_name, tl_bitmap,
+                 ucs_status_string(status));
+        ucp_ep_destroy_internal(ep);
+        goto out;
     }
 
+    ep->flags                   |= UCP_EP_FLAG_LISTENER;
+    ucp_ep_ext_gen(ep)->listener = conn_request->listener;
     ucp_ep_update_dest_ep_ptr(ep, conn_request->sa_data.ep_ptr);
     ucp_listener_schedule_accept_cb(ep);
     *ep_p = ep;
-    return UCS_OK;
+
+out:
+    ucs_free(conn_request->remote_dev_addr);
+    ucs_free(conn_request);
+
+    return status;
 }
 
 static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
@@ -895,7 +911,8 @@ static void ucp_cm_server_conn_notify_cb(uct_ep_h ep, void *arg,
 }
 
 ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
-                                           ucp_conn_request_h conn_request)
+                                           uct_listener_h uct_listener,
+                                           uct_conn_request_h uct_conn_req)
 {
     ucp_worker_h worker   = ep->worker;
     ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
@@ -909,6 +926,9 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     /* TODO: split CM and wireup lanes */
     status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane]);
     if (status != UCS_OK) {
+        ucs_warn("server ep %p failed to create wireup CM lane, status %s",
+                 ep, ucs_status_string(status));
+        uct_listener_reject(uct_listener, uct_conn_req);
         return status;
     }
 
@@ -926,7 +946,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                        "multiple CMs are not supported");
     uct_ep_params.cm                 = worker->cms[0].cm;
     uct_ep_params.user_data          = ep;
-    uct_ep_params.conn_request       = conn_request->uct_req;
+    uct_ep_params.conn_request       = uct_conn_req;
     uct_ep_params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
     uct_ep_params.sockaddr_pack_cb   = ucp_cm_server_priv_pack_cb;
     uct_ep_params.sockaddr_cb_server = ucp_cm_server_conn_notify_cb;
