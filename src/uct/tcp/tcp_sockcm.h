@@ -19,6 +19,7 @@ typedef struct uct_tcp_sockcm {
     size_t              priv_data_len;
     size_t              sockopt_sndbuf;  /** SO_SNDBUF */
     size_t              sockopt_rcvbuf;  /** SO_RCVBUF */
+    unsigned            syn_cnt;         /** TCP_SYNCNT */
     ucs_list_link_t     ep_list;         /** List of endpoints */
 } uct_tcp_sockcm_t;
 
@@ -29,6 +30,7 @@ typedef struct uct_tcp_sockcm_config {
     uct_cm_config_t                 super;
     size_t                          priv_data_len;
     uct_tcp_send_recv_buf_config_t  sockopt;
+    unsigned                        syn_cnt;
 } uct_tcp_sockcm_config_t;
 
 

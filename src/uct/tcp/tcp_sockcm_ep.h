@@ -20,7 +20,8 @@ typedef enum uct_tcp_sockcm_ep_state {
     UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_CALLED        = UCS_BIT(9),  /* ep on the client called notify API call */
     UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_SENT          = UCS_BIT(10), /* ep on the client sent the notify message to the server */
     UCT_TCP_SOCKCM_EP_DISCONNECTING               = UCS_BIT(11), /* @ref uct_ep_disconnect was called on the ep */
-    UCT_TCP_SOCKCM_EP_GOT_DISCONNECT              = UCS_BIT(12)  /* ep received a disconnect notice from the remote peer */
+    UCT_TCP_SOCKCM_EP_GOT_DISCONNECT              = UCS_BIT(12), /* ep received a disconnect notice from the remote peer */
+    UCT_TCP_SOCKCM_EP_FAILED                      = UCS_BIT(13)  /* ep is in error state due to an internal local error */
 } uct_tcp_sockcm_ep_state_t;
 
 
@@ -57,3 +58,5 @@ ucs_status_t uct_tcp_sockcm_ep_recv(uct_tcp_sockcm_ep_t *cep);
 ucs_status_t uct_tcp_sockcm_ep_set_sockopt(uct_tcp_sockcm_ep_t *ep);
 
 ucs_status_t uct_tcp_sockcm_cm_ep_conn_notify(uct_ep_h ep);
+
+void uct_tcp_sockcm_ep_handle_error(uct_tcp_sockcm_ep_t *cep, ucs_status_t status);
