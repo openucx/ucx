@@ -459,7 +459,7 @@ ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id)
     static ucs_sys_bus_id_t cached_bus_id = {0xffff, 0xff, 0xff, 0xff};
     CUresult cu_err;
     CUdevice cuda_device;
-    CUpointer_attribute attribute;
+    CUdevice_attribute attribute;
     int attr_result;
 
     ucm_trace("ucm_cuda_get_current_device_info");
