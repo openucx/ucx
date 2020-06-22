@@ -7,6 +7,15 @@
 ##
 #
 
+## 1.8.1-RC1 (June 23, 2020)
+### Bugfixes:
+- Multiple fixes in testing environment and Azure CI
+- Fixes in InfiniBand DEVX transport
+- Fixes in memory management for CUDA IPC transport
+- Fixes for  binutils 2.34+
+- Fixes in RPM SPEC file and package generation
+- Fixes for AMD ROCM build environment
+
 ## 1.8.0 (April 3, 2020)
 ### Features:
 #### UCX Core
