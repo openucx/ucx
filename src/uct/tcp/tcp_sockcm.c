@@ -60,27 +60,21 @@ static inline void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep
                                                          ucs_status_t status,
                                                          int events, const char *reason)
 {
+    ucs_assert(UCS_STATUS_IS_ERR(status));
     ucs_assert(!(ep->state & UCT_TCP_SOCKCM_EP_FAILED));
 
-    /* disconnect was already handled on send/recv failure */
-    if (ep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT) {
-        return;
-    }
+    ucs_trace("handling error on %s ep %p (fd=%d state=%d events=%d) because %s: %s ",
+              ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client"),
+              ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
 
-    if (status != UCS_OK) {
-        ucs_trace("handling error on ep %p (fd=%d state=%d events=%d) because %s: %s ",
-                  ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
-
-        /* if the ep is on the server side but uct_ep_create wasn't called yet,
-         * destroy the ep here since uct_ep_destroy won't be called either */
-        if ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
-            !(ep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED)) {
-            ucs_assert(events == UCS_EVENT_SET_EVREAD);
-            uct_tcp_sockcm_close_ep(ep);
-        } else {
-            uct_tcp_sockcm_ep_handle_error(ep, status);
-            ep->state |= UCT_TCP_SOCKCM_EP_FAILED;
-        }
+    /* if the ep is on the server side but uct_ep_create wasn't called yet,
+     * destroy the ep here since uct_ep_destroy won't be called either */
+    if ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
+        !(ep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED)) {
+        ucs_assert(events == UCS_EVENT_SET_EVREAD);
+        uct_tcp_sockcm_close_ep(ep);
+    } else {
+        uct_tcp_sockcm_ep_handle_error(ep, status);
     }
 }
 
@@ -124,16 +118,16 @@ void uct_tcp_sa_data_handler(int fd, int events, void *arg)
     /* handle a READ event first in case it is a disconnect notice from the peer */
     if (events & UCS_EVENT_SET_EVREAD) {
         status = uct_tcp_sockcm_ep_recv(ep);
-        uct_tcp_sockcm_ep_handle_event_status(ep, status, events, "failed to receive");
         if (status != UCS_OK) {
+            uct_tcp_sockcm_ep_handle_event_status(ep, status, events, "failed to receive");
             return;
         }
     }
 
     if (events & UCS_EVENT_SET_EVWRITE) {
         status = uct_tcp_sockcm_ep_send(ep);
-        uct_tcp_sockcm_ep_handle_event_status(ep, status, events, "failed to send");
         if (status != UCS_OK) {
+            uct_tcp_sockcm_ep_handle_event_status(ep, status, events, "failed to send");
             return;
         }
     }

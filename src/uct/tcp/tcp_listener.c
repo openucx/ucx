@@ -154,7 +154,31 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_listener_t)
 ucs_status_t uct_tcp_listener_reject(uct_listener_h listener,
                                      uct_conn_request_h conn_request)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    uct_tcp_sockcm_ep_t *cep         = (uct_tcp_sockcm_ep_t *)conn_request;
+    uct_tcp_sockcm_t *tcp_sockcm     = uct_tcp_sockcm_ep_get_cm(cep);
+    char peer_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(tcp_sockcm->super.iface.worker->async);
+
+    ucs_assert((cep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
+               !(cep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED));
+
+    if (cep->state & UCT_TCP_SOCKCM_EP_FAILED) {
+        status = UCS_ERR_NOT_CONNECTED;
+        goto out;
+    }
+
+    ucs_trace("server ep %p (fd=%d state=%d) rejecting connection request from client: %s",
+              cep, cep->fd, cep->state,
+              uct_tcp_sockcm_cm_ep_peer_addr_str(cep, peer_str, UCS_SOCKADDR_STRING_LEN));
+
+    status = UCS_OK;
+out:
+    UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
+    /* reject the connection request by closing the endpoint which will close its fd */
+    UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, cep);
+    return status;
 }
 
 ucs_status_t uct_tcp_listener_query(uct_listener_h listener,

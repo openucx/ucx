@@ -946,7 +946,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, cm_server_reject)
     /* wrap errors since a reject is expected */
     scoped_log_handler slh(detect_reject_error_logger);
 
-    skip_tcp_sockcm();          /* reject for tcp_sockcm isn't implemented yet */
     listen_and_connect();
 
     wait_for_bits(&m_state, TEST_STATE_SERVER_REJECTED |
@@ -1044,7 +1043,6 @@ UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
 
 UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_reject_with_delay)
 {
-    skip_tcp_sockcm();
     test_delayed_server_response(true);
 }
 
