@@ -328,8 +328,8 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
 
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
 {
-    uct_rdmacm_cm_ep_t   *cep         = event->id->context;
-    struct sockaddr      *remote_addr = rdma_get_peer_addr(event->id);
+    uct_rdmacm_cm_ep_t   *cep                 = event->id->context;
+    struct sockaddr UCS_V_UNUSED *remote_addr = rdma_get_peer_addr(event->id);
     char                 ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char                 ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
@@ -393,8 +393,8 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
 static void
 uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
 {
-    struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
-    uint8_t         ack_event    = 1;
+    struct sockaddr UCS_V_UNUSED *remote_addr = rdma_get_peer_addr(event->id);
+    uint8_t         ack_event                 = 1;
     char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     ucs_trace("rdmacm event (fd=%d cm_id %p cm %p event_channel %p status %s): %s. Peer: %s.",

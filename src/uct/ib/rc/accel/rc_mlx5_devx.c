@@ -187,6 +187,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
 
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* Normalize to device's interface values (range of (-6) - 7) */
+        /* cppcheck-suppress internalAstError */
         log_num_of_strides = ucs_ilog2(iface->tm.mp.num_strides) - 9;
 
         UCT_IB_MLX5DV_SET(wq, wq, log_wqe_num_of_strides,

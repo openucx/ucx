@@ -188,6 +188,7 @@ ucs_frag_list_insert(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
     }
 #endif
     /* in order arrival on empty list - inc sn and do nothing */
+    /* cppcheck-suppress syntaxError */
     if (ucs_likely(UCS_FRAG_LIST_SN_CMP(sn, ==, head->head_sn + 1) && (head->elem_count == 0))) {
         head->head_sn = sn;
         return UCS_FRAG_LIST_INSERT_FAST;

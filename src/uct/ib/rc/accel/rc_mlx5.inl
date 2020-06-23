@@ -949,8 +949,11 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
     case IBV_TMH_RNDV:
+        ucs_assert(iov != NULL);
         /* RVH can be wrapped */
+        /* cppcheck-suppress nullPointer */
         uct_rc_mlx5_fill_rvh(&rvh, iov->buffer,
+        /* cppcheck-suppress nullPointer */
                               ((uct_ib_mem_t*)iov->memh)->rkey, iov->length);
         uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
 

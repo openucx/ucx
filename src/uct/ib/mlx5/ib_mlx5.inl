@@ -161,7 +161,11 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
 {
     ptrdiff_t n;
 
+    ucs_assert(dest != NULL);
+    ucs_assert(src != NULL);
+
     if (UCS_PTR_BYTE_OFFSET(dest, length) <= wq->qend) {
+        /* cppcheck-suppress nullPointer */
         memcpy(dest, src, length);
     } else {
         n = UCS_PTR_BYTE_DIFF(dest, wq->qend);
@@ -255,6 +259,8 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
         mlx5_av_base(&seg->av)->key.dc_key     = htobe64(UCT_IB_KEY);
 #endif
     }
+    ucs_assert(av != NULL);
+    /* cppcheck-suppress ctunullpointer */
     mlx5_av_base(&seg->av)->dqp_dct            = av->dqp_dct;
     mlx5_av_base(&seg->av)->stat_rate_sl       = av->stat_rate_sl;
     mlx5_av_base(&seg->av)->fl_mlid            = av->fl_mlid;
