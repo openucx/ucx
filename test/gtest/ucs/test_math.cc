@@ -207,15 +207,63 @@ UCS_TEST_F(test_math, linear_func) {
     ucs_linear_func_t func[2];
     double x, y[2];
 
-    x = ucs::rand();
+    /* Generate 2 random functions */
+    x = ucs::rand() / (double)RAND_MAX;
     for (unsigned i = 0; i < 2; ++i) {
         func[i] = ucs_linear_func_make(ucs::rand() / (double)RAND_MAX,
                                        ucs::rand() / (double)RAND_MAX);
         y[i]    = ucs_linear_func_apply(func[i], x);
     }
 
+    /* Add */
     ucs_linear_func_t sum_func = ucs_linear_func_add(func[0], func[1]);
     double y_sum               = ucs_linear_func_apply(sum_func, x);
+    EXPECT_NEAR(y[0] + y[1], y_sum, 1e-6);
 
-    EXPECT_NEAR(y[0] + y[1], y_sum, fabs(y_sum * 1e-6));
+    /* Add in-place */
+    ucs_linear_func_t sum_func_inplace = func[0];
+    ucs_linear_func_add_inplace(&sum_func_inplace, func[1]);
+    double y_sum_inplace = ucs_linear_func_apply(sum_func_inplace, x);
+    EXPECT_NEAR(y[0] + y[1], y_sum_inplace, 1e-6);
+
+    /* Subtract */
+    ucs_linear_func_t diff_func = ucs_linear_func_sub(func[0], func[1]);
+    double y_diff               = ucs_linear_func_apply(diff_func, x);
+    EXPECT_NEAR(y[0] - y[1], y_diff, 1e-6);
+
+    /* Intersect */
+    double x_intersect = 0;
+    ucs_status_t status;
+    status = ucs_linear_func_intersect(func[0], func[1], &x_intersect);
+    ASSERT_EQ(UCS_OK, status);
+    double y_intersect[2];
+    for (unsigned i = 0; i < 2; ++i) {
+        y_intersect[i] = ucs_linear_func_apply(func[i], x_intersect);
+    }
+    EXPECT_NEAR(y_intersect[0], y_intersect[1], 1e-6);
+
+    /* Invalid intersect - parallel functions */
+    ucs_linear_func_t tmp_func = func[0];
+    tmp_func.c = func[0].c + 1.0;
+    status     = ucs_linear_func_intersect(func[0], tmp_func, &x_intersect);
+    ASSERT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    /* Invalid intersect - infinite point */
+    ucs_linear_func_t tmp_func1 = ucs_linear_func_make(1000, DBL_MIN * 3);
+    ucs_linear_func_t tmp_func2 = ucs_linear_func_make(2000, DBL_MIN * 2);
+    status                      = ucs_linear_func_intersect(tmp_func1, tmp_func2,
+                                                            &x_intersect);
+    ASSERT_EQ(UCS_ERR_INVALID_PARAM, status) << x_intersect;
+
+    /* Compose */
+    ucs_linear_func_t compose_func = ucs_linear_func_compose(func[0], func[1]);
+    double y_compose               = ucs_linear_func_apply(compose_func, x);
+    double y_compose_exp           = ucs_linear_func_apply(func[0], y[1]);
+    EXPECT_NEAR(y_compose_exp, y_compose, 1e-6);
+
+    /* Add value of */
+    ucs_linear_func_t added_func = func[0];
+    ucs_linear_func_add_value_at(&added_func, func[1], x);
+    double y_added_func = ucs_linear_func_apply(added_func, x);
+    EXPECT_NEAR(y[0] + y[1], y_added_func, 1e-6);
 }
