@@ -16,6 +16,7 @@
 
 #include "reloc.h"
 
+#include <ucs/datastruct/khash.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
@@ -34,6 +35,7 @@
 #include <limits.h>
 
 typedef void * (*ucm_reloc_dlopen_func_t)(const char *, int);
+typedef int    (*ucm_reloc_dlclose_func_t)(void *);
 
 typedef struct ucm_auxv {
     long               type;
@@ -48,17 +50,26 @@ typedef struct ucm_reloc_dl_iter_context {
 } ucm_reloc_dl_iter_context_t;
 
 
-static ucm_reloc_patch_t ucm_reloc_dlopen_patch = {
-    .symbol = "dlopen",
-    .value  = ucm_dlopen
-};
+/* Hash of symbols in a dynamic object */
+KHASH_MAP_INIT_STR(ucm_dl_symbol_hash, void*);
 
+/* Hash of loaded dynamic objects */
+typedef struct {
+    khash_t(ucm_dl_symbol_hash) symbols;
+} ucm_dl_info_t;
+
+KHASH_MAP_INIT_INT64(ucm_dl_info_hash, ucm_dl_info_t)
 
 /* List of patches to be applied to additional libraries */
 static UCS_LIST_HEAD(ucm_reloc_patch_list);
-static ucm_reloc_dlopen_func_t ucm_reloc_orig_dlopen = NULL;
 static pthread_mutex_t ucm_reloc_patch_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
+static khash_t(ucm_dl_info_hash) ucm_dl_info_hash;
+static ucm_reloc_dlopen_func_t  ucm_reloc_orig_dlopen  = NULL;
+static ucm_reloc_dlclose_func_t ucm_reloc_orig_dlclose = NULL;
+
+/* forward declaration */
+static void ucm_reloc_get_orig_dl_funcs();
 
 static uintptr_t
 ucm_reloc_get_entry(ElfW(Addr) base, const ElfW(Phdr) *dphdr, ElfW(Sxword) tag)
@@ -83,7 +94,7 @@ static void ucm_reloc_file_lock(int fd, int l_type)
     }
 }
 
-static int ucm_reloc_get_aux_phsize()
+static ucs_status_t ucm_reloc_get_aux_phsize(int *phsize_p)
 {
 #define UCM_RELOC_AUXV_BUF_LEN 16
     static const char *proc_auxv_filename = "/proc/self/auxv";
@@ -96,59 +107,65 @@ static int ucm_reloc_get_aux_phsize()
     int fd;
 
     /* Can avoid lock here - worst case we'll read the file more than once */
-    if (phsize == 0) {
-        fd = open(proc_auxv_filename, O_RDONLY);
-        if (fd < 0) {
-            ucm_error("failed to open '%s' for reading: %m", proc_auxv_filename);
-            return fd;
+    if (phsize != 0) {
+        *phsize_p = phsize;
+        return UCS_OK;
+    }
+
+    fd = open(proc_auxv_filename, O_RDONLY);
+    if (fd < 0) {
+        ucm_error("failed to open '%s' for reading: %m", proc_auxv_filename);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    if (RUNNING_ON_VALGRIND) {
+        /* Work around a bug caused by valgrind's fake /proc/self/auxv -
+         * every time this file is opened when running with valgrind, a
+         * a duplicate of the same fd is returned, so all share the same
+         * file offset.
+         */
+        ucm_reloc_file_lock(fd, F_WRLCK);
+        lseek(fd, 0, SEEK_SET);
+    }
+
+    /* Use small buffer on the stack, avoid using malloc() */
+    found = 0;
+    do {
+        nread = read(fd, buffer, sizeof(buffer));
+        if (nread < 0) {
+            ucm_error("failed to read %lu bytes from %s (ret=%ld): %m",
+                      sizeof(buffer), proc_auxv_filename, nread);
+            break;
         }
 
-        if (RUNNING_ON_VALGRIND) {
-            /* Work around a bug caused by valgrind's fake /proc/self/auxv -
-             * every time this file is opened when running with valgrind, a
-             * a duplicate of the same fd is returned, so all share the same
-             * file offset.
-             */
-            ucm_reloc_file_lock(fd, F_WRLCK);
-            lseek(fd, 0, SEEK_SET);
-        }
-
-        /* Use small buffer on the stack, avoid using malloc() */
-        found = 0;
-        do {
-            nread = read(fd, buffer, sizeof(buffer));
-            if (nread < 0) {
-                ucm_error("failed to read %lu bytes from %s (ret=%ld): %m",
-                          sizeof(buffer), proc_auxv_filename, nread);
+        count = nread / sizeof(buffer[0]);
+        for (auxv = buffer; (auxv < buffer + count) && (auxv->type != AT_NULL);
+                        ++auxv)
+        {
+            if (auxv->type == AT_PHENT) {
+                found  = 1;
+                phsize = auxv->value;
+                ucm_debug("read phent from %s: %d", proc_auxv_filename, phsize);
+                if (phsize == 0) {
+                    ucm_error("phsize is 0");
+                }
                 break;
             }
-
-            count = nread / sizeof(buffer[0]);
-            for (auxv = buffer; (auxv < buffer + count) && (auxv->type != AT_NULL);
-                            ++auxv)
-            {
-                if (auxv->type == AT_PHENT) {
-                    found  = 1;
-                    phsize = auxv->value;
-                    ucm_debug("read phent from %s: %d", proc_auxv_filename, phsize);
-                    if (phsize == 0) {
-                        ucm_error("phsize is 0");
-                    }
-                    break;
-                }
-            }
-        } while ((count > 0) && (phsize == 0));
-
-        if (!found) {
-            ucm_error("AT_PHENT entry not found in %s", proc_auxv_filename);
         }
+    } while ((count > 0) && (phsize == 0));
 
-        if (RUNNING_ON_VALGRIND) {
-            ucm_reloc_file_lock(fd, F_UNLCK);
-        }
-        close(fd);
+    if (!found) {
+        ucm_error("AT_PHENT entry not found in %s", proc_auxv_filename);
+        return UCS_ERR_NO_ELEM;
     }
-    return phsize;
+
+    if (RUNNING_ON_VALGRIND) {
+        ucm_reloc_file_lock(fd, F_UNLCK);
+    }
+    close(fd);
+
+    *phsize_p = phsize;
+    return UCS_OK;
 }
 
 ElfW(Rela) *ucm_reloc_find_sym(void *table, size_t table_size, const char *symbol,
@@ -168,128 +185,252 @@ ElfW(Rela) *ucm_reloc_find_sym(void *table, size_t table_size, const char *symbo
     return NULL;
 }
 
-
 static ucs_status_t
-ucm_reloc_modify_got(ElfW(Addr) base, const ElfW(Phdr) *phdr, const char UCS_V_UNUSED *phname,
-                     int phnum, int phsize,
-                     const ucm_reloc_dl_iter_context_t *ctx)
+ucm_reloc_dl_apply_patch(const ucm_dl_info_t *dl_info, const char *dl_basename,
+                         int store_prev, ucm_reloc_patch_t *patch)
 {
-    const char *section_name;
-    ElfW(Phdr) *dphdr;
-    ElfW(Rela) *reloc;
-    ElfW(Sym)  *symtab;
-    void *jmprel, *rela, *strtab;
-    size_t pltrelsz, relasz;
+    void *prev_value;
+    khiter_t khiter;
     long page_size;
     void **entry;
-    void *prev_value;
     void *page;
     int ret;
-    int i;
 
-    page_size = ucm_get_page_size();
-
-    if (!strcmp(phname, "")) {
-        phname = "(empty)";
-    }
-
-    /* find PT_DYNAMIC */
-    dphdr = NULL;
-    for (i = 0; i < phnum; ++i) {
-        dphdr = UCS_PTR_BYTE_OFFSET(phdr, phsize * i);
-        if (dphdr->p_type == PT_DYNAMIC) {
-            break;
-        }
-    }
-    if (dphdr == NULL) {
-        return UCS_ERR_NO_ELEM;
-    }
-
-    /* Get ELF tables pointers */
-    jmprel   = (void*)ucm_reloc_get_entry(base, dphdr, DT_JMPREL);
-    symtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_SYMTAB);
-    strtab   = (void*)ucm_reloc_get_entry(base, dphdr, DT_STRTAB);
-    pltrelsz = ucm_reloc_get_entry(base, dphdr, DT_PLTRELSZ);
-
-    if ((symtab == NULL) || (strtab == NULL)) {
-        /* no DT_SYMTAB or DT_STRTAB sections are defined */
+    /* find symbol in our hash table */
+    khiter = kh_get(ucm_dl_symbol_hash, &dl_info->symbols, patch->symbol);
+    if (khiter == kh_end(&dl_info->symbols)) {
+        ucm_trace("symbol '%s' not found in %s", patch->symbol, dl_basename);
         return UCS_OK;
     }
 
-    section_name = ".got.plt";
-    reloc        = ucm_reloc_find_sym(jmprel, pltrelsz, ctx->patch->symbol,
-                                      strtab, symtab);
-    if (reloc == NULL) {
-        /* if not found in .got.plt, search in .got */
-        section_name = ".got";
-        rela         = (void*)ucm_reloc_get_entry(base, dphdr, DT_RELA);
-        relasz       = ucm_reloc_get_entry(base, dphdr, DT_RELASZ);
-        reloc        = ucm_reloc_find_sym(rela, relasz, ctx->patch->symbol,
-                                          strtab, symtab);
-    }
-    if (reloc == NULL) {
-        return UCS_OK;
-    }
-
-    entry      = (void *)(base + reloc->r_offset);
+    /* get entry address from hash table */
+    entry      = kh_val(&dl_info->symbols, khiter);
     prev_value = *entry;
 
-    if (prev_value == ctx->patch->value) {
-        ucm_trace("%s entry '%s' in %s at [%p] up-to-date",
-                  section_name, ctx->patch->symbol, ucs_basename(phname), entry);
+    if (prev_value == patch->value) {
+        ucm_trace("symbol '%s' in %s at [%p] up-to-date", patch->symbol,
+                  dl_basename, entry);
         return UCS_OK;
     }
 
     /* enable writing to the page */
-    page = (void *)((intptr_t)entry & ~(page_size - 1));
-    ret  = mprotect(page, page_size, PROT_READ|PROT_WRITE);
+    page_size = ucm_get_page_size();
+    page      = ucs_align_down_pow2_ptr(entry, page_size);
+    ret       = mprotect(page, page_size, PROT_READ|PROT_WRITE);
     if (ret < 0) {
-        ucm_error("failed to modify %s page %p to rw: %m", section_name, page);
+        ucm_error("failed to modify %s page %p to rw: %m", dl_basename, page);
         return UCS_ERR_UNSUPPORTED;
     }
 
-    *entry = ctx->patch->value;
-    ucm_debug("%s entry '%s' in %s at [%p] modified from %p to %p",
-              section_name, ctx->patch->symbol, basename(phname), entry,
-              prev_value, ctx->patch->value);
+    /* modify the relocation to the new value */
+    *entry = patch->value;
+    ucm_debug("symbol '%s' in %s at [%p] modified from %p to %p",
+              patch->symbol, dl_basename, entry, prev_value, patch->value);
 
     /* store default entry to prev_value to guarantee valid pointers
      * throughout life time of the process */
-    if (base == ctx->libucm_base_addr) {
-        ctx->patch->prev_value = prev_value;
-        ucm_debug("'%s' prev_value is %p'", ctx->patch->symbol, prev_value);
+    if (store_prev) {
+        patch->prev_value = prev_value;
+        ucm_debug("'%s' prev_value is %p'", patch->symbol, prev_value);
     }
 
     return UCS_OK;
 }
 
-static int ucm_reloc_phdr_iterator(struct dl_phdr_info *info, size_t size,
-                                   void *data)
+static unsigned
+ucm_dl_populate_symbols(ucm_dl_info_t *dl_info, uintptr_t dlpi_addr, void *table,
+                        size_t table_size, void *strtab, ElfW(Sym) *symtab,
+                        const char *dl_name)
 {
-    ucm_reloc_dl_iter_context_t *ctx = data;
-    int phsize;
-    int i;
+    ElfW(Rela) *reloc;
+    khiter_t khiter;
+    unsigned count;
+    char *elf_sym;
+    int ret;
 
-    /* check if shared object is black-listed for this patch */
-    if (ctx->patch->blacklist) {
-        for (i = 0; ctx->patch->blacklist[i]; i++) {
-            if (strstr(info->dlpi_name, ctx->patch->blacklist[i])) {
-                /* shared object is black-listed */
-                return 0;
-            }
+    count = 0;
+    for (reloc = table; (void*)reloc < UCS_PTR_BYTE_OFFSET(table, table_size);
+         ++reloc) {
+        elf_sym = (char*)strtab + symtab[ELF64_R_SYM(reloc->r_info)].st_name;
+        if (*elf_sym == '\0') {
+            /* skip empty symbols */
+            continue;
+        }
+
+        khiter = kh_put(ucm_dl_symbol_hash, &dl_info->symbols, elf_sym, &ret);
+        if ((ret == UCS_KH_PUT_BUCKET_EMPTY) ||
+            (ret == UCS_KH_PUT_BUCKET_CLEAR)) {
+            /* do not override previous values */
+            kh_val(&dl_info->symbols, khiter) = (void*)(dlpi_addr +
+                                                        reloc->r_offset);
+            ++count;
+        } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
+            ucm_trace("ignoring duplicate symbol '%s' in %s", elf_sym, dl_name);
+        } else {
+            ucm_debug("failed to add symbol '%s' in %s", elf_sym, dl_name);
         }
     }
 
-    phsize = ucm_reloc_get_aux_phsize();
-    if (phsize <= 0) {
-        ucm_error("failed to read phent size");
-        ctx->status = UCS_ERR_UNSUPPORTED;
-        return -1;
+    return count;
+}
+
+static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
+                                          const char *dl_name,
+                                          const ucm_dl_info_t **dl_info_p)
+{
+    uintptr_t dlpi_addr = phdr_info->dlpi_addr;
+    void *jmprel, *rela, *strtab;
+    size_t pltrelsz, relasz;
+    ucm_dl_info_t *dl_info;
+    ucs_status_t status;
+    ElfW(Phdr) *dphdr;
+    ElfW(Sym) *symtab;
+    khiter_t khiter;
+    unsigned num_symbols;
+    int i, ret;
+    int phsize;
+
+    status = ucm_reloc_get_aux_phsize(&phsize);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    ctx->status = ucm_reloc_modify_got(info->dlpi_addr, info->dlpi_phdr,
-                                       info->dlpi_name, info->dlpi_phnum,
-                                       phsize, ctx);
+    khiter = kh_put(ucm_dl_info_hash, &ucm_dl_info_hash, dlpi_addr, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucm_error("failed to add dl info hash entry");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    dl_info = &kh_val(&ucm_dl_info_hash, khiter);
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
+        /* exists */
+        goto out;
+    }
+
+    kh_init_inplace(ucm_dl_symbol_hash, &dl_info->symbols);
+
+    /* find PT_DYNAMIC */
+    dphdr = NULL;
+    for (i = 0; i < phdr_info->dlpi_phnum; ++i) {
+        dphdr = UCS_PTR_BYTE_OFFSET(phdr_info->dlpi_phdr, phsize * i);
+        if (dphdr->p_type == PT_DYNAMIC) {
+            break;
+        }
+    }
+    if (dphdr == NULL) {
+        /* No dynamic section */
+        ucm_debug("%s has no dynamic section - skipping", dl_name)
+        goto out;
+    }
+
+    /* Get ELF tables pointers */
+    symtab = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_SYMTAB);
+    strtab = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_STRTAB);
+    if ((symtab == NULL) || (strtab == NULL)) {
+        /* no DT_SYMTAB or DT_STRTAB sections are defined */
+        ucm_debug("%s has no dynamic symbols - skipping", dl_name)
+        goto out;
+    }
+
+    num_symbols = 0;
+
+    /* populate .got.plt */
+    jmprel       = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_JMPREL);
+    pltrelsz     = ucm_reloc_get_entry(dlpi_addr, dphdr, DT_PLTRELSZ);
+    num_symbols += ucm_dl_populate_symbols(dl_info, dlpi_addr, jmprel, pltrelsz,
+                                           strtab, symtab, dl_name);
+
+    /* populate .got */
+    rela         = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_RELA);
+    relasz       = ucm_reloc_get_entry(dlpi_addr, dphdr, DT_RELASZ);
+    num_symbols += ucm_dl_populate_symbols(dl_info, dlpi_addr, rela, relasz,
+                                           strtab, symtab, dl_name);
+
+    ucm_debug("added dl_info %p for %s with %u symbols", dl_info,
+              ucs_basename(dl_name), num_symbols);
+
+out:
+    *dl_info_p = dl_info;
+    return UCS_OK;
+}
+
+static void ucm_reloc_dl_info_cleanup(ElfW(Addr) dlpi_addr, const char *dl_name)
+{
+    ucm_dl_info_t *dl_info;
+    khiter_t khiter;
+
+    khiter = kh_get(ucm_dl_info_hash, &ucm_dl_info_hash, dlpi_addr);
+    if (khiter == kh_end(&ucm_dl_info_hash)) {
+        ucm_debug("no dl_info entry for address 0x%lx", dlpi_addr);
+        return;
+    }
+
+    /* destroy symbols hash table */
+    dl_info = &kh_val(&ucm_dl_info_hash, khiter);
+    kh_destroy_inplace(ucm_dl_symbol_hash, &dl_info->symbols);
+
+    /* delete entry in dl_info hash */
+    kh_del(ucm_dl_info_hash, &ucm_dl_info_hash, khiter);
+
+    ucm_debug("removed dl_info %p for %s", dl_info, ucs_basename(dl_name));
+}
+
+static int
+ucm_reloc_patch_is_dl_blacklisted(const char *dlpi_name,
+                                  const ucm_reloc_patch_t *patch)
+{
+    unsigned i;
+
+    if (patch->blacklist == NULL) {
+        return 0;
+    }
+
+    for (i = 0; patch->blacklist[i] != NULL; i++) {
+        if (strstr(dlpi_name, patch->blacklist[i])) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static const char*
+ucm_reloc_get_dl_name(const char *dlpi_name, ElfW(Addr) dlpi_addr, char *buf,
+                      size_t max)
+{
+    if (strcmp(dlpi_name, "")) {
+        return dlpi_name;
+    } else {
+        snprintf(buf, max, "(anonymous dl @ 0x%lx)", dlpi_addr);
+        return buf;
+    }
+}
+
+static int ucm_reloc_phdr_iterator(struct dl_phdr_info *phdr_info, size_t size,
+                                   void *data)
+{
+    ucm_reloc_dl_iter_context_t *ctx = data;
+    const ucm_dl_info_t *dl_info;
+    char dl_name_buffer[256];
+    const char *dl_name;
+    int store_prev;
+
+    /* check if shared object is black-listed for this patch */
+    if (ucm_reloc_patch_is_dl_blacklisted(phdr_info->dlpi_name, ctx->patch)) {
+        return 0;
+    }
+
+    dl_name = ucm_reloc_get_dl_name(phdr_info->dlpi_name, phdr_info->dlpi_addr,
+                                    dl_name_buffer, sizeof(dl_name_buffer));
+
+    ctx->status = ucm_reloc_dl_info_get(phdr_info, dl_name, &dl_info);
+    if (ctx->status != UCS_OK) {
+        return -1; /* stop iteration if got a real error */
+    }
+
+    store_prev  = phdr_info->dlpi_addr == ctx->libucm_base_addr;
+    ctx->status = ucm_reloc_dl_apply_patch(dl_info, ucs_basename(dl_name),
+                                           store_prev, ctx->patch);
     if (ctx->status != UCS_OK) {
         return -1; /* stop iteration if got a real error */
     }
@@ -311,6 +452,7 @@ static ucs_status_t ucm_reloc_apply_patch(ucm_reloc_patch_t *patch,
     /* Avoid locks here because we don't modify ELF data structures.
      * Worst case the same symbol will be written more than once.
      */
+    ucm_trace("patch symbol '%s'", patch->symbol);
     (void)dl_iterate_phdr(ucm_reloc_phdr_iterator, &ctx);
     return ctx.status;
 }
@@ -353,7 +495,7 @@ static Dl_serinfo *ucm_dlopen_load_serinfo(const char *module_path)
     }
 
 close_module:
-    dlclose(module);
+    ucm_reloc_orig_dlclose(module);
     return serinfo;
 }
 
@@ -370,15 +512,7 @@ void *ucm_dlopen(const char *filename, int flag)
 
     ucm_debug("open module: %s, flag: %x", filename, flag);
 
-    if (ucm_reloc_orig_dlopen == NULL) {
-        ucm_reloc_orig_dlopen =
-            (ucm_reloc_dlopen_func_t)ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
-                                                        ucm_reloc_dlopen_patch.value);
-
-        if (ucm_reloc_orig_dlopen == NULL) {
-            ucm_fatal("ucm_reloc_orig_dlopen is NULL");
-        }
-    }
+    ucm_reloc_get_orig_dl_funcs();
 
     if (!ucm_global_opts.dlopen_process_rpath) {
         goto fallback_load_lib;
@@ -445,6 +579,8 @@ out_apply_patches:
      * loaded due to dependencies.
      */
 
+    ucm_trace("dlopen(%s) = %p", filename ,handle);
+
     pthread_mutex_lock(&ucm_reloc_patch_list_lock);
     ucs_list_for_each(patch, &ucm_reloc_patch_list, list) {
         ucm_debug("in dlopen(%s), re-applying '%s' to %p", filename,
@@ -456,26 +592,88 @@ out_apply_patches:
     return handle;
 }
 
+static int ucm_dlclose(void *handle)
+{
+    struct link_map *lm_entry;
+    char dl_name_buffer[256];
+    const char *dl_name;
+    int ret;
+
+    ucm_trace("dlclose(%p)", handle);
+
+    ret = dlinfo(handle, RTLD_DI_LINKMAP, &lm_entry);
+    if (ret != 0) {
+        ucm_warn("dlinfo(handle=%p) failed during dlclose() hook, symbol"
+                 "table may become unreliable", handle);
+    } else {
+        /*
+         * Cleanup the cached information about the library.
+         * NOTE: They library may not actually be unloaded (if its reference
+         * count is > 1). Since we have no safe way to know it, we remove the
+         * cached information anyway, and it may be re-added on the next call to
+         * ucm_reloc_apply_patch().
+         */
+        dl_name = ucm_reloc_get_dl_name(lm_entry->l_name, lm_entry->l_addr,
+                                        dl_name_buffer, sizeof(dl_name_buffer));
+        pthread_mutex_lock(&ucm_reloc_patch_list_lock);
+        ucm_reloc_dl_info_cleanup(lm_entry->l_addr, dl_name);
+        pthread_mutex_unlock(&ucm_reloc_patch_list_lock);
+    }
+
+    ucm_reloc_get_orig_dl_funcs();
+
+    return ucm_reloc_orig_dlclose(handle);
+}
+
+static ucm_reloc_patch_t ucm_dlopen_reloc_patches[] = {
+    { .symbol = "dlopen",  .value  = ucm_dlopen  },
+    { .symbol = "dlclose", .value  = ucm_dlclose }
+};
+
+static void ucm_reloc_get_orig_dl_funcs()
+{
+    ucm_reloc_patch_t *patch;
+
+    /* pointer to original dlopen() */
+    if (ucm_reloc_orig_dlopen == NULL) {
+        patch = &ucm_dlopen_reloc_patches[0];
+        ucm_reloc_orig_dlopen = (ucm_reloc_dlopen_func_t)
+                                ucm_reloc_get_orig(patch->symbol, patch->value);
+        if (ucm_reloc_orig_dlopen == NULL) {
+            ucm_fatal("ucm_reloc_orig_dlopen is NULL");
+        }
+    }
+
+    /* pointer to original dlclose() */
+    if (ucm_reloc_orig_dlclose == NULL) {
+        patch = &ucm_dlopen_reloc_patches[1];
+        ucm_reloc_orig_dlclose = (ucm_reloc_dlclose_func_t)
+                                 ucm_reloc_get_orig(patch->symbol, patch->value);
+        if (ucm_reloc_orig_dlclose == NULL) {
+            ucm_fatal("ucm_reloc_orig_dlclose is NULL");
+        }
+    }
+}
+
 /* called with lock held */
-static ucs_status_t ucm_reloc_install_dlopen()
+static ucs_status_t ucm_reloc_install_dl_hooks()
 {
     static int installed = 0;
     ucs_status_t status;
+    size_t i;
 
     if (installed) {
         return UCS_OK;
     }
 
-    ucm_reloc_orig_dlopen =
-        (ucm_reloc_dlopen_func_t)ucm_reloc_get_orig(ucm_reloc_dlopen_patch.symbol,
-                                                    ucm_reloc_dlopen_patch.value);
+    for (i = 0; i < ucs_array_size(ucm_dlopen_reloc_patches); ++i) {
+        status = ucm_reloc_apply_patch(&ucm_dlopen_reloc_patches[i], 0);
+        if (status != UCS_OK) {
+            return status;
+        }
 
-    status = ucm_reloc_apply_patch(&ucm_reloc_dlopen_patch, 0);
-    if (status != UCS_OK) {
-        return status;
+        ucs_list_add_tail(&ucm_reloc_patch_list, &ucm_dlopen_reloc_patches[i].list);
     }
-
-    ucs_list_add_tail(&ucm_reloc_patch_list, &ucm_reloc_dlopen_patch.list);
 
     installed = 1;
     return UCS_OK;
@@ -486,6 +684,8 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
     ucs_status_t status;
     Dl_info dl_info;
     int ret;
+
+    ucm_reloc_get_orig_dl_funcs();
 
     /* Take default symbol value from the current library */
     ret = dladdr(ucm_reloc_modify, &dl_info);
@@ -499,7 +699,7 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
      */
     pthread_mutex_lock(&ucm_reloc_patch_list_lock);
 
-    status = ucm_reloc_install_dlopen();
+    status = ucm_reloc_install_dl_hooks();
     if (status != UCS_OK) {
         goto out_unlock;
     }
@@ -516,3 +716,6 @@ out_unlock:
     return status;
 }
 
+UCS_STATIC_INIT {
+    kh_init_inplace(ucm_dl_info_hash, &ucm_dl_info_hash);
+}
