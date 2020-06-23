@@ -874,49 +874,41 @@ out:
                                       &req->send.disconnect.prog_id);
 }
 
-static ucs_status_t ucp_ep_close_nb_check_params(ucp_ep_h ep, unsigned mode)
-{
-    /* CM lane tracks remote state, so it can be used with any modes of close
-     * and error handling */
-    if ((mode == UCP_EP_CLOSE_MODE_FLUSH) || ucp_ep_has_cm_lane(ep)) {
-        return UCS_OK;
-    }
-
-    /* In case of close in force mode, remote peer failure detection mechanism
-     * should be enabled (CM lane is handled above) to prevent hang or any
-     * other undefined behavior */
-    if ((mode == UCP_EP_CLOSE_MODE_FORCE) &&
-        (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
-        return UCS_OK;
-    }
-
-    return UCS_ERR_INVALID_PARAM;
-}
-
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
+    const ucp_request_param_t param = {
+        .op_attr_mask = UCP_EP_PARAM_FIELD_FLAGS,
+        .flags        = (mode == UCP_EP_CLOSE_MODE_FORCE) ?
+                        UCP_EP_CLOSE_FLAG_FORCE : 0
+    };
+
+    return ucp_ep_close_nbx(ep, &param);
+}
+
+ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
+{
     ucp_worker_h  worker = ep->worker;
+    int           force;
     void          *request;
     ucp_request_t *close_req;
-    ucs_status_t  status;
+    unsigned      uct_flags;
 
-    status = ucp_ep_close_nb_check_params(ep, mode);
-    if (status != UCS_OK) {
-        return UCS_STATUS_PTR(status);
+    force = ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE;
+    if (force && !ucp_ep_has_cm_lane(ep) &&
+        (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
 
     ep->flags |= UCP_EP_FLAG_CLOSED;
-    request = ucp_ep_flush_internal(ep,
-                                    (mode == UCP_EP_CLOSE_MODE_FLUSH) ?
-                                    UCT_FLUSH_FLAG_LOCAL : UCT_FLUSH_FLAG_CANCEL,
-                                    NULL, 0, NULL,
-                                    ucp_ep_close_flushed_callback, "close");
-
+    uct_flags  = force ? UCT_FLUSH_FLAG_CANCEL : UCT_FLUSH_FLAG_LOCAL;
+    request    = ucp_ep_flush_internal(ep, uct_flags, 0,
+                                       &ucp_request_null_param, NULL,
+                                       ucp_ep_close_flushed_callback,
+                                       "close");
     if (!UCS_PTR_IS_PTR(request)) {
-        if (ucp_ep_is_cm_local_connected(ep) &&
-            (mode == UCP_EP_CLOSE_MODE_FLUSH)) {
+        if (ucp_ep_is_cm_local_connected(ep) && !force) {
             /* lanes already flushed, start disconnect on CM lane */
             ucp_ep_cm_disconnect_cm_lane(ep);
             close_req = ucp_ep_cm_close_request_get(ep);
@@ -927,17 +919,12 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
                 request = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
             }
         } else {
-            ucp_ep_disconnected(ep, mode == UCP_EP_CLOSE_MODE_FORCE);
+            ucp_ep_disconnected(ep, force);
         }
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
     return request;
-}
-
-ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
-{
-    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }
 
 ucs_status_ptr_t ucp_disconnect_nb(ucp_ep_h ep)
