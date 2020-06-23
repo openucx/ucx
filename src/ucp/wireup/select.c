@@ -540,10 +540,11 @@ out_update_score:
     lane_desc->score[lane_type] = select_info->score;
 }
 
-static int ucp_wireup_is_lane_proxy(ucp_ep_h ep, ucp_rsc_index_t rsc_index,
+static int ucp_wireup_is_lane_proxy(ucp_worker_h worker,
+                                    ucp_rsc_index_t rsc_index,
                                     uint64_t remote_event_flags)
 {
-    return !ucp_worker_is_tl_p2p(ep->worker, rsc_index) &&
+    return ucp_worker_is_tl_2iface(worker, rsc_index) &&
            ((remote_event_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
             UCT_IFACE_FLAG_EVENT_RECV_SIG);
 }
@@ -566,7 +567,7 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
          * make sure the remote interface will indeed wake up. */
         remote_event_flags = select_params->address->address_list
                                  [select_info->addr_index].iface_attr.event_flags;
-        is_proxy           = ucp_wireup_is_lane_proxy(select_params->ep,
+        is_proxy           = ucp_wireup_is_lane_proxy(select_params->ep->worker,
                                                       select_info->rsc_index,
                                                       remote_event_flags);
     }
@@ -899,7 +900,7 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
      */
     tl_bitmap = worker->atomic_tls;
     ucs_for_each_bit(rsc_index, context->tl_bitmap) {
-        if (!ucp_worker_is_tl_p2p(worker, rsc_index)) {
+        if (ucp_worker_is_tl_2iface(worker, rsc_index)) {
             tl_bitmap |= UCS_BIT(rsc_index);
         }
     }
@@ -959,8 +960,8 @@ ucp_wireup_is_am_required(const ucp_wireup_select_params_t *select_params,
     }
 
     for (lane = 0; lane < select_ctx->num_lanes; ++lane) {
-        if (ucp_worker_is_tl_p2p(ep->worker,
-                                 select_ctx->lane_descs[lane].rsc_index)) {
+        if (!ucp_worker_is_tl_2iface(ep->worker,
+                                     select_ctx->lane_descs[lane].rsc_index)) {
             return 1;
         }
     }
@@ -1405,11 +1406,11 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                    address_list[addr_index].iface_attr.event_flags,
                                    criteria.remote_event_flags, criteria.title,
                                    ucp_wireup_event_flags, NULL, 0))
-         {
-             return lane;
-         } else if (ucp_worker_is_tl_p2p(worker, rsc_index)) {
-             p2p_lane = lane;
-         }
+        {
+            return lane;
+        } else if (ucp_worker_is_tl_p2p(worker, rsc_index)) {
+            p2p_lane = lane;
+        }
     }
 
     return p2p_lane;

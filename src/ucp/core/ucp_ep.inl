@@ -63,6 +63,7 @@ static inline uct_ep_h ucp_ep_get_tag_uct_ep(ucp_ep_h ep)
 
 static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t lane)
 {
+    ucs_assert(lane < UCP_MAX_LANES); /* to suppress coverity */
     return ucp_ep_config(ep)->key.lanes[lane].rsc_index;
 }
 
@@ -234,15 +235,33 @@ ucp_ep_config_get_dst_md_cmpt(const ucp_ep_config_key_t *key,
     return key->dst_md_cmpts[idx];
 }
 
-static inline ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
+static inline int
+ucp_ep_config_key_has_cm_lane(const ucp_ep_config_key_t *config_key)
 {
-    return ucp_ep_config(ep)->key.cm_lane;
+    return config_key->cm_lane != UCP_NULL_LANE;
 }
 
 static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
 {
     return (ep->cfg_index != UCP_NULL_CFG_INDEX) &&
-           (ucp_ep_get_cm_lane(ep) != UCP_NULL_LANE);
+           ucp_ep_config_key_has_cm_lane(&ucp_ep_config(ep)->key);
+}
+
+static UCS_F_ALWAYS_INLINE ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
+{
+    return ucp_ep_config(ep)->key.cm_lane;
+}
+
+static inline int
+ucp_ep_config_connect_p2p(ucp_worker_h worker,
+                          const ucp_ep_config_key_t *ep_config_key,
+                          ucp_rsc_index_t rsc_index)
+{
+    /* The EP with CM lane has to be connected to remote EP, so prefer native
+     * UCT p2p capability. */
+    return ucp_ep_config_key_has_cm_lane(ep_config_key) ?
+           ucp_worker_is_tl_p2p(worker, rsc_index) :
+           !ucp_worker_is_tl_2iface(worker, rsc_index);
 }
 
 #endif

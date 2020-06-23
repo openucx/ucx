@@ -1454,7 +1454,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         rsc_index = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
             config->md_index[lane] = context->tl_rscs[rsc_index].md_index;
-            if (ucp_worker_is_tl_p2p(worker, rsc_index)) {
+            if (ucp_ep_config_connect_p2p(worker, &config->key, rsc_index)) {
                 config->p2p_lanes |= UCS_BIT(lane);
             }
         } else {
