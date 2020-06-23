@@ -124,7 +124,13 @@ struct ucs_rcache_region {
     ucs_status_t           status;   /**< Current status code */
     uint8_t                prot;     /**< Protection bits */
     uint16_t               flags;    /**< Status flags. Protected by page table lock. */
-    uint64_t               priv;     /**< Used internally */
+    union {
+        uint64_t           priv;     /**< Used internally */
+        unsigned long     *pfn;      /**< Pointer to PFN array. In case if requested 
+                                          evaluation more than 1 page - PFN array is
+                                          allocated, if 1 page requested - used
+                                          in-place priv value. */
+    };
 };
 
 

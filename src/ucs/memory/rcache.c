@@ -42,6 +42,8 @@
 
 #define ucs_rcache_region_pfn(_region) \
     ((_region)->priv)
+#define ucs_rcache_region_pfn_ptr(_region) \
+    ((_region)->pfn)
 
 
 enum {
@@ -68,6 +70,12 @@ typedef struct ucs_rcache_inv_entry {
     ucs_pgt_addr_t           start;
     ucs_pgt_addr_t           end;
 } ucs_rcache_inv_entry_t;
+
+
+typedef struct {
+    ucs_rcache_t        *rcache;
+    ucs_rcache_region_t *region;
+} ucs_rcache_region_validate_pfn_t;
 
 
 #ifdef ENABLE_STATS
@@ -185,23 +193,73 @@ static ucs_mpool_ops_t ucs_rcache_mp_ops = {
     .obj_cleanup   = NULL
 };
 
+static unsigned ucs_rcache_region_page_count(ucs_rcache_region_t *region)
+{
+    size_t page_size = ucs_get_page_size();
+
+    return (ucs_align_up(region->super.end, page_size) -
+            ucs_align_down(region->super.start, page_size)) /
+            ucs_get_page_size();
+}
+
+static void ucs_rcache_validate_pfn(ucs_rcache_t *rcache,
+                                    ucs_rcache_region_t *region,
+                                    unsigned page_num,
+                                    unsigned long region_pfn,
+                                    unsigned long actual_pfn)
+{
+    if (region_pfn != actual_pfn) {
+        ucs_rcache_region_error(rcache, region, "pfn check failed");
+        ucs_fatal("%s: page at virtual address 0x%lx moved from pfn 0x%lx to pfn 0x%lx",
+                  rcache->name,
+                  region->super.start + (page_num * ucs_get_page_size()),
+                  region_pfn, actual_pfn);
+    }
+}
+
+static void ucs_rcache_region_validate_pfn_cb(unsigned page_num,
+                                              unsigned long pfn,
+                                              void *ctx)
+{
+    ucs_rcache_region_validate_pfn_t *data = (ucs_rcache_region_validate_pfn_t*)ctx;
+
+    ucs_rcache_validate_pfn(data->rcache, data->region, page_num,
+                            ucs_rcache_region_pfn_ptr(data->region)[page_num],
+                            pfn);
+}
+
 /* Lock must be held for read */
 static void ucs_rcache_region_validate_pfn(ucs_rcache_t *rcache,
                                            ucs_rcache_region_t *region)
 {
     unsigned long region_pfn, actual_pfn;
+    unsigned page_count;
+    ucs_rcache_region_validate_pfn_t ctx;
+    ucs_status_t status;
 
-    if (!ucs_unlikely(ucs_global_opts.rcache_check_pfn)) {
+    if (ucs_global_opts.rcache_check_pfn == 0) {
         return;
     }
 
-    region_pfn = ucs_rcache_region_pfn(region);
-    actual_pfn = ucs_sys_get_pfn(region->super.start);
-    if (region_pfn != actual_pfn) {
-        ucs_rcache_region_error(rcache, region, "pfn check failed");
-        ucs_fatal("%s: page at virtual address 0x%lx moved from pfn 0x%lx to pfn 0x%lx",
-                  rcache->name, region->super.start, region_pfn, actual_pfn);
-    } else {
+    if (ucs_global_opts.rcache_check_pfn == 1) {
+        /* in case if only 1 page to check - save PFN value in-place
+           in priv section */
+        region_pfn = ucs_rcache_region_pfn(region);
+        ucs_sys_get_pfn(region->super.start, 1, &actual_pfn);
+        ucs_rcache_validate_pfn(rcache, region, 0, region_pfn, actual_pfn);
+        status = UCS_OK;
+        goto out;
+    }
+
+    page_count = ucs_min(ucs_global_opts.rcache_check_pfn,
+                         ucs_rcache_region_page_count(region));
+    ctx.rcache = rcache;
+    ctx.region = region;
+    status     = ucs_sys_enum_pfn(region->super.start, page_count,
+                                  ucs_rcache_region_validate_pfn_cb, &ctx);
+
+out:
+    if (status == UCS_OK) {
         ucs_rcache_region_trace(rcache, region, "pfn ok");
     }
 }
@@ -238,6 +296,10 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
         UCS_PROFILE_CODE("mem_dereg") {
             rcache->params.ops->mem_dereg(rcache->params.context, rcache, region);
         }
+    }
+
+    if (ucs_global_opts.rcache_check_pfn > 1) {
+        ucs_free(ucs_rcache_region_pfn_ptr(region));
     }
 
     ucs_free(region);
@@ -545,6 +607,39 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
     return UCS_OK;
 }
 
+static ucs_status_t ucs_rcache_fill_pfn(ucs_rcache_region_t *region)
+{
+    unsigned page_count;
+    ucs_status_t status;
+
+    if (ucs_global_opts.rcache_check_pfn == 0) {
+        ucs_rcache_region_pfn(region) = 0;
+        return UCS_OK;
+    }
+
+    if (ucs_global_opts.rcache_check_pfn == 1) {
+        ucs_sys_get_pfn(region->super.start, 1, &ucs_rcache_region_pfn(region));
+        return UCS_OK;
+    }
+
+    page_count = ucs_min(ucs_rcache_region_page_count(region),
+                         ucs_global_opts.rcache_check_pfn);
+    ucs_rcache_region_pfn_ptr(region) =
+        ucs_malloc(sizeof(*ucs_rcache_region_pfn_ptr(region)) * page_count,
+                   "pfn list");
+    if (ucs_rcache_region_pfn_ptr(region) == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    status =  ucs_sys_get_pfn(region->super.start, page_count,
+                              ucs_rcache_region_pfn_ptr(region));
+    if (status != UCS_OK) {
+        ucs_free(ucs_rcache_region_pfn_ptr(region));
+    }
+
+    return status;
+}
+
 static ucs_status_t
 ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
                          int prot, void *arg, ucs_rcache_region_t **region_p)
@@ -645,10 +740,11 @@ retry:
     region->flags   |= UCS_RCACHE_REGION_FLAG_REGISTERED;
     region->refcount = 2; /* Page-table + user */
 
-    if (ucs_global_opts.rcache_check_pfn) {
-        ucs_rcache_region_pfn(region) = ucs_sys_get_pfn(region->super.start);
-    } else {
-        ucs_rcache_region_pfn(region) = 0;
+    status = ucs_rcache_fill_pfn(region);
+    if (status != UCS_OK) {
+        ucs_error("failed to allocate pfn list");
+        ucs_free(region);
+        goto out_unlock;
     }
 
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_MISSES, 1);
