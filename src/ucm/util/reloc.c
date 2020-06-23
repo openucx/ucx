@@ -154,15 +154,15 @@ static ucs_status_t ucm_reloc_get_aux_phsize(int *phsize_p)
         }
     } while ((count > 0) && (phsize == 0));
 
-    if (!found) {
-        ucm_error("AT_PHENT entry not found in %s", proc_auxv_filename);
-        return UCS_ERR_NO_ELEM;
-    }
-
     if (RUNNING_ON_VALGRIND) {
         ucm_reloc_file_lock(fd, F_UNLCK);
     }
     close(fd);
+
+    if (!found) {
+        ucm_error("AT_PHENT entry not found in %s", proc_auxv_filename);
+        return UCS_ERR_NO_ELEM;
+    }
 
     *phsize_p = phsize;
     return UCS_OK;
@@ -335,16 +335,20 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
     num_symbols = 0;
 
     /* populate .got.plt */
-    jmprel       = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_JMPREL);
-    pltrelsz     = ucm_reloc_get_entry(dlpi_addr, dphdr, DT_PLTRELSZ);
-    num_symbols += ucm_dl_populate_symbols(dl_info, dlpi_addr, jmprel, pltrelsz,
-                                           strtab, symtab, dl_name);
+    jmprel = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_JMPREL);
+    if (jmprel != NULL) {
+        pltrelsz     = ucm_reloc_get_entry(dlpi_addr, dphdr, DT_PLTRELSZ);
+        num_symbols += ucm_dl_populate_symbols(dl_info, dlpi_addr, jmprel,
+                                               pltrelsz, strtab, symtab, dl_name);
+    }
 
     /* populate .got */
-    rela         = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_RELA);
-    relasz       = ucm_reloc_get_entry(dlpi_addr, dphdr, DT_RELASZ);
-    num_symbols += ucm_dl_populate_symbols(dl_info, dlpi_addr, rela, relasz,
-                                           strtab, symtab, dl_name);
+    rela = (void*)ucm_reloc_get_entry(dlpi_addr, dphdr, DT_RELA);
+    if (rela != NULL) {
+        relasz       = ucm_reloc_get_entry(dlpi_addr, dphdr, DT_RELASZ);
+        num_symbols += ucm_dl_populate_symbols(dl_info, dlpi_addr, rela, relasz,
+                                               strtab, symtab, dl_name);
+    }
 
     ucm_debug("added dl_info %p for %s with %u symbols", dl_info,
               ucs_basename(dl_name), num_symbols);
