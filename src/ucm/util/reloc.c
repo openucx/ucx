@@ -279,6 +279,7 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
                                           const ucm_dl_info_t **dl_info_p)
 {
     uintptr_t dlpi_addr = phdr_info->dlpi_addr;
+    unsigned UCS_V_UNUSED num_symbols;
     void *jmprel, *rela, *strtab;
     size_t pltrelsz, relasz;
     ucm_dl_info_t *dl_info;
@@ -286,7 +287,6 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
     ElfW(Phdr) *dphdr;
     ElfW(Sym) *symtab;
     khiter_t khiter;
-    unsigned num_symbols;
     int i, ret;
     int phsize;
 
