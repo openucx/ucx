@@ -334,7 +334,7 @@ typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
     ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
-    ucp_ep_conn_sn_t              conn_sn;       /* Sequence number for remote connection */
+    ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */
 
@@ -368,6 +368,16 @@ typedef struct {
     ucp_request_t             *req;             /* Flush request which is
                                                    used in close protocol */
 } ucp_ep_close_proto_req_t;
+
+
+/**
+ * Object that represents matching with remote endpoints
+ */
+typedef struct {
+    uint64_t                  dest_uuid;         /* Destination worker UUID */
+    ucs_conn_match_elem_t     conn_match;        /* Connection matching object */
+} ucp_ep_match_t;
+
 
 /*
  * Endpoint extension for generic non fast-path data
