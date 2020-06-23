@@ -83,6 +83,7 @@ noinst_HEADERS = \
 	datastruct/queue.h \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
+	datastruct/conn_match.h \
 	debug/assert.h \
 	debug/debug.h \
 	debug/log.h \
@@ -133,6 +134,7 @@ libucs_la_SOURCES = \
 	datastruct/strided_alloc.c \
 	datastruct/string_buffer.c \
 	datastruct/string_set.c \
+	datastruct/conn_match.c \
 	debug/assert.c \
 	debug/debug.c \
 	debug/log.c \
