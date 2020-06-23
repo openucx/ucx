@@ -433,42 +433,74 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
            (ifa_addr->sa_family == AF_INET6);
 }
 
+static std::vector<std::string> read_dir(const std::string& path)
+{
+    std::vector<std::string> result;
+    struct dirent *entry;
+    DIR *dir;
+
+    dir = opendir(path.c_str());
+    if (dir == NULL) {
+        goto out_close;
+    }
+
+    entry = readdir(dir);
+    while (entry != NULL) {
+        if (entry->d_name[0] != '.') {
+            result.push_back(entry->d_name);
+        }
+        entry = readdir(dir);
+    }
+
+out_close:
+    closedir(dir);
+    return result;
+}
+
 static std::set<std::string> get_all_rdmacm_net_devices()
 {
-#define IB_SYSFS_DIR "/sys/class/infiniband"
+    static const std::string sysfs_ib_dir  = "/sys/class/infiniband";
+    static const std::string sysfs_net_dir = "/sys/class/net";
+    static const std::string ndevs_fmt     = sysfs_ib_dir +
+                                             "/%s/ports/%d/gid_attrs/ndevs/0";
+    static const std::string node_guid_fmt = sysfs_ib_dir + "/%s/node_guid";
     std::set<std::string> devices;
-    struct dirent *entry;
     char dev_name[32];
     char guid_buf[32];
     ssize_t nread;
     int port_num;
-    DIR *dir;
 
-    dir = opendir(IB_SYSFS_DIR);
-    if (dir == NULL) {
-        goto out;
+    std::vector<std::string> ndevs = read_dir(sysfs_net_dir);
+
+    /* Enumerate IPoIB and RoCE devices which have direct mapping to an RDMA
+     * device.
+     */
+    for (std::vector<std::string>::iterator iter = ndevs.begin();
+         iter != ndevs.end(); ++iter) {
+        std::string infiniband_dir = sysfs_net_dir + "/" + *iter +
+                                     "/device/infiniband";
+        if (!read_dir(infiniband_dir).empty()) {
+            devices.insert(*iter);
+        }
     }
 
-    /* read IB device name */
-    for (;;) {
-        entry = readdir(dir);
-        if (entry == NULL) {
-            goto out_close;
-        } else if (entry->d_name[0] == '.') {
-            continue;
-        }
+    /* Enumerate all RoCE devices, including bonding (RoCE LAG). Some devices
+     * can be found again, but std::set will eliminate the duplicates.
+      */
+    std::vector<std::string> rdma_devs = read_dir(sysfs_ib_dir);
+    for (std::vector<std::string>::iterator iter = rdma_devs.begin();
+         iter != rdma_devs.end(); ++iter) {
 
         for (port_num = 1; port_num <= 2; ++port_num) {
-            nread = ucs_read_file_str(dev_name, sizeof(dev_name), 1,
-                                      IB_SYSFS_DIR "/%s/ports/%d/gid_attrs/ndevs/0",
-                                      entry->d_name, port_num);
+            nread = ucs_read_file_str(dev_name, sizeof(dev_name), 0,
+                                      ndevs_fmt.c_str(), iter->c_str(), port_num);
             if (nread <= 0) {
                 continue;
             }
 
             memset(guid_buf, 0, sizeof(guid_buf));
-            nread = ucs_read_file_str(guid_buf, sizeof(guid_buf), 1,
-                                      IB_SYSFS_DIR "/%s/node_guid", entry->d_name);
+            nread = ucs_read_file_str(guid_buf, sizeof(guid_buf), 0,
+                                      node_guid_fmt.c_str(), iter->c_str());
             if (nread <= 0) {
                 continue;
             }
@@ -480,9 +512,6 @@ static std::set<std::string> get_all_rdmacm_net_devices()
         }
     }
 
-out_close:
-    closedir(dir);
-out:
     return devices;
 }
 
