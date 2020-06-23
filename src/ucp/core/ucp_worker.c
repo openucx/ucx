@@ -609,6 +609,120 @@ out:
     return ret_status;
 }
 
+void ucp_worker_ep_match_get_addr(const ucs_conn_match_t *conn_match,
+                                  ucs_conn_match_addr_t *addr_p)
+{
+    const ucp_ep_ext_gen_t *ep_ext = ucs_container_of(conn_match,
+                                                      ucp_ep_ext_gen_t,
+                                                      ep_match.conn_match);
+
+    addr_p->addr   = (void*)&ep_ext->ep_match.dest_uuid;
+    addr_p->length = sizeof(ep_ext->ep_match.dest_uuid);
+}
+
+ucs_conn_sn_t ucp_worker_ep_match_get_conn_sn(const ucs_conn_match_t *conn_match)
+{
+    return ucp_ep_from_ext_gen((ucp_ep_ext_gen_t*)
+                               ucs_container_of(conn_match,
+                                                ucp_ep_ext_gen_t,
+                                                ep_match.conn_match))->conn_sn;
+}
+
+const char* ucp_worker_ep_match_addr_str(const ucs_conn_match_addr_t *addr,
+                                         char *str, size_t max_size)
+{
+    size_t required_size = snprintf(NULL, 0, "%zu", *((uint64_t*)addr->addr));
+
+    if (max_size < required_size) {
+        ucs_fatal("size of the string (%zu) is not enough to be filled"
+                  " by the address (%zu), required - %zu",
+                  max_size, *((uint64_t*)addr->addr), required_size);
+    }
+
+    ucs_snprintf_zero(str, max_size, "%zu", *((uint64_t*)addr->addr));
+    return str;
+}
+
+const static ucs_conn_match_ops_t ucp_worker_ep_match_ops = {
+    .get_addr    = ucp_worker_ep_match_get_addr,
+    .get_conn_sn = ucp_worker_ep_match_get_conn_sn,
+    .addr_str    = ucp_worker_ep_match_addr_str
+};
+
+ucs_conn_sn_t ucp_worker_ep_match_get_sn(ucp_worker_h worker,
+                                         uint64_t dest_uuid)
+{
+    ucs_conn_match_addr_t conn_match_addr;
+
+    conn_match_addr.addr   = &dest_uuid;
+    conn_match_addr.length = sizeof(dest_uuid);
+
+    return ucs_conn_match_get_next_sn(&worker->conn_match_ctx,
+                                      &conn_match_addr);
+}
+
+void ucp_worker_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep,
+                                uint64_t dest_uuid, ucs_conn_sn_t conn_sn,
+                                int is_exp)
+{
+    ucs_conn_match_addr_t conn_match_addr;
+
+    conn_match_addr.addr   = &dest_uuid;
+    conn_match_addr.length = sizeof(dest_uuid);
+
+    ucs_assert(!is_exp || !(ep->flags & UCP_EP_FLAG_DEST_EP));
+    /* NOTE: protect union */
+    ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
+                              UCP_EP_FLAG_FLUSH_STATE_VALID |
+                              UCP_EP_FLAG_LISTENER)));
+    ep->flags                             |= UCP_EP_FLAG_ON_MATCH_CTX;
+    ucp_ep_ext_gen(ep)->ep_match.dest_uuid = dest_uuid;
+
+    ucs_conn_match_insert(&worker->conn_match_ctx, &conn_match_addr, conn_sn,
+                          &ucp_ep_ext_gen(ep)->ep_match.conn_match, is_exp);
+}
+
+ucp_ep_h ucp_worker_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
+                                      ucs_conn_sn_t conn_sn, int is_exp)
+{
+    ucp_ep_flags_t UCS_V_UNUSED exp_ep_flags = UCP_EP_FLAG_ON_MATCH_CTX |
+                                              (!is_exp ? UCP_EP_FLAG_DEST_EP : 0);
+    ucs_conn_match_addr_t conn_match_addr;
+    ucs_conn_match_t *conn_match;
+    ucp_ep_h ep;
+
+    conn_match_addr.addr   = &dest_uuid;
+    conn_match_addr.length = sizeof(dest_uuid);
+
+    conn_match = ucs_conn_match_retrieve(&worker->conn_match_ctx,
+                                         &conn_match_addr, conn_sn, is_exp);
+    if (conn_match == NULL) {
+        return NULL;
+    }
+
+    ep = ucp_ep_from_ext_gen(ucs_container_of(conn_match, ucp_ep_ext_gen_t,
+                                              ep_match.conn_match));
+
+    ucs_assertv(ucs_test_all_flags(ep->flags, exp_ep_flags),
+                "ep=%p flags=0x%x exp_flags=0x%x", ep, ep->flags,
+                exp_ep_flags);
+    ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
+    return ep;
+}
+
+void ucp_worker_ep_match_remove_ep(ucp_worker_h worker, ucp_ep_h ep)
+{
+    if (!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
+        return;
+    }
+
+    ucs_conn_match_remove_conn(&worker->conn_match_ctx,
+                               &ucp_ep_ext_gen(ep)->ep_match.conn_match,
+                               !(ep->flags & UCP_EP_FLAG_DEST_EP));
+
+    ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
+}
+
 static ucs_status_t
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
@@ -1779,7 +1893,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
-    ucp_ep_match_init(&worker->ep_match_ctx);
+    ucs_conn_match_init(&worker->conn_match_ctx, &ucp_worker_ep_match_ops);
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
@@ -1975,7 +2089,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
-    ucp_ep_match_cleanup(&worker->ep_match_ctx);
+    ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);

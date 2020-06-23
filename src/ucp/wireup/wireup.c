@@ -437,8 +437,9 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         }
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     } else {
-        ep = ucp_ep_match_retrieve_exp(&worker->ep_match_ctx, remote_uuid,
-                                       msg->conn_sn ^ (remote_uuid == worker->uuid));
+        ep = ucp_worker_ep_match_retrieve(worker, remote_uuid,
+                                          msg->conn_sn ^
+                                          (remote_uuid == worker->uuid), 1);
         if (ep == NULL) {
             /* Create a new endpoint if does not exist */
             status = ucp_worker_create_ep(worker, remote_address->name,
@@ -449,7 +450,8 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
             /* add internal endpoint to hash */
             ep->conn_sn = msg->conn_sn;
-            ucp_ep_match_insert_unexp(&worker->ep_match_ctx, remote_uuid, ep);
+            ucp_worker_ep_match_insert(worker, ep, remote_uuid,
+                                       ep->conn_sn, 0);
         } else {
             ucp_ep_flush_state_reset(ep);
         }
@@ -578,7 +580,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     ucs_trace("ep %p: got wireup reply src_ep 0x%lx dst_ep 0x%lx sn %d", ep,
               msg->src_ep_ptr, msg->dest_ep_ptr, msg->conn_sn);
 
-    ucp_ep_match_remove_ep(&worker->ep_match_ctx, ep);
+    ucp_worker_ep_match_remove_ep(worker, ep);
     ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
     ucp_ep_flush_state_reset(ep);
 
