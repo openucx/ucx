@@ -139,10 +139,10 @@ static ucs_status_t ucm_reloc_get_aux_phsize(int *phsize_p)
         }
 
         count = nread / sizeof(buffer[0]);
-        for (auxv = buffer; (auxv < buffer + count) && (auxv->type != AT_NULL);
-                        ++auxv)
+        for (auxv = buffer; (auxv < (buffer + count)) && (auxv->type != AT_NULL);
+             ++auxv)
         {
-            if (auxv->type == AT_PHENT) {
+            if ((auxv->type == AT_PHENT) && (auxv->value > 0)) {
                 found  = 1;
                 phsize = auxv->value;
                 ucm_debug("read phent from %s: %d", proc_auxv_filename, phsize);
@@ -152,7 +152,7 @@ static ucs_status_t ucm_reloc_get_aux_phsize(int *phsize_p)
                 break;
             }
         }
-    } while ((count > 0) && (phsize == 0));
+    } while ((count > 0) && !found);
 
     if (RUNNING_ON_VALGRIND) {
         ucm_reloc_file_lock(fd, F_UNLCK);
@@ -231,7 +231,7 @@ ucm_reloc_dl_apply_patch(const ucm_dl_info_t *dl_info, const char *dl_basename,
      * throughout life time of the process */
     if (store_prev) {
         patch->prev_value = prev_value;
-        ucm_debug("'%s' prev_value is %p'", patch->symbol, prev_value);
+        ucm_debug("'%s' prev_value is %p", patch->symbol, prev_value);
     }
 
     return UCS_OK;
@@ -583,7 +583,7 @@ out_apply_patches:
      * loaded due to dependencies.
      */
 
-    ucm_trace("dlopen(%s) = %p", filename ,handle);
+    ucm_trace("dlopen(%s) = %p", filename, handle);
 
     pthread_mutex_lock(&ucm_reloc_patch_list_lock);
     ucs_list_for_each(patch, &ucm_reloc_patch_list, list) {
@@ -612,7 +612,7 @@ static int ucm_dlclose(void *handle)
     } else {
         /*
          * Cleanup the cached information about the library.
-         * NOTE: They library may not actually be unloaded (if its reference
+         * NOTE: The library may not actually be unloaded (if its reference
          * count is > 1). Since we have no safe way to know it, we remove the
          * cached information anyway, and it may be re-added on the next call to
          * ucm_reloc_apply_patch().
@@ -640,7 +640,7 @@ static void ucm_reloc_get_orig_dl_funcs()
 
     /* pointer to original dlopen() */
     if (ucm_reloc_orig_dlopen == NULL) {
-        patch = &ucm_dlopen_reloc_patches[0];
+        patch                 = &ucm_dlopen_reloc_patches[0];
         ucm_reloc_orig_dlopen = (ucm_reloc_dlopen_func_t)
                                 ucm_reloc_get_orig(patch->symbol, patch->value);
         if (ucm_reloc_orig_dlopen == NULL) {
@@ -650,7 +650,7 @@ static void ucm_reloc_get_orig_dl_funcs()
 
     /* pointer to original dlclose() */
     if (ucm_reloc_orig_dlclose == NULL) {
-        patch = &ucm_dlopen_reloc_patches[1];
+        patch                  = &ucm_dlopen_reloc_patches[1];
         ucm_reloc_orig_dlclose = (ucm_reloc_dlclose_func_t)
                                  ucm_reloc_get_orig(patch->symbol, patch->value);
         if (ucm_reloc_orig_dlclose == NULL) {
