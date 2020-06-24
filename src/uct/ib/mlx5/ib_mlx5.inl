@@ -162,7 +162,7 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
     ptrdiff_t n;
 
     ucs_assert(dest != NULL);
-    ucs_assert(src != NULL);
+    ucs_assert((src != NULL) || (length == 0));
 
     if (UCS_PTR_BYTE_OFFSET(dest, length) <= wq->qend) {
         /* cppcheck-suppress nullPointer */
