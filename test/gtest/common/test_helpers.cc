@@ -492,14 +492,14 @@ static std::set<std::string> get_all_rdmacm_net_devices()
          iter != rdma_devs.end(); ++iter) {
 
         for (port_num = 1; port_num <= 2; ++port_num) {
-            nread = ucs_read_file_str(dev_name, sizeof(dev_name), 0,
+            nread = ucs_read_file_str(dev_name, sizeof(dev_name), 1,
                                       ndevs_fmt.c_str(), iter->c_str(), port_num);
             if (nread <= 0) {
                 continue;
             }
 
             memset(guid_buf, 0, sizeof(guid_buf));
-            nread = ucs_read_file_str(guid_buf, sizeof(guid_buf), 0,
+            nread = ucs_read_file_str(guid_buf, sizeof(guid_buf), 1,
                                       node_guid_fmt.c_str(), iter->c_str());
             if (nread <= 0) {
                 continue;
