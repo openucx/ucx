@@ -108,9 +108,9 @@ void uct_rdmacm_cm_ep_set_failed(uct_rdmacm_cm_ep_t *cep,
 
 ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
 {
-    uct_rdmacm_cm_ep_t *cep      = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
-    struct sockaddr *remote_addr = rdma_get_peer_addr(cep->id);
-    uct_rdmacm_cm_t *rdmacm_cm   = uct_rdmacm_cm_ep_get_cm(cep);
+    uct_rdmacm_cm_ep_t *cep                 = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
+    struct sockaddr *remote_addr            = rdma_get_peer_addr(cep->id);
+    uct_rdmacm_cm_t UCS_V_UNUSED *rdmacm_cm = uct_rdmacm_cm_ep_get_cm(cep);
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 

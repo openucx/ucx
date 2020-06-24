@@ -370,8 +370,10 @@ ucp_request_send_state_advance(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
         ucs_assert(new_dt_state != NULL);
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
+            /* cppcheck-suppress nullPointer */
             req->send.state.dt.offset = new_dt_state->offset;
         } else {
+            /* cppcheck-suppress nullPointer */
             req->send.state.dt        = *new_dt_state;
         }
         break;

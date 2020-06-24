@@ -87,6 +87,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
 
     UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
+    /* cppcheck-suppress syntaxError */
     UCT_SKIP_ZERO_LENGTH(sge_cnt);
     UCT_RC_VERBS_FILL_RDMA_WR_IOV(wr, wr.opcode, (enum ibv_wr_opcode)opcode,
                                   sge, sge_cnt, remote_addr, rkey);

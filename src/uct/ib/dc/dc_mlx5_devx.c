@@ -128,6 +128,7 @@ uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in_2rts, qpc);
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
+    /* cppcheck-suppress internalAstError */
     UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max, ucs_ilog2_or0(iface->super.super.config.max_rd_atomic));
     UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, iface->super.super.config.retry_cnt);
     UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.super.config.rnr_retry);
