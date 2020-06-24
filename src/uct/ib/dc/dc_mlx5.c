@@ -887,6 +887,12 @@ ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_c
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
+
+    status = uct_rc_iface_fence_relaxed_order(tl_iface);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = uct_dc_mlx5_iface_flush_dcis(iface);
     if (status == UCS_OK) {
         UCT_TL_IFACE_STAT_FLUSH(&iface->super.super.super.super);

@@ -425,7 +425,6 @@ typedef struct uct_rc_mlx5_iface_common {
 #endif
     struct {
         uint8_t                        atomic_fence_flag;
-        uint8_t                        put_fence_flag;
         ucs_ternary_value_t            cyclic_srq_enable;
     } config;
     UCS_STATS_NODE_DECLARE(stats)

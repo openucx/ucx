@@ -448,8 +448,14 @@ static inline uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
     if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
         return 0;
     }
+#elif HAVE_DEVX
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
+        return 0;
+    }
+#else
+    return 0;
 #endif
-#if HAVE_EXP_UMR || HAVE_DEVX
+
     /* Generate atomic UMR id. We want umrs for same virtual addresses to have
      * different ids across processes.
      *
@@ -457,9 +463,6 @@ static inline uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
      * job will have consecutive PIDs. For example MPI ranks, slurm spawned tasks...
      */
     return getpid() % 256;
-#else
-    return 0;
-#endif
 }
 
 static inline uint8_t uct_ib_mlx5_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
