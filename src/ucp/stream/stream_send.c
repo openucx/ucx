@@ -139,6 +139,14 @@ out:
     return ret;
 }
 
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
+                 (ep, buffer, count, param),
+                 ucp_ep_h ep, const void *buffer, size_t count,
+                 const ucp_request_param_t *param)
+{
+    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
+}
+
 static ucs_status_t ucp_stream_contig_am_short(uct_pending_req_t *self)
 {
     ucp_request_t  *req   = ucs_container_of(self, ucp_request_t, send.uct);

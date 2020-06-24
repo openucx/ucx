@@ -1240,8 +1240,9 @@ typedef struct {
      * send or receive operation is completed.
      */
     union {
-        ucp_send_nbx_callback_t     send;
-        ucp_tag_recv_nbx_callback_t recv;
+        ucp_send_nbx_callback_t        send;
+        ucp_tag_recv_nbx_callback_t    recv;
+        ucp_stream_recv_nbx_callback_t recv_stream;
     }              cb;
 
     /**
@@ -2543,6 +2544,36 @@ ucs_status_ptr_t ucp_stream_send_nb(ucp_ep_h ep, const void *buffer, size_t coun
 
 /**
  * @ingroup UCP_COMM
+ * @brief Non-blocking stream send operation.
+ *
+ * This routine sends data that is described by the local address @a buffer,
+ * size @a count object to the destination endpoint @a ep. The routine is
+ * non-blocking and therefore returns immediately, however the actual send
+ * operation may be delayed. The send operation is considered completed when
+ * it is safe to reuse the source @e buffer. If the send operation is
+ * completed immediately the routine returns UCS_OK.
+ *
+ * @note The user should not modify any part of the @a buffer after this
+ *       operation is called, until the operation completes.
+ *
+ * @param [in]  ep          Destination endpoint handle.
+ * @param [in]  buffer      Pointer to the message buffer (payload).
+ * @param [in]  count       Number of elements to send.
+ * @param [in]  param       Operation parameters, see @ref ucp_request_param_t.
+ *
+ * @return NULL                 - The send operation was completed immediately.
+ * @return UCS_PTR_IS_ERR(_ptr) - The send operation failed.
+ * @return otherwise            - Operation was scheduled for send and can be
+ *                                completed at any point in time. The request
+ *                                handle is returned to the application in
+ *                                order to track progress of the message.
+ */
+ucs_status_ptr_t ucp_stream_send_nbx(ucp_ep_h ep, const void *buffer, size_t count,
+                                     const ucp_request_param_t *param);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Non-blocking tagged-send operations
  *
  * This routine sends a messages that is described by the local address @a
@@ -2826,6 +2857,45 @@ ucs_status_ptr_t ucp_stream_recv_nb(ucp_ep_h ep, void *buffer, size_t count,
 
 /**
  * @ingroup UCP_COMM
+ * @brief Non-blocking stream receive operation of structured data into a
+ *        user-supplied buffer.
+ *
+ * This routine receives data that is described by the local address @a buffer,
+ * size @a count object on the endpoint @a ep. The routine is non-blocking
+ * and therefore returns immediately. The receive operation is considered
+ * complete when the message is delivered to the buffer. If the receive
+ * operation cannot be started, the routine returns an error.
+ *
+ * @param [in]     ep       UCP endpoint that is used for the receive operation.
+ * @param [in]     buffer   Pointer to the buffer that will receive the data.
+ * @param [in]     count    Number of elements to receive into @a buffer.
+ * @param [out]    length   Size of the received data in bytes. The value is
+ *                          valid only if return code is NULL.
+ * @param [in]     param    Operation parameters, see @ref ucp_request_param_t.
+ *                          This operation supports specific flags, which can be
+ *                          passed in @a param by @ref ucp_request_param_t.flags.
+ *                          The exact set of flags is defined by
+ *                          @ref ucp_stream_recv_flags_t.
+ *
+ * @return NULL                 - The receive operation was completed
+ *                                immediately. In this case the value pointed by
+ *                                @a length is updated by the size of received
+ *                                data.
+ * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
+ * @return otherwise            - Operation was scheduled for receive. A request
+ *                                handle is returned to the application in order
+ *                                to track progress of the operation.
+ *
+ * @note The amount of data received, in bytes, is always an integral multiple
+ *       of the @a datatype size.
+ */
+ucs_status_ptr_t ucp_stream_recv_nbx(ucp_ep_h ep, void *buffer, size_t count,
+                                     size_t *length,
+                                     const ucp_request_param_t *param);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Non-blocking stream receive operation of unstructured data into
  *        a UCP-supplied buffer.
  *
@@ -2863,11 +2933,11 @@ ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
  * @ingroup UCP_COMM
  * @brief Non-blocking tagged-receive operation.
  *
- * This routine receives a messages that is described by the local address @a
- * buffer, size @a count, and @a datatype object on the @a worker.  The tag
+ * This routine receives a message that is described by the local address @a
+ * buffer, size @a count, and @a datatype object on the @a worker. The tag
  * value of the receive message has to match the @a tag and @a tag_mask values,
- * where the @a tag_mask indicates what bits of the tag have to be matched. The
- * routine is a non-blocking and therefore returns immediately. The receive
+ * where the @a tag_mask indicates which bits of the tag have to be matched. The
+ * routine is non-blocking and therefore returns immediately. The receive
  * operation is considered completed when the message is delivered to the @a
  * buffer.  In order to notify the application about completion of the receive
  * operation the UCP library will invoke the call-back @a cb when the received
@@ -2907,10 +2977,10 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * @brief Non-blocking tagged-receive operation.
  *
  * This routine receives a message that is described by the local address @a
- * buffer, size @a count, and @a datatype object on the @a worker.  The tag
+ * buffer, size @a count, and @a datatype object on the @a worker. The tag
  * value of the receive message has to match the @a tag and @a tag_mask values,
- * where the @a tag_mask indicates what bits of the tag have to be matched. The
- * routine is a non-blocking and therefore returns immediately. The receive
+ * where the @a tag_mask indicates which bits of the tag have to be matched. The
+ * routine is non-blocking and therefore returns immediately. The receive
  * operation is considered completed when the message is delivered to the @a
  * buffer. In order to monitor completion of the operation
  * @ref ucp_request_check_status or @ref ucp_tag_recv_request_test should be
@@ -3025,16 +3095,16 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  * @ingroup UCP_COMM
  * @brief Non-blocking receive operation for a probed message.
  *
- * This routine receives a messages that is described by the local address @a
+ * This routine receives a message that is described by the local address @a
  * buffer, size @a count, @a message handle, and @a datatype object on the @a
- * worker.  The @a message handle can be obtain by calling the @ref
+ * worker. The @a message handle can be obtained by calling the @ref
  * ucp_tag_probe_nb "ucp_tag_probe_nb()" routine.  @ref ucp_tag_msg_recv_nb
- * "ucp_tag_msg_recv_nb()" routine is a non-blocking and therefore returns
+ * "ucp_tag_msg_recv_nb()" routine is non-blocking and therefore returns
  * immediately. The receive operation is considered completed when the message
- * is delivered to the @a buffer.  In order to notify the application about
+ * is delivered to the @a buffer. In order to notify the application about
  * completion of the receive operation the UCP library will invoke the
  * call-back @a cb when the received message is in the receive buffer and ready
- * for application access.  If the receive operation cannot be stated the
+ * for application access. If the receive operation cannot be started the
  * routine returns an error.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
@@ -3067,7 +3137,7 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
  * This routine initiates a storage of contiguous block of data that is
  * described by the local address @a buffer in the remote contiguous memory
  * region described by @a remote_addr address and the @ref ucp_rkey_h "memory
- * handle" @a rkey.  The routine returns immediately and @b does @b not
+ * handle" @a rkey. The routine returns immediately and @b does @b not
  * guarantee re-usability of the source address @e buffer. If the operation is
  * completed immediately the routine return UCS_OK, otherwise UCS_INPROGRESS
  * or an error is returned to user.

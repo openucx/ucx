@@ -435,6 +435,28 @@ typedef void (*ucp_stream_recv_callback_t)(void *request, ucs_status_t status,
 
 /**
  * @ingroup UCP_COMM
+ * @brief Completion callback for non-blocking stream receives
+ * ucp_stream_recv_nbx call.
+ *
+ * This callback routine is invoked whenever the @ref ucp_stream_recv_nbx
+ * "receive operation" is completed and the data is ready in the receive buffer.
+ *
+ * @param [in]  request   The completed receive request.
+ * @param [in]  status    Completion status. If the send operation was completed
+ *                        successfully UCS_OK is returned. Otherwise,
+ *                        an @ref ucs_status_t "error status" is returned.
+ * @param [in]  length    The size of the received data in bytes, always on the
+ *                        boundary of base datatype size. The value is valid
+ *                        only if the status is UCS_OK.
+ * @param [in]  user_data User data passed to "user_data" value,
+ *                        see @ref ucp_request_param_t.
+ */
+typedef void (*ucp_stream_recv_nbx_callback_t)(void *request, ucs_status_t status,
+                                               size_t length, void *user_data);
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Completion callback for non-blocking tag receives.
  *
  * This callback routine is invoked whenever the @ref ucp_tag_recv_nb
