@@ -12,7 +12,7 @@ resources:
       image: ucfconsort.azurecr.io/ucx/centos7:1
       endpoint: ucfconsort_registry
     - container: fedora
-      image: ucfconsort.azurecr.io/ucx/fedora:2
+      image: ucfconsort.azurecr.io/ucx/fedora:3
       endpoint: ucfconsort_registry
 
 stages:
