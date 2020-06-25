@@ -430,20 +430,6 @@ public:
 
 protected:
 
-    void skip_tcp_sockcm() {
-        uct_component_attr_t cmpt_attr;
-        ucs_status_t status;
-
-        cmpt_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME;
-        /* coverity[var_deref_model] */
-        status = uct_component_query(GetParam()->component, &cmpt_attr);
-        ASSERT_UCS_OK(status);
-
-        if (!strcmp(cmpt_attr.name, "tcp")) {
-            UCS_TEST_SKIP_R("tcp cm is not fully implemented");
-        }
-    }
-
     void start_listen(uct_cm_listener_conn_request_callback_t server_conn_req_cb) {
         uct_listener_params_t params;
 
@@ -1428,8 +1414,6 @@ protected:
 
 UCS_TEST_P(test_uct_cm_sockaddr_multiple_cms, server_switch_cm)
 {
-    skip_tcp_sockcm();
-
     listen_and_connect();
 
     wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |

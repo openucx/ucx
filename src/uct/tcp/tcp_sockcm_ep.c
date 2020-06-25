@@ -628,13 +628,6 @@ ucs_status_t uct_tcp_sockcm_ep_set_sockopt(uct_tcp_sockcm_ep_t *ep)
 
 }
 
-static ucs_status_t uct_tcp_sockcm_ep_server_init(uct_tcp_sockcm_ep_t *cep,
-                                                  const uct_ep_params_t *params)
-{
-    cep->state |= UCT_TCP_SOCKCM_EP_ON_SERVER;
-    return UCS_OK;
-}
-
 static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
                                                   const uct_ep_params_t *params)
 {
@@ -701,6 +694,101 @@ err:
     return status;
 }
 
+static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
+                                                    const uct_ep_params_t *params,
+                                                    uct_ep_h *ep_p)
+{
+    uct_tcp_sockcm_t *tcp_sockcm = uct_tcp_sockcm_ep_get_cm(tcp_ep);
+    uct_tcp_sockcm_t *params_tcp_sockcm;
+    ucs_async_context_t *new_async_ctx;
+    ucs_status_t status;
+
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
+        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
+                  params->field_mask);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+    if (params->cm == NULL) {
+        ucs_error("cm cannot be NULL (ep=%p fd=%d)", tcp_ep, tcp_ep->fd);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
+
+    /* check if the server opened this ep, to the client, on a CM that is
+     * different from the one it created its internal ep on earlier, when it
+     * received the connection request from the client (the cm used by its listener) */
+    if (&tcp_sockcm->super != params->cm) {
+        status = ucs_async_remove_handler(tcp_ep->fd, 1);
+        if (status != UCS_OK) {
+            ucs_error("failed to remove fd %d from the async handlers: %s",
+                      tcp_ep->fd, ucs_status_string(status));
+            goto err;
+        }
+    }
+
+    UCS_ASYNC_BLOCK(tcp_sockcm->super.iface.worker->async);
+
+    UCS_CLASS_CLEANUP(uct_cm_base_ep_t, &tcp_ep->super);
+
+    /* set the server's ep to use the cm from params and its iface
+     * (it could be the previous one it had - the one used by the listener or
+     * a new one set by the user) */
+    status = UCS_CLASS_INIT(uct_cm_base_ep_t, &tcp_ep->super, params);
+    if (status != UCS_OK) {
+        ucs_error("failed to initialize a uct_cm_base_ep_t endpoint");
+        goto err_unblock;
+    }
+
+    params_tcp_sockcm = ucs_derived_of(params->cm, uct_tcp_sockcm_t);
+    ucs_assert(uct_tcp_sockcm_ep_get_cm(tcp_ep) == params_tcp_sockcm);
+
+    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER,
+                           tcp_ep->super.server.notify_cb, params->sockaddr_cb_server,
+                           uct_cm_ep_server_conn_notify_callback_t,
+                           ucs_empty_function);
+    if (status != UCS_OK) {
+        goto err_unblock;
+    }
+
+    /* the server's endpoint was already created by the listener, return it */
+    *ep_p          = &tcp_ep->super.super.super;
+    tcp_ep->state |= UCT_TCP_SOCKCM_EP_SERVER_CREATED;
+
+    UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
+
+    if (&tcp_sockcm->super != params->cm) {
+        new_async_ctx = params_tcp_sockcm->super.iface.worker->async;
+        status = ucs_async_set_event_handler(new_async_ctx->mode, tcp_ep->fd,
+                                             UCS_EVENT_SET_EVREAD |
+                                             UCS_EVENT_SET_EVERR,
+                                             uct_tcp_sa_data_handler,
+                                             tcp_ep, new_async_ctx);
+        if (status != UCS_OK) {
+            ucs_error("failed to set event handler (fd %d): %s",
+                      tcp_ep->fd, ucs_status_string(status));
+            goto err;
+        }
+
+        ucs_trace("moved tcp_sockcm ep %p from cm %p to cm %p", tcp_ep,
+                  tcp_sockcm, params_tcp_sockcm);
+    }
+
+    ucs_trace("server completed endpoint creation (fd=%d cm=%p state=%d)",
+              tcp_ep->fd, params_tcp_sockcm, tcp_ep->state);
+
+    /* now that the server's ep was created, can try to send data */
+    ucs_async_modify_handler(tcp_ep->fd, UCS_EVENT_SET_EVWRITE | UCS_EVENT_SET_EVREAD);
+    return UCS_OK;
+
+err_unblock:
+    UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
+err:
+    return status;
+}
+
 UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_ep_t, const uct_ep_params_t *params)
 {
     ucs_status_t status;
@@ -714,73 +802,51 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_ep_t, const uct_ep_params_t *params)
                                     "tcp_sockcm priv data");
     if (self->comm_ctx.buf == NULL) {
         ucs_error("failed to allocate memory for the ep's send/recv buf");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         status = uct_tcp_sockcm_ep_client_init(self, params);
+        if (status != UCS_OK) {
+            ucs_free(self->comm_ctx.buf);
+            goto out;
+        }
     } else {
-        status = uct_tcp_sockcm_ep_server_init(self, params);
+        self->state |= UCT_TCP_SOCKCM_EP_ON_SERVER;
+        status = UCS_OK;
     }
 
-    if (status == UCS_OK) {
-        ucs_debug("created an endpoint on tcp_sockcm %p id: %d state: %d",
-                  uct_tcp_sockcm_ep_get_cm(self), self->fd, self->state);
-    }
+    ucs_debug("%s created an endpoint on tcp_sockcm %p id: %d state: %d",
+              (self->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
+              uct_tcp_sockcm_ep_get_cm(self), self->fd, self->state);
 
+out:
     return status;
 }
 
 ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 {
     uct_tcp_sockcm_ep_t *tcp_ep;
-    uct_tcp_sockcm_t *tcp_sockcm;
-    uct_cm_base_ep_t *cm_ep;
     ucs_status_t status;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         /* create a new endpoint for the client side */
         return UCS_CLASS_NEW(uct_tcp_sockcm_ep_t, ep_p, params);
     } else if (params->field_mask & UCT_EP_PARAM_FIELD_CONN_REQUEST) {
-        tcp_ep     = (uct_tcp_sockcm_ep_t*)params->conn_request;
-        tcp_sockcm = uct_tcp_sockcm_ep_get_cm(tcp_ep);
-        UCS_ASYNC_BLOCK(tcp_sockcm->super.iface.worker->async);
+        tcp_ep = (uct_tcp_sockcm_ep_t*)params->conn_request;
 
-        /* the server's endpoint was already created by the listener, return it */
-        *ep_p  = &tcp_ep->super.super.super;
-
-        /* fill the tcp_ep fields from the caller's params */
-        status = uct_cm_set_common_data(&tcp_ep->super, params);
+        status = uct_tcp_sockcm_ep_server_create(tcp_ep, params, ep_p);
         if (status != UCS_OK) {
-            goto err;
+            UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, tcp_ep);
         }
 
-        cm_ep = &tcp_ep->super;
-        status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER,
-                               cm_ep->server.notify_cb, params->sockaddr_cb_server,
-                               uct_cm_ep_server_conn_notify_callback_t,
-                               ucs_empty_function);
-        if (status != UCS_OK) {
-            goto err;
-        }
-
-        tcp_ep->state |= UCT_TCP_SOCKCM_EP_SERVER_CREATED;
-
-        UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
-
-        /* now that the server's ep was created, can try to send data */
-        ucs_async_modify_handler(tcp_ep->fd, UCS_EVENT_SET_EVWRITE | UCS_EVENT_SET_EVREAD);
-        return UCS_OK;
+        return status;
     } else {
         ucs_error("either UCT_EP_PARAM_FIELD_SOCKADDR or UCT_EP_PARAM_FIELD_CONN_REQUEST "
                   "has to be provided");
         return UCS_ERR_INVALID_PARAM;
     }
-
-err:
-    UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
-    UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, tcp_ep);
-    return status;
 }
 
 UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_ep_t)
@@ -788,6 +854,10 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_ep_t)
     uct_tcp_sockcm_t *tcp_sockcm = uct_tcp_sockcm_ep_get_cm(self);
 
     UCS_ASYNC_BLOCK(tcp_sockcm->super.iface.worker->async);
+
+    ucs_trace("%s destroy ep %p on cm %p",
+              (self->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
+              self, tcp_sockcm);
 
     ucs_free(self->comm_ctx.buf);
 
