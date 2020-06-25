@@ -135,7 +135,7 @@
  * @return Address of the container structure.
  */
 #define ucs_container_of(_ptr, _type, _member) \
-    ( (_type*)( (char*)(void*)(_ptr) - ucs_offsetof(_type, _member) )  )
+    ( (_type*)( (uintptr_t)(void*)(_ptr) - ucs_offsetof(_type, _member) )  )
 
 
 /**
