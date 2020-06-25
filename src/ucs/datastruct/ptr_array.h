@@ -208,6 +208,9 @@ __ucs_ptr_array_for_each_get_step_size(ucs_ptr_array_t *ptr_array,
     } else {
        size_elem = 1;
     }
+
+    /* Prefetch the next item */
+    ucs_prefetch(&ptr_array->start[element_index + size_elem]);
     ucs_assert(size_elem > 0);
 
     return size_elem;
