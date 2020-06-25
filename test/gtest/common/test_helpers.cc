@@ -444,12 +444,10 @@ static std::vector<std::string> read_dir(const std::string& path)
         goto out_close;
     }
 
-    entry = readdir(dir);
-    while (entry != NULL) {
+    for (entry = readdir(dir); entry != NULL; entry = readdir(dir)) {
         if (entry->d_name[0] != '.') {
             result.push_back(entry->d_name);
         }
-        entry = readdir(dir);
     }
 
 out_close:
@@ -475,12 +473,11 @@ static std::set<std::string> get_all_rdmacm_net_devices()
     /* Enumerate IPoIB and RoCE devices which have direct mapping to an RDMA
      * device.
      */
-    for (std::vector<std::string>::iterator iter = ndevs.begin();
-         iter != ndevs.end(); ++iter) {
-        std::string infiniband_dir = sysfs_net_dir + "/" + *iter +
+    for (size_t i = 0; i < ndevs.size(); ++i) {
+        std::string infiniband_dir = sysfs_net_dir + "/" + ndevs[i] +
                                      "/device/infiniband";
         if (!read_dir(infiniband_dir).empty()) {
-            devices.insert(*iter);
+            devices.insert(ndevs[i]);
         }
     }
 
@@ -488,19 +485,19 @@ static std::set<std::string> get_all_rdmacm_net_devices()
      * can be found again, but std::set will eliminate the duplicates.
       */
     std::vector<std::string> rdma_devs = read_dir(sysfs_ib_dir);
-    for (std::vector<std::string>::iterator iter = rdma_devs.begin();
-         iter != rdma_devs.end(); ++iter) {
+    for (size_t i = 0; i < rdma_devs.size(); ++i) {
+        const char *ndev_name = rdma_devs[i].c_str();
 
         for (port_num = 1; port_num <= 2; ++port_num) {
             nread = ucs_read_file_str(dev_name, sizeof(dev_name), 1,
-                                      ndevs_fmt.c_str(), iter->c_str(), port_num);
+                                      ndevs_fmt.c_str(), ndev_name, port_num);
             if (nread <= 0) {
                 continue;
             }
 
             memset(guid_buf, 0, sizeof(guid_buf));
             nread = ucs_read_file_str(guid_buf, sizeof(guid_buf), 1,
-                                      node_guid_fmt.c_str(), iter->c_str());
+                                      node_guid_fmt.c_str(), ndev_name);
             if (nread <= 0) {
                 continue;
             }
