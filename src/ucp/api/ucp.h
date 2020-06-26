@@ -520,6 +520,24 @@ typedef enum {
 
 /**
  * @ingroup UCP_COMM
+ * @brief Atomic operation requested for ucp_atomic_op_nbx
+ *
+ * This enumeration defines which atomic memory operation should be
+ * performed by the @ref ucp_atomic_op_nbx routine.
+ */
+typedef enum {
+    UCP_ATOMIC_OP_ADD,   /**< Atomic add  */
+    UCP_ATOMIC_OP_SWAP,  /**< Atomic swap */
+    UCP_ATOMIC_OP_CSWAP, /**< Atomic conditional swap */
+    UCP_ATOMIC_OP_AND,   /**< Atomic and  */
+    UCP_ATOMIC_OP_OR,    /**< Atomic or   */
+    UCP_ATOMIC_OP_XOR,   /**< Atomic xor  */
+    UCP_ATOMIC_OP_LAST
+} ucp_atomic_op_t;
+
+
+/**
+ * @ingroup UCP_COMM
  * @brief Flags to define behavior of @ref ucp_stream_recv_nb function
  *
  * This enumeration defines behavior of @ref ucp_stream_recv_nb function.
@@ -547,7 +565,8 @@ typedef enum {
     UCP_OP_ATTR_FIELD_CALLBACK      = UCS_BIT(1),  /**< cb field */
     UCP_OP_ATTR_FIELD_USER_DATA     = UCS_BIT(2),  /**< user_data field */
     UCP_OP_ATTR_FIELD_DATATYPE      = UCS_BIT(3),  /**< datatype field */
-    UCP_OP_ATTR_FIELD_FLAGS         = UCS_BIT(4),  /**< operation specific flags */
+    UCP_OP_ATTR_FIELD_FLAGS         = UCS_BIT(4),  /**< operation-specific flags */
+    UCP_OP_ATTR_FIELD_REPLY_BUFFER  = UCS_BIT(5),  /**< reply_buffer field */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
@@ -1256,6 +1275,12 @@ typedef struct {
      * Pointer to user data passed to callback function.
      */
     void          *user_data;
+
+    /**
+     * Reply buffer. Can be used for storing operation result, for example by
+     * @ref ucp_atomic_op_nbx.
+     */
+    void          *reply_buffer;
 } ucp_request_param_t;
 
 
@@ -3456,32 +3481,54 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
 
 /**
  * @ingroup UCP_COMM
- * @brief Post an atomic fetch operation.
+ * @brief Post an atomic memory operation.
  *
- * This routine will post an atomic fetch operation to remote memory.
+ * This routine will post an atomic operation to remote memory.
  * The remote value is described by the combination of the remote
  * memory address @a remote_addr and the @ref ucp_rkey_h "remote memory handle"
- * @a rkey.
- * The routine is non-blocking and therefore returns immediately. However the
- * actual atomic operation may be delayed. The atomic operation is not considered complete
- * until the values in remote and local memory are completed.
+ * @a rkey. The routine is non-blocking and therefore returns immediately.
+ * However, the actual atomic operation may be delayed. In order to enable
+ * fetching semantics for atomic operations user has to specify
+ * @a param.reply_buffer. Please see @ref atomic_ops "table" below for more
+ * details.
  *
- * @note The user should not modify any part of the @a buffer or @a result after
- *       this operation is called, until the operation completes.
- * @note Only ucp_dt_make_config(4) and ucp_dt_make_contig(8) are supported in
- *       @a param->datatype, see @ref ucp_dt_make_contig
+ * @note    The user should not modify any part of the @a buffer (or also
+ *          @a param->reply_buffer for fetch operations), until the operation
+ *          completes.
+ * @note    Only ucp_dt_make_config(4) and ucp_dt_make_contig(8) are supported
+ *          in @a param->datatype, see @ref ucp_dt_make_contig.
+ *
+ * <table>
+ * <caption id="atomic_ops">Atomic Operations Semantic</caption>
+ * <tr> <th align="center">Atomic Operation <th align="center">Pseudo code
+ *      <th align="center">X <th align="center">Y <th align="center">Z
+ *      <th align="center">Result
+ * <tr> <td align="left">@ref UCP_ATOMIC_OP_ADD <td align="left"> Result=Y; Y+=X
+ *      <td align="left">buffer<td align="left">remote_addr<td align="center">-
+ *      <td align="left">param.reply_buffer(optional)
+ * <tr> <td align="left">@ref UCP_ATOMIC_OP_SWAP <td align="left"> Result=Y; Y=X
+ *      <td align="left">buffer<td align="left">remote_addr <td align="center">-
+ *      <td align="left">param.reply_buffer
+ * <tr> <td align="left">@ref UCP_ATOMIC_OP_CSWAP
+ *      <td align="left">Result=Y; if (X==Y) then Y=Z<td align="left">buffer
+ *      <td align="left">remote_addr <td align="left">param.reply_buffer
+ *      <td align="left">param.reply_buffer
+ * <tr> <td align="left">@ref UCP_ATOMIC_OP_AND <td align="left"> Result=Y; Y&=X
+ *      <td align="left">buffer<td align="left">remote_addr <td align="center">-
+ *      <td align="left">param.reply_buffer(optional)
+ * <tr> <td align="left">@ref UCP_ATOMIC_OP_OR <td align="left"> Result=Y; Y|=X
+ *      <td align="left">buffer<td align="left">remote_addr <td align="center">-
+ *      <td align="left">param.reply_buffer(optional)
+ * <tr> <td align="left">@ref UCP_ATOMIC_OP_XOR <td align="left"> Result=Y; Y^=X
+ *      <td align="left">buffer<td align="left">remote_addr <td align="center">-
+ *      <td align="left">param.reply_buffer(optional)
+ * </table>
  *
  * @param [in] ep          UCP endpoint.
- * @param [in] opcode      One of @ref ucp_atomic_fetch_op_t.
- * @param [in] buffer      Address of operand for atomic operation. For
- *                         @ref UCP_ATOMIC_FETCH_OP_CSWAP operation, this is
- *                         the value with which the remote memory buffer is
- *                         compared. For @ref UCP_ATOMIC_FETCH_OP_SWAP operation
- *                         this is the value to be placed in remote memory.
- * @param [inout] result   Local memory buffer in which to store the result of
- *                         the operation. In the case of CSWAP the value in
- *                         result will be swapped into the @a remote_addr if
- *                         the condition is true.
+ * @param [in] opcode      One of @ref ucp_atomic_op_t.
+ * @param [in] buffer      Address of operand for the atomic operation. See
+ *                         @ref atomic_ops "Atomic Operations Semantic table"
+ *                         for exact usage by different atomic operations.
  * @param [in] count       Number of elements in @a buffer and @a result. The
  *                         size of each element is specified by
  *                         @ref ucp_request_param_t.datatype
@@ -3497,10 +3544,9 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
  *                                in order to track progress of the operation.
  */
 ucs_status_ptr_t
-ucp_atomic_fetch_nbx(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
-                     const void *buffer, void *result, size_t count,
-                     uint64_t remote_addr, ucp_rkey_h rkey,
-                     const ucp_request_param_t *param);
+ucp_atomic_op_nbx(ucp_ep_h ep, ucp_atomic_op_t opcode, const void *buffer,
+                  size_t count, uint64_t remote_addr, ucp_rkey_h rkey,
+                  const ucp_request_param_t *param);
 
 
 /**

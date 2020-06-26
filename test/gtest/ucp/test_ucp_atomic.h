@@ -45,6 +45,10 @@ public:
     void nb_post(entity *e,  size_t max_size, void *memheap_addr,
                  ucp_rkey_h rkey, std::string& expected_data);
 
+    template <typename T, ucp_atomic_op_t OP>
+    void nbx_post(entity *e,  size_t max_size, void *memheap_addr,
+                 ucp_rkey_h rkey, std::string& expected_data);
+
     template <typename T, ucp_atomic_fetch_op_t FOP>
     void nb_fetch(entity *e,  size_t max_size, void *memheap_addr,
                   ucp_rkey_h rkey, std::string& expected_data);
@@ -61,6 +65,24 @@ public:
         case UCP_ATOMIC_POST_OP_OR:
             return v1 | v2;
         case UCP_ATOMIC_POST_OP_XOR:
+            return v1 ^ v2;
+        default:
+            return 0;
+        }
+    }
+
+    template <typename T, ucp_atomic_op_t OP>
+    T nbx_atomic_op_val(T v1, T v2)
+    {
+        /* coverity[switch_selector_expr_is_constant] */
+        switch (OP) {
+        case UCP_ATOMIC_OP_ADD:
+            return v1 + v2;
+        case UCP_ATOMIC_OP_AND:
+            return v1 & v2;
+        case UCP_ATOMIC_OP_OR:
+            return v1 | v2;
+        case UCP_ATOMIC_OP_XOR:
             return v1 ^ v2;
         default:
             return 0;
@@ -93,6 +115,12 @@ private:
     ucs_status_t ucp_atomic_post_nbi(ucp_ep_h ep, ucp_atomic_post_op_t opcode,
                                  T value, void *remote_addr,
                                  ucp_rkey_h rkey);
+
+    template <typename T>
+    ucs_status_t ucp_atomic_post_nbx(ucp_ep_h ep, ucp_atomic_op_t opcode,
+                                     T value, void *remote_addr,
+                                     ucp_rkey_h rkey);
+
     template <typename T>
     ucs_status_ptr_t ucp_atomic_fetch(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
                                       T value, T *result,
