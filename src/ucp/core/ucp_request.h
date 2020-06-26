@@ -44,14 +44,13 @@ enum {
     UCP_REQUEST_FLAG_STREAM_RECV_WAITALL  = UCS_BIT(12),
     UCP_REQUEST_FLAG_SEND_AM              = UCS_BIT(13),
     UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
+    UCP_REQUEST_FLAG_RNDV_FRAG            = UCS_BIT(15),
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(16),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17),
-    UCP_REQUEST_DEBUG_RNDV_FRAG           = UCS_BIT(18)
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0,
-    UCP_REQUEST_DEBUG_RNDV_FRAG           = 0
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
 #endif
 };
 
@@ -183,6 +182,7 @@ struct ucp_request {
                     ucp_request_t     *rreq;          /* pointer to the receive request */
                     size_t            length;         /* the length of the data that should be fetched
                                                        * from sender side */
+                    size_t            offset;         /* offset in recv buffer */
                 } rndv_rtr;
 
                 struct {

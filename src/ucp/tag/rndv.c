@@ -135,7 +135,7 @@ static size_t ucp_tag_rndv_rtr_pack(void *dest, void *arg)
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
         rndv_rtr_hdr->address = (uintptr_t)rreq->recv.buffer;
         rndv_rtr_hdr->size    = rndv_req->send.rndv_rtr.length;
-        rndv_rtr_hdr->offset  = rreq->recv.frag.offset;
+        rndv_rtr_hdr->offset  = rndv_req->send.rndv_rtr.offset;
 
         packed_rkey_size = ucp_rkey_pack_uct(rndv_req->send.ep->worker->context,
                                              rreq->recv.state.dt.contig.md_map,
@@ -400,12 +400,11 @@ static void ucp_rndv_recv_data_init(ucp_request_t *rreq, size_t size)
 {
     rreq->status             = UCS_OK;
     rreq->recv.tag.remaining = size;
-    rreq->recv.frag.rreq     = NULL;
-    rreq->recv.frag.offset   = 0;
 }
 
 static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
-                                  uintptr_t sender_reqptr, size_t recv_length)
+                                  uintptr_t sender_reqptr, size_t recv_length,
+                                  size_t offset)
 {
     ucp_trace_req(rndv_req, "send rtr remote sreq 0x%lx rreq %p", sender_reqptr,
                   rreq);
@@ -415,6 +414,7 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     rndv_req->send.rndv_rtr.remote_request = sender_reqptr;
     rndv_req->send.rndv_rtr.rreq           = rreq;
     rndv_req->send.rndv_rtr.length         = recv_length;
+    rndv_req->send.rndv_rtr.offset         = offset;
 
     ucp_request_send(rndv_req, 0);
 }
@@ -514,7 +514,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                                 rndv_req->send.length);
         ucp_rndv_req_send_rtr(rndv_req, rndv_req->send.rndv_get.rreq,
                               rndv_req->send.rndv_get.remote_request,
-                              rndv_req->send.length);
+                              rndv_req->send.length, 0ul);
         return UCS_OK;
     }
 
@@ -904,7 +904,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         freq->recv.state.dt.contig.md_map = 0;
         freq->recv.frag.rreq              = rreq;
         freq->recv.frag.offset            = offset;
-        freq->flags                      |= UCP_REQUEST_DEBUG_RNDV_FRAG;
+        freq->flags                      |= UCP_REQUEST_FLAG_RNDV_FRAG;
 
         memh_index = 0;
         ucs_for_each_bit(md_index,
@@ -919,7 +919,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         frndv_req->send.pending_lane = UCP_NULL_LANE;
 
         ucp_rndv_req_send_rtr(frndv_req, freq, rndv_rts_hdr->sreq.reqptr,
-                              freq->recv.length);
+                              freq->recv.length, offset);
         offset += frag_size;
     }
 
@@ -1165,7 +1165,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
      * the sender will send the data with active message or put_zcopy. */
     ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
     ucp_rndv_req_send_rtr(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr,
-                          rndv_rts_hdr->size);
+                          rndv_rts_hdr->size, 0ul);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1535,7 +1535,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     ucp_reply_hdr_t *rep_hdr = data;
     ucp_request_t *req       = (ucp_request_t*) rep_hdr->reqptr;
 
-    if (req->recv.frag.rreq) {
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_frag_atp_recv", 0);
         ucp_rndv_recv_frag_put_mem_type(req->recv.frag.rreq, NULL, req,
@@ -1666,7 +1666,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     ucp_request_t *rreq = (ucp_request_t*) rndv_data_hdr->rreq_ptr;
     size_t recv_len;
 
-    ucs_assert(!(rreq->flags & UCP_REQUEST_DEBUG_RNDV_FRAG));
+    ucs_assert(!(rreq->flags & UCP_REQUEST_FLAG_RNDV_FRAG));
 
     recv_len = length - sizeof(*rndv_data_hdr);
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_recv", recv_len);
