@@ -9,6 +9,8 @@
 #ifndef UCS_COMPILER_DEF_H
 #define UCS_COMPILER_DEF_H
 
+#include <stdint.h>
+
 /* Note: Place "@file <file name>.h" after BEGIN_C_DECS
  * to avoid bugs in a documentation */
 #ifdef __cplusplus
@@ -135,7 +137,7 @@
  * @return Address of the container structure.
  */
 #define ucs_container_of(_ptr, _type, _member) \
-    ( (_type*)( (char*)(void*)(_ptr) - ucs_offsetof(_type, _member) )  )
+    ( (_type*)( (void*)((uintptr_t)(_ptr) - ucs_offsetof(_type, _member)) ) )
 
 
 /**
