@@ -64,15 +64,8 @@ typedef struct {
 
 typedef struct {
     ucs_list_link_t          list;        /* entry into list of unfinished AM's */
-    ucs_queue_head_t         mid_rdesc_q; /* queue of middle fragments, which
-                                             arrived before the first one */
-    ucp_recv_desc_t          *all_data;   /* buffer for all parts of the AM */
-    ucp_ep_h                 reply_ep;    /* reply ep if requested by the sender */
-    uint64_t                 msg_id;      /* way to match up all parts of AM */
-    size_t                   left;        /* how many bytes left to receive */
-    size_t                   total_size;  /* total size of the message */
-    int                      am_id;       /* index into callback array */
-} ucp_am_unfinished_t;
+    size_t                   remaining;   /* how many bytes left to receive */
+} ucp_am_first_desc_t;
 
 
 ucs_status_t ucp_am_init(ucp_worker_h worker);
