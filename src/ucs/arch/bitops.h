@@ -7,6 +7,9 @@
 #ifndef UCS_ARCH_BITOPS_H
 #define UCS_ARCH_BITOPS_H
 
+BEGIN_C_DECLS
+
+#include <stdint.h>
 
 #if defined(__x86_64__)
 #  include "x86_64/bitops.h"
@@ -17,6 +20,7 @@
 #else
 #  error "Unsupported architecture"
 #endif
+
 
 #define ucs_ilog2(_n)                   \
 (                                       \
@@ -98,7 +102,8 @@
 
 /* Returns the number of 1-bits in x */
 #define ucs_popcount(_n) \
-    ((sizeof(_n) <= 4) ? __builtin_popcount((uint32_t)(_n)) : __builtin_popcountl(_n))
+    ((sizeof(_n) <= 4) ? __builtin_popcount((uint32_t)(_n)) : \
+                         __builtin_popcountl(_n))
 
 /* On some arch ffs64(0) returns 0, on other -1, let's unify this */
 #define ucs_ffs64_safe(_val) ((_val) ? ucs_ffs64(_val) : 64)
@@ -112,5 +117,7 @@
 /* Returns the number of 1-bits by _idx mask */
 #define ucs_bitmap2idx(_map, _idx) \
     ucs_popcount((_map) & (UCS_MASK(_idx)))
+
+END_C_DECLS
 
 #endif
