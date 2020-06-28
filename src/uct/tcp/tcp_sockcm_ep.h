@@ -21,7 +21,9 @@ typedef enum uct_tcp_sockcm_ep_state {
     UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_SENT          = UCS_BIT(10), /* ep on the client sent the notify message to the server */
     UCT_TCP_SOCKCM_EP_DISCONNECTING               = UCS_BIT(11), /* @ref uct_ep_disconnect was called on the ep */
     UCT_TCP_SOCKCM_EP_GOT_DISCONNECT              = UCS_BIT(12), /* ep received a disconnect notice from the remote peer */
-    UCT_TCP_SOCKCM_EP_FAILED                      = UCS_BIT(13)  /* ep is in error state due to an internal local error */
+    UCT_TCP_SOCKCM_EP_FAILED                      = UCS_BIT(13), /* ep is in error state due to an internal local error */
+    UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECTED         = UCS_BIT(14), /* ep on the client side received a reject from the server
+                                                                    (debug flag) */
 } uct_tcp_sockcm_ep_state_t;
 
 
@@ -45,6 +47,14 @@ UCS_CLASS_DECLARE(uct_tcp_sockcm_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_tcp_sockcm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_tcp_sockcm_ep_t, uct_ep_t);
 
+static UCS_F_ALWAYS_INLINE
+uct_tcp_sockcm_t *uct_tcp_sockcm_ep_get_cm(uct_tcp_sockcm_ep_t *cep)
+{
+    /* return the tcp sockcm connection manager this ep is using */
+    return ucs_container_of(cep->super.super.super.iface, uct_tcp_sockcm_t,
+                            super.iface);
+}
+
 void uct_tcp_sockcm_ep_close_fd(int *fd);
 
 ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h* ep_p);
@@ -60,3 +70,6 @@ ucs_status_t uct_tcp_sockcm_ep_set_sockopt(uct_tcp_sockcm_ep_t *ep);
 ucs_status_t uct_tcp_sockcm_cm_ep_conn_notify(uct_ep_h ep);
 
 void uct_tcp_sockcm_ep_handle_error(uct_tcp_sockcm_ep_t *cep, ucs_status_t status);
+
+const char *uct_tcp_sockcm_cm_ep_peer_addr_str(uct_tcp_sockcm_ep_t *cep,
+                                               char *buf, size_t max);
