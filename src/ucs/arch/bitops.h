@@ -7,9 +7,10 @@
 #ifndef UCS_ARCH_BITOPS_H
 #define UCS_ARCH_BITOPS_H
 
-BEGIN_C_DECLS
-
+#include <ucs/sys/compiler_def.h>
 #include <stdint.h>
+
+BEGIN_C_DECLS
 
 #if defined(__x86_64__)
 #  include "x86_64/bitops.h"
