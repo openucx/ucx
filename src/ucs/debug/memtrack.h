@@ -143,4 +143,10 @@ char *ucs_strndup(const char *src, size_t n, const char *name);
 
 END_C_DECLS
 
+/*
+ * The functions below have no native implementation, they apply to both cases.
+ */
+int ucs_posix_memalign_realloc(void **ptr, size_t boundary, size_t size,
+                               const char *name);
+
 #endif
