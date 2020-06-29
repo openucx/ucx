@@ -199,11 +199,11 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
  * @param member  Member inside 'elem' which is the queue link.
  */
 #define ucs_queue_for_each(elem, queue, member) \
-    /* we set `ptail` field to queue address to not substract NULL pointer */ \
+    /* we set `ptail` field to queue address to not subtract NULL pointer */ \
     for (*(queue)->ptail = (ucs_queue_elem_t*)(void*)(queue), \
              elem = ucs_container_of((queue)->head, typeof(*elem), member); \
-         (elem) != ucs_container_of((ucs_queue_elem_t*)(void*)(queue), \
-                                    typeof(*elem), member); \
+         (UCS_PTR_BYTE_OFFSET(elem, ucs_offsetof(typeof(*elem), member)) != \
+             (void*)(queue)); \
          elem = ucs_container_of(elem->member.next, typeof(*elem), member))
 
 /**
