@@ -39,7 +39,7 @@ UCS_TEST_F(test_topo, get_distance) {
 
     status = ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
                                    UCS_SYS_DEVICE_ID_UNKNOWN, &distance);
-    ASSERT_UCS_OK(status);
+    ASSERT_EQ(status, UCS_ERR_IO_ERROR);
 }
 
 UCS_TEST_F(test_topo, print_info) {
