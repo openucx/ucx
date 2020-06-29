@@ -16,6 +16,10 @@ libucs_ladir       = $(includedir)/ucs
 libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la
 
 nobase_dist_libucs_la_HEADERS = \
+	arch/aarch64/bitops.h \
+	arch/ppc64/bitops.h \
+	arch/x86_64/bitops.h \
+	arch/bitops.h \
 	algorithm/crc.h \
 	algorithm/qsort_r.h \
 	async/async_fwd.h \
@@ -63,17 +67,13 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/global_opts.h
 
 noinst_HEADERS = \
-	arch/aarch64/bitops.h \
 	arch/aarch64/cpu.h \
 	arch/generic/atomic.h \
 	arch/generic/cpu.h \
-	arch/ppc64/bitops.h \
 	arch/ppc64/cpu.h \
 	arch/x86_64/atomic.h \
-	arch/x86_64/bitops.h \
 	arch/x86_64/cpu.h \
 	arch/atomic.h \
-	arch/bitops.h \
 	arch/cpu.h \
 	datastruct/arbiter.h \
 	datastruct/frag_list.h \

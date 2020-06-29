@@ -14,6 +14,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <math.h>
+#include <ucs/arch/bitops.h>
 
 BEGIN_C_DECLS
 
@@ -145,9 +146,6 @@ static inline double ucs_log2(double x)
 #define UCS_CIRCULAR_COMPARE16(__a, __op, __b)  UCS_CIRCULAR_COMPARE(__a, __op, __b, int16_t)
 #define UCS_CIRCULAR_COMPARE32(__a, __op, __b)  UCS_CIRCULAR_COMPARE(__a, __op, __b, int32_t)
 #define UCS_CIRCULAR_COMPARE64(__a, __op, __b)  UCS_CIRCULAR_COMPARE(__a, __op, __b, int64_t)
-
-/* on some arch ffs64(0) returns 0, on other -1, let's unify this */
-#define ucs_ffs64_safe(_val) ((_val) ? ucs_ffs64(_val) : 64)
 
 #define ucs_for_each_bit(_index, _map)                   \
     for ((_index) = ucs_ffs64_safe(_map); (_index) < 64; \
