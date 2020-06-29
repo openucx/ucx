@@ -1537,6 +1537,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
+        ucs_assert(req->recv.frag.rreq != NULL);
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_frag_atp_recv", 0);
         ucp_rndv_recv_frag_put_mem_type(req->recv.frag.rreq, NULL, req,
                                         ((ucp_mem_desc_t*) req->recv.buffer - 1),
