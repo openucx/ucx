@@ -98,12 +98,15 @@ static double uct_cuda_ipc_iface_get_bw()
         return 0;
     }
 
-    /* TODO: Detect nvswitch */
+    /* Assuming peak number of nvlinks used for the given generation.
+     * TODO: Detect nvswitch */
     switch (major_version) {
     case UCT_CUDA_BASE_GEN_PASCAL:
-        return 20000.0 * UCS_MBYTE;
+        return 80000.0 * UCS_MBYTE;
     case UCT_CUDA_BASE_GEN_VOLTA:
-        return 25000.0 * UCS_MBYTE;
+        return 150000.0 * UCS_MBYTE;
+    case UCT_CUDA_BASE_GEN_AMPERE:
+        return 300000.0 * UCS_MBYTE;
     default:
         return 6911.0  * UCS_MBYTE;
     }
