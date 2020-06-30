@@ -508,23 +508,44 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_selection, self_rcx,
                               "self,rc_x");
 
 
-class test_ucp_tag_offload_cuda : public test_ucp_tag_offload {
+class test_ucp_tag_offload_gpu : public test_ucp_tag_offload {
 public:
-    test_ucp_tag_offload_cuda() {
+    test_ucp_tag_offload_gpu() {
         modify_config("RNDV_THRESH", "1024");
+    }
+
+    std::vector<ucp_test_param>
+    static enum_test_params(const ucp_params_t& ctx_params,
+                            const std::string& name,
+                            const std::string& test_case_name,
+                            const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+
+        generate_test_params_variant(ctx_params, name, test_case_name,
+                                     tls, UCS_MEMORY_TYPE_CUDA, result);
+        generate_test_params_variant(ctx_params, name, test_case_name,
+                                     tls, UCS_MEMORY_TYPE_ROCM, result);
+
+        return result;
+    }
+
+protected:
+    ucs_memory_type_t mem_type() const {
+        return static_cast<ucs_memory_type_t>(GetParam().variant);
     }
 };
 
 // Test that expected SW RNDV request is handled properly when receive buffer
 // is allocated on GPU memory.
-UCS_TEST_P(test_ucp_tag_offload_cuda, sw_rndv_to_cuda_mem, "TM_SW_RNDV=y")
+UCS_TEST_P(test_ucp_tag_offload_gpu, sw_rndv_to_gpu_mem, "TM_SW_RNDV=y")
 {
     activate_offload(sender());
 
     size_t size   = 2048;
     ucp_tag_t tag = 0xCAFEBABEul;
-    // Test will be skipped here if CUDA mem is not supported
-    mem_buffer rbuf(size, UCS_MEMORY_TYPE_CUDA);
+    // Test will be skipped here if GPU mem is not supported
+    mem_buffer rbuf(size, mem_type());
     request *rreq = recv_nb_exp(rbuf.ptr(), size, DATATYPE, tag,
                                 UCP_TAG_MASK_FULL);
 
@@ -539,14 +560,14 @@ UCS_TEST_P(test_ucp_tag_offload_cuda, sw_rndv_to_cuda_mem, "TM_SW_RNDV=y")
 // Test that small buffers wich can be scattered to CQE are not posted to the
 // HW. Otherwise it may segfault, while copying data from CQE to the
 // (potentially) GPU buffer.
-UCS_TEST_P(test_ucp_tag_offload_cuda, rx_scatter_to_cqe, "TM_THRESH=1")
+UCS_TEST_P(test_ucp_tag_offload_gpu, rx_scatter_to_cqe, "TM_THRESH=1")
 {
     activate_offload(sender());
 
     size_t size   = 8;
     ucp_tag_t tag = 0xCAFEBABEul;
-    // Test will be skipped here if CUDA mem is not supported
-    mem_buffer rbuf(size, UCS_MEMORY_TYPE_CUDA);
+    // Test will be skipped here if GPU mem is not supported
+    mem_buffer rbuf(size, mem_type());
     request *rreq = recv_nb_exp(rbuf.ptr(), size, DATATYPE, tag,
                                 UCP_TAG_MASK_FULL);
     uint64_t sbuf = 0ul;
@@ -556,8 +577,8 @@ UCS_TEST_P(test_ucp_tag_offload_cuda, rx_scatter_to_cqe, "TM_THRESH=1")
     wait_and_validate(sreq);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_cuda, rc_dc_cuda,
-                              "dc_x,rc_x,cuda_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_gpu, rc_dc_gpu,
+                              "dc_x,rc_x," UCP_TEST_GPU_COPY_TLS)
 
 class test_ucp_tag_offload_status : public test_ucp_tag {
 public:
@@ -772,21 +793,42 @@ UCS_TEST_P(test_ucp_tag_offload_stats, force_sw_rndv, "TM_SW_RNDV=y",
 UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload_stats)
 
 
-class test_ucp_tag_offload_stats_cuda : public test_ucp_tag_offload_stats {
+class test_ucp_tag_offload_stats_gpu : public test_ucp_tag_offload_stats {
 public:
-    test_ucp_tag_offload_stats_cuda() {
+    test_ucp_tag_offload_stats_gpu() {
         m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
+    }
+
+    std::vector<ucp_test_param>
+    static enum_test_params(const ucp_params_t& ctx_params,
+                            const std::string& name,
+                            const std::string& test_case_name,
+                            const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+
+        generate_test_params_variant(ctx_params, name, test_case_name,
+                                     tls, UCS_MEMORY_TYPE_CUDA, result);
+        generate_test_params_variant(ctx_params, name, test_case_name,
+                                     tls, UCS_MEMORY_TYPE_ROCM, result);
+
+        return result;
+    }
+
+protected:
+    ucs_memory_type_t mem_type() const {
+        return static_cast<ucs_memory_type_t>(GetParam().variant);
     }
 };
 
-UCS_TEST_P(test_ucp_tag_offload_stats_cuda, block_cuda_no_gpu_direct,
+UCS_TEST_P(test_ucp_tag_offload_stats_gpu, block_gpu_no_gpu_direct,
            "TM_THRESH=128")
 {
     activate_offload(sender());
 
     size_t size   = 2048;
-    // Test will be skipped here if CUDA mem is not supported
-    mem_buffer rbuf(size, UCS_MEMORY_TYPE_CUDA);
+    // Test will be skipped here if GPU mem is not supported
+    mem_buffer rbuf(size, mem_type());
     request *rreq = recv_nb_and_check(rbuf.ptr(), size, DATATYPE, 0x11,
                                       UCP_TAG_MASK_FULL);
 
@@ -798,7 +840,7 @@ UCS_TEST_P(test_ucp_tag_offload_stats_cuda, block_cuda_no_gpu_direct,
     req_cancel(receiver(), rreq);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_stats_cuda, rc_dc_cuda,
-                              "dc_x,rc_x,cuda_copy")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_stats_gpu, rc_dc_gpu,
+                              "dc_x,rc_x," UCP_TEST_GPU_COPY_TLS)
 
 #endif
