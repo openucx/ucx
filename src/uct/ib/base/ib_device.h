@@ -15,8 +15,10 @@
 #include <ucs/debug/assert.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/sys/sock.h>
 
 #include <endian.h>
+#include <linux/ip.h>
 
 
 #define UCT_IB_QPN_ORDER                  24  /* How many bits can be an IB QP number */

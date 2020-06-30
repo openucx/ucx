@@ -164,18 +164,15 @@ public:
             UCS_TEST_SKIP_R("No interface for testing");
         }
 
-        static const std::string ud_or_dc_tls[] = { "ud", "ud_v", "ud_x",
-                                                    "dc", "dc_x", "ib" };
+        static const std::string dc_tls[] = { "dc", "dc_x", "ib" };
 
-        bool has_dc_or_ud = has_any_transport(
-                        std::vector<std::string>(ud_or_dc_tls,
-                                                 ud_or_dc_tls +
-                                                 ucs_array_size(ud_or_dc_tls)));
+        bool has_dc = has_any_transport(
+            std::vector<std::string>(dc_tls, dc_tls + ucs_array_size(dc_tls)));
 
-        /* FIXME: select random interface, except for UD and DC transports,
-                  which do not yet support having different gid_index for
-                  different UCT endpoints on same iface */
-        int saddr_idx = has_dc_or_ud ? 0 : (ucs::rand() % saddrs.size());
+        /* FIXME: select random interface, except for DC transport, which do not
+                  yet support having different gid_index for different UCT
+                  endpoints on same iface */
+        int saddr_idx = has_dc ? 0 : (ucs::rand() % saddrs.size());
         m_test_addr   = saddrs[saddr_idx];
     }
 

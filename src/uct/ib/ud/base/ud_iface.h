@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -9,6 +9,7 @@
 #define UCT_UD_IFACE_H
 
 #include <uct/base/uct_worker.h>
+#include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/datastruct/ptr_array.h>
@@ -18,6 +19,7 @@
 #include <ucs/async/async.h>
 #include <ucs/time/timer_wheel.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/sock.h>
 
 #include "ud_def.h"
 #include "ud_ep.h"
@@ -25,7 +27,9 @@
 
 BEGIN_C_DECLS
 
+
 #define UCT_UD_MIN_TIMER_TIMER_BACKOFF 1.0
+
 
 /** @file ud_iface.h */
 
@@ -34,12 +38,14 @@ enum {
     UCT_UD_IFACE_STAT_LAST
 };
 
+
 /* flags for uct_ud_iface_send_ctl() */
 enum {
     UCT_UD_IFACE_SEND_CTL_FLAG_INLINE    = UCS_BIT(0),
     UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED = UCS_BIT(1),
     UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED  = UCS_BIT(2)
 };
+
 
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */
 
@@ -76,6 +82,7 @@ uct_ud_iface_peer_cmp(uct_ud_iface_peer_t *a, uct_ud_iface_peer_t *b)
            ((int)a->path_index - (int)b->path_index);
 }
 
+
 static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a)
 {
     return (a->dlid + a->dgid.global.interface_id +
@@ -83,18 +90,20 @@ static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a)
            UCT_UD_HASH_SIZE;
 }
 
+
 SGLIB_DEFINE_LIST_PROTOTYPES(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
 SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE,
                                          uct_ud_iface_peer_hash)
-
 
 
 #if UCT_UD_EP_DEBUG_HOOKS
 
 typedef ucs_status_t (*uct_ud_iface_hook_t)(uct_ud_iface_t *iface, uct_ud_neth_t *neth);
 
+
 #define UCT_UD_IFACE_HOOK_DECLARE(_name) \
     uct_ud_iface_hook_t _name;
+
 
 #define UCT_UD_IFACE_HOOK_CALL_RX(_iface, _neth, _len) \
     if ((_iface)->rx.hook(_iface, _neth) != UCS_OK) { \
@@ -102,9 +111,11 @@ typedef ucs_status_t (*uct_ud_iface_hook_t)(uct_ud_iface_t *iface, uct_ud_neth_t
         return; \
     }
 
+
 #define UCT_UD_IFACE_HOOK_INIT(_iface) { \
         (_iface)->rx.hook = uct_ud_iface_null_hook; \
     }
+
 
 static inline ucs_status_t uct_ud_iface_null_hook(uct_ud_iface_t *iface,
                                                   uct_ud_neth_t *neth)
@@ -120,6 +131,7 @@ static inline ucs_status_t uct_ud_iface_null_hook(uct_ud_iface_t *iface,
 
 #endif
 
+
 typedef struct uct_ud_iface_ops {
     uct_ib_iface_ops_t        super;
     unsigned                  (*async_progress)(uct_ud_iface_t *iface);
@@ -130,6 +142,39 @@ typedef struct uct_ud_iface_ops {
     ucs_status_t              (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                            struct ibv_qp **qp_p);
 } uct_ud_iface_ops_t;
+
+
+/* device GIDs set */
+KHASH_TYPE(uct_ud_iface_gid, union ibv_gid, char);
+
+
+static UCS_F_ALWAYS_INLINE
+khint32_t uct_ud_iface_kh_gid_hash_func(union ibv_gid gid)
+{
+    return kh_int64_hash_func(gid.global.subnet_prefix ^
+                              gid.global.interface_id);
+}
+
+
+static UCS_F_ALWAYS_INLINE int
+uct_ud_gid_equal(const union ibv_gid *a, const union ibv_gid *b, size_t length)
+{
+    ucs_assert(length <= sizeof(union ibv_gid));
+    return !memcmp(UCS_PTR_BYTE_OFFSET(a, sizeof(*a) - length),
+                   UCS_PTR_BYTE_OFFSET(b, sizeof(*b) - length), length);
+}
+
+
+static UCS_F_ALWAYS_INLINE int
+uct_ud_iface_kh_gid_hash_equal(union ibv_gid a, union ibv_gid b)
+{
+    return uct_ud_gid_equal(&a, &b, sizeof(a));
+}
+
+
+KHASH_IMPL(uct_ud_iface_gid, union ibv_gid, char, 0,
+           uct_ud_iface_kh_gid_hash_func, uct_ud_iface_kh_gid_hash_equal)
+
 
 struct uct_ud_iface {
     uct_ib_iface_t           super;
@@ -162,7 +207,6 @@ struct uct_ud_iface {
         unsigned             tx_qp_len;
         unsigned             max_inline;
         int                  check_grh_dgid;
-        unsigned             gid_len;
         unsigned             max_window;
     } config;
 
@@ -177,12 +221,21 @@ struct uct_ud_iface {
         uct_async_event_cb_t      event_cb;
         unsigned                  disable;
     } async;
+
+    /* used for GRH GID filter */
+    struct {
+        union ibv_gid             last;
+        unsigned                  last_len;
+        khash_t(uct_ud_iface_gid) hash;
+    } gid_table;
 };
+
 
 UCS_CLASS_DECLARE(uct_ud_iface_t, uct_ud_iface_ops_t*, uct_md_h,
                   uct_worker_h, const uct_iface_params_t*,
                   const uct_ud_iface_config_t*,
                   uct_ib_iface_init_attr_t*)
+
 
 struct uct_ud_ctl_hdr {
     uint8_t                    type;
@@ -205,6 +258,7 @@ struct uct_ud_ctl_hdr {
 
 extern ucs_config_field_t uct_ud_iface_config_table[];
 
+
 ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t am_max_iov, size_t am_max_hdr);
@@ -214,7 +268,9 @@ void uct_ud_iface_release_desc(uct_recv_desc_t *self, void *desc);
 ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr);
 
 void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
+
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
+
 void uct_ud_iface_replace_ep(uct_ud_iface_t *iface, uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
@@ -228,60 +284,9 @@ void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
                         void *data, size_t length, size_t valid_length,
                         char *buffer, size_t max);
 
-
-static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
-{
-    return iface->tx.available > 0;
-}
-
-static UCS_F_ALWAYS_INLINE int uct_ud_iface_has_skbs(uct_ud_iface_t *iface)
-{
-    return iface->tx.skb || !ucs_mpool_is_empty(&iface->tx.mp);
-}
+union ibv_gid* uct_ud_grh_get_dgid(struct ibv_grh *grh, size_t dgid_len);
 
 uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface);
-
-static inline uct_ib_address_t* uct_ud_creq_ib_addr(uct_ud_ctl_hdr_t *conn_req)
-{
-    ucs_assert(conn_req->type == UCT_UD_PACKET_CREQ);
-    return (uct_ib_address_t*)(conn_req + 1);
-}
-
-static UCS_F_ALWAYS_INLINE void uct_ud_enter(uct_ud_iface_t *iface)
-{
-    UCS_ASYNC_BLOCK(iface->super.super.worker->async);
-}
-
-static UCS_F_ALWAYS_INLINE void uct_ud_leave(uct_ud_iface_t *iface)
-{
-    UCS_ASYNC_UNBLOCK(iface->super.super.worker->async);
-}
-
-static UCS_F_ALWAYS_INLINE int
-uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *grh_end, int is_grh_present)
-{
-    void *dest_gid, *local_gid;
-
-    if (!iface->config.check_grh_dgid) {
-        return 1;
-    }
-
-    if (ucs_unlikely(!is_grh_present)) {
-        ucs_warn("RoCE packet does not contain GRH");
-        return 1;
-    }
-
-    local_gid = (char*)iface->super.gid_info.gid.raw + (16 - iface->config.gid_len);
-    dest_gid  = (char*)grh_end - iface->config.gid_len;
-
-    if (memcmp(local_gid, dest_gid, iface->config.gid_len)) {
-        UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_UD_IFACE_STAT_RX_DROP, 1);
-        ucs_trace_data("Drop packet with wrong dgid");
-        return 0;
-    }
-
-    return 1;
-}
 
 /*
 management of connecting endpoints (cep)
@@ -390,6 +395,104 @@ ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
 
+ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
+
+ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
+
+void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
+
+void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
+
+void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
+                                   uct_ud_ctl_desc_t *cdesc, int is_async);
+
+void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
+                                  int is_async);
+
+void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface);
+
+
+static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
+{
+    return iface->tx.available > 0;
+}
+
+
+static UCS_F_ALWAYS_INLINE int uct_ud_iface_has_skbs(uct_ud_iface_t *iface)
+{
+    return iface->tx.skb || !ucs_mpool_is_empty(&iface->tx.mp);
+}
+
+
+static inline uct_ib_address_t* uct_ud_creq_ib_addr(uct_ud_ctl_hdr_t *conn_req)
+{
+    ucs_assert(conn_req->type == UCT_UD_PACKET_CREQ);
+    return (uct_ib_address_t*)(conn_req + 1);
+}
+
+
+static UCS_F_ALWAYS_INLINE void uct_ud_enter(uct_ud_iface_t *iface)
+{
+    UCS_ASYNC_BLOCK(iface->super.super.worker->async);
+}
+
+
+static UCS_F_ALWAYS_INLINE void uct_ud_leave(uct_ud_iface_t *iface)
+{
+    UCS_ASYNC_UNBLOCK(iface->super.super.worker->async);
+}
+
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_ud_grh_get_dgid_len(struct ibv_grh *grh)
+{
+    static const uint8_t ipmask = 0xf0;
+    uint8_t ipver               = ((*(uint8_t*)grh) & ipmask);
+
+    return (ipver == (6 << 4)) ? UCS_IPV6_ADDR_LEN : UCS_IPV4_ADDR_LEN;
+}
+
+
+static UCS_F_ALWAYS_INLINE int
+uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present)
+{
+    struct ibv_grh *grh = (struct ibv_grh *)packet;
+    size_t gid_len;
+    union ibv_gid *gid;
+    khiter_t khiter;
+    char gid_str[128] UCS_V_UNUSED;
+
+    if (!iface->config.check_grh_dgid) {
+        return 1;
+    }
+
+    if (ucs_unlikely(!is_grh_present)) {
+        ucs_warn("RoCE packet does not contain GRH");
+        return 1;
+    }
+
+    gid_len = uct_ud_grh_get_dgid_len(grh);
+    if (ucs_likely((gid_len == iface->gid_table.last_len) &&
+                    uct_ud_gid_equal(&grh->dgid, &iface->gid_table.last,
+                                     gid_len))) {
+        return 1;
+    }
+
+    gid    = uct_ud_grh_get_dgid(grh, gid_len);
+    khiter = kh_get(uct_ud_iface_gid, &iface->gid_table.hash, *gid);
+    if (ucs_likely(khiter != kh_end(&iface->gid_table.hash))) {
+        iface->gid_table.last     = *gid;
+        iface->gid_table.last_len = gid_len;
+        return 1;
+    }
+
+    UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_UD_IFACE_STAT_RX_DROP, 1);
+    ucs_trace_data("iface %p: drop packet with wrong dgid %s", iface,
+                   uct_ib_gid_str(gid, gid_str, sizeof(gid_str)));
+    return 0;
+}
+
+
 /* get time of the last async wakeup */
 static UCS_F_ALWAYS_INLINE ucs_time_t
 uct_ud_iface_get_async_time(uct_ud_iface_t *iface)
@@ -397,11 +500,13 @@ uct_ud_iface_get_async_time(uct_ud_iface_t *iface)
     return iface->super.super.worker->async->last_wakeup;
 }
 
+
 static UCS_F_ALWAYS_INLINE ucs_time_t
 uct_ud_iface_get_time(uct_ud_iface_t *iface)
 {
     return ucs_get_time();
 }
+
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_twheel_sweep(uct_ud_iface_t *iface)
@@ -416,6 +521,7 @@ uct_ud_iface_twheel_sweep(uct_ud_iface_t *iface)
 
     ucs_twheel_sweep(&iface->tx.timer, uct_ud_iface_get_time(iface));
 }
+
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
@@ -434,11 +540,13 @@ uct_ud_iface_progress_pending(uct_ud_iface_t *iface, const uintptr_t is_async)
                          (void *)is_async);
 }
 
+
 static UCS_F_ALWAYS_INLINE int
 uct_ud_iface_has_pending_async_ev(uct_ud_iface_t *iface)
 {
     return iface->tx.async_before_pending;
 }
+
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
@@ -447,6 +555,7 @@ uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
         iface->tx.async_before_pending = 1;
     }
 }
+
 
 static UCS_F_ALWAYS_INLINE uint16_t
 uct_ud_iface_send_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_send_skb_t *skb,
@@ -458,11 +567,13 @@ uct_ud_iface_send_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_send_skb_t 
     return ud_ops->send_ctl(ep, skb, iov, iovcnt, flags, max_log_sge);
 }
 
+
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
 {
     ucs_queue_push(&iface->tx.outstanding_q, &cdesc->queue);
 }
+
 
 /* Go over all active eps and remove them. Do it this way because class destructors are not
  * virtual
@@ -476,19 +587,6 @@ uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
         } \
     }
 
-ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
-
-ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
-
-void uct_ud_iface_progress_enable(uct_iface_h tl_iface, unsigned flags);
-
-void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
-
-void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
-                                   uct_ud_ctl_desc_t *cdesc, int is_async);
-
-void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
-                                  int is_async);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
@@ -499,7 +597,6 @@ uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
     return uct_ud_iface_dispatch_pending_rx_do(iface);
 }
 
-void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface);
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface)

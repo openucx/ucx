@@ -457,8 +457,7 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     len   = ntohl(cqe->byte_cnt);
     VALGRIND_MAKE_MEM_DEFINED(packet, len);
 
-    if (!uct_ud_iface_check_grh(&iface->super,
-                                UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN),
+    if (!uct_ud_iface_check_grh(&iface->super, packet,
                                 uct_ib_mlx5_cqe_is_grh_present(cqe))) {
         ucs_mpool_put_inline(desc);
         goto out;

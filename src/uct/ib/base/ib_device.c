@@ -933,7 +933,6 @@ err:
 
 ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)
 {
-
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     uint8_t port_num;
     ucs_status_t status;
