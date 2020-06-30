@@ -30,6 +30,7 @@ UCS_TEST_F(test_rcache_basic, create_fail) {
         ucs_get_page_size(),
         UCS_BIT(30), /* non-existing event */
         1000,
+        0,
         &ops,
         NULL
     };
@@ -69,6 +70,7 @@ protected:
             ucs_get_page_size(),
             UCM_EVENT_VM_UNMAPPED,
             1000,
+            0,
             &ops,
             reinterpret_cast<void*>(this)
         };

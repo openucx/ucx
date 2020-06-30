@@ -266,6 +266,7 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
     rcache_params.ucm_event_priority = 0;
     rcache_params.ops                = &uct_xpmem_rcache_ops;
     rcache_params.context            = rmem;
+    rcache_params.flags              = UCS_RCACHE_FLAG_NO_PFN_CHECK;
 
     status = ucs_rcache_create(&rcache_params, "xpmem_remote_mem",
                                ucs_stats_get_root(), &rmem->rcache);

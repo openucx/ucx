@@ -47,6 +47,13 @@ enum {
 };
 
 /*
+ * Rcache flags.
+ */
+enum {
+    UCS_RCACHE_FLAG_NO_PFN_CHECK = UCS_BIT(0), /**< PFN check not supported for this rcache */
+};
+
+/*
  * Registration cache operations.
  */
 struct ucs_rcache_ops {
@@ -110,6 +117,7 @@ struct ucs_rcache_params {
                                                      UCM_EVENT_VM_UNMAPPED and
                                                      UCM_EVENT_MEM_TYPE_FREE are supported */
     int                    ucm_event_priority;  /**< Priority of memory events */
+    int                    flags;               /**< Flags */
     const ucs_rcache_ops_t *ops;                /**< Memory operations functions */
     void                   *context;            /**< User-defined context that will
                                                      be passed to mem_reg/mem_dereg */

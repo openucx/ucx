@@ -1219,6 +1219,7 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
             rcache_params.ucm_event_priority = md_config->rcache.event_prio;
             rcache_params.context            = md;
             rcache_params.ops                = &uct_ib_rcache_ops;
+            rcache_params.flags              = 0;
 
             status = ucs_rcache_create(&rcache_params, uct_ib_device_name(&md->dev),
                                        UCS_STATS_RVAL(md->stats), &md->rcache);
