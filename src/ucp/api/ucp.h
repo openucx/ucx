@@ -643,7 +643,7 @@ typedef struct ucp_generic_dt_ops {
      * @param [in]  count          Number of elements to pack into the buffer.
      *
      * @return  A custom state that is passed to the following
-     *          @ref ucp_generic_dt_ops::unpack "pack()" routine.
+     *          @ref ucp_generic_dt_ops::pack "pack()" routine.
      */
     void* (*start_pack)(void *context, const void *buffer, size_t count);
 
