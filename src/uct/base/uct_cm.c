@@ -111,10 +111,34 @@ void uct_cm_ep_server_conn_notify_cb(uct_cm_base_ep_t *cep, ucs_status_t status)
     cep->server.notify_cb(&cep->super.super, cep->user_data, &notify_args);
 }
 
+static ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
+{
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
+        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
+                  params->field_mask);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ||
+        !(params->sockaddr_cb_flags & UCT_CB_FLAG_ASYNC)) {
+        ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS and UCT_CB_FLAG_ASYNC "
+                  "should be set. field_mask 0x%lx, sockaddr_cb_flags 0x%x",
+                  params->field_mask, params->sockaddr_cb_flags);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_cm_set_common_data(uct_cm_base_ep_t *ep,
                                     const uct_ep_params_t *params)
 {
     ucs_status_t status;
+
+    status = uct_cm_check_ep_params(params);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB,
                            ep->priv_pack_cb, params->sockaddr_pack_cb,
@@ -137,41 +161,9 @@ ucs_status_t uct_cm_set_common_data(uct_cm_base_ep_t *ep,
     return UCS_OK;
 }
 
-ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
-{
-    if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
-        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
-                  params->field_mask);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ||
-        !(params->sockaddr_cb_flags & UCT_CB_FLAG_ASYNC)) {
-        ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS and UCT_CB_FLAG_ASYNC "
-                  "should be set. field_mask 0x%lx, sockaddr_cb_flags 0x%x",
-                  params->field_mask, params->sockaddr_cb_flags);
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    if (!(params->field_mask & (UCT_EP_PARAM_FIELD_SOCKADDR |
-                                UCT_EP_PARAM_FIELD_CONN_REQUEST))) {
-        ucs_error("neither UCT_EP_PARAM_FIELD_SOCKADDR nor "
-                  "UCT_EP_PARAM_FIELD_CONN_REQUEST is set. field_mask 0x%lx",
-                  params->field_mask);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
-
 UCS_CLASS_INIT_FUNC(uct_cm_base_ep_t, const uct_ep_params_t *params)
 {
     ucs_status_t status;
-
-    status = uct_cm_check_ep_params(params);
-    if (status != UCS_OK) {
-        return status;
-    }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &params->cm->iface);
 

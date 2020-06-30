@@ -50,11 +50,9 @@ static void uct_tcp_listener_conn_req_handler(int fd, int events, void *arg)
     }
 
     /* create the server's endpoint here. uct_ep_create() will return this one */
-    params.field_mask        = UCT_EP_PARAM_FIELD_CM               |
-                               UCT_EP_PARAM_FIELD_CONN_REQUEST     |
+    params.field_mask        = UCT_EP_PARAM_FIELD_CM |
                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS;
     params.cm                = listener->super.cm;
-    params.conn_request      = NULL;
     params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
 
     status = UCS_CLASS_NEW(uct_tcp_sockcm_ep_t, &ep, &params);
