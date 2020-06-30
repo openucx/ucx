@@ -69,9 +69,9 @@
 
 
 typedef enum uct_cuda_base_gen {
-    UCT_CUDA_BASE_GEN_PASCAL = 6,
-    UCT_CUDA_BASE_GEN_VOLTA  = 7,
-    UCT_CUDA_BASE_GEN_AMPERE = 8
+    UCT_CUDA_BASE_GEN_P100 = 6,
+    UCT_CUDA_BASE_GEN_V100 = 7,
+    UCT_CUDA_BASE_GEN_A100 = 8
 } uct_cuda_base_gen_t;
 
 ucs_status_t
