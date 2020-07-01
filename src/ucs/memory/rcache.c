@@ -237,11 +237,8 @@ static void ucs_rcache_region_validate_pfn(ucs_rcache_t *rcache,
     ucs_rcache_region_validate_pfn_t ctx;
     ucs_status_t status;
 
-    if (rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK) {
-        return;
-    }
-
-    if (ucs_global_opts.rcache_check_pfn == 0) {
+    if ((rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK) ||
+        (ucs_global_opts.rcache_check_pfn == 0)) {
         return;
     }
 
@@ -304,7 +301,8 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
         }
     }
 
-    if (ucs_global_opts.rcache_check_pfn > 1) {
+    if (!(rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK) &&
+        (ucs_global_opts.rcache_check_pfn > 1)) {
         ucs_free(ucs_rcache_region_pfn_ptr(region));
     }
 
@@ -745,9 +743,7 @@ retry:
     region->flags   |= UCS_RCACHE_REGION_FLAG_REGISTERED;
     region->refcount = 2; /* Page-table + user */
 
-    if (rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK) {
-        ucs_rcache_region_pfn(region) = 0;
-    } else {
+    if (!(rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK)) {
         status = ucs_rcache_fill_pfn(region);
         if (status != UCS_OK) {
             ucs_error("failed to allocate pfn list");
