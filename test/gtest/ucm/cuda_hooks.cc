@@ -3,13 +3,16 @@
 * See file LICENSE for terms.
 */
 #include <ucm/api/ucm.h>
-#include <ucm/util/sys.h>
-#include <ucs/sys/topo.h>
-#include <ucs/memory/memory_type.h>
 #include <common/test.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
+
+extern "C" {
+#include <ucm/util/sys.h>
+#include <ucs/sys/topo.h>
+#include <ucs/memory/memory_type.h>
 #include <string.h>
+}
 
 static ucm_event_t alloc_event, free_event;
 
