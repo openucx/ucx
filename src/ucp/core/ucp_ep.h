@@ -209,6 +209,19 @@ typedef struct ucp_memtype_thresh {
 } ucp_memtype_thresh_t;
 
 
+/*
+ * Rendezvous thresholds
+ */
+typedef struct ucp_rndv_thresh {
+        /* threshold calculated assuming faster remote completion */
+        ssize_t            remote;
+        /* threshold calculated assuming faster local completion, for instance
+         * when UCP_OP_ATTR_FLAG_FAST_CMP flagL is provided to send operation
+         * parameters */
+        ssize_t            local;
+} ucp_rndv_thresh_t;
+
+
 struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
@@ -234,59 +247,59 @@ struct ucp_ep_config {
     ucp_md_index_t          md_index[UCP_MAX_LANES];
 
     struct {
+        /* Maximal total size of rndv_get_zcopy */
+        size_t            max_get_zcopy;
+        /* Minimal size of rndv_get_zcopy */
+        size_t            min_get_zcopy;
+        /* Can the message > `max_get_zcopy` be split to
+         * the segments that are >= `min_get_zcopy` */
+        int               get_zcopy_split;
+        /* Maximal total size of rndv_put_zcopy */
+        size_t            max_put_zcopy;
+        /* Minimal size of rndv_put_zcopy */
+        size_t            min_put_zcopy;
+        /* Can the message > `max_put_zcopy` be split to
+         * the segments that are >= `min_put_zcopy` */
+        int               put_zcopy_split;
+        /* Threshold for switching from eager to RMA based rendezvous */
+        ucp_rndv_thresh_t rma_thresh;
+        /* Threshold for switching from eager to AM based rendezvous */
+        ucp_rndv_thresh_t am_thresh;
+        /* Total size of packed rkey, according to high-bw md_map */
+        size_t            rkey_size;
+        /* remote memory domains which support rkey_ptr */
+        ucp_md_map_t      rkey_ptr_dst_mds;
+        /* Lanes for GET zcopy */
+        ucp_lane_index_t  get_zcopy_lanes[UCP_MAX_LANES];
+        /* Lanes for PUT zcopy */
+        ucp_lane_index_t  put_zcopy_lanes[UCP_MAX_LANES];
+        /* BW based scale factor */
+        double            scale[UCP_MAX_LANES];
+    } rndv;
+
+    struct {
         /* Protocols used for tag matching operations
          * (can be AM based or tag offload). */
         const ucp_request_send_proto_t   *proto;
         const ucp_request_send_proto_t   *sync_proto;
 
         /* Lane used for tag matching operations. */
-        ucp_lane_index_t    lane;
+        ucp_lane_index_t     lane;
 
         /* Maximal size for eager short. */
         ucp_memtype_thresh_t max_eager_short;
 
         /* Configuration of the lane used for eager protocols
          * (can be AM or tag offload). */
-        ucp_ep_msg_config_t eager;
+        ucp_ep_msg_config_t  eager;
 
+        /* Threshold for switching from eager to rendezvous. Can be different
+         * from AM thresholds if tag offload is enabled and tag offload lane is
+         * not the same as AM lane. */
         struct {
-            /* Maximal total size of rndv_get_zcopy */
-            size_t          max_get_zcopy;
-            /* Minimal size of rndv_get_zcopy */
-            size_t          min_get_zcopy;
-            /* Can the message > `max_get_zcopy` be split to
-             * the segments that are >= `min_get_zcopy` */
-            int             get_zcopy_split;
-            /* Maximal total size of rndv_put_zcopy */
-            size_t          max_put_zcopy;
-            /* Minimal size of rndv_put_zcopy */
-            size_t          min_put_zcopy;
-            /* Can the message > `max_put_zcopy` be split to
-             * the segments that are >= `min_put_zcopy` */
-            int             put_zcopy_split;
-            /* Threshold for switching from eager to RMA based rendezvous */
-            size_t          rma_thresh;
-            /* Threshold for switching from eager to AM based rendezvous */
-            size_t          am_thresh;
-            /* Total size of packed rkey, according to high-bw md_map */
-            size_t          rkey_size;
-            /* remote memory domains which support rkey_ptr */
-            ucp_md_map_t    rkey_ptr_dst_mds;
-            /* Lanes for GET zcopy */
-            ucp_lane_index_t get_zcopy_lanes[UCP_MAX_LANES];
-            /* Lanes for PUT zcopy */
-            ucp_lane_index_t put_zcopy_lanes[UCP_MAX_LANES];
-            /* BW based scale factor */
-            double           scale[UCP_MAX_LANES];
+            ucp_rndv_thresh_t    rma_thresh;
+            ucp_rndv_thresh_t    am_thresh;
         } rndv;
-
-        /* special thresholds for the ucp_tag_send_nbr() */
-        struct {
-            /* Threshold for switching from eager to RMA based rendezvous */
-            size_t          rma_thresh;
-            /* Threshold for switching from eager to AM based rendezvous */
-            size_t          am_thresh;
-        } rndv_send_nbr;
 
         struct {
             /* Maximal size for eager short. */
@@ -304,7 +317,7 @@ struct ucp_ep_config {
          * (currently it's only AM based). */
         const ucp_request_send_proto_t   *proto;
     } stream;
-    
+
     struct {
         /* Protocols used for am operations */
         const ucp_request_send_proto_t   *proto;
