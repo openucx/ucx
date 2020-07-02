@@ -80,7 +80,8 @@ void ucs_conn_match_cleanup(ucs_conn_match_ctx_t *conn_match_ctx)
                 ucs_diag("match_ctx %p: %s queue is not empty for %s address",
                          conn_match_ctx,
                          ucs_conn_match_queue_title[i],
-                         conn_match_ctx->ops.address_str(&peer->address, address_str,
+                         conn_match_ctx->ops.address_str(conn_match_ctx,
+                                                         &peer->address, address_str,
                                                          UCS_CONN_MATCH_ADDRESS_STR_MAX));
             }
         }
@@ -102,7 +103,8 @@ ucs_conn_match_peer_alloc(ucs_conn_match_ctx_t *conn_match_ctx,
     if (peer == NULL) {
         ucs_fatal("match_ctx %p: failed to allocate memory for %s address",
                   conn_match_ctx,
-                  conn_match_ctx->ops.address_str(address, address_str,
+                  conn_match_ctx->ops.address_str(conn_match_ctx,
+                                                  address, address_str,
                                                   UCS_CONN_MATCH_ADDRESS_STR_MAX));
     }
 
@@ -127,7 +129,8 @@ ucs_conn_match_get_conn(ucs_conn_match_ctx_t *conn_match_ctx,
         ucs_free(peer);
         ucs_fatal("match_ctx %p: kh_put failed for %s",
                   conn_match_ctx,
-                  conn_match_ctx->ops.address_str(address, address_str,
+                  conn_match_ctx->ops.address_str(conn_match_ctx,
+                                                  address, address_str,
                                                   UCS_CONN_MATCH_ADDRESS_STR_MAX));
     }
 
@@ -166,7 +169,8 @@ void ucs_conn_match_insert(ucs_conn_match_ctx_t *conn_match_ctx,
     ucs_trace("match_ctx %p: conn_match %p added as %s address %s conn_sn %zu",
               conn_match_ctx, conn_match,
               ucs_conn_match_queue_title[conn_queue_type],
-              conn_match_ctx->ops.address_str(address, address_str,
+              conn_match_ctx->ops.address_str(conn_match_ctx,
+                                              address, address_str,
                                               UCS_CONN_MATCH_ADDRESS_STR_MAX),
               conn_sn);
 }
@@ -197,7 +201,8 @@ ucs_conn_match_retrieve(ucs_conn_match_ctx_t *conn_match_ctx,
             ucs_hlist_del(head, &elem->list);
             ucs_trace("match_ctx %p: matched %s conn_match %p by address %s conn_sn %zu",
                       conn_match_ctx, ucs_conn_match_queue_title[conn_queue_type], elem,
-                      conn_match_ctx->ops.address_str(address, address_str,
+                      conn_match_ctx->ops.address_str(conn_match_ctx,
+                                                      address, address_str,
                                                       UCS_CONN_MATCH_ADDRESS_STR_MAX),
                       conn_sn);
             return elem;
@@ -207,7 +212,8 @@ ucs_conn_match_retrieve(ucs_conn_match_ctx_t *conn_match_ctx,
 notfound:
     ucs_trace("match_ctx %p: %s address %s conn_sn %zu not found",
               conn_match_ctx, ucs_conn_match_queue_title[conn_queue_type],
-              conn_match_ctx->ops.address_str(address, address_str,
+              conn_match_ctx->ops.address_str(conn_match_ctx,
+                                              address, address_str,
                                               UCS_CONN_MATCH_ADDRESS_STR_MAX),
               conn_sn);
     return NULL;
@@ -228,7 +234,8 @@ void ucs_conn_match_remove_elem(ucs_conn_match_ctx_t *conn_match_ctx,
     if (iter == kh_end(&conn_match_ctx->hash)) {
         ucs_fatal("match_ctx %p: conn_match %p address %s conn_sn %zu "
                   "wasn't found in hash as %s connection", conn_match_ctx, elem,
-                  conn_match_ctx->ops.address_str(address, address_str,
+                  conn_match_ctx->ops.address_str(conn_match_ctx,
+                                                  address, address_str,
                                                   UCS_CONN_MATCH_ADDRESS_STR_MAX),
                   conn_match_ctx->ops.get_conn_sn(elem),
                   ucs_conn_match_queue_title[conn_queue_type]);
@@ -242,7 +249,8 @@ void ucs_conn_match_remove_elem(ucs_conn_match_ctx_t *conn_match_ctx,
     ucs_hlist_del(head, &elem->list);
     ucs_trace("match_ctx %p: remove %s conn_match %p address %s conn_sn %zu)",
               conn_match_ctx, ucs_conn_match_queue_title[conn_queue_type],
-              elem, conn_match_ctx->ops.address_str(address, address_str,
+              elem, conn_match_ctx->ops.address_str(conn_match_ctx,
+                                                    address, address_str,
                                                     UCS_CONN_MATCH_ADDRESS_STR_MAX),
               conn_match_ctx->ops.get_conn_sn(elem));
 }

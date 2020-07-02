@@ -349,7 +349,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     uct_ud_ep_reset(self);
-    ucs_list_head_init(&self->cep_list);
     uct_ud_iface_add_ep(iface, self);
     self->tx.tick = iface->tx.tick;
     ucs_wtimer_init(&self->timer, uct_ud_ep_timer);
@@ -412,7 +411,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 {
     uct_ud_iface_t *iface = ucs_derived_of(self->super.super.iface, uct_ud_iface_t);
 
-    ucs_trace_func("ep=%p id=%d conn_id=%d", self, self->ep_id, self->conn_id);
+    ucs_trace_func("ep=%p id=%d conn_sn=%d", self, self->ep_id, self->conn_sn);
 
     uct_ud_enter(iface);
 
@@ -422,15 +421,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
     ucs_wtimer_remove(&iface->tx.timer, &self->timer);
     uct_ud_iface_remove_ep(iface, self);
-    uct_ud_iface_cep_remove(self);
+    uct_ud_iface_cep_remove(iface, self);
     ucs_frag_list_cleanup(&self->rx.ooo_pkts);
 
     ucs_arbiter_group_purge(&iface->tx.pending_q, &self->tx.pending.group,
                             uct_ud_ep_pending_cancel_cb, 0);
 
     if (!ucs_queue_is_empty(&self->tx.window)) {
-        ucs_debug("ep=%p id=%d conn_id=%d has %d unacked packets",
-                   self, self->ep_id, self->conn_id,
+        ucs_debug("ep=%p id=%d conn_sn=%d has %d unacked packets",
+                   self, self->ep_id, self->conn_sn,
                    (int)ucs_queue_length(&self->tx.window));
     }
     ucs_arbiter_group_cleanup(&self->tx.pending.group);
@@ -493,26 +492,35 @@ static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
-                                               const uct_ib_address_t *ib_addr,
-                                               const uct_ud_iface_addr_t *if_addr,
-                                               unsigned path_index,
-                                               uct_ud_ep_t **new_ep_p,
-                                               uct_ud_send_skb_t **skb_p)
+ucs_status_t uct_ud_ep_create_connected(uct_iface_h iface_h,
+                                        const uct_device_addr_t *dev_addr,
+                                        const uct_iface_addr_t *iface_addr,
+                                        unsigned path_index,
+                                        size_t ep_dest_address_offset,
+                                        uct_ep_h *new_ep_p)
 {
+    uct_ud_iface_t *iface              = ucs_derived_of(iface_h,
+                                                        uct_ud_iface_t);
+    const uct_ib_address_t *ib_addr    = (const uct_ib_address_t*)dev_addr;
+    const uct_ud_iface_addr_t *if_addr = (const uct_ud_iface_addr_t*)iface_addr;
+    void *dest_address;
+    uct_ud_send_skb_t *skb;
+    uct_ud_ep_conn_sn_t conn_sn;
     uct_ep_params_t params;
     ucs_status_t status;
     uct_ud_ep_t *ep;
     uct_ep_h new_ep_h;
 
-    ep = uct_ud_iface_cep_lookup(iface, ib_addr, if_addr, UCT_UD_EP_CONN_ID_MAX,
-                                 path_index);
-    if (ep) {
+    uct_ud_enter(iface);
+
+    conn_sn = uct_ud_iface_cep_get_conn_sn(iface, ib_addr, if_addr, path_index);
+    ep      = uct_ud_iface_cep_retrieve(iface, ib_addr, if_addr, path_index,
+                                        conn_sn, 1);
+    if (ep != NULL) {
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
         ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
-        *new_ep_p = ep;
-        *skb_p    = NULL;
-        return UCS_ERR_ALREADY_EXISTS;
+        status     = UCS_OK;
+        goto out;
     }
 
     params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
@@ -522,51 +530,63 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
 
     status = uct_ep_create(&params, &new_ep_h);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
-    ep = ucs_derived_of(new_ep_h, uct_ud_ep_t);
+    ep          = ucs_derived_of(new_ep_h, uct_ud_ep_t);
+    ep->conn_sn = conn_sn;
 
     status = uct_ud_ep_connect_to_iface(ep, ib_addr, if_addr);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
-    status = uct_ud_iface_cep_insert(iface, ib_addr, if_addr, ep,
-                                     UCT_UD_EP_CONN_ID_MAX, path_index);
-    if (status != UCS_OK) {
-        goto err_cep_insert;
-    }
+    uct_ud_iface_cep_insert(iface, ib_addr, if_addr, path_index, conn_sn, ep);
 
-    *skb_p = uct_ud_ep_prepare_creq(ep);
-    if (!*skb_p) {
-        status = UCS_ERR_NO_RESOURCE;
+    skb = uct_ud_ep_prepare_creq(ep);
+    if (skb == NULL) {
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREQ);
     }
 
-    *new_ep_p = ep;
+    dest_address = uct_ud_iface_get_peer_address(iface, ib_addr, if_addr,
+                                                 ep->path_index,
+                                                 UCS_PTR_BYTE_OFFSET(
+                                                     ep, ep_dest_address_offset));
+    if (dest_address == NULL) {
+        uct_ud_ep_disconnect_from_iface(&ep->super.super);
+        goto err;
+    }
+
+    if (skb != NULL) {
+        uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
+                              UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED, 1);
+        uct_ud_iface_complete_tx_skb(iface, ep, skb);
+        uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_SENT);
+    }
+
+out:
+    /* cppcheck-suppress autoVariables */
+    *new_ep_p = &ep->super.super;
+    uct_ud_leave(iface);
     return status;
 
-err_cep_insert:
-    uct_ud_ep_disconnect_from_iface(&ep->super.super);
-    return status;
+err:
+    ep = NULL;
+    goto out;
 }
 
-void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep,
-                                 const uct_ib_address_t *ib_addr,
-                                 const uct_ud_iface_addr_t *if_addr)
+ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
+                                     const uct_device_addr_t *dev_addr,
+                                     const uct_ep_addr_t *uct_ep_addr,
+                                     size_t ep_dest_address_offset)
 {
-    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
-    uct_ud_iface_cep_rollback(iface, ib_addr, if_addr, ep);
-    uct_ud_ep_disconnect_from_iface(&ep->super.super);
-}
-
-ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
-                                     const uct_ib_address_t *ib_addr,
-                                     const uct_ud_ep_addr_t *ep_addr)
-{
-    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+    uct_ud_ep_t *ep                   = ucs_derived_of(tl_ep, uct_ud_ep_t);
+    uct_ud_iface_t *iface             = ucs_derived_of(ep->super.super.iface,
+                                                       uct_ud_iface_t);
+    const uct_ib_address_t *ib_addr   = (const uct_ib_address_t*)dev_addr;
+    const uct_ud_ep_addr_t *ep_addr   = (const uct_ud_ep_addr_t*)uct_ep_addr;
     uct_ib_device_t UCS_V_UNUSED *dev = uct_ib_iface_device(&iface->super);
     char buf[128];
+    void *dest_address;
 
     ucs_assert_always(ep->dest_ep_id == UCT_UD_EP_NULL_ID);
     ucs_trace_func("");
@@ -583,6 +603,16 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num),
               ep->dest_ep_id);
+
+    dest_address = uct_ud_iface_get_peer_address(iface, ib_addr,
+                                                 &ep_addr->iface_addr,
+                                                 ep->path_index,
+                                                 UCS_PTR_BYTE_OFFSET(
+                                                     ep, ep_dest_address_offset));
+    if (dest_address == NULL) {
+        return UCS_ERR_INVALID_ADDR;
+    }
+
     return UCS_OK;
 }
 
@@ -637,40 +667,41 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
 
     ep->path_index = ctl->conn_req.path_index;
 
-    status = uct_ud_iface_cep_insert(iface, uct_ud_creq_ib_addr(ctl),
-                                     &ctl->conn_req.ep_addr.iface_addr,
-                                     ep, ctl->conn_req.conn_id, ep->path_index);
-    ucs_assert_always(status == UCS_OK);
+    uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_PRIVATE);
+
+    ep->conn_sn = ctl->conn_req.conn_sn;
+    uct_ud_iface_cep_insert(iface, uct_ud_creq_ib_addr(ctl),
+                            &ctl->conn_req.ep_addr.iface_addr,
+                            ep->path_index, ctl->conn_req.conn_sn, ep);
     return ep;
 }
 
 static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 {
-    uct_ud_ep_t *ep;
     uct_ud_ctl_hdr_t *ctl = (uct_ud_ctl_hdr_t *)(neth + 1);
+    uct_ud_ep_t *ep;
 
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREQ);
 
-    ep = uct_ud_iface_cep_lookup(iface, uct_ud_creq_ib_addr(ctl),
-                                 &ctl->conn_req.ep_addr.iface_addr,
-                                 ctl->conn_req.conn_id,
-                                 ctl->conn_req.path_index);
-    if (!ep) {
+    ep = uct_ud_iface_cep_retrieve(iface, uct_ud_creq_ib_addr(ctl),
+                                   &ctl->conn_req.ep_addr.iface_addr,
+                                   ctl->conn_req.path_index,
+                                   ctl->conn_req.conn_sn, 0);
+    if (ep == NULL) {
         ep = uct_ud_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
         ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
-        uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_PRIVATE);
     } else {
         if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
-            /* simultanuous CREQ */
+            /* simultaneuous CREQ */
             uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
             ep->rx.ooo_pkts.head_sn = neth->psn;
             uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
-            ucs_debug("simultanuous CREQ ep=%p"
-                      "(iface=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
-                      ep, iface, ep->conn_id, ep->ep_id,
+            ucs_debug("simultaneuous CREQ ep=%p"
+                      "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
+                      ep, iface, ep->conn_sn, ep->ep_id,
                       ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
             if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
                 /* our own creq was sent, treat incoming creq as ack and remove our own
@@ -684,9 +715,9 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 
     ++ep->rx_creq_count;
 
-    ucs_assertv_always(ctl->conn_req.conn_id == ep->conn_id,
-                       "creq->conn_id=%d ep->conn_id=%d",
-                       ctl->conn_req.conn_id, ep->conn_id);
+    ucs_assertv_always(ctl->conn_req.conn_sn == ep->conn_sn,
+                       "creq->conn_sn=%d ep->conn_sn=%d",
+                       ctl->conn_req.conn_sn, ep->conn_sn);
 
     ucs_assertv_always(ctl->conn_req.path_index == ep->path_index,
                        "creq->path_index=%d ep->path_index=%d",
@@ -700,9 +731,9 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 
     /* creq must always have same psn */
     ucs_assertv_always(ep->rx.ooo_pkts.head_sn == neth->psn,
-                       "iface=%p ep=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
+                       "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
                        "neth_psn=%u ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
-                       iface, ep, ep->conn_id, ep->ep_id, ep->dest_ep_id,
+                       iface, ep, ep->conn_sn, ep->ep_id, ep->dest_ep_id,
                        ep->rx.ooo_pkts.head_sn, neth->psn, ep->flags,
                        ep->tx.pending.ops, ep->rx_creq_count);
     /* scedule connection reply op */
@@ -724,7 +755,7 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     if (uct_ud_ep_is_connected(ep)) {
         ucs_assertv_always(ep->dest_ep_id == ctl->conn_rep.src_ep_id,
-                           "ep [id=%d dest_ep_id=%d flags=0x%x] "
+                           "ep %p [id=%d dest_ep_id=%d flags=0x%x] "
                            "crep [neth->dest=%d dst_ep_id=%d src_ep_id=%d]",
                            ep->ep_id, ep->dest_ep_id, ep->path_index, ep->flags,
                            uct_ud_neth_get_dest_id(neth), ctl->conn_rep.src_ep_id);
@@ -757,9 +788,9 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
      * (or sent already) */
     ucs_assertv_always(!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREP) &&
                        !(ep->flags & UCT_UD_EP_FLAG_CREP_SENT),
-                       "iface=%p ep=%p conn_id=%d rx_psn=%u ep_flags=0x%x "
+                       "iface=%p ep=%p conn_sn=%d rx_psn=%u ep_flags=0x%x "
                        "ctl_ops=0x%x rx_creq_count=%d",
-                       iface, ep, ep->conn_id, ep->rx.ooo_pkts.head_sn,
+                       iface, ep, ep->conn_sn, ep->rx.ooo_pkts.head_sn,
                        ep->flags, ep->tx.pending.ops, ep->rx_creq_count);
 
     skb = uct_ud_iface_get_tx_skb(iface, ep);
@@ -776,7 +807,7 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     creq = (uct_ud_ctl_hdr_t *)(neth + 1);
 
     creq->type                = UCT_UD_PACKET_CREQ;
-    creq->conn_req.conn_id    = ep->conn_id;
+    creq->conn_req.conn_sn    = ep->conn_sn;
     creq->conn_req.path_index = ep->path_index;
 
     status = uct_ud_ep_get_address(&ep->super.super,
@@ -1044,9 +1075,9 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     /* Check that CREQ is neither sheduled nor waiting for CREP ack */
     ucs_assertv_always(!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ) &&
                        uct_ud_ep_is_last_ack_received(ep),
-                       "iface=%p ep=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
+                       "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
                        "ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
-                       iface, ep, ep->conn_id, ep->ep_id, ep->dest_ep_id,
+                       iface, ep, ep->conn_sn, ep->ep_id, ep->dest_ep_id,
                        ep->rx.ooo_pkts.head_sn, ep->flags, ep->tx.pending.ops,
                        ep->rx_creq_count);
 
