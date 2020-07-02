@@ -3259,8 +3259,11 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local source address.
- * @param [in]  length       Length of the data (in bytes) stored under the
- *                           source address.
+ * @param [in]  count        Number of elements of type
+ *                           @ref ucp_request_param_t.datatype to put. If
+ *                           @ref ucp_request_param_t.datatype is not specified,
+ *                           the type defaults to ucp_dt_make_contig(1), which
+ *                           corresponds to byte elements.
  * @param [in]  remote_addr  Pointer to the destination remote memory address
  *                           to write to.
  * @param [in]  rkey         Remote memory key associated with the
@@ -3275,8 +3278,11 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  *                                progress of the operation. The application is
  *                                responsible for releasing the handle using
  *                                @ref ucp_request_free "ucp_request_free()" routine.
+ * 
+ * @note Only the datatype ucp_dt_make_contig(1) is supported
+ * for @a param->datatype, see @ref ucp_dt_make_contig.
  */
-ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t length,
+ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param);
 
@@ -3379,8 +3385,11 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
  *
  * @param [in]  ep           Remote endpoint handle.
  * @param [in]  buffer       Pointer to the local destination address.
- * @param [in]  length       Length of the data (in bytes) stored under the
- *                           destination address.
+ * @param [in]  count        Number of elements of type
+ *                           @ref ucp_request_param_t.datatype to put. If
+ *                           @ref ucp_request_param_t.datatype is not specified,
+ *                           the type defaults to ucp_dt_make_contig(1), which
+ *                           corresponds to byte elements.
  * @param [in]  remote_addr  Pointer to the source remote memory address
  *                           to read from.
  * @param [in]  rkey         Remote memory key associated with the
@@ -3395,8 +3404,11 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
  *                                progress of the operation. The application is
  *                                responsible for releasing the handle using
  *                                @ref ucp_request_free "ucp_request_free()" routine.
+ * 
+ * @note Only the datatype ucp_dt_make_contig(1) is supported
+ * for @a param->datatype, see @ref ucp_dt_make_contig.
  */
-ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t length,
+ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param);
 
