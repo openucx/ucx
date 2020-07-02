@@ -1190,13 +1190,16 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
 
     if (!ucp_ep_config_test_rndv_support(config)) {
         /* Disable RNDV */
-        rndv_thresh = rndv_local_thresh = SIZE_MAX;
-    } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
+        ucs_trace("AM rendezvous protocol is not supported");
+        return;
+    }
+
+    if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
-        rndv_thresh     = ucp_ep_config_calc_rndv_thresh(worker, config,
-                                                         config->key.am_bw_lanes,
-                                                         config->key.am_bw_lanes,
-                                                         0);
+        rndv_thresh = ucp_ep_config_calc_rndv_thresh(worker, config,
+                                                     config->key.am_bw_lanes,
+                                                     config->key.am_bw_lanes,
+                                                     0);
         rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
         ucs_trace("active message rendezvous threshold is %zu", rndv_thresh);
     } else {
@@ -1208,8 +1211,7 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
                                        rndv_thresh);
     }
 
-    min_thresh = ucs_max(iface_attr->cap.am.min_zcopy, min_rndv_thresh);
-
+    min_thresh     = ucs_max(iface_attr->cap.am.min_zcopy, min_rndv_thresh);
     thresh->remote = ucp_ep_thresh(rndv_thresh, min_thresh, max_rndv_thresh);
     thresh->local  = ucp_ep_thresh(rndv_local_thresh, min_thresh, max_rndv_thresh);
 
@@ -1231,28 +1233,27 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
     uct_iface_attr_t *iface_attr;
 
     if (lane == UCP_NULL_LANE) {
-        ucs_debug("rendezvous (get_zcopy) protocol is not supported");
-        return;
+        goto out_not_supported;
     }
 
     rsc_index = config->key.lanes[lane].rsc_index;
     if (rsc_index == UCP_NULL_RESOURCE) {
-        return;
+        goto out_not_supported;
     }
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
     if (!ucp_ep_config_test_rndv_support(config)) {
         /* Disable RNDV */
-        rndv_thresh = rndv_local_thresh = SIZE_MAX;
+        goto out_not_supported;
     } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
-        rndv_thresh     = ucp_ep_config_calc_rndv_thresh(worker, config,
-                                                         config->key.am_bw_lanes,
-                                                         lanes, 1);
+        rndv_thresh       = ucp_ep_config_calc_rndv_thresh(worker, config,
+                                                           config->key.am_bw_lanes,
+                                                           lanes, 1);
         rndv_local_thresh = context->config.ext.rndv_send_nbr_thresh;
     } else {
-        rndv_thresh     = context->config.ext.rndv_thresh;
+        rndv_thresh       = context->config.ext.rndv_thresh;
         rndv_local_thresh = context->config.ext.rndv_thresh;
 
         /* adjust max_short if rndv_thresh is set externally */
@@ -1268,6 +1269,11 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
 
     ucs_trace("rndv threshold is %zu (fast local compl: %zu)",
               thresh->remote, thresh->local);
+
+    return;
+
+out_not_supported:
+    ucs_trace("rendezvous (get_zcopy) protocol is not supported");
 }
 
 static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_short,
@@ -1415,9 +1421,10 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->tag.proto                   = &ucp_tag_eager_proto;
     config->tag.sync_proto              = &ucp_tag_eager_sync_proto;
     config->tag.rndv.rma_thresh.remote  = SIZE_MAX;
-    config->tag.rndv.am_thresh.remote   = SIZE_MAX;
     config->tag.rndv.rma_thresh.local   = SIZE_MAX;
-    config->tag.rndv.am_thresh.local    = SIZE_MAX;
+    config->tag.rndv.am_thresh          = config->tag.rndv.rma_thresh;
+    config->rndv.rma_thresh             = config->tag.rndv.rma_thresh;
+    config->rndv.am_thresh              = config->tag.rndv.am_thresh;
     config->rndv.min_get_zcopy          = 0;
     config->rndv.max_get_zcopy          = SIZE_MAX;
     config->rndv.min_put_zcopy          = 0;
@@ -1573,13 +1580,14 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
 
+            /* Must have active messages for using rendezvous */
             if (config->key.am_lane != UCP_NULL_LANE) {
-                /* Must have active messages for using rendezvous */
                 tag_lanes[0] = lane;
                 ucp_ep_config_set_rndv_thresh(worker, config, tag_lanes,
                                               min_rndv_thresh, max_rndv_thresh,
                                               &config->tag.rndv.rma_thresh);
 
+                md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
                 ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr,
                                                  config, min_am_rndv_thresh,
                                                  max_am_rndv_thresh,
@@ -1645,9 +1653,10 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
                 if (context->config.ext.rndv_thresh != UCS_MEMUNITS_AUTO) {
                     /* adjust max_short if rndv_thresh is set externally */
+                    min_rndv_thresh = ucs_min(config->tag.rndv.rma_thresh.remote,
+                                              config->tag.rndv.am_thresh.remote);
                     ucp_ep_config_adjust_max_short(&config->tag.eager.max_short,
-                                                   ucs_min(config->tag.rndv.rma_thresh.remote,
-                                                           config->tag.rndv.am_thresh.remote));
+                                                   min_rndv_thresh);
                 }
 
                 /* Max Eager short has to be set after Zcopy and RNDV thresholds */

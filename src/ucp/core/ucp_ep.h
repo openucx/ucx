@@ -213,12 +213,12 @@ typedef struct ucp_memtype_thresh {
  * Rendezvous thresholds
  */
 typedef struct ucp_rndv_thresh {
-        /* threshold calculated assuming faster remote completion */
-        ssize_t            remote;
-        /* threshold calculated assuming faster local completion, for instance
-         * when UCP_OP_ATTR_FLAG_FAST_CMP flagL is provided to send operation
-         * parameters */
-        ssize_t            local;
+    /* threshold calculated assuming faster remote completion */
+    size_t            remote;
+    /* threshold calculated assuming faster local completion, for instance
+     * when UCP_OP_ATTR_FLAG_FAST_CMP flag is provided to send operation
+     * parameters */
+    size_t            local;
 } ucp_rndv_thresh_t;
 
 
