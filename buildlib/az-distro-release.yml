@@ -39,16 +39,18 @@ jobs:
       - bash: |
           set -eE
           ./autogen.sh
-          ./contrib/configure-release --with-cuda
+          mkdir pkg-build
+          cd pkg-build
+          ../contrib/configure-release --with-cuda
         displayName: Configure
 
       - bash: |
           set -eE
-          ./contrib/buildrpm.sh -s -t -b --strict-ibverbs-dep
+          cd pkg-build
+          ../contrib/buildrpm.sh -s -t -b --strict-ibverbs-dep
           cd rpm-dist/`uname -m`
-          tar -cjf "../../${AZ_ARTIFACT_NAME}" *.rpm
-          cd ../..
-          ls -l "${AZ_ARTIFACT_NAME}"
+          tar -cjf "../../../${AZ_ARTIFACT_NAME}" *.rpm
+          cd ../../..
           tar -tjf "${AZ_ARTIFACT_NAME}"
         displayName: Build RPM package
         condition: and(succeeded(), contains(variables['artifact_name'], 'centos'))
@@ -57,9 +59,11 @@ jobs:
 
       - bash: |
           set -eE
+          cd pkg-build
           dpkg-buildpackage -us -uc
-          find .. -name '*.deb' -exec cp {} "${AZ_ARTIFACT_NAME}" \;
-          ls -l "${AZ_ARTIFACT_NAME}"
+          find .. -name '*.deb'
+          find .. -name '*.deb' -exec cp {} "../${AZ_ARTIFACT_NAME}" \;
+          dpkg-deb -I "../${AZ_ARTIFACT_NAME}"
         displayName: Build DEB package
         condition: and(succeeded(), contains(variables['artifact_name'], 'ubuntu'))
         env:
