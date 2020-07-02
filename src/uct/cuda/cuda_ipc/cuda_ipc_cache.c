@@ -53,7 +53,8 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
     ucs_pgtable_purge(&cache->pgtable, uct_cuda_ipc_cache_region_collect_callback,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+        UCT_CUDADRV_FUNC_LOG_ERR(
+                cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
         ucs_free(region);
     }
     ucs_trace("%s: cuda ipc cache purged", cache->name);
@@ -99,7 +100,8 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
             ucs_error("failed to remove address:%p from cache (%s)",
                       (void *)region->key.d_bptr, ucs_status_string(status));
         }
-        UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+        UCT_CUDADRV_FUNC_LOG_ERR(
+                cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
         ucs_free(region);
     }
     ucs_trace("%s: closed memhandles in the range [%p..%p]",
@@ -133,7 +135,8 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr,
                       (void *)region->key.d_bptr, ucs_status_string(status));
         }
         ucs_assert(region->mapped_addr == mapped_addr);
-        status = UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(
+                cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
         ucs_free(region);
     }
 
@@ -182,8 +185,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle,
             }
 
             /* close memhandle */
-            UCT_CUDADRV_FUNC(cuIpcCloseMemHandle((CUdeviceptr)
-                                                 region->mapped_addr));
+            UCT_CUDADRV_FUNC_LOG_ERR(
+                    cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
             ucs_free(region);
         }
     }
