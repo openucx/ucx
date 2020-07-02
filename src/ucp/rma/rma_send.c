@@ -181,10 +181,10 @@ ucp_rma_nonblocking(ucp_ep_h ep, const void *buffer, size_t length,
 ucs_status_t ucp_put_nbi(ucp_ep_h ep, const void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey)
 {
-    ucp_request_param_t param = {.op_attr_mask = 0};
     ucs_status_ptr_t status_ptr;
 
-    status_ptr = ucp_put_nbx(ep, buffer, length, remote_addr, rkey, &param);
+    status_ptr = ucp_put_nbx(ep, buffer, length, remote_addr, rkey,
+                             &ucp_request_null_param);
     if (UCS_PTR_IS_PTR(status_ptr)) {
         ucp_request_free(status_ptr);
         return UCS_INPROGRESS;
@@ -257,10 +257,10 @@ out_unlock:
 ucs_status_t ucp_get_nbi(ucp_ep_h ep, void *buffer, size_t length,
                          uint64_t remote_addr, ucp_rkey_h rkey)
 {
-    ucp_request_param_t param = {.op_attr_mask = 0};
     ucs_status_ptr_t status_ptr;
 
-    status_ptr = ucp_get_nbx(ep, buffer, length, remote_addr, rkey, &param);
+    status_ptr = ucp_get_nbx(ep, buffer, length, remote_addr, rkey,
+                             &ucp_request_null_param);
     if (UCS_PTR_IS_PTR(status_ptr)) {
         ucp_request_free(status_ptr);
         return UCS_INPROGRESS;

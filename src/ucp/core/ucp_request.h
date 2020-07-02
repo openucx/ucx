@@ -292,11 +292,11 @@ struct ucp_request {
         } recv;
 
         struct {
-            ucp_worker_h          worker;   /* Worker to flush */
-            ucp_send_callback_t   cb;       /* Completion callback */
-            uct_worker_cb_id_t    prog_id;  /* Progress callback ID */
-            int                   comp_count; /* Countdown to request completion */
-            ucp_ep_ext_gen_t      *next_ep; /* Next endpoint to flush */
+            ucp_worker_h            worker;     /* Worker to flush */
+            ucp_send_nbx_callback_t cb;         /* Completion callback */
+            uct_worker_cb_id_t      prog_id;    /* Progress callback ID */
+            int                     comp_count; /* Countdown to request completion */
+            ucp_ep_ext_gen_t        *next_ep;   /* Next endpoint to flush */
         } flush_worker;
     };
 };
@@ -353,6 +353,7 @@ struct ucp_request_send_proto {
 
 extern ucs_mpool_ops_t ucp_request_mpool_ops;
 extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
+extern const ucp_request_param_t ucp_request_null_param;
 
 
 int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status,

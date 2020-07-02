@@ -266,7 +266,7 @@ enum ucp_ep_params_flags_field {
  * The enumeration is used to specify the behavior of @ref ucp_ep_close_nbx.
  */
 typedef enum {
-    UCP_EP_CLOSE_FLAG_FORCE         = 0, /**< @ref ucp_ep_close_nbx releases
+    UCP_EP_CLOSE_FLAG_FORCE = UCS_BIT(0) /**< @ref ucp_ep_close_nbx releases
                                               the endpoint without any
                                               confirmation from the peer. All
                                               outstanding requests will be
@@ -278,8 +278,9 @@ typedef enum {
                                               @ref UCP_ERR_HANDLING_MODE_PEER
                                               for all endpoints created on
                                               both (local and remote) sides to
-                                              avoid undefined behavior. */
-    UCP_EP_CLOSE_FLAG_FLUSH         = 1  /**< @ref ucp_ep_close_nbx schedules
+                                              avoid undefined behavior. If this
+                                              flag is not set then
+                                              @ref ucp_ep_close_nbx schedules
                                               flushes on all outstanding
                                               operations. */
 } ucp_ep_close_flags_t;
@@ -292,8 +293,7 @@ typedef enum {
  * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
  */
 enum ucp_ep_close_mode {
-    UCP_EP_CLOSE_MODE_FORCE         = UCP_EP_CLOSE_FLAG_FORCE,
-                                         /**< @ref ucp_ep_close_nb releases
+    UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
                                               the endpoint without any
                                               confirmation from the peer. All
                                               outstanding requests will be
@@ -306,8 +306,7 @@ enum ucp_ep_close_mode {
                                               for all endpoints created on
                                               both (local and remote) sides to
                                               avoid undefined behavior. */
-    UCP_EP_CLOSE_MODE_FLUSH         = UCP_EP_CLOSE_FLAG_FLUSH
-                                         /**< @ref ucp_ep_close_nb schedules
+    UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
 };

@@ -120,6 +120,15 @@
     return UCS_STATUS_PTR(_status);
 
 
+#define ucp_request_set_send_callback_param(_param, _req, _cb) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
+        ucp_request_set_callback(_req, _cb.cb, (_param)->cb.send, \
+                                 ((_param)->op_attr_mask & \
+                                  UCP_OP_ATTR_FIELD_USER_DATA) ? \
+                                 (_param)->user_data : NULL); \
+    }
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
@@ -639,15 +648,11 @@ static UCS_F_ALWAYS_INLINE uintptr_t ucp_request_get_dest_ep_ptr(ucp_request_t *
     return ucp_ep_dest_ep_ptr(req->send.ep);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_request_set_send_callback_param(const ucp_request_param_t *param,
-                                    ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE uint32_t
+ucp_request_param_flags(const ucp_request_param_t *param)
 {
-    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-        ucp_request_set_callback(req, send.cb, param->cb.send,
-                                 (param->op_attr_mask & UCP_OP_ATTR_FIELD_USER_DATA) ?
-                                 param->user_data : NULL);
-    }
+    return (param->op_attr_mask & UCP_EP_PARAM_FIELD_FLAGS) ?
+           param->flags : 0;
 }
 
 #endif
