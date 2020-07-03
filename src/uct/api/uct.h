@@ -1113,7 +1113,10 @@ struct uct_ep_params {
 
     /**
      * Connection request that was passed to
-     * @ref uct_cm_listener_conn_request_args_t::conn_request .
+     * @ref uct_cm_listener_conn_request_args_t::conn_request.
+     * @note After a call to @ref uct_ep_create, @a params.conn_request is
+     *       consumed and should not be used anymore, even if the call returns
+     *       with an error.
      */
     uct_conn_request_h                conn_request;
 
@@ -1953,13 +1956,14 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  *    @ref uct_ep_params_t::iface_addr are set, this will establish an endpoint
  *    that is connected to a remote interface. This requires that
  *    @ref uct_ep_params_t::iface has the @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE
- *    capability flag. It may be obtained by @ref uct_iface_query .
+ *    capability flag. It may be obtained by @ref uct_iface_query.
  * -# Connect to a remote socket address: If @ref uct_ep_params_t::sockaddr is
- *    set, this will create an endpoint that is conected to a remote socket.
- *    This requires that @ref uct_ep_params_t::iface has the
- *    @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability flag. It may be
- *    obtained by @ref uct_iface_query .*
- * @param [in]  params  User defined @ref uct_ep_params_t configurations for the
+ *    set, this will create an endpoint that is connected to a remote socket.
+ *    This requires that either @ref uct_ep_params::cm, or
+ *    @ref uct_ep_params::iface will be set. In the latter case, the interface
+ *    has to support @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR flag, which can be
+ *    checked by calling @ref uct_iface_query.
+ * @param [in]  params  User defined @ref uct_ep_params_t configuration for the
  *                      @a ep_p.
  * @param [out] ep_p    Filled with handle to the new endpoint.
  *
