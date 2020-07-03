@@ -45,8 +45,8 @@
                 _status = UCS_INPROGRESS;                       \
             } else if (CUDA_SUCCESS != _result) {               \
                 cuGetErrorString(_result, &cu_err_str);         \
-                ucs_log((_log_level), "%s failed: %s",          \
-                        UCS_PP_MAKE_STRING(_func),cu_err_str);  \
+                ucs_log((_log_level), "%s() failed: %s",        \
+                        UCS_PP_MAKE_STRING(_func), cu_err_str); \
                 _status = UCS_ERR_IO_ERROR;                     \
             }                                                   \
         } while (0);                                            \

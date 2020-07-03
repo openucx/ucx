@@ -90,9 +90,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 
     log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
                 UCS_LOG_LEVEL_ERROR;
-    status = UCT_CUDA_FUNC(cudaHostRegister(address, length,
-                                            cudaHostRegisterPortable),
-                           log_level);
+    status    = UCT_CUDA_FUNC(cudaHostRegister(address, length,
+                                               cudaHostRegisterPortable),
+                              log_level);
     if (status != UCS_OK) {
         return status;
     }
