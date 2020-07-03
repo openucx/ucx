@@ -651,7 +651,7 @@ static UCS_F_ALWAYS_INLINE uintptr_t ucp_request_get_dest_ep_ptr(ucp_request_t *
 static UCS_F_ALWAYS_INLINE uint32_t
 ucp_request_param_flags(const ucp_request_param_t *param)
 {
-    return (param->op_attr_mask & UCP_EP_PARAM_FIELD_FLAGS) ?
+    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_FLAGS) ?
            param->flags : 0;
 }
 

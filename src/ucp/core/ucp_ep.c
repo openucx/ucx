@@ -877,7 +877,7 @@ out:
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 {
     const ucp_request_param_t param = {
-        .op_attr_mask = UCP_EP_PARAM_FIELD_FLAGS,
+        .op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS,
         .flags        = (mode == UCP_EP_CLOSE_MODE_FORCE) ?
                         UCP_EP_CLOSE_FLAG_FORCE : 0
     };
