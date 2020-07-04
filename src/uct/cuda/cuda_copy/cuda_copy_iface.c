@@ -197,8 +197,8 @@ static void uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chun
     ucs_status_t status;
 
     memset(base, 0 , sizeof(*base));
-    status = UCT_CUDA_FUNC(cudaEventCreateWithFlags(&(base->event),
-                           cudaEventDisableTiming));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaEventCreateWithFlags(&base->event,
+                                                            cudaEventDisableTiming));
     if (UCS_OK != status) {
         ucs_error("cudaEventCreateWithFlags Failed");
     }
@@ -212,7 +212,7 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     UCT_CUDADRV_CTX_ACTIVE(active);
 
     if (active) {
-        UCT_CUDA_FUNC(cudaEventDestroy(base->event));
+        UCT_CUDA_FUNC_LOG_ERR(cudaEventDestroy(base->event));
     }
 }
 
@@ -279,11 +279,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     if (active) {
         if (self->stream_h2d != 0) {
-            UCT_CUDA_FUNC(cudaStreamDestroy(self->stream_h2d));
+            UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(self->stream_h2d));
         }
 
         if (self->stream_d2h != 0) {
-            UCT_CUDA_FUNC(cudaStreamDestroy(self->stream_d2h));
+            UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(self->stream_d2h));
         }
     }
 

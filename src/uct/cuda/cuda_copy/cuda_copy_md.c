@@ -70,6 +70,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
                  uct_md_h md, void *address, size_t length,
                  unsigned flags, uct_mem_h *memh_p)
 {
+    ucs_log_level_t log_level;
     CUmemorytype memType;
     CUresult result;
     ucs_status_t status;
@@ -87,8 +88,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
         return UCS_OK;
     }
 
-    status = UCT_CUDA_FUNC(cudaHostRegister(address, length,
-                                            cudaHostRegisterPortable));
+    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                UCS_LOG_LEVEL_ERROR;
+    status    = UCT_CUDA_FUNC(cudaHostRegister(address, length,
+                                               cudaHostRegisterPortable),
+                              log_level);
     if (status != UCS_OK) {
         return status;
     }
@@ -107,7 +111,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
         return UCS_OK;
     }
 
-    status = UCT_CUDA_FUNC(cudaHostUnregister(address));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaHostUnregister(address));
     if (status != UCS_OK) {
         return status;
     }

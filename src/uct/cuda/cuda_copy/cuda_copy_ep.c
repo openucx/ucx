@@ -44,7 +44,8 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
 #define UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(_strm) \
     if ((_strm) == 0) { \
         ucs_status_t __status; \
-        __status = UCT_CUDA_FUNC(cudaStreamCreateWithFlags(&(_strm), cudaStreamNonBlocking)); \
+        __status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(&(_strm), \
+                                                                   cudaStreamNonBlocking)); \
         if (UCS_OK != __status) { \
             return UCS_ERR_IO_ERROR; \
         } \
@@ -70,12 +71,13 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
         return UCS_ERR_NO_MEMORY;
     }
 
-    status = UCT_CUDA_FUNC(cudaMemcpyAsync(dst, src, length, direction, stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(dst, src, length, direction,
+                                                   stream));
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
 
-    status = UCT_CUDA_FUNC(cudaEventRecord(cuda_event->event, stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaEventRecord(cuda_event->event, stream));
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
@@ -148,9 +150,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
 
     UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_h2d);
 
-    UCT_CUDA_FUNC(cudaMemcpyAsync((void *)remote_addr, buffer, length,
-                                  cudaMemcpyHostToDevice, iface->stream_h2d));
-    status = UCT_CUDA_FUNC(cudaStreamSynchronize(iface->stream_h2d));
+    UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync((void*)remote_addr, buffer, length,
+                                          cudaMemcpyHostToDevice, iface->stream_h2d));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(iface->stream_h2d));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
@@ -168,9 +170,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
 
     UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_d2h);
 
-    UCT_CUDA_FUNC(cudaMemcpyAsync(buffer, (void *)remote_addr, length,
-                                  cudaMemcpyDeviceToHost, iface->stream_d2h));
-    status = UCT_CUDA_FUNC(cudaStreamSynchronize(iface->stream_d2h));
+    UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(buffer, (void*)remote_addr, length,
+                                          cudaMemcpyDeviceToHost,
+                                          iface->stream_d2h));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(iface->stream_d2h));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",

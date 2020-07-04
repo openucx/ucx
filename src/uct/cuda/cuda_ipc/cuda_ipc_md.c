@@ -50,7 +50,8 @@ static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
 
     *packed          = *mem_hndl;
 
-    return UCT_CUDADRV_FUNC(cuDeviceGetUuid(&packed->uuid, mem_hndl->dev_num));
+    return UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&packed->uuid,
+                                                    mem_hndl->dev_num));
 }
 
 static inline int uct_cuda_ipc_uuid_equals(const CUuuid* a, const CUuuid* b)
@@ -195,6 +196,7 @@ static ucs_status_t
 uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
                               unsigned flags, uct_cuda_ipc_key_t *key)
 {
+    ucs_log_level_t log_level;
     CUdevice cu_device;
     ucs_status_t status;
 
@@ -202,16 +204,20 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
         return UCS_OK;
     }
 
-    status = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&(key->ph), (CUdeviceptr) addr));
+    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                UCS_LOG_LEVEL_ERROR;
+    status    = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph, (CUdeviceptr)addr),
+                                 log_level);
     if (UCS_OK != status) {
         return status;
     }
 
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
-    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&(key->d_bptr),
-                                          &(key->b_len),
-                                          (CUdeviceptr) addr));
+    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
+                                          (CUdeviceptr)addr),
+                     log_level);
+
     key->dev_num  = (int) cu_device;
     ucs_trace("registered memory:%p..%p length:%lu dev_num:%d",
               addr, UCS_PTR_BYTE_OFFSET(addr, length), length, (int) cu_device);

@@ -115,7 +115,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     src = (CUdeviceptr)
         ((direction == UCT_CUDA_IPC_PUT) ? iov[0].buffer : mapped_rem_addr);
 
-    status = UCT_CUDADRV_FUNC(cuMemcpyDtoDAsync(dst, src, iov[0].length, stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemcpyDtoDAsync(dst, src, iov[0].length,
+                                                        stream));
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
@@ -124,7 +125,8 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
     iface->stream_refcount[key->dev_num]++;
     cuda_ipc_event->stream_id = key->dev_num;
 
-    status = UCT_CUDADRV_FUNC(cuEventRecord(cuda_ipc_event->event, stream));
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventRecord(cuda_ipc_event->event,
+                                                    stream));
     if (UCS_OK != status) {
         ucs_mpool_put(cuda_ipc_event);
         return status;
