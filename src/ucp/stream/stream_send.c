@@ -18,6 +18,12 @@
 #include <ucp/dt/dt.inl>
 
 
+#define UCP_STREAM_SEND_CHECK_STATUS(_ep, _status, _ret, _done) \
+    if (ucs_likely((_status) != UCS_ERR_NO_RESOURCE)) { \
+        _ret = UCS_STATUS_PTR(_status); /* UCS_OK also goes here */ \
+        _done; \
+    }
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_stream_send_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
 {
@@ -50,7 +56,8 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_stream_send_req(ucp_request_t *req, size_t count,
                     const ucp_ep_msg_config_t* msg_config,
-                    ucp_send_callback_t cb, const ucp_request_send_proto_t *proto)
+                    const ucp_request_param_t *param,
+                    const ucp_request_send_proto_t *proto)
 {
     size_t zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config,
                                                         count, SIZE_MAX);
@@ -70,13 +77,10 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
      */
     status = ucp_request_send(req, 0);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        ucs_trace_req("releasing send request %p, returning status %s", req,
-                      ucs_status_string(status));
-        ucp_request_put(req);
-        return UCS_STATUS_PTR(status);
+        ucp_request_imm_cmpl_param(param, req, status, send);
     }
 
-    ucp_request_set_callback(req, send.cb, (ucp_send_nbx_callback_t)cb, NULL);
+    ucp_request_set_send_callback_param(param, req, send);
     ucs_trace_req("returning send request %p", req);
     return req + 1;
 }
@@ -86,17 +90,51 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  uintptr_t datatype, ucp_send_callback_t cb, unsigned flags)
 {
+    ucp_request_param_t param = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                        UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FIELD_FLAGS,
+        .cb.send      = (ucp_send_nbx_callback_t)cb,
+        .flags        = flags,
+        .datatype     = datatype
+    };
+
+    return ucp_stream_send_nbx(ep, buffer, count, &param);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_stream_send_nbx_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
+{
+    if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_short)) {
+        return UCS_PROFILE_CALL(ucp_stream_send_am_short, ep, buffer, length);
+    }
+
+    return UCS_ERR_NO_RESOURCE;
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
+                 (ep, buffer, count, param),
+                 ucp_ep_h ep, const void *buffer, size_t count,
+                 const ucp_request_param_t *param)
+{
+    ucp_datatype_t   datatype;
     ucp_request_t    *req;
     size_t           length;
     ucs_status_t     status;
     ucs_status_ptr_t ret;
+    uint32_t         attr_mask;
+    uint32_t         flags;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_STREAM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
-    ucs_trace_req("stream_send_nb buffer %p count %zu to %s cb %p flags %u",
-                  buffer, count, ucp_ep_peer_name(ep), cb, flags);
+    flags = ucp_request_param_flags(param);
+
+    ucs_trace_req("stream_send_nbx buffer %p count %zu to %s cb %p flags %u",
+                  buffer, count, ucp_ep_peer_name(ep),
+                  param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK ?
+                  param->cb.send : NULL, flags);
 
     if (ucs_unlikely(flags != 0)) {
         ret = UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
@@ -109,42 +147,46 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
         goto out;
     }
 
-    if (ucs_likely(UCP_DT_IS_CONTIG(datatype)) &&
-        ucp_memory_type_cache_is_empty(ep->worker->context)) {
-        length = ucp_contig_dt_length(datatype, count);
-        if (ucs_likely((ssize_t)length <= ucp_ep_config(ep)->am.max_short)) {
-            status = UCS_PROFILE_CALL(ucp_stream_send_am_short, ep, buffer,
-                                      length);
-            if (ucs_likely(status != UCS_ERR_NO_RESOURCE)) {
-                UCP_EP_STAT_TAG_OP(ep, EAGER);
-                ret = UCS_STATUS_PTR(status); /* UCS_OK also goes here */
-                goto out;
+    if (ucp_memory_type_cache_is_empty(ep->worker->context)) {
+        attr_mask = param->op_attr_mask &
+                    (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
+        if (ucs_likely(attr_mask == 0)) {
+            status = ucp_stream_send_nbx_am_short(ep, buffer, count);
+            UCP_STREAM_SEND_CHECK_STATUS(ep, status, ret, goto out);
+            datatype = ucp_dt_make_contig(1);
+        } else if (attr_mask == UCP_OP_ATTR_FIELD_DATATYPE) {
+            datatype = param->datatype;
+            if (UCP_DT_IS_CONTIG(datatype)) {
+                length = ucp_contig_dt_length(datatype, count);
+                status = ucp_stream_send_nbx_am_short(ep, buffer, length);
+                UCP_STREAM_SEND_CHECK_STATUS(ep, status, ret, goto out);
             }
+        } else {
+            datatype = ucp_dt_make_contig(1);
         }
+    } else {
+        datatype = ucp_request_param_datatype(param);
     }
 
-    req = ucp_request_get(ep->worker);
-    if (ucs_unlikely(req == NULL)) {
-        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+    if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
+        ret = UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
         goto out;
     }
 
+    req = ucp_request_get_param(ep->worker, param,
+                                {
+                                    ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                    goto out;
+                                });
+
     ucp_stream_send_req_init(req, ep, buffer, datatype, count, flags);
 
-    ret = ucp_stream_send_req(req, count, &ucp_ep_config(ep)->am, cb,
+    ret = ucp_stream_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->stream.proto);
 
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;
-}
-
-UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
-                 (ep, buffer, count, param),
-                 ucp_ep_h ep, const void *buffer, size_t count,
-                 const ucp_request_param_t *param)
-{
-    return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }
 
 static ucs_status_t ucp_stream_contig_am_short(uct_pending_req_t *self)

@@ -177,7 +177,8 @@ ucp_request_complete_stream_recv(ucp_request_t *req, ucp_ep_ext_proto_t* ep_ext,
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.stream.length, ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
-    ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.length);
+    ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.length,
+                         req->user_data);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -653,6 +654,13 @@ ucp_request_param_flags(const ucp_request_param_t *param)
 {
     return (param->op_attr_mask & UCP_OP_ATTR_FIELD_FLAGS) ?
            param->flags : 0;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_datatype_t
+ucp_request_param_datatype(const ucp_request_param_t *param)
+{
+    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
+           param->datatype : ucp_dt_make_contig(1);
 }
 
 #endif
