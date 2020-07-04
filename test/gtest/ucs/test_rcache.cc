@@ -31,7 +31,8 @@ UCS_TEST_F(test_rcache_basic, create_fail) {
         UCS_BIT(30), /* non-existing event */
         1000,
         &ops,
-        NULL
+        NULL,
+        0
     };
 
     ucs_rcache_t *rcache;
@@ -70,7 +71,8 @@ protected:
             UCM_EVENT_VM_UNMAPPED,
             1000,
             &ops,
-            reinterpret_cast<void*>(this)
+            reinterpret_cast<void*>(this),
+            0
         };
         UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucs_rcache_t*, m_rcache, ucs_rcache_destroy,
                                             ucs_rcache_create, &params, "test", ucs_stats_get_root());

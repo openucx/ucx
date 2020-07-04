@@ -237,7 +237,8 @@ static void ucs_rcache_region_validate_pfn(ucs_rcache_t *rcache,
     ucs_rcache_region_validate_pfn_t ctx;
     ucs_status_t status;
 
-    if (ucs_global_opts.rcache_check_pfn == 0) {
+    if ((rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK) ||
+        (ucs_global_opts.rcache_check_pfn == 0)) {
         return;
     }
 
@@ -245,9 +246,11 @@ static void ucs_rcache_region_validate_pfn(ucs_rcache_t *rcache,
         /* in case if only 1 page to check - save PFN value in-place
            in priv section */
         region_pfn = ucs_rcache_region_pfn(region);
-        ucs_sys_get_pfn(region->super.start, 1, &actual_pfn);
+        status = ucs_sys_get_pfn(region->super.start, 1, &actual_pfn);
+        if (status != UCS_OK) {
+            goto out;
+        }
         ucs_rcache_validate_pfn(rcache, region, 0, region_pfn, actual_pfn);
-        status = UCS_OK;
         goto out;
     }
 
@@ -298,7 +301,8 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
         }
     }
 
-    if (ucs_global_opts.rcache_check_pfn > 1) {
+    if (!(rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK) &&
+        (ucs_global_opts.rcache_check_pfn > 1)) {
         ucs_free(ucs_rcache_region_pfn_ptr(region));
     }
 
@@ -618,8 +622,7 @@ static ucs_status_t ucs_rcache_fill_pfn(ucs_rcache_region_t *region)
     }
 
     if (ucs_global_opts.rcache_check_pfn == 1) {
-        ucs_sys_get_pfn(region->super.start, 1, &ucs_rcache_region_pfn(region));
-        return UCS_OK;
+        return ucs_sys_get_pfn(region->super.start, 1, &ucs_rcache_region_pfn(region));
     }
 
     page_count = ucs_min(ucs_rcache_region_page_count(region),
@@ -631,8 +634,8 @@ static ucs_status_t ucs_rcache_fill_pfn(ucs_rcache_region_t *region)
         return UCS_ERR_NO_MEMORY;
     }
 
-    status =  ucs_sys_get_pfn(region->super.start, page_count,
-                              ucs_rcache_region_pfn_ptr(region));
+    status = ucs_sys_get_pfn(region->super.start, page_count,
+                             ucs_rcache_region_pfn_ptr(region));
     if (status != UCS_OK) {
         ucs_free(ucs_rcache_region_pfn_ptr(region));
     }
@@ -740,11 +743,13 @@ retry:
     region->flags   |= UCS_RCACHE_REGION_FLAG_REGISTERED;
     region->refcount = 2; /* Page-table + user */
 
-    status = ucs_rcache_fill_pfn(region);
-    if (status != UCS_OK) {
-        ucs_error("failed to allocate pfn list");
-        ucs_free(region);
-        goto out_unlock;
+    if (!(rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK)) {
+        status = ucs_rcache_fill_pfn(region);
+        if (status != UCS_OK) {
+            ucs_error("failed to allocate pfn list");
+            ucs_free(region);
+            goto out_unlock;
+        }
     }
 
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_MISSES, 1);

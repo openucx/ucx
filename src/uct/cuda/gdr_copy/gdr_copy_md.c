@@ -391,6 +391,7 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_gdr_copy_rcache_ops;
+        rcache_params.flags              = 0;
         status = ucs_rcache_create(&rcache_params, "gdr_copy", NULL, &md->rcache);
         if (status == UCS_OK) {
             md->super.ops = &md_rcache_ops;
