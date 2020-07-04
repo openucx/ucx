@@ -959,14 +959,15 @@ static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
     size_t seg_size         = ucs_min(worker->context->config.ext.rkey_ptr_seg_size,
                                       rndv_req->send.length - rreq->recv.state.offset);
     ucs_status_t status;
-    size_t new_offset;
+    size_t offset, new_offset;
     int last;
 
-    new_offset = rreq->recv.state.offset + seg_size;
+    offset     = rreq->recv.state.offset;
+    new_offset = offset + seg_size;
     last       = new_offset == rndv_req->send.length;
-    status     = ucp_request_recv_data_unpack(rreq, rndv_req->send.buffer,
-                                              seg_size, rreq->recv.state.offset,
-                                              last);
+    status     = ucp_request_recv_data_unpack(rreq,
+                                              rndv_req->send.buffer + offset,
+                                              seg_size, offset, last);
     if (ucs_unlikely(status != UCS_OK) || last) {
         ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);
         ucp_request_complete_tag_recv(rreq, status);
