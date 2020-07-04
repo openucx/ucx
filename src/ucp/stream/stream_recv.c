@@ -42,7 +42,7 @@
  * rdesc          pointer to 'ucp_recv_desc_t *', it's needed to get access to
  *                'ucp_recv_desc_t *' inside @ref ucp_stream_release_data after
  *                the buffer was returned to user by
- *                @ref ucp_stream_recv_data_nb as a pointer to 'paylod'
+ *                @ref ucp_stream_recv_data_nb as a pointer to 'payload'
  */
 
 
