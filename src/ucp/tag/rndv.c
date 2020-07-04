@@ -949,16 +949,6 @@ ucp_rndv_is_rkey_ptr(const ucp_rndv_rts_hdr_t *rndv_rts_hdr, ucp_ep_h ep,
            UCP_MEM_IS_ACCESSIBLE_FROM_CPU(recv_mem_type);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_rndv_rkey_ptr_rreq_advance(ucp_request_t *req, size_t length)
-{
-    /* advance `offset` only in case of contiguous datatype, `state` for other
-     * datatypes is advanced in ucp_request_recv_data_unpack() */
-    if ((req->recv.datatype & UCP_DATATYPE_CLASS_MASK) == UCP_DATATYPE_CONTIG) {
-        req->recv.state.offset += length;
-    }
-}
-
 static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
 {
     ucp_worker_h worker     = (ucp_worker_h)arg;
@@ -969,12 +959,15 @@ static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
     size_t seg_size         = ucs_min(worker->context->config.ext.rkey_ptr_seg_size,
                                       rndv_req->send.length - rreq->recv.state.offset);
     ucs_status_t status;
+    size_t new_offset;
+    int last;
 
-    status = ucp_request_recv_data_unpack(rreq, rndv_req->send.buffer, seg_size,
-                                          rreq->recv.state.offset, 1);
-    ucp_rndv_rkey_ptr_rreq_advance(rreq, seg_size);
-    if (ucs_unlikely(status != UCS_OK) ||
-        (rreq->recv.state.offset == rndv_req->send.length)) {
+    new_offset = rreq->recv.state.offset + seg_size;
+    last       = new_offset == rndv_req->send.length;
+    status     = ucp_request_recv_data_unpack(rreq, rndv_req->send.buffer,
+                                              seg_size, rreq->recv.state.offset,
+                                              last);
+    if (ucs_unlikely(status != UCS_OK) || last) {
         ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);
         ucp_request_complete_tag_recv(rreq, status);
         ucp_rkey_destroy(rndv_req->send.rkey_ptr.rkey);
@@ -984,6 +977,8 @@ static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
             uct_worker_progress_unregister_safe(worker->uct,
                                                 &worker->rkey_ptr_cb_id);
         }
+    } else {
+        rreq->recv.state.offset = new_offset;
     }
 
     return 1;
