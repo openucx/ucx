@@ -1088,11 +1088,11 @@ public:
             /* rkey_ptr expected to be selected if xpmem is available */
             EXPECT_EQ(1u, rkey_ptr);
         } else if (has_get_zcopy()) {
-            /* if any transprots supports get_zcopy, expect it to be used */
+            /* if any transports supports get_zcopy, expect it to be used */
             EXPECT_EQ(1u, get_zcopy);
         } else {
             /* Could be a transport which supports get_zcopy that wasn't
-             * accounted for, or fallback to RTR. In any case, rpey_ptr is not
+             * accounted for, or fallback to RTR. In any case, rkey_ptr is not
              * expected to be used.
              */
             EXPECT_EQ(1u, rtr + get_zcopy);
