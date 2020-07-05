@@ -15,6 +15,7 @@
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
+#include <ucs/sys/math.h>
 #include <ucm/api/ucm.h>
 
 
@@ -109,6 +110,8 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
     struct knem_cmd_param_iovec knem_iov[1];
     uct_knem_md_t *knem_md = (uct_knem_md_t *)md;
     int knem_fd = knem_md->knem_fd;
+    size_t page_size, unused;
+    intptr_t start, end;
 
     ucs_assert_always(knem_fd > -1);
 
@@ -120,6 +123,23 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
     create.iovec_nr = 1;
     create.flags = 0;
     create.protection = PROT_READ | PROT_WRITE;
+
+    page_size = ucs_get_page_size();
+    start     = ucs_align_down((intptr_t)address, page_size);
+    end       = ucs_align_up((intptr_t)address + length, page_size);
+    rc        = madvise((void *)start, end - start, MADV_DONTFORK);
+    if (rc == EINVAL) {
+        ucs_get_mem_page_size(address, length, &unused, &page_size);
+        start = ucs_align_down((intptr_t)address, page_size);
+        end   = ucs_align_up((intptr_t)address + length, page_size);
+        rc    = madvise((void *)start, end - start, MADV_DONTFORK);
+        if (rc) {
+            if (!silent) {
+                ucs_error("KNEM madvice DONTFORK failed: %m");
+            }
+            return UCS_ERR_IO_ERROR;
+        }
+    }
 
     rc = ioctl(knem_fd, KNEM_CMD_CREATE_REGION, &create);
     if (rc < 0) {
