@@ -1470,8 +1470,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
             /* only GET Zcopy RNDV scheme supports multi-rail */
-            bw          = ucp_tl_iface_bandwidth(context,
-                                                 &iface_attr->bandwidth);
+            bw = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
             ucs_for_each_bit(mem_type_index, md_attr->cap.reg_mem_types) {
                 ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
                 rndv_max_bw[mem_type_index] = ucs_max(rndv_max_bw[mem_type_index], bw);
