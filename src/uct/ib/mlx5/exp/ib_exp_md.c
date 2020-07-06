@@ -393,7 +393,6 @@ static ucs_status_t uct_ib_mlx5_exp_reg_atomic_key(uct_ib_md_t *ibmd,
 #ifdef HAVE_EXP_UMR
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
-    off_t offset = uct_ib_md_atomic_offset(uct_ib_mlx5_md_get_atomic_mr_id(md));
     struct ibv_exp_mem_region *mem_reg = NULL;
     struct ibv_mr *mr = memh->mr;
     uint32_t create_flags, umr_type;
@@ -401,10 +400,17 @@ static ucs_status_t uct_ib_mlx5_exp_reg_atomic_key(uct_ib_md_t *ibmd,
     struct ibv_mr *umr;
     int i, list_size;
     size_t reg_length;
+    uint8_t mr_id;
+
+    status = uct_ib_mlx5_md_get_atomic_mr_id(ibmd, &mr_id);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
         status = uct_ib_mlx5_exp_reg_ksm(md, memh->ksm_data, memh->mr->length,
-                                         offset, &memh->ksm_data->atomic_mr);
+                                         uct_ib_md_atomic_offset(mr_id),
+                                         &memh->ksm_data->atomic_mr);
         if (status == UCS_OK) {
             memh->super.atomic_rkey = memh->ksm_data->atomic_mr->rkey;
         }
@@ -459,9 +465,8 @@ static ucs_status_t uct_ib_mlx5_exp_reg_atomic_key(uct_ib_md_t *ibmd,
     mem_reg[list_size - 1].length = mr->length % reg_length;
 
     status = uct_ib_mlx5_exp_reg_indirect_mr(md,
-                                             UCS_PTR_BYTE_OFFSET(mr->addr, offset),
-                                             mr->length, mem_reg, list_size,
-                                             create_flags, umr_type, &umr);
+            UCS_PTR_BYTE_OFFSET(mr->addr, uct_ib_md_atomic_offset(mr_id)),
+            mr->length, mem_reg, list_size, create_flags, umr_type, &umr);
     if (status != UCS_OK) {
         goto err;
     }
@@ -736,6 +741,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
     .reg_multithreaded   = uct_ib_mlx5_exp_reg_multithreaded,
     .dereg_multithreaded = uct_ib_mlx5_exp_dereg_multithreaded,
     .mem_prefetch        = uct_ib_mlx5_mem_prefetch,
+    .get_atomic_mr_id    = uct_ib_mlx5_md_get_atomic_mr_id,
 };
 
 UCT_IB_MD_OPS(uct_ib_mlx5_md_ops, 1);

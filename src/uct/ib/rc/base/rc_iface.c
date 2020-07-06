@@ -170,7 +170,6 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     }
 
     iface_attr->iface_addr_len  = 0;
-    iface_attr->ep_addr_len     = sizeof(uct_rc_ep_address_t);
     iface_attr->max_conn_priv   = 0;
     iface_attr->cap.flags       = UCT_IFACE_FLAG_AM_BCOPY        |
                                   UCT_IFACE_FLAG_AM_ZCOPY        |

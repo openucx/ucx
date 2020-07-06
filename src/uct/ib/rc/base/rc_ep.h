@@ -202,6 +202,7 @@ struct uct_rc_ep {
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
     uct_rc_fc_t         fc;
+    uint16_t            atomic_mr_offset;
     uint8_t             path_index;
 };
 
@@ -209,8 +210,13 @@ UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*
 
 
 typedef struct uct_rc_ep_address {
+    uint8_t          flags;
     uct_ib_uint24_t  qp_num;
 } UCS_S_PACKED uct_rc_ep_address_t;
+
+enum {
+    UCT_RC_ADDR_HAS_ATOMIC_MR = UCS_BIT(0)
+};
 
 void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                            void *data, size_t length, size_t valid_length,
@@ -471,6 +477,17 @@ uct_rc_ep_fence(uct_ep_h tl_ep, uct_ib_fence_info_t* fi, int fence)
 
     UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_fence_put(uct_rc_iface_t *iface, uct_ib_fence_info_t *fi,
+                    uct_rkey_t *rkey, uint64_t *addr, uint16_t offset)
+{
+    if (uct_rc_ep_fm(iface, fi, 1)) {
+        *rkey = uct_ib_resolve_atomic_rkey(*rkey, offset, addr);
+    } else {
+        *rkey = uct_ib_md_direct_rkey(*rkey);
+    }
 }
 
 #endif

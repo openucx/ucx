@@ -849,9 +849,11 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
 {
     uct_dc_mlx5_iface_t      *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_iface_addr_t *addr  = (uct_dc_mlx5_iface_addr_t *)iface_addr;
+    uct_ib_md_t              *md    = uct_ib_iface_md(ucs_derived_of(iface,
+                                                      uct_ib_iface_t));
 
     uct_ib_pack_uint24(addr->qp_num, iface->rx.dct.qp_num);
-    addr->atomic_mr_id = uct_ib_mlx5_iface_get_atomic_mr_id(&iface->super.super.super);
+    uct_ib_mlx5_md_get_atomic_mr_id(md, &addr->atomic_mr_id);
     addr->flags        = iface->version_flag;
     if (UCT_RC_MLX5_TM_ENABLED(&iface->super)) {
         addr->flags   |= UCT_DC_MLX5_IFACE_ADDR_HW_TM;

@@ -439,39 +439,7 @@ struct uct_ib_mlx5_atomic_masked_fadd64_seg {
     uint64_t           filed_boundary;
 } UCS_S_PACKED;
 
-/**
- * Calculate unique id for atomic
- */
-static inline uint8_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_mlx5_md_t *md)
-{
-#if HAVE_EXP_UMR
-    if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
-        return 0;
-    }
-#elif HAVE_DEVX
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
-        return 0;
-    }
-#else
-    return 0;
-#endif
-
-    /* Generate atomic UMR id. We want umrs for same virtual addresses to have
-     * different ids across processes.
-     *
-     * Usually parallel processes running on the same node as part of a single
-     * job will have consecutive PIDs. For example MPI ranks, slurm spawned tasks...
-     */
-    return getpid() % 256;
-}
-
-static inline uint8_t uct_ib_mlx5_iface_get_atomic_mr_id(uct_ib_iface_t *iface)
-{
-    ucs_assert(ucs_derived_of(iface->super.md, uct_ib_md_t)->dev.flags &
-               UCT_IB_DEVICE_FLAG_MLX5_PRM);
-    return uct_ib_mlx5_md_get_atomic_mr_id(ucs_derived_of(iface->super.md,
-                                           uct_ib_mlx5_md_t));
-}
+ucs_status_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_md_t *md, uint8_t *mr_id);
 
 ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
                                               uct_ib_mlx5_qp_t *txwq);
