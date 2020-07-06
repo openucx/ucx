@@ -91,6 +91,7 @@ public class UcpEndpointTest extends UcxTest {
         // Wait for 2 get operations to complete
         while (numCompletedRequests.get() != 2) {
             worker1.progress();
+            worker2.progress();
         }
 
         assertTrue(request1.isCompleted() && request2.isCompleted());
@@ -346,7 +347,7 @@ public class UcpEndpointTest extends UcxTest {
             }
         });
 
-        while (request.isCompleted()) {
+        while (!request.isCompleted()) {
             worker1.progress();
             worker2.progress();
         }
