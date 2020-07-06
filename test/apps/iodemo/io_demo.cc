@@ -640,8 +640,14 @@ public:
         return (_status == OK) || (_status == RUNTIME_EXCEEDED);
     }
 
-    // returns true if number of connection retries is exceeded
+    // returns true if has to stop the connection retries
     bool update_retry() {
+        check_time_limit(get_time());
+        if (_status == RUNTIME_EXCEEDED) {
+            /* the run-time of the application has been exhausted */
+            return true;
+        }
+
         if (++_retry >= opts().client_retries) {
             /* client failed all retries */
             _status = CONN_RETRIES_EXCEEDED;
