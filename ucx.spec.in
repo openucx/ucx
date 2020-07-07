@@ -300,7 +300,7 @@ process to map the memory of another process into its virtual address space.
 
 
 %changelog
-* Thu Jul 1 2020 Yossi Itigin <yosefe@mellanox.com> 1.8.1-1
+* Wed Jul 1 2020 Yossi Itigin <yosefe@mellanox.com> 1.8.1-1
 - Bump version to 1.8.1
 * Sun Sep 22 2019 Yossi Itigin <yosefe@mellanox.com> 1.8.0-1
 - Bump version to 1.8.0
