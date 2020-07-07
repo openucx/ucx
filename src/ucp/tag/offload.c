@@ -557,7 +557,7 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
                ep->worker->context->config.ext.tm_sw_rndv);
 
     /* send RTS to allow fallback to SW RNDV on receiver */
-    rndv_hdr_len = sizeof(ucp_rndv_rts_hdr_t) + ucp_ep_config(ep)->tag.rndv.rkey_size;
+    rndv_hdr_len = sizeof(ucp_rndv_rts_hdr_t) + ucp_ep_config(ep)->rndv.rkey_size;
     rndv_rts_hdr = ucs_alloca(rndv_hdr_len);
     packed_len   = ucp_tag_rndv_rts_pack(rndv_rts_hdr, req);
     ucs_assert((rndv_rts_hdr->address != 0) || !UCP_DT_IS_CONTIG(req->send.datatype) ||
