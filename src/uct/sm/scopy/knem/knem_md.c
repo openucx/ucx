@@ -109,6 +109,14 @@ static int uct_knem_dontfork_range(const void *address, size_t length, size_t pa
     return madvise((void*)start, end - start, MADV_DONTFORK);
 }
 
+static int uct_knem_dofork_range(intptr_t address, size_t length, size_t page_size)
+{
+    intptr_t start = ucs_align_down(address, page_size);
+    intptr_t end   = ucs_align_up(address + length, page_size);
+
+    return madvise((void*)start, end - start, MADV_DOFORK);
+}
+
 static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t length,
                                               unsigned flags, unsigned silent,
                                               uct_knem_key_t *key)
@@ -160,6 +168,7 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
     ucs_assert_always(create.cookie != 0);
     key->cookie  = create.cookie;
     key->address = (uintptr_t)address;
+    key->length  = length;
 
     return UCS_OK;
 }
@@ -190,10 +199,23 @@ static ucs_status_t uct_knem_mem_dereg_internal(uct_md_h md, uct_knem_key_t *key
     int rc;
     uct_knem_md_t *knem_md = (uct_knem_md_t *)md;
     int knem_fd = knem_md->knem_fd;
+    size_t page_size, unused;
 
     ucs_assert_always(knem_fd > -1);
     ucs_assert_always(key->cookie  != 0);
     ucs_assert_always(key->address != 0);
+
+    page_size = ucs_get_page_size();
+    rc        = uct_knem_dofork_range(key->address, key->length, page_size);
+    if (rc == EINVAL) {
+        ucs_get_mem_page_size((void*)key->address, key->length, &unused, &page_size);
+        rc    = uct_knem_dofork_range(key->address, key->length, page_size);
+    }
+
+    if (rc != 0) {
+        ucs_debug("KNEM madvice DOFORK failed, addr:%lx len:%zx: %m",
+                  key->address, key->length);
+    }
 
     rc = ioctl(knem_fd, KNEM_CMD_DESTROY_REGION, &key->cookie);
     if (rc < 0) {

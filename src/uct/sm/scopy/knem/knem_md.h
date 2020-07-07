@@ -33,6 +33,7 @@ typedef struct uct_knem_md {
 typedef struct uct_knem_key {
     uint64_t cookie;   /**< knem cookie */
     uintptr_t address; /**< base addr for the registration */
+    size_t length;
 } uct_knem_key_t;
 
 /**
