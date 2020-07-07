@@ -1076,13 +1076,13 @@ public:
 
     void validate_rndv_counters() {
         unsigned get_zcopy = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_GET_ZCOPY);
-        unsigned rtr       = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_RTR);
+        unsigned send_rtr  = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_SEND_RTR);
         unsigned rkey_ptr  = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_RKEY_PTR);
 
         UCS_TEST_MESSAGE << "get_zcopy: " << get_zcopy
-                         << " rtr: " << rtr
+                         << " send_rtr: " << send_rtr
                          << " rkey_ptr: " << rkey_ptr;
-        EXPECT_EQ(1, get_zcopy + rtr + rkey_ptr);
+        EXPECT_EQ(1, get_zcopy + send_rtr + rkey_ptr);
 
         if (has_xpmem()) {
             /* rkey_ptr expected to be selected if xpmem is available */
@@ -1095,7 +1095,7 @@ public:
              * accounted for, or fallback to RTR. In any case, rkey_ptr is not
              * expected to be used.
              */
-            EXPECT_EQ(1u, rtr + get_zcopy);
+            EXPECT_EQ(1u, send_rtr + get_zcopy);
         }
     }
 

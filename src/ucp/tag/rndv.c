@@ -514,7 +514,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                                 rndv_req->send.length);
         /* Update statistics counters from get_zcopy to rtr */
         UCP_WORKER_STAT_RNDV(ep->worker, GET_ZCOPY, -1);
-        UCP_WORKER_STAT_RNDV(ep->worker, RTR,       +1);
+        UCP_WORKER_STAT_RNDV(ep->worker, SEND_RTR,  +1);
         ucp_rndv_req_send_rtr(rndv_req, rndv_req->send.rndv_get.rreq,
                               rndv_req->send.rndv_get.remote_request,
                               rndv_req->send.length, 0ul);
@@ -1166,7 +1166,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
      * configured to PUT, or GET rndv mode is unsupported - send an RTR and
      * the sender will send the data with active message or put_zcopy. */
     ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
-    UCP_WORKER_STAT_RNDV(ep->worker, RTR, 1);
+    UCP_WORKER_STAT_RNDV(ep->worker, SEND_RTR, 1);
     ucp_rndv_req_send_rtr(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr,
                           rndv_rts_hdr->size, 0ul);
 
