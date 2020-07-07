@@ -101,6 +101,14 @@ static void uct_knem_md_close(uct_md_h md)
     ucs_free(knem_md);
 }
 
+static int uct_knem_dontfork_range(const void *address, size_t length, size_t page_size)
+{
+    intptr_t start = ucs_align_down((intptr_t)address, page_size);
+    intptr_t end   = ucs_align_up((intptr_t)address + length, page_size);
+
+    return madvise((void*)start, end - start, MADV_DONTFORK);
+}
+
 static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t length,
                                               unsigned flags, unsigned silent,
                                               uct_knem_key_t *key)
@@ -111,7 +119,6 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
     uct_knem_md_t *knem_md = (uct_knem_md_t *)md;
     int knem_fd = knem_md->knem_fd;
     size_t page_size, unused;
-    intptr_t start, end;
 
     ucs_assert_always(knem_fd > -1);
 
@@ -125,20 +132,18 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
     create.protection = PROT_READ | PROT_WRITE;
 
     page_size = ucs_get_page_size();
-    start     = ucs_align_down((intptr_t)address, page_size);
-    end       = ucs_align_up((intptr_t)address + length, page_size);
-    rc        = madvise((void *)start, end - start, MADV_DONTFORK);
+    rc        = uct_knem_dontfork_range(address, length, page_size);
     if (rc == EINVAL) {
         ucs_get_mem_page_size(address, length, &unused, &page_size);
-        start = ucs_align_down((intptr_t)address, page_size);
-        end   = ucs_align_up((intptr_t)address + length, page_size);
-        rc    = madvise((void *)start, end - start, MADV_DONTFORK);
-        if (rc) {
-            if (!silent) {
-                ucs_error("KNEM madvice DONTFORK failed: %m");
-            }
-            return UCS_ERR_IO_ERROR;
+        rc    = uct_knem_dontfork_range(address, length, page_size);
+    }
+
+    if (rc != 0) {
+        if (!silent) {
+            ucs_error("KNEM madvice DONTFORK failed, addr:%p len:%zx: %m",
+                      address, length);
         }
+        return UCS_ERR_IO_ERROR;
     }
 
     rc = ioctl(knem_fd, KNEM_CMD_CREATE_REGION, &create);
