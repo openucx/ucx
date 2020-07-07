@@ -301,7 +301,7 @@ process to map the memory of another process into its virtual address space.
 
 
 %changelog
-* Mon Feb 10 2020 Yossi Itigin <yosefe@mellanox.com> 1.10.0-1
+* Tue Jul 07 2020 Yossi Itigin <yosefe@mellanox.com> 1.10.0-1
 - Bump version to 1.10.0
 * Mon Feb 10 2020 Yossi Itigin <yosefe@mellanox.com> 1.9.0-1
 - Bump version to 1.9.0
