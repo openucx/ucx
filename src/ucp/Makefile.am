@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2019. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
@@ -48,6 +48,7 @@ noinst_HEADERS = \
 	rma/rma.inl \
 	tag/eager.h \
 	tag/rndv.h \
+	tag/tag_rndv.h \
 	tag/tag_match.h \
 	tag/tag_match.inl \
 	tag/offload.h \
@@ -102,6 +103,7 @@ libucp_la_SOURCES = \
 	tag/eager_snd.c \
 	tag/probe.c \
 	tag/rndv.c \
+	tag/tag_rndv.c \
 	tag/tag_match.c \
 	tag/tag_recv.c \
 	tag/tag_send.c \

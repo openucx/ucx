@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -10,7 +10,7 @@
 
 #include "offload.h"
 #include "eager.h"
-#include "rndv.h"
+#include "tag_rndv.h"
 
 #include <ucp/proto/proto_am.inl>
 #include <ucp/core/ucp_context.h>
@@ -153,7 +153,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
     ucs_assert(header_length >= sizeof(ucp_rndv_rts_hdr_t));
 
     if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->recv.mem_type)) {
-        ucp_rndv_matched(req->recv.worker, req, header);
+        ucp_tag_rndv_matched(req->recv.worker, req, header);
     } else {
         /* SW rendezvous request is stored in the user buffer (temporarily)
            when matched. If user buffer allocated on GPU memory, need to "pack"
@@ -161,7 +161,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
         header_host_copy = ucs_alloca(header_length);
         ucp_mem_type_pack(req->recv.worker, header_host_copy, header,
                           header_length, req->recv.mem_type);
-        ucp_rndv_matched(req->recv.worker, req, header_host_copy);
+        ucp_tag_rndv_matched(req->recv.worker, req, header_host_copy);
     }
 
     ucp_tag_offload_release_buf(req, 0);
@@ -195,18 +195,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         /* Build the dummy RTS packet, copy meta-data from unexpected rndv header
          * and remote key from rkey_buf.
          */
-        dummy_rts                   = ucs_alloca(dummy_rts_size);
-        dummy_rts->super.tag        = stag;
-        dummy_rts->sreq.ep_ptr      = rndv_hdr->ep_ptr;
-        dummy_rts->sreq.reqptr      = rndv_hdr->reqptr;
-        dummy_rts->address          = remote_addr;
-        dummy_rts->size             = length;
+        dummy_rts              = ucs_alloca(dummy_rts_size);
+        dummy_rts->tag.tag     = stag;
+        dummy_rts->sreq.ep_ptr = rndv_hdr->ep_ptr;
+        dummy_rts->sreq.reqptr = rndv_hdr->reqptr;
+        dummy_rts->address     = remote_addr;
+        dummy_rts->size        = length;
+        dummy_rts->flags       = UCP_RNDV_RTS_FLAG_TAG;
 
         ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index),
                              UCS_MEMORY_TYPE_HOST, dummy_rts + 1, uct_rkeys);
 
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
-        ucp_rndv_process_rts(worker, dummy_rts, dummy_rts_size, 0);
+        ucp_tag_rndv_process_rts(worker, dummy_rts, dummy_rts_size, 0);
     } else {
         /* Unexpected tag offload rndv request. Sender buffer is either
            non-contig or it's length > rndv.max_zcopy capability of tag lane.
@@ -215,7 +216,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
          */
         ucs_assert(hdr_length >= sizeof(ucp_rndv_rts_hdr_t));
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_SW_RNDV);
-        ucp_rndv_process_rts(worker, (void*)hdr, hdr_length, 0);
+        ucp_tag_rndv_process_rts(worker, (void*)hdr, hdr_length, 0);
     }
 
     /* Unexpected RNDV (both SW and HW) need to enable offload capabilities.
@@ -666,7 +667,7 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
 
         /* RNDV will be performed by the SW - can register with SW RNDV lanes
          * to get multirail benefits */
-        status = ucp_tag_rndv_reg_send_buffer(sreq);
+        status = ucp_rndv_reg_send_buffer(sreq);
         if (status != UCS_OK) {
             return status;
         }

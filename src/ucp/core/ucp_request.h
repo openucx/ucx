@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
@@ -121,17 +121,18 @@ struct ucp_request {
                     ucp_lane_index_t     am_bw_index; /* AM BW lane index */
                     uint64_t             message_id;  /* used to identify matching parts
                                                          of a large message */
-
-                    struct {
-                        ucp_tag_t        tag;
-                        uintptr_t        rreq_ptr;    /* receive request ptr on the
+                    uintptr_t            rreq_ptr;    /* receive request ptr on the
                                                          recv side (used in AM rndv) */
-                    } tag;
+                    union {
+                        struct {
+                            ucp_tag_t    tag;
+                        } tag;
 
-                    struct {
-                        uint16_t         am_id;
-                        unsigned         flags;
-                    } am;
+                        struct {
+                            uint16_t     am_id;
+                            unsigned     flags;
+                        } am;
+                    };
                 } msg_proto;
 
                 struct {
