@@ -1145,6 +1145,8 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
         }
     }
 
+    context->mem_type_mask |= mem_type_mask;
+
     status = UCS_OK;
 out:
     return status;
@@ -1636,12 +1638,17 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
     if (attr->field_mask & UCP_ATTR_FIELD_REQUEST_SIZE) {
         attr->request_size = sizeof(ucp_request_t);
     }
+
     if (attr->field_mask & UCP_ATTR_FIELD_THREAD_MODE) {
         if (UCP_THREAD_IS_REQUIRED(&context->mt_lock)) {
             attr->thread_mode = UCS_THREAD_MODE_MULTI;
         } else {
             attr->thread_mode = UCS_THREAD_MODE_SINGLE;
         }
+    }
+
+    if (attr->field_mask & UCP_ATTR_FIELD_MEMTYPE_MASK) {
+        attr->mem_type_mask = context->mem_type_mask;
     }
 
     return UCS_OK;

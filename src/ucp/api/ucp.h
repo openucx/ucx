@@ -16,6 +16,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/memory/memory_type.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -353,7 +354,8 @@ enum ucp_mem_advise_params_field {
  */
 enum ucp_context_attr_field {
     UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
-    UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1)  /**< UCP context thread flag */
+    UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1), /**< UCP context thread flag */
+    UCP_ATTR_FIELD_MEMTYPE_MASK = UCS_BIT(2)  /**< UCP supported memory types */
 };
 
 
@@ -885,6 +887,12 @@ typedef struct ucp_context_attr {
      * see @ref ucs_thread_mode_t.
      */
     ucs_thread_mode_t     thread_mode;
+
+    /**
+     * Mask of which memory types are supported, using bits from
+     * @ref ucs_memory_type_t.
+     */
+    uint64_t              mem_type_mask;
 } ucp_context_attr_t;
 
 
