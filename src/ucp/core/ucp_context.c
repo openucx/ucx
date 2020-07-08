@@ -1647,8 +1647,8 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
         }
     }
 
-    if (attr->field_mask & UCP_ATTR_FIELD_MEMTYPE_MASK) {
-        attr->mem_type_mask = context->mem_type_mask;
+    if (attr->field_mask & UCP_ATTR_FIELD_MEMORY_TYPES) {
+        attr->memory_types = context->mem_type_mask;
     }
 
     return UCS_OK;

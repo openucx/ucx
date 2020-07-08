@@ -20,14 +20,16 @@ BEGIN_C_DECLS
      UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED))
 
 
-/*
+/**
  * @ingroup UCS_RESOURCE
- * Memory types
+ * @brief Memory types
+ *
+ * List of supported memory types.
  */
 typedef enum ucs_memory_type {
     UCS_MEMORY_TYPE_HOST,          /**< Default system memory */
     UCS_MEMORY_TYPE_CUDA,          /**< NVIDIA CUDA memory */
-    UCS_MEMORY_TYPE_CUDA_MANAGED,  /**< NVIDIA CUDA managed (or unified) memory*/
+    UCS_MEMORY_TYPE_CUDA_MANAGED,  /**< NVIDIA CUDA managed (or unified) memory */
     UCS_MEMORY_TYPE_ROCM,          /**< AMD ROCM memory */
     UCS_MEMORY_TYPE_ROCM_MANAGED,  /**< AMD ROCM managed system memory */
     UCS_MEMORY_TYPE_LAST

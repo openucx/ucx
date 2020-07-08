@@ -355,7 +355,7 @@ enum ucp_mem_advise_params_field {
 enum ucp_context_attr_field {
     UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
     UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1), /**< UCP context thread flag */
-    UCP_ATTR_FIELD_MEMTYPE_MASK = UCS_BIT(2)  /**< UCP supported memory types */
+    UCP_ATTR_FIELD_MEMORY_TYPES = UCS_BIT(2)  /**< UCP supported memory types */
 };
 
 
@@ -889,10 +889,10 @@ typedef struct ucp_context_attr {
     ucs_thread_mode_t     thread_mode;
 
     /**
-     * Mask of which memory types are supported, using bits from
-     * @ref ucs_memory_type_t.
+     * Mask of which memory types are supported, For supported memory types
+     * please see @ref ucs_memory_type_t.
      */
-    uint64_t              mem_type_mask;
+    uint64_t              memory_types;
 } ucp_context_attr_t;
 
 
