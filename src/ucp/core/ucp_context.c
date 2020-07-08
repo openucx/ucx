@@ -1172,6 +1172,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->tl_rscs          = NULL;
     context->num_tls          = 0;
     context->memtype_cache    = NULL;
+    context->mem_type_mask    = 0;
     context->num_mem_type_detect_mds = 0;
 
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
