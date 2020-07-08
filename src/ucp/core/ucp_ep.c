@@ -1375,9 +1375,10 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     size_t max_rndv_thresh, max_am_rndv_thresh;
     size_t min_rndv_thresh, min_am_rndv_thresh;
     size_t rma_zcopy_thresh;
-    double rndv_max_bw, scale, bw;
+    double rndv_max_bw[UCS_MEMORY_TYPE_LAST], scale, bw;
     ucs_status_t status;
     size_t it;
+    uint8_t mem_type_index;
 
     memset(config, 0, sizeof(*config));
 
@@ -1448,7 +1449,11 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     /* configuration for rndv */
     get_zcopy_lane_count = 0;
     put_zcopy_lane_count = 0;
-    rndv_max_bw          = 0;
+
+    for (i = 0; i < UCS_MEMORY_TYPE_LAST; i++) {
+        rndv_max_bw[i] = 0;
+    }
+
     for (i = 0; (i < config->key.num_lanes) &&
                 (config->key.rma_bw_lanes[i] != UCP_NULL_LANE); ++i) {
         lane      = config->key.rma_bw_lanes[i];
@@ -1457,12 +1462,15 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             continue;
         }
 
+        md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
             /* only GET Zcopy RNDV scheme supports multi-rail */
-            bw          = ucp_tl_iface_bandwidth(context,
-                                                 &iface_attr->bandwidth);
-            rndv_max_bw = ucs_max(rndv_max_bw, bw);
+            bw = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+            ucs_for_each_bit(mem_type_index, md_attr->cap.reg_mem_types) {
+                ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
+                rndv_max_bw[mem_type_index] = ucs_max(rndv_max_bw[mem_type_index], bw);
+            }
         }
     }
 
@@ -1473,23 +1481,28 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
             /* GET Zcopy */
             if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
-                scale = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
-                        rndv_max_bw;
-                if (scale < (1. / context->config.ext.multi_lane_max_ratio)) {
-                    continue;
+                ucs_for_each_bit(mem_type_index, md_attr->cap.reg_mem_types) {
+                    ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
+                    scale = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
+                            rndv_max_bw[mem_type_index];
+                    if (scale < (1. / context->config.ext.multi_lane_max_ratio)) {
+                        continue;
+                    }
+
+                    config->rndv.min_get_zcopy = ucs_max(config->rndv.min_get_zcopy,
+                                                         iface_attr->cap.get.min_zcopy);
+
+                    config->rndv.max_get_zcopy = ucs_min(config->rndv.max_get_zcopy,
+                                                         iface_attr->cap.get.max_zcopy);
+                    ucs_assert(get_zcopy_lane_count < UCP_MAX_LANES);
+                    config->rndv.get_zcopy_lanes[get_zcopy_lane_count++] = lane;
+                    config->rndv.scale[lane]                             = scale;
+                    break;
                 }
-
-                config->rndv.min_get_zcopy = ucs_max(config->rndv.min_get_zcopy,
-                                                     iface_attr->cap.get.min_zcopy);
-
-                config->rndv.max_get_zcopy = ucs_min(config->rndv.max_get_zcopy,
-                                                     iface_attr->cap.get.max_zcopy);
-                ucs_assert(get_zcopy_lane_count < UCP_MAX_LANES);
-                config->rndv.get_zcopy_lanes[get_zcopy_lane_count++] = lane;
-                config->rndv.scale[lane]                             = scale;
             }
 
             /* PUT Zcopy */
