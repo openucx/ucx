@@ -889,7 +889,7 @@ typedef struct ucp_context_attr {
     ucs_thread_mode_t     thread_mode;
 
     /**
-     * Mask of which memory types are supported, For supported memory types
+     * Mask of which memory types are supported, for supported memory types
      * please see @ref ucs_memory_type_t.
      */
     uint64_t              memory_types;

@@ -13,7 +13,9 @@
 BEGIN_C_DECLS
 
 
-/* Memory types accessible from CPU  */
+/**
+ * Memory types accessible from CPU
+ */
 #define UCS_MEMORY_TYPES_CPU_ACCESSIBLE \
     (UCS_BIT(UCS_MEMORY_TYPE_HOST) | \
      UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED) | \
