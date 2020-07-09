@@ -71,7 +71,8 @@ uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
 
     uct_rc_txqp_add_send_comp(&iface->super.super, txqp, handler, comp, sn,
-                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
+                              uct_iov_total_length(iov, iovcnt));
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -512,7 +513,7 @@ ucs_status_t uct_dc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
                                  remote_addr, rkey, desc, fm_ce_se, 0,
                                  desc + 1, NULL);
 
-    UCT_RC_RDMA_READ_POSTED(&iface->super.super);
+    UCT_RC_RDMA_READ_POSTED(&iface->super.super, length);
     UCT_TL_EP_STAT_OP(&ep->super, GET, BCOPY, length);
 
     return UCS_INPROGRESS;
@@ -542,7 +543,7 @@ ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                  uct_rc_ep_get_zcopy_completion_handler, comp,
                                  fm_ce_se);
 
-    UCT_RC_RDMA_READ_POSTED(&iface->super.super);
+    UCT_RC_RDMA_READ_POSTED(&iface->super.super, uct_iov_total_length(iov, iovcnt));
     UCT_TL_EP_STAT_OP(&ep->super, GET, ZCOPY, uct_iov_total_length(iov, iovcnt));
 
     return UCS_INPROGRESS;

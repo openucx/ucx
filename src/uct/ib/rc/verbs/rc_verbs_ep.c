@@ -103,7 +103,8 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED, INT_MAX);
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp,
-                              ep->txcnt.pi, UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+                              ep->txcnt.pi, UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
+                              uct_iov_total_length(iov, iovcnt));
     return UCS_INPROGRESS;
 }
 
@@ -223,7 +224,7 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
 
     UCT_TL_EP_STAT_OP(&ep->super.super, GET, BCOPY, length);
     uct_rc_verbs_ep_post_send_desc(ep, &wr, desc, IBV_SEND_SIGNALED, INT_MAX);
-    UCT_RC_RDMA_READ_POSTED(&iface->super);
+    UCT_RC_RDMA_READ_POSTED(&iface->super, length);
     return UCS_INPROGRESS;
 }
 
@@ -247,7 +248,7 @@ ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                         uct_rc_ep_get_zcopy_completion_handler,
                                         IBV_WR_RDMA_READ);
     if (!UCS_STATUS_IS_ERR(status)) {
-        UCT_RC_RDMA_READ_POSTED(&iface->super);
+        UCT_RC_RDMA_READ_POSTED(&iface->super, uct_iov_total_length(iov, iovcnt));
         UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY,
                           uct_iov_total_length(iov, iovcnt));
     }
