@@ -76,7 +76,8 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp, sn,
-                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
+                              uct_iov_total_length(iov, iovcnt));
     return UCS_INPROGRESS;
 }
 
@@ -243,7 +244,7 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
                                 rkey, MLX5_WQE_CTRL_CQ_UPDATE, 0, desc, desc + 1,
                                 NULL);
     UCT_TL_EP_STAT_OP(&ep->super.super, GET, BCOPY, length);
-    UCT_RC_RDMA_READ_POSTED(&iface->super);
+    UCT_RC_RDMA_READ_POSTED(&iface->super, length);
     return UCS_INPROGRESS;
 }
 
@@ -269,7 +270,7 @@ ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
     if (!UCS_STATUS_IS_ERR(status)) {
         UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY,
                           uct_iov_total_length(iov, iovcnt));
-        UCT_RC_RDMA_READ_POSTED(&iface->super);
+        UCT_RC_RDMA_READ_POSTED(&iface->super, uct_iov_total_length(iov, iovcnt));
     }
     return status;
 }
