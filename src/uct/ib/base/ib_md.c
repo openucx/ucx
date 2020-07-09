@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  * Copyright (C) The University of Tennessee and The University
  *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
  *
@@ -20,6 +20,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
 #include <ucm/api/ucm.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <pthread.h>
 #ifdef HAVE_PTHREAD_NP_H
 #include <pthread_np.h>
@@ -251,6 +252,7 @@ typedef struct {
     uint64_t      access;
     struct ibv_pd *pd;
     struct ibv_mr **mr;
+    int           silent;
 } uct_ib_md_mem_reg_thread_t;
 
 static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_attr,
@@ -307,26 +309,45 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-static void uct_ib_md_print_mem_reg_err_msg(ucs_log_level_t level, void *address,
-                                            size_t length, uint64_t access_flags)
+static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
+                                            uint64_t access_flags, int err,
+                                            int silent)
 {
-    char msg[200] = {0};
+    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    ucs_string_buffer_t msg;
     struct rlimit limit_info;
+    size_t page_size;
+    size_t unused;
 
-    ucs_snprintf_zero(msg, sizeof(msg),
-                      "%s(address=%p, length=%zu, access=0x%lx) failed: %m",
-                      ibv_reg_mr_func_name, address, length, access_flags);
+    ucs_string_buffer_init(&msg);
 
-    /* Check the value of the max locked memory which is set on the system
-     * (ulimit -l) */
-    if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
-        (limit_info.rlim_cur != RLIM_INFINITY)) {
-        ucs_snprintf_zero(msg + strlen(msg), sizeof(msg) - strlen(msg),
-                          ". Please set max locked memory (ulimit -l) to 'unlimited' "
-                          "(current: %llu kbytes)", limit_info.rlim_cur / UCS_KBYTE);
+    ucs_string_buffer_appendf(&msg,
+                              "%s(address=%p, length=%zu, access=0x%lx) failed: %m",
+                              ibv_reg_mr_func_name, address, length, access_flags);
+    if (err == ENOMEM) {
+        /* Check the value of the max locked memory which is set on the system
+        * (ulimit -l) */
+        if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
+            (limit_info.rlim_cur != RLIM_INFINITY)) {
+            ucs_string_buffer_appendf(&msg,
+                                      ". Please set max locked memory "
+                                      "(ulimit -l) to 'unlimited' "
+                                      "(current: %llu kbytes)",
+                                      limit_info.rlim_cur / UCS_KBYTE);
+        }
+    } else if (err == EINVAL) {
+        /* Check if huge page is used */
+        ucs_get_mem_page_size(address, length, &unused, &page_size);
+        if (page_size != ucs_get_page_size()) {
+            ucs_string_buffer_appendf(&msg,
+                                      ". Application is using HUGE pages. "
+                                      "Please set environment variable "
+                                      "RDMAV_HUGEPAGES_SAFE=1");
+        }
     }
 
-    ucs_log(level, "%s", msg);
+    ucs_log(level, "%s", ucs_string_buffer_cstr(&msg));
+    ucs_string_buffer_cleanup(&msg);
 }
 
 void *uct_ib_md_mem_handle_thread_func(void *arg)
@@ -345,6 +366,8 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
                                                      ctx->addr, size,
                                                      ctx->access);
             if (ctx->mr[mr_idx] == NULL) {
+                uct_ib_md_print_mem_reg_err_msg(ctx->addr, size, ctx->access,
+                                                errno, ctx->silent);
                 return UCS_STATUS_PTR(UCS_ERR_IO_ERROR);
             }
         } else {
@@ -370,7 +393,8 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
 ucs_status_t
 uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
                                        size_t length, uint64_t access_flags,
-                                       size_t chunk, struct ibv_mr **mrs)
+                                       size_t chunk, struct ibv_mr **mrs,
+                                       int silent)
 {
     int thread_num_mrs, thread_num, thread_idx, mr_idx = 0, cpu_id = 0;
     int mr_num = ucs_div_round_up(length, chunk);
@@ -419,6 +443,7 @@ uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
         cur_ctx->access = access_flags;
         cur_ctx->mr     = &mrs[mr_idx];
         cur_ctx->chunk  = chunk;
+        cur_ctx->silent = silent;
 
         if (md->config.mt_reg_bind) {
             while (!CPU_ISSET(cpu_id, &parent_set)) {
@@ -469,38 +494,31 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
                                      int silent, uct_ib_mem_t *memh,
                                      uct_ib_mr_type_t mr_type)
 {
-    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
     ucs_status_t status;
 
     if (length >= md->config.min_mt_reg) {
         UCS_PROFILE_CODE("reg ksm") {
             status = md->ops->reg_multithreaded(md, address, length,
-                                                access_flags, memh, mr_type);
+                                                access_flags, memh, mr_type,
+                                                silent);
         }
 
         if (status != UCS_ERR_UNSUPPORTED) {
             if (status == UCS_OK) {
                 memh->flags |= UCT_IB_MEM_MULTITHREADED;
-            } else {
-                uct_ib_md_print_mem_reg_err_msg(level, address, length,
-                                                access_flags);
             }
 
             return status;
         } /* if unsuported - fallback to regular registration */
     }
 
-    status = md->ops->reg_key(md, address, length, access_flags, memh, mr_type);
-    if (status != UCS_OK) {
-        uct_ib_md_print_mem_reg_err_msg(level, address, length, access_flags);
-        return status;
-    }
-
-    return UCS_OK;
+    return md->ops->reg_key(md, address, length, access_flags, memh, mr_type,
+                            silent);
 }
 
 ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
-                           uint64_t access_flags, struct ibv_mr **mr_p)
+                           uint64_t access_flags, struct ibv_mr **mr_p,
+                           int silent)
 {
     struct ibv_mr *mr;
 #if HAVE_DECL_IBV_EXP_REG_MR
@@ -515,6 +533,8 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
     mr = UCS_PROFILE_CALL(ibv_reg_mr, pd, addr, length, access_flags);
 #endif
     if (mr == NULL) {
+        uct_ib_md_print_mem_reg_err_msg(addr, length, access_flags,
+                                        errno, silent);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -810,22 +830,23 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
 static ucs_status_t uct_ib_verbs_reg_key(uct_ib_md_t *md, void *address,
                                          size_t length, uint64_t access_flags,
                                          uct_ib_mem_t *ib_memh,
-                                         uct_ib_mr_type_t mr_type)
+                                         uct_ib_mr_type_t mr_type, int silent)
 {
     uct_ib_verbs_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
 
     return uct_ib_reg_key_impl(md, address, length, access_flags,
-                               ib_memh, &memh->mrs[mr_type], mr_type);
+                               ib_memh, &memh->mrs[mr_type], mr_type, silent);
 }
 
 ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address,
                                  size_t length, uint64_t access_flags,
                                  uct_ib_mem_t *memh, uct_ib_mr_t *mr,
-                                 uct_ib_mr_type_t mr_type)
+                                 uct_ib_mr_type_t mr_type, int silent)
 {
     ucs_status_t status;
 
-    status = uct_ib_reg_mr(md->pd, address, length, access_flags, &mr->ib);
+    status = uct_ib_reg_mr(md->pd, address, length, access_flags, &mr->ib,
+                           silent);
     if (status != UCS_OK) {
         return status;
     }
@@ -1181,7 +1202,7 @@ uct_ib_md_global_odp_init(uct_ib_md_t *md, uct_mem_h *memh_p)
     mr = &global_odp->mrs[UCT_IB_MR_DEFAULT];
     status = uct_ib_reg_mr(md->pd, 0, UINT64_MAX,
                            UCT_IB_MEM_ACCESS_FLAGS | IBV_ACCESS_ON_DEMAND,
-                           &mr->ib);
+                           &mr->ib, 1);
     if (status != UCS_OK) {
         ucs_debug("%s: failed to register global mr: %m",
                   uct_ib_device_name(&md->dev));
