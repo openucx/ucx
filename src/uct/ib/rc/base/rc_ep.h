@@ -102,7 +102,7 @@ enum {
 #define UCT_RC_RDMA_READ_POSTED(_iface, _length) \
     { \
         ucs_assert((_iface)->tx.reads_available > 0); \
-        (_iface)->tx.reads_available -= _length; \
+        (_iface)->tx.reads_available -= (_length); \
     }
 
 #define UCT_RC_CHECK_RES(_iface, _ep) \
