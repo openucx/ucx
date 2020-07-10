@@ -42,7 +42,7 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
            as unexpected */
         ucp_tag_offload_try_cancel(worker, rreq, UCP_TAG_OFFLOAD_CANCEL_FORCE);
 
-        UCP_WORKER_STAT_RNDV(worker, EXP);
+        UCP_WORKER_STAT_RNDV(worker, EXP, 1);
         return UCS_OK;
     }
 
