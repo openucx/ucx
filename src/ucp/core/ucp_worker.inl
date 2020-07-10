@@ -9,6 +9,29 @@
 
 #include "ucp_worker.h"
 
+
+static UCS_F_ALWAYS_INLINE khint_t
+ucp_worker_rkey_config_hash_func(ucp_rkey_config_key_t rkey_config_key)
+{
+    return (khint_t)rkey_config_key.md_map  ^
+           rkey_config_key.ep_cfg_index     ^
+           (rkey_config_key.mem_type << 16) ^
+           (rkey_config_key.sys_dev  << 24);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
+                                ucp_rkey_config_key_t rkey_config_key2)
+{
+    return (rkey_config_key1.md_map       == rkey_config_key2.md_map) &&
+           (rkey_config_key1.ep_cfg_index == rkey_config_key2.ep_cfg_index) &&
+           (rkey_config_key1.sys_dev      == rkey_config_key2.sys_dev) &&
+           (rkey_config_key1.mem_type     == rkey_config_key2.mem_type);
+}
+
+KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t,
+           1, ucp_worker_rkey_config_hash_func, ucp_worker_rkey_config_is_equal);
+
 /**
  * @return Worker name
  */
@@ -153,5 +176,27 @@ ucp_worker_is_tl_2sockaddr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
     return !!(ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags &
               UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR);
 }
+
+/**
+ * Resolve remote key configuration key to a remote key configuration index
+ *
+ * @param [in]  worker       UCP worker to resolve configuration on
+ * @param [in]  key          Rkey configuration key
+ * @param [out] cfg_index_p  Filled with configuration index in the worker.
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_worker_get_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key,
+                           ucp_worker_cfg_index_t *cfg_index_p)
+{
+    khiter_t khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
+                             *key);
+    if (ucs_likely(khiter != kh_end(&worker->rkey_config_hash))) {
+        *cfg_index_p = kh_val(&worker->rkey_config_hash, khiter);
+        return UCS_OK;
+    }
+
+    return ucp_worker_add_rkey_config(worker, key, cfg_index_p);
+}
+
 
 #endif

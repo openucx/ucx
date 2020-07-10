@@ -11,6 +11,7 @@
 #include "ucp_ep.h"
 #include "ucp_context.h"
 #include "ucp_thread.h"
+#include "ucp_rkey.h"
 
 #include <ucp/core/ucp_am.h>
 #include <ucp/tag/tag_match.h>
@@ -165,6 +166,11 @@ enum {
     })
 
 
+/* Hash map to find rkey config index by rkey config key, for fast rkey unpack */
+KHASH_TYPE(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t);
+typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
+
+
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
  * some auxiliary info needed for tag matching offloads.
@@ -246,9 +252,14 @@ typedef struct ucp_worker {
     UCS_STATS_NODE_DECLARE(tm_offload_stats)
 
     ucs_cpu_set_t                 cpu_mask;        /* Save CPU mask for subsequent calls to ucp_worker_listen */
-    unsigned                      ep_config_max;   /* Maximal number of configurations */
-    unsigned                      ep_config_count; /* Current number of configurations */
-    ucp_ep_config_t               ep_config[0];    /* Array of transport limits and thresholds */
+
+    ucp_worker_rkey_config_hash_t rkey_config_hash; /* rkey config key -> index */
+
+    unsigned                      ep_config_count; /* Current number of ep configurations */
+    ucp_ep_config_t               ep_config[UCP_WORKER_MAX_EP_CONFIG];
+
+    unsigned                      rkey_config_count; /* Current number of rkey configurations */
+    ucp_rkey_config_t             rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
 } ucp_worker_t;
 
 
@@ -264,10 +275,13 @@ typedef struct ucp_worker_err_handle_arg {
 } ucp_worker_err_handle_arg_t;
 
 
-ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
-                                      const ucp_ep_config_key_t *key,
-                                      int print_cfg,
-                                      ucp_worker_cfg_index_t *config_idx_p);
+ucs_status_t
+ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
+                         int print_cfg, ucp_worker_cfg_index_t *cfg_index_p);
+
+ucs_status_t
+ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key,
+                           ucp_worker_cfg_index_t *cfg_index_p);
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    uct_iface_params_t *iface_params,

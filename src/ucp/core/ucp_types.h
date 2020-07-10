@@ -38,7 +38,8 @@ typedef uint8_t                      ucp_lane_map_t;
 
 /* Worker configuration index for endpoint and rkey */
 typedef uint8_t                      ucp_worker_cfg_index_t;
-#define UCP_WORKER_MAX_CONFIG        128
+#define UCP_WORKER_MAX_EP_CONFIG     16
+#define UCP_WORKER_MAX_RKEY_CONFIG   128
 #define UCP_WORKER_CFG_INDEX_NULL    UINT8_MAX
 
 /* Forward declarations */
@@ -56,6 +57,7 @@ typedef struct ucp_amo_proto            ucp_amo_proto_t;
 typedef struct ucp_wireup_sockaddr_data ucp_wireup_sockaddr_data_t;
 typedef struct ucp_ep_config            ucp_ep_config_t;
 typedef struct ucp_ep_config_key        ucp_ep_config_key_t;
+typedef struct ucp_rkey_config_key      ucp_rkey_config_key_t;
 typedef struct ucp_proto                ucp_proto_t;
 
 
