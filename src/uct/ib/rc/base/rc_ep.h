@@ -93,16 +93,16 @@ enum {
     }
 
 #define UCT_RC_CHECK_NUM_RDMA_READ(_iface) \
-    if (ucs_unlikely((_iface)->tx.reads_available == 0)) { \
+    if (ucs_unlikely((_iface)->tx.reads_available <= 0)) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, \
                                  UCT_RC_IFACE_STAT_NO_READS, 1); \
         return UCS_ERR_NO_RESOURCE; \
     }
 
-#define UCT_RC_RDMA_READ_POSTED(_iface) \
+#define UCT_RC_RDMA_READ_POSTED(_iface, _length) \
     { \
         ucs_assert((_iface)->tx.reads_available > 0); \
-        --(_iface)->tx.reads_available; \
+        (_iface)->tx.reads_available -= (_length); \
     }
 
 #define UCT_RC_CHECK_RES(_iface, _ep) \
@@ -336,7 +336,7 @@ uct_rc_txqp_add_send_op_sn(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint
 static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                           uct_rc_send_handler_t handler, uct_completion_t *comp,
-                          uint16_t sn, uint16_t flags)
+                          uint16_t sn, uint16_t flags, size_t length)
 {
     uct_rc_iface_send_op_t *op;
 
@@ -348,6 +348,7 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     op->handler   = handler;
     op->user_comp = comp;
     op->flags    |= flags;
+    op->length    = length;
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
