@@ -98,7 +98,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err;
     }
 
-    ep->cfg_index                   = UCP_NULL_CFG_INDEX;
+    ep->cfg_index                   = UCP_WORKER_CFG_INDEX_NULL;
     ep->worker                      = worker;
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
@@ -2061,7 +2061,7 @@ ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 
-    if (ep->cfg_index == UCP_NULL_CFG_INDEX) {
+    if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         return NULL;
     }
 

@@ -50,7 +50,7 @@ enum {
 typedef struct ucp_rkey {
     /* cached values for the most recent endpoint configuration */
     struct {
-        ucp_ep_cfg_index_t        ep_cfg_index; /* EP configuration relevant for the cache */
+        ucp_worker_cfg_index_t    ep_cfg_index; /* EP configuration relevant for the cache */
         ucp_lane_index_t          rma_lane;     /* Lane to use for RMAs */
         ucp_lane_index_t          amo_lane;     /* Lane to use for AMOs */
         ssize_t                   max_put_short;/* Cached value of max_put_short */

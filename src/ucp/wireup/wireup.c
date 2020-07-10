@@ -153,7 +153,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
     ucs_status_t status;
     void *address;
 
-    ucs_assert(ep->cfg_index != UCP_NULL_CFG_INDEX);
+    ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
 
     /* We cannot allocate from memory pool because it's not thread safe
      * and this function may be called from any thread
@@ -957,7 +957,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep,
         }
     }
 
-    if (ep->cfg_index == UCP_NULL_CFG_INDEX) {
+    if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         prev_config_key = NULL;
         prev_dst_md_map = 0;
     } else {
@@ -1001,7 +1001,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_worker_h worker = ep->worker;
     uint64_t tl_bitmap  = local_tl_bitmap & worker->context->tl_bitmap;
     ucp_ep_config_key_t key;
-    ucp_ep_cfg_index_t new_cfg_index;
+    ucp_worker_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
     char str[32];
@@ -1036,7 +1036,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         return UCS_OK; /* No change */
     }
 
-    if ((ep->cfg_index != UCP_NULL_CFG_INDEX) && !ucp_ep_is_sockaddr_stub(ep)) {
+    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+        !ucp_ep_is_sockaddr_stub(ep)) {
         /*
          * TODO handle a case where we have to change lanes and reconfigure the ep:
          *
