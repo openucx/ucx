@@ -49,8 +49,8 @@ uct_rc_mlx5_txqp_bcopy_post(uct_rc_mlx5_iface_common_t *iface,
  * Adds user completion to the callback queue.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
-                          unsigned opcode, const uct_iov_t *iov, size_t iovcnt,
+uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep, unsigned opcode,
+                          const uct_iov_t *iov, size_t iovcnt, size_t iov_total_length,
                           /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
                           /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                           /* TAG  */ uct_tag_t tag, uint32_t app_ctx, uint32_t ib_imm_be,
@@ -75,8 +75,8 @@ uct_rc_mlx5_ep_zcopy_post(uct_rc_mlx5_ep_t *ep,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
 
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp, sn,
-                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
-                              uct_iov_total_length(iov, iovcnt));
+                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, iov_total_length);
+
     return UCS_INPROGRESS;
 }
 
@@ -221,7 +221,7 @@ ucs_status_t uct_rc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
                              ep->super.atomic_mr_offset);
 
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_RDMA_WRITE, iov, iovcnt,
-                                       0, NULL, 0, remote_addr, rkey,
+                                       0ul, 0, NULL, 0, remote_addr, rkey,
                                        0ul, 0, 0, MLX5_WQE_CTRL_CQ_UPDATE,
                                        uct_rc_ep_send_op_completion_handler,
                                        comp);
@@ -258,27 +258,27 @@ ucs_status_t uct_rc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uct_completion_t *comp)
 {
-    uint8_t fm_ce_se = MLX5_WQE_CTRL_CQ_UPDATE;
+    uint8_t fm_ce_se    = MLX5_WQE_CTRL_CQ_UPDATE;
+    size_t total_length = uct_iov_total_length(iov, iovcnt);
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     ucs_status_t status;
 
     UCT_CHECK_IOV_SIZE(iovcnt, UCT_RC_MLX5_RMA_MAX_IOV(0),
                        "uct_rc_mlx5_ep_get_zcopy");
-    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt),
+    UCT_CHECK_LENGTH(total_length,
                      iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
                      iface->super.config.max_get_zcopy, "get_zcopy");
     UCT_RC_CHECK_NUM_RDMA_READ(&iface->super);
 
     uct_rc_mlx5_ep_fence_get(iface, &ep->tx.wq, &rkey, &fm_ce_se);
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_RDMA_READ, iov, iovcnt,
-                                       0, NULL, 0, remote_addr, rkey,
+                                       total_length, 0, NULL, 0, remote_addr, rkey,
                                        0ul, 0, 0, fm_ce_se,
                                        uct_rc_ep_get_zcopy_completion_handler,
                                        comp);
     if (!UCS_STATUS_IS_ERR(status)) {
-        UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY,
-                          uct_iov_total_length(iov, iovcnt));
-        UCT_RC_RDMA_READ_POSTED(&iface->super, uct_iov_total_length(iov, iovcnt));
+        UCT_TL_EP_STAT_OP(&ep->super.super, GET, ZCOPY, total_length);
+        UCT_RC_RDMA_READ_POSTED(&iface->super, total_length);
     }
     return status;
 }
@@ -362,7 +362,7 @@ ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
                                iface->super.super.config.seg_size, 0);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
 
-    status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_SEND, iov, iovcnt,
+    status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_SEND, iov, iovcnt, 0ul,
                                        id, header, header_length, 0, 0, 0ul, 0, 0,
                                        MLX5_WQE_CTRL_SOLICITED,
                                        uct_rc_ep_send_op_completion_handler,
@@ -825,7 +825,7 @@ ucs_status_t uct_rc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                       uct_iov_total_length(iov, iovcnt));
 
     return uct_rc_mlx5_ep_zcopy_post(ep, opcode|UCT_RC_MLX5_OPCODE_FLAG_TM,
-                                     iov, iovcnt, 0, "", 0, 0, 0,
+                                     iov, iovcnt, 0ul, 0, "", 0, 0, 0,
                                      tag, app_ctx, ib_imm,
                                      MLX5_WQE_CTRL_SOLICITED,
                                      uct_rc_ep_send_op_completion_handler,
