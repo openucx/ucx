@@ -167,13 +167,13 @@ uct_rc_op_release_iface_resources(uct_rc_iface_send_op_t *op, int is_get_zcopy)
     uct_rc_iface_t *iface;
 
     if (is_get_zcopy) {
-        ++op->iface->tx.reads_available;
+        op->iface->tx.reads_available += op->length;
         return;
     }
 
     desc  = ucs_derived_of(op, uct_rc_iface_send_desc_t);
     iface = ucs_container_of(ucs_mpool_obj_owner(desc), uct_rc_iface_t, tx.mp);
-    ++iface->tx.reads_available;
+    iface->tx.reads_available += op->length;
 }
 
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
