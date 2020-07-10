@@ -51,14 +51,14 @@ static UCS_F_ALWAYS_INLINE void
 ucp_datatype_generic_iter_init(ucp_context_h context, void *buffer, size_t count,
                                ucp_datatype_t datatype, ucp_datatype_iter_t *dt_iter)
 {
-    ucp_dt_generic_t *dt_gen = ucp_dt_generic(datatype);
+    ucp_dt_generic_t *dt_gen = ucp_dt_to_generic(datatype);
     void *state;
 
     state                        = dt_gen->ops.start_pack(dt_gen->context,
                                                           buffer, count);
     dt_iter->mem_type            = UCS_MEMORY_TYPE_HOST;
     dt_iter->length              = dt_gen->ops.packed_size(state);
-    dt_iter->type.generic.dt_gen = ucp_dt_generic(datatype);
+    dt_iter->type.generic.dt_gen = ucp_dt_to_generic(datatype);
     dt_iter->type.generic.state  = state;
 }
 

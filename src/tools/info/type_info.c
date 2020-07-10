@@ -31,6 +31,7 @@
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_worker.h>
+#include <ucp/dt/datatype_iter.h>
 #include <ucp/wireup/wireup.h>
 
 #if HAVE_IB
@@ -262,6 +263,7 @@ void print_type_info(const char * tl_name)
     PRINT_SIZE(ucp_ep_match_entry_t);
     PRINT_SIZE(ucp_ep_config_key_t);
     PRINT_SIZE(ucp_ep_config_t);
+    PRINT_SIZE(ucp_datatype_iter_t);
     PRINT_SIZE(ucp_request_t);
     PRINT_SIZE(ucp_recv_desc_t);
     PRINT_SIZE(ucp_tag_recv_info_t);

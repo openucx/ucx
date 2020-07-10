@@ -134,7 +134,7 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
         break;
 
     case UCP_DATATYPE_GENERIC:
-        dt = ucp_dt_generic(datatype);
+        dt         = ucp_dt_to_generic(datatype);
         result_len = UCS_PROFILE_NAMED_CALL("dt_pack", dt->ops.pack,
                                             state->dt.generic.state,
                                             state->offset, dest, length);

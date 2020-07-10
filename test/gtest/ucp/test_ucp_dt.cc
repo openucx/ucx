@@ -105,25 +105,35 @@ protected:
         }
 
         EXPECT_EQ(dt_buffer, packed_buffer);
+
+        ucp_datatype_iter_cleanup(&dt_iter, UINT_MAX);
     }
 
 public:
-    static std::vector<ucp_datatype_t> enum_dt_generic_params()
-    {
-        std::vector<ucp_datatype_t> result;
-        ucp_datatype_t dt_gen;
-        ucs_status_t status = ucp_dt_create_generic(&ucp::test_dt_copy_ops, NULL,
-                                                    &dt_gen);
-        if (status == UCS_OK) {
-            result.push_back(dt_gen);
+    static std::vector<ucp_datatype_t> enum_dt_generic_params() {
+        ucp_datatype_t datatype;
+        ucs_status_t status;
+
+        if (dt_gen == 0) {
+            status = ucp_dt_create_generic(&ucp::test_dt_copy_ops, NULL, &datatype);
+            if (status != UCS_OK) {
+                return std::vector<ucp_datatype_t>();
+            }
+
+            /* keep global pointer to dt_gen to silence valgrind leak checker */
+            dt_gen = ucp_dt_to_generic(datatype);
         }
 
-        return result;
+        return std::vector<ucp_datatype_t>(1, ucp_dt_from_generic(dt_gen));
     }
 
 private:
+    static ucp_dt_generic_t* dt_gen;
+
     ucs::handle<ucp_context_h> m_ucph;
 };
+
+ucp_dt_generic_t* test_ucp_dt_iter::dt_gen = 0;
 
 UCS_TEST_P(test_ucp_dt_iter, pack_100b) {
     do_test(100, true);

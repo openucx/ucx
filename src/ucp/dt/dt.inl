@@ -44,7 +44,7 @@ size_t ucp_dt_length(ucp_datatype_t datatype, size_t count,
         return ucp_dt_iov_length(iov, count);
 
     case UCP_DATATYPE_GENERIC:
-        dt_gen = ucp_dt_generic(datatype);
+        dt_gen = ucp_dt_to_generic(datatype);
         ucs_assert(NULL != state);
         ucs_assert(NULL != dt_gen);
         return dt_gen->ops.packed_size(state->dt.generic.state);
@@ -93,7 +93,7 @@ ucp_dt_unpack_only(ucp_worker_h worker, void *buffer, size_t count,
         return UCS_OK;
 
     case UCP_DATATYPE_GENERIC:
-        dt_gen = ucp_dt_generic(datatype);
+        dt_gen = ucp_dt_to_generic(datatype);
         state  = UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
                                         dt_gen->context, buffer, count);
         if (truncation &&
@@ -138,7 +138,7 @@ ucp_dt_recv_state_init(ucp_dt_state_t *dt_state, void *buffer,
         dt_state->dt.iov.dt_reg        = NULL;
         break;
     case UCP_DATATYPE_GENERIC:
-        dt_gen = ucp_dt_generic(dt);
+        dt_gen = ucp_dt_to_generic(dt);
         dt_state->dt.generic.state =
             UCS_PROFILE_NAMED_CALL("dt_start", dt_gen->ops.start_unpack,
                                    dt_gen->context, buffer, dt_count);
