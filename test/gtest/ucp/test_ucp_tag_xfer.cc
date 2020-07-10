@@ -10,6 +10,7 @@
 #include "ucp_datatype.h"
 
 extern "C" {
+#include <ucp/core/ucp_resource.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/datastruct/queue.h>
 }
@@ -1050,12 +1051,52 @@ public:
         return e.worker()->stats;
     }
 
-    void validate_counters(uint64_t tx_cntr, uint64_t rx_cntr) {
+    unsigned get_rx_stat(unsigned counter) {
+        return UCS_STATS_GET_COUNTER(worker_stats(receiver()), counter);
+    }
+
+    void validate_counters(unsigned tx_counter, unsigned rx_counter) {
         uint64_t cnt;
-        cnt = UCS_STATS_GET_COUNTER(ep_stats(sender()), tx_cntr);
+        cnt = UCS_STATS_GET_COUNTER(ep_stats(sender()), tx_counter);
         EXPECT_EQ(1ul, cnt);
-        cnt = UCS_STATS_GET_COUNTER(worker_stats(receiver()), rx_cntr);
+        cnt = get_rx_stat(rx_counter);
         EXPECT_EQ(1ul, cnt);
+    }
+
+    bool has_xpmem() {
+        return ucp_context_find_tl_md(receiver().ucph(), "xpmem") != NULL;
+    }
+
+    bool has_get_zcopy() {
+        return has_transport("rc_v") || has_transport("rc_x") ||
+               has_transport("dc_x") ||
+               (ucp_context_find_tl_md(receiver().ucph(), "cma")  != NULL) ||
+               (ucp_context_find_tl_md(receiver().ucph(), "knem") != NULL);
+    }
+
+    void validate_rndv_counters() {
+        unsigned get_zcopy = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_GET_ZCOPY);
+        unsigned send_rtr  = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_SEND_RTR);
+        unsigned rkey_ptr  = get_rx_stat(UCP_WORKER_STAT_TAG_RX_RNDV_RKEY_PTR);
+
+        UCS_TEST_MESSAGE << "get_zcopy: " << get_zcopy
+                         << " send_rtr: " << send_rtr
+                         << " rkey_ptr: " << rkey_ptr;
+        EXPECT_EQ(1, get_zcopy + send_rtr + rkey_ptr);
+
+        if (has_xpmem()) {
+            /* rkey_ptr expected to be selected if xpmem is available */
+            EXPECT_EQ(1u, rkey_ptr);
+        } else if (has_get_zcopy()) {
+            /* if any transports supports get_zcopy, expect it to be used */
+            EXPECT_EQ(1u, get_zcopy);
+        } else {
+            /* Could be a transport which supports get_zcopy that wasn't
+             * accounted for, or fallback to RTR. In any case, rkey_ptr is not
+             * expected to be used.
+             */
+            EXPECT_EQ(1u, send_rtr + get_zcopy);
+        }
     }
 
 };
@@ -1114,6 +1155,7 @@ UCS_TEST_P(test_ucp_tag_stats, rndv_expected, "RNDV_THRESH=1000") {
     test_run_xfer(true, true, true, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_EXP);
+    validate_rndv_counters();
 }
 
 UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000") {
@@ -1121,6 +1163,7 @@ UCS_TEST_P(test_ucp_tag_stats, rndv_unexpected, "RNDV_THRESH=1000") {
     test_run_xfer(true, true, false, false, false);
     validate_counters(UCP_EP_STAT_TAG_TX_RNDV,
                       UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP);
+    validate_rndv_counters();
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_stats)

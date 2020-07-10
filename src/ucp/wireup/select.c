@@ -1591,6 +1591,13 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         }
     }
 
+    if ((key->rkey_ptr_lane != UCP_NULL_LANE) &&
+        (ucs_popcount(key->rma_bw_md_map) < UCP_MAX_OP_MDS)) {
+        rsc_index            = select_ctx->lane_descs[key->rkey_ptr_lane].rsc_index;
+        md_index             = context->tl_rscs[rsc_index].md_index;
+        key->rma_bw_md_map  |= UCS_BIT(md_index);
+    }
+
     /* use AM lane first for eager AM transport to simplify processing single/middle
      * msg packets */
     key->am_bw_lanes[0] = key->am_lane;
