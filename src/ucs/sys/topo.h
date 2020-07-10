@@ -14,12 +14,10 @@
 
 BEGIN_C_DECLS
 
-#define UCS_SYS_DEVICE_ID_UNKNOWN UINT_MAX /* Indicate that the ucs_sys_device_t
-                                              for the device has no real bus_id
-                                              E.g. virtual devices like CMA/knem
-                                            */
-
-/** @file topo.h */
+#define UCS_SYS_DEVICE_ID_UNKNOWN UINT16_MAX /* Indicate that the ucs_sys_device_t
+                                              * for the device has no real bus_id
+                                              * e.g. virtual devices like CMA/knem
+                                              */
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
@@ -32,10 +30,10 @@ typedef struct ucs_sys_bus_id {
 /**
  * @ingroup UCS_RESOURCE
  * System Device Index
- * Obtained from a translation of the device bus id into an unsigned int
+ * Obtained from a translation of the device bus id into a short integer
  * Refer ucs_topo_find_device_by_bus_id()
  */
-typedef unsigned ucs_sys_device_t;
+typedef uint16_t ucs_sys_device_t;
 
 
 /*
