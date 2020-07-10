@@ -75,7 +75,7 @@ void ucp_dt_iov_gather(void *dest, const ucp_dt_iov_t *iov, size_t length,
  * @return Size in bytes that was actually copied from @a src to @a iov. It must
  *         be less or equal to @a length.
  */
-size_t ucp_dt_iov_scatter(ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
+size_t ucp_dt_iov_scatter(const ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
                           size_t length, size_t *iov_offset, size_t *iovcnt_offset);
 
 

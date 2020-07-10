@@ -34,6 +34,8 @@ noinst_HEADERS = \
 	core/ucp_worker.h \
 	core/ucp_thread.h \
 	core/ucp_types.h \
+	dt/datatype_iter.h \
+	dt/datatype_iter.inl \
 	dt/dt.h \
 	dt/dt.inl \
 	dt/dt_contig.h \

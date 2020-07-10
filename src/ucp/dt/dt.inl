@@ -7,7 +7,24 @@
 #ifndef UCP_DT_INL_
 #define UCP_DT_INL_
 
+#include "dt.h"
+
+#include <ucp/core/ucp_mm.h>
 #include <ucs/profile/profile.h>
+
+
+/**
+ * Get the class of a given datatype
+ *
+ * @param [in]   datatype Handle to a datatype
+ *
+ * @return datatype class of a datatype handle
+ */
+static UCS_F_ALWAYS_INLINE enum ucp_dt_type
+ucp_datatype_class(ucp_datatype_t datatype)
+{
+    return (enum ucp_dt_type)(datatype & UCP_DATATYPE_CLASS_MASK);
+}
 
 /**
  * Get the total length of the data
@@ -64,13 +81,15 @@ ucp_dt_unpack_only(ucp_worker_h worker, void *buffer, size_t count,
         return UCS_OK;
 
     case UCP_DATATYPE_IOV:
-        if (truncation &&
-            ucs_unlikely(length > (buffer_size = ucp_dt_iov_length(buffer, count)))) {
-            goto err_truncated;
+        if (truncation) {
+            buffer_size = ucp_dt_iov_length((const ucp_dt_iov_t*)buffer, count);
+            if (ucs_unlikely(length > buffer_size)) {
+                goto err_truncated;
+            }
         }
         iov_offset = iovcnt_offset = 0;
-        UCS_PROFILE_CALL(ucp_dt_iov_scatter, buffer, count, data, length,
-                         &iov_offset, &iovcnt_offset);
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, (const ucp_dt_iov_t*)buffer, count,
+                         data, length, &iov_offset, &iovcnt_offset);
         return UCS_OK;
 
     case UCP_DATATYPE_GENERIC:

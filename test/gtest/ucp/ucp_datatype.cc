@@ -7,6 +7,9 @@
 #include "ucp_test.h"
 
 #include <common/test_helpers.h>
+extern "C" {
+#include <ucp/dt/dt.inl>
+}
 
 namespace ucp {
 
@@ -166,10 +169,13 @@ static size_t
 dt_pack_copy(void *state, size_t offset, void *dest, size_t max_length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
+    size_t length;
 
-    memcpy(dest, UCS_PTR_BYTE_OFFSET(dt_state->buffer, offset), max_length);
+    ucs_assert(offset <= dt_state->count);
+    length = std::min(max_length, dt_state->count - offset);
+    memcpy(dest, UCS_PTR_BYTE_OFFSET(dt_state->buffer, offset), length);
 
-    return max_length;
+    return length;
 }
 
 static ucs_status_t
@@ -177,6 +183,7 @@ dt_unpack_copy(void *state, size_t offset, const void *src, size_t length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
 
+    ucs_assert(offset + length <= dt_state->count);
     memcpy(UCS_PTR_BYTE_OFFSET(dt_state->buffer, offset), src, length);
 
     return UCS_OK;
@@ -230,14 +237,7 @@ ucp_generic_dt_ops test_dt_copy_ops = {
 
 std::string datatype_name(ucp_datatype_t dt)
 {
-    if (UCP_DT_IS_CONTIG(dt)) {
-        return "contig";
-    } else if (UCP_DT_IS_IOV(dt)) {
-        return "iov";
-    } else {
-        ucs_assert(UCP_DT_IS_GENERIC(dt));
-        return "generic";
-    }
+    return ucp_datatype_class_names[ucp_datatype_class(dt)];
 }
 
 std::vector<std::vector<ucp_datatype_t> >

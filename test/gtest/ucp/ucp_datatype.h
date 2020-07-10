@@ -132,6 +132,7 @@ extern int dt_gen_finish_count;
 extern ucp_generic_dt_ops test_dt_uint32_ops;
 extern ucp_generic_dt_ops test_dt_uint32_err_ops;
 extern ucp_generic_dt_ops test_dt_uint8_ops;
+extern ucp_generic_dt_ops test_dt_copy_ops;
 
 } // ucp
 
