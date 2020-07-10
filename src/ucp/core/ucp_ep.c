@@ -12,6 +12,7 @@
 #include "ucp_ep.h"
 #include "ucp_worker.h"
 #include "ucp_am.h"
+#include "ucp_rkey.h"
 #include "ucp_ep.inl"
 #include "ucp_request.inl"
 
