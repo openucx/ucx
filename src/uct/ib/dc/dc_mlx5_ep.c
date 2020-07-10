@@ -48,6 +48,7 @@ uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                              unsigned opcode, const uct_iov_t *iov, size_t iovcnt,
+                             size_t iov_total_length,
                              /* SEND */ uint8_t am_id, const void *am_hdr, unsigned am_hdr_len,
                              /* RDMA */ uint64_t rdma_raddr, uct_rkey_t rdma_rkey,
                              /* TAG  */ uct_tag_t tag, uint32_t app_ctx, uint32_t ib_imm_be,
@@ -71,8 +72,7 @@ uct_dc_mlx5_iface_zcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                                    UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super.super));
 
     uct_rc_txqp_add_send_comp(&iface->super.super, txqp, handler, comp, sn,
-                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
-                              uct_iov_total_length(iov, iovcnt));
+                              UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY, iov_total_length);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -369,7 +369,7 @@ ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
                                UCT_IB_MLX5_AV_FULL_SIZE);
     UCT_DC_CHECK_RES_AND_FC(iface, ep);
 
-    uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_SEND, iov, iovcnt,
+    uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_SEND, iov, iovcnt, 0ul,
                                  id, header, header_length, 0, 0, 0ul, 0, 0,
                                  uct_rc_ep_send_op_completion_handler,
                                  comp, MLX5_WQE_CTRL_SOLICITED);
@@ -480,7 +480,7 @@ ucs_status_t uct_dc_mlx5_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size
                              ep->atomic_mr_offset);
 
     uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_RDMA_WRITE, iov, iovcnt,
-                                 0, NULL, 0, remote_addr, rkey, 0ul, 0, 0,
+                                 0ul, 0, NULL, 0, remote_addr, rkey, 0ul, 0, 0,
                                  uct_rc_ep_send_op_completion_handler, comp, 0);
 
     UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY,
@@ -527,11 +527,12 @@ ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     uint8_t fm_ce_se           = 0;
+    size_t total_length        = uct_iov_total_length(iov, iovcnt);
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     UCT_CHECK_IOV_SIZE(iovcnt, UCT_RC_MLX5_RMA_MAX_IOV(UCT_IB_MLX5_AV_FULL_SIZE),
                        "uct_dc_mlx5_ep_get_zcopy");
-    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt),
+    UCT_CHECK_LENGTH(total_length,
                      iface->super.super.super.config.max_inl_cqe[UCT_IB_DIR_TX] + 1,
                      iface->super.super.config.max_get_zcopy, "get_zcopy");
     UCT_DC_MLX5_CHECK_RMA_RES(iface, ep);
@@ -539,12 +540,13 @@ ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     uct_rc_mlx5_ep_fence_get(&iface->super, txwq, &rkey, &fm_ce_se);
 
     uct_dc_mlx5_iface_zcopy_post(iface, ep, MLX5_OPCODE_RDMA_READ, iov, iovcnt,
-                                 0, NULL, 0, remote_addr, rkey, 0ul, 0, 0,
+                                 total_length, 0, NULL, 0, remote_addr, rkey,
+                                 0ul, 0, 0,
                                  uct_rc_ep_get_zcopy_completion_handler, comp,
                                  fm_ce_se);
 
-    UCT_RC_RDMA_READ_POSTED(&iface->super.super, uct_iov_total_length(iov, iovcnt));
-    UCT_TL_EP_STAT_OP(&ep->super, GET, ZCOPY, uct_iov_total_length(iov, iovcnt));
+    UCT_RC_RDMA_READ_POSTED(&iface->super.super, total_length);
+    UCT_TL_EP_STAT_OP(&ep->super, GET, ZCOPY, total_length);
 
     return UCS_INPROGRESS;
 }
@@ -720,7 +722,7 @@ ucs_status_t uct_dc_mlx5_ep_tag_eager_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
     UCT_RC_MLX5_FILL_TM_IMM(imm, app_ctx, ib_imm, opcode, MLX5_OPCODE_SEND, _IMM);
 
     uct_dc_mlx5_iface_zcopy_post(iface, ep, opcode|UCT_RC_MLX5_OPCODE_FLAG_TM,
-                                 iov, iovcnt, 0, "", 0, 0, 0, tag, app_ctx,
+                                 iov, iovcnt, 0ul, 0, "", 0, 0, 0, tag, app_ctx,
                                  ib_imm, uct_rc_ep_send_op_completion_handler,
                                  comp, MLX5_WQE_CTRL_SOLICITED);
 
