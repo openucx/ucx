@@ -97,7 +97,8 @@ ucs_conn_match_peer_alloc(ucs_conn_match_ctx_t *conn_match_ctx,
     char address_str[UCS_CONN_MATCH_ADDRESS_STR_MAX];
     ucs_conn_match_peer_t *peer;
 
-    peer = ucs_calloc(1, sizeof(*peer), "conn match peer");
+    peer = ucs_calloc(1, sizeof(*peer) + conn_match_ctx->address_length,
+                      "conn match peer");
     if (peer == NULL) {
         ucs_fatal("match_ctx %p: failed to allocate memory for %s address",
                   conn_match_ctx,
