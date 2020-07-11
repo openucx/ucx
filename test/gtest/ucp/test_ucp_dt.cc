@@ -4,9 +4,9 @@
  * See file LICENSE for terms.
  */
 
-#include "ucp_datatype.h"
-
 #include <common/test.h>
+
+#include "ucp_datatype.h"
 
 extern "C" {
 #include <ucp/dt/dt.h>
