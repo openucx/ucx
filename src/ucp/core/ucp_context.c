@@ -1145,6 +1145,8 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
         }
     }
 
+    context->mem_type_mask |= mem_type_mask;
+
     status = UCS_OK;
 out:
     return status;
@@ -1170,6 +1172,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->tl_rscs          = NULL;
     context->num_tls          = 0;
     context->memtype_cache    = NULL;
+    context->mem_type_mask    = 0;
     context->num_mem_type_detect_mds = 0;
 
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
@@ -1636,12 +1639,17 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
     if (attr->field_mask & UCP_ATTR_FIELD_REQUEST_SIZE) {
         attr->request_size = sizeof(ucp_request_t);
     }
+
     if (attr->field_mask & UCP_ATTR_FIELD_THREAD_MODE) {
         if (UCP_THREAD_IS_REQUIRED(&context->mt_lock)) {
             attr->thread_mode = UCS_THREAD_MODE_MULTI;
         } else {
             attr->thread_mode = UCS_THREAD_MODE_SINGLE;
         }
+    }
+
+    if (attr->field_mask & UCP_ATTR_FIELD_MEMORY_TYPES) {
+        attr->memory_types = context->mem_type_mask;
     }
 
     return UCS_OK;
