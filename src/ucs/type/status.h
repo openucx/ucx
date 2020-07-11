@@ -88,11 +88,11 @@ typedef enum {
 
 #define UCS_IS_LINK_ERROR(_code) \
     (((_code) <= UCS_ERR_FIRST_LINK_FAILURE) && \
-     ((_code) >= UCS_ERR_LAST_LINK_FAILURE)
+     ((_code) >= UCS_ERR_LAST_LINK_FAILURE))
 
 #define UCS_IS_ENDPOINT_ERROR(_code) \
     (((_code) <= UCS_ERR_FIRST_ENDPOINT_FAILURE) && \
-     ((_code) >= UCS_ERR_LAST_ENDPOINT_FAILURE)
+     ((_code) >= UCS_ERR_LAST_ENDPOINT_FAILURE))
 
 /**
  * @ingroup UCS_RESOURCE
