@@ -4,6 +4,8 @@
 * See file LICENSE for terms.
 */
 
+#include <common/test.h>
+
 #include "ucp_test.h"
 #include "common/test.h"
 #include "ucp/ucp_test.h"
