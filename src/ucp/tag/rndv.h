@@ -1,11 +1,11 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
 
-#ifndef UCP_TAG_RNDV_H_
-#define UCP_TAG_RNDV_H_
+#ifndef UCP_RNDV_H_
+#define UCP_RNDV_H_
 
 #include "tag_match.h"
 
@@ -14,16 +14,23 @@
 #include <ucp/core/ucp_ep.inl>
 
 
+enum ucp_rndv_rts_flags {
+    UCP_RNDV_RTS_FLAG_TAG = UCS_BIT(0)
+};
+
+
 /*
  * Rendezvous RTS
  */
 typedef struct {
-    ucp_tag_hdr_t             super;
+    ucp_tag_hdr_t             tag;      /* Tag used by TAG API calls */
     ucp_request_hdr_t         sreq;     /* send request on the rndv initiator side */
     uint64_t                  address;  /* holds the address of the data buffer on the sender's side */
     size_t                    size;     /* size of the data for sending */
-    /* packed rkeys follow */
+    uint16_t                  flags;    /* rndv proto flags, as defined by
+                                           ucp_rndv_rts_flags */
 } UCS_S_PACKED ucp_rndv_rts_hdr_t;
+
 
 /*
  * Rendezvous RTR
@@ -37,6 +44,7 @@ typedef struct {
     /* packed rkeys follow */
 } UCS_S_PACKED ucp_rndv_rtr_hdr_t;
 
+
 /*
  * RNDV_DATA
  */
@@ -46,21 +54,17 @@ typedef struct {
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
 
-ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
-
-void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *req,
-                      const ucp_rndv_rts_hdr_t *rndv_rts_hdr);
-
 ucs_status_t ucp_rndv_progress_rma_get_zcopy(uct_pending_req_t *self);
 
 ucs_status_t ucp_rndv_progress_rma_put_zcopy(uct_pending_req_t *self);
 
-ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
-                                  unsigned tl_flags);
+size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
+                         uint16_t flags);
 
-size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
+ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq);
 
-ucs_status_t ucp_tag_rndv_reg_send_buffer(ucp_request_t *sreq);
+void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
+                      const ucp_rndv_rts_hdr_t *rndv_rts_hdr);
 
 static UCS_F_ALWAYS_INLINE int ucp_rndv_is_get_zcopy(ucs_memory_type_t mem_type,
                                                      ucp_rndv_mode_t rndv_mode)

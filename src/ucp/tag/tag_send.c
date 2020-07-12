@@ -10,7 +10,7 @@
 
 #include "tag_match.inl"
 #include "eager.h"
-#include "rndv.h"
+#include "tag_rndv.h"
 
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
