@@ -642,6 +642,7 @@ public:
 
     // returns true if has to stop the connection retries
     bool update_retry() {
+        _status = OK;
         check_time_limit(get_time());
         if (_status == RUNTIME_EXCEEDED) {
             /* the run-time of the application has been exhausted */
