@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -9,10 +9,10 @@
 #endif
 
 #include "eager.h"
-#include "rndv.h"
 #include "tag_match.inl"
 
 #include <ucp/api/ucp.h>
+#include <ucp/proto/rndv.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucs/datastruct/queue.h>
 

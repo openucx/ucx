@@ -7,9 +7,8 @@
 #ifndef UCP_RNDV_H_
 #define UCP_RNDV_H_
 
-#include "tag_match.h"
-
 #include <ucp/api/ucp.h>
+#include <ucp/tag/tag_match.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_ep.inl>
 

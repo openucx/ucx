@@ -9,10 +9,10 @@
 #endif
 
 #include "rndv.h"
-#include "tag_rndv.h"
-#include "tag_match.inl"
-#include "offload.h"
 
+#include <ucp/tag/tag_rndv.h>
+#include <ucp/tag/tag_match.inl>
+#include <ucp/tag/offload.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
 

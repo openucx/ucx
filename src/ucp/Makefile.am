@@ -45,10 +45,10 @@ noinst_HEADERS = \
 	proto/proto_am.inl \
 	proto/proto_select.h \
 	proto/proto.h \
+	proto/rndv.h \
 	rma/rma.h \
 	rma/rma.inl \
 	tag/eager.h \
-	tag/rndv.h \
 	tag/tag_rndv.h \
 	tag/tag_match.h \
 	tag/tag_match.inl \
@@ -93,6 +93,7 @@ libucp_la_SOURCES = \
 	proto/lane_type.c \
 	proto/proto_am.c \
 	proto/proto.c \
+	proto/rndv.c \
 	rma/amo_basic.c \
 	rma/amo_send.c \
 	rma/amo_sw.c \
@@ -103,7 +104,6 @@ libucp_la_SOURCES = \
 	tag/eager_rcv.c \
 	tag/eager_snd.c \
 	tag/probe.c \
-	tag/rndv.c \
 	tag/tag_rndv.c \
 	tag/tag_match.c \
 	tag/tag_recv.c \
