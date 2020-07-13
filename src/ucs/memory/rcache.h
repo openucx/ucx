@@ -50,7 +50,8 @@ enum {
  * Rcache flags.
  */
 enum {
-    UCS_RCACHE_FLAG_NO_PFN_CHECK = UCS_BIT(0), /**< PFN check not supported for this rcache */
+    UCS_RCACHE_FLAG_NO_PFN_CHECK  = UCS_BIT(0), /**< PFN check not supported for this rcache */
+    UCS_RCACHE_FLAG_PURGE_ON_FORK = UCS_BIT(1), /**< purge rcache on fork */
 };
 
 /*
