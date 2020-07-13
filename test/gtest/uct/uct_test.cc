@@ -445,10 +445,14 @@ void uct_test::generate_test_variant(int variant,
 void uct_test::init() {
 }
 
-void uct_test::cleanup() {
+void uct_test::disconnect() {
     FOR_EACH_ENTITY(iter) {
         (*iter)->destroy_eps();
     }
+}
+
+void uct_test::cleanup() {
+    disconnect();
     m_entities.clear();
 }
 
@@ -1324,6 +1328,11 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
         m_rkey.rkey   = UCT_INVALID_RKEY;
         m_rkey.handle = NULL;
     }
+
+    init_iov_rkey();
+}
+
+void uct_test::mapped_buffer::init_iov_rkey() {
     m_iov.buffer = ptr();
     m_iov.length = length();
     m_iov.count  = 1;
@@ -1334,10 +1343,33 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
     m_rkey.type  = NULL;
 }
 
+uct_test::mapped_buffer::mapped_buffer(void *address, size_t length,
+                                       uint64_t seed, const entity &entity) :
+    m_entity(entity)
+{
+    m_mem.method   = UCT_ALLOC_METHOD_LAST;
+    m_mem.mem_type = UCS_MEMORY_TYPE_HOST;
+    m_mem.address  = address;
+    m_mem.length   = length;
+    m_mem.memh     = UCT_MEM_HANDLE_NULL;
+    m_mem.md       = NULL;
+    m_entity.mem_type_reg(&m_mem);
+
+    m_buf = (char*)m_mem.address;
+    m_end = (char*)m_buf + length;
+
+    pattern_fill(seed);
+    init_iov_rkey();
+}
+
 uct_test::mapped_buffer::~mapped_buffer() {
     m_entity.rkey_release(&m_rkey);
     if (m_mem.mem_type == UCS_MEMORY_TYPE_HOST) {
-        m_entity.mem_free_host(&m_mem);
+        if (m_mem.method != UCT_ALLOC_METHOD_LAST) {
+            m_entity.mem_free_host(&m_mem);
+        } else if (m_mem.memh != UCT_MEM_HANDLE_NULL) {
+            m_entity.mem_type_dereg(&m_mem);
+        }
     } else {
         ucs_assert(m_mem.method == UCT_ALLOC_METHOD_LAST);
         m_entity.mem_type_dereg(&m_mem);
@@ -1346,7 +1378,9 @@ uct_test::mapped_buffer::~mapped_buffer() {
 }
 
 void uct_test::mapped_buffer::pattern_fill(uint64_t seed) {
-    mem_buffer::pattern_fill(ptr(), length(), seed, m_mem.mem_type);
+    if (ptr()) {
+        mem_buffer::pattern_fill(ptr(), length(), seed, m_mem.mem_type);
+    }
 }
 
 void uct_test::mapped_buffer::pattern_check(uint64_t seed) {

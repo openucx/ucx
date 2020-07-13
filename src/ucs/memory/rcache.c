@@ -98,6 +98,9 @@ static ucs_stats_class_t ucs_rcache_stats_class = {
 #endif
 
 
+static pthread_mutex_t ucs_rcache_registry_lock = PTHREAD_MUTEX_INITIALIZER;
+static UCS_LIST_HEAD(ucs_rcache_registry);
+
 static void __ucs_rcache_region_log(const char *file, int line, const char *function,
                                     ucs_log_level_t level, ucs_rcache_t *rcache,
                                     ucs_rcache_region_t *region, const char *fmt,
@@ -446,6 +449,7 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
     ucs_pgt_addr_t start, end;
 
     ucs_assert(event_type == UCM_EVENT_VM_UNMAPPED ||
+               event_type == UCM_EVENT_VM_FORK ||
                event_type == UCM_EVENT_MEM_TYPE_FREE);
 
     if (event_type == UCM_EVENT_VM_UNMAPPED) {
@@ -454,6 +458,9 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
     } else if(event_type == UCM_EVENT_MEM_TYPE_FREE) {
         start = (uintptr_t)event->mem_type.address;
         end   = (uintptr_t)event->mem_type.address + event->mem_type.size;
+    } else if (event_type == UCM_EVENT_VM_FORK) {
+        start = 0;
+        end   = UCS_PGT_ADDR_MAX;
     } else {
         ucs_warn("%s: unknown event type: %x", rcache->name, event_type);
         return;
@@ -888,6 +895,10 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_destroy_mp;
     }
 
+    pthread_mutex_lock(&ucs_rcache_registry_lock);
+    ucs_list_add_tail(&ucs_rcache_registry, &self->list);
+    pthread_mutex_unlock(&ucs_rcache_registry_lock);
+
     return UCS_OK;
 
 err_destroy_mp:
@@ -913,6 +924,9 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 {
     ucs_status_t status;
 
+    pthread_mutex_lock(&ucs_rcache_registry_lock);
+    ucs_list_del(&self->list);
+    pthread_mutex_unlock(&ucs_rcache_registry_lock);
     ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
                             self);
     ucs_rcache_check_inv_queue(self, 0);
@@ -935,3 +949,27 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucs_rcache_create, ucs_rcache_t, ucs_rcache_t,
                                 const ucs_rcache_params_t*, const char *,
                                 ucs_stats_node_t*)
 UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(ucs_rcache_destroy, ucs_rcache_t, ucs_rcache_t)
+
+static void ucs_rcache_before_fork(void)
+{
+    ucs_rcache_t *rcache;
+
+    pthread_mutex_lock(&ucs_rcache_registry_lock);
+    ucs_list_for_each(rcache, &ucs_rcache_registry, list) {
+        if (rcache->params.flags & UCS_RCACHE_FLAG_NO_PFN_CHECK) {
+            continue;
+        }
+
+        ucs_rcache_unmapped_callback(UCM_EVENT_VM_FORK, NULL, rcache);
+    }
+    pthread_mutex_unlock(&ucs_rcache_registry_lock);
+}
+
+UCS_STATIC_INIT {
+    int ret;
+
+    ret = pthread_atfork(ucs_rcache_before_fork, NULL, NULL);
+    if (ret != 0) {
+        ucs_warn("pthread_atfork failed: %m");
+    }
+}

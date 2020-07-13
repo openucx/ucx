@@ -67,17 +67,25 @@ void uct_p2p_test::init() {
     /* Create 2 connected endpoints */
     entity *e1 = uct_test::create_entity(m_rx_headroom, m_err_handler);
     m_entities.push_back(e1);
+    if (!r->loopback) {
+        entity *e2 = uct_test::create_entity(m_rx_headroom, m_err_handler);
+        m_entities.push_back(e2);
+    }
 
     check_skip_test();
 
-    if (r->loopback) {
-        e1->connect(0, *e1, 0);
-    } else {
-        entity *e2 = uct_test::create_entity(m_rx_headroom, m_err_handler);
-        m_entities.push_back(e2);
+    connect();
+}
 
-        e1->connect(0, *e2, 0);
-        e2->connect(0, *e1, 0);
+void uct_p2p_test::connect() {
+    const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
+    ucs_assert_always(r != NULL);
+
+    if (r->loopback) {
+        sender().connect(0, receiver(), 0);
+    } else {
+        sender().connect(0, receiver(), 0);
+        receiver().connect(0, sender(), 0);
     }
 
     /* Allocate completion handle and set the callback */

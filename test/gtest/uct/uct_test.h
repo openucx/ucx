@@ -112,6 +112,7 @@ public:
                                       const std::string &tl_name="");
     uct_test();
     virtual ~uct_test();
+    void disconnect();
 
     enum atomic_mode {
         OP32,
@@ -251,6 +252,9 @@ protected:
         mapped_buffer(size_t size, uint64_t seed, const entity& entity,
                       size_t offset = 0,
                       ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST);
+        mapped_buffer(void *address, size_t length, uint64_t seed,
+                      const entity& entity);
+
         virtual ~mapped_buffer();
 
         void *ptr() const;
@@ -266,6 +270,7 @@ protected:
         static size_t pack(void *dest, void *arg);
 
     private:
+        void init_iov_rkey();
 
         const uct_test::entity& m_entity;
 
