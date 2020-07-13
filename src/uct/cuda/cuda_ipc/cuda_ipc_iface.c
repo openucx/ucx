@@ -102,16 +102,14 @@ static double uct_cuda_ipc_iface_get_bw()
 
     /*
      * TODO: Detect nvswitch
-     * TODO: Not reporting peak unidirectional bandwidth to avoid dropping other
-     *       transports like cma/knem/ib in rma_bw_lanes
      */
     switch (major_version) {
     case UCT_CUDA_BASE_GEN_P100:
-        return 20000.0 * UCS_MBYTE;
+        return 80000.0 * UCS_MBYTE;
     case UCT_CUDA_BASE_GEN_V100:
-        return 25000.0 * UCS_MBYTE;
+        return 250000.0 * UCS_MBYTE;
     case UCT_CUDA_BASE_GEN_A100:
-        return 30000.0 * UCS_MBYTE;
+        return 300000.0 * UCS_MBYTE;
     default:
         return 6911.0  * UCS_MBYTE;
     }
