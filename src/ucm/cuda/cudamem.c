@@ -20,6 +20,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/topo.h>
+#include <ucs/memory/memory_type.h>
 
 #include <sys/mman.h>
 #include <pthread.h>
@@ -63,8 +64,6 @@ UCM_OVERRIDE_FUNC(cudaMallocPitch,           cudaError_t)
 UCM_OVERRIDE_FUNC(cudaHostGetDevicePointer,  cudaError_t)
 UCM_OVERRIDE_FUNC(cudaHostUnregister,        cudaError_t)
 #endif
-
-extern ucs_status_t (*ucm_mem_type_get_current_device_info[UCS_MEMORY_TYPE_LAST])(ucs_sys_bus_id_t *bus_id);
 
 static void ucm_cuda_set_ptr_attr(CUdeviceptr dptr)
 {
@@ -454,7 +453,8 @@ static void ucm_cudamem_get_existing_alloc(ucm_event_handler_t *handler)
     }
 }
 
-ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id)
+ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id,
+                                              ucs_memory_type_t mem_type)
 {
     static ucs_sys_bus_id_t cached_bus_id = {0xffff, 0xff, 0xff, 0xff};
     CUresult cu_err;
@@ -463,6 +463,10 @@ ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id)
     int attr_result;
 
     ucm_trace("ucm_cuda_get_current_device_info");
+
+    if (mem_type != UCS_MEMORY_TYPE_CUDA) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     if (cached_bus_id.slot != 0xff) {
         memcpy(bus_id, &cached_bus_id, sizeof(cached_bus_id));
@@ -507,13 +511,13 @@ ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id)
 }
 
 static ucm_event_installer_t ucm_cuda_initializer = {
-    .install            = ucm_cudamem_install,
-    .get_existing_alloc = ucm_cudamem_get_existing_alloc
+    .install                             = ucm_cudamem_install,
+    .get_existing_alloc                  = ucm_cudamem_get_existing_alloc,
+    .get_mem_type_current_device_info    = ucm_cuda_get_current_device_info
 };
 
 UCS_STATIC_INIT {
     ucs_list_add_tail(&ucm_event_installer_list, &ucm_cuda_initializer.list);
-    ucm_mem_type_get_current_device_info[UCS_MEMORY_TYPE_CUDA] = &ucm_cuda_get_current_device_info;
 }
 
 UCS_STATIC_CLEANUP {

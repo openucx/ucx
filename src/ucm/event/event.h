@@ -11,6 +11,8 @@
 #include <ucm/util/log.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/type/status.h>
+#include <ucs/sys/topo.h>
+#include <ucs/memory/memory_type.h>
 
 #define UCM_NATIVE_EVENT_VM_MAPPED (UCM_EVENT_MMAP  | UCM_EVENT_MREMAP | \
                                     UCM_EVENT_SHMAT | UCM_EVENT_SBRK)
@@ -33,6 +35,7 @@ typedef struct ucm_event_handler {
 typedef struct ucm_event_installer {
     ucs_status_t          (*install)(int events);
     void                  (*get_existing_alloc)(ucm_event_handler_t *handler);
+    ucs_status_t          (*get_mem_type_current_device_info)(ucs_sys_bus_id_t *bus_id, ucs_memory_type_t mem_type);
     ucs_list_link_t       list;
 } ucm_event_installer_t;
 
