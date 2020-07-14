@@ -346,10 +346,14 @@ char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *fil
 
 ucs_status_t ucm_get_mem_type_current_device_info(ucs_memory_type_t memtype, ucs_sys_bus_id_t *bus_id)
 {
-    ucs_status_t status = UCS_OK;
+    ucs_status_t status = UCS_ERR_UNSUPPORTED;
     ucm_event_installer_t *event_installer;
 
     ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
+        if (NULL == event_installer->get_mem_type_current_device_info) {
+            continue;
+        }
+
         status = event_installer->get_mem_type_current_device_info(bus_id, memtype);
         if (UCS_OK == status) {
             break;

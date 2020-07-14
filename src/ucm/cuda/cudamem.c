@@ -511,9 +511,9 @@ ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id,
 }
 
 static ucm_event_installer_t ucm_cuda_initializer = {
-    .install                             = ucm_cudamem_install,
-    .get_existing_alloc                  = ucm_cudamem_get_existing_alloc,
-    .get_mem_type_current_device_info    = ucm_cuda_get_current_device_info
+    .install                          = ucm_cudamem_install,
+    .get_existing_alloc               = ucm_cudamem_get_existing_alloc,
+    .get_mem_type_current_device_info = ucm_cuda_get_current_device_info
 };
 
 UCS_STATIC_INIT {
