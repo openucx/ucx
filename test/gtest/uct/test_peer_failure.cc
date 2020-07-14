@@ -181,6 +181,33 @@ public:
                (is_time_out ? UCS_ERR_TIMED_OUT : UCS_ERR_OUT_OF_RANGE);
     }
 
+    ucs_status_t add_pending(uct_ep_h ep, pending_send_request_t &req) {
+        req.ep       = ep;
+        req.uct.func = pending_cb;
+        return uct_ep_pending_add(ep, &req.uct, 0);
+    }
+
+    void fill_resources(bool expect_error, ucs_time_t loop_end_limit) {
+        const uint64_t send_data = 0;
+        ucs_status_t status;
+        do {
+            status = uct_ep_am_short(ep0(), 0, 0, &send_data,
+                                     sizeof(send_data));
+        } while ((status == UCS_OK) && (ucs_get_time() < loop_end_limit));
+
+        if (status == UCS_OK) {
+            UCS_TEST_SKIP_R("unable to fill the UCT resources");
+        } else if (status != UCS_ERR_NO_RESOURCE) {
+            if (expect_error && UCS_IS_ENDPOINT_ERROR(status)) {
+                UCS_TEST_SKIP_R("unable to fill the UCT resources, since "
+                                "peer failure has been already detected");
+            } else {
+                UCS_TEST_ABORT("AM Short failed with " <<
+                               ucs_status_string(status));
+            }
+        }
+    }
+
 protected:
     entity                *m_sender;
     std::vector<entity *> m_receivers;
@@ -280,32 +307,32 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
     send_recv_am(0);
     send_recv_am(1);
 
-    const ucs_time_t loop_end_limit = ucs::get_deadline();
     const size_t num_pend_sends     = 64ul;
-    const uint64_t send_data        = 0;
+    const ucs_time_t loop_end_limit = ucs::get_deadline();
     std::vector<pending_send_request_t> reqs(num_pend_sends);
 
     {
         scoped_log_handler slh(wrap_errors_logger);
-
         ucs_status_t status;
-        do {
-            status = uct_ep_am_short(ep0(), 0, 0, &send_data,
-                                     sizeof(send_data));
-        } while ((status == UCS_OK) && (ucs_get_time() < loop_end_limit));
 
-        if (status == UCS_OK) {
-            UCS_TEST_SKIP_R("unable to fill the UCT resources");
-        } else if (status != UCS_ERR_NO_RESOURCE) {
-            UCS_TEST_ABORT("AM Short failed with " << ucs_status_string(status));
-        }
-
+        fill_resources(false, loop_end_limit);
         kill_receiver();
 
-        for (size_t i = 0; i < num_pend_sends; i ++) {
-            reqs[i].ep       = ep0();
-            reqs[i].uct.func = pending_cb;
-            EXPECT_EQ(UCS_OK, uct_ep_pending_add(ep0(), &reqs[i].uct, 0));
+        do {
+            status = add_pending(ep0(), reqs[0]);
+            if (UCS_OK != status) {
+                EXPECT_EQ(UCS_ERR_BUSY, status);
+                fill_resources(true, loop_end_limit);
+            }
+        } while ((status == UCS_ERR_BUSY) && (ucs_get_time() < loop_end_limit));
+
+        if (status == UCS_ERR_BUSY) {
+            UCS_TEST_SKIP_R("unable to add pending requests after "
+                            "filling UCT resources");
+        }
+
+        for (size_t i = 1; i < num_pend_sends; i++) {
+            EXPECT_UCS_OK(add_pending(ep0(), reqs[i]));
         }
 
         flush();

@@ -69,12 +69,12 @@ void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max)
             p += strlen(p);
             break;
         case 'u':
-            snprintf(p, end - p, "%s", basename(ucs_get_user_name()));
+            snprintf(p, end - p, "%s", ucs_basename(ucs_get_user_name()));
             pf = pp + 2;
             p += strlen(p);
             break;
         case 'e':
-            snprintf(p, end - p, "%s", basename(ucs_get_exe()));
+            snprintf(p, end - p, "%s", ucs_basename(ucs_get_exe()));
             pf = pp + 2;
             p += strlen(p);
             break;

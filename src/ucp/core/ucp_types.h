@@ -36,9 +36,6 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 typedef uint8_t                      ucp_lane_index_t;
 typedef uint8_t                      ucp_lane_map_t;
 
-/* Connection sequence number */
-typedef uint16_t                     ucp_ep_conn_sn_t;
-
 /* Worker configuration index for endpoint and rkey */
 typedef uint8_t                      ucp_worker_cfg_index_t;
 #define UCP_WORKER_MAX_CONFIG        128

@@ -380,7 +380,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     ucs_assert(msg->type == UCP_WIREUP_MSG_PRE_REQUEST);
     ucs_assert(msg->dest_ep_ptr != 0);
-    ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep 0x%lx dst_ep 0x%lx conn_sn %d",
+    ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep 0x%lx dst_ep 0x%lx conn_sn %u",
               remote_address->uuid, msg->src_ep_ptr, msg->dest_ep_ptr, msg->conn_sn);
 
     /* wireup pre_request for a specific ep */
@@ -437,8 +437,9 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         }
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     } else {
-        ep = ucp_ep_match_retrieve_exp(&worker->ep_match_ctx, remote_uuid,
-                                       msg->conn_sn ^ (remote_uuid == worker->uuid));
+        ep = ucp_ep_match_retrieve(worker, remote_uuid,
+                                   msg->conn_sn ^
+                                   (remote_uuid == worker->uuid), 1);
         if (ep == NULL) {
             /* Create a new endpoint if does not exist */
             status = ucp_worker_create_ep(worker, remote_address->name,
@@ -449,7 +450,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
             /* add internal endpoint to hash */
             ep->conn_sn = msg->conn_sn;
-            ucp_ep_match_insert_unexp(&worker->ep_match_ctx, remote_uuid, ep);
+            ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn, 0);
         } else {
             ucp_ep_flush_state_reset(ep);
         }
@@ -578,7 +579,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     ucs_trace("ep %p: got wireup reply src_ep 0x%lx dst_ep 0x%lx sn %d", ep,
               msg->src_ep_ptr, msg->dest_ep_ptr, msg->conn_sn);
 
-    ucp_ep_match_remove_ep(&worker->ep_match_ctx, ep);
+    ucp_ep_match_remove_ep(worker, ep);
     ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
     ucp_ep_flush_state_reset(ep);
 
@@ -1287,11 +1288,6 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 
     ucs_free(unpacked_address.address_list);
-}
-
-int ucp_worker_iface_is_tl_p2p(const uct_iface_attr_t *iface_attr)
-{
-    return !!(iface_attr->cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP);
 }
 
 static ucp_err_handling_mode_t
