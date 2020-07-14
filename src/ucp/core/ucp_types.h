@@ -36,6 +36,11 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 typedef uint8_t                      ucp_lane_index_t;
 typedef uint8_t                      ucp_lane_map_t;
 
+/* Worker configuration index for endpoint and rkey */
+typedef uint8_t                      ucp_worker_cfg_index_t;
+#define UCP_WORKER_MAX_CONFIG        128
+#define UCP_WORKER_CFG_INDEX_NULL    UINT8_MAX
+
 /* Forward declarations */
 typedef struct ucp_request              ucp_request_t;
 typedef struct ucp_recv_desc            ucp_recv_desc_t;

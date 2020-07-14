@@ -22,11 +22,6 @@
 #define UCP_MAX_IOV                16UL
 
 
-/* Configuration */
-typedef uint16_t                   ucp_ep_cfg_index_t;
-#define UCP_NULL_CFG_INDEX         UINT16_MAX
-
-
 /* Endpoint flags type */
 #if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
 typedef uint32_t                   ucp_ep_flags_t;
@@ -333,7 +328,7 @@ struct ucp_ep_config {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
-    ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
+    ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */

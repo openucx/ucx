@@ -1574,7 +1574,7 @@ static char* ucp_worker_add_feature_rsc(ucp_context_h context,
 
 static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                       ucp_context_h context,
-                                      ucp_ep_cfg_index_t config_idx)
+                                      ucp_worker_cfg_index_t config_idx)
 {
     char info[256]                  = {0};
     ucp_lane_map_t tag_lanes_map    = 0;
@@ -1688,9 +1688,9 @@ out:
 ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                                       const ucp_ep_config_key_t *key,
                                       int print_cfg,
-                                      ucp_ep_cfg_index_t *config_idx_p)
+                                      ucp_worker_cfg_index_t *config_idx_p)
 {
-    ucp_ep_cfg_index_t config_idx;
+    ucp_worker_cfg_index_t config_idx;
     ucs_status_t status;
 
     /* Search for the given key in the ep_config array */

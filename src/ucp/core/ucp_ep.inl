@@ -19,7 +19,7 @@
 
 static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
 {
-    ucs_assert(ep->cfg_index != UCP_NULL_CFG_INDEX);
+    ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
     return &ep->worker->ep_config[ep->cfg_index];
 }
 
@@ -244,7 +244,7 @@ ucp_ep_config_key_has_cm_lane(const ucp_ep_config_key_t *config_key)
 
 static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
 {
-    return (ep->cfg_index != UCP_NULL_CFG_INDEX) &&
+    return (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
            ucp_ep_config_key_has_cm_lane(&ucp_ep_config(ep)->key);
 }
 

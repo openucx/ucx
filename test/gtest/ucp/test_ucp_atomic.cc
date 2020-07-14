@@ -5,6 +5,8 @@
 * See file LICENSE for terms.
 */
 
+#include <common/test.h>
+
 #include "test_ucp_atomic.h"
 extern "C" {
 #include <ucp/core/ucp_context.h>
