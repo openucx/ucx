@@ -334,7 +334,7 @@ typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
     ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
-    ucp_ep_conn_sn_t              conn_sn;       /* Sequence number for remote connection */
+    ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */
 
@@ -369,6 +369,7 @@ typedef struct {
                                                    used in close protocol */
 } ucp_ep_close_proto_req_t;
 
+
 /*
  * Endpoint extension for generic non fast-path data
  */
@@ -383,7 +384,7 @@ typedef struct {
      * matched to a remote peer.
      */
     union {
-        ucp_ep_match_t            ep_match;      /* Matching with remote endpoints */
+        ucp_ep_match_elem_t       ep_match;      /* Matching with remote endpoints */
         ucp_ep_flush_state_t      flush_state;   /* Remove completion status */
         ucp_listener_h            listener;      /* Listener that may be associated with ep */
         ucp_ep_close_proto_req_t  close_req;     /* Close protocol request */
