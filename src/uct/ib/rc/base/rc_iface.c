@@ -78,13 +78,17 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
                 UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
 
-  {"TX_NUM_GET_OPS", "inf",
-   "Maximal number of simultaneous get/RDMA_READ operations.",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_ops), UCS_CONFIG_TYPE_UINT},
+  {"TX_NUM_GET_OPS", "",
+   "The configuration parameter replaced by UCX_RC_TX_NUM_GET_BYTES.",
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
   {"MAX_GET_ZCOPY", "auto",
    "Maximal size of get operation with zcopy protocol.",
    ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_zcopy), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TX_NUM_GET_BYTES", "inf",
+   "Maximal number of bytes simultaneously transferred by get/RDMA_READ operations.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_bytes), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -519,7 +523,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                               &config->super, init_attr);
 
     self->tx.cq_available           = init_attr->cq_len[UCT_IB_DIR_TX] - 1;
-    self->tx.reads_available        = config->tx.max_get_ops;
     self->rx.srq.available          = 0;
     self->rx.srq.quota              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
@@ -552,6 +555,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                  uct_ib_device_name(dev), self->super.config.port_num,
                  max_ib_msg_size);
         self->config.max_get_zcopy = max_ib_msg_size;
+    }
+
+    if ((config->tx.max_get_bytes == UCS_MEMUNITS_INF) ||
+        (config->tx.max_get_bytes == UCS_MEMUNITS_AUTO)) {
+        self->tx.reads_available = SSIZE_MAX;
+    } else {
+        self->tx.reads_available = config->tx.max_get_bytes;
     }
 
     uct_ib_fence_info_init(&self->tx.fi);
