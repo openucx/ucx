@@ -69,7 +69,7 @@ ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags)
 
     UCS_ASYNC_BLOCK(tcp_sockcm->super.iface.worker->async);
 
-    ucs_debug("ep %p (fd=%d state=%d) disconnecting from peer :%s", cep, cep->fd,
+    ucs_debug("ep %p (fd=%d state=%d) disconnecting from peer: %s", cep, cep->fd,
               cep->state, uct_tcp_sockcm_cm_ep_peer_addr_str(cep, peer_str,
                                                              UCS_SOCKADDR_STRING_LEN));
 
@@ -114,6 +114,16 @@ ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags)
     ucs_assert(cep->fd != -1);
     ret = shutdown(cep->fd, SHUT_WR);
     if (ret == -1) {
+        /* if errno is 'Transport endpoint is not connected', shutdown is expected to fail.
+         * Can happen if this disconnect call was triggered from the error handling
+         * flow after getting EPIPE on an error event */
+        if (errno == ENOTCONN) {
+            ucs_debug("ep %p: failed to shutdown on fd %d. ignoring because %m",
+                      cep, cep->fd);
+            status = UCS_OK;
+            goto out;
+        }
+
         ucs_error("ep %p: failed to shutdown on fd %d. %m", cep, cep->fd);
         status = UCS_ERR_IO_ERROR;
         goto out;
@@ -183,8 +193,8 @@ static ucs_status_t uct_tcp_sockcm_ep_handle_remote_disconnect(uct_tcp_sockcm_ep
     ucs_status_t cb_status;
 
     /* remote peer disconnected */
-    ucs_debug("ep %p (fd=%d): remote peer (%s) disconnected/rejected (%s)",
-              cep, cep->fd,
+    ucs_debug("ep %p (fd=%d state=%d): remote peer (%s) disconnected/rejected (%s)",
+              cep, cep->fd, cep->state,
               uct_tcp_sockcm_cm_ep_peer_addr_str(cep, peer_str, UCS_SOCKADDR_STRING_LEN),
               ucs_status_string(status));
 
@@ -855,9 +865,9 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_ep_t)
 
     UCS_ASYNC_BLOCK(tcp_sockcm->super.iface.worker->async);
 
-    ucs_trace("%s destroy ep %p on cm %p",
+    ucs_trace("%s destroy ep %p (state=%d) on cm %p",
               (self->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
-              self, tcp_sockcm);
+              self, self->state, tcp_sockcm);
 
     ucs_free(self->comm_ctx.buf);
 
