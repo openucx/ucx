@@ -15,14 +15,21 @@
 #include <ucs/profile/profile.h>
 
 
+static UCS_F_ALWAYS_INLINE int
+ucp_datatype_iter_is_class(const ucp_datatype_iter_t *dt_iter,
+                           enum ucp_dt_type dt_class, unsigned dt_mask)
+{
+    return (dt_mask & UCS_BIT(dt_class)) && (dt_iter->dt_class == dt_class);
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_contig_iter_init(ucp_context_h context, void *buffer, size_t length,
                               ucp_datatype_t datatype, ucp_datatype_iter_t *dt_iter)
 {
-    dt_iter->mem_type            = ucp_memory_type_detect(context, buffer,
-                                                          length);
-    dt_iter->length              = length;
-    dt_iter->type.contig.buffer  = buffer;
+    dt_iter->mem_type           = ucp_memory_type_detect(context, buffer,
+                                                         length);
+    dt_iter->length             = length;
+    dt_iter->type.contig.buffer = buffer;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -38,11 +45,11 @@ ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
     dt_iter->type.iov.iov_offset = 0;
 
     if (ucs_likely(count > 0)) {
-        *sg_count          = ucs_min(count, (size_t)UINT8_MAX);
-        dt_iter->mem_type  = ucp_memory_type_detect(context, iov->buffer,
-                                                    iov->length);
+        *sg_count         = ucs_min(count, (size_t)UINT8_MAX);
+        dt_iter->mem_type = ucp_memory_type_detect(context, iov->buffer,
+                                                   iov->length);
     } else {
-        *sg_count          = 1;
+        *sg_count         = 1;
         dt_iter->mem_type = UCS_MEMORY_TYPE_HOST;
     }
 }
@@ -58,10 +65,14 @@ ucp_datatype_generic_iter_init(ucp_context_h context, void *buffer, size_t count
                                                           buffer, count);
     dt_iter->mem_type            = UCS_MEMORY_TYPE_HOST;
     dt_iter->length              = dt_gen->ops.packed_size(state);
-    dt_iter->type.generic.dt_gen = ucp_dt_to_generic(datatype);
+    dt_iter->type.generic.dt_gen = dt_gen;
     dt_iter->type.generic.state  = state;
 }
 
+/*
+ * Initialize a datatype iterator, also returns number of scatter-gather entries
+ * for protocol selection.
+ */
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
                        ucp_datatype_t datatype, size_t contig_length,
@@ -84,25 +95,20 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
     }
 }
 
+/*
+ * Cleanup datatype iterator. dt_mask is a bitmap of possible datatypes, which
+ * could help the compiler eliminate some branches.
+ */
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_cleanup(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
 {
-    ucp_dt_generic_t *dt_gen;
-
-    switch (dt_iter->dt_class) {
-    case UCP_DATATYPE_GENERIC:
-        if (dt_mask & UCS_BIT(UCP_DATATYPE_GENERIC)) {
-            dt_gen = dt_iter->type.generic.dt_gen;
-            dt_gen->ops.finish(dt_iter->type.generic.state);
-        }
-        break;
-    default:
-        break;
+    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_GENERIC, dt_mask)) {
+        dt_iter->type.generic.dt_gen->ops.finish(dt_iter->type.generic.state);
     }
 }
 
 /*
- * pack data and set some fields of next_iter as next iterator state
+ * Pack data and set some fields of next_iter as next iterator state
  */
 static UCS_F_ALWAYS_INLINE size_t
 ucp_datatype_iter_next_pack(const ucp_datatype_iter_t *dt_iter,
@@ -152,7 +158,7 @@ ucp_datatype_iter_next_pack(const ucp_datatype_iter_t *dt_iter,
 }
 
 /*
- * unpack data and set some fields of next_iter as next iterator state
+ * Unpack data and set some fields of next_iter as next iterator state
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_datatype_iter_next_unpack(const ucp_datatype_iter_t *dt_iter,
@@ -205,6 +211,10 @@ ucp_datatype_iter_next_unpack(const ucp_datatype_iter_t *dt_iter,
     return status;
 }
 
+/*
+ * Returns a pointer to next chunk of data (could be done only on some datatype
+ * classes)
+ */
 static UCS_F_ALWAYS_INLINE size_t
 ucp_datatype_iter_next_ptr(const ucp_datatype_iter_t *dt_iter,
                            size_t max_length, ucp_datatype_iter_t *next_iter,
@@ -222,6 +232,10 @@ ucp_datatype_iter_next_ptr(const ucp_datatype_iter_t *dt_iter,
     return length;
 }
 
+/*
+ * Returns a pointer to next chunk of data as IOV entry of registered memory
+ * (could be done only on some datatype classes)
+ */
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
                            ucp_md_index_t md_index, size_t max_length,
@@ -246,6 +260,9 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
     iov[0].count    = 1;
 }
 
+/*
+ * Copy iterator position
+ */
 static UCS_F_ALWAYS_INLINE
 void ucp_datatype_iter_copy_from_next(ucp_datatype_iter_t *dt_iter,
                                       const ucp_datatype_iter_t *next_iter)
@@ -257,6 +274,9 @@ void ucp_datatype_iter_copy_from_next(ucp_datatype_iter_t *dt_iter,
     }
 }
 
+/*
+ * Check if the iterator has reached the end
+ */
 static UCS_F_ALWAYS_INLINE int
 ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
 {
@@ -264,6 +284,9 @@ ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
     return dt_iter->offset == dt_iter->length;
 }
 
+/*
+ * Register memory and update iterator state
+ */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
                           ucp_md_map_t md_map)
@@ -277,6 +300,9 @@ ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
                              &dt_iter->type.contig.reg.md_map);
 }
 
+/*
+ * De-register memory and update iterator state
+ */
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_mem_dereg(ucp_context_h context, ucp_datatype_iter_t *dt_iter)
 {

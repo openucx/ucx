@@ -20,7 +20,7 @@ const char * ucp_datatype_class_names[] = {
     [UCP_DATATYPE_CONTIG]   = "contiguous",
     [UCP_DATATYPE_STRIDED]  = "strided",
     [UCP_DATATYPE_IOV]      = "iov",
-    [UCP_DATATYPE_GENERIC]  = "generic",
+    [UCP_DATATYPE_GENERIC]  = "generic"
 };
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_unpack,

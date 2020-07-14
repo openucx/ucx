@@ -46,7 +46,7 @@ typedef struct ucp_dt_state {
 } ucp_dt_state_t;
 
 
-extern const char * ucp_datatype_class_names[];
+extern const char *ucp_datatype_class_names[];
 
 size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
                    ucs_memory_type_t mem_type, void *dest, const void *src,

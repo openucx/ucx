@@ -96,7 +96,7 @@ protected:
                 ucp_datatype_iter_next_pack(&dt_iter, NULL, seg_size,
                                             &next_iter, packed_ptr);
             } else {
-                size_t unpack_size = ucs_min(seg_size, size - offset);
+                size_t unpack_size = std::min(seg_size, size - offset);
                 ucp_datatype_iter_next_unpack(&dt_iter, NULL, unpack_size,
                                               &next_iter, packed_ptr);
             }
@@ -157,7 +157,7 @@ INSTANTIATE_TEST_CASE_P(contig, test_ucp_dt_iter,
                                         ucp_dt_make_contig(39)));
 
 INSTANTIATE_TEST_CASE_P(iov, test_ucp_dt_iter,
-                        testing::Values(ucp_dt_make_contig(1)));
+                        testing::Values((ucp_datatype_t)ucp_dt_make_iov()));
 
 INSTANTIATE_TEST_CASE_P(generic, test_ucp_dt_iter,
                         testing::ValuesIn(test_ucp_dt_iter::enum_dt_generic_params()));

@@ -17,7 +17,7 @@
  * into a receive buffer.
  */
 typedef struct {
-    enum ucp_dt_type              dt_class;   /* Datatype class (config/iov/...) */
+    enum ucp_dt_type              dt_class;   /* Datatype class (contig/iov/...) */
     ucs_memory_type_t             mem_type;   /* Memory type, needed to pack/unpack */
     size_t                        length;     /* Total packed flat length */
     size_t                        offset;     /* Current flat offset */
