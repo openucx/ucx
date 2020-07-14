@@ -183,7 +183,7 @@ UCS_TEST_P(test_ucp_tag_mem_type, xfer_mismatch_length)
 
     UCS_TEST_MESSAGE << "TEST: "
                      << ucs_memory_type_names[m_send_mem_type] << " <-> "
-                     << ucs_memory_type_names[m_recv_mem_type] << " length :"
+                     << ucs_memory_type_names[m_recv_mem_type] << " length: "
                      << length;
 
     mem_buffer m_recv_mem_buf(length, m_recv_mem_type);

@@ -96,9 +96,9 @@ static void request_init(void *request)
     ctx->completed = 0;
 }
 
-static void send_handler(void *request, ucs_status_t status)
+static void send_handler(void *request, ucs_status_t status, void *ctx)
 {
-    struct ucx_context *context = (struct ucx_context *) request;
+    struct ucx_context *context = (struct ucx_context *) ctx;
 
     context->completed = 1;
 
@@ -128,7 +128,7 @@ static void recv_handler(void *request, ucs_status_t status,
            info->length);
 }
 
-static void wait(ucp_worker_h ucp_worker, struct ucx_context *context)
+static void ucx_wait(ucp_worker_h ucp_worker, struct ucx_context *context)
 {
     while (context->completed == 0) {
         ucp_worker_progress(ucp_worker);
@@ -179,13 +179,15 @@ err:
 
 static int run_ucx_client(ucp_worker_h ucp_worker)
 {
+    ucp_request_param_t send_param;
     ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
     ucp_ep_h server_ep;
     ucp_ep_params_t ep_params;
     struct msg *msg = 0;
-    struct ucx_context *request = 0;
+    struct ucx_context *request;
+    struct ucx_context ctx;
     size_t msg_len = 0;
     int ret = -1;
     char *str;
@@ -207,16 +209,19 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     msg->data_len = local_addr_len;
     memcpy(msg + 1, local_addr, local_addr_len);
 
-    request = ucp_tag_send_nb(server_ep, msg, msg_len,
-                              ucp_dt_make_contig(1), tag,
-                              send_handler);
+    send_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA;
+    send_param.cb.send      = send_handler;
+    send_param.user_data    = &ctx;
+    ctx.completed           = 0;
+    request                 = ucp_tag_send_nbx(server_ep, msg, msg_len, tag,
+                                               &send_param);
     if (UCS_PTR_IS_ERR(request)) {
         fprintf(stderr, "unable to send UCX address message\n");
         free(msg);
         goto err_ep;
     } else if (UCS_PTR_IS_PTR(request)) {
-        wait(ucp_worker, request);
-        request->completed = 0; /* Reset request state before recycling it */
+        ucx_wait(ucp_worker, &ctx);
         ucp_request_release(request);
     }
 
@@ -269,7 +274,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     } else {
         /* ucp_tag_msg_recv_nb() cannot return NULL */
         assert(UCS_PTR_IS_PTR(request));
-        wait(ucp_worker, request);
+        ucx_wait(ucp_worker, request);
         request->completed = 0;
         ucp_request_release(request);
         printf("UCX data message was received\n");
@@ -298,15 +303,18 @@ err:
     return ret;
 }
 
-static void flush_callback(void *request, ucs_status_t status)
+static void flush_callback(void *request, ucs_status_t status, void *user_data)
 {
 }
 
 static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
 {
+    ucp_request_param_t param;
     void *request;
 
-    request = ucp_ep_flush_nb(ep, 0, flush_callback);
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK;
+    param.cb.send      = flush_callback;
+    request            = ucp_ep_flush_nbx(ep, &param);
     if (request == NULL) {
         return UCS_OK;
     } else if (UCS_PTR_IS_ERR(request)) {
@@ -324,6 +332,7 @@ static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
 
 static int run_ucx_server(ucp_worker_h ucp_worker)
 {
+    ucp_request_param_t send_param;
     ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
@@ -331,6 +340,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ucp_ep_params_t ep_params;
     struct msg *msg = 0;
     struct ucx_context *request = 0;
+    struct ucx_context ctx;
     size_t msg_len = 0;
     int ret;
 
@@ -357,7 +367,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     } else {
         /* ucp_tag_msg_recv_nb() cannot return NULL */
         assert(UCS_PTR_IS_PTR(request));
-        wait(ucp_worker, request);
+        ucx_wait(ucp_worker, request);
         request->completed = 0;
         ucp_request_release(request);
         printf("UCX address message was received\n");
@@ -399,17 +409,20 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ret = generate_test_string((char *)(msg + 1), test_string_length);
     CHKERR_JUMP(ret < 0, "generate test string", err_free_mem_type_msg);
 
-    request = ucp_tag_send_nb(client_ep, msg, msg_len,
-                              ucp_dt_make_contig(1), tag,
-                              send_handler);
+    send_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA;
+    send_param.cb.send      = send_handler;
+    send_param.user_data    = &ctx;
+    ctx.completed           = 0;
+    request                 = ucp_tag_send_nbx(client_ep, msg, msg_len, tag,
+                                               &send_param);
     if (UCS_PTR_IS_ERR(request)) {
         fprintf(stderr, "unable to send UCX data message\n");
         ret = -1;
         goto err_free_mem_type_msg;
     } else if (UCS_PTR_IS_PTR(request)) {
         printf("UCX data message was scheduled for send\n");
-        wait(ucp_worker, request);
-        request->completed = 0;
+        ucx_wait(ucp_worker, &ctx);
         ucp_request_release(request);
     }
 

@@ -20,7 +20,6 @@
 static const char *uct_rc_fence_mode_values[] = {
     [UCT_RC_FENCE_MODE_NONE]   = "none",
     [UCT_RC_FENCE_MODE_WEAK]   = "weak",
-    [UCT_RC_FENCE_MODE_STRONG] = "strong",
     [UCT_RC_FENCE_MODE_AUTO]   = "auto",
     [UCT_RC_FENCE_MODE_LAST]   = NULL
 };
@@ -75,19 +74,21 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "IB fence type when API fence requested:\n"
    "  none   - fence is a no-op\n"
    "  weak   - fence makes sure remote reads are ordered with respect to remote writes\n"
-   "  strong - fence makes sure that subsequent remote operations start only after\n"
-   "           previous remote operations complete\n"
    "  auto   - select fence mode based on hardware capabilities",
    ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
                 UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
 
-  {"TX_NUM_GET_OPS", "inf",
-   "Maximal number of simultaneous get/RDMA_READ operations.",
-   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_ops), UCS_CONFIG_TYPE_UINT},
+  {"TX_NUM_GET_OPS", "",
+   "The configuration parameter replaced by UCX_RC_TX_NUM_GET_BYTES.",
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
   {"MAX_GET_ZCOPY", "auto",
    "Maximal size of get operation with zcopy protocol.",
    ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_zcopy), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TX_NUM_GET_BYTES", "inf",
+   "Maximal number of bytes simultaneously transferred by get/RDMA_READ operations.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_bytes), UCS_CONFIG_TYPE_MEMUNITS},
 
   {NULL}
 };
@@ -173,7 +174,6 @@ ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
     }
 
     iface_attr->iface_addr_len  = 0;
-    iface_attr->ep_addr_len     = sizeof(uct_rc_ep_address_t);
     iface_attr->max_conn_priv   = 0;
     iface_attr->cap.flags       = UCT_IFACE_FLAG_AM_BCOPY        |
                                   UCT_IFACE_FLAG_AM_ZCOPY        |
@@ -287,6 +287,11 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = uct_rc_iface_fence_relaxed_order(tl_iface);
+    if (status != UCS_OK) {
+        return status;
     }
 
     count = 0;
@@ -518,7 +523,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                               &config->super, init_attr);
 
     self->tx.cq_available           = init_attr->cq_len[UCT_IB_DIR_TX] - 1;
-    self->tx.reads_available        = config->tx.max_get_ops;
     self->rx.srq.available          = 0;
     self->rx.srq.quota              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
@@ -551,6 +555,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                  uct_ib_device_name(dev), self->super.config.port_num,
                  max_ib_msg_size);
         self->config.max_get_zcopy = max_ib_msg_size;
+    }
+
+    if ((config->tx.max_get_bytes == UCS_MEMUNITS_INF) ||
+        (config->tx.max_get_bytes == UCS_MEMUNITS_AUTO)) {
+        self->tx.reads_available = SSIZE_MAX;
+    } else {
+        self->tx.reads_available = config->tx.max_get_bytes;
     }
 
     uct_ib_fence_info_init(&self->tx.fi);

@@ -52,6 +52,9 @@ typedef struct ucp_worker_cm            ucp_worker_cm_t;
 typedef struct ucp_rma_proto            ucp_rma_proto_t;
 typedef struct ucp_amo_proto            ucp_amo_proto_t;
 typedef struct ucp_wireup_sockaddr_data ucp_wireup_sockaddr_data_t;
+typedef struct ucp_ep_config            ucp_ep_config_t;
+typedef struct ucp_ep_config_key        ucp_ep_config_key_t;
+typedef struct ucp_proto                ucp_proto_t;
 
 
 /**
@@ -86,12 +89,12 @@ enum {
     UCP_AM_ID_ATOMIC_REQ        =  20, /* Remote memory atomic request */
     UCP_AM_ID_ATOMIC_REP        =  21, /* Remote memory atomic reply */
     UCP_AM_ID_CMPL              =  22, /* Remote memory operation completion */
-    UCP_AM_ID_SINGLE            =  23, /* For user defined Active Messages */
-    UCP_AM_ID_MULTI             =  24, /* For user defined AM if message 
-                                          does not fit in one AM */
-    UCP_AM_ID_SINGLE_REPLY      =  25, /* For user defined AM when a reply
-                                          is needed */
-    UCP_AM_ID_MULTI_REPLY       =  26,
+    UCP_AM_ID_SINGLE            =  23, /* Single fragment user defined AM */
+    UCP_AM_ID_FIRST             =  24, /* First fragment of user defined AM */
+    UCP_AM_ID_MIDDLE            =  25, /* Middle or last fragment of user
+                                          defined AM */
+    UCP_AM_ID_SINGLE_REPLY      =  26, /* Single fragment user defined AM
+                                          carrying remote ep for reply */
     UCP_AM_ID_LAST
 };
 

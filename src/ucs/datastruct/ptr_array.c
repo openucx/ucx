@@ -71,6 +71,14 @@ ucs_ptr_array_freelist_element_set(ucs_ptr_array_elem_t *elem,
             (((ucs_ptr_array_elem_t)next) << UCS_PTR_ARRAY_NEXT_SHIFT);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucs_ptr_array_freelist_element_set_free_ahead(ucs_ptr_array_elem_t *elem,
+                                              uint32_t free_ahead)
+{
+    ucs_ptr_array_freelist_element_set(elem, free_ahead,
+                                       ucs_ptr_array_freelist_get_next(*elem));
+}
+
 static void UCS_F_MAYBE_UNUSED ucs_ptr_array_dump(ucs_ptr_array_t *ptr_array)
 {
 #if UCS_ENABLE_ASSERT
@@ -133,22 +141,16 @@ void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array)
     ucs_ptr_array_clear(ptr_array);
 }
 
-static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array UCS_MEMTRACK_ARG)
+static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array, unsigned new_size
+                               UCS_MEMTRACK_ARG)
 {
     ucs_ptr_array_elem_t *new_array;
-    unsigned curr_size, new_size;
-    unsigned i, next;
-
-    curr_size = ptr_array->size;
-    if (curr_size == 0) {
-        new_size = UCS_PTR_ARRAY_INITIAL_SIZE;
-    } else {
-        new_size = curr_size * 2;
-    }
+    unsigned curr_size, i, next;
 
     /* Allocate new array */
     new_array = ucs_malloc(new_size * sizeof(ucs_ptr_array_elem_t) UCS_MEMTRACK_VAL);
     ucs_assert_always(new_array != NULL);
+    curr_size = ptr_array->size;
     memcpy(new_array, ptr_array->start, curr_size * sizeof(ucs_ptr_array_elem_t));
 
     /* Link all new array items */
@@ -165,9 +167,9 @@ static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array UCS_MEMTRACK_ARG)
         next = ptr_array->freelist;
         do {
             i = next;
-            next = ucs_ptr_array_freelist_get_next(ptr_array->start[i]);
+            next = ucs_ptr_array_freelist_get_next(new_array[i]);
         } while (next != UCS_PTR_ARRAY_SENTINEL);
-        ucs_ptr_array_freelist_set_next(&ptr_array->start[i], curr_size);
+        ucs_ptr_array_freelist_set_next(&new_array[i], curr_size);
     }
 
     /* Switch to new array */
@@ -179,12 +181,13 @@ static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array UCS_MEMTRACK_ARG)
 unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value)
 {
     ucs_ptr_array_elem_t *elem;
-    unsigned element_index;
+    unsigned element_index, new_size;
 
     ucs_assert_always(((uintptr_t)value & UCS_PTR_ARRAY_FLAG_FREE) == 0);
 
     if (ptr_array->freelist == UCS_PTR_ARRAY_SENTINEL) {
-        ucs_ptr_array_grow(ptr_array UCS_MEMTRACK_NAME(ptr_array->name));
+        new_size = ucs_max(UCS_PTR_ARRAY_INITIAL_SIZE, ptr_array->size * 2);
+        ucs_ptr_array_grow(ptr_array, new_size UCS_MEMTRACK_NAME(ptr_array->name));
     }
 
     /* Get the first item on the free list */
@@ -200,9 +203,49 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value)
     return element_index;
 }
 
+void ucs_ptr_array_set(ucs_ptr_array_t *ptr_array, unsigned element_index,
+                       void *new_val)
+{
+    ucs_ptr_array_elem_t *elem;
+    unsigned next, free_iter, free_ahead, new_size;
+
+    if (ucs_unlikely(element_index > ptr_array->size)) {
+        new_size = ucs_max(ptr_array->size * 2, element_index + 1);
+        ucs_ptr_array_grow(ptr_array, new_size UCS_MEMTRACK_NAME(ptr_array->name));
+    } else if (!__ucs_ptr_array_is_free(ptr_array->start[element_index])) {
+        ptr_array->start[element_index] = (uintptr_t)new_val;
+        return;
+    }
+
+    next = ucs_ptr_array_freelist_get_next(ptr_array->start[element_index]);
+    ptr_array->start[element_index] = (uintptr_t)new_val;
+
+    /* update the "next index" in the free list (removing element_index from it) */
+    free_iter = ptr_array->freelist;
+    if (ucs_unlikely(free_iter == element_index)) {
+        ptr_array->freelist = next;
+    } else {
+        while (element_index !=
+               ucs_ptr_array_freelist_get_next(ptr_array->start[free_iter])) {
+            free_iter =
+                   ucs_ptr_array_freelist_get_next(ptr_array->start[free_iter]);
+            ucs_assert(free_iter != UCS_PTR_ARRAY_SENTINEL);
+        }
+        ucs_ptr_array_freelist_set_next(ptr_array->start + free_iter, next);
+    }
+
+    /* update the "free-ahead" for the cells before me */
+    free_ahead = 1;
+    elem       = ptr_array->start + element_index - 1;
+    while ((elem >= ptr_array->start) && (__ucs_ptr_array_is_free(*elem))) {
+        ucs_ptr_array_freelist_element_set_free_ahead(elem, free_ahead);
+        free_ahead++;
+        elem--;
+    }
+}
+
 void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned element_index)
 {
-    ucs_ptr_array_elem_t *elem = &ptr_array->start[element_index];
     ucs_ptr_array_elem_t *next_elem;
     uint32_t size_free_ahead;
 
@@ -215,8 +258,8 @@ void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned element_index)
         size_free_ahead = 1;
     }
 
-    ucs_ptr_array_freelist_element_set(elem, size_free_ahead,
-                                       ptr_array->freelist);
+    ucs_ptr_array_freelist_element_set(&ptr_array->start[element_index],
+                                       size_free_ahead, ptr_array->freelist);
 
     /* Make sure the next element is free */
     ucs_assert(__ucs_ptr_array_is_free(ptr_array->start[element_index + size_free_ahead - 1]));
@@ -285,6 +328,15 @@ unsigned ucs_ptr_array_locked_insert(ucs_ptr_array_locked_t *locked_ptr_array,
     ucs_recursive_spin_unlock(&locked_ptr_array->lock);
 
     return element_index;
+}
+
+void ucs_ptr_array_locked_set(ucs_ptr_array_locked_t *locked_ptr_array,
+                              unsigned element_index, void *new_val)
+{
+    ucs_recursive_spin_lock(&locked_ptr_array->lock);
+    /* Call unlocked function */
+    ucs_ptr_array_set(&locked_ptr_array->super, element_index, new_val);
+    ucs_recursive_spin_unlock(&locked_ptr_array->lock);
 }
 
 void ucs_ptr_array_locked_remove(ucs_ptr_array_locked_t *locked_ptr_array,

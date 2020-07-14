@@ -93,16 +93,16 @@ enum {
     }
 
 #define UCT_RC_CHECK_NUM_RDMA_READ(_iface) \
-    if (ucs_unlikely((_iface)->tx.reads_available == 0)) { \
+    if (ucs_unlikely((_iface)->tx.reads_available <= 0)) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, \
                                  UCT_RC_IFACE_STAT_NO_READS, 1); \
         return UCS_ERR_NO_RESOURCE; \
     }
 
-#define UCT_RC_RDMA_READ_POSTED(_iface) \
+#define UCT_RC_RDMA_READ_POSTED(_iface, _length) \
     { \
         ucs_assert((_iface)->tx.reads_available > 0); \
-        --(_iface)->tx.reads_available; \
+        (_iface)->tx.reads_available -= (_length); \
     }
 
 #define UCT_RC_CHECK_RES(_iface, _ep) \
@@ -202,6 +202,7 @@ struct uct_rc_ep {
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
     uct_rc_fc_t         fc;
+    uint16_t            atomic_mr_offset;
     uint8_t             path_index;
 };
 
@@ -209,8 +210,13 @@ UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*
 
 
 typedef struct uct_rc_ep_address {
+    uint8_t          flags;
     uct_ib_uint24_t  qp_num;
 } UCS_S_PACKED uct_rc_ep_address_t;
+
+enum {
+    UCT_RC_ADDR_HAS_ATOMIC_MR = UCS_BIT(0)
+};
 
 void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                            void *data, size_t length, size_t valid_length,
@@ -330,7 +336,7 @@ uct_rc_txqp_add_send_op_sn(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint
 static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                           uct_rc_send_handler_t handler, uct_completion_t *comp,
-                          uint16_t sn, uint16_t flags)
+                          uint16_t sn, uint16_t flags, size_t length)
 {
     uct_rc_iface_send_op_t *op;
 
@@ -342,6 +348,7 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     op->handler   = handler;
     op->user_comp = comp;
     op->flags    |= flags;
+    op->length    = length;
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 
@@ -471,6 +478,17 @@ uct_rc_ep_fence(uct_ep_h tl_ep, uct_ib_fence_info_t* fi, int fence)
 
     UCT_TL_EP_STAT_FENCE(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_ep_fence_put(uct_rc_iface_t *iface, uct_ib_fence_info_t *fi,
+                    uct_rkey_t *rkey, uint64_t *addr, uint16_t offset)
+{
+    if (uct_rc_ep_fm(iface, fi, 1)) {
+        *rkey = uct_ib_resolve_atomic_rkey(*rkey, offset, addr);
+    } else {
+        *rkey = uct_ib_md_direct_rkey(*rkey);
+    }
 }
 
 #endif

@@ -147,7 +147,7 @@ UCS_TEST_F(test_sys, memunits_to_str) {
     test_memunits(UCS_GBYTE, "1G");
     test_memunits(2 * UCS_GBYTE, "2G");
     test_memunits(UCS_TBYTE, "1T");
-    test_memunits(UCS_TBYTE * 1024, "1024T");
+    test_memunits(UCS_TBYTE * 1024, "1P");
 }
 
 UCS_TEST_F(test_sys, cpu_cache) {

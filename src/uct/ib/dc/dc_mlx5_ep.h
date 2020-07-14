@@ -513,8 +513,8 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 
 
 #define UCT_DC_MLX5_TXQP_DECL(_txqp, _txwq) \
-    uct_rc_txqp_t *_txqp; \
-    uct_ib_mlx5_txwq_t *_txwq;
+    uct_rc_txqp_t UCS_V_UNUSED *_txqp; \
+    uct_ib_mlx5_txwq_t UCS_V_UNUSED *_txwq;
 
 
 #define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \

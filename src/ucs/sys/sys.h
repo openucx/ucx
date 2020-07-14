@@ -48,6 +48,7 @@
 #include <net/if_arp.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <dirent.h>
 
 
 #include <sys/types.h>
@@ -80,6 +81,25 @@ typedef enum {
     UCS_SYS_NS_TYPE_UTS,
     UCS_SYS_NS_TYPE_LAST
 } ucs_sys_namespace_type_t;
+
+
+/**
+ * Callback function type used in ucs_sys_readdir.
+ */
+typedef ucs_status_t (*ucs_sys_readdir_cb_t)(struct dirent *entry, void *ctx);
+
+
+/**
+ * Callback function type used in ucs_sys_enum_threads.
+ */
+typedef ucs_status_t (*ucs_sys_enum_threads_cb_t)(pid_t pid, void *ctx);
+
+
+/**
+ * Callback function type used in ucs_sys_enum_pfn.
+ */
+typedef void (*ucs_sys_enum_pfn_cb_t)(unsigned page_number, unsigned long pfn,
+                                      void *ctx);
 
 
 /**
@@ -311,10 +331,28 @@ int ucs_get_mem_prot(unsigned long start, unsigned long end);
  * If the page map file is non-readable (for example, due to permissions), or
  * the page is not present, this function returns 0.
  *
- * @param address  Virtual address to get the PFN for
- * @return PFN number, or 0 if failed.
+ * @param address    Virtual address to get the. PFN for.
+ * @param page_count Number of pages to process
+ * @param data       Result buffer.
+ * @return UCS_OK if all pages are processed, else error code.
  */
-unsigned long ucs_sys_get_pfn(uintptr_t address);
+ucs_status_t ucs_sys_get_pfn(uintptr_t address, unsigned page_count,
+                             unsigned long *data);
+
+
+/**
+ * Enums the physical page frame numbers of a given virtual address range.
+ * If the page map file is non-readable (for example, due to permissions), or
+ * the page is not present, this function returns error.
+ *
+ * @param address     Virtual address to get the PFN for.
+ * @param page_number Number of pages to process.
+ * @param cb          Callback function which is called for every page.
+ * @param ctx         Context argument passed to @a cb call.
+ * @return error code if failed to enumerate or UCS_OK.
+ */
+ucs_status_t ucs_sys_enum_pfn(uintptr_t address, unsigned page_count,
+                              ucs_sys_enum_pfn_cb_t cb, void *ctx);
 
 
 /**
@@ -469,6 +507,41 @@ int ucs_sys_ns_is_default(ucs_sys_namespace_type_t name);
  * @return UCS_OK or error in case of failure.
  */
 ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low);
+
+
+/**
+ * Read directory
+ *
+ * @param [in]  path       Path to directory to read
+ * @param [in]  cb         Callback function, see NOTES
+ * @param [in]  ctx        Context pointer passed to callback
+ *
+ * @return UCS_OK if directory is found and successfully iterated thought all
+ *         entries, error code in all other cases, see NOTES.
+ * 
+ * @note ucs_sys_readdir function reads directory pointed by @a path argument
+ *       and calls @a cb function for every entry in directory, including
+ *       '.' and '..'. In case if @a cb function returns value different from
+ *       UCS_OK then function breaks immediately and this value is returned
+ *       from ucs_sys_readdir.
+ */
+ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ctx);
+
+/**
+ * Enumerate process threads
+ *
+ * @param [in]  cb         Callback function, see NOTES
+ * @param [in]  ctx        Context pointer passed to callback
+ *
+ * @return UCS_OK if directory is found and successfully iterated thought all
+ *         entries, error code in all other cases, see NOTES.
+ * 
+ * @note ucs_sys_enum_threads function enumerates current process threads
+ *       and calls @a cb function for every thread. In case if @a cb function
+ *       returns value different from UCS_OK then function breaks
+ *       immediately and this value is returned from ucs_sys_enum_threads.
+ */
+ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx);
 
 END_C_DECLS
 

@@ -16,6 +16,22 @@
     uct_rc_mlx5_iface_common_t *_iface = ucs_derived_of(_tl_ep->iface, \
                                                         uct_rc_mlx5_iface_common_t)
 
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_ep_fence_put(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq,
+                         uct_rkey_t *rkey, uint64_t *addr, uint16_t offset)
+{
+    uct_rc_ep_fence_put(&iface->super, &txwq->fi, rkey, addr, offset);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_ep_fence_get(uct_rc_mlx5_iface_common_t *iface, uct_ib_mlx5_txwq_t *txwq,
+                         uct_rkey_t *rkey, uint8_t *fm_ce_se)
+{
+    *rkey      = uct_ib_md_direct_rkey(*rkey);
+    *fm_ce_se |= uct_rc_ep_fm(&iface->super, &txwq->fi, iface->config.atomic_fence_flag);
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_common_update_tx_res(uct_rc_iface_t *rc_iface, uct_ib_mlx5_txwq_t *txwq,
                                  uct_rc_txqp_t *txqp, uint16_t hw_ci)
@@ -643,11 +659,6 @@ uct_rc_mlx5_txqp_dptr_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         /* Fall through */
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */
-        fm_ce_se |= uct_rc_ep_fm(&iface->super, &txwq->fi,
-                                 (opcode_flags == MLX5_OPCODE_RDMA_READ) ?
-                                 iface->config.atomic_fence_flag :
-                                 iface->config.put_fence_flag);
-
         ucs_assert(length <= UCT_IB_MAX_MESSAGE_SIZE);
 
         raddr = next_seg;
@@ -840,11 +851,6 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
         /* Fall through */
     case MLX5_OPCODE_RDMA_WRITE:
         /* Set RDMA segment */
-        fm_ce_se |= uct_rc_ep_fm(&iface->super, &txwq->fi,
-                                 (opcode_flags == MLX5_OPCODE_RDMA_READ) ?
-                                 iface->config.atomic_fence_flag :
-                                 iface->config.put_fence_flag);
-
         ucs_assert(uct_iov_total_length(iov, iovcnt) <= UCT_IB_MAX_MESSAGE_SIZE);
 
         raddr            = next_seg;
@@ -949,8 +955,11 @@ uct_rc_mlx5_txqp_tag_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
     case IBV_TMH_RNDV:
+        ucs_assert(iov != NULL);
         /* RVH can be wrapped */
+        /* cppcheck-suppress nullPointer */
         uct_rc_mlx5_fill_rvh(&rvh, iov->buffer,
+        /* cppcheck-suppress nullPointer */
                               ((uct_ib_mem_t*)iov->memh)->rkey, iov->length);
         uct_ib_mlx5_inline_copy(tmh + 1, &rvh, sizeof(rvh), txwq);
 

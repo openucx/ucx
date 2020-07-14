@@ -104,21 +104,24 @@ ucm_dispatch_mem_type_free(void *addr, size_t length, ucs_memory_type_t mem_type
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_FREE, &event);
 }
 
-static void ucm_cudafree_dispatch_events(void *dptr)
+static void ucm_cudafree_dispatch_events(CUdeviceptr dptr, const char *func_name)
 {
     CUresult ret;
     CUdeviceptr pbase;
     size_t psize;
 
-    if (dptr == NULL) {
+    if (dptr == 0) {
         return;
     }
 
-    ret = cuMemGetAddressRange(&pbase, &psize, (CUdeviceptr) dptr);
+    ret = cuMemGetAddressRange(&pbase, &psize, dptr);
     if (ret == CUDA_SUCCESS) {
-        ucs_assert(dptr == (void *)pbase);
+        if (dptr != pbase) {
+            ucm_warn("%s(%p) called with unexpected pointer (expected: %p)",
+                     func_name, (void*)dptr, (void*)pbase);
+        }
     } else {
-        ucm_debug("cuMemGetAddressRange(devPtr=%p) failed", (void *)dptr);
+        ucm_debug("cuMemGetAddressRange(devPtr=%p) failed", (void*)dptr);
         psize = 1; /* set minimum length */
     }
 
@@ -131,9 +134,9 @@ CUresult ucm_cuMemFree(CUdeviceptr dptr)
 
     ucm_event_enter();
 
-    ucm_trace("ucm_cuMemFree(dptr=%p)",(void *)dptr);
+    ucm_trace("ucm_cuMemFree(dptr=%p)",(void*)dptr);
 
-    ucm_cudafree_dispatch_events((void *)dptr);
+    ucm_cudafree_dispatch_events(dptr, "cuMemFree");
 
     ret = ucm_orig_cuMemFree(dptr);
 
@@ -250,7 +253,7 @@ cudaError_t ucm_cudaFree(void *devPtr)
 
     ucm_trace("ucm_cudaFree(devPtr=%p)", devPtr);
 
-    ucm_cudafree_dispatch_events((void *)devPtr);
+    ucm_cudafree_dispatch_events((CUdeviceptr)devPtr, "cudaFree");
 
     ret = ucm_orig_cudaFree(devPtr);
 

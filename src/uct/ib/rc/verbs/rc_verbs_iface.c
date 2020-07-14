@@ -156,6 +156,8 @@ static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
 static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_verbs_iface_t);
+    uct_ib_md_t *md             = uct_ib_iface_md(ucs_derived_of(iface, uct_ib_iface_t));
+    uint8_t mr_id;
     ucs_status_t status;
 
     status = uct_rc_iface_query(&iface->super, iface_attr,
@@ -169,8 +171,13 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
         return status;
     }
 
-    iface_attr->latency.growth += 1e-9;            /* 1 ns per each extra QP */
-    iface_attr->overhead        = 75e-9;           /* Software overhead */
+    iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
+    iface_attr->overhead   = 75e-9; /* Software overhead */
+
+    iface_attr->ep_addr_len = sizeof(uct_rc_ep_address_t);
+    if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
+        iface_attr->ep_addr_len += sizeof(mr_id);
+    }
 
     return UCS_OK;
 }
@@ -226,11 +233,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
         self->super.config.fence_mode = UCT_RC_FENCE_MODE_WEAK;
     } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_NONE) {
         self->super.config.fence_mode = UCT_RC_FENCE_MODE_NONE;
-    } else if (config->super.super.fence_mode == UCT_RC_FENCE_MODE_STRONG) {
-        /* TODO: for now strong fence mode is not supported by verbs */
-        ucs_error("fence mode 'strong' is not supported by verbs");
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
     } else {
         ucs_error("incorrect fence value: %d", self->super.config.fence_mode);
         status = UCS_ERR_INVALID_PARAM;

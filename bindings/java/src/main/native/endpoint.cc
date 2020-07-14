@@ -12,12 +12,29 @@
 static void error_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
 {
     JNIEnv* env = get_jni_env();
-    JNU_ThrowExceptionByStatus(env, status);
-    ucs_error("JUCX: endpoint error handler: %s", ucs_status_string(status));
+
+    ucs_debug("JUCX: endpoint %p error handler: %s", ep, ucs_status_string(status));
+    jobject jucx_ep = reinterpret_cast<jobject>(arg);
+    if (env->IsSameObject(jucx_ep, NULL)) {
+        ucs_warn("UcpEndpoint was garbage collected. Can't call it's error handler.");
+        return;
+    }
+
+    jclass jucx_ep_error_hndl_cls = env->FindClass("org/openucx/jucx/ucp/UcpEndpointErrorHandler");
+    jclass jucx_ep_class = env->GetObjectClass(jucx_ep);
+    jfieldID ep_error_hdnl_field = env->GetFieldID(jucx_ep_class, "errorHandler",
+                                                   "Lorg/openucx/jucx/ucp/UcpEndpointErrorHandler;");
+    jobject jucx_ep_error_hndl = env->GetObjectField(jucx_ep, ep_error_hdnl_field);
+    jmethodID on_error = env->GetMethodID(jucx_ep_error_hndl_cls, "onError",
+                                          "(Lorg/openucx/jucx/ucp/UcpEndpoint;ILjava/lang/String;)V");
+    env->CallVoidMethod(jucx_ep_error_hndl, on_error, jucx_ep, status,
+                        ucs_status_string(status));
+    env->DeleteWeakGlobalRef(jucx_ep);
 }
 
+
 JNIEXPORT jlong JNICALL
-Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass cls,
+Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jobject jucx_ep,
                                                            jobject ucp_ep_params,
                                                            jlong worker_ptr)
 {
@@ -40,12 +57,6 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass c
     if (ep_params.field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
         field = env->GetFieldID(ucp_ep_params_class, "errorHandlingMode", "I");
         ep_params.err_mode =  static_cast<ucp_err_handling_mode_t>(env->GetIntField(ucp_ep_params, field));
-    }
-
-    if (ep_params.field_mask & UCP_EP_PARAM_FIELD_USER_DATA) {
-        field = env->GetFieldID(ucp_ep_params_class, "userData", "Ljava/nio/ByteBuffer;");
-        jobject user_data = env->GetObjectField(ucp_ep_params, field);
-        ep_params.user_data = env->GetDirectBufferAddress(user_data);
     }
 
     if (ep_params.field_mask & UCP_EP_PARAM_FIELD_FLAGS) {
@@ -73,8 +84,12 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jclass c
         ep_params.conn_request = reinterpret_cast<ucp_conn_request_h>(env->GetLongField(ucp_ep_params, field));
     }
 
-    ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLER;
-    ep_params.err_handler.cb = error_handler;
+    if (ep_params.field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
+        // Important to use weak reference, to allow JUCX endpoint class to be closed and
+        // garbage collected, as error handler may never be called
+        ep_params.err_handler.arg = env->NewWeakGlobalRef(jucx_ep);
+        ep_params.err_handler.cb = error_handler;
+    }
 
     ucs_status_t status = ucp_ep_create(ucp_worker, &ep_params, &endpoint);
     if (status != UCS_OK) {

@@ -15,6 +15,7 @@
 #include <uct/cuda/base/cuda_iface.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
+#include <ucs/debug/assert.h>
 #include <sys/eventfd.h>
 
 static ucs_config_field_t uct_cuda_ipc_iface_config_table[] = {
@@ -80,6 +81,40 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
             *((const uint64_t *)dev_addr)) && ((getpid() != *(pid_t *)iface_addr)));
 }
 
+static double uct_cuda_ipc_iface_get_bw()
+{
+    CUdevice cu_device;
+    int major_version;
+    ucs_status_t status;
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDeviceGetAttribute(&major_version,
+                                 CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+                                 cu_device));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    /*
+     * TODO: Detect nvswitch
+     */
+    switch (major_version) {
+    case UCT_CUDA_BASE_GEN_P100:
+        return 80000.0 * UCS_MBYTE;
+    case UCT_CUDA_BASE_GEN_V100:
+        return 250000.0 * UCS_MBYTE;
+    case UCT_CUDA_BASE_GEN_A100:
+        return 300000.0 * UCS_MBYTE;
+    default:
+        return 6911.0  * UCS_MBYTE;
+    }
+}
+
 static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                              uct_iface_attr_t *iface_attr)
 {
@@ -115,10 +150,9 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
 
-    iface_attr->latency.overhead        = 1e-9;
-    iface_attr->latency.growth          = 0;
+    iface_attr->latency                 = ucs_linear_func_make(1e-9, 0);
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = 24000 * 1024.0 * 1024.0;
+    iface_attr->bandwidth.shared        = uct_cuda_ipc_iface_get_bw();
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
 
@@ -205,7 +239,7 @@ uct_cuda_ipc_progress_event_q(uct_cuda_ipc_iface_t *iface,
     unsigned max_events = iface->config.max_poll;
 
     ucs_queue_for_each_safe(cuda_ipc_event, iter, event_q, queue) {
-        status = UCT_CUDADRV_FUNC(cuEventQuery(cuda_ipc_event->event));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuEventQuery(cuda_ipc_event->event));
         if (UCS_INPROGRESS == status) {
             continue;
         } else if (UCS_OK != status) {
@@ -285,11 +319,12 @@ static ucs_status_t uct_cuda_ipc_iface_event_fd_arm(uct_iface_h tl_iface,
             if (iface->stream_refcount[i]) {
                 status =
 #if (__CUDACC_VER_MAJOR__ >= 100000)
-                UCT_CUDADRV_FUNC(cuLaunchHostFunc(iface->stream_d2d[i],
-                                                  myHostFn, iface));
+                UCT_CUDADRV_FUNC_LOG_ERR(cuLaunchHostFunc(iface->stream_d2d[i],
+                                                          myHostFn, iface));
 #else
-                UCT_CUDADRV_FUNC(cuStreamAddCallback(iface->stream_d2d[i],
-                                                     myHostCallback, iface, 0));
+                UCT_CUDADRV_FUNC_LOG_ERR(cuStreamAddCallback(iface->stream_d2d[i],
+                                                             myHostCallback,
+                                                             iface, 0));
 #endif
                 if (UCS_OK != status) {
                     return status;
@@ -328,7 +363,7 @@ static void uct_cuda_ipc_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk
     uct_cuda_ipc_event_desc_t *base = (uct_cuda_ipc_event_desc_t *) obj;
 
     memset(base, 0, sizeof(*base));
-    UCT_CUDADRV_FUNC(cuEventCreate(&base->event, CU_EVENT_DISABLE_TIMING));
+    UCT_CUDADRV_FUNC_LOG_ERR(cuEventCreate(&base->event, CU_EVENT_DISABLE_TIMING));
 }
 
 static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
@@ -339,7 +374,7 @@ static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     UCT_CUDADRV_CTX_ACTIVE(active);
 
     if (active) {
-        UCT_CUDADRV_FUNC(cuEventDestroy(base->event));
+        UCT_CUDADRV_FUNC_LOG_ERR(cuEventDestroy(base->event));
     }
 }
 
@@ -349,8 +384,8 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
     int i;
 
     for (i = 0; i < iface->config.max_streams; i++) {
-        status = UCT_CUDADRV_FUNC(cuStreamCreate(&iface->stream_d2d[i],
-                                                 CU_STREAM_NON_BLOCKING));
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamCreate(&iface->stream_d2d[i],
+                                                         CU_STREAM_NON_BLOCKING));
         if (UCS_OK != status) {
             return status;
         }
@@ -427,7 +462,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
 
     if (self->streams_initialized && active) {
         for (i = 0; i < self->config.max_streams; i++) {
-            status = UCT_CUDADRV_FUNC(cuStreamDestroy(self->stream_d2d[i]));
+            status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(self->stream_d2d[i]));
             if (UCS_OK != status) {
                 continue;
             }

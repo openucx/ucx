@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
@@ -44,14 +44,13 @@ enum {
     UCP_REQUEST_FLAG_STREAM_RECV_WAITALL  = UCS_BIT(12),
     UCP_REQUEST_FLAG_SEND_AM              = UCS_BIT(13),
     UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
+    UCP_REQUEST_FLAG_RNDV_FRAG            = UCS_BIT(15),
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(16),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17),
-    UCP_REQUEST_DEBUG_RNDV_FRAG           = UCS_BIT(18)
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0,
-    UCP_REQUEST_DEBUG_RNDV_FRAG           = 0
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
 #endif
 };
 
@@ -122,17 +121,18 @@ struct ucp_request {
                     ucp_lane_index_t     am_bw_index; /* AM BW lane index */
                     uint64_t             message_id;  /* used to identify matching parts
                                                          of a large message */
-
-                    struct {
-                        ucp_tag_t        tag;
-                        uintptr_t        rreq_ptr;    /* receive request ptr on the
+                    uintptr_t            rreq_ptr;    /* receive request ptr on the
                                                          recv side (used in AM rndv) */
-                    } tag;
+                    union {
+                        struct {
+                            ucp_tag_t    tag;
+                        } tag;
 
-                    struct {
-                        uint16_t         am_id;
-                        unsigned         flags;
-                    } am;
+                        struct {
+                            uint16_t     am_id;
+                            unsigned     flags;
+                        } am;
+                    };
                 } msg_proto;
 
                 struct {
@@ -183,6 +183,7 @@ struct ucp_request {
                     ucp_request_t     *rreq;          /* pointer to the receive request */
                     size_t            length;         /* the length of the data that should be fetched
                                                        * from sender side */
+                    size_t            offset;         /* offset in recv buffer */
                 } rndv_rtr;
 
                 struct {
@@ -284,19 +285,19 @@ struct ucp_request {
                 } frag;
 
                 struct {
-                    ucp_stream_recv_callback_t cb;     /* Completion callback */
-                    size_t                     offset; /* Receive data offset */
-                    size_t                     length; /* Completion info to fill */
+                    ucp_stream_recv_nbx_callback_t cb;     /* Completion callback */
+                    size_t                         offset; /* Receive data offset */
+                    size_t                         length; /* Completion info to fill */
                 } stream;
             };
         } recv;
 
         struct {
-            ucp_worker_h          worker;   /* Worker to flush */
-            ucp_send_callback_t   cb;       /* Completion callback */
-            uct_worker_cb_id_t    prog_id;  /* Progress callback ID */
-            int                   comp_count; /* Countdown to request completion */
-            ucp_ep_ext_gen_t      *next_ep; /* Next endpoint to flush */
+            ucp_worker_h            worker;     /* Worker to flush */
+            ucp_send_nbx_callback_t cb;         /* Completion callback */
+            uct_worker_cb_id_t      prog_id;    /* Progress callback ID */
+            int                     comp_count; /* Countdown to request completion */
+            ucp_ep_ext_gen_t        *next_ep;   /* Next endpoint to flush */
         } flush_worker;
     };
 };
@@ -322,6 +323,9 @@ struct ucp_recv_desc {
         ucs_list_link_t     tag_list[2];     /* Hash list TAG-element */
         ucs_queue_elem_t    stream_queue;    /* Queue STREAM-element */
         ucs_queue_elem_t    tag_frag_queue;  /* Tag fragments queue */
+        ucp_am_first_desc_t am_first;        /* AM first fragment data needed
+                                                for assembling the message */
+        ucs_queue_elem_t    am_mid_queue;    /* AM middle fragments queue */
     };
     uint32_t                length;          /* Received length */
     uint32_t                payload_offset;  /* Offset from end of the descriptor
@@ -350,6 +354,7 @@ struct ucp_request_send_proto {
 
 extern ucs_mpool_ops_t ucp_request_mpool_ops;
 extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
+extern const ucp_request_param_t ucp_request_null_param;
 
 
 int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status,

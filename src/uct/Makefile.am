@@ -38,6 +38,7 @@ noinst_HEADERS = \
 	sm/scopy/base/scopy_iface.h \
 	sm/scopy/base/scopy_ep.h \
 	sm/self/self.h \
+	tcp/tcp_base.h \
 	tcp/tcp.h \
 	tcp/tcp_sockcm.h \
 	tcp/tcp_listener.h \
@@ -70,6 +71,7 @@ libuct_la_SOURCES = \
 	tcp/tcp_md.c \
 	tcp/tcp_net.c \
 	tcp/tcp_cm.c \
+	tcp/tcp_base.c \
 	tcp/tcp_sockcm.c \
 	tcp/tcp_listener.c \
 	tcp/tcp_sockcm_ep.c \

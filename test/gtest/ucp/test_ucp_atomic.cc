@@ -81,6 +81,23 @@ ucs_status_t test_ucp_atomic::ucp_atomic_post_nbi(ucp_ep_h ep, ucp_atomic_post_o
     return ucp_atomic_post(ep, opcode, value, sizeof(T), (uintptr_t)remote_addr, rkey);
 }
 
+template <typename T>
+ucs_status_t test_ucp_atomic::ucp_atomic_post_nbx(ucp_ep_h ep, ucp_atomic_op_t opcode,
+                                                  T value, void *remote_addr,
+                                                  ucp_rkey_h rkey)
+{
+    ucp_request_param_t param;
+
+    param.op_attr_mask    = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype        = ucp_dt_make_contig(sizeof(T));
+    ucs_status_ptr_t sptr = ucp_atomic_op_nbx(ep, opcode, &value, 1,
+                                              (uint64_t)remote_addr, rkey,
+                                              &param);
+    EXPECT_FALSE(UCS_PTR_IS_PTR(sptr));
+
+    return UCS_PTR_STATUS(sptr);
+}
+
 template <typename T, ucp_atomic_post_op_t OP>
 void test_ucp_atomic::nb_post(entity *e,  size_t max_size, void *memheap_addr,
                               ucp_rkey_h rkey, std::string& expected_data)
@@ -100,6 +117,22 @@ void test_ucp_atomic::nb_post(entity *e,  size_t max_size, void *memheap_addr,
     }
     expected_data.resize(sizeof(T));
     *(T*)&expected_data[0] = atomic_op_val<T, OP>(val, prev);
+}
+
+template <typename T, ucp_atomic_op_t OP>
+void test_ucp_atomic::nbx_post(entity *e,  size_t max_size, void *memheap_addr,
+                               ucp_rkey_h rkey, std::string& expected_data)
+{
+    T val, prev;
+
+    prev   = *(T*)memheap_addr;
+    val    = (T)ucs::rand() * (T)ucs::rand();
+
+    ASSERT_UCS_OK(test_ucp_atomic::ucp_atomic_post_nbx<T>(e->ep(), OP, val,
+                                                          memheap_addr, rkey));
+
+    expected_data.resize(sizeof(T));
+    *(T*)&expected_data[0] = nbx_atomic_op_val<T, OP>(val, prev);
 }
 
 template <ucp_atomic_post_op_t OP>
@@ -211,9 +244,19 @@ UCS_TEST_P(test_ucp_atomic32, atomic_add_nb) {
     test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_ADD>, true);
 }
 
+UCS_TEST_P(test_ucp_atomic32, atomic_add_nbx) {
+    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_ADD>, false);
+    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_ADD>, true);
+}
+
 UCS_TEST_P(test_ucp_atomic32, atomic_and_nb) {
     test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_AND>, false);
     test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_AND>, true);
+}
+
+UCS_TEST_P(test_ucp_atomic32, atomic_and_nbx) {
+    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_AND>, false);
+    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_AND>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic32, atomic_or_nb) {
@@ -221,9 +264,19 @@ UCS_TEST_P(test_ucp_atomic32, atomic_or_nb) {
     test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_OR>, true);
 }
 
+UCS_TEST_P(test_ucp_atomic32, atomic_or_nbx) {
+    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_OR>, false);
+    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_OR>, true);
+}
+
 UCS_TEST_P(test_ucp_atomic32, atomic_xor_nb) {
     test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_XOR>, false);
     test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_XOR>, true);
+}
+
+UCS_TEST_P(test_ucp_atomic32, atomic_xor_nbx) {
+    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_XOR>, false);
+    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_XOR>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic32, atomic_fadd_nb) {
@@ -277,9 +330,19 @@ UCS_TEST_P(test_ucp_atomic64, atomic_add_nb) {
     test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_ADD>, true);
 }
 
+UCS_TEST_P(test_ucp_atomic64, atomic_add_nbx) {
+    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_ADD>, false);
+    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_ADD>, true);
+}
+
 UCS_TEST_P(test_ucp_atomic64, atomic_and_nb) {
     test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_AND>, false);
     test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_AND>, true);
+}
+
+UCS_TEST_P(test_ucp_atomic64, atomic_and_nbx) {
+    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_AND>, false);
+    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_AND>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic64, atomic_or_nb) {
@@ -287,9 +350,19 @@ UCS_TEST_P(test_ucp_atomic64, atomic_or_nb) {
     test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_OR>, true);
 }
 
+UCS_TEST_P(test_ucp_atomic64, atomic_or_nbx) {
+    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_OR>, false);
+    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_OR>, true);
+}
+
 UCS_TEST_P(test_ucp_atomic64, atomic_xor_nb) {
     test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_XOR>, false);
     test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_XOR>, true);
+}
+
+UCS_TEST_P(test_ucp_atomic64, atomic_xor_nbx) {
+    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_XOR>, false);
+    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_XOR>, true);
 }
 
 UCS_TEST_P(test_ucp_atomic64, atomic_fadd_nb) {

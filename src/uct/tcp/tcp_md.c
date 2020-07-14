@@ -23,8 +23,7 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
     attr->cap.detect_mem_types    = 0;
     attr->cap.max_reg             = ULONG_MAX;
     attr->rkey_packed_size        = 0;
-    attr->reg_cost.overhead       = 0;
-    attr->reg_cost.growth         = 0;
+    attr->reg_cost                = ucs_linear_func_make(0, 0);
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
@@ -82,7 +81,7 @@ uct_component_t uct_tcp_component = {
     .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
     .cm_config          = {
         .name           = "TCP-SOCKCM connection manager",
-        .prefix         = "TCP_",
+        .prefix         = "TCP_CM_",
         .table          = uct_tcp_sockcm_config_table,
         .size           = sizeof(uct_tcp_sockcm_config_t),
      },

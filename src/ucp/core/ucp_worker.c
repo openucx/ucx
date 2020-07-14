@@ -69,7 +69,10 @@ static ucs_stats_class_t ucp_worker_stats_class = {
         [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]   = "rx_eager_chunk_exp",
         [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP] = "rx_eager_chunk_unexp",
         [UCP_WORKER_STAT_TAG_RX_RNDV_EXP]          = "rx_rndv_rts_exp",
-        [UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP]        = "rx_rndv_rts_unexp"
+        [UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP]        = "rx_rndv_rts_unexp",
+        [UCP_WORKER_STAT_TAG_RX_RNDV_GET_ZCOPY]    = "rx_rndv_get_zcopy",
+        [UCP_WORKER_STAT_TAG_RX_RNDV_SEND_RTR]     = "rx_rndv_send_rtr",
+        [UCP_WORKER_STAT_TAG_RX_RNDV_RKEY_PTR]     = "rx_rndv_rkey_ptr"
     }
 };
 #endif
@@ -1088,8 +1091,10 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
 
     worker->scalable_tl_bitmap = 0;
     ucs_for_each_bit(tl_id, context->tl_bitmap) {
+        ucs_assert(ucp_worker_is_tl_p2p(worker, tl_id) ||
+                   ucp_worker_is_tl_2iface(worker, tl_id) ||
+                   ucp_worker_is_tl_2sockaddr(worker, tl_id));
         wiface = ucp_worker_iface(worker, tl_id);
-
         if (ucp_is_scalable_transport(context, wiface->attr.max_num_eps)) {
             worker->scalable_tl_bitmap |= UCS_BIT(tl_id);
         }
@@ -1658,7 +1663,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 
     status = ucs_mpool_init(&worker->rndv_frag_mp, 0,
                             context->config.ext.rndv_frag_size + sizeof(ucp_mem_desc_t),
-                            sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE, 128,
+                            sizeof(ucp_mem_desc_t), UCS_SYS_PCI_MAX_PAYLOAD, 128,
                             UINT_MAX, &ucp_frag_mpool_ops, "ucp_rndv_frags");
     if (status != UCS_OK) {
         goto err_release_reg_mpool;
@@ -1793,10 +1798,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         worker->user_data = NULL;
     }
 
-    if (context->config.features & UCP_FEATURE_AM){
-        worker->am_cbs            = NULL;
-        worker->am_cb_array_len   = 0;
-    }
     name_length = ucs_min(UCP_WORKER_NAME_MAX,
                           context->config.ext.max_worker_name + 1);
     ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
@@ -1867,6 +1868,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_wakeup_cleanup;
     }
 
+    /* Initialize UCP AMs */
+    status = ucp_am_init(worker);
+    if (status != UCS_OK) {
+        goto err_tag_match_cleanup;
+    }
+
     /* Open all resources as interfaces on this worker */
     status = ucp_worker_add_resource_ifaces(worker);
     if (status != UCS_OK) {
@@ -1906,6 +1913,7 @@ err_close_cms:
     ucp_worker_close_cms(worker);
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
+err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
 err_wakeup_cleanup:
     ucp_worker_wakeup_cleanup(worker);
@@ -1953,18 +1961,18 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_trace_func("worker=%p", worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ucs_free(worker->am_cbs);
     ucp_worker_destroy_eps(worker);
     ucp_worker_remove_am_handlers(worker);
+    ucp_am_cleanup(worker);
     ucp_worker_close_cms(worker);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucp_worker_destroy_ep_configs(worker);
+    ucp_tag_match_cleanup(&worker->tm);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
     ucp_worker_close_ifaces(worker);
-    ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_wakeup_cleanup(worker);
     ucs_mpool_cleanup(&worker->rkey_mp, 1);
     ucs_mpool_cleanup(&worker->req_mp, 1);

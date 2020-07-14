@@ -53,18 +53,21 @@ typedef struct uct_cuda_ipc_key {
 } uct_cuda_ipc_key_t;
 
 
-#define UCT_CUDA_IPC_GET_DEVICE(_cu_device)                             \
-    do {                                                                \
-        if (UCS_OK != UCT_CUDADRV_FUNC(cuCtxGetDevice(&_cu_device))) {  \
-            return UCS_ERR_IO_ERROR;                                    \
-        }                                                               \
+#define UCT_CUDA_IPC_GET_DEVICE(_cu_device)                          \
+    do {                                                             \
+        if (UCS_OK !=                                                \
+            UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&_cu_device))) { \
+            return UCS_ERR_IO_ERROR;                                 \
+        }                                                            \
     } while(0);
 
-#define UCT_CUDA_IPC_DEVICE_GET_COUNT(_num_device)                        \
-    do {                                                                  \
-        if (UCS_OK != UCT_CUDADRV_FUNC(cuDeviceGetCount(&_num_device))) { \
-            return UCS_ERR_IO_ERROR;                                      \
-        }                                                                 \
+
+#define UCT_CUDA_IPC_DEVICE_GET_COUNT(_num_device)                      \
+    do {                                                                \
+        if (UCS_OK !=                                                   \
+            UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&_num_device))) { \
+            return UCS_ERR_IO_ERROR;                                    \
+        }                                                               \
     } while(0);
 
 #endif

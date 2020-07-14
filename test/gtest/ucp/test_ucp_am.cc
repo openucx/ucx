@@ -36,8 +36,6 @@ public:
         return params;
     }
 
-    static void ucp_send_am_cb(void *request, ucs_status_t status);
-
     static ucs_status_t ucp_process_am_cb(void *arg, void *data,
                                           size_t length,
                                           ucp_ep_h reply_ep,
@@ -90,11 +88,13 @@ ucs_status_t test_ucp_am_base::am_handler(test_ucp_am_base *me, void *data,
     memcpy(&databuf[0], data, length);
 
     EXPECT_EQ(cmp, databuf);
+
+    bool has_desc = flags & UCP_CB_PARAM_FLAG_DATA;
     if (me->release) {
-        me->for_release[me->recv_ams] = data;
-        status                        = UCS_INPROGRESS;
+        me->for_release[me->recv_ams] = has_desc ? data : NULL;
+        status                        = has_desc ? UCS_INPROGRESS : UCS_OK;
     } else {
-        status = UCS_OK;
+        status                        = UCS_OK;
     }
 
     me->recv_ams++;
@@ -165,7 +165,7 @@ void test_ucp_am::do_send_process_data_test(int test_release, uint16_t am_id,
         }
 
         reply   = NULL;
-        sstatus = ucp_am_send_nb(receiver().ep(), am_id,
+        sstatus = ucp_am_send_nb(sender().ep(), am_id,
                                  buf.data(), 1, ucp_dt_make_contig(i),
                                  (ucp_send_callback_t) ucs_empty_function,
                                  send_reply);
@@ -231,7 +231,7 @@ void test_ucp_am::do_send_process_data_iov_test(size_t size)
         ucp::data_type_desc_t send_dt_desc(DATATYPE_IOV, sendbuf.data(),
                                            i * iovcnt, iovcnt);
 
-        sstatus = ucp_am_send_nb(receiver().ep(), 0,
+        sstatus = ucp_am_send_nb(sender().ep(), 0,
                                  send_dt_desc.buf(), iovcnt, DATATYPE_IOV,
                                  (ucp_send_callback_t) ucs_empty_function, 0);
         wait(sstatus);

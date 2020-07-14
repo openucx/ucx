@@ -19,6 +19,9 @@
 #include <ucs/debug/log.h>
 
 
+const ucp_request_param_t ucp_request_null_param = { .op_attr_mask = 0 };
+
+
 int ucp_request_is_completed(void *request)
 {
     ucp_request_t *req = (ucp_request_t*)request - 1;

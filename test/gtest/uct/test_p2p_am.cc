@@ -594,8 +594,9 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs,
     short_progress_loop();
     ucs_log_pop_handler();
 
-    /* check that now the sender is able to send */
-    EXPECT_EQ(UCS_OK, send_with_timeout(sender_ep(), sendbuf, recvbuf, 6));
+    /* check that now the sender is able to send.
+     * for UD time to recover depends on UCX_UD_TIMER_TICK */
+    EXPECT_EQ(UCS_OK, send_with_timeout(sender_ep(), sendbuf, recvbuf, 100));
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, am_max_short_multi,

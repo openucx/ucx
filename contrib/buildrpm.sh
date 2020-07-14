@@ -4,9 +4,9 @@
 PACKAGE=ucx
 WS=$PWD
 rpmspec=${PACKAGE}.spec
+
 rpmmacros="--define='_rpmdir ${WS}/rpm-dist' --define='_srcrpmdir ${WS}/rpm-dist' --define='_sourcedir ${WS}' --define='_specdir ${WS}' --define='_builddir ${WS}'"
 rpmopts="--buildroot='${WS}/_rpm'"
-
 
 
 opt_tarball=0
@@ -14,6 +14,7 @@ opt_srcrpm=0
 opt_binrpm=0
 opt_no_dist=0
 opt_no_deps=0
+opt_strict_ibverb_dep=0
 defines=""
 
 while test "$1" != ""; do
@@ -24,6 +25,7 @@ while test "$1" != ""; do
         --no-dist)    opt_no_dist=1 ;;
         --nodeps)     opt_no_deps=1 ;;
         --define|-d)  defines="$defines --define '$2'"; shift ;;
+        --strict-ibverbs-dep) opt_strict_ibverb_dep=1 ;;
         *)
             cat <<EOF
 Unrecognized argument: $1
@@ -36,7 +38,7 @@ Valid arguments:
 --no-dist           Undefine %{dist} tag
 --nodeps            Ignore build-time dependencies
 --define|-d <arg>   Add a define to rpmbuild
-
+--strict-ibverbs-dep Add RPM "Requires: libibverbs == VER-RELEASE" (libibverbs has to be installed)
 
 EOF
             exit 1
@@ -47,6 +49,11 @@ done
 
 if [ $opt_no_dist -eq 1 ]; then
     rpmmacros="$rpmmacros '--undefine=dist'"
+fi
+
+if [ $opt_strict_ibverb_dep -eq 1 ]; then
+    libibverbs_ver=$(rpm -q libibverbs --qf '%{version}-%{release}')
+    rpmmacros="${rpmmacros} --define='extra_deps libibverbs == ${libibverbs_ver}'"
 fi
 
 if [ $opt_no_deps -eq 1 ]; then

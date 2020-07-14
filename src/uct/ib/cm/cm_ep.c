@@ -28,14 +28,10 @@ static UCS_CLASS_INIT_FUNC(uct_cm_ep_t, const uct_ep_params_t *params)
 
 {
     uct_cm_iface_t *iface = ucs_derived_of(params->iface, uct_cm_iface_t);
-    enum ibv_mtu mtu;
-    uint8_t gid_index;
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
 
-    uct_ib_address_unpack((const uct_ib_address_t*)params->dev_addr, &self->dlid,
-                          &self->dgid, &gid_index, &mtu);
     self->dest_service_id = *(const uint32_t*)params->iface_addr;
     return UCS_OK;
 }
@@ -71,7 +67,7 @@ static ucs_status_t uct_cm_ep_fill_path_rec(uct_cm_ep_t *ep,
     path->traffic_class             = iface->super.config.traffic_class;
     path->reversible                = htonl(1); /* IBCM currently only supports reversible paths */
     path->numb_path                 = 0;
-    path->pkey                      = ntohs(iface->super.pkey_value);
+    path->pkey                      = ntohs(iface->super.pkey);
     path->sl                        = iface->super.config.sl;
     path->mtu_selector              = 2; /* EQ */
     path->mtu                       = uct_ib_iface_port_attr(&iface->super)->active_mtu;

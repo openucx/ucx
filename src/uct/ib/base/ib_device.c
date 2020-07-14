@@ -933,7 +933,6 @@ err:
 
 ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu)
 {
-
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     uint8_t port_num;
     ucs_status_t status;
@@ -1026,8 +1025,9 @@ static ucs_status_t uct_ib_device_create_ah(uct_ib_device_t *dev,
 
     ah = ibv_create_ah(pd, ah_attr);
     if (ah == NULL) {
-        ucs_error("ibv_create_ah(%s) failed: %m",
-                  uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr));
+        ucs_error("ibv_create_ah(%s) on %s failed: %m",
+                  uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr),
+                  uct_ib_device_name(dev));
         return UCS_ERR_INVALID_ADDR;
     }
 

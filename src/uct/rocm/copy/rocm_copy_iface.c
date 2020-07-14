@@ -90,9 +90,8 @@ static ucs_status_t uct_rocm_copy_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_hdr          = 0;
     iface_attr->cap.am.max_iov          = 1;
 
-    iface_attr->latency.overhead        = 10e-6; /* 10 us */
-    iface_attr->latency.growth          = 0;
-    iface_attr->bandwidth.dedicated     = 6911 * 1024.0 * 1024.0;
+    iface_attr->latency                 = ucs_linear_func_make(10e-6, 0);
+    iface_attr->bandwidth.dedicated     = 6911.0 * UCS_MBYTE;
     iface_attr->bandwidth.shared        = 0;
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;

@@ -41,16 +41,19 @@ enum {
 
 
 enum {
-    UCT_IB_MEM_FLAG_ODP             = UCS_BIT(0), /**< The memory region has on
-                                                       demand paging enabled */
-    UCT_IB_MEM_FLAG_ATOMIC_MR       = UCS_BIT(1), /**< The memory region has UMR
-                                                       for the atomic access */
-    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(2), /**< An atomic access was
-                                                       requested for the memory
-                                                       region */
-    UCT_IB_MEM_MULTITHREADED        = UCS_BIT(3), /**< The memory region registration
-                                                       handled by chunks in parallel
-                                                       threads */
+    UCT_IB_MEM_FLAG_ODP              = UCS_BIT(0), /**< The memory region has on
+                                                        demand paging enabled */
+    UCT_IB_MEM_FLAG_ATOMIC_MR        = UCS_BIT(1), /**< The memory region has UMR
+                                                        for the atomic access */
+    UCT_IB_MEM_ACCESS_REMOTE_ATOMIC  = UCS_BIT(2), /**< An atomic access was
+                                                        requested for the memory
+                                                        region */
+    UCT_IB_MEM_MULTITHREADED         = UCS_BIT(3), /**< The memory region registration
+                                                        handled by chunks in parallel
+                                                        threads */
+    UCT_IB_MEM_FLAG_RELAXED_ORDERING = UCS_BIT(4), /**< The memory region will issue
+                                                        PCIe writes with relaxed order
+                                                        attribute */
 };
 
 enum {
@@ -93,6 +96,22 @@ typedef struct uct_ib_mem {
     uint32_t                flags;
 } uct_ib_mem_t;
 
+
+typedef union uct_ib_mr {
+    struct ibv_mr           *ib;
+} uct_ib_mr_t;
+
+
+typedef enum {
+    /* Default memory region with either strict or relaxed order */
+    UCT_IB_MR_DEFAULT,
+    /* Additional memory region with strict order,
+     * if the default region is relaxed order */
+    UCT_IB_MR_STRICT_ORDER,
+    UCT_IB_MR_LAST
+} uct_ib_mr_type_t;
+
+
 /**
  * IB memory domain.
  */
@@ -102,7 +121,7 @@ typedef struct uct_ib_md {
     uct_mem_h                global_odp;/**< Implicit ODP memory handle */
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
-    uct_linear_growth_t      reg_cost;  /**< Memory registration cost */
+    ucs_linear_func_t        reg_cost;  /**< Memory registration cost */
     struct uct_ib_md_ops     *ops;
     UCS_STATS_NODE_DECLARE(stats)
     uct_ib_md_ext_config_t   config;    /* IB external configuration */
@@ -114,6 +133,7 @@ typedef struct uct_ib_md {
     uint64_t                 subnet_filter;
     double                   pci_bw;
     int                      relaxed_order;
+    size_t                   memh_struct_size;
 } uct_ib_md_t;
 
 
@@ -127,7 +147,7 @@ typedef struct uct_ib_md_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(rmtd) reg_methods;
 
     uct_md_rcache_config_t   rcache;       /**< Registration cache config */
-    uct_linear_growth_t      uc_reg_cost;  /**< Memory registration cost estimation
+    ucs_linear_func_t        uc_reg_cost;  /**< Memory registration cost estimation
                                                 without using the cache */
     unsigned                 fork_init;    /**< Use ibv_fork_init() */
     int                      async_events; /**< Whether async events should be delivered */
@@ -186,7 +206,8 @@ typedef void (*uct_ib_md_cleanup_func_t)(struct uct_ib_md *);
 typedef ucs_status_t (*uct_ib_md_reg_key_func_t)(struct uct_ib_md *md,
                                                  void *address, size_t length,
                                                  uint64_t access,
-                                                 uct_ib_mem_t *memh);
+                                                 uct_ib_mem_t *memh,
+                                                 uct_ib_mr_type_t mr_type);
 
 /**
  * Memory domain method to deregister memory area.
@@ -199,7 +220,8 @@ typedef ucs_status_t (*uct_ib_md_reg_key_func_t)(struct uct_ib_md *md,
  * @return UCS_OK on success or error code in case of failure.
  */
 typedef ucs_status_t (*uct_ib_md_dereg_key_func_t)(struct uct_ib_md *md,
-                                                   uct_ib_mem_t *memh);
+                                                   uct_ib_mem_t *memh,
+                                                   uct_ib_mr_type_t mr_type);
 
 /**
  * Memory domain method to register memory area optimized for atomic ops.
@@ -247,7 +269,8 @@ typedef ucs_status_t (*uct_ib_md_reg_multithreaded_func_t)(uct_ib_md_t *md,
                                                            void *address,
                                                            size_t length,
                                                            uint64_t access,
-                                                           uct_ib_mem_t *memh);
+                                                           uct_ib_mem_t *memh,
+                                                           uct_ib_mr_type_t mr_type);
 
 /**
  * Memory domain method to deregister memory area.
@@ -260,7 +283,8 @@ typedef ucs_status_t (*uct_ib_md_reg_multithreaded_func_t)(uct_ib_md_t *md,
  * @return UCS_OK on success or error code in case of failure.
  */
 typedef ucs_status_t (*uct_ib_md_dereg_multithreaded_func_t)(uct_ib_md_t *md,
-                                                             uct_ib_mem_t *memh);
+                                                             uct_ib_mem_t *memh,
+                                                             uct_ib_mr_type_t mr_type);
 
 /**
  * Memory domain method to prefetch physical memory for virtual memory area.
@@ -279,12 +303,21 @@ typedef ucs_status_t (*uct_ib_md_mem_prefetch_func_t)(uct_ib_md_t *md,
                                                       uct_ib_mem_t *memh,
                                                       void *addr, size_t length);
 
+/**
+ * Memory domain method to get unique atomic mr id.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [out] mr_id   id to access atomic MR.
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_ib_md_get_atomic_mr_id_func_t)(uct_ib_md_t *md,
+                                                          uint8_t *mr_id);
+
 typedef struct uct_ib_md_ops {
     uct_ib_md_open_func_t                open;
     uct_ib_md_cleanup_func_t             cleanup;
-
-    size_t                               memh_struct_size;
-
     uct_ib_md_reg_key_func_t             reg_key;
     uct_ib_md_dereg_key_func_t           dereg_key;
     uct_ib_md_reg_atomic_key_func_t      reg_atomic_key;
@@ -292,6 +325,7 @@ typedef struct uct_ib_md_ops {
     uct_ib_md_reg_multithreaded_func_t   reg_multithreaded;
     uct_ib_md_dereg_multithreaded_func_t dereg_multithreaded;
     uct_ib_md_mem_prefetch_func_t        mem_prefetch;
+    uct_ib_md_get_atomic_mr_id_func_t    get_atomic_mr_id;
 } uct_ib_md_ops_t;
 
 
@@ -383,13 +417,22 @@ static inline uint16_t uct_ib_md_atomic_offset(uint8_t atomic_mr_id)
     return 8 * atomic_mr_id;
 }
 
-
-static inline void uct_ib_memh_init_from_mr(uct_ib_mem_t *memh, struct ibv_mr *mr)
+static inline void
+uct_ib_memh_init_keys(uct_ib_mem_t *memh, uint32_t lkey, uint32_t rkey)
 {
-    memh->lkey = mr->lkey;
-    memh->rkey = mr->rkey;
+    memh->lkey = lkey;
+    memh->rkey = rkey;
 }
 
+static inline uct_ib_mr_type_t
+uct_ib_memh_get_atomic_base_mr_type(uct_ib_mem_t *memh)
+{
+    if (memh->flags & UCT_IB_MEM_FLAG_RELAXED_ORDERING) {
+        return UCT_IB_MR_STRICT_ORDER;
+    } else {
+        return UCT_IB_MR_DEFAULT;
+    }
+}
 
 static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)
 {
@@ -416,4 +459,12 @@ ucs_status_t
 uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
                                        size_t length, uint64_t access,
                                        size_t chunk, struct ibv_mr **mrs);
+
+void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
+                                   const uct_ib_md_config_t *md_config);
+
+ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address,
+                                 size_t length, uint64_t access_flags,
+                                 uct_ib_mem_t *memh, uct_ib_mr_t *mrs,
+                                 uct_ib_mr_type_t mr_type);
 #endif
