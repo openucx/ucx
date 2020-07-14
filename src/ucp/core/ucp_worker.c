@@ -1785,7 +1785,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
                         &ucp_ep_match_ops);
 
-    //UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
+    UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
         UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_proto_t) <= sizeof(ucp_ep_t));
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 3);

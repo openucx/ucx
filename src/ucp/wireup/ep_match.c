@@ -15,33 +15,32 @@
 #include <ucp/core/ucp_ep.inl>
 
 
-const void *ucp_ep_match_get_address(const ucs_conn_match_elem_t *conn_match)
+static const ucp_ep_ext_gen_t *
+ucp_ep_ext_gen_from_conn_match(const ucs_conn_match_elem_t *conn_match)
 {
-    const ucp_ep_ext_gen_t *ep_ext = ucs_container_of(conn_match,
-                                                      ucp_ep_ext_gen_t,
-                                                      ep_match.conn_match);
+    return ucs_container_of(conn_match, ucp_ep_ext_gen_t,
+                            ep_match.conn_match);
+}
+
+static const void *
+ucp_ep_match_get_address(const ucs_conn_match_elem_t *conn_match)
+{
+    const ucp_ep_ext_gen_t *ep_ext = ucp_ep_ext_gen_from_conn_match(conn_match);
     return &ep_ext->ep_match.dest_uuid;
 }
 
-ucs_conn_sn_t ucp_ep_match_get_conn_sn(const ucs_conn_match_elem_t *conn_match)
+static ucs_conn_sn_t
+ucp_ep_match_get_conn_sn(const ucs_conn_match_elem_t *conn_match)
 {
-    return (ucs_conn_sn_t)ucp_ep_from_ext_gen((ucp_ep_ext_gen_t*)
-                                              ucs_container_of(conn_match,
-                                                               ucp_ep_ext_gen_t,
-                                                               ep_match.conn_match))->conn_sn;
+    return (ucs_conn_sn_t)
+           ucp_ep_from_ext_gen((ucp_ep_ext_gen_t*)
+                               ucp_ep_ext_gen_from_conn_match(
+                                   conn_match))->conn_sn;
 }
 
-const char* ucp_ep_match_address_str(const void *address,
-                                     char *str, size_t max_size)
+static const char* ucp_ep_match_address_str(const void *address,
+                                            char *str, size_t max_size)
 {
-    size_t required_size = snprintf(NULL, 0, "%zu", *(uint64_t*)address);
-
-    if (max_size < required_size) {
-        ucs_fatal("size of the string (%zu) is not enough to be filled"
-                  " by the address (%zu), required - %zu",
-                  max_size, *(uint64_t*)address, required_size);
-    }
-
     ucs_snprintf_zero(str, max_size, "%zu", *(uint64_t*)address);
     return str;
 }
@@ -86,7 +85,8 @@ ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
                                ucp_ep_match_conn_sn_t conn_sn, int is_exp)
 {
         ucp_ep_flags_t UCS_V_UNUSED exp_ep_flags = UCP_EP_FLAG_ON_MATCH_CTX |
-                                                   (!is_exp ? UCP_EP_FLAG_DEST_EP : 0);
+                                                   (is_exp ?
+                                                    0 : UCP_EP_FLAG_DEST_EP);
         ucs_conn_match_elem_t *conn_match;
         ucp_ep_h ep;
 

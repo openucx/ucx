@@ -23,6 +23,15 @@
 typedef uint16_t ucp_ep_match_conn_sn_t;
 
 
+/**
+ * Object that represents matching with remote endpoints
+ */
+typedef struct {
+    uint64_t                  dest_uuid;         /* Destination worker UUID */
+    ucs_conn_match_elem_t     conn_match;        /* Connection matching object */
+} ucp_ep_match_elem_t;
+
+
 extern const ucs_conn_match_ops_t ucp_ep_match_ops;
 
 
