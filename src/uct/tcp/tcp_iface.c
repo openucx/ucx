@@ -91,7 +91,7 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
 
-    *(struct in_addr*)addr = iface->config.ifaddr.sin_addr;
+    *(struct sockaddr_in*)addr = iface->config.ifaddr;
     return UCS_OK;
 }
 
@@ -128,7 +128,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     }
 
     attr->iface_addr_len   = sizeof(in_port_t);
-    attr->device_addr_len  = sizeof(struct in_addr);
+    attr->device_addr_len  = sizeof(struct sockaddr_in);
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                              UCT_IFACE_FLAG_AM_SHORT         |
                              UCT_IFACE_FLAG_AM_BCOPY         |
