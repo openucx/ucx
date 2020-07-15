@@ -325,7 +325,7 @@ static void print_header(struct perftest_context *ctx)
     if (ctx->flags & TEST_FLAG_PRINT_CSV) {
         if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
             for (i = 0; i < ctx->num_batch_files; ++i) {
-                printf("%s,", basename(ctx->batch_files[i]));
+                printf("%s,", ucs_basename(ctx->batch_files[i]));
             }
             printf("iterations,typical_lat,avg_lat,overall_lat,avg_bw,overall_bw,avg_mr,overall_mr\n");
         }
