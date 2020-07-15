@@ -178,7 +178,8 @@ private:
         struct sockaddr_in dest_addr;
         dest_addr.sin_family = AF_INET;
         dest_addr.sin_port   = *(in_port_t*)iface_addr;
-        dest_addr.sin_addr   = *(struct in_addr*)dev_addr;
+        dest_addr.sin_addr   = *(const struct in_addr*)ucs_sockaddr_get_inet_addr
+                                                       ((struct sockaddr*)dev_addr);
 
         int fd;
         status = ucs_socket_create(AF_INET, SOCK_STREAM, &fd);

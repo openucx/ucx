@@ -436,7 +436,8 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
     /* TODO: handle AF_INET6 */
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port   = *(in_port_t*)params->iface_addr;
-    dest_addr.sin_addr   = *(struct in_addr*)params->dev_addr;
+    dest_addr.sin_addr   = *(const struct in_addr*)ucs_sockaddr_get_inet_addr
+                                                   ((struct sockaddr*)params->dev_addr);
 
     do {
         ep = uct_tcp_cm_search_ep(iface, &dest_addr,
