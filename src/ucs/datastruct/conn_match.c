@@ -227,10 +227,11 @@ void ucs_conn_match_remove_elem(ucs_conn_match_ctx_t *conn_match_ctx,
     iter = kh_get(ucs_conn_match, &conn_match_ctx->hash, peer);
     if (iter == kh_end(&conn_match_ctx->hash)) {
         ucs_fatal("match_ctx %p: conn_match %p address %s conn_sn %zu "
-                  "wasn't found in hash", conn_match_ctx, elem,
-                  conn_match_ctx->ops.address_str(&address, address_str,
+                  "wasn't found in hash as %s connection", conn_match_ctx, elem,
+                  conn_match_ctx->ops.address_str(address, address_str,
                                                   UCS_CONN_MATCH_ADDRESS_STR_MAX),
-                  conn_match_ctx->ops.get_conn_sn(elem));
+                  conn_match_ctx->ops.get_conn_sn(elem),
+                  ucs_conn_match_queue_title[conn_queue_type]);
     }
 
     ucs_free(peer);
@@ -241,7 +242,7 @@ void ucs_conn_match_remove_elem(ucs_conn_match_ctx_t *conn_match_ctx,
     ucs_hlist_del(head, &elem->list);
     ucs_trace("match_ctx %p: remove %s conn_match %p address %s conn_sn %zu)",
               conn_match_ctx, ucs_conn_match_queue_title[conn_queue_type],
-              elem, conn_match_ctx->ops.address_str(&address, address_str,
+              elem, conn_match_ctx->ops.address_str(address, address_str,
                                                     UCS_CONN_MATCH_ADDRESS_STR_MAX),
               conn_match_ctx->ops.get_conn_sn(elem));
 }
