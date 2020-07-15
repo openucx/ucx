@@ -63,7 +63,7 @@ ucp_datatype_generic_iter_init(ucp_context_h context, void *buffer, size_t count
 
     state                        = dt_gen->ops.start_pack(dt_gen->context,
                                                           buffer, count);
-    dt_iter->mem_type            = UCS_MEMORY_TYPE_HOST;
+    dt_iter->mem_type            = UCS_MEMORY_TYPE_LAST;
     dt_iter->length              = dt_gen->ops.packed_size(state);
     dt_iter->type.generic.dt_gen = dt_gen;
     dt_iter->type.generic.state  = state;
