@@ -367,7 +367,7 @@ static ucs_status_t uct_mem_check_flags(unsigned flags)
     return UCS_OK;
 }
 
-ucs_status_t uct_md_mem_alloc(uct_md_h md, uct_mem_alloc_param_t *param,
+ucs_status_t uct_md_mem_alloc(uct_md_h md, const uct_mem_alloc_params_t *param,
                               uct_mem_h *memh_p)
 {
     ucs_status_t status;

@@ -410,7 +410,7 @@ uct_posix_segment_open(uct_mm_md_t *md, uct_mm_seg_id_t *seg_id_p, int *fd_p)
 }
 
 static ucs_status_t
-uct_posix_mem_alloc(uct_md_h tl_md, uct_mem_alloc_param_t *param,
+uct_posix_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
                     uct_mem_h *memh_p)
 {
     uct_mm_md_t                     *md = ucs_derived_of(tl_md, uct_mm_md_t);

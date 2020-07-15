@@ -56,13 +56,13 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
     return mm_flags;
 }
 
-ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
+ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
                            uct_allocated_memory_t *mem)
 {
 #ifdef ENABLE_MEMTRACK
     const char *alloc_name = param->name;
 #endif
-    uct_alloc_method_t *method;
+    const uct_alloc_method_t *method;
     uct_md_attr_t md_attr;
     ucs_status_t status;
     size_t alloc_length;
@@ -83,7 +83,7 @@ ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (param->num_methods == 0) {
+    if (param->methods.count == 0) {
         ucs_error("No allocation methods provided");
         return UCS_ERR_INVALID_PARAM;
     }
@@ -94,15 +94,16 @@ ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    for (method = param->methods; method < param->methods + param->num_methods;
+    for (method = param->methods.methods;
+         method < (param->methods.methods + param->methods.count);
          ++method) {
         ucs_trace("trying allocation method %s", uct_alloc_method_names[*method]);
 
         switch (*method) {
         case UCT_ALLOC_METHOD_MD:
             /* Allocate with one of the specified memory domains */
-            for (md_index = 0; md_index < param->num_mds; ++md_index) {
-                md = param->mds[md_index];
+            for (md_index = 0; md_index < param->mds.count; ++md_index) {
+                md = param->mds.mds[md_index];
                 status = uct_md_query(md, &md_attr);
                 if (status != UCS_OK) {
                     ucs_error("Failed to query MD");
@@ -126,8 +127,8 @@ ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
                  * fall-back, because this MD already exposed support for memory
                  * allocation.
                  */
-                alloc_length     = *param->length_p;
-                status = uct_md_mem_alloc(md, param, &memh);
+                alloc_length = *param->length_p;
+                status       = uct_md_mem_alloc(md, param, &memh);
                 if (status != UCS_OK) {
                     ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
                               alloc_length, md->component->name,
@@ -289,25 +290,23 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
     void *addr              = NULL;
     uct_md_attr_t md_attr;
     ucs_status_t status;
-    uct_mem_alloc_param_t param;
+    uct_mem_alloc_params_t param;
 
     param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS       |
                         UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR    |
                         UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR  |
                         UCT_MEM_ALLOC_PARAM_FIELD_METHODS     |
-                        UCT_MEM_ALLOC_PARAM_FIELD_NUM_METHODS |
                         UCT_MEM_ALLOC_PARAM_FIELD_MDS         |
-                        UCT_MEM_ALLOC_PARAM_FIELD_NUM_MDS     |
                         UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-    param.flags       = UCT_MD_MEM_ACCESS_ALL;
-    param.address_p   = &addr;
-    param.length_p    = &length;
-    param.methods     = iface->config.alloc_methods;
-    param.num_methods = iface->config.num_alloc_methods;
-    param.mds         = &iface->md;
-    param.num_mds     = 1;
-    param.name        = name;
+    param.flags           = UCT_MD_MEM_ACCESS_ALL;
+    param.address_p       = &addr;
+    param.length_p        = &length;
+    param.methods.methods = iface->config.alloc_methods;
+    param.methods.count   = iface->config.num_alloc_methods;
+    param.mds.mds         = &iface->md;
+    param.mds.count       = 1;
+    param.name            = name;
 
     status = uct_mem_alloc(&param, mem);
     if (status != UCS_OK) {

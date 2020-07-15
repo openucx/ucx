@@ -226,7 +226,7 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, alloc,
     void   *address     = NULL;
     size_t alloc_length = size;
     uct_mem_h memh;
-    uct_mem_alloc_param_t param;
+    uct_mem_alloc_params_t param;
 
     param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
                         UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |

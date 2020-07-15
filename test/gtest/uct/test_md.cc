@@ -130,7 +130,7 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
     uct_mem_h memh;
     uct_rkey_bundle_t rkey_bundle;
     unsigned i;
-    uct_mem_alloc_param_t param;
+    uct_mem_alloc_params_t param;
 
     // alloc (should work with both sysv and xpmem
     size = sizeof(unsigned) * UCS_MBYTE;
@@ -206,7 +206,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
-    uct_mem_alloc_param_t param;
+    uct_mem_alloc_params_t param;
 
     for (unsigned i = 0; i < 300; ++i) {
         size = orig_size = ucs::rand() % 65536;
@@ -396,7 +396,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
-    uct_mem_alloc_param_t param;
+    uct_mem_alloc_params_t param;
 
     orig_size = size = 128 * UCS_MBYTE;
     address   = NULL;

@@ -2066,37 +2066,31 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr);
  * @ingroup UCT_MD
  * @brief UCT allocation parameters specification field mask
  *
- * The enumeration allows specifying which fields in @ref uct_mem_alloc_param_t
+ * The enumeration allows specifying which fields in @ref uct_mem_alloc_params_t
  * are present.
  */
 typedef enum {
-    /** Enables @ref uct_mem_alloc_param_t::flags */
+    /** Enables @ref uct_mem_alloc_params_t::flags */
     UCT_MEM_ALLOC_PARAM_FIELD_FLAGS          = UCS_BIT(0),
 
-    /** Enables @ref uct_mem_alloc_param_t::address_p */
+    /** Enables @ref uct_mem_alloc_params_t::address_p */
     UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR       = UCS_BIT(1),
 
-    /** Enables @ref uct_mem_alloc_param_t::length_p */
+    /** Enables @ref uct_mem_alloc_params_t::length_p */
     UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR     = UCS_BIT(2),
 
-    /** Enables @ref uct_mem_alloc_param_t::methods */
-    UCT_MEM_ALLOC_PARAM_FIELD_METHODS        = UCS_BIT(3),
+    /** Enables @ref uct_mem_alloc_params_t::mem_type */
+    UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE       = UCS_BIT(3),
 
-    /** Enables @ref uct_mem_alloc_param_t::num_methods */
-    UCT_MEM_ALLOC_PARAM_FIELD_NUM_METHODS    = UCS_BIT(4),
+    /** Enables @ref uct_mem_alloc_params_t::methods */
+    UCT_MEM_ALLOC_PARAM_FIELD_METHODS        = UCS_BIT(4),
 
-    /** Enables @ref uct_mem_alloc_param_t::mds */
+    /** Enables @ref uct_mem_alloc_params_t::mds */
     UCT_MEM_ALLOC_PARAM_FIELD_MDS            = UCS_BIT(5),
 
-    /** Enables @ref uct_mem_alloc_param_t::num_mds */
-    UCT_MEM_ALLOC_PARAM_FIELD_NUM_MDS        = UCS_BIT(6),
-
-    /** Enables @ref uct_mem_alloc_param_t::mem_type */
-    UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE       = UCS_BIT(7),
-
-    /** Enables @ref uct_mem_alloc_param_t::name */
-    UCT_MEM_ALLOC_PARAM_FIELD_NAME           = UCS_BIT(8)
-} uct_mem_alloc_param_field_t;
+    /** Enables @ref uct_mem_alloc_params_t::name */
+    UCT_MEM_ALLOC_PARAM_FIELD_NAME           = UCS_BIT(6)
+} uct_mem_alloc_params_field_t;
 
 
 /**
@@ -2107,7 +2101,7 @@ typedef enum {
 typedef struct {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_mem_alloc_param_field_t. Fields not specified in this mask will
+     * @ref uct_mem_alloc_params_field_t. Fields not specified in this mask will
      * be ignored
      */
     uint64_t           field_mask;
@@ -2116,17 +2110,6 @@ typedef struct {
      * Memory allocation flags, see @ref uct_md_mem_flags
      */
     unsigned           flags;
-
-    /**
-     * The address. Valid to use with @ref uct_md_mem_alloc
-     */
-
-    /**
-     * Points to minimal size to allocate. The actual size may be larger, for
-     * example because of alignment restrictions. Upon successful return,
-     * filled with the actual size that was allocated. Must be >0.
-     */
-    size_t             *length_p;
 
     /**
      * If @a address_p content is NULL, the underlying allocation routine will
@@ -2141,44 +2124,55 @@ typedef struct {
     void               **address_p;
 
     /**
-     * Array of memory allocation methods to attempt. Every one of the provided
-     * allocation methods will be used, in turn, to perform the allocation,
-     * until one succeeds. Whenever the MD method is encountered, every one
-     * of the provided MDs will be used, in turn, to allocate the memory, until
-     * one succeeds, or they are exhausted. In this case the next allocation
-     * method from the initial list will be attempted.
+     * Points to minimal size to allocate. The actual size may be larger, for
+     * example because of alignment restrictions. Upon successful return,
+     * filled with the actual size that was allocated. Must be >0.
      */
-    uct_alloc_method_t *methods;
-
-    /**
-     * Length of 'methods' array
-     */
-    unsigned           num_methods;
-
-    /**
-     * Array of memory domains to attempt to allocate
-     * the memory with, for MD allocation method.
-     */
-    uct_md_h           *mds;
-
-    /**
-     *  Length of 'mds' array. May be empty, in such case
-     *  'mds' may be NULL, and MD allocation method will
-     *  be skipped.
-     */
-    unsigned           num_mds;
+    size_t             *length_p;
 
     /**
      * Type of memory to be allocated.
      */
     ucs_memory_type_t  mem_type;
 
+    struct {
+        /**
+         * Array of memory allocation methods to attempt. Each of the provided
+         * allocation methods will be used, in turn, to perform the allocation,
+         * until one succeeds. Whenever the MD method is encountered, each of
+         * the provided MDs will be used, in turn, to allocate the memory, until
+         * one succeeds, or they are exhausted. In this case the next allocation
+         * method from the initial list will be attempted.
+         */
+        const uct_alloc_method_t *methods;
+
+        /**
+         * Length of 'methods' array
+         */
+        unsigned                 count;
+    } methods;
+
+    struct {
+        /**
+         * Array of memory domains to attempt to allocate
+         * the memory with, for MD allocation method.
+         */
+        const uct_md_h *mds;
+
+        /**
+         *  Length of 'mds' array. May be empty, in such case
+         *  'mds' may be NULL, and MD allocation method will
+         *  be skipped.
+         */
+        unsigned       count;
+    } mds;
+
     /**
      * Name of the allocated region, used to track memory
      * usage for debugging and profiling.
      */
     const char         *name;
-} uct_mem_alloc_param_t;
+} uct_mem_alloc_params_t;
 
 
 /**
@@ -2190,10 +2184,10 @@ typedef struct {
  *
  * @param [in]     md          Memory domain to allocate memory on.
  * @param [in]     param       Memory allocation characteristics, see
- *                             @ref uct_mem_alloc_param_t.
+ *                             @ref uct_mem_alloc_params_t.
  * @param [out]    memh_p      Filled with handle for allocated region.
  */
-ucs_status_t uct_md_mem_alloc(uct_md_h md, uct_mem_alloc_param_t *param,
+ucs_status_t uct_md_mem_alloc(uct_md_h md, const uct_mem_alloc_params_t *param,
                               uct_mem_h *memh_p);
 
 
@@ -2280,11 +2274,11 @@ ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
  * Allocate potentially registered memory. 
  *
  * @param [in]     param       Memory allocation characteristics, see
- *                             @ref uct_mem_alloc_param_t.
+ *                             @ref uct_mem_alloc_params_t.
  * @param [out]    mem         In case of success, filled with information about
  *                              the allocated memory. @ref uct_allocated_memory_t.
  */
-ucs_status_t uct_mem_alloc(uct_mem_alloc_param_t *param,
+ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
                            uct_allocated_memory_t *mem);
 
 

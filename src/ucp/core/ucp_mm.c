@@ -179,7 +179,7 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
     uct_alloc_method_t method;
     unsigned method_index, md_index, num_mds;
     ucs_status_t status;
-    uct_mem_alloc_param_t param;
+    uct_mem_alloc_params_t param;
     uct_md_h *mds;
 
     mds = ucs_calloc(context->num_mds, sizeof(*mds), "temp mds");
@@ -209,19 +209,17 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
                             UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR    |
                             UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR  |
                             UCT_MEM_ALLOC_PARAM_FIELD_METHODS     |
-                            UCT_MEM_ALLOC_PARAM_FIELD_NUM_METHODS |
                             UCT_MEM_ALLOC_PARAM_FIELD_MDS         |
-                            UCT_MEM_ALLOC_PARAM_FIELD_NUM_MDS     |
                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-        param.flags       = uct_flags;
-        param.address_p   = &memh->address;
-        param.length_p    = &length;
-        param.methods     = &method;
-        param.num_methods = 1;
-        param.mds         = mds;
-        param.num_mds     = num_mds;
-        param.name        = name;
+        param.flags           = uct_flags;
+        param.address_p       = &memh->address;
+        param.length_p        = &length;
+        param.methods.methods = &method;
+        param.methods.count   = 1;
+        param.mds.mds         = mds;
+        param.mds.count       = num_mds;
+        param.name            = name;
 
         status = uct_mem_alloc(&param, &mem);
         if (status == UCS_OK) {
