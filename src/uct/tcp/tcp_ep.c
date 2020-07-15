@@ -122,14 +122,6 @@ static void uct_tcp_ep_addr_init(struct sockaddr_in *sock_addr,
     }
 }
 
-static void uct_tcp_ep_close_fd(int *fd_p)
-{
-    if (*fd_p != -1) {
-        close(*fd_p);
-        *fd_p = -1;
-    }
-}
-
 unsigned uct_tcp_ep_is_self(const uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -160,7 +152,7 @@ static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
         uct_tcp_ep_mod_events(ep, 0, ep->events);
     }
 
-    uct_tcp_ep_close_fd(&ep->fd);
+    ucs_close_fd(&ep->fd);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
@@ -245,11 +237,9 @@ ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep,
 
     uct_tcp_ep_change_ctx_caps(ep, ep->ctx_caps | UCS_BIT(cap));
     if (!uct_tcp_ep_is_self(ep) && (prev_caps != ep->ctx_caps)) {
-        if (!prev_caps) {
+        if (!(prev_caps & UCT_TCP_EP_CTX_CAPS)) {
             return uct_tcp_cm_add_ep(iface, ep);
-        } else if (ucs_test_all_flags(ep->ctx_caps,
-                                      (UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX) |
-                                       UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)))) {
+        } else if (ucs_test_all_flags(ep->ctx_caps, UCT_TCP_EP_CTX_CAPS)) {
             uct_tcp_cm_remove_ep(iface, ep);
         }
     }
@@ -266,11 +256,9 @@ ucs_status_t uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep,
 
     uct_tcp_ep_change_ctx_caps(ep, ep->ctx_caps & ~UCS_BIT(cap));
     if (!uct_tcp_ep_is_self(ep)) {
-        if (ucs_test_all_flags(prev_caps,
-                               (UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX) |
-                                UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)))) {
+        if (ucs_test_all_flags(prev_caps, UCT_TCP_EP_CTX_CAPS)) {
             return uct_tcp_cm_add_ep(iface, ep);
-        } else if (!ep->ctx_caps) {
+        } else if (!(ep->ctx_caps & UCT_TCP_EP_CTX_CAPS)) {
             uct_tcp_cm_remove_ep(iface, ep);
         }
     }
@@ -307,7 +295,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
         uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_TYPE_RX);
     }
 
-    ucs_assertv(!self->ctx_caps, "ep=%p", self);
+    ucs_assertv(!(self->ctx_caps & UCT_TCP_EP_CTX_CAPS), "ep=%p", self);
 
     ucs_queue_for_each_extract(put_comp, &self->put_comp_q, elem, 1) {
         ucs_free(put_comp);
@@ -337,9 +325,7 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
 
     if ((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
-        ucs_test_all_flags(ep->ctx_caps,
-                           UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX) |
-                           UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX))) {
+        ucs_test_all_flags(ep->ctx_caps, UCT_TCP_EP_CTX_CAPS)) {
         /* remove TX capability, but still will be able to receive data */
         uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_TX);
     } else {
@@ -410,7 +396,7 @@ err_close_fd:
     /* fd has to be valid in case of valid EP has been
      * passed to this function */
     ucs_assert((*ep_p == NULL) || (fd != -1));
-    uct_tcp_ep_close_fd(&fd);
+    ucs_close_fd(&fd);
     return status;
 }
 
@@ -564,9 +550,8 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep,
         }
 
         uct_tcp_ep_mod_events(ep, 0, ep->events);
-        uct_tcp_ep_close_fd(&ep->fd);
-    } else if ((ep->ctx_caps == 0) ||
-               (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX))) {
+        ucs_close_fd(&ep->fd);
+    } else {
         /* If the EP supports RX only or no capabilities set, destroy it */
         uct_tcp_ep_destroy_internal(&ep->super.super);
     }
@@ -667,7 +652,7 @@ ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep,
         (uct_tcp_ep_is_conn_closed_by_peer(io_status) ||
          (io_status == UCS_ERR_TIMED_OUT))) {
         uct_tcp_ep_mod_events(ep, 0, ep->events);
-        uct_tcp_ep_close_fd(&ep->fd);
+        ucs_close_fd(&ep->fd);
 
         uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
 

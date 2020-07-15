@@ -113,7 +113,7 @@ bool test_ib_md::has_ksm() const {
 bool test_ib_md::check_umr(uct_ib_md_t *ib_md) const {
 #if HAVE_DEVX
     return has_ksm();
-#elif defined (HAVE_MLX5_HW)
+#elif HAVE_EXP_UMR
     if (ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
         uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
         return mlx5_md->umr_qp != NULL;

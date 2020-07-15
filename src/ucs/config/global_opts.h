@@ -115,8 +115,8 @@ typedef struct {
     /* statistics format options */
     ucs_stats_formats_t        stats_format;
 
-    /* registration cache checks if physical page is not moved */
-    int                        rcache_check_pfn;
+    /* registration cache checks if physical pages are not moved */
+    unsigned                   rcache_check_pfn;
 
     /* directory for loadable modules */
     char                       *module_dir;

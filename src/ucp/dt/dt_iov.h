@@ -28,6 +28,7 @@ static inline size_t ucp_dt_iov_length(const ucp_dt_iov_t *iov, size_t iovcnt)
     size_t iov_it, total_length = 0;
 
     for (iov_it = 0; iov_it < iovcnt; ++iov_it) {
+        /* cppcheck-suppress nullPointer */
         total_length += iov[iov_it].length;
     }
 

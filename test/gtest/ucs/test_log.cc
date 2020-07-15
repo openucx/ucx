@@ -117,21 +117,34 @@ public:
     }
 
     bool do_grep(const std::string &needle) {
-        unsigned num_retries = 0;
+        unsigned num_retries       = 0;
+        std::string cmd_str        = "<none>";
+        std::string system_ret_str = "<none>";
 
         while (num_retries++ < GREP_RETRIES) {
             /* if this is the last retry, allow printing the grep output */
             std::string grep_cmd = ucs_likely(num_retries != GREP_RETRIES) ?
                                    "grep -q" : "grep";
-            std::string cmd_str = grep_cmd + " '" + needle + "' " +
-                                  template_grep_name;
+            cmd_str = grep_cmd + " '" + needle + "' " + template_grep_name;
             int ret = system(cmd_str.c_str());
             if (ret == 0) {
                 return true;
+            } else {
+                system_ret_str = "return value: ";
+                if (ret == -1) {
+                    system_ret_str += ucs::to_string(ret) +
+                                      ", errno: " + ucs::to_string(errno);
+                } else {
+                    system_ret_str += ucs::to_string(WEXITSTATUS(ret));
+                }
             }
 
             ucs_log_flush();
         }
+
+        UCS_TEST_MESSAGE << "\"" << cmd_str << "\" failed after "
+                         << num_retries - 1 << " iterations ("
+                         << system_ret_str << ")";
 
         return false;
     }
@@ -218,7 +231,7 @@ protected:
 
         for (size_t i = 0; i < len; ++i) {
             s += possible_vals[ucs::rand() %
-                              (ucs_array_size(possible_vals) - 1)];
+                               (ucs_array_size(possible_vals) - 1)];
         }
     }
 

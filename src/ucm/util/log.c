@@ -24,7 +24,7 @@
 #include <errno.h>
 #include <limits.h>
 
-#define UCM_LOG_BUG_SIZE   256
+#define UCM_LOG_BUG_SIZE   512
 
 static int  ucm_log_fileno                  = 1; /* stdout */
 static char ucm_log_hostname[HOST_NAME_MAX] = {0};
@@ -33,6 +33,7 @@ const char *ucm_log_level_names[] = {
     [UCS_LOG_LEVEL_FATAL] = "FATAL",
     [UCS_LOG_LEVEL_ERROR] = "ERROR",
     [UCS_LOG_LEVEL_WARN]  = "WARN",
+    [UCS_LOG_LEVEL_DIAG]  = "DIAG",
     [UCS_LOG_LEVEL_INFO]  = "INFO",
     [UCS_LOG_LEVEL_DEBUG] = "DEBUG",
     [UCS_LOG_LEVEL_TRACE] = "TRACE",

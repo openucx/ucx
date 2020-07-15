@@ -12,9 +12,11 @@
 
 #include <common/test.h>
 
+#include <poll.h>
 #include <uct/api/uct.h>
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
+#include <ucs/async/pipe.h>
 #include <common/mem_buffer.h>
 #include <common/test.h>
 #include <vector>
@@ -123,6 +125,7 @@ protected:
     class entity {
     public:
         typedef uct_test::atomic_mode atomic_mode;
+        typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
 
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
@@ -170,7 +173,9 @@ protected:
 
         uct_ep_h ep(unsigned index) const;
 
+        eps_vec_t& eps();
         size_t num_eps() const;
+        void reserve_ep(unsigned index);
 
         void create_ep(unsigned index);
         void destroy_ep(unsigned index);
@@ -193,19 +198,12 @@ protected:
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_sata);
 
-        static size_t priv_data_do_pack(void *priv_data);
-        void accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                    uct_cm_ep_server_conn_notify_callback_t notify_cb,
-                    uct_ep_disconnect_cb_t disconnect_cb,
-                    void *user_data);
         void listen(const ucs::sock_addr_storage &listen_addr,
                     const uct_listener_params_t &params);
         void disconnect(uct_ep_h ep);
 
         void flush() const;
 
-        static const std::string server_priv_data;
-        static std::string       client_priv_data;
         size_t                   max_conn_priv;
 
         class scoped_async_lock {
@@ -226,19 +224,13 @@ protected:
         private:
             async_wrapper(const async_wrapper &);
         };
-        typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
 
         entity(const entity&);
 
-        void reserve_ep(unsigned index);
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
         void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
         void cuda_mem_free(const uct_allocated_memory_t *mem) const;
-        static ssize_t server_priv_data_cb(void *arg,
-                                           const uct_cm_ep_priv_data_pack_args_t
-                                           *pack_args, void *priv_data);
-
 
         const resource              m_resource;
         ucs::handle<uct_md_h>       m_md;
@@ -282,6 +274,33 @@ protected:
         uct_rkey_bundle_t       m_rkey;
         uct_allocated_memory_t  m_mem;
         uct_iov_t               m_iov;
+    };
+
+    class async_event_ctx {
+    public:
+        async_event_ctx() {
+            wakeup_fd.fd      = -1;
+            wakeup_fd.events  = POLLIN;
+            wakeup_fd.revents = 0;
+            aux_pipe_init     = false;
+            memset(&aux_pipe, 0, sizeof(aux_pipe));
+        }
+
+        ~async_event_ctx() {
+            if (aux_pipe_init) {
+                ucs_async_pipe_destroy(&aux_pipe);
+            }
+        }
+
+        void signal();
+        bool wait_for_event(entity &e, int timeout);
+
+    private:
+        struct pollfd    wakeup_fd;
+        /* this used for UCT TLs that support async event cb
+         * for event notification */
+        ucs_async_pipe_t aux_pipe;
+        bool             aux_pipe_init;
     };
 
     template <typename T>
@@ -385,6 +404,8 @@ protected:
     uct_test::entity* create_entity();
     int max_connections();
     int max_connect_batch();
+
+    void reduce_tl_send_queues();
 
     ucs_status_t send_am_message(entity *e, uint8_t am_id = 0, int ep_idx = 0);
 

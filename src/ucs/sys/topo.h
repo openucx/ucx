@@ -14,7 +14,10 @@
 
 BEGIN_C_DECLS
 
-/** @file topo.h */
+#define UCS_SYS_DEVICE_ID_UNKNOWN UINT16_MAX /* Indicate that the ucs_sys_device_t
+                                              * for the device has no real bus_id
+                                              * e.g. virtual devices like CMA/knem
+                                              */
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
@@ -23,15 +26,14 @@ typedef struct ucs_sys_bus_id {
     uint8_t  function; /* range: 0 to 7 */
 } ucs_sys_bus_id_t;
 
-extern ucs_sys_bus_id_t ucs_sys_bus_id_unknown;
 
 /**
  * @ingroup UCS_RESOURCE
  * System Device Index
- * Obtained from a translation of the device bus id into an unsigned int
+ * Obtained from a translation of the device bus id into a short integer
  * Refer ucs_topo_find_device_by_bus_id()
  */
-typedef unsigned ucs_sys_device_t;
+typedef uint16_t ucs_sys_device_t;
 
 
 /*
@@ -77,6 +79,16 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
  * devices discovered
  */
 void ucs_topo_print_info(FILE *stream);
+
+/**
+ * Initialize UCS topology subsystem.
+ */
+void ucs_topo_init();
+
+/**
+ * Cleanup UCS topology subsystem.
+ */
+void ucs_topo_cleanup();
 
 END_C_DECLS
 

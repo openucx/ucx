@@ -848,8 +848,50 @@ private:
  * output.size = input[0].size * input[1].size * ... * input[input.size].size
  */
 template<typename T>
+void cartesian_product(std::vector<std::vector<T> > &final_output,
+                       std::vector<T> &cur_output,
+                       typename std::vector<std::vector<T> >
+                       ::const_iterator cur_input,
+                       typename std::vector<std::vector<T> >
+                       ::const_iterator end_input) {
+    if (cur_input == end_input) {
+        final_output.push_back(cur_output);
+        return;
+    }
+
+    const std::vector<T> &cur_vector = *cur_input;
+
+    cur_input++;
+
+    for (typename std::vector<T>::const_iterator iter =
+            cur_vector.begin(); iter != cur_vector.end(); ++iter) {
+        cur_output.push_back(*iter);
+        ucs::cartesian_product(final_output, cur_output,
+                               cur_input, end_input);
+        cur_output.pop_back();
+    }
+}
+
+template<typename T>
 void cartesian_product(std::vector<std::vector<T> > &output,
-                       const std::vector<std::vector<T> > &input);
+                       const std::vector<std::vector<T> > &input)
+{
+    std::vector<T> cur_output;
+    cartesian_product(output, cur_output, input.begin(), input.end());
+}
+
+template<typename T>
+std::vector<std::vector<T> > make_pairs(const std::vector<T> &input_vec) {
+    std::vector<std::vector<T> > result;
+    std::vector<std::vector<T> > input;
+
+    input.push_back(input_vec);
+    input.push_back(input_vec);
+
+    ucs::cartesian_product(result, input);
+
+    return result;
+}
 
 std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs();
 

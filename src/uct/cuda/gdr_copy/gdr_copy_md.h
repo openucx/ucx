@@ -23,7 +23,7 @@ typedef struct uct_gdr_copy_md {
     uct_md_t            super;      /**< Domain info */
     gdr_t               gdrcpy_ctx; /**< gdr copy context */
     ucs_rcache_t        *rcache;    /**< Registration cache (can be NULL) */
-    uct_linear_growth_t reg_cost;   /**< Memory registration cost */
+    ucs_linear_func_t   reg_cost;   /**< Memory registration cost */
 } uct_gdr_copy_md_t;
 
 
@@ -34,7 +34,7 @@ typedef struct uct_gdr_copy_md_config {
     uct_md_config_t         super;
     int                     enable_rcache;/**< Enable registration cache */
     uct_md_rcache_config_t  rcache;       /**< Registration cache config */
-    uct_linear_growth_t     uc_reg_cost;  /**< Memory registration cost estimation
+    ucs_linear_func_t       uc_reg_cost;  /**< Memory registration cost estimation
                                              without using the cache */
 } uct_gdr_copy_md_config_t;
 

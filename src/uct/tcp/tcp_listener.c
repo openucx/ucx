@@ -50,11 +50,9 @@ static void uct_tcp_listener_conn_req_handler(int fd, int events, void *arg)
     }
 
     /* create the server's endpoint here. uct_ep_create() will return this one */
-    params.field_mask        = UCT_EP_PARAM_FIELD_CM               |
-                               UCT_EP_PARAM_FIELD_CONN_REQUEST     |
+    params.field_mask        = UCT_EP_PARAM_FIELD_CM |
                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS;
     params.cm                = listener->super.cm;
-    params.conn_request      = NULL;
     params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
 
     status = UCS_CLASS_NEW(uct_tcp_sockcm_ep_t, &ep, &params);
@@ -65,8 +63,12 @@ static void uct_tcp_listener_conn_req_handler(int fd, int events, void *arg)
 
     /* coverity[uninit_use] */
     ep->fd       = conn_fd;
-    ep->state   |= UCT_TCP_SOCKCM_EP_CONNECTED;
     ep->listener = listener;
+
+    status = uct_tcp_sockcm_ep_set_sockopt(ep);
+    if (status != UCS_OK) {
+        goto err_delete_ep;
+    }
 
     /* Adding the ep to a list on the cm for cleanup purposes */
     ucs_list_add_tail(&listener->sockcm->ep_list, &ep->list);
@@ -86,7 +88,7 @@ static void uct_tcp_listener_conn_req_handler(int fd, int events, void *arg)
 err_delete_ep:
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 err:
-    close(conn_fd);
+    ucs_close_fd(&conn_fd);
 }
 
 UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
@@ -129,7 +131,7 @@ UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
     return UCS_OK;
 
 err_close_socket:
-    close(self->listen_fd);
+    ucs_close_fd(&self->listen_fd);
 err:
     return status;
 }
@@ -144,13 +146,37 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_listener_t)
                  self->listen_fd, ucs_status_string(status));
     }
 
-    close(self->listen_fd);
+    ucs_close_fd(&self->listen_fd);
 }
 
 ucs_status_t uct_tcp_listener_reject(uct_listener_h listener,
                                      uct_conn_request_h conn_request)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    uct_tcp_sockcm_ep_t *cep         = (uct_tcp_sockcm_ep_t *)conn_request;
+    uct_tcp_sockcm_t *tcp_sockcm     = uct_tcp_sockcm_ep_get_cm(cep);
+    char peer_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
+
+    UCS_ASYNC_BLOCK(tcp_sockcm->super.iface.worker->async);
+
+    ucs_assert((cep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
+               !(cep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED));
+
+    if (cep->state & UCT_TCP_SOCKCM_EP_FAILED) {
+        status = UCS_ERR_NOT_CONNECTED;
+        goto out;
+    }
+
+    ucs_trace("server ep %p (fd=%d state=%d) rejecting connection request from client: %s",
+              cep, cep->fd, cep->state,
+              uct_tcp_sockcm_cm_ep_peer_addr_str(cep, peer_str, UCS_SOCKADDR_STRING_LEN));
+
+    status = UCS_OK;
+out:
+    UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
+    /* reject the connection request by closing the endpoint which will close its fd */
+    UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, cep);
+    return status;
 }
 
 ucs_status_t uct_tcp_listener_query(uct_listener_h listener,

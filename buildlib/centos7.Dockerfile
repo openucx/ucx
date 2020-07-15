@@ -14,4 +14,5 @@ RUN yum install -y \
     maven \
     numactl-devel \
     rdma-core-devel \
+    rpm-build \
     && yum clean dbcache packages

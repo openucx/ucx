@@ -135,6 +135,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, srqn_rmpn_xrqn, attr->super.srq_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_snd, dvscq.cqn);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, dvrcq.cqn);
+    /* cppcheck-suppress internalAstError */
     UCT_IB_MLX5DV_SET(qpc, qpc, log_sq_size, ucs_ilog2_or0(max_tx));
     UCT_IB_MLX5DV_SET(qpc, qpc, log_rq_size, ucs_ilog2_or0(max_rx));
     UCT_IB_MLX5DV_SET(qpc, qpc, cs_req,

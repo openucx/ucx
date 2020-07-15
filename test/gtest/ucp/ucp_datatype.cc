@@ -69,7 +69,7 @@ data_type_desc_t::make(ucp_datatype_t datatype, const void *buf, size_t length,
 int dt_gen_start_count  = 0;
 int dt_gen_finish_count = 0;
 
-static void* dt_common_start(void *context, size_t count)
+static void* dt_common_start(void *context, void *buffer, size_t count)
 {
     dt_gen_state *dt_state = new dt_gen_state;
 
@@ -77,6 +77,7 @@ static void* dt_common_start(void *context, size_t count)
     dt_state->started = 1;
     dt_state->magic   = ucp::MAGIC;
     dt_state->context = context;
+    dt_state->buffer  = buffer;
     dt_gen_start_count++;
 
     return dt_state;
@@ -85,12 +86,12 @@ static void* dt_common_start(void *context, size_t count)
 static void* dt_common_start_pack(void *context, const void *buffer,
                                   size_t count)
 {
-    return dt_common_start(NULL, count);
+    return dt_common_start(NULL, (void*)buffer, count);
 }
 
 static void* dt_common_start_unpack(void *context, void *buffer, size_t count)
 {
-    return dt_common_start(context, count);
+    return dt_common_start(context, buffer, count);
 }
 
 template <typename T>
@@ -161,6 +162,26 @@ static ucs_status_t dt_err_unpack(void *state, size_t offset, const void *src,
     return UCS_ERR_NO_MEMORY;
 }
 
+static size_t
+dt_pack_copy(void *state, size_t offset, void *dest, size_t max_length)
+{
+    dt_gen_state *dt_state = (dt_gen_state*)state;
+
+    memcpy(dest, UCS_PTR_BYTE_OFFSET(dt_state->buffer, offset), max_length);
+
+    return max_length;
+}
+
+static ucs_status_t
+dt_unpack_copy(void *state, size_t offset, const void *src, size_t length)
+{
+    dt_gen_state *dt_state = (dt_gen_state*)state;
+
+    memcpy(UCS_PTR_BYTE_OFFSET(dt_state->buffer, offset), src, length);
+
+    return UCS_OK;
+}
+
 static void dt_common_finish(void *state)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
@@ -197,5 +218,40 @@ ucp_generic_dt_ops test_dt_uint32_err_ops = {
     dt_err_unpack,
     dt_common_finish
 };
+
+ucp_generic_dt_ops test_dt_copy_ops = {
+    dt_common_start_pack,
+    dt_common_start_unpack,
+    dt_packed_size<uint8_t>,
+    dt_pack_copy,
+    dt_unpack_copy,
+    dt_common_finish
+};
+
+std::string datatype_name(ucp_datatype_t dt)
+{
+    if (UCP_DT_IS_CONTIG(dt)) {
+        return "contig";
+    } else if (UCP_DT_IS_IOV(dt)) {
+        return "iov";
+    } else {
+        ucs_assert(UCP_DT_IS_GENERIC(dt));
+        return "generic";
+    }
+}
+
+std::vector<std::vector<ucp_datatype_t> >
+datatype_pairs(const ucp_generic_dt_ops_t *ops, size_t contig_elem_size)
+{
+    ucp_datatype_t dt;
+    ASSERT_UCS_OK(ucp_dt_create_generic(ops, NULL, &dt));
+
+    ucp_datatype_t dt_arr[] = { ucp_dt_make_contig(contig_elem_size),
+                                ucp_dt_make_iov(),
+                                dt };
+    std::vector<ucp_datatype_t> dts(dt_arr, dt_arr + 3);
+
+    return ucs::make_pairs(dts);
+}
 
 } // ucp

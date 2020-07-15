@@ -22,7 +22,7 @@ struct ucx_request {
     bool                         completed;
     uint32_t                     conn_id;
     size_t                       recv_length;
-    ucx_request_list_t::iterator pos;
+    ucs_list_link_t              pos;
 };
 
 UcxCallback::~UcxCallback()
@@ -39,7 +39,7 @@ EmptyCallback* EmptyCallback::get() {
     return &instance;
 }
 
-UcxLog::UcxLog(const std::string& prefix, bool enable) : _enable(enable)
+UcxLog::UcxLog(const char* prefix, bool enable) : _enable(enable)
 {
     if (enable) {
         std::cout << prefix << " ";
@@ -189,7 +189,8 @@ void UcxContext::request_reset(ucx_request *r)
     r->callback    = NULL;
     r->conn        = NULL;
     r->recv_length = 0;
-    r->pos         = ucx_request_list_t::iterator();
+    r->pos.next    = NULL;
+    r->pos.prev    = NULL;
 }
 
 void UcxContext::request_release(void *request)
@@ -387,6 +388,7 @@ UcxConnection::UcxConnection(UcxContext &context, uint32_t conn_id) :
     struct sockaddr_in in_addr = {0};
     in_addr.sin_family = AF_INET;
     set_log_prefix((const struct sockaddr*)&in_addr, sizeof(in_addr));
+    ucs_list_head_init(&_all_requests);
     UCX_CONN_LOG << "created new connection, total: " << _num_instances;
 }
 
@@ -402,11 +404,11 @@ UcxConnection::~UcxConnection()
     }
 
     // wait until all requests are completed
-    if (!_all_requests.empty()) {
-        UCX_CONN_LOG << "waiting for " << _all_requests.size() <<
+    if (!ucs_list_is_empty(&_all_requests)) {
+        UCX_CONN_LOG << "waiting for " << ucs_list_length(&_all_requests) <<
                         " uncompleted requests";
     }
-    while (!_all_requests.empty()) {
+    while (!ucs_list_is_empty(&_all_requests)) {
         ucp_worker_progress(_context.worker());
     }
 
@@ -480,18 +482,14 @@ bool UcxConnection::recv_data(void *buffer, size_t length, uint32_t sn,
 
 void UcxConnection::cancel_all()
 {
-    if (_all_requests.empty()) {
+    if (ucs_list_is_empty(&_all_requests)) {
         return;
     }
 
-    ucx_request_list_t requests;
-    std::copy(_all_requests.begin(), _all_requests.end(),
-              std::back_insert_iterator<ucx_request_list_t>(requests));
-
-    unsigned count = 0;
-    for (ucx_request_list_t::iterator iter = requests.begin();
-         iter != requests.end(); ++iter) {
-        ucp_request_cancel(_context.worker(), *iter);
+    ucx_request *request, *tmp;
+    unsigned     count = 0;
+    ucs_list_for_each_safe(request, tmp, &_all_requests, pos) {
+        ucp_request_cancel(_context.worker(), request);
         ++count;
     }
 
@@ -551,7 +549,12 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
     std::stringstream ss;
     ss << "[UCX-connection #" << _conn_id << " " <<
           UcxContext::sockaddr_str(saddr, addrlen) << "]";
-    _log_prefix = ss.str();
+    memset(_log_prefix, 0, MAX_LOG_PREFIX_SIZE);
+    int length = ss.str().length();
+    if (length >= MAX_LOG_PREFIX_SIZE) {
+        length = MAX_LOG_PREFIX_SIZE - 1;
+    }
+    memcpy(_log_prefix, ss.str().c_str(), length);
 }
 
 bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
@@ -626,13 +629,13 @@ bool UcxConnection::send_common(const void *buffer, size_t length, ucp_tag_t tag
 
 void UcxConnection::request_started(ucx_request *r)
 {
-    r->pos = _all_requests.insert(_all_requests.end(), r);
+    ucs_list_add_tail(&_all_requests, &r->pos);
 }
 
 void UcxConnection::request_completed(ucx_request *r)
 {
     assert(r->conn == this);
-    _all_requests.erase(r->pos);
+    ucs_list_del(&r->pos);
 }
 
 void UcxConnection::handle_connection_error(ucs_status_t status)

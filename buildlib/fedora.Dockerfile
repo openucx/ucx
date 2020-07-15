@@ -1,5 +1,5 @@
 # docker build -t ucfconsort.azurecr.io/ucx/fedora:1 -f buildlib/fedora.Dockerfile buildlib/
-FROM fedora:30
+FROM fedora:32
 
 RUN dnf install -y \
     autoconf \

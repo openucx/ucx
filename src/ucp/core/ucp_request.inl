@@ -120,6 +120,15 @@
     return UCS_STATUS_PTR(_status);
 
 
+#define ucp_request_set_send_callback_param(_param, _req, _cb) \
+    if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
+        ucp_request_set_callback(_req, _cb.cb, (_param)->cb.send, \
+                                 ((_param)->op_attr_mask & \
+                                  UCP_OP_ATTR_FIELD_USER_DATA) ? \
+                                 (_param)->user_data : NULL); \
+    }
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
@@ -168,7 +177,8 @@ ucp_request_complete_stream_recv(ucp_request_t *req, ucp_ep_ext_proto_t* ep_ext,
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.stream.length, ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
-    ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.length);
+    ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.length,
+                         req->user_data);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -370,8 +380,10 @@ ucp_request_send_state_advance(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
         ucs_assert(new_dt_state != NULL);
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
+            /* cppcheck-suppress nullPointer */
             req->send.state.dt.offset = new_dt_state->offset;
         } else {
+            /* cppcheck-suppress nullPointer */
             req->send.state.dt        = *new_dt_state;
         }
         break;
@@ -637,15 +649,18 @@ static UCS_F_ALWAYS_INLINE uintptr_t ucp_request_get_dest_ep_ptr(ucp_request_t *
     return ucp_ep_dest_ep_ptr(req->send.ep);
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_request_set_send_callback_param(const ucp_request_param_t *param,
-                                    ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE uint32_t
+ucp_request_param_flags(const ucp_request_param_t *param)
 {
-    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-        ucp_request_set_callback(req, send.cb, param->cb.send,
-                                 (param->op_attr_mask & UCP_OP_ATTR_FIELD_USER_DATA) ?
-                                 param->user_data : NULL);
-    }
+    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_FLAGS) ?
+           param->flags : 0;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_datatype_t
+ucp_request_param_datatype(const ucp_request_param_t *param)
+{
+    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
+           param->datatype : ucp_dt_make_contig(1);
 }
 
 #endif

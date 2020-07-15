@@ -16,6 +16,7 @@
 #include <uct/api/version.h>
 #include <ucs/async/async_fwd.h>
 #include <ucs/datastruct/callbackq.h>
+#include <ucs/datastruct/linear_func.h>
 #include <ucs/memory/memory_type.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
@@ -317,7 +318,10 @@ typedef enum {
 typedef struct uct_tl_resource_desc {
     char                     tl_name[UCT_TL_NAME_MAX];   /**< Transport name */
     char                     dev_name[UCT_DEVICE_NAME_MAX]; /**< Hardware device name */
-    uct_device_type_t        dev_type;     /**< Device type. To which UCT group it belongs to */
+    uct_device_type_t        dev_type;     /**< The device represented by this resource
+                                                (e.g. UCT_DEVICE_TYPE_NET for a network interface) */
+    ucs_sys_device_t         sys_device;   /**< The identifier associated with the device
+                                                bus_id as captured in ucs_sys_bus_id_t struct */
 } uct_tl_resource_desc_t;
 
 #define UCT_TL_RESOURCE_DESC_FMT              "%s/%s"
@@ -774,55 +778,44 @@ enum uct_listener_params_field {
  */
 enum uct_ep_params_field {
     /** Enables @ref uct_ep_params::iface */
-    UCT_EP_PARAM_FIELD_IFACE                  = UCS_BIT(0),
+    UCT_EP_PARAM_FIELD_IFACE                      = UCS_BIT(0),
 
     /** Enables @ref uct_ep_params::user_data */
-    UCT_EP_PARAM_FIELD_USER_DATA              = UCS_BIT(1),
+    UCT_EP_PARAM_FIELD_USER_DATA                  = UCS_BIT(1),
 
     /** Enables @ref uct_ep_params::dev_addr */
-    UCT_EP_PARAM_FIELD_DEV_ADDR               = UCS_BIT(2),
+    UCT_EP_PARAM_FIELD_DEV_ADDR                   = UCS_BIT(2),
 
     /** Enables @ref uct_ep_params::iface_addr */
-    UCT_EP_PARAM_FIELD_IFACE_ADDR             = UCS_BIT(3),
+    UCT_EP_PARAM_FIELD_IFACE_ADDR                 = UCS_BIT(3),
 
     /** Enables @ref uct_ep_params::sockaddr */
-    UCT_EP_PARAM_FIELD_SOCKADDR               = UCS_BIT(4),
+    UCT_EP_PARAM_FIELD_SOCKADDR                   = UCS_BIT(4),
 
     /** Enables @ref uct_ep_params::sockaddr_cb_flags */
-    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS      = UCS_BIT(5),
+    UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS          = UCS_BIT(5),
 
     /** Enables @ref uct_ep_params::sockaddr_pack_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB       = UCS_BIT(6),
+    UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB           = UCS_BIT(6),
 
     /** Enables @ref uct_ep_params::cm */
-    UCT_EP_PARAM_FIELD_CM                     = UCS_BIT(7),
+    UCT_EP_PARAM_FIELD_CM                         = UCS_BIT(7),
 
     /** Enables @ref uct_ep_params::conn_request */
-    UCT_EP_PARAM_FIELD_CONN_REQUEST           = UCS_BIT(8),
+    UCT_EP_PARAM_FIELD_CONN_REQUEST               = UCS_BIT(8),
 
-    /** Enables @ref uct_ep_params::sockaddr_connect_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB    = UCS_BIT(9),
+    /** Enables @ref uct_ep_params::sockaddr_cb_client */
+    UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT = UCS_BIT(9),
+
+    /** Enables @ref uct_ep_params::sockaddr_cb_server */
+    UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER  = UCS_BIT(10),
 
     /** Enables @ref uct_ep_params::disconnect_cb */
-    UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB = UCS_BIT(10),
+    UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB     = UCS_BIT(11),
 
     /** Enables @ref uct_ep_params::path_index */
-    UCT_EP_PARAM_FIELD_PATH_INDEX             = UCS_BIT(11)
+    UCT_EP_PARAM_FIELD_PATH_INDEX                 = UCS_BIT(12)
 };
-
-
-/*
- * @ingroup UCT_RESOURCE
- * @brief Linear growth specification: f(x) = overhead + growth * x
- *
- *  This structure specifies a linear function which is used as basis for time
- * estimation of various UCT operations. This information can be used to select
- * the best performing combination of UCT operations.
- */
-typedef struct uct_linear_growth {
-    double                   overhead;  /**< Constant overhead factor */
-    double                   growth;    /**< Growth rate factor */
-} uct_linear_growth_t;
 
 
 /*
@@ -955,7 +948,8 @@ struct uct_iface_attr {
      */
     double                   overhead;     /**< Message overhead, seconds */
     uct_ppn_bandwidth_t      bandwidth;    /**< Bandwidth model */
-    uct_linear_growth_t      latency;      /**< Latency model */
+    ucs_linear_func_t        latency;      /**< Latency as function of number of
+                                                active endpoints */
     uint8_t                  priority;     /**< Priority of device */
     size_t                   max_num_eps;  /**< Maximum number of endpoints */
     unsigned                 dev_num_paths;/**< How many network paths can be
@@ -1119,23 +1113,24 @@ struct uct_ep_params {
 
     /**
      * Connection request that was passed to
-     * @ref uct_cm_listener_conn_request_args_t::conn_request .
+     * @ref uct_cm_listener_conn_request_args_t::conn_request.
+     * @note After a call to @ref uct_ep_create, @a params.conn_request is
+     *       consumed and should not be used anymore, even if the call returns
+     *       with an error.
      */
     uct_conn_request_h                conn_request;
 
-    union {
-        /**
-         * Callback that will be invoked when the endpoint on the client side
-         * is being connected to the server by a connection manager @ref uct_cm_h .
-         */
-        uct_cm_ep_client_connect_callback_t      client;
+    /**
+     * Callback that will be invoked when the endpoint on the client side
+     * is being connected to the server by a connection manager @ref uct_cm_h .
+     */
+    uct_cm_ep_client_connect_callback_t      sockaddr_cb_client;
 
-        /**
-         * Callback that will be invoked when the endpoint on the server side
-         * is being connected to a client by a connection manager @ref uct_cm_h .
-         */
-        uct_cm_ep_server_conn_notify_callback_t  server;
-    } sockaddr_connect_cb;
+    /**
+     * Callback that will be invoked when the endpoint on the server side
+     * is being connected to a client by a connection manager @ref uct_cm_h .
+     */
+    uct_cm_ep_server_conn_notify_callback_t  sockaddr_cb_server;
 
     /**
      * Callback that will be invoked when the endpoint is disconnected.
@@ -1236,10 +1231,10 @@ struct uct_md_attr {
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
         uint64_t             alloc_mem_types;  /**< Bitmap of memory types that Memory Domain can allocate memory on*/
-        ucs_memory_type_t    access_mem_type; /**< Memory type MD can access */
+        ucs_memory_type_t    access_mem_type; /**< Memory type that Memory Domain can access */
     } cap;
 
-    uct_linear_growth_t      reg_cost;  /**< Memory registration cost estimation
+    ucs_linear_func_t        reg_cost;  /**< Memory registration cost estimation
                                              (time,seconds) as a linear function
                                              of the buffer size. */
 
@@ -1962,13 +1957,14 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  *    @ref uct_ep_params_t::iface_addr are set, this will establish an endpoint
  *    that is connected to a remote interface. This requires that
  *    @ref uct_ep_params_t::iface has the @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE
- *    capability flag. It may be obtained by @ref uct_iface_query .
+ *    capability flag. It may be obtained by @ref uct_iface_query.
  * -# Connect to a remote socket address: If @ref uct_ep_params_t::sockaddr is
- *    set, this will create an endpoint that is conected to a remote socket.
- *    This requires that @ref uct_ep_params_t::iface has the
- *    @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability flag. It may be
- *    obtained by @ref uct_iface_query .*
- * @param [in]  params  User defined @ref uct_ep_params_t configurations for the
+ *    set, this will create an endpoint that is connected to a remote socket.
+ *    This requires that either @ref uct_ep_params::cm, or
+ *    @ref uct_ep_params::iface will be set. In the latter case, the interface
+ *    has to support @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR flag, which can be
+ *    checked by calling @ref uct_iface_query.
+ * @param [in]  params  User defined @ref uct_ep_params_t configuration for the
  *                      @a ep_p.
  * @param [out] ep_p    Filled with handle to the new endpoint.
  *

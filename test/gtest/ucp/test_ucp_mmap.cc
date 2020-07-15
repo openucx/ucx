@@ -87,7 +87,7 @@ bool test_ucp_mmap::resolve_rma_bw(entity *e, ucp_rkey_h rkey)
     uct_rkey_t uct_rkey;
 
     lane = ucp_rkey_find_rma_lane(e->ucph(), ep_config, UCS_MEMORY_TYPE_HOST,
-                                  ep_config->tag.rndv.get_zcopy_lanes, rkey, 0,
+                                  ep_config->rndv.get_zcopy_lanes, rkey, 0,
                                   &uct_rkey);
     if (lane != UCP_NULL_LANE) {
         return true;

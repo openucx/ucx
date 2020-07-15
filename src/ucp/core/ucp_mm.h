@@ -174,6 +174,12 @@ ucp_rkey_packed_md_map(const void *rkey_buffer)
     return *(const ucp_md_map_t*)rkey_buffer;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_memory_type_t
+ucp_rkey_packed_mem_type(const void *rkey_buffer)
+{
+    return (ucs_memory_type_t)(*(uint8_t *)((const ucp_md_map_t*)rkey_buffer + 1));
+}
+
 static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
 {

@@ -279,6 +279,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "require out of band synchronization before destroying UCP resources.",
    ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
 
+  {"PROTO_ENABLE", "n",
+   "Experimental: enable new protocol selection logic",
+   ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
@@ -1004,9 +1008,8 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
                 !strncmp(sockaddr_cm_names[cm_idx],
                          context->tl_cmpts[cmpt_idx].attr.name,
                          UCT_COMPONENT_NAME_MAX)) {
-                context->config.cm_cmpt_idxs[cm_idx] = cmpt_idx;
+                context->config.cm_cmpt_idxs[context->config.num_cm_cmpts++] = cmpt_idx;
                 cm_cmpts_bitmap &= ~UCS_BIT(cmpt_idx);
-                ++context->config.num_cm_cmpts;
             }
         }
     }
@@ -1142,6 +1145,8 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
         }
     }
 
+    context->mem_type_mask |= mem_type_mask;
+
     status = UCS_OK;
 out:
     return status;
@@ -1167,6 +1172,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->tl_rscs          = NULL;
     context->num_tls          = 0;
     context->memtype_cache    = NULL;
+    context->mem_type_mask    = 0;
     context->num_mem_type_detect_mds = 0;
 
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
@@ -1397,7 +1403,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     ucs_debug("estimated number of endpoints per node is %d",
               context->config.est_num_ppn);
 
-    if (context->config.ext.bcopy_bw == UCS_BANDWIDTH_AUTO) {
+    if (UCS_CONFIG_BW_IS_AUTO(context->config.ext.bcopy_bw)) {
         /* bcopy_bw wasn't set via the env variable. Calculate the value */
         context->config.ext.bcopy_bw = ucs_cpu_get_memcpy_bw();
     }
@@ -1633,12 +1639,17 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
     if (attr->field_mask & UCP_ATTR_FIELD_REQUEST_SIZE) {
         attr->request_size = sizeof(ucp_request_t);
     }
+
     if (attr->field_mask & UCP_ATTR_FIELD_THREAD_MODE) {
         if (UCP_THREAD_IS_REQUIRED(&context->mt_lock)) {
             attr->thread_mode = UCS_THREAD_MODE_MULTI;
         } else {
             attr->thread_mode = UCS_THREAD_MODE_SINGLE;
         }
+    }
+
+    if (attr->field_mask & UCP_ATTR_FIELD_MEMORY_TYPES) {
+        attr->memory_types = context->mem_type_mask;
     }
 
     return UCS_OK;

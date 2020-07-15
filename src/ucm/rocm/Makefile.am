@@ -13,6 +13,9 @@ libucm_rocm_la_CFLAGS   = $(BASE_CFLAGS) $(ROCM_CFLAGS)
 libucm_rocm_la_LIBADD   = ../libucm.la
 libucm_rocm_la_LDFLAGS  = $(UCM_MODULE_LDFLAGS) \
                           $(patsubst %, -Xlinker %, $(ROCM_LDFLAGS)) \
+                          $(patsubst %, -Xlinker %, -L$(ROCM_ROOT)/lib -rpath $(ROCM_ROOT)/hip/lib -rpath $(ROCM_ROOT)/lib) \
+                          $(patsubst %, -Xlinker %, --enable-new-dtags) \
+                          $(patsubst %, -Xlinker %, -rpath $(ROCM_ROOT)/lib64) \
                           -version-info $(SOVERSION)
 
 noinst_HEADERS = \
