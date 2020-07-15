@@ -123,7 +123,7 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
 
     rc = ioctl(knem_fd, KNEM_CMD_CREATE_REGION, &create);
     if (rc < 0) {
-        if (!silent) {
+        if (!silent && !(flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
             /* do not report error in silent mode: it called from rcache
              * internals, rcache will try to register memory again with
              * more accurate data */
