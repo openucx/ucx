@@ -226,6 +226,44 @@ UCS_TEST_P(test_ucp_mmap, reg) {
     }
 }
 
+UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
+    std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
+    ucs_status_t status;
+    bool is_dummy;
+    ucs_memory_type_t alloc_mem_type;
+
+    sender().connect(&sender(), get_ep_params());
+
+    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
+        size_t size = ucs::rand() % (UCS_MBYTE);
+
+        alloc_mem_type = mem_types.at(ucs::rand() % mem_types.size());
+        mem_buffer buf(size, alloc_mem_type);
+        mem_buffer::pattern_fill(buf.ptr(), size, 0, alloc_mem_type);
+
+        ucp_mem_h memh;
+        ucp_mem_map_params_t params;
+
+        params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                             UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                             UCP_MEM_MAP_PARAM_FIELD_FLAGS |
+                             UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+        params.address     = buf.ptr();
+        params.length      = size;
+        params.memory_type = alloc_mem_type;
+        params.flags       = rand_flags();
+
+        status = ucp_mem_map(sender().ucph(), &params, &memh);
+        ASSERT_UCS_OK(status);
+
+        is_dummy = (size == 0);
+        test_rkey_management(&sender(), memh, is_dummy);
+
+        status = ucp_mem_unmap(sender().ucph(), memh);
+        ASSERT_UCS_OK(status);
+    }
+}
+
 void test_ucp_mmap::test_length0(unsigned flags)
 {
     ucs_status_t status;

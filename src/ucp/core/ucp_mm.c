@@ -263,9 +263,9 @@ static inline int ucp_mem_map_is_allocate(const ucp_mem_map_params_t *params)
 }
 
 static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
-                                       size_t length, unsigned uct_flags,
-                                       int is_allocate, const char *alloc_name,
-                                       ucp_mem_h *memh_p)
+                                       size_t length, ucs_memory_type_t memory_type,
+                                       unsigned uct_flags, int is_allocate,
+                                       const char *alloc_name, ucp_mem_h *memh_p)
 {
     ucs_status_t            status;
     ucp_mem_h               memh;
@@ -283,13 +283,21 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
     memh->length  = length;
 
     if (is_allocate) {
+        if (memory_type != UCS_MEMORY_TYPE_HOST) {
+            ucs_error("memory allocation not supported with non-host memory");
+            status = UCS_ERR_INVALID_PARAM;
+            goto err_free_memh;
+        }
+
         ucs_debug("allocating %s at %p length %zu", alloc_name, address, length);
         status = ucp_mem_alloc(context, length, uct_flags, alloc_name, memh);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
     } else {
-        memh->mem_type     = ucp_memory_type_detect(context, address, length);
+        memh->mem_type     = (memory_type == UCS_MEMORY_TYPE_UNKNOWN) ?
+                             ucp_memory_type_detect(context, address, length) :
+                             memory_type;
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
@@ -373,6 +381,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     ucs_status_t status;
     void         *address;
     unsigned     flags;
+    ucs_memory_type_t memory_type;
 
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
@@ -384,8 +393,11 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         goto out;
     }
 
-    address = UCP_PARAM_VALUE(MEM_MAP, params, address, ADDRESS, NULL);    
-    flags   = UCP_PARAM_VALUE(MEM_MAP, params, flags, FLAGS, 0);
+    address     = UCP_PARAM_VALUE(MEM_MAP, params, address, ADDRESS, NULL);
+    flags       = UCP_PARAM_VALUE(MEM_MAP, params, flags, FLAGS, 0);
+    memory_type = UCP_PARAM_VALUE(MEM_MAP, params, memory_type, MEMORY_TYPE,
+                                  (flags & UCP_MEM_MAP_ALLOCATE) ?
+                                  UCS_MEMORY_TYPE_HOST : UCS_MEMORY_TYPE_UNKNOWN);
 
     if ((flags & UCP_MEM_MAP_FIXED) &&
         ((uintptr_t)address % ucs_get_page_size())) {
@@ -414,7 +426,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         goto out;
     }
 
-    status = ucp_mem_map_common(context, address, params->length,
+    status = ucp_mem_map_common(context, address, params->length, memory_type,
                                 ucp_mem_map_params2uct_flags(params),
                                 ucp_mem_map_is_allocate(params),
                                 "user memory", memh_p);
@@ -607,7 +619,7 @@ ucp_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **ch
     /* Need to get default flags from ucp_mem_map_params2uct_flags() */
     mem_params.field_mask = 0;
     status = ucp_mem_map_common(worker->context, NULL,
-                                *size_p + sizeof(*chunk_hdr),
+                                *size_p + sizeof(*chunk_hdr), UCS_MEMORY_TYPE_HOST,
                                 ucp_mem_map_params2uct_flags(&mem_params),
                                 1, ucs_mpool_name(mp), &memh);
     if (status != UCS_OK) {

@@ -321,15 +321,16 @@ enum ucp_ep_close_mode {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_mem_map_params_field {
-    UCP_MEM_MAP_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory that
-                                                       will be used in the
-                                                       @ref ucp_mem_map routine. */
-    UCP_MEM_MAP_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory that
-                                                       will be allocated or
-                                                       registered in the
-                                                       @ref ucp_mem_map routine.*/
-    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2), /**< Allocation flags. */
-    UCP_MEM_MAP_PARAM_FIELD_PROT    = UCS_BIT(3)  /**< Memory protection mode. */
+    UCP_MEM_MAP_PARAM_FIELD_ADDRESS     = UCS_BIT(0), /**< Address of the memory that
+                                                           will be used in the
+                                                           @ref ucp_mem_map routine. */
+    UCP_MEM_MAP_PARAM_FIELD_LENGTH      = UCS_BIT(1), /**< The size of memory that
+                                                           will be allocated or
+                                                           registered in the
+                                                           @ref ucp_mem_map routine.*/
+    UCP_MEM_MAP_PARAM_FIELD_FLAGS       = UCS_BIT(2), /**< Allocation flags. */
+    UCP_MEM_MAP_PARAM_FIELD_PROT        = UCS_BIT(3), /**< Memory protection mode. */
+    UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE = UCS_BIT(4)  /**< Memory type. */
 };
 
 /**
@@ -1207,6 +1208,24 @@ typedef struct ucp_mem_map_params {
       * UCP_MEM_MAP_PROT_REMOTE_READ|UCP_MEM_MAP_PROT_REMOTE_WRITE.
       */
      unsigned               prot;
+
+     /*
+      * Memory type (for possible memory types see @ref ucs_memory_type_t)
+      * This value is optional. The meaning of this field depends on the
+      * operation type.
+      *
+      * - Memory allocation: (@ref UCP_MEM_MAP_ALLOCATE flag is set) This field
+      *    specifies the type of memory to allocate. If it's not set (along with its
+      *    corresponding bit in the field_mask - @ref UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE),
+      *    @ref UCS_MEMORY_TYPE_HOST will be assumed by default.
+      *
+      * - Memory registration: This field specifies the type of memory which is
+      *    pointed by @ref ucp_mem_map_params.address. If it's not set (along with its
+      *    corresponding bit in the field_mask - @ref UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE),
+      *    or set to @ref UCS_MEMORY_TYPE_UNKNOWN, the memory type will be dectected
+      *    internally.
+      */
+     ucs_memory_type_t      memory_type;
 } ucp_mem_map_params_t;
 
 
