@@ -686,6 +686,8 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
     ah_attr.grh.dgid       = *gid;
     ah_attr.grh.sgid_index = gid_index;
     ah_attr.grh.hop_limit  = 255;
+    ah_attr.grh.flow_label = 1;
+    ah_attr.dlid           = UCT_IB_ROCE_UDP_SRC_PORT_BASE;
 
     ah = ibv_create_ah(ucs_container_of(dev, uct_ib_md_t, dev)->pd, &ah_attr);
     if (ah == NULL) {
