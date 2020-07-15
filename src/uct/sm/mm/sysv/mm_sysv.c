@@ -66,6 +66,10 @@ uct_sysv_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
     uct_mm_seg_t *seg;
     int shmid;
 
+    if (!(param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     status = uct_mm_seg_new(*param->address_p, *param->length_p, &seg);
     if (status != UCS_OK) {
         return status;
@@ -74,7 +78,10 @@ uct_sysv_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
 #ifdef SHM_HUGETLB
     if (md->config->hugetlb_mode != UCS_NO) {
         status = ucs_sysv_alloc(&seg->length, seg->length * 2, &seg->address,
-                                UCT_MM_SYSV_MSTR | SHM_HUGETLB, param->name,
+                                UCT_MM_SYSV_MSTR | SHM_HUGETLB,
+                                (param->field_mask &
+                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
+                                param->name : NULL,
                                 &shmid);
         if (status == UCS_OK) {
             goto out_ok;
@@ -88,7 +95,10 @@ uct_sysv_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
 
     if (md->config->hugetlb_mode != UCS_YES) {
         status = ucs_sysv_alloc(&seg->length, SIZE_MAX, &seg->address,
-                                UCT_MM_SYSV_MSTR, param->name, &shmid);
+                                UCT_MM_SYSV_MSTR,
+                                (param->field_mask &
+                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
+                                param->name : NULL, &shmid);
         if (status == UCS_OK) {
             goto out_ok;
         }

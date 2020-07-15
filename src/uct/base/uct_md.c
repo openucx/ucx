@@ -373,9 +373,11 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, const uct_mem_alloc_params_t *param,
 {
     ucs_status_t status;
 
-    status = uct_mem_check_flags(param->flags);
-    if (status != UCS_OK) {
-        return status;
+    if (param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) {
+        status = uct_mem_check_flags(param->flags);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return md->ops->mem_alloc(md, param, memh_p);

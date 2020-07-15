@@ -423,6 +423,11 @@ uct_posix_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
     void *address;
     int fd;
 
+    if (!(param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto err;
+    }
+
     status = uct_mm_seg_new(*param->address_p, *param->length_p, &seg);
     if (status != UCS_OK) {
         goto err;
@@ -457,7 +462,8 @@ uct_posix_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
     }
 
     /* mmap the shared memory segment that was created by shm_open */
-    if (param->flags & UCT_MD_MEM_FLAG_FIXED) {
+    if ((param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) &&
+        (param->flags & UCT_MD_MEM_FLAG_FIXED)) {
         mmap_flags   = MAP_FIXED;
     } else {
         seg->address = NULL;
@@ -470,7 +476,10 @@ uct_posix_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
         force_hugetlb = (posix_config->super.hugetlb_mode == UCS_YES);
 #ifdef MAP_HUGETLB
         status = uct_posix_mmap(&seg->address, &seg->length,
-                                mmap_flags | MAP_HUGETLB, fd, param->name,
+                                mmap_flags | MAP_HUGETLB, fd,
+                                (param->field_mask &
+                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
+                                param->name : NULL,
                                 force_hugetlb ? UCS_LOG_LEVEL_ERROR :
                                                 UCS_LOG_LEVEL_DEBUG);
 #else
@@ -491,7 +500,9 @@ uct_posix_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
     if (address == MAP_FAILED) {
         ucs_assert(posix_config->super.hugetlb_mode != UCS_YES);
         status = uct_posix_mmap(&seg->address, &seg->length, mmap_flags, fd,
-                                param->name, UCS_LOG_LEVEL_ERROR);
+                                (param->field_mask &
+                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
+                                param->name : NULL, UCS_LOG_LEVEL_ERROR);
         if (status != UCS_OK) {
             goto err_close;
         }
