@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "ucp_mm.h"
+#include "ucp_rkey.h"
 #include "ucp_request.h"
 #include "ucp_ep.inl"
 

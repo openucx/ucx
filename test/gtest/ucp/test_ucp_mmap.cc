@@ -10,6 +10,7 @@
 extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_ep.inl>
 }
 
