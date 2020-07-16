@@ -108,6 +108,7 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
                                         ucp_lane_map_t ignore,
                                         uct_rkey_t *uct_rkey_p);
 
+
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map);
 
 
