@@ -340,9 +340,12 @@ void ucs_arbiter_dispatch_nonempty(ucs_arbiter_t *arbiter, unsigned per_group,
                     /* take over a recursively scheduled group */
                     if (ucs_unlikely(ucs_arbiter_group_head_is_scheduled(&dummy))) {
                         ucs_list_replace(&dummy.list, &group_head->list);
+                        UCS_ARBITER_GROUP_ARBITER_SET(group,
+                                                      UCS_ARBITER_GROUP_ARBITER(dummy.group));
                         ucs_arbiter_group_head_reset(&dummy);
+                    } else {
+                        UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
                     }
-                    UCS_ARBITER_GROUP_ARBITER_SET(group, NULL);
                 } else {
                     /* remove a recursively scheduled group, give priority
                      * to the original order */
