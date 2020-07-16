@@ -16,7 +16,7 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
-#include <ucm/util/log.h>
+#include <ucm/event/event.h>
 #include <ucm/mmap/mmap.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/topo.h>
@@ -31,8 +31,6 @@
 
 
 #define UCM_PROC_SELF_MAPS "/proc/self/maps"
-
-ucs_status_t (*ucm_mem_type_get_current_device_info[UCS_MEMORY_TYPE_LAST])(ucs_sys_bus_id_t *bus_id);
 
 ucm_global_config_t ucm_global_opts = {
     .log_level                  = UCS_LOG_LEVEL_WARN,
@@ -347,10 +345,19 @@ char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *fil
 
 ucs_status_t ucm_get_mem_type_current_device_info(ucs_memory_type_t memtype, ucs_sys_bus_id_t *bus_id)
 {
+    ucs_status_t status = UCS_ERR_UNSUPPORTED;
+    ucm_event_installer_t *event_installer;
 
-    if (ucm_mem_type_get_current_device_info[memtype] == NULL) {
-        return UCS_ERR_UNSUPPORTED;
+    ucs_list_for_each(event_installer, &ucm_event_installer_list, list) {
+        if (NULL == event_installer->get_mem_type_current_device_info) {
+            continue;
+        }
+
+        status = event_installer->get_mem_type_current_device_info(bus_id, memtype);
+        if (UCS_OK == status) {
+            break;
+        }
     }
 
-    return ucm_mem_type_get_current_device_info[memtype](bus_id);
+    return status; 
 }

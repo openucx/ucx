@@ -186,8 +186,9 @@ static void ucm_rocmmem_get_existing_alloc(ucm_event_handler_t *handler)
 }
 
 static ucm_event_installer_t ucm_rocm_initializer = {
-    .install            = ucm_rocmmem_install,
-    .get_existing_alloc = ucm_rocmmem_get_existing_alloc
+    .install                          = ucm_rocmmem_install,
+    .get_existing_alloc               = ucm_rocmmem_get_existing_alloc,
+    .get_mem_type_current_device_info = NULL
 };
 
 UCS_STATIC_INIT {
