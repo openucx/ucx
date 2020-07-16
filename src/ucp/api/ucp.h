@@ -630,8 +630,9 @@ typedef enum {
  *
  * @return Data-type identifier.
  *
- * @note In case of partial receive, @ref ucp_dt_iov_t::buffer can be filled
- *       with any number of bytes according to its @ref ucp_dt_iov_t::length.
+ * @note In the event of partial receive, @ref ucp_dt_iov_t::buffer can be
+ *       filled with any number of bytes according to its
+ *       @ref ucp_dt_iov_t::length.
  */
 #define ucp_dt_make_iov() ((ucp_datatype_t)UCP_DATATYPE_IOV)
 
