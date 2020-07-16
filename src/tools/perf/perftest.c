@@ -1075,13 +1075,18 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
 
         close(sockfd);
 
+        /* release the memory for the list of the message sizes allocated
+         * during the initialization of the default testing parameters */
+        free(ctx->params.super.msg_size_list);
+        ctx->params.super.msg_size_list = NULL;
+
         ret = safe_recv(connfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
         if (ret) {
             status = UCS_ERR_IO_ERROR;
             goto err_close_connfd;
         }
 
-        if (ctx->params.super.msg_size_cnt) {
+        if (ctx->params.super.msg_size_cnt != 0) {
             ctx->params.super.msg_size_list =
                     calloc(ctx->params.super.msg_size_cnt,
                            sizeof(*ctx->params.super.msg_size_list));
@@ -1125,7 +1130,7 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         }
 
         safe_send(sockfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
-        if (ctx->params.super.msg_size_cnt) {
+        if (ctx->params.super.msg_size_cnt != 0) {
             safe_send(sockfd, ctx->params.super.msg_size_list,
                       sizeof(*ctx->params.super.msg_size_list) *
                       ctx->params.super.msg_size_cnt,
@@ -1585,31 +1590,30 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
         return UCS_ERR_IO_ERROR;
     }
 
-    status = clone_params(&params, parent_params);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
     line_num = 0;
-    while ((status = read_batch_file(batch_file, ctx->batch_files[depth],
-                                     &line_num, &params,
-                                     &ctx->test_names[depth])) == UCS_OK) {
-        run_test_recurs(ctx, &params, depth + 1);
-        free(params.super.msg_size_list);
-        free(ctx->test_names[depth]);
-        ctx->test_names[depth] = NULL;
-
+    do {
         status = clone_params(&params, parent_params);
         if (status != UCS_OK) {
             goto out;
         }
-    }
+
+        status = read_batch_file(batch_file, ctx->batch_files[depth],
+                                 &line_num, &params,
+                                 &ctx->test_names[depth]);
+        if (status == UCS_OK) {
+            run_test_recurs(ctx, &params, depth + 1);
+            free(ctx->test_names[depth]);
+            ctx->test_names[depth] = NULL;
+        }
+
+        free(params.super.msg_size_list);
+        params.super.msg_size_list = NULL;
+    } while (status == UCS_OK);
 
     if (status == UCS_ERR_NO_ELEM) {
         status = UCS_OK;
     }
 
-    free(params.super.msg_size_list);
 out:
     fclose(batch_file);
     return status;
@@ -1723,9 +1727,7 @@ int main(int argc, char **argv)
 out_cleanup_rte:
     (mpi_rte) ? cleanup_mpi_rte(&ctx) : cleanup_sock_rte(&ctx);
 out_msg_size_list:
-    if (ctx.params.super.msg_size_list) {
-        free(ctx.params.super.msg_size_list);
-    }
+    free(ctx.params.super.msg_size_list);
 #if HAVE_MPI
 out:
 #endif
