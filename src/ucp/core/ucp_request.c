@@ -427,7 +427,7 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
               length, offset, req->recv.length);
 
     if (UCP_DT_IS_GENERIC(req->recv.datatype)) {
-        dt_gen = ucp_dt_generic(req->recv.datatype);
+        dt_gen = ucp_dt_to_generic(req->recv.datatype);
         UCS_PROFILE_NAMED_CALL_VOID("dt_finish", dt_gen->ops.finish,
                                     req->recv.state.dt.generic.state);
     }
