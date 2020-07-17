@@ -156,3 +156,11 @@ UCS_TEST_F(test_sys, cpu_cache) {
     check_cache_type(UCS_CPU_CACHE_L2, "L2");
     check_cache_type(UCS_CPU_CACHE_L3, "L3");
 }
+
+UCS_TEST_F(test_sys, is_mem_accessible) {
+    EXPECT_FALSE(ucs_arch_is_mem_accessible((void*)0x1));
+    EXPECT_FALSE(ucs_arch_is_mem_accessible((void*)0x2));
+
+    char dummy = 0;
+    EXPECT_TRUE (ucs_arch_is_mem_accessible(&dummy));
+}

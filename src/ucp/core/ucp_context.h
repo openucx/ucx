@@ -366,6 +366,12 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
 ucs_memory_type_t
 ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t length);
 
+
+ucs_memory_type_t
+ucp_memory_type_detect_inaccessible(ucp_context_h context, const void *address,
+                                    size_t size);
+
+
 /**
  * Calculate a small value to overcome float imprecision
  * between two float values
@@ -437,15 +443,15 @@ ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length
     }
 
     if (ucs_likely(context->memtype_cache != NULL)) {
-        if (!context->memtype_cache->pgtable.num_regions) {
-            return UCS_MEMORY_TYPE_HOST;
+        if (ucs_likely(!context->memtype_cache->pgtable.num_regions)) {
+            goto not_found;
         }
 
         status = ucs_memtype_cache_lookup(context->memtype_cache, address,
                                           length, &mem_type);
         if (status != UCS_OK) {
             ucs_assert(status == UCS_ERR_NO_ELEM);
-            return UCS_MEMORY_TYPE_HOST;
+            goto not_found;
         }
 
         if (mem_type != UCS_MEMORY_TYPE_LAST) {
@@ -457,6 +463,13 @@ ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length
     }
 
     return ucp_memory_type_detect_mds(context, address, length);
+
+not_found:
+    if (ucs_unlikely((length > 0) && !ucs_arch_is_mem_accessible(address))) {
+        return ucp_memory_type_detect_inaccessible(context, address, length);
+    }
+
+    return UCS_MEMORY_TYPE_HOST;
 }
 
 uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);

@@ -144,4 +144,17 @@ void ucs_handle_error(const char *message);
 const char *ucs_debug_get_symbol_name(void *address);
 
 
+/**
+ * Set a long jump in case of SEGV signal: if the failing instruction is at
+ * range fault_address, long-jump to restore_address.
+ */
+void ucs_debug_add_segv_restore(const void *fault_address,
+                                const void *restore_address);
+
+/**
+ * Remove a previously added long jump
+ */
+void ucs_debug_remove_segv_restore(const void *fault_address);
+
+
 #endif

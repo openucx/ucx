@@ -13,6 +13,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/config/types.h>
 #include <ucs/config/global_opts.h>
+#include <sys/ucontext.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -51,6 +52,11 @@ ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
 ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
 ucs_cpu_vendor_t ucs_arch_get_cpu_vendor();
 void ucs_cpu_init();
+void ucs_cpu_cleanup();
+int ucs_arch_is_mem_accessible(const void *address);
+const void *ucs_arch_ucontext_get_return_address(ucontext_t *ucontext);
+void ucs_arch_ucontext_set_return_address(ucontext_t *ucontext,
+                                          const void *address);
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes);
 void ucs_x86_memcpy_sse_movntdqa(void *dst, const void *src, size_t len);
 

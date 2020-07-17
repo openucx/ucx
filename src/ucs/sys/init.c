@@ -107,5 +107,6 @@ static void UCS_F_DTOR ucs_cleanup(void)
 #ifdef ENABLE_STATS
     ucs_stats_cleanup();
 #endif
+    ucs_cpu_cleanup();
     ucs_log_cleanup();
 }

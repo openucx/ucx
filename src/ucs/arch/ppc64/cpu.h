@@ -69,6 +69,26 @@ static inline void ucs_cpu_init()
 {
 }
 
+static inline void ucs_cpu_cleanup()
+{
+}
+
+static inline int ucs_arch_is_mem_accessible(const void *address)
+{
+    return 1;
+}
+
+static inline const void *
+ucs_arch_ucontext_get_return_address(ucontext_t *ucontext)
+{
+    return NULL;
+}
+
+static inline void
+ucs_arch_ucontext_set_return_address(ucontext_t *ucontext, const void *address)
+{
+}
+
 double ucs_arch_get_clocks_per_sec();
 
 #define ucs_arch_wait_mem ucs_arch_generic_wait_mem

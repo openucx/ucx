@@ -11,6 +11,7 @@
 #include "debug.h"
 #include "log.h"
 
+#include <ucs/arch/cpu.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/checker.h>
@@ -31,9 +32,16 @@
 KHASH_MAP_INIT_INT64(ucs_debug_symbol, char*);
 KHASH_MAP_INIT_INT(ucs_signal_orig_action, struct sigaction*);
 
-#define UCS_GDB_MAX_ARGS         32
-#define BACKTRACE_MAX            64
-#define UCS_DEBUG_UNKNOWN_SYM    "???"
+#define UCS_GDB_MAX_ARGS            32
+#define BACKTRACE_MAX               64
+#define UCS_DEBUG_UNKNOWN_SYM       "???"
+#define UCS_DEBUG_MAX_SEGV_RESTORE  16
+
+typedef struct {
+    const void  *fault_address;
+    const void  *restore_address;
+} ucs_debug_segv_restore_t;
+
 
 #ifdef HAVE_DETAILED_BACKTRACE
 #    define UCS_DEBUG_BACKTRACE_LINE_FMT "%2d 0x%016lx %s()  %s:%u\n"
@@ -186,6 +194,9 @@ static khash_t(ucs_signal_orig_action) ucs_signal_orig_action_map;
 static ucs_recursive_spinlock_t ucs_kh_lock;
 
 static int ucs_debug_initialized = 0;
+
+static ucs_debug_segv_restore_t ucs_debug_segv_restore[UCS_DEBUG_MAX_SEGV_RESTORE];
+static unsigned ucs_debug_segv_restore_count = 0;
 
 #ifdef HAVE_CPLUS_DEMANGLE
 extern char *cplus_demangle(const char *, int);
@@ -1027,8 +1038,66 @@ static void ucs_debug_handle_error_signal(int signo, const char *cause,
     ucs_handle_error(cause);
 }
 
+void ucs_debug_add_segv_restore(const void *fault_address,
+                                const void *restore_address)
+{
+    ucs_debug_segv_restore_t *restore;
+
+    if (ucs_debug_segv_restore_count >= UCS_DEBUG_MAX_SEGV_RESTORE) {
+        ucs_fatal("reached limit of segv restore points");
+    }
+
+    restore = &ucs_debug_segv_restore[ucs_debug_segv_restore_count++];
+    restore->fault_address   = fault_address;
+    restore->restore_address = restore_address;
+}
+
+void ucs_debug_remove_segv_restore(const void *fault_address)
+{
+    unsigned i, new_count = 0;
+
+    for (i = 0; i < ucs_debug_segv_restore_count; ++i) {
+        if (ucs_debug_segv_restore[i].fault_address != fault_address) {
+            ucs_debug_segv_restore[new_count++] = ucs_debug_segv_restore[i];
+        }
+    }
+    ucs_debug_segv_restore_count = new_count;
+}
+
+static const void *ucs_debug_find_segv_restore(const void *fault_address)
+{
+    unsigned i;
+
+    for (i = 0; i < ucs_debug_segv_restore_count; ++i) {
+        if (ucs_debug_segv_restore[i].fault_address == fault_address) {
+            return ucs_debug_segv_restore[i].restore_address;
+        }
+    }
+
+    return NULL;
+}
+
+static int ucs_debug_handle_segv(siginfo_t *info, void *context)
+{
+    const void *fault_address, *restore_address;
+
+    /* try to find the faulting address in the list of restore points */
+    fault_address   = ucs_arch_ucontext_get_return_address(context);
+    restore_address = ucs_debug_find_segv_restore(fault_address);
+    if (restore_address != NULL) {
+        ucs_arch_ucontext_set_return_address(context, restore_address);
+        return 1;
+    }
+
+    return 0;
+}
+
 static void ucs_error_signal_handler(int signo, siginfo_t *info, void *context)
 {
+    if ((signo == SIGSEGV) && ucs_debug_handle_segv(info, context)) {
+        return;
+    }
+
     ucs_debug_cleanup(1);
     ucs_log_flush();
 

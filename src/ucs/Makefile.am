@@ -116,6 +116,7 @@ libucs_la_SOURCES = \
 	arch/ppc64/global_opts.c \
 	arch/x86_64/cpu.c \
 	arch/x86_64/global_opts.c \
+	arch/x86_64/memaccess.S \
 	arch/cpu.c \
 	async/async.c \
 	async/signal.c \

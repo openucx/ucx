@@ -154,11 +154,12 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
 
 static UCS_F_ALWAYS_INLINE int
 ucp_tag_eager_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
-                        ssize_t length)
+                        const void *address, ssize_t length)
 {
     return (ucs_likely(length <= max_eager_short->memtype_off) ||
             (length <= max_eager_short->memtype_on &&
-             ucp_memory_type_cache_is_empty(ep->worker->context)));
+             ucp_memory_type_cache_is_empty(ep->worker->context) &&
+             ucs_arch_is_mem_accessible(address)));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -167,13 +168,13 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t length, ucp_tag_t ta
     ucs_status_t status;
 
     if (ucp_tag_eager_is_inline(ep, &ucp_ep_config(ep)->tag.max_eager_short,
-                                length)) {
+                                buffer, length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
         status = uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY,
                                  tag, buffer, length);
     } else if (ucp_tag_eager_is_inline(ep, &ucp_ep_config(ep)->tag.offload.max_eager_short,
-                                       length)) {
+                                       buffer, length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uct_tag_t));
         status = uct_ep_tag_eager_short(ucp_ep_get_tag_uct_ep(ep), tag, buffer,
                                         length);

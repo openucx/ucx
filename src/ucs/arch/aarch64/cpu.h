@@ -16,6 +16,7 @@
 #include <ucs/arch/generic/cpu.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/status.h>
+#include <sys/ucontext.h>
 #ifdef __ARM_NEON
 #include <arm_neon.h>
 #endif
@@ -135,6 +136,26 @@ static inline int ucs_arch_get_cpu_flag()
 }
 
 static inline void ucs_cpu_init()
+{
+}
+
+static inline void ucs_cpu_cleanup()
+{
+}
+
+static inline int ucs_arch_is_mem_accessible(const void *address)
+{
+    return 1;
+}
+
+static inline const void *
+ucs_arch_ucontext_get_return_address(ucontext_t *ucontext)
+{
+    return NULL;
+}
+
+static inline void
+ucs_arch_ucontext_set_return_address(ucontext_t *ucontext, const void *address)
 {
 }
 

@@ -1727,6 +1727,27 @@ ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t si
     return UCS_MEMORY_TYPE_HOST;
 }
 
+ucs_memory_type_t
+ucp_memory_type_detect_inaccessible(ucp_context_h context, const void *address,
+                                    size_t size)
+{
+    ucs_memory_type_t mem_type = ucp_memory_type_detect_mds(context, address,
+                                                            size);
+
+    if (mem_type != UCS_MEMORY_TYPE_HOST) {
+        ucs_diag("disabling memtype cache because address %p of type %s "
+                 "was not found in it", address,
+                 ucs_memory_type_names[mem_type]);
+        ucs_memtype_cache_destroy(context->memtype_cache);
+        context->memtype_cache = NULL;
+    } else {
+        ucs_warn("invalid user buffer detected: address %p length %zu", address,
+                 size);
+    }
+
+    return mem_type;
+}
+
 uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)
 {
     uint64_t        tl_bitmap;

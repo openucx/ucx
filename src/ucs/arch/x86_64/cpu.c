@@ -12,6 +12,7 @@
 #endif
 
 #include <ucs/arch/cpu.h>
+#include <ucs/debug/debug.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
@@ -478,6 +479,19 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 }
 #endif
 
+void ucs_arch_is_mem_accessible_restore();
+
+const void *ucs_arch_ucontext_get_return_address(ucontext_t *ucontext)
+{
+    return (const void*)ucontext->uc_mcontext.gregs[REG_RIP];
+}
+
+void ucs_arch_ucontext_set_return_address(ucontext_t *ucontext,
+                                          const void *address)
+{
+    ucontext->uc_mcontext.gregs[REG_RIP] = (uintptr_t)address;
+}
+
 void ucs_cpu_init()
 {
 #if ENABLE_BUILTIN_MEMCPY
@@ -488,6 +502,13 @@ void ucs_cpu_init()
         ucs_cpu_memcpy_thresh(ucs_global_opts.arch.builtin_memcpy_max,
                               ucs_cpu_builtin_memcpy[ucs_arch_get_cpu_vendor()].max);
 #endif
+    ucs_debug_add_segv_restore(ucs_arch_is_mem_accessible,
+                               ucs_arch_is_mem_accessible_restore);
+}
+
+void ucs_cpu_cleanup()
+{
+    ucs_debug_remove_segv_restore(ucs_arch_is_mem_accessible_restore);
 }
 
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
