@@ -35,7 +35,8 @@ ucp_stream_send_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
 
 static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
                                      const void* buffer, uintptr_t datatype,
-                                     size_t count, uint32_t flags)
+                                     ucs_memory_type_t memory_type, size_t count,
+                                     uint32_t flags)
 {
     req->flags             = flags;
     req->send.ep           = ep;
@@ -46,9 +47,8 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);
-    req->send.mem_type     = ucp_memory_type_detect(ep->worker->context,
-                                                    (void*)buffer,
-                                                    req->send.length);
+    req->send.mem_type     = ucp_get_memory_type(ep->worker->context, (void*)buffer,
+                                                 req->send.length, memory_type);
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.msg_proto.tag,
                                 sizeof(req->send.msg_proto.tag));
 }
@@ -124,6 +124,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
     ucs_status_ptr_t ret;
     uint32_t         attr_mask;
     uint32_t         flags;
+    ucs_memory_type_t memory_type;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_STREAM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
@@ -173,13 +174,16 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
         goto out;
     }
 
+    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
+                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
+
     req = ucp_request_get_param(ep->worker, param,
                                 {
                                     ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                     goto out;
                                 });
 
-    ucp_stream_send_req_init(req, ep, buffer, datatype, count, flags);
+    ucp_stream_send_req_init(req, ep, buffer, datatype, memory_type, count, flags);
 
     ret = ucp_stream_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->stream.proto);

@@ -423,10 +423,12 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
         sleep(5);
     }
 
-    send_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
-                              UCP_OP_ATTR_FIELD_USER_DATA;
+    send_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                              UCP_OP_ATTR_FIELD_USER_DATA |
+                              UCP_OP_ATTR_FIELD_MEMORY_TYPE;
     send_param.cb.send      = send_handler;
     send_param.user_data    = (void*)data_msg_str;
+    send_param.memory_type  = test_mem_type;
     request                 = ucp_tag_send_nbx(client_ep, msg, msg_len, tag,
                                                &send_param);
     status                  = ucx_wait(ucp_worker, request, "send",
