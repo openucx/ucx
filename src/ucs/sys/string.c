@@ -13,6 +13,7 @@
 #include "sys.h"
 #include <ucs/config/parser.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/sys/math.h>
 
 #include <string.h>
 #include <ctype.h>
@@ -292,4 +293,35 @@ const char* ucs_flags_str(char *buf, size_t max,
     }
 
     return buf;
+}
+
+ssize_t ucs_path_calc_distance(const char *path1, const char *path2)
+{
+    unsigned distance = 0;
+    int same  = 1;
+    int comp_len;
+    int i;
+    char resolved_path1[PATH_MAX], resolved_path2[PATH_MAX];
+    int rp_len1, rp_len2;
+
+    if ((NULL == realpath(path1, resolved_path1)) ||
+        (NULL == realpath(path2, resolved_path2))) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    rp_len1  = strlen(resolved_path1);
+    rp_len2  = strlen(resolved_path2);
+    comp_len = ucs_min(rp_len1, rp_len2);
+
+    for (i = 0; i < comp_len; i++) {
+        if (resolved_path1[i] != resolved_path2[i]) {
+            same = 0;
+        }
+
+        if ((resolved_path1[i] == '/') && !same) {
+            distance++;
+        }
+    }
+
+    return distance;
 }

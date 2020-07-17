@@ -19,6 +19,7 @@ BEGIN_C_DECLS
                                               E.g. virtual devices like CMA/knem
                                             */
 
+
 /** @file topo.h */
 
 typedef struct ucs_sys_bus_id {
