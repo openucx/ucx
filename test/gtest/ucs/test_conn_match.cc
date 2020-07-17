@@ -50,8 +50,10 @@ protected:
         return conn_elem_from_match_elem(conn_match)->conn_sn;
     }
 
-    static const char *address_str(const void *address, char *str,
+    static const char *address_str(const ucs_conn_match_ctx_t *conn_match_ctx,
+                                   const void *address, char *str,
                                    size_t max_size) {
+        EXPECT_EQ(&m_conn_match_ctx, conn_match_ctx);
         return ucs_strncpy_safe(str, static_cast<const char*>(address),
                                 ucs_min(m_conn_match_ctx.address_length,
                                         max_size));

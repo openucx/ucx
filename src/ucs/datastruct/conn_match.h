@@ -47,6 +47,9 @@ typedef struct ucs_conn_match_elem {
 } ucs_conn_match_elem_t;
 
 
+typedef struct ucs_conn_match_ctx ucs_conn_match_ctx_t;
+
+
 /**
  * Function to get the address of the connection between the peers.
  *
@@ -72,15 +75,16 @@ typedef ucs_conn_sn_t
 /**
  * Function to get string representation of the connection address.
  *
- * @param [in]  address     Pointer to the connection address.
- * @param [out] str         A string filled with the address.
- * @param [in]  max_size    Size of a string (considering '\0'-terminated symbol).
+ * @param [in] conn_match_ctx    Pointer to the connection matching context.
+ * @param [in]  address          Pointer to the connection address.
+ * @param [out] str              A string filled with the address.
+ * @param [in]  max_size         Size of a string (considering '\0'-terminated symbol).
  *
  * @return A resulted string filled with the address.
  */
 typedef const char*
-(*ucs_conn_match_address_str_t)(const void *address,
-                                char *str, size_t max_size);
+(*ucs_conn_match_address_str_t)(const ucs_conn_match_ctx_t *conn_match_ctx,
+                                const void *address, char *str, size_t max_size);
 
 
 /**
@@ -106,12 +110,12 @@ KHASH_TYPE(ucs_conn_match, ucs_conn_match_peer_t*, char)
 /**
  * Context for matching connections
  */
-typedef struct ucs_conn_match_ctx {
+struct ucs_conn_match_ctx {
     khash_t(ucs_conn_match)      hash;           /* Hash of matched connections */
     size_t                       address_length; /* Length of the addresses used for the
                                                     connection between peers */
     ucs_conn_match_ops_t         ops;            /* User's connection matching operations */
-} ucs_conn_match_ctx_t;
+};
 
 
 /**
