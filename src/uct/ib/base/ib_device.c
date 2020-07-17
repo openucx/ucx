@@ -766,6 +766,52 @@ const char *uct_ib_device_name(uct_ib_device_t *dev)
     return ibv_get_device_name(dev->ibv_context->device);
 }
 
+ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, ucs_sys_bus_id_t *bus_id)
+{
+    char ib_realpath[PATH_MAX];
+    char pcie_bus[PATH_MAX];
+    char *tmp;
+    int i, bus_count;
+
+    if (NULL == realpath(dev->ibv_context->device->ibdev_path, ib_realpath)) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* realpath name is of form /sys/devices/.../0000:05:00.0/infiniband/mlx5_0
+     * and bus_id is constructed from 0000:05:00.0 */
+
+    tmp = strstr(ib_realpath, "/infiniband");
+
+    bus_count = 0;
+    tmp--;
+    while (1) {
+        if (*tmp == '/') {
+            break;
+        }
+        bus_count++;
+        tmp--;
+    }
+
+    memcpy(pcie_bus, (char *)tmp + 1, bus_count);
+    pcie_bus[bus_count] = '\0';
+
+    for (i = 0; i < bus_count; i++) {
+        if (pcie_bus[i] == ':' || pcie_bus[i] == '.') {
+            pcie_bus[i] = ' ';
+        }
+    }
+
+    sscanf(pcie_bus, "%hx %hhx %hhx %hhx", &bus_id->domain, &bus_id->bus,
+                                           &bus_id->slot, &bus_id->function);
+
+    ucs_debug("ib bus id = %hu:%hhu:%hhu.%hhu\n", bus_id->domain,
+                                                  bus_id->bus,
+                                                  bus_id->slot,
+                                                  bus_id->function);
+
+    return UCS_OK;
+}
+
 size_t uct_ib_mtu_value(enum ibv_mtu mtu)
 {
     switch (mtu) {

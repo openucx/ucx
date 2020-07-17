@@ -20,6 +20,7 @@
 #include <ucs/time/time.h>
 #include <ucs/memory/numa.h>
 #include <ucs/sys/sock.h>
+#include <ucm/util/sys.h>
 #include <string.h>
 #include <stdlib.h>
 #include <poll.h>
@@ -1440,6 +1441,50 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
+#if HAVE_CUDA
+static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
+                                                  double *latency)
+{
+    ucs_sys_dev_distance_t dist = {0.0, 0.0};
+    uct_ib_device_t *dev        = uct_ib_iface_device(iface);
+    ucs_sys_device_t ib_sys_device;
+    ucs_sys_device_t cuda_sys_device;
+    ucs_sys_bus_id_t ib_bus_id;
+    ucs_sys_bus_id_t cuda_bus_id;
+    ucs_status_t status;
+
+    status = uct_ib_device_bus(dev, &ib_bus_id);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_find_device_by_bus_id(&ib_bus_id, &ib_sys_device);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucm_get_mem_type_current_device_info(UCS_MEMORY_TYPE_CUDA,
+                                                  &cuda_bus_id);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_find_device_by_bus_id(&cuda_bus_id, &cuda_sys_device);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_get_distance(ib_sys_device, cuda_sys_device, &dist);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *latency = dist.latency;
+
+    return UCS_OK;
+}
+#endif
+
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr)
 {
@@ -1457,6 +1502,9 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     size_t mtu, width, extra_pkt_len;
     ucs_status_t status;
     double numa_latency;
+#if HAVE_CUDA
+    double cuda_latency;
+#endif
 
     uct_base_iface_query(&iface->super, iface_attr);
     
@@ -1533,6 +1581,16 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     iface_attr->latency.c += numa_latency;
     iface_attr->latency.m  = 0;
+
+#if HAVE_CUDA
+    status = uct_ib_iface_get_cuda_latency(iface, &cuda_latency);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface_attr->latency.c += cuda_latency;
+    iface_attr->latency.m  = 0;
+#endif
 
     /* Wire speed calculation: Width * SignalRate * Encoding */
     width                 = ib_port_widths[width_idx];
