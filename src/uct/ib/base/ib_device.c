@@ -1138,14 +1138,6 @@ unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num
     char ndev_name[IFNAMSIZ];
     unsigned roce_lag_level;
     ucs_status_t status;
-    long lag_enable;
-
-    status = ucs_read_file_number(&lag_enable, 1, UCT_IB_DEVICE_SYSFS_FMT,
-                                  uct_ib_device_name(dev), "roce_lag_enable");
-    if ((status != UCS_OK) || !lag_enable) {
-        ucs_debug("RoCE LAG is disabled on %s", uct_ib_device_name(dev));
-        return 1;
-    }
 
     status = uct_ib_device_get_roce_ndev_name(dev, port_num, ndev_name,
                                               sizeof(ndev_name));
