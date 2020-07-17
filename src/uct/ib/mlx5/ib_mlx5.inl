@@ -252,36 +252,33 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
                           uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av,
                           int qp_type)
 {
+    struct mlx5_base_av *to_av    = mlx5_av_base(&seg->av);
+    struct mlx5_grh_av *to_grh_av = mlx5_av_grh(&seg->av);
+
     if (qp_type == IBV_QPT_UD) {
-        mlx5_av_base(&seg->av)->key.qkey.qkey  = htonl(UCT_IB_KEY);
+        to_av->key.qkey.qkey = htonl(UCT_IB_KEY);
 #if HAVE_TL_DC
     } else if (qp_type == UCT_IB_QPT_DCI) {
-        mlx5_av_base(&seg->av)->key.dc_key     = htobe64(UCT_IB_KEY);
+        to_av->key.dc_key    = htobe64(UCT_IB_KEY);
 #endif
     }
     ucs_assert(av != NULL);
     /* cppcheck-suppress ctunullpointer */
-    mlx5_av_base(&seg->av)->dqp_dct            = av->dqp_dct;
-    mlx5_av_base(&seg->av)->stat_rate_sl       = av->stat_rate_sl;
-    mlx5_av_base(&seg->av)->fl_mlid            = av->fl_mlid;
-    mlx5_av_base(&seg->av)->rlid               = av->rlid;
+    UCT_IB_MLX5_SET_BASE_AV(to_av, av);
 
-    if (grh_av) {
-        ucs_assert(av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV);
+    if (grh_av != NULL) {
+        ucs_assert(to_av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV);
 #if HAVE_STRUCT_MLX5_GRH_AV_RMAC
-        memcpy(mlx5_av_grh(&seg->av)->rmac, grh_av->rmac,
-               sizeof(mlx5_av_grh(&seg->av)->rmac));
+        memcpy(to_grh_av->rmac, grh_av->rmac, sizeof(to_grh_av->rmac));
 #endif
-        mlx5_av_grh(&seg->av)->tclass      = grh_av->tclass;
-        mlx5_av_grh(&seg->av)->hop_limit   = grh_av->hop_limit;
-        mlx5_av_grh(&seg->av)->grh_gid_fl  = grh_av->grh_gid_fl;
-        memcpy(mlx5_av_grh(&seg->av)->rgid, grh_av->rgid,
-               sizeof(mlx5_av_grh(&seg->av)->rgid));
+        to_grh_av->tclass     = grh_av->tclass;
+        to_grh_av->hop_limit  = grh_av->hop_limit;
+        to_grh_av->grh_gid_fl = grh_av->grh_gid_fl;
+        memcpy(to_grh_av->rgid, grh_av->rgid, sizeof(to_grh_av->rgid));
     } else if (av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) {
-        mlx5_av_grh(&seg->av)->grh_gid_fl  = 0;
+        to_grh_av->grh_gid_fl = 0;
     }
 }
-
 
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,

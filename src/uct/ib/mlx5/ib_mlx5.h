@@ -118,6 +118,14 @@ struct mlx5_grh_av {
       (_av_size) + \
       sizeof(struct mlx5_wqe_inl_data_seg)))
 
+#define UCT_IB_MLX5_SET_BASE_AV(to_base_av, from_base_av) \
+    do { \
+        (to_base_av)->dqp_dct      = (from_base_av)->dqp_dct; \
+        (to_base_av)->stat_rate_sl = (from_base_av)->stat_rate_sl; \
+        (to_base_av)->fl_mlid      = (from_base_av)->fl_mlid; \
+        (to_base_av)->rlid         = (from_base_av)->rlid; \
+    } while (0)
+
 #define UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(_av_size) \
     (UCT_IB_MLX5_AM_MAX_SHORT(_av_size) - \
      UCT_IB_MLX5_AM_ZCOPY_MAX_IOV * sizeof(struct mlx5_wqe_data_seg))
