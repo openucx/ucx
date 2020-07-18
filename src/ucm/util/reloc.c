@@ -670,7 +670,7 @@ static ucs_status_t ucm_reloc_install_dl_hooks()
         return UCS_OK;
     }
 
-    for (i = 0; i < ucs_array_size(ucm_dlopen_reloc_patches); ++i) {
+    for (i = 0; i < ucs_static_array_size(ucm_dlopen_reloc_patches); ++i) {
         status = ucm_reloc_apply_patch(&ucm_dlopen_reloc_patches[i], 0);
         if (status != UCS_OK) {
             return status;

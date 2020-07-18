@@ -1299,7 +1299,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
      * by user. If no lanes were selected and RNDV scheme in the
      * configuration is AUTO, try other schemes. */
     UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_HOST == 0);
-    for (i = 0; i < ucs_array_size(rndv_modes); i++) {
+    for (i = 0; i < ucs_static_array_size(rndv_modes); i++) {
         /* Remove the previous iface RMA flags */
         bw_info.criteria.remote_iface_flags &= ~iface_rma_flags;
         bw_info.criteria.local_iface_flags  &= ~iface_rma_flags;
