@@ -73,10 +73,12 @@ static struct err_handling {
 } err_handling_opt;
 
 static ucs_status_t client_status = UCS_OK;
-static uint16_t server_port = 13337;
-static long test_string_length = 16;
-static const ucp_tag_t tag  = 0x1337a880u;
-static const ucp_tag_t tag_mask = UINT64_MAX;
+static uint16_t server_port       = 13337;
+static long test_string_length    = 16;
+static const ucp_tag_t tag        = 0x1337a880u;
+static const ucp_tag_t tag_mask   = UINT64_MAX;
+static const char *addr_msg_str   = "UCX address message";
+static const char *data_msg_str   = "UCX data message";
 static ucp_address_t *local_addr;
 static ucp_address_t *peer_addr;
 
@@ -92,18 +94,21 @@ static void set_msg_data_len(struct msg *msg, uint64_t data_len)
 
 static void request_init(void *request)
 {
-    struct ucx_context *ctx = (struct ucx_context *) request;
-    ctx->completed = 0;
+    struct ucx_context *contex = (struct ucx_context *)request;
+
+    contex->completed = 0;
 }
 
 static void send_handler(void *request, ucs_status_t status, void *ctx)
 {
-    struct ucx_context *context = (struct ucx_context *) ctx;
+    struct ucx_context *context = (struct ucx_context *)request;
+    const char *str             = (const char *)ctx;
 
     context->completed = 1;
 
-    printf("[0x%x] send handler called with status %d (%s)\n",
-           (unsigned int)pthread_self(), status, ucs_status_string(status));
+    printf("[0x%x] send handler called for \"%s\" with status %d (%s)\n",
+           (unsigned int)pthread_self(), str, status,
+           ucs_status_string(status));
 }
 
 static void failure_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
@@ -119,7 +124,7 @@ static void failure_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
 static void recv_handler(void *request, ucs_status_t status,
                         ucp_tag_recv_info_t *info)
 {
-    struct ucx_context *context = (struct ucx_context *) request;
+    struct ucx_context *context = (struct ucx_context *)request;
 
     context->completed = 1;
 
@@ -128,11 +133,33 @@ static void recv_handler(void *request, ucs_status_t status,
            info->length);
 }
 
-static void ucx_wait(ucp_worker_h ucp_worker, struct ucx_context *context)
+static ucs_status_t ucx_wait(ucp_worker_h ucp_worker, struct ucx_context *request,
+                             const char *op_str, const char *data_str)
 {
-    while (context->completed == 0) {
-        ucp_worker_progress(ucp_worker);
+    ucs_status_t status;
+
+    if (UCS_PTR_IS_ERR(request)) {
+        status = UCS_PTR_STATUS(request);
+    } else if (UCS_PTR_IS_PTR(request)) {
+        while (!request->completed) {
+            ucp_worker_progress(ucp_worker);
+        }
+
+        request->completed = 0;
+        status             = ucp_request_check_status(request);
+        ucp_request_release(request);
+    } else {
+        status = UCS_OK;
     }
+
+    if (status != UCS_OK) {
+        fprintf(stderr, "unable to %s %s (%s)\n", op_str, data_str,
+                ucs_status_string(status));
+    } else {
+        printf("finish to %s %s\n", op_str, data_str);
+    }
+
+    return status;
 }
 
 static ucs_status_t test_poll_wait(ucp_worker_h ucp_worker)
@@ -179,17 +206,16 @@ err:
 
 static int run_ucx_client(ucp_worker_h ucp_worker)
 {
+    struct msg *msg = NULL;
+    size_t msg_len  = 0;
+    int ret         = -1;
     ucp_request_param_t send_param;
     ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
     ucp_ep_h server_ep;
     ucp_ep_params_t ep_params;
-    struct msg *msg = 0;
     struct ucx_context *request;
-    struct ucx_context ctx;
-    size_t msg_len = 0;
-    int ret = -1;
     char *str;
 
     /* Send client UCX address to server */
@@ -212,17 +238,14 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     send_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                               UCP_OP_ATTR_FIELD_USER_DATA;
     send_param.cb.send      = send_handler;
-    send_param.user_data    = &ctx;
-    ctx.completed           = 0;
+    send_param.user_data    = (void*)addr_msg_str;
     request                 = ucp_tag_send_nbx(server_ep, msg, msg_len, tag,
                                                &send_param);
-    if (UCS_PTR_IS_ERR(request)) {
-        fprintf(stderr, "unable to send UCX address message\n");
+    status                  = ucx_wait(ucp_worker, request, "send",
+                                       addr_msg_str);
+    if (status != UCS_OK) {
         free(msg);
         goto err_ep;
-    } else if (UCS_PTR_IS_PTR(request)) {
-        ucx_wait(ucp_worker, &ctx);
-        ucp_request_release(request);
     }
 
     free(msg);
@@ -265,19 +288,10 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     request = ucp_tag_msg_recv_nb(ucp_worker, msg, info_tag.length,
                                   ucp_dt_make_contig(1), msg_tag,
                                   recv_handler);
-
-    if (UCS_PTR_IS_ERR(request)) {
-        fprintf(stderr, "unable to receive UCX data message (%u)\n",
-                UCS_PTR_STATUS(request));
-        free(msg);
+    status  = ucx_wait(ucp_worker, request, "receive", data_msg_str);
+    if (status != UCS_OK) {
+        mem_type_free(msg);
         goto err_ep;
-    } else {
-        /* ucp_tag_msg_recv_nb() cannot return NULL */
-        assert(UCS_PTR_IS_PTR(request));
-        ucx_wait(ucp_worker, request);
-        request->completed = 0;
-        ucp_request_release(request);
-        printf("UCX data message was received\n");
     }
 
     str = calloc(1, test_string_length);
@@ -289,6 +303,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         free(str);
     } else {
         fprintf(stderr, "Memory allocation failed\n");
+        mem_type_free(msg);
         goto err_ep;
     }
 
@@ -332,16 +347,15 @@ static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
 
 static int run_ucx_server(ucp_worker_h ucp_worker)
 {
+    struct msg *msg             = NULL;
+    struct ucx_context *request = NULL;
+    size_t msg_len              = 0;
     ucp_request_param_t send_param;
     ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
     ucp_ep_h client_ep;
     ucp_ep_params_t ep_params;
-    struct msg *msg = 0;
-    struct ucx_context *request = 0;
-    struct ucx_context ctx;
-    size_t msg_len = 0;
     int ret;
 
     /* Receive client UCX address */
@@ -357,20 +371,11 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     CHKERR_ACTION(msg == NULL, "allocate memory\n", ret = -1; goto err);
     request = ucp_tag_msg_recv_nb(ucp_worker, msg, info_tag.length,
                                   ucp_dt_make_contig(1), msg_tag, recv_handler);
-
-    if (UCS_PTR_IS_ERR(request)) {
-        fprintf(stderr, "unable to receive UCX address message (%s)\n",
-                ucs_status_string(UCS_PTR_STATUS(request)));
+    status  = ucx_wait(ucp_worker, request, "receive", addr_msg_str);
+    if (status != UCS_OK) {
         free(msg);
         ret = -1;
         goto err;
-    } else {
-        /* ucp_tag_msg_recv_nb() cannot return NULL */
-        assert(UCS_PTR_IS_PTR(request));
-        ucx_wait(ucp_worker, request);
-        request->completed = 0;
-        ucp_request_release(request);
-        printf("UCX address message was received\n");
     }
 
     peer_addr_len = msg->data_len;
@@ -398,7 +403,10 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ep_params.user_data       = &client_status;
 
     status = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
-    CHKERR_ACTION(status != UCS_OK, "ucp_ep_create\n", ret = -1; goto err);
+    /* If peer failure testing was requested, it could be possible that UCP EP
+     * couldn't be created; in this case set `ret = 0` to report success */
+    CHKERR_ACTION(status != UCS_OK, "ucp_ep_create\n",
+                  ret = (err_handling_opt.failure) ? 0 : -1; goto err);
 
     msg_len = sizeof(*msg) + test_string_length;
     msg = mem_type_malloc(msg_len);
@@ -409,26 +417,39 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ret = generate_test_string((char *)(msg + 1), test_string_length);
     CHKERR_JUMP(ret < 0, "generate test string", err_free_mem_type_msg);
 
+    if (err_handling_opt.failure) {
+        /* Sleep for small amount of time to ensure that server was killed
+         * and peer failure handling is covered */
+        sleep(5);
+    }
+
     send_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                               UCP_OP_ATTR_FIELD_USER_DATA;
     send_param.cb.send      = send_handler;
-    send_param.user_data    = &ctx;
-    ctx.completed           = 0;
+    send_param.user_data    = (void*)data_msg_str;
     request                 = ucp_tag_send_nbx(client_ep, msg, msg_len, tag,
                                                &send_param);
-    if (UCS_PTR_IS_ERR(request)) {
-        fprintf(stderr, "unable to send UCX data message\n");
-        ret = -1;
+    status                  = ucx_wait(ucp_worker, request, "send",
+                                       data_msg_str);
+    if (status != UCS_OK) {
+        if (!err_handling_opt.failure) {
+            ret = -1;
+        } else {
+            /* If peer failure testing was requested, set `ret = 0` to report
+             * success from the application */
+            ret = 0;
+
+            /* Make sure that failure_handler was called */
+            while (client_status == UCS_OK) {
+                ucp_worker_progress(ucp_worker);
+            }
+        }
         goto err_free_mem_type_msg;
-    } else if (UCS_PTR_IS_PTR(request)) {
-        printf("UCX data message was scheduled for send\n");
-        ucx_wait(ucp_worker, &ctx);
-        ucp_request_release(request);
     }
 
     status = flush_ep(ucp_worker, client_ep);
     printf("flush_ep completed with status %d (%s)\n",
-            status, ucs_status_string(status));
+           status, ucs_status_string(status));
 
     ret = 0;
 

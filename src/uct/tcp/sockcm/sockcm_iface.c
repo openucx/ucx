@@ -86,7 +86,7 @@ static ucs_status_t uct_sockcm_iface_notify_client(int notif_val,
     
     fd = ((uct_sockcm_ctx_t *) conn_request)->sock_fd;
 
-    return ucs_socket_send(fd, &notif, sizeof(notif), NULL, NULL);
+    return ucs_socket_send(fd, &notif, sizeof(notif));
 }
 
 static ucs_status_t uct_sockcm_iface_accept(uct_iface_h tl_iface,
@@ -172,7 +172,7 @@ static void uct_sockcm_iface_recv_handler(int fd, int events, void *arg)
     status = ucs_socket_recv_nb(sock_id_ctx->sock_fd,
                                 UCS_PTR_BYTE_OFFSET(&sock_id_ctx->conn_param,
                                                     sock_id_ctx->recv_len),
-                                &recv_len, NULL, NULL);
+                                &recv_len);
     if ((status == UCS_ERR_CANCELED) || (status == UCS_ERR_IO_ERROR)) {
         ucs_warn("recv failed in recv handler");
         /* TODO: clean up resources allocated for client endpoint? */
@@ -247,8 +247,7 @@ static void uct_sockcm_iface_event_handler(int fd, int events, void *arg)
 
     recv_len = sizeof(sock_id_ctx->conn_param);
 
-    status = ucs_socket_recv_nb(accept_fd, &sock_id_ctx->conn_param, &recv_len,
-                                NULL, NULL);
+    status = ucs_socket_recv_nb(accept_fd, &sock_id_ctx->conn_param, &recv_len);
     if (UCS_OK != status) {
         sock_id_ctx->recv_len = ((UCS_ERR_NO_PROGRESS == status) ? 0: recv_len);
         status = ucs_async_set_event_handler(iface->super.worker->async->mode,

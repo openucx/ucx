@@ -248,7 +248,7 @@ static ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep)
     status = ucs_socket_send_nb(cep->fd,
                                 UCS_PTR_BYTE_OFFSET(cep->comm_ctx.buf,
                                                     cep->comm_ctx.offset),
-                                &sent_length, NULL, NULL);
+                                &sent_length);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
         if (status != UCS_ERR_CONNECTION_RESET) { /* UCS_ERR_NOT_CONNECTED cannot return from send() */
             ucs_error("ep %p failed to send %s's data (len=%zu offset=%zu status=%s)",
@@ -559,9 +559,10 @@ static ucs_status_t uct_tcp_sockcm_ep_recv_nb(uct_tcp_sockcm_ep_t *cep)
 
     recv_length = uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len +
                   sizeof(uct_tcp_sockcm_priv_data_hdr_t) - cep->comm_ctx.offset;
-    status = ucs_socket_recv_nb(cep->fd, UCS_PTR_BYTE_OFFSET(cep->comm_ctx.buf,
-                                                             cep->comm_ctx.offset),
-                                &recv_length, NULL, NULL);
+    status = ucs_socket_recv_nb(cep->fd,
+                                UCS_PTR_BYTE_OFFSET(cep->comm_ctx.buf,
+                                                    cep->comm_ctx.offset),
+                                &recv_length);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
         if (status != UCS_ERR_NOT_CONNECTED) {  /* ECONNRESET cannot return from recv() */
             ucs_error("ep %p (fd=%d) failed to recv client's data "
