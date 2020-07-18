@@ -91,8 +91,8 @@ ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
         ucs_conn_match_elem_t *conn_match;
         ucp_ep_h ep;
 
-        conn_match = ucs_conn_match_retrieve(&worker->conn_match_ctx, &dest_uuid,
-                                             (ucs_conn_sn_t)conn_sn, is_exp);
+        conn_match = ucs_conn_match_get_elem(&worker->conn_match_ctx, &dest_uuid,
+                                             (ucs_conn_sn_t)conn_sn, is_exp, 1);
         if (conn_match == NULL) {
             return NULL;
         }
