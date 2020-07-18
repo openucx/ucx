@@ -229,9 +229,11 @@ protected:
 
         ASSERT_TRUE(len != 0);
 
+        s.resize(len);
+
         for (size_t i = 0; i < len; ++i) {
-            s += possible_vals[ucs::rand() %
-                               (ucs_array_size(possible_vals) - 1)];
+            s[i] = possible_vals[ucs::rand() %
+                                 (ucs_array_size(possible_vals) - 1)];
         }
     }
 
