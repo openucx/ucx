@@ -1441,7 +1441,6 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
-#if HAVE_CUDA
 static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
                                                   double *latency)
 {
@@ -1466,7 +1465,8 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
     status = ucm_get_mem_type_current_device_info(UCS_MEMORY_TYPE_CUDA,
                                                   &cuda_bus_id);
     if (status != UCS_OK) {
-        return status;
+        *latency = 0.0;
+        return UCS_OK;
     }
 
     status = ucs_topo_find_device_by_bus_id(&cuda_bus_id, &cuda_sys_device);
@@ -1483,7 +1483,6 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
 
     return UCS_OK;
 }
-#endif
 
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr)
@@ -1502,9 +1501,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     size_t mtu, width, extra_pkt_len;
     ucs_status_t status;
     double numa_latency;
-#if HAVE_CUDA
     double cuda_latency;
-#endif
 
     uct_base_iface_query(&iface->super, iface_attr);
     
@@ -1582,7 +1579,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     iface_attr->latency.c += numa_latency;
     iface_attr->latency.m  = 0;
 
-#if HAVE_CUDA
     status = uct_ib_iface_get_cuda_latency(iface, &cuda_latency);
     if (status != UCS_OK) {
         return status;
@@ -1590,7 +1586,6 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     iface_attr->latency.c += cuda_latency;
     iface_attr->latency.m  = 0;
-#endif
 
     /* Wire speed calculation: Width * SignalRate * Encoding */
     width                 = ib_port_widths[width_idx];
