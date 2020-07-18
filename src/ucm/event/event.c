@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <inttypes.h>
 
 
 UCS_LIST_HEAD(ucm_event_installer_list);
@@ -170,7 +171,7 @@ void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     ucm_event_t event;
 
     ucm_trace("ucm_mmap(addr=%p length=%lu prot=0x%x flags=0x%x fd=%d offset=%ld)",
-              addr, length, prot, flags, fd, offset);
+              addr, length, prot, flags, fd, (long)offset);
 
     ucm_event_enter();
 
