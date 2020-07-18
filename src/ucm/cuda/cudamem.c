@@ -19,6 +19,8 @@
 #include <ucs/debug/assert.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
+#include <ucs/sys/topo.h>
+#include <ucs/memory/memory_type.h>
 
 #include <sys/mman.h>
 #include <pthread.h>
@@ -455,9 +457,67 @@ static void ucm_cudamem_get_existing_alloc(ucm_event_handler_t *handler)
     }
 }
 
+ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id,
+                                              ucs_memory_type_t mem_type)
+{
+    static ucs_sys_bus_id_t cached_bus_id = {0xffff, 0xff, 0xff, 0xff};
+    CUresult cu_err;
+    CUdevice cuda_device;
+    CUdevice_attribute attribute;
+    int attr_result;
+
+    ucm_trace("ucm_cuda_get_current_device_info");
+
+    if (mem_type != UCS_MEMORY_TYPE_CUDA) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (cached_bus_id.slot != 0xff) {
+        memcpy(bus_id, &cached_bus_id, sizeof(cached_bus_id));
+        return UCS_OK;
+    }
+
+    /* Find cuda dev that the current ctx is using and find it's path*/
+    cu_err = cuCtxGetDevice(&cuda_device);
+    if (CUDA_SUCCESS != cu_err) {
+        ucm_error("no find current set device");
+        return UCS_OK;
+    }
+
+    attribute = CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID;
+    cu_err = cuDeviceGetAttribute(&attr_result, attribute, cuda_device);
+    if (CUDA_SUCCESS != cu_err) {
+        ucm_error("unable to get cuda device domain");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    bus_id->domain = (uint16_t)attr_result;
+
+    attribute = CU_DEVICE_ATTRIBUTE_PCI_BUS_ID;
+    cu_err = cuDeviceGetAttribute(&attr_result, attribute, cuda_device);
+    if (CUDA_SUCCESS != cu_err) {
+        ucm_error("unable to get cuda device bus id");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    bus_id->bus      = (uint8_t)attr_result;
+    bus_id->slot     = 0;
+    bus_id->function = 0;
+    cached_bus_id    = *bus_id;
+
+    ucm_trace("found bus_id %x:%x:%x:%x for device %d", bus_id->domain,
+                                                        bus_id->bus,
+                                                        bus_id->slot,
+                                                        bus_id->function,
+                                                        cuda_device);
+
+    return UCS_OK;
+}
+
 static ucm_event_installer_t ucm_cuda_initializer = {
-    .install            = ucm_cudamem_install,
-    .get_existing_alloc = ucm_cudamem_get_existing_alloc
+    .install                          = ucm_cudamem_install,
+    .get_existing_alloc               = ucm_cudamem_get_existing_alloc,
+    .get_mem_type_current_device_info = ucm_cuda_get_current_device_info
 };
 
 UCS_STATIC_INIT {
