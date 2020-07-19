@@ -136,10 +136,10 @@ out:
     return status;
 }
 
-static void uct_tcp_sockcm_ep_reset_comm_ctx(uct_tcp_sockcm_ep_t *cep)
+void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep)
 {
-    cep->comm_ctx.offset = 0;
-    cep->comm_ctx.length = 0;
+    ucs_list_del(&ep->list);
+    UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 }
 
 static void uct_tcp_sockcm_ep_invoke_error_cb(uct_tcp_sockcm_ep_t *cep,
@@ -167,23 +167,52 @@ static void uct_tcp_sockcm_ep_invoke_error_cb(uct_tcp_sockcm_ep_t *cep,
     }
 }
 
-void uct_tcp_sockcm_ep_handle_error(uct_tcp_sockcm_ep_t *cep, ucs_status_t status)
+void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
+                                           ucs_status_t status,
+                                           int events, const char *reason)
 {
     ucs_status_t async_status;
 
     ucs_assert(UCS_STATUS_IS_ERR(status));
+    ucs_assert(!(ep->state & UCT_TCP_SOCKCM_EP_FAILED));
 
-    ucs_trace("removing ep %p (fd=%d state=%d) async events handler. %s ",
-              cep, cep->fd, cep->state, ucs_status_string(status));
+    ucs_trace("handling error on %s ep %p (fd=%d state=%d events=%d) because %s: %s ",
+              ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client"),
+              ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
 
-    async_status = ucs_async_remove_handler(cep->fd, 1);
-    if (async_status != UCS_OK) {
-        ucs_warn("failed to remove fd %d from the async handlers: %s",
-                 cep->fd, ucs_status_string(async_status));
+    /* if the ep is on the server side but uct_ep_create wasn't called yet,
+     * destroy the ep here since uct_ep_destroy won't be called either */
+    if ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
+        !(ep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED)) {
+        ucs_assert(events == UCS_EVENT_SET_EVREAD);
+
+        ucs_trace("closing server's internal ep %p (state=%d)", ep, ep->state);
+        uct_tcp_sockcm_close_ep(ep);
+    } else {
+        ucs_trace("removing ep %p (fd=%d state=%d) async events handler. %s ",
+                  ep, ep->fd, ep->state, ucs_status_string(status));
+
+        async_status = ucs_async_remove_handler(ep->fd, 1);
+        if (async_status != UCS_OK) {
+            ucs_warn("failed to remove fd %d from the async handlers: %s",
+                     ep->fd, ucs_status_string(async_status));
+        }
+
+        /* if the private data pack callback failed, then the upper layer already
+         * knows about it since it failed in it. in this case, no need to invoke
+         * another upper layer callback. */
+        if (!(ep->state & UCT_TCP_SOCKCM_EP_PACK_CB_FAILED)) {
+            uct_tcp_sockcm_ep_invoke_error_cb(ep, status);
+        }
+
+        ep->state |= UCT_TCP_SOCKCM_EP_FAILED;
     }
+}
 
-    uct_tcp_sockcm_ep_invoke_error_cb(cep, status);
-    cep->state |= UCT_TCP_SOCKCM_EP_FAILED;
+static void uct_tcp_sockcm_ep_reset_comm_ctx(uct_tcp_sockcm_ep_t *cep)
+{
+    cep->comm_ctx.offset = 0;
+    cep->comm_ctx.length = 0;
 }
 
 static ucs_status_t uct_tcp_sockcm_ep_handle_remote_disconnect(uct_tcp_sockcm_ep_t *cep,
@@ -202,7 +231,7 @@ static ucs_status_t uct_tcp_sockcm_ep_handle_remote_disconnect(uct_tcp_sockcm_ep
      * it means that the server accepted the client's connection request and
      * created an ep to it. therefore, the server did not reject the request
      * and if we got here then the status should be UCS_ERR_CONNECTION_RESET.
-     * otherwise, the status is UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECTED */
+     * otherwise, the status is UCS_ERR_REJECTED */
     if (ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_CLIENT |
                                        UCT_TCP_SOCKCM_EP_DATA_SENT) &&
         !(cep->state & (UCT_TCP_SOCKCM_EP_HDR_RECEIVED |
@@ -358,6 +387,7 @@ static ucs_status_t uct_tcp_sockcm_ep_pack_priv_data(uct_tcp_sockcm_ep_t *cep)
                                uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len,
                                &priv_data_ret);
     if (status != UCS_OK) {
+        cep->state |= UCT_TCP_SOCKCM_EP_PACK_CB_FAILED;
         goto out;
     }
 
@@ -726,7 +756,6 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }
-
 
     /* check if the server opened this ep, to the client, on a CM that is
      * different from the one it created its internal ep on earlier, when it

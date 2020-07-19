@@ -50,34 +50,6 @@ static uct_cm_ops_t uct_tcp_sockcm_ops = {
     .ep_create        = uct_tcp_sockcm_ep_create
 };
 
-static void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep)
-{
-    ucs_list_del(&ep->list);
-    UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
-}
-
-static inline void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
-                                                         ucs_status_t status,
-                                                         int events, const char *reason)
-{
-    ucs_assert(UCS_STATUS_IS_ERR(status));
-    ucs_assert(!(ep->state & UCT_TCP_SOCKCM_EP_FAILED));
-
-    ucs_trace("handling error on %s ep %p (fd=%d state=%d events=%d) because %s: %s ",
-              ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client"),
-              ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
-
-    /* if the ep is on the server side but uct_ep_create wasn't called yet,
-     * destroy the ep here since uct_ep_destroy won't be called either */
-    if ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
-        !(ep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED)) {
-        ucs_assert(events == UCS_EVENT_SET_EVREAD);
-        uct_tcp_sockcm_close_ep(ep);
-    } else {
-        uct_tcp_sockcm_ep_handle_error(ep, status);
-    }
-}
-
 static ucs_status_t uct_tcp_sockcm_event_err_to_ucs_err_log(int fd,
                                                             ucs_log_level_t* log_level)
 {
