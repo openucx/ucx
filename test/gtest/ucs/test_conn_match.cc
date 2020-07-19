@@ -58,10 +58,8 @@ protected:
     }
 
     void init_new_address_length(size_t address_length) {
-        if (address_length != m_address_length) {
-            ucs_conn_match_cleanup(&m_conn_match_ctx);
-            conn_match_init(address_length);
-        }
+        ucs_conn_match_cleanup(&m_conn_match_ctx);
+        conn_match_init(address_length);
     }
 
     void *alloc_address(size_t idx, size_t address_length) {
