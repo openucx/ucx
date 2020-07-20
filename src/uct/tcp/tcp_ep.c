@@ -354,13 +354,14 @@ uct_tcp_ep_create_socket_and_connect(uct_tcp_iface_t *iface,
 
     status = ucs_socket_create(AF_INET, SOCK_STREAM, &fd);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
     if (*ep_p == NULL) {
         status = uct_tcp_ep_init(iface, fd, dest_addr, &ep);
         if (status != UCS_OK) {
-            goto err_close_fd;
+            ucs_close_fd(&fd);
+            goto err;
         }
 
         /* EP is responsible for this socket fd from now */
@@ -385,11 +386,9 @@ err_ep_destroy:
     if (*ep_p == NULL) {
         uct_tcp_ep_destroy_internal(&ep->super.super);
     }
-err_close_fd:
-    /* fd has to be valid in case of valid EP has been
-     * passed to this function */
-    ucs_assert((*ep_p == NULL) || (fd != -1));
-    ucs_close_fd(&fd);
+    ucs_assert(ep != NULL);
+    ucs_close_fd(&ep->fd);
+err:
     return status;
 }
 
