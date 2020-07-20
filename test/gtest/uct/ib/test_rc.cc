@@ -132,9 +132,9 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_max_wr)
 class test_rc_get_limit : public test_rc {
 public:
     test_rc_get_limit() {
-        m_num_get_ops = 8;
-        modify_config("RC_TX_NUM_GET_OPS",
-                      ucs::to_string(m_num_get_ops).c_str());
+        m_num_get_bytes = 8 * UCS_KBYTE + 557; // some non power of 2 value
+        modify_config("RC_TX_NUM_GET_BYTES",
+                      ucs::to_string(m_num_get_bytes).c_str());
 
         m_max_get_zcopy = 4096;
         modify_config("RC_MAX_GET_ZCOPY",
@@ -167,19 +167,19 @@ public:
     }
 #endif
 
-    unsigned reads_available(entity *e) {
+    ssize_t reads_available(entity *e) {
         return rc_iface(e)->tx.reads_available;
     }
 
     void post_max_reads(entity *e, const mapped_buffer &sendbuf,
                         const mapped_buffer &recvbuf) {
-        ucs_status_t status, status_exp;
-
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
                                 sendbuf.memh(), e->iface_attr().cap.get.max_iov);
 
-        for (unsigned i = 0; i <= m_num_get_ops; ++i) {
-            if (i % 2) {
+        int i = 0;
+        ucs_status_t status;
+        do {
+            if (i++ % 2) {
                 status = uct_ep_get_zcopy(e->ep(0), iov, iovcnt, recvbuf.addr(),
                                           recvbuf.rkey(), &m_comp);
             } else {
@@ -187,12 +187,10 @@ public:
                                           sendbuf.ptr(), sendbuf.length(),
                                           recvbuf.addr(), recvbuf.rkey(), &m_comp);
             }
-            status_exp = (i == m_num_get_ops) ? UCS_ERR_NO_RESOURCE :
-                                                UCS_INPROGRESS;
-            EXPECT_EQ(status_exp, status);
-        }
+        } while (status == UCS_INPROGRESS);
 
-        EXPECT_EQ(0u, reads_available(e));
+        EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+        EXPECT_GE(0u, reads_available(e));
     }
 
     static size_t empty_pack_cb(void *dest, void *arg) {
@@ -200,7 +198,7 @@ public:
     }
 
 protected:
-    unsigned         m_num_get_ops;
+    unsigned         m_num_get_bytes;
     unsigned         m_max_get_zcopy;
     uct_completion_t m_comp;
 };
@@ -226,7 +224,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_ops_limit,
     uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
 
     flush();
-    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
 }
 
 // Check that get function fails for messages bigger than MAX_GET_ZCOPY value
@@ -246,7 +244,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_size_limit,
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 
     flush();
-    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
 }
 
 // Check that get size value is trimmed by the actual maximum IB msg size
@@ -270,7 +268,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
                                  UCT_IFACE_FLAG_AM_BCOPY))
 {
-    unsigned max_get_ops = reads_available(m_e1);
+    unsigned max_get_bytes = reads_available(m_e1);
     ucs_status_t status;
 
     do {
@@ -278,7 +276,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
     } while (status == UCS_OK);
 
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
-    EXPECT_EQ(max_get_ops, reads_available(m_e1));
+    EXPECT_EQ(max_get_bytes, reads_available(m_e1));
 
     mapped_buffer buf(1024, 0ul, *m_e1);
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buf.ptr(), buf.length(), buf.memh(),
@@ -287,7 +285,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, post_get_no_res,
     status = uct_ep_get_zcopy(m_e1->ep(0), iov, iovcnt, buf.addr(), buf.rkey(),
                               &m_comp);
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
-    EXPECT_EQ(max_get_ops, reads_available(m_e1));
+    EXPECT_EQ(max_get_bytes, reads_available(m_e1));
 #ifdef ENABLE_STATS
     EXPECT_EQ(get_no_reads_stat_counter(m_e1), 0ul);
 #endif
@@ -368,7 +366,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, check_rma_ops,
     }
 
     flush();
-    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
 }
 
 // Check that outstanding get ops purged gracefully when ep is closed.
@@ -377,8 +375,8 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
                                  UCT_IFACE_FLAG_GET_BCOPY))
 {
-    mapped_buffer sendbuf(128, 0ul, *m_e1);
-    mapped_buffer recvbuf(128, 0ul, *m_e2);
+    mapped_buffer sendbuf(1024, 0ul, *m_e1);
+    mapped_buffer recvbuf(1024, 0ul, *m_e2);
 
     post_max_reads(m_e1, sendbuf, recvbuf);
 
@@ -401,7 +399,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
 
     m_e1->destroy_eps();
     flush();
-    EXPECT_EQ(m_num_get_ops, reads_available(m_e1));
+    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
 }
 
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_get_limit)

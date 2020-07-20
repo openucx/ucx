@@ -22,10 +22,6 @@
 #define UCP_MAX_IOV                16UL
 
 
-/* Configuration */
-typedef uint16_t                   ucp_ep_cfg_index_t;
-
-
 /* Endpoint flags type */
 #if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
 typedef uint32_t                   ucp_ep_flags_t;
@@ -107,7 +103,7 @@ enum {
  * This is filled by to the transport selection logic, according to the local
  * resources and set of remote addresses.
  */
-typedef struct ucp_ep_config_key {
+struct ucp_ep_config_key {
 
     ucp_lane_index_t         num_lanes;    /* Number of active lanes */
 
@@ -160,7 +156,7 @@ typedef struct ucp_ep_config_key {
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
     ucs_status_t             status;
-} ucp_ep_config_key_t;
+};
 
 
 /*
@@ -208,7 +204,20 @@ typedef struct ucp_memtype_thresh {
 } ucp_memtype_thresh_t;
 
 
-typedef struct ucp_ep_config {
+/*
+ * Rendezvous thresholds
+ */
+typedef struct ucp_rndv_thresh {
+    /* threshold calculated assuming faster remote completion */
+    size_t            remote;
+    /* threshold calculated assuming faster local completion, for instance
+     * when UCP_OP_ATTR_FLAG_FAST_CMP flag is provided to send operation
+     * parameters */
+    size_t            local;
+} ucp_rndv_thresh_t;
+
+
+struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
      * configuration (in the current worker) and defined only by it.
@@ -233,59 +242,59 @@ typedef struct ucp_ep_config {
     ucp_md_index_t          md_index[UCP_MAX_LANES];
 
     struct {
+        /* Maximal total size of rndv_get_zcopy */
+        size_t            max_get_zcopy;
+        /* Minimal size of rndv_get_zcopy */
+        size_t            min_get_zcopy;
+        /* Can the message > `max_get_zcopy` be split to
+         * the segments that are >= `min_get_zcopy` */
+        int               get_zcopy_split;
+        /* Maximal total size of rndv_put_zcopy */
+        size_t            max_put_zcopy;
+        /* Minimal size of rndv_put_zcopy */
+        size_t            min_put_zcopy;
+        /* Can the message > `max_put_zcopy` be split to
+         * the segments that are >= `min_put_zcopy` */
+        int               put_zcopy_split;
+        /* Threshold for switching from eager to RMA based rendezvous */
+        ucp_rndv_thresh_t rma_thresh;
+        /* Threshold for switching from eager to AM based rendezvous */
+        ucp_rndv_thresh_t am_thresh;
+        /* Total size of packed rkey, according to high-bw md_map */
+        size_t            rkey_size;
+        /* remote memory domains which support rkey_ptr */
+        ucp_md_map_t      rkey_ptr_dst_mds;
+        /* Lanes for GET zcopy */
+        ucp_lane_index_t  get_zcopy_lanes[UCP_MAX_LANES];
+        /* Lanes for PUT zcopy */
+        ucp_lane_index_t  put_zcopy_lanes[UCP_MAX_LANES];
+        /* BW based scale factor */
+        double            scale[UCP_MAX_LANES];
+    } rndv;
+
+    struct {
         /* Protocols used for tag matching operations
          * (can be AM based or tag offload). */
         const ucp_request_send_proto_t   *proto;
         const ucp_request_send_proto_t   *sync_proto;
 
         /* Lane used for tag matching operations. */
-        ucp_lane_index_t    lane;
+        ucp_lane_index_t     lane;
 
         /* Maximal size for eager short. */
         ucp_memtype_thresh_t max_eager_short;
 
         /* Configuration of the lane used for eager protocols
          * (can be AM or tag offload). */
-        ucp_ep_msg_config_t eager;
+        ucp_ep_msg_config_t  eager;
 
+        /* Threshold for switching from eager to rendezvous. Can be different
+         * from AM thresholds if tag offload is enabled and tag offload lane is
+         * not the same as AM lane. */
         struct {
-            /* Maximal total size of rndv_get_zcopy */
-            size_t          max_get_zcopy;
-            /* Minimal size of rndv_get_zcopy */
-            size_t          min_get_zcopy;
-            /* Can the message > `max_get_zcopy` be split to
-             * the segments that are >= `min_get_zcopy` */
-            int             get_zcopy_split;
-            /* Maximal total size of rndv_put_zcopy */
-            size_t          max_put_zcopy;
-            /* Minimal size of rndv_put_zcopy */
-            size_t          min_put_zcopy;
-            /* Can the message > `max_put_zcopy` be split to
-             * the segments that are >= `min_put_zcopy` */
-            int             put_zcopy_split;
-            /* Threshold for switching from eager to RMA based rendezvous */
-            size_t          rma_thresh;
-            /* Threshold for switching from eager to AM based rendezvous */
-            size_t          am_thresh;
-            /* Total size of packed rkey, according to high-bw md_map */
-            size_t          rkey_size;
-            /* remote memory domains which support rkey_ptr */
-            ucp_md_map_t    rkey_ptr_dst_mds;
-            /* Lanes for GET zcopy */
-            ucp_lane_index_t get_zcopy_lanes[UCP_MAX_LANES];
-            /* Lanes for PUT zcopy */
-            ucp_lane_index_t put_zcopy_lanes[UCP_MAX_LANES];
-            /* BW based scale factor */
-            double           scale[UCP_MAX_LANES];
+            ucp_rndv_thresh_t    rma_thresh;
+            ucp_rndv_thresh_t    am_thresh;
         } rndv;
-
-        /* special thresholds for the ucp_tag_send_nbr() */
-        struct {
-            /* Threshold for switching from eager to RMA based rendezvous */
-            size_t          rma_thresh;
-            /* Threshold for switching from eager to AM based rendezvous */
-            size_t          am_thresh;
-        } rndv_send_nbr;
 
         struct {
             /* Maximal size for eager short. */
@@ -303,14 +312,14 @@ typedef struct ucp_ep_config {
          * (currently it's only AM based). */
         const ucp_request_send_proto_t   *proto;
     } stream;
-    
+
     struct {
         /* Protocols used for am operations */
         const ucp_request_send_proto_t   *proto;
         const ucp_request_send_proto_t   *reply_proto;
     } am_u;
 
-} ucp_ep_config_t;
+};
 
 
 /**
@@ -319,8 +328,8 @@ typedef struct ucp_ep_config {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
-    ucp_ep_cfg_index_t            cfg_index;     /* Configuration index */
-    ucp_ep_conn_sn_t              conn_sn;       /* Sequence number for remote connection */
+    ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
+    ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */
 
@@ -355,6 +364,7 @@ typedef struct {
                                                    used in close protocol */
 } ucp_ep_close_proto_req_t;
 
+
 /*
  * Endpoint extension for generic non fast-path data
  */
@@ -369,7 +379,7 @@ typedef struct {
      * matched to a remote peer.
      */
     union {
-        ucp_ep_match_t            ep_match;      /* Matching with remote endpoints */
+        ucp_ep_match_elem_t       ep_match;      /* Matching with remote endpoints */
         ucp_ep_flush_state_t      flush_state;   /* Remove completion status */
         ucp_listener_h            listener;      /* Listener that may be associated with ep */
         ucp_ep_close_proto_req_t  close_req;     /* Close protocol request */
@@ -389,6 +399,8 @@ typedef struct {
 
     struct {
         ucs_list_link_t           started_ams;
+        ucs_queue_head_t          mid_rdesc_q; /* queue of middle fragments, which
+                                                  arrived before the first one */
     } am;
 } ucp_ep_ext_proto_t;
 
@@ -468,8 +480,8 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                          ucp_ep_h *ep_p);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
-                                       ucp_send_callback_t req_cb,
                                        unsigned req_flags,
+                                       const ucp_request_param_t *param,
                                        ucp_request_t *worker_req,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name);
@@ -504,7 +516,7 @@ int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
                                       ucp_lane_index_t lane);
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
-                                           const uct_linear_growth_t *reg_cost,
+                                           const ucs_linear_func_t *reg_cost,
                                            const ucp_context_h context,
                                            double bandwidth);
 

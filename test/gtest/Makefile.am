@@ -122,6 +122,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_mmap.cc \
 	ucp/test_ucp_mem_type.cc \
 	ucp/test_ucp_perf.cc \
+	ucp/test_ucp_proto.cc \
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_rma_mt.cc \
 	ucp/test_ucp_tag_cancel.cc \
@@ -147,6 +148,7 @@ gtest_SOURCES = \
 	ucs/test_callbackq.cc \
 	ucs/test_class.cc \
 	ucs/test_config.cc \
+	ucs/test_conn_match.cc \
 	ucs/test_datatype.cc \
 	ucs/test_debug.cc \
 	ucs/test_memtrack.cc \

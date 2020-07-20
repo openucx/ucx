@@ -15,8 +15,10 @@
 #include <ucs/debug/assert.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/sys/sock.h>
 
 #include <endian.h>
+#include <linux/ip.h>
 
 
 #define UCT_IB_QPN_ORDER                  24  /* How many bits can be an IB QP number */
@@ -175,6 +177,7 @@ typedef struct uct_ib_device {
     uint8_t                     ext_atomic_arg_sizes_be;
     uint8_t                     pci_fadd_arg_sizes;
     uint8_t                     pci_cswap_arg_sizes;
+    uint8_t                     atomic_align;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;

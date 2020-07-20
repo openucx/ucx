@@ -12,7 +12,7 @@ resources:
       image: ucfconsort.azurecr.io/ucx/centos7:1
       endpoint: ucfconsort_registry
     - container: fedora
-      image: ucfconsort.azurecr.io/ucx/fedora:2
+      image: ucfconsort.azurecr.io/ucx/fedora:3
       endpoint: ucfconsort_registry
 
 stages:
@@ -131,7 +131,7 @@ stages:
 
       # Test RPM build
       - job: build_rpm
-        displayName: build tarball and source rpm
+        displayName: Build tarball and source rpm
         container: fedora
         steps:
           - checkout: self
@@ -144,8 +144,15 @@ stages:
               set -eE
               gcc --version
               ./contrib/configure-release
-              ./contrib/buildrpm.sh -s -t -b
-            displayName: Build tarball
+              stdbuf -e0 -o0 ./contrib/buildrpm.sh -s -t -b |& tee rpmbuild.log
+              pattern='^warning: '
+              if grep -q "$pattern" rpmbuild.log; then
+                echo "rpm build generated warnings:"
+                grep "$pattern" rpmbuild.log
+                echo "##vso[task.logissue type=error]rpm build generated warnings"
+                echo "##vso[task.complete result=Failed;]"
+              fi
+            displayName: Configure source and build RPM
 
   - stage: Tests
     dependsOn: [Codestyle]
@@ -166,4 +173,8 @@ stages:
       parameters:
         name: new
         demands: ucx_new -equals yes
-
+    - template: tests.yml
+      parameters:
+        name: hwi
+        demands: ucx_hwi -equals yes
+    - template: io-demo.yml

@@ -10,8 +10,26 @@ import java.io.Closeable;
 import java.nio.ByteBuffer;
 
 public class UcpEndpoint extends UcxNativeStruct implements Closeable {
+    private final String paramsString;
+    // Keep a reference to errorHandler to prevent it from GC and have valid ref
+    // from JNI error handler.
+    private final UcpEndpointErrorHandler errorHandler;
+
+    @Override
+    public String toString() {
+        return "UcpEndpoint(id=" + getNativeId() + ", " + paramsString + ")";
+    }
 
     public UcpEndpoint(UcpWorker worker, UcpEndpointParams params) {
+        // For backward compatibility and better error tracking always set ep error handler.
+        if (params.errorHandler == null) {
+            params.setErrorHandler((ep, status, errorMsg) -> {
+                throw new UcxException("Endpoint " + ep.toString() +
+                    " error: " + errorMsg);
+            });
+        }
+        this.errorHandler = params.errorHandler;
+        this.paramsString = params.toString();
         setNativeId(createEndpointNative(params, worker.getNativeId()));
     }
 
@@ -235,7 +253,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      * Releases the endpoint without any confirmation from the peer. All
      * outstanding requests will be completed with UCS_ERR_CANCELED error.
      * This mode may cause transport level errors on remote side, so it requires set
-     * {@link UcpEndpointParams#setPeerErrorHadnlingMode()} for all endpoints created on
+     * {@link UcpEndpointParams#setPeerErrorHandlingMode()} for all endpoints created on
      * both (local and remote) sides to avoid undefined behavior.
      */
     public UcpRequest closeNonBlockingForce() {
@@ -249,7 +267,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         return closeNonBlockingNative(getNativeId(), UcpConstants.UCP_EP_CLOSE_MODE_FLUSH);
     }
 
-    private static native long createEndpointNative(UcpEndpointParams params, long workerId);
+    private native long createEndpointNative(UcpEndpointParams params, long workerId);
 
     private static native void destroyEndpointNative(long epId);
 

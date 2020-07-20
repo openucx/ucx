@@ -8,6 +8,7 @@
 #define UCP_RMA_H_
 
 #include <ucp/core/ucp_types.h>
+#include <ucp/core/ucp_rkey.h>
 #include <ucp/proto/proto_am.h>
 #include <uct/api/uct.h>
 

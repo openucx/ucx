@@ -9,6 +9,7 @@
 
 #include <ucs/type/status.h>
 
+BEGIN_C_DECLS
 
 /**
  * A pipe for event signaling.
@@ -41,5 +42,7 @@ void ucs_async_pipe_drain(ucs_async_pipe_t *p);
 static inline int ucs_async_pipe_rfd(ucs_async_pipe_t *p) {
     return p->read_fd;
 }
+
+END_C_DECLS
 
 #endif

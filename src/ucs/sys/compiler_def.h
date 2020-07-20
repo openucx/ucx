@@ -5,7 +5,6 @@
 * See file LICENSE for terms.
 */
 
-
 #ifndef UCS_COMPILER_DEF_H
 #define UCS_COMPILER_DEF_H
 

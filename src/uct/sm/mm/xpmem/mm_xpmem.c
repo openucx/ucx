@@ -112,12 +112,11 @@ static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     uct_mm_md_query(md, md_attr, 0);
 
-    md_attr->cap.flags         |= UCT_MD_FLAG_REG;
-    md_attr->reg_cost.overhead  = 60.0e-9;
-    md_attr->reg_cost.growth    = 0;
-    md_attr->cap.max_reg        = ULONG_MAX;
-    md_attr->cap.reg_mem_types  = UCS_MEMORY_TYPES_CPU_ACCESSIBLE;
-    md_attr->rkey_packed_size   = sizeof(uct_xpmem_packed_rkey_t);
+    md_attr->cap.flags        |= UCT_MD_FLAG_REG;
+    md_attr->reg_cost          = ucs_linear_func_make(60.0e-9, 0);
+    md_attr->cap.max_reg       = ULONG_MAX;
+    md_attr->cap.reg_mem_types = UCS_MEMORY_TYPES_CPU_ACCESSIBLE;
+    md_attr->rkey_packed_size  = sizeof(uct_xpmem_packed_rkey_t);
 
     return UCS_OK;
 }
@@ -267,6 +266,7 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
     rcache_params.ucm_event_priority = 0;
     rcache_params.ops                = &uct_xpmem_rcache_ops;
     rcache_params.context            = rmem;
+    rcache_params.flags              = UCS_RCACHE_FLAG_NO_PFN_CHECK;
 
     status = ucs_rcache_create(&rcache_params, "xpmem_remote_mem",
                                ucs_stats_get_root(), &rmem->rcache);

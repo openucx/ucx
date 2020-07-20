@@ -112,8 +112,6 @@ typedef enum {
 #define UCS_ARBITER_GROUP_ARBITER_DEFINE        ucs_arbiter_t *arbiter
 #define UCS_ARBITER_GROUP_ARBITER_SET(_group, _arbiter) \
     (_group)->arbiter = (_arbiter)
-#define UCS_ARBITER_GROUP_ARBITER_CHECK(_group, _arbiter) \
-    ucs_assert((_group)->arbiter == (_arbiter))
 #else
 #define UCS_ARBITER_GROUP_GUARD_DEFINE
 #define UCS_ARBITER_GROUP_GUARD_INIT(_group)
@@ -122,8 +120,11 @@ typedef enum {
 #define UCS_ARBITER_GROUP_GUARD_CHECK(_group)
 #define UCS_ARBITER_GROUP_ARBITER_DEFINE
 #define UCS_ARBITER_GROUP_ARBITER_SET(_group, _arbiter)
-#define UCS_ARBITER_GROUP_ARBITER_CHECK(_group, _arbiter)
 #endif
+
+#define UCS_ARBITER_GROUP_ARBITER_CHECK(_group, _arbiter) \
+    ucs_assertv((_group)->arbiter == (_arbiter), \
+                "%p == %p", (_group)->arbiter, _group)
 
 
 /**

@@ -61,7 +61,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, max_poll), UCS_CONFIG_TYPE_UINT},
 
   {UCT_TCP_CONFIG_MAX_CONN_RETRIES, "25",
-   "How many connection establishment attmepts should be done if dropped "
+   "How many connection establishment attempts should be done if dropped "
    "connection was detected due to lack of system resources",
    ucs_offsetof(uct_tcp_iface_config_t, max_conn_retries), UCS_CONFIG_TYPE_UINT},
 
@@ -70,13 +70,9 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    "option usually provides better performance",
    ucs_offsetof(uct_tcp_iface_config_t, sockopt_nodelay), UCS_CONFIG_TYPE_BOOL},
 
-  {"SNDBUF", "auto",
-   "Socket send buffer size",
-   ucs_offsetof(uct_tcp_iface_config_t, sockopt_sndbuf), UCS_CONFIG_TYPE_MEMUNITS},
+  UCT_TCP_SEND_RECV_BUF_FIELDS(ucs_offsetof(uct_tcp_iface_config_t, sockopt)),
 
-  {"RCVBUF", "auto",
-   "Socket receive buffer size",
-   ucs_offsetof(uct_tcp_iface_config_t, sockopt_rcvbuf), UCS_CONFIG_TYPE_MEMUNITS},
+  UCT_TCP_SYN_CNT(ucs_offsetof(uct_tcp_iface_config_t, syn_cnt)),
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 8, "send",
                                 ucs_offsetof(uct_tcp_iface_config_t, tx_mpool), ""),
@@ -95,7 +91,7 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
 {
     uct_tcp_iface_t *iface = ucs_derived_of(tl_iface, uct_tcp_iface_t);
 
-    *(struct in_addr*)addr = iface->config.ifaddr.sin_addr;
+    *(struct sockaddr_in*)addr = iface->config.ifaddr;
     return UCS_OK;
 }
 
@@ -125,19 +121,20 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     uct_base_iface_query(&iface->super, attr);
 
-    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.overhead,
+    status = uct_tcp_netif_caps(iface->if_name, &attr->latency.c,
                                 &attr->bandwidth.shared);
     if (status != UCS_OK) {
         return status;
     }
 
     attr->iface_addr_len   = sizeof(in_port_t);
-    attr->device_addr_len  = sizeof(struct in_addr);
+    attr->device_addr_len  = sizeof(struct sockaddr_in);
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                              UCT_IFACE_FLAG_AM_SHORT         |
                              UCT_IFACE_FLAG_AM_BCOPY         |
                              UCT_IFACE_FLAG_PENDING          |
-                             UCT_IFACE_FLAG_CB_SYNC;
+                             UCT_IFACE_FLAG_CB_SYNC          |
+                             UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
     attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                              UCT_IFACE_FLAG_EVENT_RECV      |
                              UCT_IFACE_FLAG_EVENT_FD;
@@ -167,7 +164,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     }
 
     attr->bandwidth.dedicated = 0;
-    attr->latency.growth      = 0;
+    attr->latency.m           = 0;
     attr->overhead            = 50e-6;  /* 50 usec */
 
     if (iface->config.prefer_default) {
@@ -240,21 +237,13 @@ static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (iface->outstanding) {
+    if (iface->outstanding != 0) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super);
         return UCS_INPROGRESS;
     }
 
     UCT_TL_IFACE_STAT_FLUSH(&iface->super);
     return UCS_OK;
-}
-
-static void uct_tcp_iface_listen_close(uct_tcp_iface_t *iface)
-{
-    if (iface->listen_fd != -1) {
-        close(iface->listen_fd);
-        iface->listen_fd = -1;
-    }
 }
 
 static void uct_tcp_iface_connect_handler(int listen_fd, int events, void *arg)
@@ -273,7 +262,7 @@ static void uct_tcp_iface_connect_handler(int listen_fd, int events, void *arg)
                                     &addrlen, &fd);
         if (status != UCS_OK) {
             if (status != UCS_ERR_NO_PROGRESS) {
-                uct_tcp_iface_listen_close(iface);
+                ucs_close_fd(&iface->listen_fd);
             }
             return;
         }
@@ -298,25 +287,13 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
         return status;
     }
 
-    if (iface->sockopt.sndbuf != UCS_MEMUNITS_AUTO) {
-        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_SNDBUF,
-                                   (const void*)&iface->sockopt.sndbuf,
-                                   sizeof(int));
-        if (status != UCS_OK) {
-            return status;
-        }
+    status = ucs_socket_set_buffer_size(fd, iface->sockopt.sndbuf,
+                                        iface->sockopt.rcvbuf);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    if (iface->sockopt.rcvbuf != UCS_MEMUNITS_AUTO) {
-        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_RCVBUF,
-                                   (const void*)&iface->sockopt.rcvbuf,
-                                   sizeof(int));
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    return UCS_OK;
+    return ucs_tcp_base_set_syn_cnt(fd, iface->config.syn_cnt);
 }
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
@@ -467,9 +444,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->config.conn_nb           = config->conn_nb;
     self->config.max_poll          = config->max_poll;
     self->config.max_conn_retries  = config->max_conn_retries;
+    self->config.syn_cnt           = config->syn_cnt;
     self->sockopt.nodelay          = config->sockopt_nodelay;
-    self->sockopt.sndbuf           = config->sockopt_sndbuf;
-    self->sockopt.rcvbuf           = config->sockopt_rcvbuf;
+    self->sockopt.sndbuf           = config->sockopt.sndbuf;
+    self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
+
     ucs_list_head_init(&self->ep_list);
     kh_init_inplace(uct_tcp_cm_eps, &self->ep_cm_map);
 
@@ -591,7 +570,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
     ucs_mpool_cleanup(&self->rx_mpool, 1);
     ucs_mpool_cleanup(&self->tx_mpool, 1);
 
-    uct_tcp_iface_listen_close(self);
+    ucs_close_fd(&self->listen_fd);
     ucs_event_set_cleanup(self->event_set);
 }
 

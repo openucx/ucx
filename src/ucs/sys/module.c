@@ -55,7 +55,8 @@ static void ucs_module_loader_add_dl_dir()
     char *dlpath_dup = NULL;
     size_t max_length;
     Dl_info dl_info;
-    char *p, *path;
+    const char *p;
+    char *path;
     int ret;
 
     (void)dlerror();
@@ -74,7 +75,7 @@ static void ucs_module_loader_add_dl_dir()
         return;
     }
 
-    p = basename(dlpath_dup);
+    p = ucs_basename(dlpath_dup);
     p = strchr(p, '.');
     if (p != NULL) {
         strncpy(ucs_module_loader_state.module_ext, p,

@@ -36,8 +36,11 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 typedef uint8_t                      ucp_lane_index_t;
 typedef uint8_t                      ucp_lane_map_t;
 
-/* Connection sequence number */
-typedef uint16_t                     ucp_ep_conn_sn_t;
+/* Worker configuration index for endpoint and rkey */
+typedef uint8_t                      ucp_worker_cfg_index_t;
+#define UCP_WORKER_MAX_EP_CONFIG     16
+#define UCP_WORKER_MAX_RKEY_CONFIG   128
+#define UCP_WORKER_CFG_INDEX_NULL    UINT8_MAX
 
 /* Forward declarations */
 typedef struct ucp_request              ucp_request_t;
@@ -52,6 +55,10 @@ typedef struct ucp_worker_cm            ucp_worker_cm_t;
 typedef struct ucp_rma_proto            ucp_rma_proto_t;
 typedef struct ucp_amo_proto            ucp_amo_proto_t;
 typedef struct ucp_wireup_sockaddr_data ucp_wireup_sockaddr_data_t;
+typedef struct ucp_ep_config            ucp_ep_config_t;
+typedef struct ucp_ep_config_key        ucp_ep_config_key_t;
+typedef struct ucp_rkey_config_key      ucp_rkey_config_key_t;
+typedef struct ucp_proto                ucp_proto_t;
 
 
 /**
@@ -86,12 +93,12 @@ enum {
     UCP_AM_ID_ATOMIC_REQ        =  20, /* Remote memory atomic request */
     UCP_AM_ID_ATOMIC_REP        =  21, /* Remote memory atomic reply */
     UCP_AM_ID_CMPL              =  22, /* Remote memory operation completion */
-    UCP_AM_ID_SINGLE            =  23, /* For user defined Active Messages */
-    UCP_AM_ID_MULTI             =  24, /* For user defined AM if message 
-                                          does not fit in one AM */
-    UCP_AM_ID_SINGLE_REPLY      =  25, /* For user defined AM when a reply
-                                          is needed */
-    UCP_AM_ID_MULTI_REPLY       =  26,
+    UCP_AM_ID_SINGLE            =  23, /* Single fragment user defined AM */
+    UCP_AM_ID_FIRST             =  24, /* First fragment of user defined AM */
+    UCP_AM_ID_MIDDLE            =  25, /* Middle or last fragment of user
+                                          defined AM */
+    UCP_AM_ID_SINGLE_REPLY      =  26, /* Single fragment user defined AM
+                                          carrying remote ep for reply */
     UCP_AM_ID_LAST
 };
 

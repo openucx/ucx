@@ -57,6 +57,12 @@ static void uct_ud_ep_resend_start(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_RESEND);
 }
 
+static void uct_ud_ep_resend_end(uct_ud_ep_t *ep)
+{
+    uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+    ep->flags &= ~UCT_UD_EP_FLAG_TX_NACKED;
+}
+
 static UCS_F_ALWAYS_INLINE void
 uct_ud_ep_resend_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
@@ -76,7 +82,7 @@ uct_ud_ep_resend_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     } else {
         /* everything in resend window was acked - no need to resend anymore */
         ep->resend.psn = ep->resend.max_psn + 1;
-        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+        uct_ud_ep_resend_end(ep);
     }
 }
 
@@ -244,7 +250,9 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
     status = iface->super.ops->set_ep_failed(&iface->super, &ep->super.super,
                                              UCS_ERR_ENDPOINT_TIMEOUT);
     if (status != UCS_OK) {
-        ucs_fatal("UD endpoint %p: unhandled timeout error", ep);
+        ucs_fatal("UD endpoint %p to "UCT_UD_EP_PEER_NAME_FMT": "
+                  "unhandled timeout error",
+                  ep, UCT_UD_EP_PEER_NAME_ARG(ep));
     }
 
     return 1;
@@ -311,15 +319,18 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
 
     last_send = ucs_max(ep->tx.send_time, ep->tx.resend_time);
     diff      = now - last_send;
-    if (diff > 3 * iface->tx.tick) {
-        ucs_trace("scheduling resend now: %lu last_send: %lu diff: %lu tick: %lu",
-                  now, last_send, diff, ep->tx.tick);
-        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
-        uct_ud_ep_ca_drop(ep);
-        uct_ud_ep_resend_start(iface, ep);
-    } else if ((diff > iface->tx.tick) && uct_ud_ep_is_connected(ep)) {
-        /* Try to request ACK twice before going into full resend mode */
-        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
+    if (diff > iface->tx.tick) {
+        if (diff > 3 * iface->tx.tick) {
+            ucs_trace("scheduling resend now: %lu last_send: %lu diff: %lu tick: %lu",
+                      now, last_send, diff, ep->tx.tick);
+            uct_ud_ep_ca_drop(ep);
+            uct_ud_ep_resend_start(iface, ep);
+        }
+
+        if (uct_ud_ep_is_connected(ep)) {
+            /* Try to request ACK/NACK twice before going into full resend mode */
+            uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
+        }
     }
 
     uct_ud_ep_timer_backoff(ep);
@@ -340,7 +351,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
     uct_ud_ep_reset(self);
     ucs_list_head_init(&self->cep_list);
     uct_ud_iface_add_ep(iface, self);
-    self->tx.tick = iface->async.tick;
+    self->tx.tick = iface->tx.tick;
     ucs_wtimer_init(&self->timer, uct_ud_ep_timer);
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
@@ -494,7 +505,8 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
     uct_ud_ep_t *ep;
     uct_ep_h new_ep_h;
 
-    ep = uct_ud_iface_cep_lookup(iface, ib_addr, if_addr, UCT_UD_EP_CONN_ID_MAX);
+    ep = uct_ud_iface_cep_lookup(iface, ib_addr, if_addr, UCT_UD_EP_CONN_ID_MAX,
+                                 path_index);
     if (ep) {
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
         ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
@@ -519,7 +531,8 @@ ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
         return status;
     }
 
-    status = uct_ud_iface_cep_insert(iface, ib_addr, if_addr, ep, UCT_UD_EP_CONN_ID_MAX);
+    status = uct_ud_iface_cep_insert(iface, ib_addr, if_addr, ep,
+                                     UCT_UD_EP_CONN_ID_MAX, path_index);
     if (status != UCS_OK) {
         goto err_cep_insert;
     }
@@ -622,9 +635,11 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
                                   (void*)&ctl->conn_req.ep_addr);
     ucs_assert_always(status == UCS_OK);
 
+    ep->path_index = ctl->conn_req.path_index;
+
     status = uct_ud_iface_cep_insert(iface, uct_ud_creq_ib_addr(ctl),
                                      &ctl->conn_req.ep_addr.iface_addr,
-                                     ep, ctl->conn_req.conn_id);
+                                     ep, ctl->conn_req.conn_id, ep->path_index);
     ucs_assert_always(status == UCS_OK);
     return ep;
 }
@@ -638,7 +653,8 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 
     ep = uct_ud_iface_cep_lookup(iface, uct_ud_creq_ib_addr(ctl),
                                  &ctl->conn_req.ep_addr.iface_addr,
-                                 ctl->conn_req.conn_id);
+                                 ctl->conn_req.conn_id,
+                                 ctl->conn_req.path_index);
     if (!ep) {
         ep = uct_ud_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
@@ -668,8 +684,20 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 
     ++ep->rx_creq_count;
 
-    ucs_assert_always(ctl->conn_req.conn_id == ep->conn_id);
-    ucs_assert_always(uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) == ep->dest_ep_id);
+    ucs_assertv_always(ctl->conn_req.conn_id == ep->conn_id,
+                       "creq->conn_id=%d ep->conn_id=%d",
+                       ctl->conn_req.conn_id, ep->conn_id);
+
+    ucs_assertv_always(ctl->conn_req.path_index == ep->path_index,
+                       "creq->path_index=%d ep->path_index=%d",
+                       ctl->conn_req.path_index, ep->path_index);
+
+    ucs_assertv_always(uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id) ==
+                       ep->dest_ep_id,
+                       "creq->ep_addr.ep_id=%d ep->dest_ep_id=%d",
+                       uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id),
+                       ep->dest_ep_id);
+
     /* creq must always have same psn */
     ucs_assertv_always(ep->rx.ooo_pkts.head_sn == neth->psn,
                        "iface=%p ep=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
@@ -693,8 +721,14 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ucs_trace_func("");
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREP);
-    ucs_assert_always(!uct_ud_ep_is_connected(ep) ||
-                      (ep->dest_ep_id == ctl->conn_rep.src_ep_id));
+
+    if (uct_ud_ep_is_connected(ep)) {
+        ucs_assertv_always(ep->dest_ep_id == ctl->conn_rep.src_ep_id,
+                           "ep [id=%d dest_ep_id=%d flags=0x%x] "
+                           "crep [neth->dest=%d dst_ep_id=%d src_ep_id=%d]",
+                           ep->ep_id, ep->dest_ep_id, ep->path_index, ep->flags,
+                           uct_ud_neth_get_dest_id(neth), ctl->conn_rep.src_ep_id);
+    }
 
     /* Discard duplicate CREP */
     if (UCT_UD_PSN_COMPARE(neth->psn, <, ep->rx.ooo_pkts.head_sn)) {
@@ -741,8 +775,9 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
 
     creq = (uct_ud_ctl_hdr_t *)(neth + 1);
 
-    creq->type                    = UCT_UD_PACKET_CREQ;
-    creq->conn_req.conn_id        = ep->conn_id;
+    creq->type                = UCT_UD_PACKET_CREQ;
+    creq->conn_req.conn_id    = ep->conn_id;
+    creq->conn_req.path_index = ep->path_index;
 
     status = uct_ud_ep_get_address(&ep->super.super,
                                    (void*)&creq->conn_req.ep_addr);
@@ -802,7 +837,16 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
                        ep->rx.ooo_pkts.head_sn, neth->psn);
     }
 
+    if (ucs_unlikely(UCT_UD_PSN_COMPARE(neth->psn, >, ep->rx.ooo_pkts.head_sn + 1))) {
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_NACK);
+    }
+
     if (ucs_unlikely(!is_am)) {
+        if (neth->packet_type & UCT_UD_PACKET_FLAG_NAK) {
+            uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_TX_NACKED);
+            goto out;
+        }
+
         if ((size_t)byte_len == sizeof(*neth)) {
             goto out;
         }
@@ -820,7 +864,6 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         }
         ucs_trace_data("DUP/OOB - schedule ack, head_sn=%d sn=%d",
                        ep->rx.ooo_pkts.head_sn, neth->psn);
-        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK);
         goto out;
     }
 
@@ -1040,7 +1083,11 @@ static void uct_ud_ep_send_creq_crep(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
 static void uct_ud_ep_resend(uct_ud_ep_t *ep)
 {
-    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+    uct_ud_iface_t *iface       = ucs_derived_of(ep->super.super.iface,
+                                                 uct_ud_iface_t);
+    size_t max_len_without_nack = sizeof(uct_ud_neth_t) +
+                                  sizeof(uct_ud_ctl_hdr_t) +
+                                  iface->super.addr_size;
     uct_ud_send_skb_t *skb, *sent_skb;
     ucs_queue_iter_t resend_pos;
     uct_ud_zcopy_desc_t *zdesc;
@@ -1051,14 +1098,14 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
 
     /* check if the resend window was acknowledged */
     if (UCT_UD_PSN_COMPARE(ep->resend.max_psn, <=, ep->tx.acked_psn)) {
-        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+        uct_ud_ep_resend_end(ep);
         return;
     }
 
     /* check window */
     resend_pos = ep->resend.pos;
     if (ucs_queue_iter_end(&ep->tx.window, resend_pos)) {
-        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+        uct_ud_ep_resend_end(ep);
         return;
     }
 
@@ -1068,7 +1115,15 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     if (UCT_UD_PSN_COMPARE(sent_skb->neth->psn, >=, ep->tx.max_psn)) {
         ucs_debug("ep(%p): out of window(psn=%d/max_psn=%d) - can not resend more",
                   ep, sent_skb ? sent_skb->neth->psn : -1, ep->tx.max_psn);
-        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+        uct_ud_ep_resend_end(ep);
+        return;
+    }
+
+    /* stop resend if packet is larger than CREQ and there wasn't NACK from
+     * other side */
+    if (!(ep->flags & UCT_UD_EP_FLAG_TX_NACKED) &&
+        (sent_skb->len > max_len_without_nack)) {
+        uct_ud_ep_resend_end(ep);
         return;
     }
 
@@ -1157,13 +1212,14 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     if (UCT_UD_PSN_COMPARE(ep->resend.psn, ==, ep->resend.max_psn)) {
         ucs_debug("ep(%p): resending completed", ep);
         ep->resend.psn = ep->resend.max_psn + 1;
-        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_RESEND);
+        uct_ud_ep_resend_end(ep);
     }
 
     /* Send control message and save operation on queue. Use signaled-send to
      * make sure user completion will not be delayed indefinitely */
     cdesc->sn = uct_ud_iface_send_ctl(iface, ep, skb, iov, iovcnt,
-                                      UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED,
+                                      UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED |
+                                      UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED,
                                       max_log_sge);
     uct_ud_iface_add_ctl_desc(iface, cdesc);
     ++ep->tx.resend_count;
@@ -1202,6 +1258,10 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
         skb->neth->packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
     }
 
+    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_NACK)) {
+        skb->neth->packet_type |= UCT_UD_PACKET_FLAG_NAK;
+    }
+
     if (is_inline) {
         uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
                               UCT_UD_IFACE_SEND_CTL_FLAG_INLINE, 1);
@@ -1216,7 +1276,7 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     }
 
 out:
-    uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK | UCT_UD_EP_OP_ACK_REQ);
+    uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CTL_ACK);
 }
 
 static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
@@ -1239,7 +1299,7 @@ static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
         }
     } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_RESEND)) {
         uct_ud_ep_resend(ep);
-    } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK | UCT_UD_EP_OP_ACK_REQ)) {
+    } else if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CTL_ACK)) {
         uct_ud_ep_send_ack(iface, ep);
     } else {
         ucs_assertv(!uct_ud_ep_ctl_op_isany(ep),
@@ -1464,7 +1524,6 @@ uct_ud_ep_pending_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
         ucs_debug("ep=%p cancelling user pending request %p", ep, req);
     }
 
-    fprintf(stderr, "%p: remove %p", ep, req);
     if (is_last_pending_elem) {
         uct_ud_ep_remove_has_pending_flag(ep);
     }

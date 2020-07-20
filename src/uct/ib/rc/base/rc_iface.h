@@ -133,7 +133,6 @@ typedef struct uct_rc_fc_request {
 typedef enum uct_rc_fence_mode {
     UCT_RC_FENCE_MODE_NONE,
     UCT_RC_FENCE_MODE_WEAK,
-    UCT_RC_FENCE_MODE_STRONG,
     UCT_RC_FENCE_MODE_AUTO,
     UCT_RC_FENCE_MODE_LAST
 } uct_rc_fence_mode_t;
@@ -151,8 +150,8 @@ typedef struct uct_rc_iface_common_config {
         unsigned             retry_count;
         double               rnr_timeout;
         unsigned             rnr_retry_count;
-        unsigned             max_get_ops;
         size_t               max_get_zcopy;
+        size_t               max_get_bytes;
     } tx;
 
     struct {
@@ -206,7 +205,7 @@ struct uct_rc_iface {
          * In case of verbs TL we use QWE number, so 1 post always takes 1
          * credit */
         signed                  cq_available;
-        unsigned                reads_available;
+        ssize_t                 reads_available;
         uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
@@ -438,7 +437,7 @@ static inline int uct_rc_iface_has_tx_resources(uct_rc_iface_t *iface)
 {
     return uct_rc_iface_have_tx_cqe_avail(iface) &&
            !ucs_mpool_is_empty(&iface->tx.mp) &&
-           (iface->tx.reads_available != 0);
+           (iface->tx.reads_available > 0);
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_send_handler_t
@@ -453,5 +452,20 @@ uct_rc_iface_atomic_handler(uct_rc_iface_t *iface, int ext, unsigned length)
                      iface->config.atomic64_handler;
     }
     return NULL;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_iface_fence_relaxed_order(uct_iface_h tl_iface)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    uct_ib_md_t *md         = ucs_derived_of(iface->md, uct_ib_md_t);
+
+    ucs_assert(tl_iface->ops.iface_fence == uct_rc_iface_fence);
+
+    if (!md->relaxed_order) {
+        return UCS_OK;
+    }
+
+    return uct_rc_iface_fence(tl_iface, 0);
 }
 #endif

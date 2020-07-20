@@ -395,6 +395,12 @@ AS_IF([test "x$enable_frame_pointer" = xyes],
                                       [AS_MESSAGE([compiling with frame pointer is not supported])])],
       [:])
 
+ADD_COMPILER_FLAG_IF_SUPPORTED([-funwind-tables],
+                               [-funwind-tables],
+                               [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
+                               [AS_MESSAGE([compiling with unwind tables])],
+                               [AS_MESSAGE([compiling without unwind tables])])
+
 
 #
 # Check for C++ support

@@ -67,8 +67,6 @@ public class NativeLibs {
                 errorMessage = "Native code library failed to load: " + file.getName()
                     + ". " + ex.getLocalizedMessage();
             }
-
-            file.deleteOnExit();
         }
     }
 

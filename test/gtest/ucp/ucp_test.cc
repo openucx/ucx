@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_worker.inl>
 #if HAVE_IB
 #include <uct/ib/ud/base/ud_iface.h>
 #endif
@@ -90,18 +91,12 @@ bool ucp_test::has_transport(const std::string& tl_name) const {
     return check_transport(tl_name, GetParam().transports);
 }
 
-bool ucp_test::has_only_transports(const std::vector<std::string>& tl_names) const {
-    const std::vector<std::string>& transports = GetParam().transports;
-    size_t other_tls_count                     = 0;
-    std::vector<std::string>::const_iterator iter;
+bool ucp_test::has_any_transport(const std::vector<std::string>& tl_names) const {
+    const std::vector<std::string>& all_tl_names = GetParam().transports;
 
-    for(iter = transports.begin(); iter != transports.end(); ++iter) {
-        if (!check_transport(*iter, tl_names)) {
-            other_tls_count++;
-        }
-    }
-
-    return !other_tls_count;
+    return std::find_first_of(all_tl_names.begin(), all_tl_names.end(),
+                              tl_names.begin(),     tl_names.end()) !=
+           all_tl_names.end();
 }
 
 bool ucp_test::is_self() const {

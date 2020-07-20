@@ -47,6 +47,13 @@ enum {
 };
 
 /*
+ * Rcache flags.
+ */
+enum {
+    UCS_RCACHE_FLAG_NO_PFN_CHECK = UCS_BIT(0), /**< PFN check not supported for this rcache */
+};
+
+/*
  * Registration cache operations.
  */
 struct ucs_rcache_ops {
@@ -113,6 +120,7 @@ struct ucs_rcache_params {
     const ucs_rcache_ops_t *ops;                /**< Memory operations functions */
     void                   *context;            /**< User-defined context that will
                                                      be passed to mem_reg/mem_dereg */
+    int                    flags;               /**< Flags */
 };
 
 
@@ -124,7 +132,13 @@ struct ucs_rcache_region {
     ucs_status_t           status;   /**< Current status code */
     uint8_t                prot;     /**< Protection bits */
     uint16_t               flags;    /**< Status flags. Protected by page table lock. */
-    uint64_t               priv;     /**< Used internally */
+    union {
+        uint64_t           priv;     /**< Used internally */
+        unsigned long     *pfn;      /**< Pointer to PFN array. In case if requested 
+                                          evaluation more than 1 page - PFN array is
+                                          allocated, if 1 page requested - used
+                                          in-place priv value. */
+    };
 };
 
 

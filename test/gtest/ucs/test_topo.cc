@@ -14,25 +14,31 @@ class test_topo : public ucs::test {
 
 UCS_TEST_F(test_topo, find_device_by_bus_id) {
     ucs_status_t status;
-    ucs_sys_device_t unknown_dev;
+    ucs_sys_device_t dev1;
+    ucs_sys_device_t dev2;
+    ucs_sys_bus_id_t dummy_bus_id;
 
-    status = ucs_topo_find_device_by_bus_id(&ucs_sys_bus_id_unknown, &unknown_dev);
+    dummy_bus_id.domain   = 0xffff;
+    dummy_bus_id.bus      = 0xff;
+    dummy_bus_id.slot     = 0xff;
+    dummy_bus_id.function = 1; 
+
+    status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &dev1);
     ASSERT_UCS_OK(status);
+
+    dummy_bus_id.function = 2; 
+
+    status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &dev2);
+    ASSERT_UCS_OK(status);
+    ASSERT_EQ(dev2, ((unsigned)dev1 + 1));
 }
 
 UCS_TEST_F(test_topo, get_distance) {
     ucs_status_t status;
-    ucs_sys_device_t unknown_dev1;
-    ucs_sys_device_t unknown_dev2;
     ucs_sys_dev_distance_t distance;
 
-    status = ucs_topo_find_device_by_bus_id(&ucs_sys_bus_id_unknown, &unknown_dev1);
-    ASSERT_UCS_OK(status);
-
-    status = ucs_topo_find_device_by_bus_id(&ucs_sys_bus_id_unknown, &unknown_dev2);
-    ASSERT_UCS_OK(status);
-
-    status = ucs_topo_get_distance(unknown_dev1, unknown_dev2, &distance);
+    status = ucs_topo_get_distance(UCS_SYS_DEVICE_ID_UNKNOWN,
+                                   UCS_SYS_DEVICE_ID_UNKNOWN, &distance);
     ASSERT_UCS_OK(status);
 }
 

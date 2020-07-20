@@ -123,7 +123,7 @@ static ucs_status_t uct_knem_mem_reg_internal(uct_md_h md, void *address, size_t
 
     rc = ioctl(knem_fd, KNEM_CMD_CREATE_REGION, &create);
     if (rc < 0) {
-        if (!silent) {
+        if (!silent && !(flags & UCT_MD_MEM_FLAG_HIDE_ERRORS)) {
             /* do not report error in silent mode: it called from rcache
              * internals, rcache will try to register memory again with
              * more accurate data */
@@ -339,11 +339,10 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    knem_md->super.ops         = &md_ops;
-    knem_md->super.component   = &uct_knem_component;
-    knem_md->reg_cost.overhead = 1200.0e-9;
-    knem_md->reg_cost.growth   = 0.007e-9;
-    knem_md->rcache            = NULL;
+    knem_md->super.ops       = &md_ops;
+    knem_md->super.component = &uct_knem_component;
+    knem_md->reg_cost        = ucs_linear_func_make(1200.0e-9, 0.007e-9);
+    knem_md->rcache          = NULL;
 
     knem_md->knem_fd = open("/dev/knem", O_RDWR);
     if (knem_md->knem_fd < 0) {
@@ -360,12 +359,13 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
         rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = knem_md;
         rcache_params.ops                = &uct_knem_rcache_ops;
+        rcache_params.flags              = 0;
         status = ucs_rcache_create(&rcache_params, "knem rcache device",
                                    ucs_stats_get_root(), &knem_md->rcache);
         if (status == UCS_OK) {
-            knem_md->super.ops         = &uct_knem_md_rcache_ops;
-            knem_md->reg_cost.overhead = md_config->rcache.overhead;
-            knem_md->reg_cost.growth   = 0; /* It's close enough to 0 */
+            knem_md->super.ops = &uct_knem_md_rcache_ops;
+            knem_md->reg_cost  = ucs_linear_func_make(md_config->rcache.overhead,
+                                                      0);
         } else {
             ucs_assert(knem_md->rcache == NULL);
             if (md_config->rcache_enable == UCS_YES) {

@@ -11,7 +11,7 @@
 
 #include "ucp_am.h"
 #include "ucp_worker.h"
-#include "ucp_mm.h"
+#include "ucp_rkey.h"
 #include "ucp_request.inl"
 
 #include <ucp/wireup/address.h>
@@ -69,7 +69,10 @@ static ucs_stats_class_t ucp_worker_stats_class = {
         [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP]   = "rx_eager_chunk_exp",
         [UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP] = "rx_eager_chunk_unexp",
         [UCP_WORKER_STAT_TAG_RX_RNDV_EXP]          = "rx_rndv_rts_exp",
-        [UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP]        = "rx_rndv_rts_unexp"
+        [UCP_WORKER_STAT_TAG_RX_RNDV_UNEXP]        = "rx_rndv_rts_unexp",
+        [UCP_WORKER_STAT_TAG_RX_RNDV_GET_ZCOPY]    = "rx_rndv_get_zcopy",
+        [UCP_WORKER_STAT_TAG_RX_RNDV_SEND_RTR]     = "rx_rndv_send_rtr",
+        [UCP_WORKER_STAT_TAG_RX_RNDV_RKEY_PTR]     = "rx_rndv_rkey_ptr"
     }
 };
 #endif
@@ -1088,8 +1091,10 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
 
     worker->scalable_tl_bitmap = 0;
     ucs_for_each_bit(tl_id, context->tl_bitmap) {
+        ucs_assert(ucp_worker_is_tl_p2p(worker, tl_id) ||
+                   ucp_worker_is_tl_2iface(worker, tl_id) ||
+                   ucp_worker_is_tl_2sockaddr(worker, tl_id));
         wiface = ucp_worker_iface(worker, tl_id);
-
         if (ucp_is_scalable_transport(context, wiface->attr.max_num_eps)) {
             worker->scalable_tl_bitmap |= UCS_BIT(tl_id);
         }
@@ -1569,7 +1574,7 @@ static char* ucp_worker_add_feature_rsc(ucp_context_h context,
 
 static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                       ucp_context_h context,
-                                      ucp_ep_cfg_index_t config_idx)
+                                      ucp_worker_cfg_index_t config_idx)
 {
     char info[256]                  = {0};
     ucp_lane_map_t tag_lanes_map    = 0;
@@ -1658,7 +1663,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 
     status = ucs_mpool_init(&worker->rndv_frag_mp, 0,
                             context->config.ext.rndv_frag_size + sizeof(ucp_mem_desc_t),
-                            sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE, 128,
+                            sizeof(ucp_mem_desc_t), UCS_SYS_PCI_MAX_PAYLOAD, 128,
                             UINT_MAX, &ucp_frag_mpool_ops, "ucp_rndv_frags");
     if (status != UCS_OK) {
         goto err_release_reg_mpool;
@@ -1680,39 +1685,83 @@ out:
  * A 'key' identifies an entry in the ep_config array. An entry holds the key and
  * additional configuration parameters and thresholds.
  */
-ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
-                                      const ucp_ep_config_key_t *key,
-                                      int print_cfg,
-                                      ucp_ep_cfg_index_t *config_idx_p)
+ucs_status_t
+ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
+                         int print_cfg, ucp_worker_cfg_index_t *cfg_index_p)
 {
-    ucp_ep_cfg_index_t config_idx;
+    ucp_context_h context = worker->context;
+    ucp_worker_cfg_index_t ep_cfg_index;
+    ucp_ep_config_t *ep_config;
     ucs_status_t status;
 
     /* Search for the given key in the ep_config array */
-    for (config_idx = 0; config_idx < worker->ep_config_count; ++config_idx) {
-        if (ucp_ep_config_is_equal(&worker->ep_config[config_idx].key, key)) {
+    for (ep_cfg_index = 0; ep_cfg_index < worker->ep_config_count;
+         ++ep_cfg_index) {
+        if (ucp_ep_config_is_equal(&worker->ep_config[ep_cfg_index].key, key)) {
             goto out;
         }
     }
 
-    if (worker->ep_config_count >= worker->ep_config_max) {
-        /* TODO support larger number of configurations */
-        ucs_fatal("too many ep configurations: %d", worker->ep_config_count);
+    if (worker->ep_config_count >= UCP_WORKER_MAX_EP_CONFIG) {
+        ucs_error("too many ep configurations: %d (max: %d)",
+                  worker->ep_config_count, UCP_WORKER_MAX_EP_CONFIG);
+        return UCS_ERR_EXCEEDS_LIMIT;
     }
 
     /* Create new configuration */
-    config_idx = worker->ep_config_count++;
-    status = ucp_ep_config_init(worker, &worker->ep_config[config_idx], key);
+    ep_cfg_index = worker->ep_config_count;
+    ep_config    = &worker->ep_config[ep_cfg_index];
+    status       = ucp_ep_config_init(worker, ep_config, key);
     if (status != UCS_OK) {
         return status;
     }
 
+    ++worker->ep_config_count;
+
     if (print_cfg) {
-        ucp_worker_print_used_tls(key, worker->context, config_idx);
+        ucp_worker_print_used_tls(key, context, ep_cfg_index);
     }
 
 out:
-    *config_idx_p = config_idx;
+    *cfg_index_p = ep_cfg_index;
+    return UCS_OK;
+}
+
+ucs_status_t
+ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key,
+                           ucp_worker_cfg_index_t *cfg_index_p)
+{
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_rkey_config_t *rkey_config;
+    khiter_t khiter;
+    int khret;
+
+    ucs_assert(worker->context->config.ext.proto_enable);
+
+    if (worker->rkey_config_count >= UCP_WORKER_MAX_RKEY_CONFIG) {
+        ucs_error("too many rkey configurations: %d (max: %d)",
+                  worker->rkey_config_count, UCP_WORKER_MAX_RKEY_CONFIG);
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    /* initialize rkey configuration */
+    rkey_cfg_index   = worker->rkey_config_count;
+    rkey_config      = &worker->rkey_config[rkey_cfg_index];
+    rkey_config->key = *key;
+
+    khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
+                    &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    /* we should not get into this function if key already exists */
+    ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
+
+    kh_value(&worker->rkey_config_hash, khiter) = rkey_cfg_index;
+
+    ++worker->rkey_config_count;
+    *cfg_index_p = rkey_cfg_index;
     return UCS_OK;
 }
 
@@ -1728,17 +1777,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                ucp_worker_h *worker_p)
 {
     ucs_thread_mode_t uct_thread_mode;
-    unsigned config_count;
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
 
-    config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
-                           UINT8_MAX);
-
-    worker = ucs_calloc(1, sizeof(*worker) +
-                           sizeof(*worker->ep_config) * config_count,
-                        "ucp worker");
+    worker = ucs_calloc(1, sizeof(*worker), "ucp worker");
     if (worker == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -1767,7 +1810,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->uuid              = ucs_generate_uuid((uintptr_t)worker);
     worker->flush_ops_count   = 0;
     worker->inprogress        = 0;
-    worker->ep_config_max     = config_count;
+    worker->rkey_config_count = 0;
     worker->ep_config_count   = 0;
     worker->num_active_ifaces = 0;
     worker->num_ifaces        = 0;
@@ -1777,7 +1820,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
-    ucp_ep_match_init(&worker->ep_match_ctx);
+    ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
+                        &ucp_ep_match_ops);
+    kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
@@ -1793,10 +1838,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         worker->user_data = NULL;
     }
 
-    if (context->config.features & UCP_FEATURE_AM){
-        worker->am_cbs            = NULL;
-        worker->am_cb_array_len   = 0;
-    }
     name_length = ucs_min(UCP_WORKER_NAME_MAX,
                           context->config.ext.max_worker_name + 1);
     ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
@@ -1867,6 +1908,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_wakeup_cleanup;
     }
 
+    /* Initialize UCP AMs */
+    status = ucp_am_init(worker);
+    if (status != UCS_OK) {
+        goto err_tag_match_cleanup;
+    }
+
     /* Open all resources as interfaces on this worker */
     status = ucp_worker_add_resource_ifaces(worker);
     if (status != UCS_OK) {
@@ -1906,6 +1953,7 @@ err_close_cms:
     ucp_worker_close_cms(worker);
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
+err_tag_match_cleanup:
     ucp_tag_match_cleanup(&worker->tm);
 err_wakeup_cleanup:
     ucp_worker_wakeup_cleanup(worker);
@@ -1953,24 +2001,25 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_trace_func("worker=%p", worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ucs_free(worker->am_cbs);
     ucp_worker_destroy_eps(worker);
     ucp_worker_remove_am_handlers(worker);
+    ucp_am_cleanup(worker);
     ucp_worker_close_cms(worker);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucp_worker_destroy_ep_configs(worker);
+    ucp_tag_match_cleanup(&worker->tm);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
     ucp_worker_close_ifaces(worker);
-    ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_wakeup_cleanup(worker);
     ucs_mpool_cleanup(&worker->rkey_mp, 1);
     ucs_mpool_cleanup(&worker->req_mp, 1);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
-    ucp_ep_match_cleanup(&worker->ep_match_ctx);
+    ucs_conn_match_cleanup(&worker->conn_match_ctx);
+    kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);

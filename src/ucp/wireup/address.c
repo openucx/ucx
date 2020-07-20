@@ -129,7 +129,7 @@ enum {
 
 static size_t ucp_address_iface_attr_size(ucp_worker_t *worker)
 {
-    return ucp_worker_unified_mode(worker) ?
+    return ucp_worker_is_unified_mode(worker) ?
            sizeof(ucp_address_unified_iface_attr_t) :
            sizeof(ucp_address_packed_iface_attr_t);
 }
@@ -216,15 +216,14 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
 
         dev = ucp_address_get_device(context, rsc_index, devices, &num_devices);
 
-        if ((flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) &&
-            ucp_worker_iface_is_tl_p2p(iface_attr)) {
+        if (flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) {
+            ucs_assert(ep != NULL);
             /* Each lane which matches the resource index adds an ep address
              * entry. The length and flags is packed in non-unified mode only.
              */
-            ucs_assert(ep != NULL);
-            for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+            ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
                 if (ucp_ep_get_rsc_index(ep, lane) == rsc_index) {
-                    dev->tl_addrs_size += !ucp_worker_unified_mode(worker);
+                    dev->tl_addrs_size += !ucp_worker_is_unified_mode(worker);
                     dev->tl_addrs_size += iface_attr->ep_addr_len;
                     dev->tl_addrs_size += sizeof(uint8_t); /* lane index */
                 }
@@ -236,7 +235,7 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
         if (flags & UCP_ADDRESS_PACK_FLAG_IFACE_ADDR) {
             /* iface address (its length will be packed in non-unified mode only) */
             dev->tl_addrs_size += iface_attr->iface_addr_len;
-            dev->tl_addrs_size += !ucp_worker_unified_mode(worker); /* if addr length */
+            dev->tl_addrs_size += !ucp_worker_is_unified_mode(worker); /* if addr length */
             dev->tl_addrs_size += ucp_address_iface_attr_size(worker);
         } else {
             dev->tl_addrs_size += 1; /* 0-value for valid unpacking */
@@ -377,15 +376,15 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     }
 
 
-    if (ucp_worker_unified_mode(worker)) {
+    if (ucp_worker_is_unified_mode(worker)) {
         /* In unified mode all workers have the same transports and tl bitmap.
          * Just send rsc index, so the remote peer could fetch iface attributes
          * from its local iface. Also send latency overhead, because it
          * depends on device NUMA locality. */
         unified            = ptr;
         unified->rsc_index = rsc_index;
-        unified->lat_ovh   = enable_atomics ? -iface_attr->latency.overhead :
-                                               iface_attr->latency.overhead;
+        unified->lat_ovh   = enable_atomics ? -iface_attr->latency.c :
+                                               iface_attr->latency.c;
 
         return sizeof(*unified);
     }
@@ -394,7 +393,7 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     packed->prio_cap_flags = ((uint8_t)iface_attr->priority);
     packed->overhead       = iface_attr->overhead;
     packed->bandwidth      = iface_attr->bandwidth.dedicated - iface_attr->bandwidth.shared;
-    packed->lat_ovh        = iface_attr->latency.overhead;
+    packed->lat_ovh        = iface_attr->latency.c;
 
     ucs_assert((ucs_popcount(UCP_ADDRESS_IFACE_FLAGS) +
                 ucs_popcount(UCP_ADDRESS_IFACE_EVENT_FLAGS)) <= 22);
@@ -437,7 +436,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_idx;
 
-    if (ucp_worker_unified_mode(worker)) {
+    if (ucp_worker_is_unified_mode(worker)) {
         /* Address contains resources index and iface latency overhead
          * (not all iface attrs). */
         unified               = ptr;
@@ -506,7 +505,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
 static void*
 ucp_address_iface_flags_ptr(ucp_worker_h worker, void *attr_ptr, int attr_len)
 {
-    if (ucp_worker_unified_mode(worker)) {
+    if (ucp_worker_is_unified_mode(worker)) {
         /* In unified mode, rsc_index is packed instead of attrs. Address flags
          * will be packed in the end of rsc_index byte. */
         UCS_STATIC_ASSERT(ucs_offsetof(ucp_address_unified_iface_attr_t,
@@ -522,7 +521,7 @@ ucp_address_iface_flags_ptr(ucp_worker_h worker, void *attr_ptr, int attr_len)
 static void*
 ucp_address_pack_length(ucp_worker_h worker, void *ptr, size_t addr_length)
 {
-    if (ucp_worker_unified_mode(worker)) {
+    if (ucp_worker_is_unified_mode(worker)) {
         return ptr;
     }
 
@@ -545,7 +544,7 @@ ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void
      * address last flag is part of lane index */
     ucs_assert(!is_ep_addr || is_last_iface == NULL);
 
-    if (ucp_worker_unified_mode(worker)) {
+    if (ucp_worker_is_unified_mode(worker)) {
         /* In unified mode:
          * - flags are packed with rsc index in ucp_address_unified_iface_attr_t
          * - iface and ep addr lengths are not packed, need to take them from
@@ -731,14 +730,12 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
              * one is marked with UCP_ADDRESS_FLAG_LAST in its length field.
              */
             num_ep_addrs = 0;
-            if ((pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) &&
-                ucp_worker_iface_is_tl_p2p(iface_attr)) {
-
+            if (pack_flags & UCP_ADDRESS_PACK_FLAG_EP_ADDR) {
                 ucs_assert(ep != NULL);
                 ep_addr_len = iface_attr->ep_addr_len;
                 ep_lane_ptr = NULL;
 
-                for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+                ucs_for_each_bit(lane, ucp_ep_config(ep)->p2p_lanes) {
                     if (ucp_ep_get_rsc_index(ep, lane) != rsc_index) {
                         continue;
                     }
@@ -797,7 +794,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                           iface_attr->bandwidth.dedicated,
                           iface_attr->bandwidth.shared,
                           iface_attr->overhead,
-                          iface_attr->latency.overhead,
+                          iface_attr->latency.c,
                           iface_attr->priority,
                           iface_attr->cap.atomic32.op_flags,
                           iface_attr->cap.atomic32.fop_flags,

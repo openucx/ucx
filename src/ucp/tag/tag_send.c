@@ -10,7 +10,7 @@
 
 #include "tag_match.inl"
 #include "eager.h"
-#include "rndv.h"
+#include "tag_rndv.h"
 
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
@@ -67,11 +67,11 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
 
     if ((param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
         ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
-        rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv_send_nbr.rma_thresh;
-        rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv_send_nbr.am_thresh;
+        rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv.rma_thresh.local;
+        rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv.am_thresh.local;
     } else {
-        rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv.rma_thresh;
-        rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv.am_thresh;
+        rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv.rma_thresh.remote;
+        rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv.am_thresh.remote;
     }
 
     rndv_thresh = ucp_tag_get_rndv_threshold(req, dt_count, msg_config->max_iov,
@@ -126,7 +126,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
         ucp_request_imm_cmpl_param(param, req, status, send);
     }
 
-    ucp_request_set_send_callback_param(param, req);
+    ucp_request_set_send_callback_param(param, req, send);
     ucs_trace_req("returning send request %p", req);
     return req + 1;
 }

@@ -51,6 +51,11 @@ ucs_status_t ucs_empty_function_return_no_resource()
     return UCS_ERR_NO_RESOURCE;
 }
 
+ucs_status_t ucs_empty_function_return_invalid_param()
+{
+    return UCS_ERR_INVALID_PARAM;
+}
+
 ucs_status_ptr_t ucs_empty_function_return_ptr_no_resource()
 {
     return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);

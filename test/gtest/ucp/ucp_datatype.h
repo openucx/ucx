@@ -21,7 +21,7 @@ namespace ucp {
 
 /* Can't be destroyed before related UCP request is completed */
 class data_type_desc_t {
-public: 
+public:
     enum {
         MAX_IOV = 40
     };
@@ -119,13 +119,20 @@ struct dt_gen_state {
     int                 started;
     uint32_t            magic;
     void                *context;
+    void                *buffer;
 };
+
+std::vector<std::vector<ucp_datatype_t> >
+datatype_pairs(const ucp_generic_dt_ops_t *ops, size_t contig_elem_size = 1);
+
+std::string datatype_name(ucp_datatype_t dt);
 
 extern int dt_gen_start_count;
 extern int dt_gen_finish_count;
 extern ucp_generic_dt_ops test_dt_uint32_ops;
 extern ucp_generic_dt_ops test_dt_uint32_err_ops;
 extern ucp_generic_dt_ops test_dt_uint8_ops;
+extern ucp_generic_dt_ops test_dt_copy_ops;
 
 } // ucp
 

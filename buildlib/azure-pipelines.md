@@ -76,3 +76,16 @@ $ docker run --rm -ti -v `pwd`:`pwd` -w `pwd` ucfconsort.azurecr.io/ucx/centos7:
 ```
 
 This will duplicate what will happen when running inside AZP.
+
+# Release images
+To build release images there is a `docker-compose` config. Here is how to use it:
+```sh
+cd buildlib
+docker-compose build
+```
+
+Tag and push release images:
+```sh
+./buildlib/push-release-images.sh
+```
+

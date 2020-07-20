@@ -97,6 +97,8 @@ typedef struct ucp_context_config {
     int                                    unified_mode;
     /** Enable cm wireup-and-close protocol for client-server connections */
     ucs_ternary_value_t                    sockaddr_cm_enable;
+    /** Enable new protocol selection logic */
+    int                                    proto_enable;
 } ucp_context_config_t;
 
 
@@ -175,9 +177,10 @@ typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_md_index_t                num_mds;    /* Number of memory domains */
 
-    /* List of MDs which detect non host memory type */
+    /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
+    uint64_t                      mem_type_mask;            /* Supported mem type mask */
     ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
@@ -405,10 +408,9 @@ int ucp_is_scalable_transport(ucp_context_h context, size_t max_num_eps)
 }
 
 static UCS_F_ALWAYS_INLINE double
-ucp_tl_iface_latency(ucp_context_h context, const uct_linear_growth_t *latency)
+ucp_tl_iface_latency(ucp_context_h context, const ucs_linear_func_t *latency)
 {
-    return latency->overhead +
-           (latency->growth * context->config.est_num_eps);
+    return ucs_linear_func_apply(*latency, context->config.est_num_eps);
 }
 
 static UCS_F_ALWAYS_INLINE double

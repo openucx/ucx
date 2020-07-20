@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2019. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
@@ -31,9 +31,14 @@ noinst_HEADERS = \
 	core/ucp_proxy_ep.h \
 	core/ucp_request.h \
 	core/ucp_request.inl \
+	core/ucp_rkey.h \
+	core/ucp_rkey.inl \
 	core/ucp_worker.h \
+	core/ucp_worker.inl \
 	core/ucp_thread.h \
 	core/ucp_types.h \
+	dt/datatype_iter.h \
+	dt/datatype_iter.inl \
 	dt/dt.h \
 	dt/dt.inl \
 	dt/dt_contig.h \
@@ -42,10 +47,13 @@ noinst_HEADERS = \
 	proto/lane_type.h \
 	proto/proto_am.h \
 	proto/proto_am.inl \
+	proto/proto_select.h \
+	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \
 	tag/eager.h \
 	tag/rndv.h \
+	tag/tag_rndv.h \
 	tag/tag_match.h \
 	tag/tag_match.inl \
 	tag/offload.h \
@@ -88,6 +96,7 @@ libucp_la_SOURCES = \
 	dt/dt.c \
 	proto/lane_type.c \
 	proto/proto_am.c \
+	proto/proto.c \
 	rma/amo_basic.c \
 	rma/amo_send.c \
 	rma/amo_sw.c \
@@ -99,6 +108,7 @@ libucp_la_SOURCES = \
 	tag/eager_snd.c \
 	tag/probe.c \
 	tag/rndv.c \
+	tag/tag_rndv.c \
 	tag/tag_match.c \
 	tag/tag_recv.c \
 	tag/tag_send.c \

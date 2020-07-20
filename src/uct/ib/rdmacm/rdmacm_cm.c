@@ -106,7 +106,14 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
     conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +
                                          sizeof(uct_rdmacm_priv_data_hdr_t));
 
-    status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
+    status = uct_rdmacm_cm_ep_pack_cb(cep, &conn_param);
+    if (status != UCS_OK) {
+        cep->status = status;
+        cep->flags |= UCT_RDMACM_CM_EP_FAILED;
+        return;
+    }
+
+    status = uct_rdamcm_cm_ep_set_qp_num(&conn_param, cep);
     if (status != UCS_OK) {
         remote_data.field_mask = 0;
         uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
@@ -328,8 +335,8 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
 
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
 {
-    uct_rdmacm_cm_ep_t   *cep         = event->id->context;
-    struct sockaddr      *remote_addr = rdma_get_peer_addr(event->id);
+    uct_rdmacm_cm_ep_t   *cep                 = event->id->context;
+    struct sockaddr UCS_V_UNUSED *remote_addr = rdma_get_peer_addr(event->id);
     char                 ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char                 ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
@@ -378,7 +385,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
             ucs_sockaddr_str(remote_addr, ip_port_str,
                              UCS_SOCKADDR_STRING_LEN));
 
-    if ((cep->flags & UCT_RDMACM_CM_EP_CONN_CB_INVOKED) &&
+    if (uct_rdmacm_ep_is_connected(cep) &&
         !(cep->flags & UCT_RDMACM_CM_EP_FAILED)) {
         /* first failure on connected EP has to be reported as disconnect event
          * to allow user to call disconnect due to UCT API limitation -
@@ -393,8 +400,8 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
 static void
 uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
 {
-    struct sockaddr *remote_addr = rdma_get_peer_addr(event->id);
-    uint8_t         ack_event    = 1;
+    struct sockaddr UCS_V_UNUSED *remote_addr = rdma_get_peer_addr(event->id);
+    uint8_t         ack_event                 = 1;
     char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     ucs_trace("rdmacm event (fd=%d cm_id %p cm %p event_channel %p status %s): %s. Peer: %s.",

@@ -23,7 +23,6 @@ void ucp_dt_iov_gather(void *dest, const ucp_dt_iov_t *iov, size_t length,
     size_t item_len, item_reminder, item_len_to_copy;
     size_t length_it = 0;
 
-    ucs_assert(length > 0);
     while (length_it < length) {
         item_len      = iov[*iovcnt_offset].length;
         item_reminder = item_len - *iov_offset;
@@ -45,7 +44,7 @@ void ucp_dt_iov_gather(void *dest, const ucp_dt_iov_t *iov, size_t length,
     }
 }
 
-size_t ucp_dt_iov_scatter(ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
+size_t ucp_dt_iov_scatter(const ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
                           size_t length, size_t *iov_offset, size_t *iovcnt_offset)
 {
     size_t item_len, item_len_to_copy;
