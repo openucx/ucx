@@ -10,6 +10,9 @@
 
 #include "rndv.h"
 
+/* TODO: Avoid dependency on tag (or other API) specifics, since this is common
+ * basic rendezvous implementation.
+ */
 #include <ucp/tag/tag_rndv.h>
 #include <ucp/tag/tag_match.inl>
 #include <ucp/tag/offload.h>
