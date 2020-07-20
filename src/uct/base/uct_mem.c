@@ -343,25 +343,25 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
     void *addr              = NULL;
     uct_md_attr_t md_attr;
     ucs_status_t status;
-    uct_mem_alloc_params_t param;
+    uct_mem_alloc_params_t params;
 
-    param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS       |
-                        UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR    |
-                        UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR  |
-                        UCT_MEM_ALLOC_PARAM_FIELD_METHODS     |
-                        UCT_MEM_ALLOC_PARAM_FIELD_MDS         |
-                        UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
+                             UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |
+                             UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR |
+                             UCT_MEM_ALLOC_PARAM_FIELD_METHODS    |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MDS        |
+                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-    param.flags           = UCT_MD_MEM_ACCESS_ALL;
-    param.address_p       = &addr;
-    param.length_p        = &length;
-    param.methods.methods = iface->config.alloc_methods;
-    param.methods.count   = iface->config.num_alloc_methods;
-    param.mds.mds         = &iface->md;
-    param.mds.count       = 1;
-    param.name            = name;
+    params.flags           = UCT_MD_MEM_ACCESS_ALL;
+    params.address_p       = &addr;
+    params.length_p        = &length;
+    params.methods.methods = iface->config.alloc_methods;
+    params.methods.count   = iface->config.num_alloc_methods;
+    params.mds.mds         = &iface->md;
+    params.mds.count       = 1;
+    params.name            = name;
 
-    status = uct_mem_alloc(&param, mem);
+    status = uct_mem_alloc(&params, mem);
     if (status != UCS_OK) {
         goto err;
     }

@@ -130,23 +130,23 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
     uct_mem_h memh;
     uct_rkey_bundle_t rkey_bundle;
     unsigned i;
-    uct_mem_alloc_params_t param;
+    uct_mem_alloc_params_t params;
 
     // alloc (should work with both sysv and xpmem
     size = sizeof(unsigned) * UCS_MBYTE;
     rva  = NULL;
 
-    param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
+    params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
                         UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |
                         UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR |
                         UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-    param.flags       = UCT_MD_MEM_ACCESS_ALL;
-    param.address_p   = (void **)&rva;
-    param.length_p    = &size;
-    param.name        = "test_mm";
+    params.flags      = UCT_MD_MEM_ACCESS_ALL;
+    params.address_p  = (void **)&rva;
+    params.length_p   = &size;
+    params.name       = "test_mm";
 
-    status = uct_md_mem_alloc(md(), &param, &memh);
+    status = uct_md_mem_alloc(md(), &params, &memh);
     ASSERT_UCS_OK(status);
     EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, size);
 
@@ -206,7 +206,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
-    uct_mem_alloc_params_t param;
+    uct_mem_alloc_params_t params;
 
     for (unsigned i = 0; i < 300; ++i) {
         size = orig_size = ucs::rand() % 65536;
@@ -216,17 +216,17 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
 
         address = NULL;
 
-        param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
+        params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
                             UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |
                             UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR |
                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-        param.flags       = UCT_MD_MEM_ACCESS_ALL;
-        param.address_p   = &address;
-        param.length_p    = &size;
-        param.name        = "test";
+        params.flags      = UCT_MD_MEM_ACCESS_ALL;
+        params.address_p  = &address;
+        params.length_p   = &size;
+        params.name       = "test";
 
-        status = uct_md_mem_alloc(md(), &param, &memh);
+        status = uct_md_mem_alloc(md(), &params, &memh);
         EXPECT_GT(size, 0ul);
 
         ASSERT_UCS_OK(status);
@@ -396,22 +396,22 @@ UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
-    uct_mem_alloc_params_t param;
+    uct_mem_alloc_params_t params;
 
     orig_size = size = 128 * UCS_MBYTE;
     address   = NULL;
 
-    param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
+    params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
                         UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |
                         UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR |
                         UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-    param.flags       = UCT_MD_MEM_FLAG_NONBLOCK | UCT_MD_MEM_ACCESS_ALL;
-    param.address_p   = &address;
-    param.length_p    = &size;
-    param.name        = "test";
+    params.flags      = UCT_MD_MEM_FLAG_NONBLOCK | UCT_MD_MEM_ACCESS_ALL;
+    params.address_p  = &address;
+    params.length_p   = &size;
+    params.name       = "test";
 
-    status = uct_md_mem_alloc(md(), &param, &memh);
+    status = uct_md_mem_alloc(md(), &params, &memh);
     ASSERT_UCS_OK(status);
     EXPECT_GE(size, orig_size);
     EXPECT_TRUE(address != NULL);
