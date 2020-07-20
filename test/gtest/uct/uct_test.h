@@ -112,7 +112,6 @@ public:
                                       const std::string &tl_name="");
     uct_test();
     virtual ~uct_test();
-    void disconnect();
 
     enum atomic_mode {
         OP32,

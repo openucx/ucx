@@ -445,14 +445,10 @@ void uct_test::generate_test_variant(int variant,
 void uct_test::init() {
 }
 
-void uct_test::disconnect() {
+void uct_test::cleanup() {
     FOR_EACH_ENTITY(iter) {
         (*iter)->destroy_eps();
     }
-}
-
-void uct_test::cleanup() {
-    disconnect();
     m_entities.clear();
 }
 

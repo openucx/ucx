@@ -8,9 +8,6 @@
 
 #include <functional>
 
-#if HAVE_IB
-#include <uct/ib/base/ib_md.h>
-#endif
 
 uct_p2p_rma_test::uct_p2p_rma_test() : uct_p2p_test(0) {
 }
@@ -136,49 +133,10 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_zcopy,
                     TEST_UCT_FLAG_RECV_ZCOPY);
 }
 
-UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_test)
-
-
-class uct_p2p_test_fork : public uct_p2p_test {
-public:
-    uct_p2p_test_fork(): uct_p2p_test(0) {}
-
-    ucs_status_t send(uct_ep_h ep, const mapped_buffer &sendbuf,
-                      const mapped_buffer &recvbuf) {
-        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
-                sendbuf.memh(), sender().iface_attr().cap.get.max_iov);
-
-        return uct_ep_get_zcopy(ep, iov, iovcnt, recvbuf.addr(), recvbuf.rkey(), comp());
-
-    }
-};
-
-UCS_TEST_SKIP_COND_P(uct_p2p_test_fork, pfn,
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, fork,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY),
                      "RCACHE_CHECK_PFN=1")
 {
-#if HAVE_IB
-    const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
-    ucs_assert_always(r != NULL);
-
-    uct_component_attr_t cmpt_attr = {};
-    ucs_status_t status;
-
-    cmpt_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
-                           UCT_COMPONENT_ATTR_FIELD_FLAGS;
-    /* coverity[var_deref_model] */
-    status = uct_component_query(r->component, &cmpt_attr);
-    ASSERT_UCS_OK(status);
-
-    if (strcmp(cmpt_attr.name, "ib") == 0) {
-        uct_ib_md_config_t *mdc = ucs_derived_of(m_md_config, uct_ib_md_config_t);
-
-        if (mdc->fork_init != UCS_NO) {
-            UCS_TEST_SKIP_R("skipping with verbs fork support");
-        }
-    }
-#endif
-
     char *page = (char *)valloc(300);
 
     mapped_buffer *sendbuf = new mapped_buffer(page, 100, 0, sender());
@@ -186,27 +144,22 @@ UCS_TEST_SKIP_COND_P(uct_p2p_test_fork, pfn,
     char *cmd_str = page + 200;
     sprintf(cmd_str, "/bin/true");
 
-    blocking_send(static_cast<send_func_t>(&uct_p2p_test_fork::send),
+    blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
                   sender_ep(), *sendbuf, *recvbuf, true);
     flush();
     delete sendbuf;
     delete recvbuf;
-    disconnect();
+
+    if (!fork()) {
+        EXPECT_EQ(0, strcmp(cmd_str, "/bin/true"));
+        return;
+    }
 
     EXPECT_EQ(0, system(cmd_str));
 
-    {
-        scoped_log_handler wrap_warn(hide_warns_logger);
-        if (!fork()) {
-            EXPECT_EQ(0, strcmp(cmd_str, "/bin/true"));
-            return;
-        }
-    }
-
-    connect();
     sendbuf = new mapped_buffer(page, 100, 0, sender());
     recvbuf = new mapped_buffer(page + 100, 100, 0, receiver());
-    blocking_send(static_cast<send_func_t>(&uct_p2p_test_fork::send),
+    blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
                   sender_ep(), *sendbuf, *recvbuf, true);
     flush();
     delete sendbuf;
@@ -215,5 +168,4 @@ UCS_TEST_SKIP_COND_P(uct_p2p_test_fork, pfn,
     free(page);
 }
 
-UCT_INSTANTIATE_TEST_CASE(uct_p2p_test_fork)
-
+UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_test)

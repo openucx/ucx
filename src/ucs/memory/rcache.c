@@ -449,7 +449,6 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
     ucs_pgt_addr_t start, end;
 
     ucs_assert(event_type == UCM_EVENT_VM_UNMAPPED ||
-               event_type == UCM_EVENT_VM_FORK ||
                event_type == UCM_EVENT_MEM_TYPE_FREE);
 
     if (event_type == UCM_EVENT_VM_UNMAPPED) {
@@ -458,9 +457,6 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
     } else if(event_type == UCM_EVENT_MEM_TYPE_FREE) {
         start = (uintptr_t)event->mem_type.address;
         end   = (uintptr_t)event->mem_type.address + event->mem_type.size;
-    } else if (event_type == UCM_EVENT_VM_FORK) {
-        start = 0;
-        end   = UCS_PGT_ADDR_MAX;
     } else {
         ucs_warn("%s: unknown event type: %x", rcache->name, event_type);
         return;
@@ -960,7 +956,9 @@ static void ucs_rcache_before_fork(void)
             continue;
         }
 
-        ucs_rcache_unmapped_callback(UCM_EVENT_VM_FORK, NULL, rcache);
+        pthread_rwlock_wrlock(&rcache->pgt_lock);
+        ucs_rcache_invalidate_range(rcache, 0, UCS_PGT_ADDR_MAX, 0);
+        pthread_rwlock_unlock(&rcache->pgt_lock);
     }
     pthread_mutex_unlock(&ucs_rcache_registry_lock);
 }

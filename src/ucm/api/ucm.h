@@ -41,7 +41,6 @@ typedef enum ucm_event_type {
     /* Aggregate events */
     UCM_EVENT_VM_MAPPED       = UCS_BIT(16),
     UCM_EVENT_VM_UNMAPPED     = UCS_BIT(17),
-    UCM_EVENT_VM_FORK         = UCS_BIT(18),
 
     /* Non-accessible memory alloc/free events */
     UCM_EVENT_MEM_TYPE_ALLOC  = UCS_BIT(20),
