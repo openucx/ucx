@@ -133,6 +133,7 @@ typedef struct uct_ib_md {
     uint64_t                 subnet_filter;
     double                   pci_bw;
     int                      relaxed_order;
+    int                      fork_init;
     size_t                   memh_struct_size;
 } uct_ib_md_t;
 
@@ -370,7 +371,6 @@ typedef struct uct_ib_md_ops_entry {
     }
 
 extern uct_component_t uct_ib_component;
-
 
 static inline uint32_t uct_ib_md_direct_rkey(uct_rkey_t uct_rkey)
 {
