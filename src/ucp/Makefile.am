@@ -32,6 +32,7 @@ noinst_HEADERS = \
 	core/ucp_request.h \
 	core/ucp_request.inl \
 	core/ucp_rkey.h \
+	core/ucp_rkey.inl \
 	core/ucp_worker.h \
 	core/ucp_worker.inl \
 	core/ucp_thread.h \

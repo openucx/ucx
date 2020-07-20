@@ -38,6 +38,26 @@ enum {
 
 
 /**
+ * Rkey configuration key
+ */
+struct ucp_rkey_config_key {
+    ucp_md_map_t                  md_map;       /* Which *remote* MDs have valid memory handles */
+    ucp_worker_cfg_index_t        ep_cfg_index; /* Endpoint configuration */
+    ucs_sys_device_t              sys_dev;      /* Remote device id */
+    ucs_memory_type_t             mem_type;     /* Remote memory type */
+};
+
+
+/**
+ * Rkey configuration
+ */
+typedef struct {
+    ucp_rkey_config_key_t         key;          /* Configuration key */
+    /* TODO add protocol selection fields */
+} ucp_rkey_config_t;
+
+
+/**
  * Remote memory key structure.
  * Contains remote keys for UCT MDs.
  * md_map specifies which MDs from the current context are present in the array.
@@ -58,6 +78,7 @@ typedef struct ucp_rkey {
     ucp_md_map_t                  md_map;       /* Which *remote* MDs have valid memory handles */
     ucs_memory_type_t             mem_type;     /* Memory type of remote key memory */
     uint8_t                       flags;        /* Rkey flags */
+    ucp_worker_cfg_index_t        cfg_index;    /* Rkey configuration index */
 #if ENABLE_PARAMS_CHECK
     ucp_ep_h                      ep;
 #endif
