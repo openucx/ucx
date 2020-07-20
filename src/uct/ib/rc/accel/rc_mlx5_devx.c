@@ -140,24 +140,18 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                                 const struct mlx5dv_pd *dvpd, void *wq)
 {
     ucs_status_t status  = UCS_ERR_NO_MEMORY;
-    uct_ib_device_t *dev = &md->super.dev;
-    int len, ret, max, stride, log_num_of_strides, wq_type;
+    int len, max, stride, log_num_of_strides, wq_type;
 
     stride = uct_ib_mlx5_srq_stride(iface->tm.mp.num_strides);
     max    = uct_ib_mlx5_srq_max_wrs(config->super.rx.queue_len,
                                      iface->tm.mp.num_strides);
     max    = ucs_roundup_pow2(max);
     len    = max * stride;
-    ret    = posix_memalign(&iface->rx.srq.buf, ucs_get_page_size(), len);
-    if (ret) {
-        return status;
-    }
 
-    iface->rx.srq.devx.mem = mlx5dv_devx_umem_reg(dev->ibv_context,
-                                                  iface->rx.srq.buf, len,
-                                                  IBV_ACCESS_LOCAL_WRITE);
-    if (!iface->rx.srq.devx.mem) {
-        goto err_free_buf;
+    status = uct_ib_mlx5_md_buf_alloc(md, len, 0, &iface->rx.srq.buf,
+                                      &iface->rx.srq.devx.mem, "srq buf");
+    if (status != UCS_OK) {
+        return status;
     }
 
     iface->rx.srq.devx.dbrec = uct_ib_mlx5_get_dbrec(md);
@@ -183,7 +177,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET  (wq, wq, pd,            dvpd->pdn);
     UCT_IB_MLX5DV_SET  (wq, wq, dbr_umem_id,   iface->rx.srq.devx.dbrec->mem_id);
     UCT_IB_MLX5DV_SET64(wq, wq, dbr_addr,      iface->rx.srq.devx.dbrec->offset);
-    UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem->umem_id);
+    UCT_IB_MLX5DV_SET  (wq, wq, wq_umem_id,    iface->rx.srq.devx.mem.mem->umem_id);
 
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
         /* Normalize to device's interface values (range of (-6) - 7) */
@@ -196,7 +190,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
                           (ucs_ilog2(iface->super.super.config.seg_size) - 6));
     }
 
-    iface->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;    
+    iface->rx.srq.type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     uct_ib_mlx5_srq_buff_init(&iface->rx.srq, 0, max - 1,
                               iface->super.super.config.seg_size,
                               iface->tm.mp.num_strides);
@@ -205,9 +199,7 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 
 err_free_mem:
-    mlx5dv_devx_umem_dereg(iface->rx.srq.devx.mem);
-err_free_buf:
-    ucs_free(iface->rx.srq.buf);
+    uct_ib_mlx5_md_buf_free(md, iface->rx.srq.buf, &iface->rx.srq.devx.mem);
     return status;
 }
 
@@ -267,7 +259,7 @@ uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 
 err_cleanup_srq:
-    uct_rc_mlx5_devx_cleanup_srq(&iface->rx.srq);
+    uct_rc_mlx5_devx_cleanup_srq(md, &iface->rx.srq);
     return status;
 }
 
@@ -314,15 +306,14 @@ ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 
 err_cleanup_srq:
-    uct_rc_mlx5_devx_cleanup_srq(&iface->rx.srq);
+    uct_rc_mlx5_devx_cleanup_srq(md, &iface->rx.srq);
     return status;
 }
 
-void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_srq_t *srq)
+void uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 {
     uct_ib_mlx5_put_dbrec(srq->devx.dbrec);
-    mlx5dv_devx_umem_dereg(srq->devx.mem);
-    ucs_free(srq->buf);
+    uct_ib_mlx5_md_buf_free(md, srq->buf, &srq->devx.mem);
 }
 
 ucs_status_t

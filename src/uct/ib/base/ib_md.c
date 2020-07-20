@@ -1462,7 +1462,7 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
     uct_ib_md_ops_entry_t *md_ops_entry;
-    int i, num_devices, ret;
+    int i, num_devices, ret, fork_init = 0;
 
     ucs_trace("opening IB device %s", md_name);
 
@@ -1506,6 +1506,8 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
             }
             ucs_debug("ibv_fork_init() failed: %m, continuing, but fork may be unsafe.");
             uct_ib_fork_warn_enable();
+        } else {
+            fork_init = 1;
         }
     } else {
         uct_ib_fork_warn_enable();
@@ -1532,8 +1534,9 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     }
 
     /* cppcheck-suppress autoVariables */
-    *md_p = &md->super;
-    status = UCS_OK;
+    *md_p         = &md->super;
+    md->fork_init = fork_init;
+    status        = UCS_OK;
 
 out_free_dev_list:
     ibv_free_device_list(ib_device_list);

@@ -174,6 +174,12 @@ enum {
     UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ = 0x3
 };
 
+#if HAVE_DEVX
+typedef struct uct_ib_mlx5_devx_umem {
+    struct mlx5dv_devx_umem  *mem;
+    size_t                   size;
+} uct_ib_mlx5_devx_umem_t;
+#endif
 
 /**
  * MLX5 IB memory domain.
@@ -188,8 +194,10 @@ typedef struct uct_ib_mlx5_md {
     struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
 #endif
 
+#if HAVE_DEVX
     void                     *zero_buf;
-    struct mlx5dv_devx_umem  *zero_mem;
+    uct_ib_mlx5_devx_umem_t  zero_mem;
+#endif
 } uct_ib_mlx5_md_t;
 
 
@@ -253,7 +261,7 @@ typedef struct uct_ib_mlx5_srq {
 #if HAVE_DEVX
         struct {
             uct_ib_mlx5_dbrec_t        *dbrec;
-            struct mlx5dv_devx_umem    *mem;
+            uct_ib_mlx5_devx_umem_t    mem;
             struct mlx5dv_devx_obj     *obj;
         } devx;
 #endif
@@ -330,7 +338,7 @@ typedef struct uct_ib_mlx5_qp {
         struct {
             void                       *wq_buf;
             uct_ib_mlx5_dbrec_t        *dbrec;
-            struct mlx5dv_devx_umem    *mem;
+            uct_ib_mlx5_devx_umem_t    mem;
             struct mlx5dv_devx_obj     *obj;
         } devx;
 #endif
@@ -560,7 +568,72 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
 
-void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp);
+void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp);
+
+static inline ucs_status_t
+uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
+                         void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
+                         char *name)
+{
+    ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+    ucs_status_t status;
+    void *buf;
+    int ret;
+
+    ret = ucs_posix_memalign(&buf, ucs_get_page_size(), size, name);
+    if (ret != 0) {
+        ucs_log(level, "failed to allocate buffer of %zu bytes: %m", size);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if (md->super.fork_init) {
+        ret = madvise(buf, size, MADV_DONTFORK);
+        if (ret != 0) {
+            ucs_log(level, "madvise(DONTFORK, buf=%p, len=%zu) failed: %m", buf, size);
+            status = UCS_ERR_IO_ERROR;
+            goto err_free;
+        }
+        mem->size = size;
+    }
+
+    mem->mem = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size, 0);
+    if (mem->mem == NULL) {
+        ucs_log(level, "mlx5dv_devx_umem_reg() failed: %m");
+        status = UCS_ERR_NO_MEMORY;
+        goto err_dofork;
+    }
+
+    *buf_p = buf;
+    return UCS_OK;
+
+err_dofork:
+    if (md->super.fork_init) {
+        madvise(buf, size, MADV_DOFORK);
+    }
+err_free:
+    ucs_free(buf);
+
+    return status;
+}
+
+static inline void
+uct_ib_mlx5_md_buf_free(uct_ib_mlx5_md_t *md, void *buf, uct_ib_mlx5_devx_umem_t *mem)
+{
+    int ret;
+
+    if (buf == NULL) {
+        return;
+    }
+
+    mlx5dv_devx_umem_dereg(mem->mem);
+    if (md->super.fork_init) {
+        ret = madvise(buf, mem->size, MADV_DOFORK);
+        if (ret != 0) {
+            ucs_warn("madvise(DOFORK, buf=%p, len=%zu) failed: %m", buf, mem->size);
+        }
+    }
+    ucs_free(buf);
+}
 
 #else
 
@@ -586,7 +659,7 @@ uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
     return UCS_ERR_UNSUPPORTED;
 }
 
-static inline void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_qp_t *qp) { }
+static inline void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp) { }
 
 #endif
 
