@@ -38,8 +38,9 @@ ucp_ep_match_get_conn_sn(const ucs_conn_match_elem_t *conn_match)
                                    conn_match))->conn_sn;
 }
 
-static const char* ucp_ep_match_address_str(const void *address,
-                                            char *str, size_t max_size)
+static const char *
+ucp_ep_match_address_str(const ucs_conn_match_ctx_t *conn_match_ctx,
+                         const void *address, char *str, size_t max_size)
 {
     ucs_snprintf_zero(str, max_size, "%zu", *(uint64_t*)address);
     return str;
