@@ -298,11 +298,10 @@ const char* ucs_flags_str(char *buf, size_t max,
 ssize_t ucs_path_calc_distance(const char *path1, const char *path2)
 {
     unsigned distance = 0;
-    int same  = 1;
-    int comp_len;
-    int i;
+    int same          = 1;
     char resolved_path1[PATH_MAX], resolved_path2[PATH_MAX];
-    int rp_len1, rp_len2;
+    size_t comp_len, i;
+    size_t rp_len1, rp_len2;
 
     if ((NULL == realpath(path1, resolved_path1)) ||
         (NULL == realpath(path2, resolved_path2))) {
