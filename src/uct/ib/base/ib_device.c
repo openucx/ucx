@@ -766,7 +766,8 @@ const char *uct_ib_device_name(uct_ib_device_t *dev)
     return ibv_get_device_name(dev->ibv_context->device);
 }
 
-ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, ucs_sys_bus_id_t *bus_id)
+ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, int port_num,
+                               ucs_sys_bus_id_t *bus_id)
 {
     char ib_realpath[PATH_MAX];
     char pcie_bus[PATH_MAX];
@@ -796,7 +797,7 @@ ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, ucs_sys_bus_id_t *bus_id)
     pcie_bus[bus_count] = '\0';
 
     for (i = 0; i < bus_count; i++) {
-        if (pcie_bus[i] == ':' || pcie_bus[i] == '.') {
+        if ((pcie_bus[i] == ':') || (pcie_bus[i] == '.')) {
             pcie_bus[i] = ' ';
         }
     }
@@ -804,10 +805,9 @@ ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, ucs_sys_bus_id_t *bus_id)
     sscanf(pcie_bus, "%hx %hhx %hhx %hhx", &bus_id->domain, &bus_id->bus,
                                            &bus_id->slot, &bus_id->function);
 
-    ucs_debug("ib bus id = %hu:%hhu:%hhu.%hhu\n", bus_id->domain,
-                                                  bus_id->bus,
-                                                  bus_id->slot,
-                                                  bus_id->function);
+    ucs_debug("ib device = %s:%d, bus id = %hu:%hhu:%hhu.%hhu",
+               uct_ib_device_name(dev), port_num, bus_id->domain, bus_id->bus,
+               bus_id->slot, bus_id->function);
 
     return UCS_OK;
 }

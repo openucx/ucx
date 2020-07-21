@@ -1452,7 +1452,7 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
     ucs_sys_bus_id_t cuda_bus_id;
     ucs_status_t status;
 
-    status = uct_ib_device_bus(dev, &ib_bus_id);
+    status = uct_ib_device_bus(dev, iface->config.port_num, &ib_bus_id);
     if (status != UCS_OK) {
         return status;
     }
