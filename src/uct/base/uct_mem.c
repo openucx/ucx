@@ -111,8 +111,8 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
                 status       = uct_md_mem_alloc(md, param, &memh);
                 if (status != UCS_OK) {
                     ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
-                              alloc_length, md->component->name,
-                              alloc_name, ucs_status_string(status));
+                              alloc_length, md->component->name
+                              UCS_MEMTRACK_VAL, ucs_status_string(status));
                     return status;
                 }
 
@@ -208,7 +208,7 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
             alloc_length = *param->length_p;
             address = *param->address_p;
             status = ucs_sysv_alloc(&alloc_length, (*param->length_p) * 2, &address,
-                                    SHM_HUGETLB, alloc_name, &shmid);
+                                    SHM_HUGETLB UCS_MEMTRACK_VAL, &shmid);
             if (status == UCS_OK) {
                 goto allocated_without_md;
             }
