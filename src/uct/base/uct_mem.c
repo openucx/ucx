@@ -58,18 +58,14 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
     ssize_t huge_page_size;
 #endif
     uct_mem_alloc_params_t filled_params;
-#ifdef ENABLE_MEMTRACK
     const char *alloc_name;
-#endif
 
     status = uct_mem_alloc_fill_params(param, &filled_params);
     if (status != UCS_OK) {
         return status;
     }
 
-#ifdef ENABLE_MEMTRACK
     alloc_name = filled_params.name;
-#endif
 
     for (method = param->methods.methods;
          method < (param->methods.methods + param->methods.count);
@@ -112,7 +108,7 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
                 if (status != UCS_OK) {
                     ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
                               alloc_length, md->component->name,
-                              ucs_status_string(status) UCS_MEMTRACK_VAL);
+                              alloc_name, ucs_status_string(status));
                     return status;
                 }
 
