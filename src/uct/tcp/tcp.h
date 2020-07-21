@@ -70,10 +70,14 @@ enum {
      * to do any operation on that EP) and TCP is responsible to
      * free memory allocating for this EP. */
     UCT_TCP_EP_FLAG_CTX_TYPE_RX        = UCS_BIT(1),
-    /* - Zcopy TX operation is in progress on a given EP. */
+    /* Zcopy TX operation is in progress on a given EP. */
     UCT_TCP_EP_FLAG_ZCOPY_TX           = UCS_BIT(2),
+    /* PUT RX operation is in progress on a given EP. */
     UCT_TCP_EP_FLAG_PUT_RX             = UCS_BIT(3),
+    /* PUT TX operation is waiting for an ACK on a given EP. */
     UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK = UCS_BIT(4),
+    /* PUT RX operation is waiting for resources to send an ACK
+     * for received PUT operations on a given EP. */
     UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK = UCS_BIT(5)
 };
 
