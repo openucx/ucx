@@ -179,7 +179,7 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
     uct_alloc_method_t method;
     unsigned method_index, md_index, num_mds;
     ucs_status_t status;
-    uct_mem_alloc_params_t param;
+    uct_mem_alloc_params_t params;
     uct_md_h *mds;
 
     mds = ucs_calloc(context->num_mds, sizeof(*mds), "temp mds");
@@ -205,23 +205,23 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
         }
 
 
-        param.field_mask  = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS       |
-                            UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR    |
-                            UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR  |
-                            UCT_MEM_ALLOC_PARAM_FIELD_METHODS     |
-                            UCT_MEM_ALLOC_PARAM_FIELD_MDS         |
-                            UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+        params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS      |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR   |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_METHODS    |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_MDS        |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME;
 
-        param.flags           = uct_flags;
-        param.address_p       = &memh->address;
-        param.length_p        = &length;
-        param.methods.methods = &method;
-        param.methods.count   = 1;
-        param.mds.mds         = mds;
-        param.mds.count       = num_mds;
-        param.name            = name;
+        params.flags           = uct_flags;
+        params.address_p       = &memh->address;
+        params.length_p        = &length;
+        params.methods.methods = &method;
+        params.methods.count   = 1;
+        params.mds.mds         = mds;
+        params.mds.count       = num_mds;
+        params.name            = name;
 
-        status = uct_mem_alloc(&param, &mem);
+        status = uct_mem_alloc(&params, &mem);
         if (status == UCS_OK) {
             goto allocated;
         }
