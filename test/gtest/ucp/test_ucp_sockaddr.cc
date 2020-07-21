@@ -167,7 +167,8 @@ public:
         static const std::string dc_tls[] = { "dc", "dc_x", "ib" };
 
         bool has_dc = has_any_transport(
-            std::vector<std::string>(dc_tls, dc_tls + ucs_array_size(dc_tls)));
+            std::vector<std::string>(dc_tls,
+                                     dc_tls + ucs_static_array_size(dc_tls)));
 
         /* FIXME: select random interface, except for DC transport, which do not
                   yet support having different gid_index for different UCT
