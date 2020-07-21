@@ -389,6 +389,7 @@ ucs_status_t uct_mem_alloc_fill_params(const uct_mem_alloc_params_t *params,
                                        uct_mem_alloc_params_t *filled_params)
 {
     const uct_alloc_method_t *method;
+    ucs_status_t status;
 
     if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
         ucs_error("The length value for allocating memory isn't set: %s",
@@ -428,9 +429,19 @@ ucs_status_t uct_mem_alloc_fill_params(const uct_mem_alloc_params_t *params,
                 method < (params->methods.methods + params->methods.count);
                 ++method) {
 
-            if ((*method == UCT_ALLOC_METHOD_MD) && (params->mds.count == 0)) {
-                ucs_error("No MDs provided for allocation");
-                return UCS_ERR_INVALID_PARAM;
+            if (*method == UCT_ALLOC_METHOD_MD) {
+
+                if (params->mds.count == 0) {
+                    ucs_error("No MDs provided for allocation");
+                    return UCS_ERR_INVALID_PARAM;
+                }
+
+                if (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) {
+                    status = uct_mem_check_flags(params->flags);
+                    if (status != UCS_OK) {
+                        return status;
+                    }
+                }
             }
 
             if (((*method == UCT_ALLOC_METHOD_MMAP) ||
@@ -462,13 +473,6 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, const uct_mem_alloc_params_t *param,
 {
     ucs_status_t status;
     uct_mem_alloc_params_t filled_params;
-
-    if (param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) {
-        status = uct_mem_check_flags(param->flags);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
 
     status = uct_mem_alloc_fill_params(param, &filled_params);
     if (status != UCS_OK) {
