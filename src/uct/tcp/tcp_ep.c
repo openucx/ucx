@@ -1117,7 +1117,7 @@ static unsigned uct_tcp_ep_progress_magic_number_rx(uct_tcp_ep_t *ep)
     if (magic_number != UCT_TCP_MAGIC_NUMBER) {
         /* Silently close this connection and destroy its EP */
         ucs_debug("tcp_iface %p (%s): received wrong magic number (expected: "
-                  "%zu, received: %zu) for ep=%p (fd=%d) from %s", iface,
+                  "%zu, received: %"PRIu64 ") for ep=%p (fd=%d) from %s", iface,
                   ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
                                    str_local_addr, UCS_SOCKADDR_STRING_LEN),
                   UCT_TCP_MAGIC_NUMBER, magic_number, ep,

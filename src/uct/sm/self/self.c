@@ -198,7 +198,7 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
-    ucs_debug("created self iface id 0x%lx send_size %zu", self->id,
+    ucs_debug("created self iface id 0x%"PRIx64 " send_size %zu", self->id,
               self->send_size);
     return UCS_OK;
 }

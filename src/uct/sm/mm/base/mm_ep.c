@@ -149,7 +149,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
     status = uct_mm_ep_get_remote_seg(self, addr->fifo_seg_id,
                                       UCT_MM_GET_FIFO_SIZE(iface), &fifo_ptr);
     if (status != UCS_OK) {
-        ucs_error("mm ep failed to connect to remote FIFO id 0x%lx: %s",
+        ucs_error("mm ep failed to connect to remote FIFO id 0x%"PRIx64 ": %s",
                   addr->fifo_seg_id, ucs_status_string(status));
         goto err_free_md_addr;
     }
@@ -160,7 +160,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
     self->signal.addrlen  = self->fifo_ctl->signal_addrlen;
     self->signal.sockaddr = self->fifo_ctl->signal_sockaddr;
 
-    ucs_debug("created mm ep %p, connected to remote FIFO id 0x%lx",
+    ucs_debug("created mm ep %p, connected to remote FIFO id 0x%"PRIx64,
               self, addr->fifo_seg_id);
 
     return UCS_OK;
