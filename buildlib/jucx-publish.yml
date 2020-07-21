@@ -16,7 +16,7 @@ jobs:
           set -eE
           gcc --version
           ./autogen.sh
-          ./contrib/configure-release --with-java
+          ./contrib/configure-release --with-java --enable-logging
         displayName: Configure
 
       - bash: |
