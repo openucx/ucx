@@ -73,39 +73,40 @@ enum uct_cb_param_flags {
  * @addtogroup UCT_RESOURCE
  * @{
  */
-typedef struct uct_component       *uct_component_h;
-typedef struct uct_iface           *uct_iface_h;
-typedef struct uct_iface_config    uct_iface_config_t;
-typedef struct uct_md_config       uct_md_config_t;
-typedef struct uct_cm_config       uct_cm_config_t;
-typedef struct uct_ep              *uct_ep_h;
-typedef void *                     uct_mem_h;
-typedef uintptr_t                  uct_rkey_t;
-typedef struct uct_md              *uct_md_h;          /**< @brief Memory domain handler */
-typedef struct uct_md_ops          uct_md_ops_t;
-typedef void                       *uct_rkey_ctx_h;
-typedef struct uct_iface_attr      uct_iface_attr_t;
-typedef struct uct_iface_params    uct_iface_params_t;
-typedef struct uct_md_attr         uct_md_attr_t;
-typedef struct uct_completion      uct_completion_t;
-typedef struct uct_pending_req     uct_pending_req_t;
-typedef struct uct_worker          *uct_worker_h;
-typedef struct uct_md              uct_md_t;
-typedef enum uct_am_trace_type     uct_am_trace_type_t;
-typedef struct uct_device_addr     uct_device_addr_t;
-typedef struct uct_iface_addr      uct_iface_addr_t;
-typedef struct uct_ep_addr         uct_ep_addr_t;
-typedef struct uct_ep_params       uct_ep_params_t;
-typedef struct uct_cm_attr         uct_cm_attr_t;
-typedef struct uct_cm              uct_cm_t;
-typedef uct_cm_t                   *uct_cm_h;
-typedef struct uct_listener_attr   uct_listener_attr_t;
-typedef struct uct_listener        *uct_listener_h;
-typedef struct uct_listener_params uct_listener_params_t;
-typedef struct uct_tag_context     uct_tag_context_t;
-typedef uint64_t                   uct_tag_t;  /* tag type - 64 bit */
-typedef int                        uct_worker_cb_id_t;
-typedef void*                      uct_conn_request_h;
+typedef struct uct_component         *uct_component_h;
+typedef struct uct_iface             *uct_iface_h;
+typedef struct uct_iface_config      uct_iface_config_t;
+typedef struct uct_md_config         uct_md_config_t;
+typedef struct uct_cm_config         uct_cm_config_t;
+typedef struct uct_ep                *uct_ep_h;
+typedef void *                       uct_mem_h;
+typedef uintptr_t                    uct_rkey_t;
+typedef struct uct_md                *uct_md_h;          /**< @brief Memory domain handler */
+typedef struct uct_md_ops            uct_md_ops_t;
+typedef void                         *uct_rkey_ctx_h;
+typedef struct uct_iface_attr        uct_iface_attr_t;
+typedef struct uct_iface_params      uct_iface_params_t;
+typedef struct uct_md_attr           uct_md_attr_t;
+typedef struct uct_completion        uct_completion_t;
+typedef struct uct_pending_req       uct_pending_req_t;
+typedef struct uct_worker            *uct_worker_h;
+typedef struct uct_md                uct_md_t;
+typedef enum uct_am_trace_type       uct_am_trace_type_t;
+typedef struct uct_device_addr       uct_device_addr_t;
+typedef struct uct_iface_addr        uct_iface_addr_t;
+typedef struct uct_iface_addr_params uct_iface_addr_params_t;
+typedef struct uct_ep_addr           uct_ep_addr_t;
+typedef struct uct_ep_params         uct_ep_params_t;
+typedef struct uct_cm_attr           uct_cm_attr_t;
+typedef struct uct_cm                uct_cm_t;
+typedef uct_cm_t                     *uct_cm_h;
+typedef struct uct_listener_attr     uct_listener_attr_t;
+typedef struct uct_listener          *uct_listener_h;
+typedef struct uct_listener_params   uct_listener_params_t;
+typedef struct uct_tag_context       uct_tag_context_t;
+typedef uint64_t                     uct_tag_t;  /* tag type - 64 bit */
+typedef int                          uct_worker_cb_id_t;
+typedef void*                        uct_conn_request_h;
 
 /**
  * @}
@@ -158,10 +159,26 @@ typedef struct uct_iov {
  * @ref uct_cm_ep_priv_data_pack_args are present, for backward compatibility support.
  */
 enum uct_cm_ep_priv_data_pack_args_field {
-    /** Enables @ref uct_cm_ep_priv_data_pack_args::dev_name
-     *  Indicates that dev_name field in uct_cm_ep_priv_data_pack_args_t is valid.
+    /**
+     * Enables @ref uct_cm_ep_priv_data_pack_args::dev_name
+     * Indicates that dev_name field in @ref uct_cm_ep_priv_data_pack_args_t
+     * is valid.
      */
-    UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME = UCS_BIT(0)
+    UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME        = UCS_BIT(0),
+
+    /**
+     * Enables @ref uct_cm_ep_priv_data_pack_args::device_addr
+     * Indicates that device_addr field in @ref uct_cm_ep_priv_data_pack_args_t
+     * is valid.
+     */
+    UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_ADDR        = UCS_BIT(1),
+
+    /**
+     * Enables @ref uct_cm_ep_priv_data_pack_args::device_addr_length
+     * Indicates that device_addr_length field in
+     * @ref uct_cm_ep_priv_data_pack_args_t is valid.
+     */
+    UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_ADDR_LENGTH = UCS_BIT(2)
 };
 
 
@@ -186,6 +203,16 @@ typedef struct uct_cm_ep_priv_data_pack_args {
      * @ref uct_md_query_tl_resources.
      */
     char                       dev_name[UCT_DEVICE_NAME_MAX];
+
+    /**
+     * Remote device address.
+     */
+    const uct_device_addr_t    *device_addr;
+
+    /**
+     * Remote device address length.
+     */
+    size_t                     device_addr_length;
 } uct_cm_ep_priv_data_pack_args_t;
 
 

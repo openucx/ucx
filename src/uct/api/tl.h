@@ -275,6 +275,10 @@ typedef ucs_status_t (*uct_iface_get_device_address_func_t)(uct_iface_h iface,
 typedef ucs_status_t (*uct_iface_get_address_func_t)(uct_iface_h iface,
                                                      uct_iface_addr_t *addr);
 
+typedef ucs_status_t (*uct_iface_address_func_t)(uct_iface_h iface,
+                                                 const uct_iface_addr_params_t *params,
+                                                 uct_iface_addr_t *addr);
+
 typedef int          (*uct_iface_is_reachable_func_t)(const uct_iface_h iface,
                                                       const uct_device_addr_t *dev_addr,
                                                       const uct_iface_addr_t *iface_addr);
@@ -362,6 +366,7 @@ typedef struct uct_iface_ops {
     uct_iface_get_device_address_func_t iface_get_device_address;
     uct_iface_get_address_func_t        iface_get_address;
     uct_iface_is_reachable_func_t       iface_is_reachable;
+    uct_iface_address_func_t            iface_address;
 
 } uct_iface_ops_t;
 

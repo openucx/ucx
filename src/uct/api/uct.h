@@ -824,6 +824,19 @@ enum uct_ep_params_field {
 };
 
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT interface address parameters field mask for @ref uct_iface_address.
+ *
+ * The enumeration allows specifying which fields in @ref uct_iface_addr_params_t
+ * are present, for backward compatibility support.
+ */
+enum uct_iface_addr_params_field {
+    /** Enables @ref uct_iface_addr_params::device_addr */
+    UCT_IFACE_ADDR_PARAM_FIELD_DEVICE_ADDR        = UCS_BIT(0)
+};
+
+
 /*
  * @ingroup UCT_RESOURCE
  * @brief Process Per Node (PPN) bandwidth specification: f(ppn) = dedicated + shared / ppn
@@ -1220,6 +1233,30 @@ struct uct_listener_params {
     void                                    *user_data;
 };
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Parameters for getting a UCT interface address by
+ *        @ref uct_iface_address
+ */
+struct uct_iface_addr_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_params_field. Fields not specified by this mask
+     * will be ignored.
+     * @note If the parameters are not set (field_mask = 0) behavior will be
+     * the same as for @ref uct_iface_get_address.
+     */
+    uint64_t                                field_mask;
+
+    /**
+     * Device address, can be obtained by @ref uct_iface_get_device_address,
+     * @ref uct_cm_ep_priv_data_pack_callback_t,
+     * @ref uct_cm_listener_conn_request_callback_t or
+     * @ref uct_cm_ep_client_connect_callback_t.
+     */
+    const uct_device_addr_t                 *device_addr;
+};
 
 /**
  * @ingroup UCT_MD
@@ -1759,7 +1796,7 @@ ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Get interface address.
+ * @brief Get interface address based on default local parameters.
  *
  * requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE.
  *
@@ -1768,6 +1805,24 @@ ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *
  *                          provided must be at least @ref uct_iface_attr_t::iface_addr_len.
  */
 ucs_status_t uct_iface_get_address(uct_iface_h iface, uct_iface_addr_t *addr);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Get interface address.
+ *
+ * requires @ref UCT_IFACE_FLAG_CONNECT_TO_IFACE.
+ *
+ * @param [in]  iface       Interface to query.
+ * @param [in]  params      User defined @ref uct_iface_addr_params_t
+ *                          configuration for the @a addr.
+ * @param [out] addr        Filled with interface address. The size of the buffer
+ *                          provided must be at least
+ *                          @ref uct_iface_attr_t::iface_addr_len.
+ */
+ucs_status_t uct_iface_address(uct_iface_h iface,
+                               const uct_iface_addr_params_t *params,
+                               uct_iface_addr_t *addr);
 
 
 /**
