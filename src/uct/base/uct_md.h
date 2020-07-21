@@ -148,6 +148,14 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p);
 
+/**
+ * Check allocation parameters and return correctly populated set of parameters
+ * if there are no errors. Otherwise return an appropriate error
+ *
+ */
+ucs_status_t uct_mem_alloc_fill_params(const uct_mem_alloc_params_t *params,
+                                       uct_mem_alloc_params_t *filled_params);
+
 extern ucs_config_field_t uct_md_config_table[];
 
 #endif

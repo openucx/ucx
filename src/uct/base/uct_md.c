@@ -368,10 +368,100 @@ static ucs_status_t uct_mem_check_flags(unsigned flags)
     return UCS_OK;
 }
 
+static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
+{
+    int mm_flags = 0;
+
+#ifdef MAP_NONBLOCK
+    if (uct_mmap_flags & UCT_MD_MEM_FLAG_NONBLOCK) {
+        mm_flags |= MAP_NONBLOCK;
+    }
+#endif
+
+    if (uct_mmap_flags & UCT_MD_MEM_FLAG_FIXED) {
+        mm_flags |= MAP_FIXED;
+    }
+
+    return mm_flags;
+}
+
+ucs_status_t uct_mem_alloc_fill_params(const uct_mem_alloc_params_t *params,
+                                       uct_mem_alloc_params_t *filled_params)
+{
+    const uct_alloc_method_t *method;
+
+    if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
+        ucs_error("The length value for allocating memory isn't set: %s",
+                  ucs_status_string(UCS_ERR_INVALID_PARAM));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR) &&
+        (*params->length_p == 0)) {
+        ucs_error("The length value for allocating memory is set to zero: %s",
+                  ucs_status_string(UCS_ERR_INVALID_PARAM));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS) &&
+        (params->methods.count == 0)) {
+        ucs_error("Count of allocation methods provided is set to zero: %s",
+                  ucs_status_string(UCS_ERR_INVALID_PARAM));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) &&
+        (params->flags & UCT_MD_MEM_FLAG_FIXED) &&
+        (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR) &&
+        (!*params->address_p || ((uintptr_t)*params->address_p % ucs_get_page_size()))) {
+        ucs_debug("UCT_MD_MEM_FLAG_FIXED requires valid page size aligned address");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS)) {
+        ucs_error("Allocation methods field not set");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS) {
+        for (method = params->methods.methods;
+                method < (params->methods.methods + params->methods.count);
+                ++method) {
+
+            if ((*method == UCT_ALLOC_METHOD_MD) && (params->mds.count == 0)) {
+                ucs_error("No MDs provided for allocation");
+                return UCS_ERR_INVALID_PARAM;
+            }
+
+            if (((*method == UCT_ALLOC_METHOD_MMAP) ||
+                 (*method == UCT_ALLOC_METHOD_HUGE)) &&
+                (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR))) {
+                ucs_error("Address field must be set when mmap method is used");
+                return UCS_ERR_INVALID_PARAM;
+            }
+        }
+    }
+
+    *filled_params = *params;
+
+    if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_NAME)) {
+        filled_params->name = NULL;
+    }
+
+    if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS)) {
+        filled_params->flags = 0;
+    } else {
+        filled_params->flags = uct_mem_get_mmap_flags(params->flags);
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_md_mem_alloc(uct_md_h md, const uct_mem_alloc_params_t *param,
                               uct_mem_h *memh_p)
 {
     ucs_status_t status;
+    uct_mem_alloc_params_t filled_params;
 
     if (param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) {
         status = uct_mem_check_flags(param->flags);
@@ -380,7 +470,12 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, const uct_mem_alloc_params_t *param,
         }
     }
 
-    return md->ops->mem_alloc(md, param, memh_p);
+    status = uct_mem_alloc_fill_params(param, &filled_params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return md->ops->mem_alloc(md, &filled_params, memh_p);
 }
 
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)

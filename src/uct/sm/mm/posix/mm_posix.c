@@ -423,11 +423,6 @@ uct_posix_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
     void *address;
     int fd;
 
-    if (!(param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
-        status = UCS_ERR_INVALID_PARAM;
-        goto err;
-    }
-
     status = uct_mm_seg_new(*param->address_p, *param->length_p, &seg);
     if (status != UCS_OK) {
         goto err;
@@ -476,10 +471,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
         force_hugetlb = (posix_config->super.hugetlb_mode == UCS_YES);
 #ifdef MAP_HUGETLB
         status = uct_posix_mmap(&seg->address, &seg->length,
-                                mmap_flags | MAP_HUGETLB, fd,
-                                (param->field_mask &
-                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
-                                param->name : NULL,
+                                mmap_flags | MAP_HUGETLB, fd, param->name,
                                 force_hugetlb ? UCS_LOG_LEVEL_ERROR :
                                                 UCS_LOG_LEVEL_DEBUG);
 #else
@@ -500,9 +492,7 @@ uct_posix_mem_alloc(uct_md_h tl_md, const uct_mem_alloc_params_t *param,
     if (address == MAP_FAILED) {
         ucs_assert(posix_config->super.hugetlb_mode != UCS_YES);
         status = uct_posix_mmap(&seg->address, &seg->length, mmap_flags, fd,
-                                (param->field_mask &
-                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
-                                param->name : NULL, UCS_LOG_LEVEL_ERROR);
+                                param->name, UCS_LOG_LEVEL_ERROR);
         if (status != UCS_OK) {
             goto err_close;
         }
