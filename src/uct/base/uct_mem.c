@@ -56,13 +56,82 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
     return mm_flags;
 }
 
+static inline
+ucs_status_t uct_mem_alloc_fill_params(const uct_mem_alloc_params_t *params,
+                                       uct_mem_alloc_params_t *filled_params)
+{
+    const uct_alloc_method_t *method;
+
+    if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
+        ucs_error("The length value for allocating memory isn't set: %s",
+                  ucs_status_string(UCS_ERR_INVALID_PARAM));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR) &&
+        (*params->length_p == 0)) {
+        ucs_error("The length value for allocating memory is set to zero: %s",
+                  ucs_status_string(UCS_ERR_INVALID_PARAM));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS) &&
+        (params->methods.count == 0)) {
+        ucs_error("Count of allocation methods provided is set to zero: %s",
+                  ucs_status_string(UCS_ERR_INVALID_PARAM));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if ((params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) &&
+        (params->flags & UCT_MD_MEM_FLAG_FIXED) &&
+        (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR) &&
+        (!*params->address_p || ((uintptr_t)*params->address_p % ucs_get_page_size()))) {
+        ucs_debug("UCT_MD_MEM_FLAG_FIXED requires valid page size aligned address");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS)) {
+        ucs_error("Allocation methods field not set");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS) {
+        for (method = params->methods.methods;
+                method < (params->methods.methods + params->methods.count);
+                ++method) {
+
+            if ((*method == UCT_ALLOC_METHOD_MD) && (params->mds.count == 0)) {
+                ucs_error("No MDs provided for allocation");
+                return UCS_ERR_INVALID_PARAM;
+            }
+
+            if (((*method == UCT_ALLOC_METHOD_MMAP) ||
+                 (*method == UCT_ALLOC_METHOD_HUGE)) &&
+                (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR))) {
+                ucs_error("Address field must be set when mmap method is used");
+                return UCS_ERR_INVALID_PARAM;
+            }
+        }
+    }
+
+    *filled_params = *params;
+
+    if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_NAME)) {
+        filled_params->name = NULL;
+    }
+
+    if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS)) {
+        filled_params->flags = 0;
+    } else {
+        filled_params->flags = uct_mem_get_mmap_flags(params->flags);
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
                            uct_allocated_memory_t *mem)
 {
-#ifdef ENABLE_MEMTRACK
-    const char *alloc_name = (param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_NAME)
-                             ? param->name : NULL;
-#endif
     const uct_alloc_method_t *method;
     uct_md_attr_t md_attr;
     ucs_status_t status;
@@ -78,29 +147,19 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
 #ifdef MADV_HUGEPAGE
     ssize_t huge_page_size;
 #endif
+    uct_mem_alloc_params_t filled_params;
+#ifdef ENABLE_MEMTRACK
+    const char *alloc_name;
+#endif
 
-    if ((param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR) &&
-        (*param->length_p == 0)) {
-        goto err_invalid_length;
+    status = uct_mem_alloc_fill_params(param, &filled_params);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    if ((param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS) &&
-        (param->methods.count == 0)) {
-        ucs_error("No allocation methods provided");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) &&
-        (param->flags & UCT_MD_MEM_FLAG_FIXED) &&
-        (param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDR_PTR) &&
-        (!*param->address_p || ((uintptr_t)*param->address_p % ucs_get_page_size()))) {
-        ucs_debug("UCT_MD_MEM_FLAG_FIXED requires valid page size aligned address");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (!(param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS)) {
-        goto allocated_without_methods;
-    }
+#ifdef ENABLE_MEMTRACK
+    alloc_name = filled_params.name;
+#endif
 
     for (method = param->methods.methods;
          method < (param->methods.methods + param->methods.count);
@@ -110,12 +169,6 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
         switch (*method) {
         case UCT_ALLOC_METHOD_MD:
             /* Allocate with one of the specified memory domains */
-
-            if ((param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MDS) &&
-                (param->mds.count == 0)) {
-                ucs_error("No MDs provided for allocation");
-                return UCS_ERR_INVALID_PARAM;
-            }
 
             for (md_index = 0; md_index < param->mds.count; ++md_index) {
                 md = param->mds.mds[md_index];
@@ -144,17 +197,12 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
                  * allocation.
                  */
 
-                if (!(param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
-                    goto err_invalid_length;
-                }
-
                 alloc_length = *param->length_p;
                 status       = uct_md_mem_alloc(md, param, &memh);
                 if (status != UCS_OK) {
                     ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
-                              alloc_length, md->component->name,
-                              (param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
-                              param->name : NULL, ucs_status_string(status));
+                              alloc_length, md->component->name, alloc_name,
+                              ucs_status_string(status));
                     return status;
                 }
 
@@ -183,10 +231,6 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
             huge_page_size = ucs_get_huge_page_size();
             if (huge_page_size <= 0) {
                 break;
-            }
-
-            if (!(param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
-                goto err_invalid_length;
             }
 
             alloc_length = ucs_align_up(*param->length_p, huge_page_size);
@@ -220,10 +264,6 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
                 break;
             }
 
-            if (!(param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
-                goto err_invalid_length;
-            }
-
             alloc_length = *param->length_p;
             ret = ucs_posix_memalign(&address, UCS_SYS_CACHE_LINE_SIZE,
                                      alloc_length UCS_MEMTRACK_VAL);
@@ -237,18 +277,11 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
         case UCT_ALLOC_METHOD_MMAP:
             /* Request memory from operating system using mmap() */
 
-            if (!(param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
-                goto err_invalid_length;
-            }
-
             alloc_length = *param->length_p;
             address      = *param->address_p;
 
             status = ucs_mmap_alloc(&alloc_length, &address,
-                                    (param->field_mask &
-                                     UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) ?
-                                    uct_mem_get_mmap_flags(param->flags) : 0
-                                    UCS_MEMTRACK_VAL);
+                                    filled_params.flags UCS_MEMTRACK_VAL);
             if (status== UCS_OK) {
                 goto allocated_without_md;
             }
@@ -261,19 +294,10 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
 #ifdef SHM_HUGETLB
             /* Allocate huge pages */
 
-            if (!(param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_LENGTH_PTR)) {
-                goto err_invalid_length;
-            }
-
             alloc_length = *param->length_p;
-            address = ((param->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) &&
-                       (param->flags & UCT_MD_MEM_FLAG_FIXED)) ?
-                      *param->address_p : NULL;
+            address = *param->address_p;
             status = ucs_sysv_alloc(&alloc_length, (*param->length_p) * 2, &address,
-                                    SHM_HUGETLB,
-                                    (param->field_mask &
-                                     UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
-                                    param->name : NULL, &shmid);
+                                    SHM_HUGETLB, alloc_name, &shmid);
             if (status == UCS_OK) {
                 goto allocated_without_md;
             }
@@ -294,10 +318,6 @@ ucs_status_t uct_mem_alloc(const uct_mem_alloc_params_t *param,
 allocated_without_methods:
     ucs_debug("Could not allocate memory with any of the provided methods");
     return UCS_ERR_NO_MEMORY;
-
-err_invalid_length:
-    ucs_error("Allocation length provided is invalid");
-    return UCS_ERR_INVALID_PARAM;
 
 allocated_without_md:
     mem->md       = NULL;
