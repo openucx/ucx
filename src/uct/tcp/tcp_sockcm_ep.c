@@ -184,11 +184,10 @@ void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
      * destroy the ep here since uct_ep_destroy won't be called either */
     if ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
         !(ep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED)) {
-        ucs_assert(events == UCS_EVENT_SET_EVREAD);
-
         ucs_trace("closing server's internal ep %p (state=%d)", ep, ep->state);
         uct_tcp_sockcm_close_ep(ep);
     } else {
+        ucs_assert(!(ep->state & UCT_TCP_SOCKCM_EP_SERVER_REJECT_CALLED));
         ucs_trace("removing ep %p (fd=%d state=%d) async events handler. %s ",
                   ep, ep->fd, ep->state, ucs_status_string(status));
 
@@ -230,14 +229,18 @@ static ucs_status_t uct_tcp_sockcm_ep_handle_remote_disconnect(uct_tcp_sockcm_ep
     /* if the server started sending any data that the client received, then
      * it means that the server accepted the client's connection request and
      * created an ep to it. therefore, the server did not reject the request
-     * and if we got here then the status should be UCS_ERR_CONNECTION_RESET.
-     * otherwise, the status is UCS_ERR_REJECTED */
+     * and there was no reject from the network either, and so if we got here
+     * then the status should be UCS_ERR_CONNECTION_RESET.
+     * otherwise, if we got here due to a network reject, we set the status
+     * to UCS_ERR_UNREACHABLE to distinguish between a network reject and
+     * a user's reject (that is done through an explicit message from the server)
+     * which calls the upper layer callback with UCS_ERR_REJECTED. */
     if (ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_CLIENT |
                                        UCT_TCP_SOCKCM_EP_DATA_SENT) &&
         !(cep->state & (UCT_TCP_SOCKCM_EP_HDR_RECEIVED |
                         UCT_TCP_SOCKCM_EP_DATA_RECEIVED))) {
-        cb_status   = UCS_ERR_REJECTED;
-        cep->state |= UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECTED;
+        cb_status   = UCS_ERR_NOT_CONNECTED;
+        cep->state |= UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECT;
     } else {
         cb_status   = UCS_ERR_CONNECTION_RESET;
     }
@@ -254,20 +257,38 @@ static int uct_tcp_sockcm_ep_is_tx_rx_done(uct_tcp_sockcm_ep_t *cep)
     return (cep->comm_ctx.offset == cep->comm_ctx.length);
 }
 
+static void uct_tcp_sockcm_ep_mark_tx_completed(uct_tcp_sockcm_ep_t *cep)
+{
+    /* on the client side - if completed sending a message after the notify
+     * call was invoked, then this message is the notify message */
+    if (cep->state & UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_CALLED) {
+        ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT);
+        cep->state |= UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_SENT;
+    }
+
+    /* on the server side - if completed sending a message after the reject
+     * call was invoked, then this message is the reject message */
+    if (cep->state & UCT_TCP_SOCKCM_EP_SERVER_REJECT_CALLED) {
+        ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_SERVER);
+        cep->state |= UCT_TCP_SOCKCM_EP_SERVER_REJECT_SENT;
+    }
+}
+
 /**
  * This function should be called with the lock held.
  */
-static ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep)
+ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep)
 {
     ucs_status_t status;
     size_t sent_length;
     int events;
 
-    ucs_assert((ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_CLIENT      |
-                                               UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED)) ||
-               (ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_SERVER      |
-                                               UCT_TCP_SOCKCM_EP_SERVER_CREATED |
-                                               UCT_TCP_SOCKCM_EP_DATA_RECEIVED)));
+    ucs_assert(ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_CLIENT      |
+                                              UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED) ||
+               ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_SERVER      |
+                                              UCT_TCP_SOCKCM_EP_SERVER_CREATED |
+                                              UCT_TCP_SOCKCM_EP_DATA_RECEIVED)    ||
+               (cep->state & UCT_TCP_SOCKCM_EP_SERVER_REJECT_CALLED));
 
     ucs_assertv(cep->comm_ctx.offset < cep->comm_ctx.length, "ep state %d offset %zu length %zu",
                 cep->state, cep->comm_ctx.offset, cep->comm_ctx.length);
@@ -299,14 +320,13 @@ static ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep)
         ucs_assert(status == UCS_OK);
         cep->state |= UCT_TCP_SOCKCM_EP_DATA_SENT;
 
-        /* on the client side - if completed sending a message after the notify
-         * call was invoked, then this message is the notify message */
-        if (cep->state & UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_CALLED) {
-            ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT);
-            cep->state |= UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_SENT;
-        }
-
+        uct_tcp_sockcm_ep_mark_tx_completed(cep);
         uct_tcp_sockcm_ep_reset_comm_ctx(cep);
+
+        if (cep->state & UCT_TCP_SOCKCM_EP_SERVER_REJECT_SENT) {
+            UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, cep);
+            goto out;
+        }
 
         /* wait for a message from the peer */
         events = UCS_EVENT_SET_EVREAD;
@@ -350,7 +370,7 @@ ucs_status_t uct_tcp_sockcm_cm_ep_conn_notify(uct_ep_h ep)
     hdr = (uct_tcp_sockcm_priv_data_hdr_t*)cep->comm_ctx.buf;
 
     hdr->length          = 0;   /* sending only the header in the notify message */
-    hdr->status          = UCS_OK;
+    hdr->status          = (uint8_t)UCS_OK;
     cep->comm_ctx.length = sizeof(*hdr);
 
     ucs_trace("ep %p sending conn notification to server: %s", cep,
@@ -392,7 +412,7 @@ static ucs_status_t uct_tcp_sockcm_ep_pack_priv_data(uct_tcp_sockcm_ep_t *cep)
     }
 
     hdr->length          = priv_data_ret;
-    hdr->status          = UCS_OK;
+    hdr->status          = (uint8_t)UCS_OK;
     cep->comm_ctx.length = sizeof(*hdr) + hdr->length;
     cep->state          |= UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED;
 
@@ -509,8 +529,6 @@ static ucs_status_t uct_tcp_sockcm_ep_client_invoke_connect_cb(uct_tcp_sockcm_ep
     uct_cm_remote_data_t remote_data;
     ucs_status_t status;
 
-    ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT));
-
     /* get the device address of the remote peer associated with the connected fd */
     status = ucs_socket_getpeername(cep->fd, &remote_dev_addr, &remote_dev_addr_len);
     if (status != UCS_OK) {
@@ -531,7 +549,7 @@ static ucs_status_t uct_tcp_sockcm_ep_client_invoke_connect_cb(uct_tcp_sockcm_ep
     return status;
 }
 
-ucs_status_t uct_tcp_sockcm_ep_server_handle_data_received(uct_tcp_sockcm_ep_t *cep)
+static ucs_status_t uct_tcp_sockcm_ep_server_handle_data_received(uct_tcp_sockcm_ep_t *cep)
 {
     uct_tcp_sockcm_priv_data_hdr_t *hdr = (uct_tcp_sockcm_priv_data_hdr_t *)
                                            cep->comm_ctx.buf;
@@ -546,8 +564,11 @@ ucs_status_t uct_tcp_sockcm_ep_server_handle_data_received(uct_tcp_sockcm_ep_t *
 
         uct_tcp_sockcm_ep_server_notify_cb(cep, (ucs_status_t)hdr->status);
 
-        /* server to wait for any notification (disconnect) from the client */
-        status = ucs_async_modify_handler(cep->fd, UCS_EVENT_SET_EVREAD);
+        /* don't access the endpoint after calling an upper layer callback since
+         * it might have destroyed it.
+         * if not destroyed, the server's handler should already be waiting to
+         * EVREAD events */
+        status = UCS_OK;
     } else if ((cep->state & UCT_TCP_SOCKCM_EP_DATA_RECEIVED) &&
                !(cep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED)) {
         status = uct_tcp_sockcm_ep_server_invoke_conn_req_cb(cep);
@@ -561,6 +582,7 @@ ucs_status_t uct_tcp_sockcm_ep_server_handle_data_received(uct_tcp_sockcm_ep_t *
 
 ucs_status_t uct_tcp_sockcm_ep_handle_data_received(uct_tcp_sockcm_ep_t *cep)
 {
+    const uct_tcp_sockcm_priv_data_hdr_t *hdr;
     ucs_status_t status;
 
     cep->state |= UCT_TCP_SOCKCM_EP_DATA_RECEIVED;
@@ -572,13 +594,23 @@ ucs_status_t uct_tcp_sockcm_ep_handle_data_received(uct_tcp_sockcm_ep_t *cep)
         status = uct_tcp_sockcm_ep_server_handle_data_received(cep);
     } else {
         ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT);
-        status = uct_tcp_sockcm_ep_client_invoke_connect_cb(cep);
+        ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT));
 
-        /* next, unless disconnected, if the client did not send a connection
-         * establishment notification to the server from the connect_cb,
+        hdr = (const uct_tcp_sockcm_priv_data_hdr_t *)cep->comm_ctx.buf;
+        if ((ucs_status_t)hdr->status == UCS_ERR_REJECTED) {
+            ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_CLIENT_CONNECTED_CB_INVOKED));
+            cep->state |= UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECT;
+            status = UCS_ERR_REJECTED;
+        } else {
+            status = uct_tcp_sockcm_ep_client_invoke_connect_cb(cep);
+        }
+
+        /* next, unless disconnected, if the client did not send
+         * a connection establishment notification to the server from the connect_cb,
          * he will send it from the main thread */
     }
 
+out:
     return status;
 }
 
@@ -621,12 +653,16 @@ ucs_status_t uct_tcp_sockcm_ep_recv(uct_tcp_sockcm_ep_t *cep)
     ucs_status_t status;
 
     /* if the ep got a disconnect notice from the peer, had an internal local
-     * error or the client received a reject frmo the server, it should have
+     * error or the client received a reject from the server, it should have
      * removed its fd from the async handlers.
      * therefore, no recv events should get here afterwards */
     ucs_assert(!(cep->state & (UCT_TCP_SOCKCM_EP_GOT_DISCONNECT |
-                               UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECTED |
+                               UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECT |
                                UCT_TCP_SOCKCM_EP_FAILED)));
+
+    if (cep->state & UCT_TCP_SOCKCM_EP_SERVER_REJECT_CALLED) {
+        return UCS_OK;
+    }
 
     status = uct_tcp_sockcm_ep_recv_nb(cep);
     if (status != UCS_OK) {

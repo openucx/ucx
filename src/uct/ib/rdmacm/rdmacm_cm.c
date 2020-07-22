@@ -43,9 +43,14 @@ ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event)
 
 ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id)
 {
+    uct_rdmacm_priv_data_hdr_t hdr;
+
+    hdr.length = 0;
+    hdr.status = (uint8_t)UCS_ERR_REJECTED;
+
     ucs_trace("reject on cm_id %p", id);
 
-    if (rdma_reject(id, NULL, 0)) {
+    if (rdma_reject(id, &hdr, sizeof(hdr))) {
         ucs_error("rdma_reject (id=%p) failed with error: %m", id);
         return UCS_ERR_IO_ERROR;
     }
@@ -360,26 +365,47 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
+    const uct_rdmacm_priv_data_hdr_t *hdr;
     ucs_log_level_t log_level;
     ucs_status_t status;
 
-    if (event->event == RDMA_CM_EVENT_REJECTED) {
+    switch (event->event) {
+    case RDMA_CM_EVENT_REJECTED:
         if (cep->flags & UCT_RDMACM_CM_EP_ON_SERVER) {
             /* response was rejected by the client in the middle of
              * connection establishment, so report connection reset */
             status = UCS_ERR_CONNECTION_RESET;
         } else {
             ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT);
-            status = UCS_ERR_REJECTED;
+            hdr = (const uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
+
+            if ((hdr != NULL) && (event->param.conn.private_data_len > 0) &&
+                ((ucs_status_t)hdr->status == UCS_ERR_REJECTED)) {
+                ucs_assert(hdr->length == 0);
+                /* the actual amount of data transferred to the remote side is
+                 * transport dependent and may be larger than that requested.*/
+                ucs_assert(event->param.conn.private_data_len >= sizeof(*hdr));
+                status = UCS_ERR_REJECTED;
+            } else {
+                status = UCS_ERR_UNREACHABLE;
+            }
         }
 
         log_level = UCS_LOG_LEVEL_DEBUG;
-    } else {
+        break;
+    case RDMA_CM_EVENT_UNREACHABLE:
+    case RDMA_CM_EVENT_ADDR_ERROR:
+    case RDMA_CM_EVENT_ROUTE_ERROR:
+    case RDMA_CM_EVENT_CONNECT_ERROR:
+        status    = UCS_ERR_UNREACHABLE;
+        log_level = UCS_LOG_LEVEL_DEBUG;
+        break;
+    default:
         status    = UCS_ERR_IO_ERROR;
         log_level = UCS_LOG_LEVEL_ERROR;
     }
 
-    ucs_log(log_level, "%s: got error event %s, status %d peer %s",
+    ucs_log(log_level, "%s: got error event %s, event status %d peer %s",
             uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
             rdma_event_str(event->event), event->status,
             ucs_sockaddr_str(remote_addr, ip_port_str,
