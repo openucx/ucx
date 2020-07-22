@@ -21,6 +21,7 @@
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
 #include <sched.h>
+#include <libgen.h>
 
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
@@ -770,33 +771,30 @@ ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, int port_num,
                                ucs_sys_bus_id_t *bus_id)
 {
     char ib_realpath[PATH_MAX];
-    char pcie_bus[PATH_MAX];
+    char *pcie_bus;
     char *tmp;
-    int i, bus_count;
+    int i, bus_len;
 
     if (NULL == realpath(dev->ibv_context->device->ibdev_path, ib_realpath)) {
-        return UCS_ERR_IO_ERROR;
+        return UCS_ERR_NO_RESOURCE;
     }
 
     /* realpath name is of form /sys/devices/.../0000:05:00.0/infiniband/mlx5_0
      * and bus_id is constructed from 0000:05:00.0 */
 
-    tmp = strstr(ib_realpath, "/infiniband");
-
-    bus_count = 0;
-    tmp--;
-    while (1) {
-        if (*tmp == '/') {
-            break;
-        }
-        bus_count++;
-        tmp--;
+    /* Make sure there is /infiniband/mlx5_0 suffix in ib_realpath*/
+    /* doesn't handle non-mlx devices */
+    tmp = strstr(ib_realpath, "/infiniband/mlx5_0");
+    if (NULL == tmp) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
-    memcpy(pcie_bus, (char *)tmp + 1, bus_count);
-    pcie_bus[bus_count] = '\0';
+    pcie_bus = dirname(ib_realpath);
+    pcie_bus = dirname(pcie_bus);
+    pcie_bus = basename(pcie_bus);
 
-    for (i = 0; i < bus_count; i++) {
+    bus_len = strlen(pcie_bus);
+    for (i = 0; i < bus_len; i++) {
         if ((pcie_bus[i] == ':') || (pcie_bus[i] == '.')) {
             pcie_bus[i] = ' ';
         }
