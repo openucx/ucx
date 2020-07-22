@@ -715,6 +715,7 @@ ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req)
 static void ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req, ucp_request_t *rreq,
                                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr)
 {
+    ucp_worker_h worker = rndv_req->send.ep->worker;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
 
@@ -741,11 +742,16 @@ static void ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req, ucp_request_t *rr
     ucp_request_send_state_reset(rndv_req, ucp_rndv_get_completion,
                                  UCP_REQUEST_SEND_PROTO_RNDV_GET);
     ucp_rndv_req_init_zcopy_lane_map(rndv_req);
-    rndv_req->send.lane         = ucp_rndv_get_zcopy_get_lane(rndv_req, &uct_rkey);
-    rndv_req->send.pending_lane = UCP_NULL_LANE;
 
-    if ((rndv_req->send.lane == UCP_NULL_LANE) ||
-        !ucp_request_pending_add(rndv_req, &status, 0)) {
+    if (worker->context->config.ext.rdnv_defer_sched) {
+        rndv_req->send.lane         = ucp_rndv_get_zcopy_get_lane(rndv_req, &uct_rkey);
+        rndv_req->send.pending_lane = UCP_NULL_LANE;
+
+        if ((rndv_req->send.lane == UCP_NULL_LANE) ||
+            !ucp_request_pending_add(rndv_req, &status, 0)) {
+            ucp_request_send(rndv_req, 0);
+        }
+    } else {
         ucp_request_send(rndv_req, 0);
     }
 }
