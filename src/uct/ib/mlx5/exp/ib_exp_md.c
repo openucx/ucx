@@ -35,13 +35,15 @@ typedef struct uct_ib_mlx5_mem {
 static ucs_status_t uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address,
                                         size_t length, uint64_t access_flags,
                                         uct_ib_mem_t *ib_memh,
-                                        uct_ib_mr_type_t mr_type)
+                                        uct_ib_mr_type_t mr_type,
+                                        int silent)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     ucs_status_t status;
 
     ucs_assert(mr_type == UCT_IB_MR_DEFAULT);
-    status = uct_ib_reg_mr(md->pd, address, length, access_flags, &memh->mr);
+    status = uct_ib_reg_mr(md->pd, address, length, access_flags, &memh->mr,
+                           silent);
     if (status != UCS_OK) {
         return status;
     }
@@ -505,7 +507,8 @@ static ucs_status_t uct_ib_mlx5_exp_reg_multithreaded(uct_ib_md_t *ibmd,
                                                       void *address, size_t length,
                                                       uint64_t access_flags,
                                                       uct_ib_mem_t *ib_memh,
-                                                      uct_ib_mr_type_t mr_type)
+                                                      uct_ib_mr_type_t mr_type,
+                                                      int silent)
 {
 #if HAVE_EXP_UMR_KSM
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
@@ -537,7 +540,7 @@ static ucs_status_t uct_ib_mlx5_exp_reg_multithreaded(uct_ib_md_t *ibmd,
     ksm_data->mr_num = mr_num;
     status = uct_ib_md_handle_mr_list_multithreaded(ibmd, address, length,
                                                     access_flags, chunk,
-                                                    ksm_data->mrs);
+                                                    ksm_data->mrs, silent);
     if (status != UCS_OK) {
         goto err;
     }
@@ -555,7 +558,7 @@ static ucs_status_t uct_ib_mlx5_exp_reg_multithreaded(uct_ib_md_t *ibmd,
 
 err_dereg:
     uct_ib_md_handle_mr_list_multithreaded(ibmd, address, length, UCT_IB_MEM_DEREG,
-                                           chunk, ksm_data->mrs);
+                                           chunk, ksm_data->mrs, silent);
 err:
     ucs_free(ksm_data);
     return status;
@@ -583,7 +586,7 @@ static ucs_status_t uct_ib_mlx5_exp_dereg_multithreaded(uct_ib_md_t *ibmd,
     s = uct_ib_md_handle_mr_list_multithreaded(ibmd, memh->mr->addr,
                                                memh->mr->length,
                                                UCT_IB_MEM_DEREG, chunk,
-                                               memh->ksm_data->mrs);
+                                               memh->ksm_data->mrs, 1);
     if (s == UCS_ERR_UNSUPPORTED) {
         s = uct_ib_dereg_mrs(memh->ksm_data->mrs, memh->ksm_data->mr_num);
         if (s != UCS_OK) {
