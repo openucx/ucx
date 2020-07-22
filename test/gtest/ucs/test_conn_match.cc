@@ -36,6 +36,13 @@ private:
         m_address_length = address_length;
     }
 
+    void check_conn_elem(const conn_elem_t *conn_elem,
+                         const void *dest_address, ucs_conn_sn_t conn_sn) {
+        EXPECT_EQ(conn_sn, conn_elem->conn_sn);
+        EXPECT_TRUE(!memcmp(dest_address, conn_elem->dest_address,
+                            m_address_length));
+    }
+
 protected:
     static inline conn_elem_t*
     conn_elem_from_match_elem(const ucs_conn_match_elem_t *conn_match) {
@@ -94,17 +101,35 @@ protected:
     conn_elem_t *retrieve(const void *dest_address, ucs_conn_sn_t conn_sn,
                           ucs_conn_match_queue_type_t queue_type) {
         ucs_conn_match_elem_t *conn_match =
-            ucs_conn_match_retrieve(&m_conn_match_ctx, dest_address,
-                                    conn_sn, queue_type);
+            ucs_conn_match_get_elem(&m_conn_match_ctx, dest_address,
+                                    conn_sn, queue_type, 1);
         if (conn_match == NULL) {
             return NULL;
         }
 
         conn_elem_t *conn_elem = conn_elem_from_match_elem(conn_match);
         EXPECT_EQ(queue_type, conn_elem->queue_type);
-        EXPECT_EQ(conn_sn, conn_elem->conn_sn);
-        EXPECT_TRUE(!memcmp(dest_address, conn_elem->dest_address,
-                            m_address_length));
+        check_conn_elem(conn_elem, dest_address, conn_sn);
+
+        return conn_elem;
+    }
+
+    conn_elem_t *lookup(const void *dest_address, ucs_conn_sn_t conn_sn,
+                        ucs_conn_match_queue_type_t queue_type) {
+        ucs_conn_match_elem_t *conn_match =
+            ucs_conn_match_get_elem(&m_conn_match_ctx, dest_address,
+                                    conn_sn, queue_type, 0);
+        if (conn_match == NULL) {
+            return NULL;
+        }
+
+        ucs_conn_match_elem_t *test_conn_match =
+            ucs_conn_match_get_elem(&m_conn_match_ctx, dest_address,
+                                    conn_sn, UCS_CONN_MATCH_QUEUE_ANY, 0);
+        EXPECT_EQ(conn_match, test_conn_match);
+
+        conn_elem_t *conn_elem = conn_elem_from_match_elem(conn_match);
+        check_conn_elem(conn_elem, dest_address, conn_sn);
 
         return conn_elem;
     }
@@ -176,15 +201,25 @@ UCS_TEST_F(test_conn_match, random_insert_retrieve) {
                 conn_elem_t *test_conn_elem;
 
                 /* must not find this element in the another queue */
+                test_conn_elem = lookup(conn_elem->dest_address, conn_elem->conn_sn,
+                                        another_queue_type);
+                EXPECT_EQ(NULL, test_conn_elem);
                 test_conn_elem = retrieve(conn_elem->dest_address, conn_elem->conn_sn,
                                           another_queue_type);
                 EXPECT_EQ(NULL, test_conn_elem);
 
+                test_conn_elem = lookup(conn_elem->dest_address, conn_elem->conn_sn,
+                                        conn_elem->queue_type);
+                EXPECT_EQ(conn_elem, test_conn_elem);
                 test_conn_elem = retrieve(conn_elem->dest_address, conn_elem->conn_sn,
                                           conn_elem->queue_type);
                 EXPECT_EQ(conn_elem, test_conn_elem);
 
-                /* subsequent retrieving of the same connection element must return NULL */
+                /* subsequent retrieving/lookup of the same connection element
+                 * must return NULL */
+                test_conn_elem = lookup(conn_elem->dest_address, conn_elem->conn_sn,
+                                        conn_elem->queue_type);
+                EXPECT_EQ(NULL, test_conn_elem);
                 test_conn_elem = retrieve(conn_elem->dest_address, conn_elem->conn_sn,
                                           conn_elem->queue_type);
                 EXPECT_EQ(NULL, test_conn_elem);
@@ -197,10 +232,30 @@ UCS_TEST_F(test_conn_match, random_insert_retrieve) {
         for (size_t i = 0; i < max_addresses; i++) {
             for (unsigned conn = 0; conn < conn_elems[i].size(); conn++) {
                 conn_elem_t *conn_elem = &conn_elems[i][conn];
+                conn_elem_t *test_conn_elem;
+
+                test_conn_elem = lookup(conn_elem->dest_address, conn_elem->conn_sn,
+                                        conn_elem->queue_type);
+                EXPECT_EQ(conn_elem, test_conn_elem);
 
                 EXPECT_EQ(conn, conn_elem->conn_sn);
 
                 remove_conn(*conn_elem);
+
+                /* subsequent retrieving/lookup of the same connection element
+                 * must return NULL */
+                test_conn_elem = lookup(conn_elem->dest_address, conn_elem->conn_sn,
+                                        UCS_CONN_MATCH_QUEUE_EXP);
+                EXPECT_EQ(NULL, test_conn_elem);
+                test_conn_elem = lookup(conn_elem->dest_address, conn_elem->conn_sn,
+                                        UCS_CONN_MATCH_QUEUE_UNEXP);
+                EXPECT_EQ(NULL, test_conn_elem);
+                test_conn_elem = retrieve(conn_elem->dest_address, conn_elem->conn_sn,
+                                          UCS_CONN_MATCH_QUEUE_EXP);
+                EXPECT_EQ(NULL, test_conn_elem);
+                test_conn_elem = retrieve(conn_elem->dest_address, conn_elem->conn_sn,
+                                          UCS_CONN_MATCH_QUEUE_UNEXP);
+                EXPECT_EQ(NULL, test_conn_elem);
             }
 
             delete[] (uint8_t*)conn_elems[i][0].dest_address;
