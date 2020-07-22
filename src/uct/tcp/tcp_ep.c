@@ -169,11 +169,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
     uct_tcp_ep_ctx_init(&self->tx);
     uct_tcp_ep_ctx_init(&self->rx);
 
-    self->events        = 0;
-    self->conn_retries  = 0;
-    self->fd            = fd;
-    self->ctx_caps      = 0;
-    self->conn_state    = UCT_TCP_EP_CONN_STATE_CLOSED;
+    self->events       = 0;
+    self->conn_retries = 0;
+    self->fd           = fd;
+    self->flags        = 0;
+    self->conn_state   = UCT_TCP_EP_CONN_STATE_CLOSED;
 
     ucs_list_head_init(&self->list);
     ucs_queue_head_init(&self->pending_q);
@@ -208,9 +208,9 @@ err_cleanup:
 const char *uct_tcp_ep_ctx_caps_str(uint8_t ep_ctx_caps, char *str_buffer)
 {
     ucs_snprintf_zero(str_buffer, UCT_TCP_EP_CTX_CAPS_STR_MAX, "[%s:%s]",
-                      (ep_ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)) ?
+                      (ep_ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ?
                       "Tx" : "-",
-                      (ep_ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) ?
+                      (ep_ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_RX) ?
                       "Rx" : "-");
     return str_buffer;
 }
@@ -220,26 +220,28 @@ void uct_tcp_ep_change_ctx_caps(uct_tcp_ep_t *ep, uint8_t new_caps)
     char str_prev_ctx_caps[UCT_TCP_EP_CTX_CAPS_STR_MAX];
     char str_cur_ctx_caps[UCT_TCP_EP_CTX_CAPS_STR_MAX];
 
-    if (ep->ctx_caps != new_caps) {
+    if (ep->flags != new_caps) {
         ucs_trace("tcp_ep %p: ctx caps changed %s -> %s", ep,
-                  uct_tcp_ep_ctx_caps_str(ep->ctx_caps, str_prev_ctx_caps),
+                  uct_tcp_ep_ctx_caps_str(ep->flags, str_prev_ctx_caps),
                   uct_tcp_ep_ctx_caps_str(new_caps, str_cur_ctx_caps));
-        ep->ctx_caps = new_caps;
+        ep->flags = new_caps;
     }
 }
 
 ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep,
-                                    uct_tcp_ep_ctx_type_t cap)
+                                    uint8_t ctx_cap)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
-    uint8_t prev_caps      = ep->ctx_caps;
+    uint8_t prev_caps      = ep->flags;
 
-    uct_tcp_ep_change_ctx_caps(ep, ep->ctx_caps | UCS_BIT(cap));
-    if (!uct_tcp_ep_is_self(ep) && (prev_caps != ep->ctx_caps)) {
+    ucs_assert(ctx_cap & UCT_TCP_EP_CTX_CAPS);
+
+    uct_tcp_ep_change_ctx_caps(ep, ep->flags | ctx_cap);
+    if (!uct_tcp_ep_is_self(ep) && (prev_caps != ep->flags)) {
         if (!(prev_caps & UCT_TCP_EP_CTX_CAPS)) {
             return uct_tcp_cm_add_ep(iface, ep);
-        } else if (ucs_test_all_flags(ep->ctx_caps, UCT_TCP_EP_CTX_CAPS)) {
+        } else if (ucs_test_all_flags(ep->flags, UCT_TCP_EP_CTX_CAPS)) {
             uct_tcp_cm_remove_ep(iface, ep);
         }
     }
@@ -248,17 +250,19 @@ ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep,
 }
 
 ucs_status_t uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep,
-                                       uct_tcp_ep_ctx_type_t cap)
+                                       uint8_t ctx_cap)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
-    uint8_t prev_caps      = ep->ctx_caps;
+    uint8_t prev_caps      = ep->flags;
 
-    uct_tcp_ep_change_ctx_caps(ep, ep->ctx_caps & ~UCS_BIT(cap));
+    ucs_assert(ctx_cap & UCT_TCP_EP_CTX_CAPS);    
+
+    uct_tcp_ep_change_ctx_caps(ep, ep->flags & ~ctx_cap);
     if (!uct_tcp_ep_is_self(ep)) {
         if (ucs_test_all_flags(prev_caps, UCT_TCP_EP_CTX_CAPS)) {
             return uct_tcp_cm_add_ep(iface, ep);
-        } else if (!(ep->ctx_caps & UCT_TCP_EP_CTX_CAPS)) {
+        } else if (!(ep->flags & UCT_TCP_EP_CTX_CAPS)) {
             uct_tcp_cm_remove_ep(iface, ep);
         }
     }
@@ -267,7 +271,7 @@ ucs_status_t uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep,
 }
 
 ucs_status_t uct_tcp_ep_move_ctx_cap(uct_tcp_ep_t *from_ep, uct_tcp_ep_t *to_ep,
-                                     uct_tcp_ep_ctx_type_t ctx_cap)
+                                     uint8_t ctx_cap)
 {
     ucs_status_t status;
 
@@ -287,15 +291,15 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
 
     uct_tcp_ep_mod_events(self, 0, self->events);
 
-    if (self->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)) {
-        uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_TYPE_TX);
+    if (self->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) {
+        uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_FLAG_CTX_TYPE_TX);
     }
 
-    if (self->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) {
-        uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_TYPE_RX);
+    if (self->flags & UCT_TCP_EP_FLAG_CTX_TYPE_RX) {
+        uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_FLAG_CTX_TYPE_RX);
     }
 
-    ucs_assertv(!(self->ctx_caps & UCT_TCP_EP_CTX_CAPS), "ep=%p", self);
+    ucs_assertv(!(self->flags & UCT_TCP_EP_CTX_CAPS), "ep=%p", self);
 
     ucs_queue_for_each_extract(put_comp, &self->put_comp_q, elem, 1) {
         ucs_free(put_comp);
@@ -321,9 +325,9 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
 
     if ((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
-        ucs_test_all_flags(ep->ctx_caps, UCT_TCP_EP_CTX_CAPS)) {
+        ucs_test_all_flags(ep->flags, UCT_TCP_EP_CTX_CAPS)) {
         /* remove TX capability, but still will be able to receive data */
-        uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_TX);
+        uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_TX);
     } else {
         uct_tcp_ep_destroy_internal(tl_ep);
     }
@@ -403,7 +407,7 @@ static ucs_status_t uct_tcp_ep_create_connected(uct_tcp_iface_t *iface,
         return status;
     }
 
-    status = uct_tcp_ep_add_ctx_cap(*ep_p, UCT_TCP_EP_CTX_TYPE_TX);
+    status = uct_tcp_ep_add_ctx_cap(*ep_p, UCT_TCP_EP_FLAG_CTX_TYPE_TX);
     if (status != UCS_OK) {
         goto err_ep_destroy;
     }
@@ -433,9 +437,9 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
 
     do {
         ep = uct_tcp_cm_search_ep(iface, &dest_addr,
-                                  UCT_TCP_EP_CTX_TYPE_RX);
+                                  UCT_TCP_EP_FLAG_CTX_TYPE_RX);
         if (ep) {
-            ucs_assert(!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)));
+            ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX));
             /* Found EP with RX ctx, try to send the connection request
              * to the remote peer, if it successful - assign TX to this EP
              * and return the EP to the user, otherwise - destroy this EP
@@ -446,7 +450,7 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
                 uct_tcp_ep_destroy_internal(&ep->super.super);
                 ep = NULL;
             } else {
-                status = uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_TX);
+                status = uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_TX);
                 if (status != UCS_OK) {
                     return status;
                 }
@@ -505,8 +509,8 @@ static inline void uct_tcp_ep_handle_put_ack(uct_tcp_ep_t *ep,
     if (put_ack->sn == ep->tx.put_sn) {
         /* Since there are no other PUT operations in-flight, can remove flag
          * and decrement iface outstanding operations counter */
-        ucs_assert(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK));
-        ep->ctx_caps &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK);
+        ucs_assert(ep->flags & UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK);
+        ep->flags &= ~UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK;
         uct_tcp_iface_outstanding_dec(iface);
     }
 
@@ -554,7 +558,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_tcp_ep_zcopy_completed(uct_tcp_ep_t *ep, uct_completion_t *comp,
                            ucs_status_t status)
 {
-    ep->ctx_caps &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX);
+    ep->flags &= ~UCT_TCP_EP_FLAG_ZCOPY_TX;
     if (comp != NULL) {
         uct_invoke_completion(comp, status);
     }
@@ -568,27 +572,27 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep, ucs_status_t status
 
     ucs_debug("tcp_ep %p: remote disconnected", ep);
 
-    if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX)) {
-        if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) {
-            uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_CTX_TYPE_RX);
-            ep->ctx_caps &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK);
+    if (ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) {
+        if (ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_RX) {
+            uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_RX);
+            ep->flags &= ~UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK;
         }
 
         uct_tcp_ep_mod_events(ep, 0, ep->events);
         ucs_close_fd(&ep->fd);
 
-        if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX)) {
+        if (ep->flags & UCT_TCP_EP_FLAG_ZCOPY_TX) {
             /* There is ongoing AM/PUT Zcopy operation, need to notify
              * the user about the error */
             ctx = (uct_tcp_ep_zcopy_tx_t*)ep->tx.buf;
             uct_tcp_ep_zcopy_completed(ep, ctx->comp, status);
         }
 
-        if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK)) {
+        if (ep->flags & UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK) {
             /* if the EP is waiting for the acknowledgment of the started
              * PUT operation, decrease iface::outstanding counter */
             uct_tcp_iface_outstanding_dec(iface);
-            ep->ctx_caps &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK);
+            ep->flags &= ~UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK;
         }
 
         uct_tcp_ep_tx_completed(ep, ep->tx.length - ep->tx.offset);
@@ -696,7 +700,7 @@ ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
     if (((ep->conn_state == UCT_TCP_EP_CONN_STATE_ACCEPTING) ||
          (ep->conn_state == UCT_TCP_EP_CONN_STATE_RECV_MAGIC_NUMBER)) ||
         ((ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) &&
-         (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX)) /* only RX cap */)) {
+         (ep->flags == UCT_TCP_EP_FLAG_CTX_TYPE_RX) /* only RX cap */)) {
         ucs_debug("tcp_ep %p: detected that [%s <-> %s] connection was "
                   "dropped by the peer", ep,
                   ucs_sockaddr_str((const struct sockaddr*)&iface->config.ifaddr,
@@ -711,7 +715,7 @@ ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
         ucs_close_fd(&ep->fd);
 
         if ((io_status == UCS_ERR_NOT_CONNECTED) &&
-            (ep->ctx_caps == UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX) /* only TX cap */)) {
+            (ep->flags == UCT_TCP_EP_FLAG_CTX_TYPE_TX /* only TX cap */)) {
             ucs_debug("tcp_ep %p: detected that [%s <-> %s] connection was "
                       "closed by the peer during resolving of simultaneous "
                       "connection establishment", ep,
@@ -843,7 +847,7 @@ static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep)
     ucs_trace_func("ep=%p", ep);
 
     if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
-        offset = (!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX)) ?
+        offset = (!(ep->flags & UCT_TCP_EP_FLAG_ZCOPY_TX) ?
                   uct_tcp_ep_send(ep) : uct_tcp_ep_sendv(ep));
         if (ucs_unlikely(offset < 0)) {
             uct_tcp_ep_handle_send_err(ep, (ucs_status_t)offset);
@@ -858,7 +862,7 @@ static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep)
         uct_tcp_ep_check_tx_completion(ep);
     }
 
-    if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK)) {
+    if (ep->flags & UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK) {
         uct_tcp_ep_post_put_ack(ep);
     }
 
@@ -890,7 +894,7 @@ static inline ucs_status_t
 uct_tcp_ep_put_rx_advance(uct_tcp_ep_t *ep, uct_tcp_ep_put_req_hdr_t *put_req,
                           size_t recv_length)
 {
-    ucs_assert(!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK)));
+    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK));
     ucs_assert(recv_length <= put_req->length);
     put_req->addr   += recv_length;
     put_req->length -= recv_length;
@@ -898,11 +902,11 @@ uct_tcp_ep_put_rx_advance(uct_tcp_ep_t *ep, uct_tcp_ep_put_req_hdr_t *put_req,
     if (!put_req->length) {
         uct_tcp_ep_post_put_ack(ep);
 
-        /* EP's ctx_caps doesn't have UCT_TCP_EP_CTX_TYPE_PUT_RX flag
+        /* EP's ctx_caps doesn't have UCT_TCP_EP_FLAG_PUT_RX flag
          * set in case of entire PUT payload was received through
          * AM protocol */
-        if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX)) {
-            ep->ctx_caps &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX);
+        if (ep->flags & UCT_TCP_EP_FLAG_PUT_RX) {
+            ep->flags &= ~UCT_TCP_EP_FLAG_PUT_RX;
             uct_tcp_ep_ctx_reset(&ep->rx);
         }
 
@@ -932,7 +936,7 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
      * to not ack the uncompleted PUT RX operation for which PUT REQ is being
      * handled here. ACK for both operations will be sent after the completion
      * of the last received PUT operation */
-    ep->ctx_caps &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK);
+    ep->flags &= ~UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK;
 
     status = uct_tcp_ep_put_rx_advance(ep, put_req, copied_length);
     if (status == UCS_OK) {
@@ -943,7 +947,7 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
     uct_tcp_ep_ctx_rewind(&ep->rx);
     /* Since RX buffer and PUT request can be ovelapped, use memmove() */
     memmove(ep->rx.buf, put_req, sizeof(*put_req));
-    ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX);
+    ep->flags |= UCT_TCP_EP_FLAG_PUT_RX;
 }
 
 static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
@@ -1022,7 +1026,7 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
             uct_tcp_ep_handle_put_req(ep, (uct_tcp_ep_put_req_hdr_t*)(hdr + 1),
                                       ep->rx.length - ep->rx.offset);
             handled++;
-            if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX)) {
+            if (ep->flags & UCT_TCP_EP_FLAG_PUT_RX) {
                 /* It means that PUT RX is in progress and EP RX buffer
                  * is used to keep PUT header. So, we don't need to
                  * release a EP RX buffer */
@@ -1108,7 +1112,7 @@ static unsigned uct_tcp_ep_progress_put_rx(uct_tcp_ep_t *ep)
 
 static unsigned uct_tcp_ep_progress_data_rx(uct_tcp_ep_t *ep)
 {
-    if (!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX))) {
+    if (!(ep->flags & UCT_TCP_EP_FLAG_PUT_RX)) {
         return uct_tcp_ep_progress_am_rx(ep);
     } else {
         return uct_tcp_ep_progress_put_rx(ep);
@@ -1175,8 +1179,8 @@ uct_tcp_ep_set_outstanding_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
                                  uct_tcp_ep_zcopy_tx_t *ctx, const void *header,
                                  unsigned header_length, uct_completion_t *comp)
 {
-    ctx->comp     = comp;
-    ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_ZCOPY_TX);
+    ctx->comp  = comp;
+    ep->flags |= UCT_TCP_EP_FLAG_ZCOPY_TX;
 
     if ((header_length != 0) &&
         /* check whether a user's header was sent or not */
@@ -1297,7 +1301,7 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep)
                                    UCT_TCP_EP_PUT_ACK_AM_ID, &hdr);
     if (status != UCS_OK) {
         if (status == UCS_ERR_NO_RESOURCE) {
-            ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK);
+            ep->flags |= UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK;
         } else {
             ucs_error("tcp_ep %p: failed to prepare AM data", ep);
         }
@@ -1315,7 +1319,7 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep)
 
     /* If sending PUT ACK was OK, always remove SENDING ACK flag
      * as the function can be called from outstanding progress */
-    ep->ctx_caps &= ~UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK);
+    ep->flags &= ~UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK;
 }
 
 ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header,
@@ -1549,13 +1553,13 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
 
     ep->tx.put_sn++;
 
-    if (!(ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK))) {
-        /* Add UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK flag and increment iface
+    if (!(ep->flags & UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK)) {
+        /* Add UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK flag and increment iface
          * outstanding operations counter in order to ensure returning
          * UCS_INPROGRESS from flush functions and do progressing.
-         * UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK flag has to be removed upon PUT
+         * UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK flag has to be removed upon PUT
          * ACK message receiving if there are no other PUT operations in-flight */
-        ep->ctx_caps |= UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK);
+        ep->flags |= UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK;
         uct_tcp_iface_outstanding_inc(iface);
     }
 
@@ -1614,7 +1618,7 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    if (ep->ctx_caps & UCS_BIT(UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK)) {
+    if (ep->flags & UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK) {
         if (comp != NULL) {
             put_comp = ucs_calloc(1, sizeof(*put_comp), "put completion");
             if (put_comp == NULL) {
