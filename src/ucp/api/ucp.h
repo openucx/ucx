@@ -3275,12 +3275,12 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  * guarantee re-usability of the source address @e buffer. If the operation is
  * completed immediately the routine return UCS_OK, otherwise UCS_INPROGRESS
  * or an error is returned to user. If the put operation completes immediately,
- * the routine returns UCS_OK and the call-back routine @a cb is @b not
- * invoked. If the operation is @b not completed immediately and no error is
- * reported, then the UCP library will schedule invocation of the call-back
- * routine @a cb upon completion of the put operation. In other words, the
- * completion of a put operation can be signaled by the return code or
- * execution of the call-back.
+ * the routine returns UCS_OK and the call-back routine @a param.cb.send is
+ * @b not invoked. If the operation is @b not completed immediately and no
+ * error is reported, then the UCP library will schedule invocation of the
+ * call-back routine @a param.cb.send upon completion of the put operation.
+ * In other words, the completion of a put operation can be signaled by the
+ * return code or execution of the call-back.
  * Immediate completion signals can be fine-tuned via the
  * @ref ucp_request_param_t.op_attr_mask field in the
  * @ref ucp_request_param_t structure. The values of this field
@@ -3406,11 +3406,11 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
  * buffer. If the operation is completed immediately the routine return UCS_OK,
  * otherwise UCS_INPROGRESS or an error is returned to user. If the get
  * operation completes immediately, the routine returns UCS_OK and the
- * call-back routine @a cb is @b not invoked. If the operation is @b not
- * completed immediately and no error is reported, then the UCP library will
- * schedule invocation of the call-back routine @a cb upon completion of the
- * get operation. In other words, the completion of a get operation can be
- * signaled by the return code or execution of the call-back.
+ * call-back routine @a param.cb.send is @b not invoked. If the operation is
+ * @b not completed immediately and no error is reported, then the UCP library
+ * will schedule invocation of the call-back routine @a param.cb.send upon
+ * completion of the get operation. In other words, the completion of a get
+ * operation can be signaled by the return code or execution of the call-back.
  *
  * @note A user can use @ref ucp_worker_flush_nb "ucp_worker_flush_nb()"
  * in order to guarantee re-usability of the source address @e buffer.
