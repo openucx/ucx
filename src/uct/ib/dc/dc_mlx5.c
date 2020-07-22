@@ -646,16 +646,18 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
     return UCS_OK;
 
 err_free_srq:
-    uct_rc_mlx5_destroy_srq(&iface->super.rx.srq);
+    uct_rc_mlx5_destroy_srq(md, &iface->super.rx.srq);
 err:
     return status;
 }
 
 void uct_dc_mlx5_cleanup_rx(uct_rc_iface_t *rc_iface)
 {
+    uct_ib_mlx5_md_t *md       = ucs_derived_of(rc_iface->super.super.md,
+                                                uct_ib_mlx5_md_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
 
-    uct_rc_mlx5_destroy_srq(&iface->super.rx.srq);
+    uct_rc_mlx5_destroy_srq(md, &iface->super.rx.srq);
 }
 
 #ifdef HAVE_DC_EXP

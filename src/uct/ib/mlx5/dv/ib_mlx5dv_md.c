@@ -34,10 +34,6 @@ typedef struct uct_ib_mlx5_mem {
     uct_ib_mlx5_mr_t           mrs[];
 } uct_ib_mlx5_mem_t;
 
-typedef struct uct_ib_mlx5_dbrec_page {
-    struct mlx5dv_devx_umem *mem;
-} uct_ib_mlx5_dbrec_page_t;
-
 
 static ucs_status_t uct_ib_mlx5_reg_key(uct_ib_md_t *md, void *address,
                                         size_t length, uint64_t access_flags,
@@ -134,6 +130,11 @@ static void uct_ib_mlx5_parse_relaxed_order(uct_ib_mlx5_md_t *md,
 }
 
 #if HAVE_DEVX
+
+typedef struct uct_ib_mlx5_dbrec_page {
+    uct_ib_mlx5_devx_umem_t    mem;
+} uct_ib_mlx5_dbrec_page_t;
+
 
 static size_t uct_ib_mlx5_calc_mkey_inlen(int list_size)
 {
@@ -428,29 +429,20 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_multithreaded(uct_ib_md_t *ibmd,
 static ucs_status_t uct_ib_mlx5_add_page(ucs_mpool_t *mp, size_t *size_p, void **page_p)
 {
     uct_ib_mlx5_md_t *md = ucs_container_of(mp, uct_ib_mlx5_md_t, dbrec_pool);
-    uintptr_t ps = ucs_get_page_size();
     uct_ib_mlx5_dbrec_page_t *page;
-    size_t size = ucs_align_up(*size_p + sizeof(*page), ps);
-    int ret;
+    size_t size = ucs_align_up(*size_p + sizeof(*page), ucs_get_page_size());
+    uct_ib_mlx5_devx_umem_t mem;
+    ucs_status_t status;
 
-    ret = ucs_posix_memalign((void **)&page, ps, size, "devx dbrec");
-    if (ret != 0) {
-        goto err;
+    status = uct_ib_mlx5_md_buf_alloc(md, size, 1, (void **)&page, &mem, "devx dbrec");
+    if (status != UCS_OK) {
+        return status;
     }
 
-    page->mem = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, page, size, 0);
-    if (page->mem == NULL) {
-        goto err_free;
-    }
-
-    *size_p = size;
-    *page_p = page + 1;
+    page->mem = mem;
+    *size_p   = size - sizeof(*page);
+    *page_p   = page + 1;
     return UCS_OK;
-
-err_free:
-    ucs_free(page);
-err:
-    return UCS_ERR_IO_ERROR;
 }
 
 static void uct_ib_mlx5_init_dbrec(ucs_mpool_t *mp, void *obj, void *chunk)
@@ -458,15 +450,15 @@ static void uct_ib_mlx5_init_dbrec(ucs_mpool_t *mp, void *obj, void *chunk)
     uct_ib_mlx5_dbrec_page_t *page = (uct_ib_mlx5_dbrec_page_t*)chunk - 1;
     uct_ib_mlx5_dbrec_t *dbrec     = obj;
 
-    dbrec->mem_id = page->mem->umem_id;
+    dbrec->mem_id = page->mem.mem->umem_id;
     dbrec->offset = UCS_PTR_BYTE_DIFF(chunk, obj) + sizeof(*page);
 }
 
 static void uct_ib_mlx5_free_page(ucs_mpool_t *mp, void *chunk)
 {
+    uct_ib_mlx5_md_t *md = ucs_container_of(mp, uct_ib_mlx5_md_t, dbrec_pool);
     uct_ib_mlx5_dbrec_page_t *page = (uct_ib_mlx5_dbrec_page_t*)chunk - 1;
-    mlx5dv_devx_umem_dereg(page->mem);
-    ucs_free(page);
+    uct_ib_mlx5_md_buf_free(md, page, &page->mem);
 }
 
 static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
@@ -746,19 +738,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    ret = ucs_posix_memalign(&md->zero_buf, ucs_get_page_size(),
-                             ucs_get_page_size(), "zero umem");
-    if (ret != 0) {
-        ucs_error("failed to allocate zero buffer: %m");
-        status = UCS_ERR_NO_MEMORY;
+    status = uct_ib_mlx5_md_buf_alloc(md, ucs_get_page_size(), 0, &md->zero_buf,
+                                      &md->zero_mem, "zero umem");
+    if (status != UCS_OK) {
         goto err_release_dbrec;
-    }
-
-    md->zero_mem = mlx5dv_devx_umem_reg(dev->ibv_context, md->zero_buf, ucs_get_page_size(), 0);
-    if (md->zero_mem == NULL) {
-        ucs_error("mlx5dv_devx_umem_reg() zero umem failed: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err_free_zero_buf;
     }
 
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
@@ -767,8 +750,6 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     *p_md       = &md->super;
     return status;
 
-err_free_zero_buf:
-    ucs_free(md->zero_buf);
 err_release_dbrec:
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
 err_free:
@@ -784,8 +765,7 @@ void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
     ucs_status_t status;
 
-    mlx5dv_devx_umem_dereg(md->zero_mem);
-    ucs_free(md->zero_buf);
+    uct_ib_mlx5_md_buf_free(md, md->zero_buf, &md->zero_mem);
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
     status = ucs_recursive_spinlock_destroy(&md->dbrec_lock);
     if (status != UCS_OK) {

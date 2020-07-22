@@ -133,4 +133,22 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_zcopy,
                     TEST_UCT_FLAG_RECV_ZCOPY);
 }
 
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, madvise,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    mapped_buffer sendbuf(4096, 0, sender());
+    mapped_buffer recvbuf(4096, 0, receiver());
+    char cmd_str[] = "/bin/true";
+
+    blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+                  sender_ep(), sendbuf, recvbuf, true);
+    flush();
+
+    EXPECT_EQ(0, system(cmd_str));
+
+    blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+                  sender_ep(), sendbuf, recvbuf, true);
+    flush();
+}
+
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_test)
