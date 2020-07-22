@@ -151,14 +151,15 @@ size_t test_ucp_tag_mem_type::do_xfer(const void *sendbuf, void *recvbuf,
 UCS_TEST_P(test_ucp_tag_mem_type, basic)
 {
     ucp_datatype_t type = ucp_dt_make_contig(1);
+    size_t max_length;
 
     UCS_TEST_MESSAGE << "TEST: "
                      << ucs_memory_type_names[m_send_mem_type] << " <-> "
                      << ucs_memory_type_names[m_recv_mem_type];
 
     for (unsigned i = 1; i <= 7; ++i) {
-        size_t max = (long)pow(10.0, i);
-        size_t length = ucs::rand() % max + 1;
+        max_length = (long)pow(10.0, i);
+        size_t length = ucs::rand() % max_length + 1;
 
         mem_buffer m_recv_mem_buf(length, m_recv_mem_type);
         mem_buffer m_send_mem_buf(length, m_send_mem_type);
@@ -175,6 +176,29 @@ UCS_TEST_P(test_ucp_tag_mem_type, basic)
         mem_buffer::pattern_check(m_recv_mem_buf.ptr(), length,
                                   2, m_recv_mem_buf.mem_type());
     }
+
+    /* re-use buffer */
+    max_length = (long)pow(10.0, 7);
+    mem_buffer m_recv_mem_buf(max_length, m_recv_mem_type);
+    mem_buffer m_send_mem_buf(max_length, m_send_mem_type);
+
+
+    for (unsigned i = 1; i <= 2; ++i) {
+        size_t length = ucs::rand() % max_length + 1;
+
+        mem_buffer::pattern_fill(m_recv_mem_buf.ptr(), length,
+                                 1, m_recv_mem_buf.mem_type());
+
+        mem_buffer::pattern_fill(m_send_mem_buf.ptr(), length,
+                                 2, m_send_mem_buf.mem_type());
+
+        size_t recvd = do_xfer(m_send_mem_buf.ptr(), m_recv_mem_buf.ptr(),
+                               length, type, type, true, false, false);
+        ASSERT_EQ(length, recvd);
+        mem_buffer::pattern_check(m_recv_mem_buf.ptr(), length,
+                                  2, m_recv_mem_buf.mem_type());
+    }
+
 }
 
 UCS_TEST_P(test_ucp_tag_mem_type, xfer_mismatch_length)
