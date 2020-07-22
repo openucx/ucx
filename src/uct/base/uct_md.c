@@ -421,7 +421,7 @@ ucs_status_t uct_mem_alloc_fill_params(const uct_mem_alloc_params_t *params,
 
     if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS)) {
         ucs_error("Allocation methods field not set");
-        return UCS_ERR_NO_MEMORY;
+        return UCS_ERR_INVALID_PARAM;
     }
 
     if (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_METHODS) {
@@ -471,10 +471,21 @@ ucs_status_t uct_mem_alloc_fill_params(const uct_mem_alloc_params_t *params,
 ucs_status_t uct_md_mem_alloc(uct_md_h md, const uct_mem_alloc_params_t *param,
                               uct_mem_h *memh_p)
 {
+    uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
     ucs_status_t status;
+    uct_mem_alloc_params_t md_params;
     uct_mem_alloc_params_t filled_params;
 
-    status = uct_mem_alloc_fill_params(param, &filled_params);
+    /* implicit initialization for uct_md_mem_alloc */
+    md_params                  = *param;
+    md_params.field_mask      |= UCT_MEM_ALLOC_PARAM_FIELD_METHODS;
+    md_params.field_mask      |= UCT_MEM_ALLOC_PARAM_FIELD_MDS;
+    md_params.methods.methods  = &method;
+    md_params.methods.count    = 1;
+    md_params.mds.mds          = &md;
+    md_params.mds.count        = 1;
+
+    status = uct_mem_alloc_fill_params(&md_params, &filled_params);
     if (status != UCS_OK) {
         return status;
     }
