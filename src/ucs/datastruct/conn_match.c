@@ -73,14 +73,18 @@ void ucs_conn_match_cleanup(ucs_conn_match_ctx_t *conn_match_ctx)
 {
     char address_str[UCS_CONN_MATCH_ADDRESS_STR_MAX];
     ucs_conn_match_peer_t *peer;
+    ucs_conn_match_elem_t *elem;
     unsigned i;
 
     kh_foreach_key(&conn_match_ctx->hash, peer, {
         for (i = 0; i < UCS_CONN_MATCH_QUEUE_LAST; i++) {
-            if (!ucs_hlist_is_empty(&peer->conn_q[i])) {
+            if (conn_match_ctx->ops.purge_cb != NULL) {
+                ucs_hlist_for_each_extract(elem, &peer->conn_q[i], list) {
+                    conn_match_ctx->ops.purge_cb(conn_match_ctx, elem);
+                }
+            } else if (!ucs_hlist_is_empty(&peer->conn_q[i])) {
                 ucs_diag("match_ctx %p: %s queue is not empty for %s address",
-                         conn_match_ctx,
-                         ucs_conn_match_queue_title[i],
+                         conn_match_ctx, ucs_conn_match_queue_title[i],
                          conn_match_ctx->ops.address_str(conn_match_ctx,
                                                          &peer->address, address_str,
                                                          UCS_CONN_MATCH_ADDRESS_STR_MAX));

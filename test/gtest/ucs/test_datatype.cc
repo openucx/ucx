@@ -133,7 +133,7 @@ UCS_TEST_F(test_datatype, hlist_basic) {
 
     /* add one element to head and extract it */
     ucs_hlist_add_head(&head, &elem1.hlist);
-    elem = ucs_list_extract_head_elem(&head, elem_t, hlist);
+    elem = ucs_hlist_extract_head_elem(&head, elem_t, hlist);
     EXPECT_EQ(&elem1, elem);
 
     /* add 3 elements */
