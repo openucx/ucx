@@ -4,10 +4,13 @@
 * See file LICENSE for terms.
 */
 
+#include <common/test.h>
+
 #include "test_ucp_memheap.h"
 extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_ep.inl>
 }
 

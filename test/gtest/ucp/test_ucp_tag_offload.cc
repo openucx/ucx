@@ -4,8 +4,9 @@
 * See file LICENSE for terms.
 */
 
-#include "test_ucp_tag.h"
+#include <common/test.h>
 
+#include "test_ucp_tag.h"
 #include "ucp_datatype.h"
 
 extern "C" {

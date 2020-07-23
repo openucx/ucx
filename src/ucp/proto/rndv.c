@@ -465,7 +465,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     ucp_lane_index_t lane;
 
     ucp_rndv_get_lanes_count(rndv_req);
-    ucs_assert_always(rndv_req->send.rndv_get.lane_count > 0);
 
     /* Figure out which lane to use for get operation */
     rndv_req->send.lane = lane = ucp_rndv_get_zcopy_get_lane(rndv_req, &uct_rkey);
@@ -485,6 +484,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                               rndv_req->send.length, 0ul);
         return UCS_OK;
     }
+
+    ucs_assert_always(rndv_req->send.rndv_get.lane_count > 0);
 
     if (!rndv_req->send.mdesc) {
         status = ucp_send_request_add_reg_lane(rndv_req, lane);

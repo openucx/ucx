@@ -637,7 +637,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, post_larger_recv, "RNDV_THRESH=0") {
                                        { large_send_size, large_recv_size } };
     request *my_send_req, *my_recv_req;
 
-    for (unsigned i = 0; i < ucs_array_size(sizes); i++) {
+    for (unsigned i = 0; i < ucs_static_array_size(sizes); i++) {
         size_t send_size = sizes[i][0];
         size_t recv_size = sizes[i][1];
         std::vector<char> sendbuf(send_size, 0);
@@ -706,7 +706,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
     const size_t sizes[] = { 1000, 2000, 8000, 2500ul * UCS_MBYTE };
 
     /* small sizes should warm-up tag cache */
-    for (unsigned i = 0; i < ucs_array_size(sizes); ++i) {
+    for (unsigned i = 0; i < ucs_static_array_size(sizes); ++i) {
         const size_t size = sizes[i] / ucs::test_time_multiplier();
         request *my_send_req, *my_recv_req;
 
@@ -740,7 +740,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, bidir_multi_exp_post, "RNDV_THRESH=0") {
 
     receiver().connect(&sender(), get_ep_params());
 
-    for (unsigned i = 0; i < ucs_array_size(sizes); ++i) {
+    for (unsigned i = 0; i < ucs_static_array_size(sizes); ++i) {
         const size_t size = sizes[i] /
                             ucs::test_time_multiplier() /
                             ucs::test_time_multiplier();

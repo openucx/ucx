@@ -529,12 +529,14 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
             reg.max_iter = 0; /* mask iteration register from processing */
         }
 
-        for (r = 0; r < ucs_array_size(reg.reg); r++) {
+        for (r = 0; r < ucs_static_array_size(reg.reg); r++) {
             if (ucs_test_all_flags(reg.reg[r].value, X86_CPU_CACHE_RESERVED)) {
                 continue;
             }
 
-            for (t = 0; (t < ucs_array_size(reg.reg[r].tag)) && (reg.reg[r].tag[t] != 0); t++) {
+            for (t = 0; (t < ucs_static_array_size(reg.reg[r].tag)) &&
+                        (reg.reg[r].tag[t] != 0);
+                 t++) {
                 tag = reg.reg[r].tag[t];
 
                 switch(tag) {
@@ -574,7 +576,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
                     }
                     return cache_count == UCS_CPU_CACHE_LAST ? UCS_OK : UCS_ERR_UNSUPPORTED;
                 default:
-                    if ((tag >= ucs_array_size(ucs_x86_cpu_cache_size_codes)) ||
+                    if ((tag >= ucs_static_array_size(ucs_x86_cpu_cache_size_codes)) ||
                         (ucs_x86_cpu_cache_size_codes[tag].size != 0)) {
                         break; /* tag is out of table or in empty entry */
                     }

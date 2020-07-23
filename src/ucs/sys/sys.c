@@ -1305,7 +1305,7 @@ ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)
             boot_id.low  = ((uint64_t)v1) | ((uint64_t)v2 << 32) |
                            ((uint64_t)v3 << 48);
             boot_id.high = v4;
-            for (i = 0; i < ucs_array_size(v5); i++) {
+            for (i = 0; i < ucs_static_array_size(v5); i++) {
                 boot_id.high |= (uint64_t)v5[i] << (16 + (i * 8));
             }
         }

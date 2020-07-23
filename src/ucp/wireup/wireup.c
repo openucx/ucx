@@ -153,7 +153,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
     ucs_status_t status;
     void *address;
 
-    ucs_assert(ep->cfg_index != UCP_NULL_CFG_INDEX);
+    ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
 
     /* We cannot allocate from memory pool because it's not thread safe
      * and this function may be called from any thread
@@ -380,7 +380,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     ucs_assert(msg->type == UCP_WIREUP_MSG_PRE_REQUEST);
     ucs_assert(msg->dest_ep_ptr != 0);
-    ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep 0x%lx dst_ep 0x%lx conn_sn %d",
+    ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep 0x%lx dst_ep 0x%lx conn_sn %u",
               remote_address->uuid, msg->src_ep_ptr, msg->dest_ep_ptr, msg->conn_sn);
 
     /* wireup pre_request for a specific ep */
@@ -437,8 +437,9 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         }
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     } else {
-        ep = ucp_ep_match_retrieve_exp(&worker->ep_match_ctx, remote_uuid,
-                                       msg->conn_sn ^ (remote_uuid == worker->uuid));
+        ep = ucp_ep_match_retrieve(worker, remote_uuid,
+                                   msg->conn_sn ^
+                                   (remote_uuid == worker->uuid), 1);
         if (ep == NULL) {
             /* Create a new endpoint if does not exist */
             status = ucp_worker_create_ep(worker, remote_address->name,
@@ -449,7 +450,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
             /* add internal endpoint to hash */
             ep->conn_sn = msg->conn_sn;
-            ucp_ep_match_insert_unexp(&worker->ep_match_ctx, remote_uuid, ep);
+            ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn, 0);
         } else {
             ucp_ep_flush_state_reset(ep);
         }
@@ -578,7 +579,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     ucs_trace("ep %p: got wireup reply src_ep 0x%lx dst_ep 0x%lx sn %d", ep,
               msg->src_ep_ptr, msg->dest_ep_ptr, msg->conn_sn);
 
-    ucp_ep_match_remove_ep(&worker->ep_match_ctx, ep);
+    ucp_ep_match_remove_ep(worker, ep);
     ucp_ep_update_dest_ep_ptr(ep, msg->src_ep_ptr);
     ucp_ep_flush_state_reset(ep);
 
@@ -957,7 +958,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep,
         }
     }
 
-    if (ep->cfg_index == UCP_NULL_CFG_INDEX) {
+    if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         prev_config_key = NULL;
         prev_dst_md_map = 0;
     } else {
@@ -1001,7 +1002,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_worker_h worker = ep->worker;
     uint64_t tl_bitmap  = local_tl_bitmap & worker->context->tl_bitmap;
     ucp_ep_config_key_t key;
-    ucp_ep_cfg_index_t new_cfg_index;
+    ucp_worker_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
     char str[32];
@@ -1036,7 +1037,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         return UCS_OK; /* No change */
     }
 
-    if ((ep->cfg_index != UCP_NULL_CFG_INDEX) && !ucp_ep_is_sockaddr_stub(ep)) {
+    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+        !ucp_ep_is_sockaddr_stub(ep)) {
         /*
          * TODO handle a case where we have to change lanes and reconfigure the ep:
          *

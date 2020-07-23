@@ -139,7 +139,6 @@ protected:
     ucs_arbiter_cb_result_t desched_group(ucs_arbiter_group_t *group,
                                           ucs_arbiter_elem_t *elem)
     {
-        //ucs_warn("desched group %d", m_count);
         m_count++;
         ucs_arbiter_group_schedule(&m_arb2, group);
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
@@ -548,6 +547,38 @@ UCS_TEST_F(test_arbiter, move_group) {
     m_count = 0;
     ucs_arbiter_dispatch(&m_arb1, 1, remove_cb, this);
     EXPECT_EQ(0, m_count);
+
+    ucs_arbiter_cleanup(&m_arb1);
+    ucs_arbiter_cleanup(&m_arb2);
+}
+
+/* Simulates a bug fixed in UCX GH issue #5382
+ * (https://github.com/openucx/ucx/issues/5382).
+ * The failing flow (with DC transport) is:
+ * - DCI waiting arbiter is being dispatched
+ * - In the dispatch callback group is scheduled to the TX waiting arbiter and
+ *   UCS_ARBITER_CB_RESULT_DESCHED_GROUP is returned from the callback
+ * - Now the group is scheduled on TX waiting arbiter
+ * - ucs_arbiter_group_desched is called in uct_dc_mlx5_iface_dci_put
+ * - ARBITER_CHECK assert fails
+ */
+UCS_TEST_F(test_arbiter, move_group_and_desched) {
+
+    ucs_arbiter_group_t group1;
+    ucs_arbiter_elem_t elem1;
+
+    ucs_arbiter_init(&m_arb1);
+    ucs_arbiter_init(&m_arb2);
+
+    ucs_arbiter_group_init(&group1);
+    ucs_arbiter_elem_init(&elem1);
+    ucs_arbiter_group_push_elem(&group1, &elem1);
+    ucs_arbiter_group_schedule(&m_arb1, &group1);
+
+    m_count = 0;
+    ucs_arbiter_dispatch(&m_arb1, 1, desched_cb, this);
+    EXPECT_EQ(1, m_count);
+    ucs_arbiter_group_desched(&m_arb2, &group1);
 
     ucs_arbiter_cleanup(&m_arb1);
     ucs_arbiter_cleanup(&m_arb2);

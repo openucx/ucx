@@ -5,8 +5,9 @@
 * See file LICENSE for terms.
 */
 
-#include "test_ucp_tag.h"
+#include <common/test.h>
 
+#include "test_ucp_tag.h"
 #include "ucp_datatype.h"
 
 extern "C" {
@@ -14,6 +15,9 @@ extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 }
+
+#include <sys/mman.h>
+#include <vector>
 
 
 ucp_params_t test_ucp_tag::get_ctx_params() {
@@ -413,3 +417,56 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_zcopy_thresh_zero, "ZCOPY_THRESH
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_limits)
+
+
+class test_ucp_tag_fallback : public ucp_test {
+public:
+    void init() {
+        /* forbid zcopy access because it will always fail due to read-only
+         * memory pages (will fail to register memory) */
+        modify_config("ZCOPY_THRESH", "inf");
+        ucp_test::init();
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+
+    static ucp_params_t get_ctx_params() {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
+        params.features     = UCP_FEATURE_TAG;
+        return params;
+    }
+
+protected:
+    static const size_t MSG_SIZE;
+};
+
+const size_t test_ucp_tag_fallback::MSG_SIZE  = 4 * 1024 * ucs_get_page_size();
+
+UCS_TEST_P(test_ucp_tag_fallback, fallback)
+{
+    ucp_request_param_t param = {0};
+
+    /* allocate read-only pages - it force ibv_reg_mr() failure */
+    void *send_buffer = mmap(NULL, MSG_SIZE, PROT_READ,
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_NE(send_buffer, MAP_FAILED);
+
+    std::vector<char> recv_buffer(MSG_SIZE);
+
+    ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
+                                                 &recv_buffer[0], MSG_SIZE,
+                                                 0, 0, &param);
+    ASSERT_UCS_PTR_OK(recv_req);
+
+    ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(), send_buffer,
+                                                 MSG_SIZE, 0, &param);
+    ASSERT_UCS_PTR_OK(send_req);
+
+    wait(send_req);
+    wait(recv_req);
+
+    munmap(send_buffer, MSG_SIZE);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_fallback)

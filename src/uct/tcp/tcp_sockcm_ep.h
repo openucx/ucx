@@ -24,6 +24,7 @@ typedef enum uct_tcp_sockcm_ep_state {
     UCT_TCP_SOCKCM_EP_FAILED                      = UCS_BIT(13), /* ep is in error state due to an internal local error */
     UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECTED         = UCS_BIT(14), /* ep on the client side received a reject from the server
                                                                     (debug flag) */
+    UCT_TCP_SOCKCM_EP_PACK_CB_FAILED              = UCS_BIT(15)  /* the upper layer's priv_pack_cb failed */
 } uct_tcp_sockcm_ep_state_t;
 
 
@@ -69,7 +70,11 @@ ucs_status_t uct_tcp_sockcm_ep_set_sockopt(uct_tcp_sockcm_ep_t *ep);
 
 ucs_status_t uct_tcp_sockcm_cm_ep_conn_notify(uct_ep_h ep);
 
-void uct_tcp_sockcm_ep_handle_error(uct_tcp_sockcm_ep_t *cep, ucs_status_t status);
-
 const char *uct_tcp_sockcm_cm_ep_peer_addr_str(uct_tcp_sockcm_ep_t *cep,
                                                char *buf, size_t max);
+
+void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep);
+
+void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
+                                           ucs_status_t status,
+                                           int events, const char *reason);

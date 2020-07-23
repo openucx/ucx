@@ -415,8 +415,7 @@ int ucs_socket_max_conn()
 }
 
 static ucs_status_t
-ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_errno,
-                           ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_errno)
 {
     ucs_status_t status;
 
@@ -425,30 +424,11 @@ ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_e
          * the connection was dropped by peer */
         ucs_assert(!strcmp(name, "recv"));
         ucs_trace("fd %d is closed", fd);
-        return UCS_ERR_NOT_CONNECTED; /* Connection closed by peer */
+        status = UCS_ERR_NOT_CONNECTED; /* Connection closed by peer */
+    } else {
+        ucs_debug("%s(%d) failed: %s", name, fd, strerror(io_errno));
+        status = ucs_socket_check_errno(io_errno);
     }
-
-    status = ucs_socket_check_errno(io_errno);
-    if (status == UCS_ERR_NO_PROGRESS) {
-        return UCS_ERR_NO_PROGRESS;
-    }
-
-    if (err_cb != NULL) {
-        status = err_cb(err_cb_arg, status);
-        if (status == UCS_OK) {
-            /* UCS_ERR_CANCELED has to be returned if no other actions
-             * are required in order to prevent an endless loop in
-             * blocking IO operations (they continue a loop if UCS_OK
-             * or UCS_ERR_NO_PROGRESS is returned) */
-            return UCS_ERR_CANCELED;
-        } else if (status == UCS_ERR_NO_PROGRESS) {
-            /* No error will be printed, a caller should continue
-             * calling function later in order to send/recv data */
-            return UCS_ERR_NO_PROGRESS;
-        }
-    }
-
-    ucs_error("%s(fd=%d) failed: %s", name, fd, strerror(io_errno));
 
     return status;
 }
@@ -467,16 +447,13 @@ ucs_socket_handle_io_error(int fd, const char *name, ssize_t io_retval, int io_e
  *                         operation).
  * @param [in]  io_retval  The result of the IO operation.
  * @param [in]  io_errno   IO operation errno.
- * @param [in]  err_cb     Error callback.
- * @param [in]  err_cb_arg User's argument for the error callback.
  *
  * @return if the IO operation was successful - UCS_OK, otherwise - error status.
  */
 static inline ucs_status_t
 ucs_socket_handle_io(int fd, const void *data, size_t count,
                      size_t *length_p, int is_iov, int io_retval,
-                     int io_errno, const char *name,
-                     ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+                     int io_errno, const char *name)
 {
     /* The IO operation is considered as successful if: */
     if (ucs_likely(io_retval > 0)) {
@@ -497,31 +474,27 @@ ucs_socket_handle_io(int fd, const void *data, size_t count,
     }
 
     *length_p = 0;
-    return ucs_socket_handle_io_error(fd, name, io_retval, io_errno,
-                                      err_cb, err_cb_arg);
+    return ucs_socket_handle_io_error(fd, name, io_retval, io_errno);
 }
 
 static inline ucs_status_t
 ucs_socket_do_io_nb(int fd, void *data, size_t *length_p,
-                    ucs_socket_io_func_t io_func, const char *name,
-                    ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+                    ucs_socket_io_func_t io_func, const char *name)
 {
     ssize_t ret = io_func(fd, data, *length_p, MSG_NOSIGNAL);
     return ucs_socket_handle_io(fd, data, *length_p, length_p, 0,
-                                ret, errno, name, err_cb, err_cb_arg);
+                                ret, errno, name);
 }
 
 static inline ucs_status_t
 ucs_socket_do_io_b(int fd, void *data, size_t length,
-                   ucs_socket_io_func_t io_func, const char *name,
-                   ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+                   ucs_socket_io_func_t io_func, const char *name)
 {
     size_t done_cnt = 0, cur_cnt = length;
     ucs_status_t status;
 
     do {
-        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func,
-                                     name, err_cb, err_cb_arg);
+        status = ucs_socket_do_io_nb(fd, data, &cur_cnt, io_func, name);
         done_cnt += cur_cnt;
         ucs_assert(done_cnt <= length);
         cur_cnt = length - done_cnt;
@@ -533,8 +506,7 @@ ucs_socket_do_io_b(int fd, void *data, size_t length,
 
 static inline ucs_status_t
 ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p,
-                     ucs_socket_iov_func_t iov_func, const char *name,
-                     ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+                     ucs_socket_iov_func_t iov_func, const char *name)
 {
     struct msghdr msg = {
         .msg_iov    = iov,
@@ -543,17 +515,13 @@ ucs_socket_do_iov_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p
     ssize_t ret;
 
     ret = iov_func(fd, &msg, MSG_NOSIGNAL);
-    return ucs_socket_handle_io(fd, iov, iov_cnt, length_p, 1,
-                                ret, errno, name, err_cb, err_cb_arg);
+    return ucs_socket_handle_io(fd, iov, iov_cnt, length_p, 1, ret, errno, name);
 }
 
-ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p,
-                                ucs_socket_io_err_cb_t err_cb,
-                                void *err_cb_arg)
+ucs_status_t ucs_socket_send_nb(int fd, const void *data, size_t *length_p)
 {
     return ucs_socket_do_io_nb(fd, (void*)data, length_p,
-                               (ucs_socket_io_func_t)send,
-                               "send", err_cb, err_cb_arg);
+                               (ucs_socket_io_func_t)send, "send");
 }
 
 /* recv is declared as 'always_inline' on some platforms, it leads to
@@ -563,37 +531,26 @@ static ssize_t ucs_socket_recv_io(int fd, void *data, size_t size, int flags)
     return recv(fd, data, size, flags);
 }
 
-ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p,
-                                ucs_socket_io_err_cb_t err_cb,
-                                void *err_cb_arg)
+ucs_status_t ucs_socket_recv_nb(int fd, void *data, size_t *length_p)
 {
-    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io,
-                               "recv", err_cb, err_cb_arg);
+    return ucs_socket_do_io_nb(fd, data, length_p, ucs_socket_recv_io, "recv");
 }
 
-ucs_status_t ucs_socket_send(int fd, const void *data, size_t length,
-                             ucs_socket_io_err_cb_t err_cb,
-                             void *err_cb_arg)
+ucs_status_t ucs_socket_send(int fd, const void *data, size_t length)
 {
     return ucs_socket_do_io_b(fd, (void*)data, length,
-                              (ucs_socket_io_func_t)send,
-                              "send", err_cb, err_cb_arg);
+                              (ucs_socket_io_func_t)send, "send");
 }
 
-ucs_status_t ucs_socket_recv(int fd, void *data, size_t length,
-                             ucs_socket_io_err_cb_t err_cb,
-                             void *err_cb_arg)
+ucs_status_t ucs_socket_recv(int fd, void *data, size_t length)
 {
-    return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io,
-                              "recv", err_cb, err_cb_arg);
+    return ucs_socket_do_io_b(fd, data, length, ucs_socket_recv_io, "recv");
 }
 
 ucs_status_t
-ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p,
-                    ucs_socket_io_err_cb_t err_cb, void *err_cb_arg)
+ucs_socket_sendv_nb(int fd, struct iovec *iov, size_t iov_cnt, size_t *length_p)
 {
-    return ucs_socket_do_iov_nb(fd, iov, iov_cnt, length_p, sendmsg,
-                                "sendv", err_cb, err_cb_arg);
+    return ucs_socket_do_iov_nb(fd, iov, iov_cnt, length_p, sendmsg, "sendv");
 }
 
 ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p)

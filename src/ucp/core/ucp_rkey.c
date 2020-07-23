@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "ucp_mm.h"
+#include "ucp_rkey.h"
 #include "ucp_request.h"
 #include "ucp_ep.inl"
 
@@ -176,6 +176,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
 {
     ucp_worker_h  worker = ep->worker;
     const ucp_ep_config_t *ep_config;
+    ucp_rkey_config_key_t rkey_config_key;
     unsigned remote_md_index;
     ucp_md_map_t md_map, remote_md_map;
     ucp_rsc_index_t cmpt_index;
@@ -280,7 +281,24 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
      */
     ucs_assert((rkey_index > 0) || (rkey->md_map == 0));
 
+    /* TODO remove ucp_rkey_resolve_inner() and replace its functionality by
+     * ucp_worker_get_rkey_config().
+     */
     ucp_rkey_resolve_inner(rkey, ep);
+
+    if (worker->context->config.ext.proto_enable) {
+        rkey_config_key.ep_cfg_index = ep->cfg_index;
+        rkey_config_key.md_map       = rkey->md_map;
+        rkey_config_key.mem_type     = rkey->mem_type;
+        rkey_config_key.sys_dev      = 0;
+
+        status = ucp_worker_get_rkey_config(worker, &rkey_config_key,
+                                            &rkey->cfg_index);
+        if (status != UCS_OK) {
+            goto err_destroy;
+        }
+    }
+
     *rkey_p = rkey;
     status  = UCS_OK;
 

@@ -33,7 +33,9 @@ typedef enum ucs_conn_match_queue_type {
      * connected to remote peer, but not provided to user yet */
     UCS_CONN_MATCH_QUEUE_UNEXP,
     /* Number of queues that are used by connection matching */
-    UCS_CONN_MATCH_QUEUE_LAST
+    UCS_CONN_MATCH_QUEUE_LAST,
+    /* Any queue type */
+    UCS_CONN_MATCH_QUEUE_ANY = UCS_CONN_MATCH_QUEUE_LAST
 } ucs_conn_match_queue_type_t;
 
 
@@ -45,6 +47,9 @@ typedef struct ucs_conn_match_elem {
     ucs_hlist_link_t          list;          /* List entry into endpoint
                                                 matching structure */
 } ucs_conn_match_elem_t;
+
+
+typedef struct ucs_conn_match_ctx ucs_conn_match_ctx_t;
 
 
 /**
@@ -72,15 +77,16 @@ typedef ucs_conn_sn_t
 /**
  * Function to get string representation of the connection address.
  *
- * @param [in]  address     Pointer to the connection address.
- * @param [out] str         A string filled with the address.
- * @param [in]  max_size    Size of a string (considering '\0'-terminated symbol).
+ * @param [in] conn_match_ctx    Pointer to the connection matching context.
+ * @param [in]  address          Pointer to the connection address.
+ * @param [out] str              A string filled with the address.
+ * @param [in]  max_size         Size of a string (considering '\0'-terminated symbol).
  *
  * @return A resulted string filled with the address.
  */
 typedef const char*
-(*ucs_conn_match_address_str_t)(const void *address,
-                                char *str, size_t max_size);
+(*ucs_conn_match_address_str_t)(const ucs_conn_match_ctx_t *conn_match_ctx,
+                                const void *address, char *str, size_t max_size);
 
 
 /**
@@ -106,12 +112,12 @@ KHASH_TYPE(ucs_conn_match, ucs_conn_match_peer_t*, char)
 /**
  * Context for matching connections
  */
-typedef struct ucs_conn_match_ctx {
+struct ucs_conn_match_ctx {
     khash_t(ucs_conn_match)      hash;           /* Hash of matched connections */
     size_t                       address_length; /* Length of the addresses used for the
                                                     connection between peers */
     ucs_conn_match_ops_t         ops;            /* User's connection matching operations */
-} ucs_conn_match_ctx_t;
+};
 
 
 /**
@@ -156,7 +162,7 @@ ucs_conn_sn_t ucs_conn_match_get_next_sn(ucs_conn_match_ctx_t *conn_match_ctx,
  * @param [in] conn_match_ctx    Pointer to the connection matching context.
  * @param [in] address           Pointer to the address of the connection
  *                               between the peers.
- * @param [in] conn_sn           Connection sequence number of the connection.
+ * @param [in] conn_sn           Connection sequence number between the peers.
  * @param [in] elem              Pointer to the connection matching structure.
  * @param [in] conn_queue_type   Connection queue which should be used to insert
  *                               the connection matching element to.
@@ -168,21 +174,27 @@ void ucs_conn_match_insert(ucs_conn_match_ctx_t *conn_match_ctx,
 
 
 /**
- * Retrieve the connection matching entry from the context.
+ * Get the connection matching entry from the context.
  *
  * @param [in] conn_match_ctx    Pointer to the connection matching context.
  * @param [in] address           Pointer to the address of the connection
  *                               between the peers.
- * @param [in] conn_sn           Connection sequence number of the connection.
- * @param [in] conn_queue_type   Connection queue which should be used to retrieve
- *                               the connection matching element from.
+ * @param [in] conn_sn           Connection sequence number between the peers.
+ * @param [in] conn_queue_type   Connection queue which should be used to get
+ *                               the connection matching element from. If the
+ *                               UCS_CONN_MATCH_QUEUE_ANY type was specified,
+ *                               the function checks the all queues to find the
+ *                               element.
+ * @param [in] delete_from_queue Delete the element from the queue where the
+ *                               element was found.
  *
  * @return Pointer to the found connection matching entry.
  */
 ucs_conn_match_elem_t *
-ucs_conn_match_retrieve(ucs_conn_match_ctx_t *conn_match_ctx,
+ucs_conn_match_get_elem(ucs_conn_match_ctx_t *conn_match_ctx,
                         const void *address, ucs_conn_sn_t conn_sn,
-                        ucs_conn_match_queue_type_t conn_queue_type);
+                        ucs_conn_match_queue_type_t conn_queue_type,
+                        int delete_from_queue);
 
 
 /**

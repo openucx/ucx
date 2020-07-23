@@ -328,7 +328,8 @@ enum ucp_mem_map_params_field {
                                                        will be allocated or
                                                        registered in the
                                                        @ref ucp_mem_map routine.*/
-    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2)  /**< Allocation flags. */
+    UCP_MEM_MAP_PARAM_FIELD_FLAGS   = UCS_BIT(2), /**< Allocation flags. */
+    UCP_MEM_MAP_PARAM_FIELD_PROT    = UCS_BIT(3)  /**< Memory protection mode. */
 };
 
 /**
@@ -437,6 +438,21 @@ enum {
                                             place the mapping at exactly that
                                             address. The address must be a multiple
                                             of the page size. */
+};
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief UCP memory mapping protection mode.
+ *
+ * The enumeration list describes the memory mapping protections supported by the @ref
+ * ucp_mem_map() function.
+ */
+enum {
+    UCP_MEM_MAP_PROT_LOCAL_READ   = UCS_BIT(0),  /**< Enable local read access. */
+    UCP_MEM_MAP_PROT_LOCAL_WRITE  = UCS_BIT(1),  /**< Enable local write access. */
+    UCP_MEM_MAP_PROT_REMOTE_READ  = UCS_BIT(8),  /**< Enable remote read access. */
+    UCP_MEM_MAP_PROT_REMOTE_WRITE = UCS_BIT(9)   /**< Enable remote write access. */
 };
 
 
@@ -1182,6 +1198,15 @@ typedef struct ucp_mem_map_params {
       * consider the flags as set to zero.
       */
      unsigned               flags;
+
+     /**
+      * Memory protection mode, e.g. @ref UCP_MEM_MAP_PROT_LOCAL_READ.
+      * This value is optional.
+      * If it's not set, the @ref ucp_mem_map routine will consider
+      * the flags as set to UCP_MEM_MAP_PROT_LOCAL_READ|UCP_MEM_MAP_PROT_LOCAL_WRITE|
+      * UCP_MEM_MAP_PROT_REMOTE_READ|UCP_MEM_MAP_PROT_REMOTE_WRITE.
+      */
+     unsigned               prot;
 } ucp_mem_map_params_t;
 
 
