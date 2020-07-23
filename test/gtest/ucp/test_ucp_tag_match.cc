@@ -443,7 +443,7 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
 
-    short_progress_loop();
+    wait_for_flag(&my_send_req->completed);
 
     EXPECT_TRUE(my_send_req->completed);
     EXPECT_EQ(UCS_OK, my_send_req->status);
