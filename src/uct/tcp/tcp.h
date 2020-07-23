@@ -53,35 +53,33 @@
 #define UCT_TCP_CONFIG_MAX_CONN_RETRIES      "MAX_CONN_RETRIES"
 
 /* TX and RX caps */
-#define UCT_TCP_EP_CTX_CAPS                  (UCS_BIT(UCT_TCP_EP_CTX_TYPE_TX) | \
-                                              UCS_BIT(UCT_TCP_EP_CTX_TYPE_RX))
+#define UCT_TCP_EP_CTX_CAPS                  (UCT_TCP_EP_FLAG_CTX_TYPE_TX | \
+                                              UCT_TCP_EP_FLAG_CTX_TYPE_RX)
 
 
 /**
- * TCP context type
+ * TCP EP flags
  */
-typedef enum uct_tcp_ep_ctx_type {
+enum {
     /* EP is connected to a peer to send data. This EP is managed
      * by a user and TCP mustn't free this EP even if connection
      * is broken. */
-    UCT_TCP_EP_CTX_TYPE_TX,
+    UCT_TCP_EP_FLAG_CTX_TYPE_TX        = UCS_BIT(0),
     /* EP is connected to a peer to receive data. If only RX is set
      * on a given EP, it is hidden from a user (i.e. the user is unable
      * to do any operation on that EP) and TCP is responsible to
      * free memory allocating for this EP. */
-    UCT_TCP_EP_CTX_TYPE_RX,
-
-    /* Additional flags that controls EP behavior: */
-    /* - Zcopy TX operation is in progress on a given EP. */
-    UCT_TCP_EP_CTX_TYPE_ZCOPY_TX,
-    /* - PUT RX operation is in progress on a given EP. */
-    UCT_TCP_EP_CTX_TYPE_PUT_RX,
-    /* - PUT TX operation is waiting for an ACK on a given EP */
-    UCT_TCP_EP_CTX_TYPE_PUT_TX_WAITING_ACK,
-    /* - PUT RX operation is waiting for resources to send an ACK
-     *   for received PUT operations on a given EP */
-    UCT_TCP_EP_CTX_TYPE_PUT_RX_SENDING_ACK
-} uct_tcp_ep_ctx_type_t;
+    UCT_TCP_EP_FLAG_CTX_TYPE_RX        = UCS_BIT(1),
+    /* Zcopy TX operation is in progress on a given EP. */
+    UCT_TCP_EP_FLAG_ZCOPY_TX           = UCS_BIT(2),
+    /* PUT RX operation is in progress on a given EP. */
+    UCT_TCP_EP_FLAG_PUT_RX             = UCS_BIT(3),
+    /* PUT TX operation is waiting for an ACK on a given EP. */
+    UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK = UCS_BIT(4),
+    /* PUT RX operation is waiting for resources to send an ACK
+     * for received PUT operations on a given EP. */
+    UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK = UCS_BIT(5)
+};
 
 
 /**
@@ -287,9 +285,9 @@ typedef struct uct_tcp_ep_zcopy_tx {
  */
 struct uct_tcp_ep {
     uct_base_ep_t                 super;
-    uint8_t                       ctx_caps;         /* Which contexts are supported */
-    int                           fd;               /* Socket file descriptor */
+    uint8_t                       flags;            /* Endpoint flags */
     uct_tcp_ep_conn_state_t       conn_state;       /* State of connection with peer */
+    int                           fd;               /* Socket file descriptor */
     unsigned                      conn_retries;     /* Number of connection attempts done */
     int                           events;           /* Current notifications */
     uct_tcp_ep_ctx_t              tx;               /* TX resources */
@@ -404,8 +402,8 @@ void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
 
-ucs_status_t uct_tcp_ep_handle_dropped_connect(uct_tcp_ep_t *ep,
-                                               ucs_status_t io_status);
+ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
+                                      ucs_status_t io_status);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
@@ -418,14 +416,12 @@ const char *uct_tcp_ep_ctx_caps_str(uint8_t ep_ctx_caps, char *str_buffer);
 
 void uct_tcp_ep_change_ctx_caps(uct_tcp_ep_t *ep, uint8_t new_caps);
 
-ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep,
-                                    uct_tcp_ep_ctx_type_t cap);
+ucs_status_t uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep, uint8_t cap);
 
-ucs_status_t uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep,
-                                       uct_tcp_ep_ctx_type_t cap);
+ucs_status_t uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep, uint8_t cap);
 
 ucs_status_t uct_tcp_ep_move_ctx_cap(uct_tcp_ep_t *from_ep, uct_tcp_ep_t *to_ep,
-                                     uct_tcp_ep_ctx_type_t ctx_cap);
+                                     uint8_t ctx_cap);
 
 void uct_tcp_ep_destroy_internal(uct_ep_h tl_ep);
 
@@ -487,7 +483,7 @@ void uct_tcp_cm_remove_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 uct_tcp_ep_t *uct_tcp_cm_search_ep(uct_tcp_iface_t *iface,
                                    const struct sockaddr_in *peer_addr,
-                                   uct_tcp_ep_ctx_type_t with_ctx_type);
+                                   uint8_t with_ctx_type);
 
 void uct_tcp_cm_purge_ep(uct_tcp_ep_t *ep);
 

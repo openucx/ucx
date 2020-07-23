@@ -264,7 +264,7 @@ void ucp_request_send_generic_dt_finish(ucp_request_t *req)
 {
     ucp_dt_generic_t *dt;
     if (UCP_DT_IS_GENERIC(req->send.datatype)) {
-        dt = ucp_dt_generic(req->send.datatype);
+        dt = ucp_dt_to_generic(req->send.datatype);
         ucs_assert(NULL != dt);
         dt->ops.finish(req->send.state.dt.dt.generic.state);
     }
@@ -275,7 +275,7 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 {
     ucp_dt_generic_t *dt;
     if (UCP_DT_IS_GENERIC(req->recv.datatype)) {
-        dt = ucp_dt_generic(req->recv.datatype);
+        dt = ucp_dt_to_generic(req->recv.datatype);
         ucs_assert(NULL != dt);
         dt->ops.finish(req->recv.state.dt.generic.state);
     }
@@ -306,7 +306,7 @@ ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
         req->send.state.dt.dt.iov.dt_reg        = NULL;
         return;
     case UCP_DATATYPE_GENERIC:
-        dt_gen    = ucp_dt_generic(datatype);
+        dt_gen    = ucp_dt_to_generic(datatype);
         state_gen = dt_gen->ops.start_pack(dt_gen->context, req->send.buffer,
                                            dt_count);
         req->send.state.dt.dt.generic.state = state_gen;
@@ -547,7 +547,7 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
         return UCS_OK;
 
     case UCP_DATATYPE_GENERIC:
-        dt_gen = ucp_dt_generic(req->recv.datatype);
+        dt_gen = ucp_dt_to_generic(req->recv.datatype);
         status = UCS_PROFILE_NAMED_CALL("dt_unpack", dt_gen->ops.unpack,
                                         req->recv.state.dt.generic.state,
                                         offset, data, length);

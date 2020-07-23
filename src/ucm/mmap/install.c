@@ -57,7 +57,7 @@
 
 #define UCM_MMAP_REPORT_BUF_LEN \
     ((UCM_MMAP_MAX_EVENT_NAME_LEN + 2) * \
-    ucs_array_size(ucm_mmap_event_name))
+    ucs_static_array_size(ucm_mmap_event_name))
 
 extern const char *ucm_mmap_hook_modes[];
 
@@ -233,7 +233,7 @@ static void ucm_mmap_event_report_missing(int expected, int actual,
     buf            = buf_p = ucs_alloca(UCM_MMAP_REPORT_BUF_LEN);
     end_p          = buf_p + UCM_MMAP_REPORT_BUF_LEN;
     missing_events = expected & ~actual &
-                     UCS_MASK(ucs_array_size(ucm_mmap_event_name));
+                     UCS_MASK(ucs_static_array_size(ucm_mmap_event_name));
 
     ucs_for_each_bit(idx, missing_events) {
         /* coverity[overrun-local] */

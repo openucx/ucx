@@ -41,12 +41,12 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags);
 
 ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep);
 
+ucs_status_t uct_rdmacm_cm_ep_pack_cb(uct_rdmacm_cm_ep_t *cep,
+                                      struct rdma_conn_param *conn_param);
+
 ucs_status_t
 uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
                             uct_rdmacm_cm_ep_t *cep);
-
-ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
-                                              struct rdma_conn_param *conn_param);
 
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
                                uct_cm_remote_data_t *remote_data,

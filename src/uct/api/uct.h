@@ -699,15 +699,21 @@ enum uct_md_mem_flags {
     UCT_MD_MEM_ACCESS_REMOTE_PUT    = UCS_BIT(5), /**< enable remote put access */
     UCT_MD_MEM_ACCESS_REMOTE_GET    = UCS_BIT(6), /**< enable remote get access */
     UCT_MD_MEM_ACCESS_REMOTE_ATOMIC = UCS_BIT(7), /**< enable remote atomic access */
+    UCT_MD_MEM_ACCESS_LOCAL_READ    = UCS_BIT(8), /**< enable local read access */
+    UCT_MD_MEM_ACCESS_LOCAL_WRITE   = UCS_BIT(9), /**< enable local write access */
 
     /** enable local and remote access for all operations */
     UCT_MD_MEM_ACCESS_ALL =  (UCT_MD_MEM_ACCESS_REMOTE_PUT|
                               UCT_MD_MEM_ACCESS_REMOTE_GET|
-                              UCT_MD_MEM_ACCESS_REMOTE_ATOMIC),
+                              UCT_MD_MEM_ACCESS_REMOTE_ATOMIC|
+                              UCT_MD_MEM_ACCESS_LOCAL_READ|
+                              UCT_MD_MEM_ACCESS_LOCAL_WRITE),
 
     /** enable local and remote access for put and get operations */
     UCT_MD_MEM_ACCESS_RMA = (UCT_MD_MEM_ACCESS_REMOTE_PUT|
-                             UCT_MD_MEM_ACCESS_REMOTE_GET)
+                             UCT_MD_MEM_ACCESS_REMOTE_GET|
+                             UCT_MD_MEM_ACCESS_LOCAL_READ|
+                             UCT_MD_MEM_ACCESS_LOCAL_WRITE)
 };
 
 

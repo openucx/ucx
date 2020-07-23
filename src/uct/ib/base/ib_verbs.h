@@ -273,12 +273,11 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 
 typedef uint8_t uct_ib_uint24_t[3];
 
-static inline void uct_ib_pack_uint24(uct_ib_uint24_t buf, const uint32_t qp_num)
+static inline void uct_ib_pack_uint24(uct_ib_uint24_t buf, uint32_t val)
 {
-
-    buf[0] = (qp_num >> 0)  & 0xFF;
-    buf[1] = (qp_num >> 8)  & 0xFF;
-    buf[2] = (qp_num >> 16) & 0xFF;
+    buf[0] = (val >> 0)  & 0xFF;
+    buf[1] = (val >> 8)  & 0xFF;
+    buf[2] = (val >> 16) & 0xFF;
 }
 
 static inline uint32_t uct_ib_unpack_uint24(const uct_ib_uint24_t buf)

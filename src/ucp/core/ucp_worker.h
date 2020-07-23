@@ -11,13 +11,14 @@
 #include "ucp_ep.h"
 #include "ucp_context.h"
 #include "ucp_thread.h"
+#include "ucp_rkey.h"
 
 #include <ucp/core/ucp_am.h>
 #include <ucp/tag/tag_match.h>
-#include <ucp/wireup/ep_match.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/strided_alloc.h>
+#include <ucs/datastruct/conn_match.h>
 #include <ucs/arch/bitops.h>
 
 
@@ -165,6 +166,11 @@ enum {
     })
 
 
+/* Hash map to find rkey config index by rkey config key, for fast rkey unpack */
+KHASH_TYPE(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t);
+typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
+
+
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
  * some auxiliary info needed for tag matching offloads.
@@ -224,7 +230,7 @@ typedef struct ucp_worker {
     ucs_strided_alloc_t           ep_alloc;      /* Endpoint allocator */
     ucs_list_link_t               stream_ready_eps; /* List of EPs with received stream data */
     ucs_list_link_t               all_eps;       /* List of all endpoints */
-    ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
+    ucs_conn_match_ctx_t          conn_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            **ifaces;      /* Array of pointers to interfaces,
                                                     one for each resource */
     unsigned                      num_ifaces;    /* Number of elements in ifaces array  */
@@ -246,9 +252,14 @@ typedef struct ucp_worker {
     UCS_STATS_NODE_DECLARE(tm_offload_stats)
 
     ucs_cpu_set_t                 cpu_mask;        /* Save CPU mask for subsequent calls to ucp_worker_listen */
-    unsigned                      ep_config_max;   /* Maximal number of configurations */
-    unsigned                      ep_config_count; /* Current number of configurations */
-    ucp_ep_config_t               ep_config[0];    /* Array of transport limits and thresholds */
+
+    ucp_worker_rkey_config_hash_t rkey_config_hash; /* rkey config key -> index */
+
+    unsigned                      ep_config_count; /* Current number of ep configurations */
+    ucp_ep_config_t               ep_config[UCP_WORKER_MAX_EP_CONFIG];
+
+    unsigned                      rkey_config_count; /* Current number of rkey configurations */
+    ucp_rkey_config_t             rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
 } ucp_worker_t;
 
 
@@ -264,10 +275,13 @@ typedef struct ucp_worker_err_handle_arg {
 } ucp_worker_err_handle_arg_t;
 
 
-ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
-                                      const ucp_ep_config_key_t *key,
-                                      int print_cfg,
-                                      ucp_ep_cfg_index_t *config_idx_p);
+ucs_status_t
+ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
+                         int print_cfg, ucp_worker_cfg_index_t *cfg_index_p);
+
+ucs_status_t
+ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key,
+                           ucp_worker_cfg_index_t *cfg_index_p);
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    uct_iface_params_t *iface_params,
@@ -291,68 +305,5 @@ int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
 ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
                                       uct_ep_h uct_ep, ucp_lane_index_t lane,
                                       ucs_status_t status);
-
-static inline const char* ucp_worker_get_name(ucp_worker_h worker)
-{
-    return worker->name;
-}
-
-/* get ep by pointer received from remote side, do some debug checks */
-static inline ucp_ep_h ucp_worker_get_ep_by_ptr(ucp_worker_h worker,
-                                                uintptr_t ep_ptr)
-{
-    ucp_ep_h ep = (ucp_ep_h)ep_ptr;
-
-    ucs_assert(ep != NULL);
-    ucs_assertv(ep->worker == worker, "worker=%p ep=%p ep->worker=%p", worker,
-                ep, ep->worker);
-    return ep;
-}
-
-static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
-ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
-{
-    uint64_t tl_bitmap;
-
-    if (rsc_index == UCP_NULL_RESOURCE) {
-        return NULL;
-    }
-
-    tl_bitmap = worker->context->tl_bitmap;
-    ucs_assert(UCS_BIT(rsc_index) & tl_bitmap);
-    return worker->ifaces[ucs_bitmap2idx(tl_bitmap, rsc_index)];
-}
-
-static UCS_F_ALWAYS_INLINE uct_iface_attr_t*
-ucp_worker_iface_get_attr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
-{
-    return &ucp_worker_iface(worker, rsc_index)->attr;
-}
-
-static UCS_F_ALWAYS_INLINE double
-ucp_worker_iface_bandwidth(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
-{
-    uct_iface_attr_t *iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-
-    return ucp_tl_iface_bandwidth(worker->context, &iface_attr->bandwidth);
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_worker_unified_mode(ucp_worker_h worker)
-{
-    return worker->context->config.ext.unified_mode;
-}
-
-static UCS_F_ALWAYS_INLINE ucp_rsc_index_t
-ucp_worker_num_cm_cmpts(const ucp_worker_h worker)
-{
-    return worker->context->config.num_cm_cmpts;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
-{
-    return !!ucp_worker_num_cm_cmpts(worker);
-}
 
 #endif

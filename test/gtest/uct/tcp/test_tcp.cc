@@ -43,9 +43,9 @@ public:
 
         scoped_log_handler slh(wrap_errors_logger);
         if (nb) {
-            status = ucs_socket_recv_nb(fd, &msg, &msg_size, NULL, NULL);
+            status = ucs_socket_recv_nb(fd, &msg, &msg_size);
         } else {
-            status = ucs_socket_recv(fd, &msg, msg_size, NULL, NULL);
+            status = ucs_socket_recv(fd, &msg, msg_size);
         }
 
         return status;
@@ -53,8 +53,7 @@ public:
 
     void post_send(int fd, const std::vector<char> &buf) {
         scoped_log_handler slh(wrap_errors_logger);
-        ucs_status_t status = ucs_socket_send(fd, &buf[0],
-                                              buf.size(), NULL, NULL);
+        ucs_status_t status = ucs_socket_send(fd, &buf[0], buf.size());
         // send can be OK or fail when a connection was closed by a peer
         // before all data were sent
         ASSERT_TRUE((status == UCS_OK) ||
@@ -178,7 +177,8 @@ private:
         struct sockaddr_in dest_addr;
         dest_addr.sin_family = AF_INET;
         dest_addr.sin_port   = *(in_port_t*)iface_addr;
-        dest_addr.sin_addr   = *(struct in_addr*)dev_addr;
+        dest_addr.sin_addr   = *(const struct in_addr*)ucs_sockaddr_get_inet_addr
+                                                       ((struct sockaddr*)dev_addr);
 
         int fd;
         status = ucs_socket_create(AF_INET, SOCK_STREAM, &fd);

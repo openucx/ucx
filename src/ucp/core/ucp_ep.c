@@ -12,6 +12,7 @@
 #include "ucp_ep.h"
 #include "ucp_worker.h"
 #include "ucp_am.h"
+#include "ucp_rkey.h"
 #include "ucp_ep.inl"
 #include "ucp_request.inl"
 
@@ -98,11 +99,11 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err;
     }
 
-    ep->cfg_index                   = UCP_NULL_CFG_INDEX;
+    ep->cfg_index                   = UCP_WORKER_CFG_INDEX_NULL;
     ep->worker                      = worker;
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
-    ep->conn_sn                     = (ucp_ep_conn_sn_t)-1;
+    ep->conn_sn                     = UCP_EP_MATCH_CONN_SN_MAX;
     ucp_ep_ext_gen(ep)->user_data   = NULL;
     ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
     ucp_ep_ext_gen(ep)->err_cb      = NULL;
@@ -564,7 +565,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
                                  const ucp_ep_params_t *params, ucp_ep_h *ep_p)
 {
     ucp_unpacked_address_t remote_address;
-    ucp_ep_conn_sn_t conn_sn;
+    ucp_ep_match_conn_sn_t conn_sn;
     ucs_status_t status;
     unsigned flags;
     ucp_ep_h ep;
@@ -594,9 +595,10 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
      * dst_ep != 0. So, ucp_wireup_request() will not create an unexpected ep
      * in ep_match.
      */
-    conn_sn = ucp_ep_match_get_next_sn(&worker->ep_match_ctx, remote_address.uuid);
-    ep = ucp_ep_match_retrieve_unexp(&worker->ep_match_ctx, remote_address.uuid,
-                                     conn_sn ^ (remote_address.uuid == worker->uuid));
+    conn_sn = ucp_ep_match_get_sn(worker, remote_address.uuid);
+    ep      = ucp_ep_match_retrieve(worker, remote_address.uuid,
+                                    conn_sn ^
+                                    (remote_address.uuid == worker->uuid), 0);
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
         if (status != UCS_OK) {
@@ -635,7 +637,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         ucp_ep_update_dest_ep_ptr(ep, (uintptr_t)ep);
         ucp_ep_flush_state_reset(ep);
     } else {
-        ucp_ep_match_insert_exp(&worker->ep_match_ctx, remote_address.uuid, ep);
+        ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn, 1);
     }
 
     /* if needed, send initial wireup message */
@@ -796,7 +798,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
         return;
     }
 
-    ucp_ep_match_remove_ep(&ep->worker->ep_match_ctx, ep);
+    ucp_ep_match_remove_ep(ep->worker, ep);
     ucp_ep_destroy_internal(ep);
 }
 
@@ -2061,7 +2063,7 @@ ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 
-    if (ep->cfg_index == UCP_NULL_CFG_INDEX) {
+    if (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
         return NULL;
     }
 

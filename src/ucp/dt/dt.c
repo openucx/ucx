@@ -16,6 +16,13 @@
 #include <ucs/profile/profile.h>
 
 
+const char * ucp_datatype_class_names[] = {
+    [UCP_DATATYPE_CONTIG]   = "contiguous",
+    [UCP_DATATYPE_STRIDED]  = "strided",
+    [UCP_DATATYPE_IOV]      = "iov",
+    [UCP_DATATYPE_GENERIC]  = "generic"
+};
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_mem_type_unpack,
                  (worker, buffer, recv_data, recv_length, mem_type),
                  ucp_worker_h worker, void *buffer, const void *recv_data,
@@ -127,7 +134,7 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
         break;
 
     case UCP_DATATYPE_GENERIC:
-        dt = ucp_dt_generic(datatype);
+        dt         = ucp_dt_to_generic(datatype);
         result_len = UCS_PROFILE_NAMED_CALL("dt_pack", dt->ops.pack,
                                             state->dt.generic.state,
                                             state->offset, dest, length);

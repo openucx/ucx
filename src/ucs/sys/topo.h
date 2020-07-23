@@ -19,6 +19,7 @@ BEGIN_C_DECLS
                                               * e.g. virtual devices like CMA/knem
                                               */
 
+
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
     uint8_t  bus;      /* range: 0 to ff */

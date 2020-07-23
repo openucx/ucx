@@ -79,8 +79,8 @@ typedef enum {
     UCS_ERR_FIRST_LINK_FAILURE     = -40,
     UCS_ERR_LAST_LINK_FAILURE      = -59,
     UCS_ERR_FIRST_ENDPOINT_FAILURE = -60,
-    UCS_ERR_LAST_ENDPOINT_FAILURE  = -79,
     UCS_ERR_ENDPOINT_TIMEOUT       = -80,
+    UCS_ERR_LAST_ENDPOINT_FAILURE  = -89,
 
     UCS_ERR_LAST                   = -100
 } UCS_S_PACKED ucs_status_t;

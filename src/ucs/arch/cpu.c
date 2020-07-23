@@ -137,7 +137,8 @@ size_t ucs_cpu_get_cache_size(ucs_cpu_cache_type_t type)
     }
 
     UCS_INIT_ONCE(&ucs_cache_read_once) {
-        UCS_STATIC_ASSERT(ucs_array_size(ucs_cpu_cache_size) == UCS_CPU_CACHE_LAST);
+        UCS_STATIC_ASSERT(ucs_static_array_size(ucs_cpu_cache_size) ==
+                          UCS_CPU_CACHE_LAST);
         /* try first CPU-specific algorithm */
         status = ucs_arch_get_cache_size(ucs_cpu_cache_size);
         if (status != UCS_OK) {

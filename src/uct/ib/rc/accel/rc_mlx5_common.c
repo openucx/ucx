@@ -233,7 +233,7 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     return UCS_OK;
 
 err_destroy_qp:
-    uct_ib_mlx5_devx_destroy_qp(&iface->tm.cmd_wq.super.super);
+    uct_ib_mlx5_devx_destroy_qp(md, &iface->tm.cmd_wq.super.super);
     return status;
 }
 
@@ -405,6 +405,8 @@ err_tag_cleanup:
 
 void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
+                                          uct_ib_mlx5_md_t);
     uct_rc_mlx5_mp_hash_key_t key_gid;
     uint64_t key_lid;
     void *recv_buffer;
@@ -413,7 +415,7 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
         return;
     }
 
-    uct_ib_mlx5_destroy_qp(&iface->tm.cmd_wq.super.super);
+    uct_ib_mlx5_destroy_qp(md, &iface->tm.cmd_wq.super.super);
     uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
     ucs_free(iface->tm.list);
     ucs_free(iface->tm.cmd_wq.ops);
@@ -480,6 +482,7 @@ ucs_status_t
 uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                  const uct_rc_iface_common_config_t *rc_config)
 {
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
     ucs_status_t status;
 
     status = uct_rc_mlx5_iface_check_no_devx_rx(iface);
@@ -504,12 +507,12 @@ uct_rc_mlx5_common_iface_init_rx(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 
 err_free_srq:
-    uct_rc_mlx5_destroy_srq(&iface->rx.srq);
+    uct_rc_mlx5_destroy_srq(md, &iface->rx.srq);
 err:
     return status;
 }
 
-void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq)
+void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 {
     int UCS_V_UNUSED ret;
 
@@ -523,7 +526,7 @@ void uct_rc_mlx5_destroy_srq(uct_ib_mlx5_srq_t *srq)
         if (ret) {
             ucs_warn("mlx5dv_devx_obj_destroy(SRQ) failed: %m");
         }
-        uct_rc_mlx5_devx_cleanup_srq(srq);
+        uct_rc_mlx5_devx_cleanup_srq(md, srq);
 #endif
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:

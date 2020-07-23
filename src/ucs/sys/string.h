@@ -198,6 +198,19 @@ const char* ucs_flags_str(char *str, size_t max,
                           uint64_t flags, const char **str_table);
 
 
+/**
+ * Get estimated number of segments different in the two paths. Segments are
+ * separated by `/`.
+ *
+ * @param  path1  String pointing to first path
+ * @param  path2  String pointing to second path
+ *
+ * @return if either of the paths are invalid, UINT_MAX; if paths are the same 0
+ *         is returned; otherwise in between
+ */
+ssize_t ucs_path_calc_distance(const char *path1, const char *path2);
+
+
 /** Quantifier suffixes for memory units ("K", "M", "G", etc) */
 extern const char *ucs_memunits_suffixes[];
 

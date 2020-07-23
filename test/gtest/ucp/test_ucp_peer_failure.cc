@@ -4,6 +4,8 @@
 * See file LICENSE for terms.
 */
 
+#include <common/test.h>
+
 #include "test_ucp_tag.h"
 #include "ucp_datatype.h"
 
@@ -425,7 +427,11 @@ UCS_TEST_P(test_ucp_peer_failure, rndv_disable) {
     EXPECT_EQ(size_max, ucp_ep_config(sender().ep())->tag.rndv.rma_thresh.local);
 }
 
-UCS_TEST_P(test_ucp_peer_failure, zcopy, "ZCOPY_THRESH=1023") {
+UCS_TEST_P(test_ucp_peer_failure, zcopy, "ZCOPY_THRESH=1023",
+           /* to catch failure with TCP during progressing multi AM Zcopy,
+            * since `must_fail=true` */
+           "TCP_SNDBUF?=1k", "TCP_RCVBUF?=128",
+           "TCP_RX_SEG_SIZE?=512", "TCP_TX_SEG_SIZE?=256") {
     do_test(UCS_KBYTE, /* msg_size */
             0, /* pre_msg_cnt */
             false, /* force_close */

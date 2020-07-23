@@ -399,7 +399,7 @@ int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
     ucs_profile_for_each_location(loc) {
         if ((type == loc->super.type) && (line == loc->super.line) &&
             !strcmp(loc->super.name, name) &&
-            !strcmp(loc->super.file, basename(file)) &&
+            !strcmp(loc->super.file, ucs_basename(file)) &&
             !strcmp(loc->super.function, function)) {
             goto out_found;
         }
@@ -426,7 +426,7 @@ int ucs_profile_get_location(ucs_profile_type_t type, const char *name,
 
     /* Initialize new location */
     loc = &ucs_profile_global_ctx.locations[ucs_profile_global_ctx.num_locations - 1];
-    ucs_strncpy_zero(loc->super.file, basename(file), sizeof(loc->super.file));
+    ucs_strncpy_zero(loc->super.file, ucs_basename(file), sizeof(loc->super.file));
     ucs_strncpy_zero(loc->super.function, function, sizeof(loc->super.function));
     ucs_strncpy_zero(loc->super.name, name, sizeof(loc->super.name));
     loc->super.line = line;

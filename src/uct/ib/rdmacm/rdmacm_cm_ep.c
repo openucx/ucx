@@ -44,7 +44,7 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
     };
 
     ucs_flags_str(flags_buf, sizeof(flags_buf), cep->flags, ep_flag_to_str);
-    ucs_snprintf_safe(str, max_len, "rdmacm_ep %p, status %s, flags %s",
+    ucs_snprintf_safe(str, max_len, "rdmacm_ep %p, ep status %s, flags %s",
                       cep, ucs_status_string(cep->status), flags_buf);
     return str;
 }
@@ -233,8 +233,8 @@ uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
     return UCS_OK;
 }
 
-ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
-                                              struct rdma_conn_param *conn_param)
+ucs_status_t uct_rdmacm_cm_ep_pack_cb(uct_rdmacm_cm_ep_t *cep,
+                                      struct rdma_conn_param *conn_param)
 {
     uct_rdmacm_priv_data_hdr_t      *hdr;
     ucs_status_t                    status;
@@ -260,11 +260,6 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
     ucs_assert_always(priv_data_ret <= UINT8_MAX);
     hdr->length = (uint8_t)priv_data_ret;
     hdr->status = UCS_OK;
-
-    status = uct_rdamcm_cm_ep_set_qp_num(conn_param, cep);
-    if (status != UCS_OK) {
-        goto err;
-    }
 
     conn_param->private_data_len = sizeof(*hdr) + hdr->length;
 
@@ -345,9 +340,8 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
         if (rdma_migrate_id(event->id, cm->ev_ch)) {
             ucs_error("failed to migrate id %p to event_channel %p (cm=%p)",
                       event->id, cm->ev_ch, cm);
-            uct_rdmacm_cm_reject(event->id);
             status = UCS_ERR_IO_ERROR;
-            goto err;
+            goto err_reject;
         }
 
         ucs_debug("%s: migrated id %p from event_channel=%p to "
@@ -371,10 +365,14 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +
                                          sizeof(uct_rdmacm_priv_data_hdr_t));
 
-    status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
+    status = uct_rdmacm_cm_ep_pack_cb(cep, &conn_param);
     if (status != UCS_OK) {
-        uct_rdmacm_cm_reject(event->id);
-        goto err;
+        goto err_reject;
+    }
+
+    status = uct_rdamcm_cm_ep_set_qp_num(&conn_param, cep);
+    if (status != UCS_OK) {
+        goto err_reject;
     }
 
     ucs_trace("%s: rdma_accept on cm_id %p",
@@ -391,6 +389,8 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     uct_rdmacm_cm_ack_event(event);
     return UCS_OK;
 
+err_reject:
+    uct_rdmacm_cm_reject(event->id);
 err:
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
     cep->status = status;

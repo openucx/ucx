@@ -236,7 +236,7 @@ out:
 
 
 static inline unsigned
-ucp_mem_map_params2uct_flags(ucp_mem_map_params_t *params)
+ucp_mem_map_params2uct_flags(const ucp_mem_map_params_t *params)
 {
     unsigned flags = 0;
 
@@ -256,61 +256,7 @@ ucp_mem_map_params2uct_flags(ucp_mem_map_params_t *params)
     return flags;
 }
 
-/* Matrix of behavior
- * |--------------------------------------------------------------------------------|
- * | parameter |                             value                                  |
- * |-----------|--------------------------------------------------------------------|
- * | ALLOCATE  |  0     |     1     |  0  |  0  |  1  |     1     |  0  |     1     |
- * | FIXED     |  0     |     0     |  1  |  0  |  1  |     0     |  1  |     1     |
- * | addr      |  0     |     0     |  0  |  1  |  0  |     1     |  1  |     1     |
- * |-----------|--------|-----------|-----|-----|-----|-----------|-----|-----------|
- * | result    | err if | alloc/reg | err | reg | err | alloc/reg | err | alloc/reg |
- * |           | len >0 |           |     |     |     |  (hint)   |     | (fixed)   |
- * |--------------------------------------------------------------------------------|
- */
-static inline ucs_status_t ucp_mem_map_check_and_adjust_params(ucp_mem_map_params_t *params)
-{
-    if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_LENGTH)) {
-        ucs_error("The length value for mapping memory isn't set: %s",
-                  ucs_status_string(UCS_ERR_INVALID_PARAM));
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    /* First of all, define all fields */
-    if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_ADDRESS)) {
-        params->field_mask |= UCP_MEM_MAP_PARAM_FIELD_ADDRESS;
-        params->address = NULL;
-    }
-
-    if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS)) {
-        params->field_mask |= UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-        params->flags = 0;
-    }
-
-    if ((params->flags & UCP_MEM_MAP_FIXED) &&
-        (!params->address ||
-         ((uintptr_t)params->address % ucs_get_page_size()))) {
-        ucs_error("UCP_MEM_MAP_FIXED flag requires page aligned address");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    /* Now, lets check the rest of erroneous cases from the matrix */
-    if (params->address == NULL) {
-        if (!(params->flags & UCP_MEM_MAP_ALLOCATE) && (params->length > 0)) {
-            ucs_error("Undefined address with nonzero length requires "
-                      "UCP_MEM_MAP_ALLOCATE flag");
-            return UCS_ERR_INVALID_PARAM;
-        }
-    } else if (!(params->flags & UCP_MEM_MAP_ALLOCATE) &&
-               (params->flags & UCP_MEM_MAP_FIXED)) {
-        ucs_error("Wrong combination of flags when address is defined");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    return UCS_OK;
-}
-
-static inline int ucp_mem_map_is_allocate(ucp_mem_map_params_t *params)
+static inline int ucp_mem_map_is_allocate(const ucp_mem_map_params_t *params)
 {
     return (params->field_mask & UCP_MEM_MAP_PARAM_FIELD_FLAGS) &&
            (params->flags & UCP_MEM_MAP_ALLOCATE);
@@ -409,31 +355,68 @@ out:
     return status;
 }
 
+/* Matrix of behavior
+ * |--------------------------------------------------------------------------------|
+ * | parameter |                             value                                  |
+ * |-----------|--------------------------------------------------------------------|
+ * | ALLOCATE  |  0     |     1     |  0  |  0  |  1  |     1     |  0  |     1     |
+ * | FIXED     |  0     |     0     |  1  |  0  |  1  |     0     |  1  |     1     |
+ * | addr      |  0     |     0     |  0  |  1  |  0  |     1     |  1  |     1     |
+ * |-----------|--------|-----------|-----|-----|-----|-----------|-----|-----------|
+ * | result    | err if | alloc/reg | err | reg | err | alloc/reg | err | alloc/reg |
+ * |           | len >0 |           |     |     |     |  (hint)   |     | (fixed)   |
+ * |--------------------------------------------------------------------------------|
+ */
 ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *params,
                          ucp_mem_h *memh_p)
 {
-    ucs_status_t            status;
-    ucp_mem_map_params_t    mem_params;
+    ucs_status_t status;
+    void         *address;
+    unsigned     flags;
 
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
-    mem_params = *params;
-    status = ucp_mem_map_check_and_adjust_params(&mem_params);
-    if (status != UCS_OK) {
+    if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_LENGTH)) {
+        ucs_error("The length value for mapping memory isn't set: %s",
+                  ucs_status_string(UCS_ERR_INVALID_PARAM));
+        status = UCS_ERR_INVALID_PARAM;
         goto out;
     }
 
-    if (mem_params.length == 0) {
+    address = UCP_PARAM_VALUE(MEM_MAP, params, address, ADDRESS, NULL);    
+    flags   = UCP_PARAM_VALUE(MEM_MAP, params, flags, FLAGS, 0);
+
+    if ((flags & UCP_MEM_MAP_FIXED) &&
+        ((uintptr_t)address % ucs_get_page_size())) {
+        ucs_error("UCP_MEM_MAP_FIXED flag requires page aligned address");
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (address == NULL) {
+        if (!(flags & UCP_MEM_MAP_ALLOCATE) && (params->length > 0)) {
+            ucs_error("Undefined address with nonzero length requires "
+                      "UCP_MEM_MAP_ALLOCATE flag");
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
+        }
+    } else if (!(flags & UCP_MEM_MAP_ALLOCATE) && (flags & UCP_MEM_MAP_FIXED)) {
+        ucs_error("Wrong combination of flags when address is defined");
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    if (params->length == 0) {
         ucs_debug("mapping zero length buffer, return dummy memh");
         *memh_p = &ucp_mem_dummy_handle;
         status  = UCS_OK;
         goto out;
     }
 
-    status = ucp_mem_map_common(context, mem_params.address, mem_params.length,
-                                ucp_mem_map_params2uct_flags(&mem_params),
-                                ucp_mem_map_is_allocate(&mem_params),
+    status = ucp_mem_map_common(context, address, params->length,
+                                ucp_mem_map_params2uct_flags(params),
+                                ucp_mem_map_is_allocate(params),
                                 "user memory", memh_p);
 out:
     UCP_THREAD_CS_EXIT(&context->mt_lock);
