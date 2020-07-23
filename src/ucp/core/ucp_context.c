@@ -1570,9 +1570,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
-    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx tl bitmap 0x%lx",
-              context, context->num_mds, context->num_tls,
-              context->config.features, context->tl_bitmap);
+    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%"PRIx64
+              " tl bitmap 0x%"PRIx64, context, context->num_mds,
+              context->num_tls, context->config.features, context->tl_bitmap);
 
     *context_p = context;
     return UCS_OK;

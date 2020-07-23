@@ -142,7 +142,7 @@ ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
     }
 
     ucs_assertv((hash_sn == ULONG_MAX) && (wild_sn == ULONG_MAX),
-                "hash_seq=%lu wild_seq=%lu", hash_sn, wild_sn);
+                "hash_seq=%"PRIu64" wild_seq=%"PRIu64, hash_sn, wild_sn);
     ucs_assert(ucs_queue_iter_end(hash_queue, hash_iter));
     ucs_assert(ucs_queue_iter_end(&tm->expected.wildcard.queue, wild_iter));
     return NULL;

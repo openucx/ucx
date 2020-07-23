@@ -93,7 +93,8 @@ typedef struct ucp_rkey {
             ucp_rkey_resolve_inner(_rkey, _ep); \
         } \
         if (ucs_unlikely((_rkey)->cache._op_type##_lane == UCP_NULL_LANE)) { \
-            ucs_error("remote memory is unreachable (remote md_map 0x%lx)", \
+            ucs_error("remote memory is unreachable " \
+                      "(remote md_map 0x%" PRIx64 ")", \
                       (_rkey)->md_map); \
             _status_nc = UCS_ERR_UNREACHABLE; \
         } \

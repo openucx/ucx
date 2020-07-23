@@ -786,8 +786,9 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
             if (!(pack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT" "
-                          "eps %u md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64" bw %e + %e/n ovh %e "
-                          "lat_ovh %e dev_priority %d a32 0x%lx/0x%lx a64 0x%lx/0x%lx",
+                          "eps %u md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64
+                          " bw %e + %e/n ovh %e lat_ovh %e dev_priority %d a32 "
+                          "0x%"PRIx64"/0x%"PRIx64" a64 0x%"PRIx64"/0x%"PRIx64,
                           addr_index,
                           UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
                           num_ep_addrs, md_flags, iface_attr->cap.flags,
@@ -1040,7 +1041,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                 ucs_trace("unpack addr[%d] : eps %u md_flags 0x%"PRIx64
                           " tl_iface_flags 0x%"PRIx64" tl_event_flags 0x%"PRIx64
                           " bw %e + %e/n ovh %e lat_ovh %e dev_priority %d a32 "
-                          "0x%lx/0x%lx a64 0x%lx/0x%lx",
+                          "0x%"PRIx64"/0x%"PRIx64" a64 0x%"PRIx64"/0x%"PRIx64,
                           (int)(address - address_list), address->num_ep_addrs,
                           address->md_flags, address->iface_attr.cap_flags,
                           address->iface_attr.event_flags,

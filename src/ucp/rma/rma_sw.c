@@ -263,23 +263,24 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     switch (id) {
     case UCP_AM_ID_PUT:
         puth = data;
-        snprintf(buffer, max, "PUT [addr 0x%lx ep_ptr 0x%lx]", puth->address,
-                 puth->ep_ptr);
+        snprintf(buffer, max, "PUT [addr 0x%"PRIx64" ep_ptr 0x%"PRIxPTR"]",
+                 puth->address, puth->ep_ptr);
         header_len = sizeof(*puth);
         break;
     case UCP_AM_ID_GET_REQ:
         geth = data;
-        snprintf(buffer, max, "GET_REQ [addr 0x%lx len %zu reqptr 0x%lx ep 0x%lx]",
-                 geth->address, geth->length, geth->req.reqptr, geth->req.ep_ptr);
+        snprintf(buffer, max, "GET_REQ [addr 0x%"PRIx64" len %"PRIu64
+                 " reqptr 0x%"PRIxPTR" ep 0x%"PRIxPTR"]", geth->address,
+                 geth->length, geth->req.reqptr, geth->req.ep_ptr);
         return;
     case UCP_AM_ID_GET_REP:
         reph = data;
-        snprintf(buffer, max, "GET_REP [reqptr 0x%lx]", reph->req);
+        snprintf(buffer, max, "GET_REP [reqptr 0x%"PRIxPTR"]", reph->req);
         header_len = sizeof(*reph);
         break;
     case UCP_AM_ID_CMPL:
         cmplh = data;
-        snprintf(buffer, max, "CMPL [ep_ptr 0x%lx]", cmplh->ep_ptr);
+        snprintf(buffer, max, "CMPL [ep_ptr 0x%"PRIxPTR"]", cmplh->ep_ptr);
         return;
     default:
         return;

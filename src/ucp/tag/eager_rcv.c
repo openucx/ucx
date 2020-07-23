@@ -474,12 +474,12 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         header_len = sizeof(*eagers_first_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_ACK:
-        snprintf(buffer, max, "EGRS_A request 0x%lx status '%s'", rep_hdr->reqptr,
-                 ucs_status_string(rep_hdr->status));
+        snprintf(buffer, max, "EGRS_A request 0x%"PRIx64" status '%s'",
+                 rep_hdr->reqptr, ucs_status_string(rep_hdr->status));
         header_len = sizeof(*rep_hdr);
         break;
     case UCP_AM_ID_OFFLOAD_SYNC_ACK:
-        snprintf(buffer, max, "EGRS_A_O tag %"PRIx64" ep_ptr 0x%lx",
+        snprintf(buffer, max, "EGRS_A_O tag %"PRIx64" ep_ptr 0x%"PRIxPTR,
                  off_rep_hdr->sender_tag, off_rep_hdr->ep_ptr);
         header_len = sizeof(*rep_hdr);
         break;

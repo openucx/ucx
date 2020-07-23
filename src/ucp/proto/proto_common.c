@@ -115,7 +115,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
         /* Check iface capabilities */
         iface_attr = ucp_proto_common_get_iface_attr(params, lane);
         if (!ucs_test_all_flags(iface_attr->cap.flags, tl_cap_flags)) {
-            ucs_trace("lane[%d]: no cap 0x%lx", lane, tl_cap_flags);
+            ucs_trace("lane[%d]: no cap 0x%"PRIx64, lane, tl_cap_flags);
             continue;
         }
 
