@@ -562,7 +562,8 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     rndv_rts_hdr = ucs_alloca(rndv_hdr_len);
     packed_len   = ucp_tag_rndv_rts_pack(rndv_rts_hdr, req);
     ucs_assert((rndv_rts_hdr->address != 0) || !UCP_DT_IS_CONTIG(req->send.datatype) ||
-               !ucp_rndv_is_get_zcopy(req->send.mem_type,
+               !ucp_rndv_is_get_zcopy(req->send.mem_type, req->send.length,
+                                      ep->worker->context->config.ext.rndv_pipeline_send_thresh,
                                       ep->worker->context->config.ext.rndv_mode));
     return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane],
                                    req->send.msg_proto.tag.tag,

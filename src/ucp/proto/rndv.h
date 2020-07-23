@@ -66,12 +66,14 @@ void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr);
 
 static UCS_F_ALWAYS_INLINE int ucp_rndv_is_get_zcopy(ucs_memory_type_t mem_type,
+                                                     size_t length,
+                                                     size_t rndv_pipeline_send_thresh,
                                                      ucp_rndv_mode_t rndv_mode)
 {
     return ((rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ||
             ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
-             (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
-              UCP_MEM_IS_ROCM(mem_type))));
+             (!UCP_MEM_IS_CUDA(mem_type) ||
+              (length < rndv_pipeline_send_thresh))));
 }
 
 #endif
