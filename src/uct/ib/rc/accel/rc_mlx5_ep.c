@@ -884,6 +884,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(params->iface,
                                                        uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
+                                                       uct_ib_mlx5_md_t);
     uct_ib_mlx5_qp_attr_t attr = {};
     ucs_status_t status;
 
@@ -928,7 +930,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     return UCS_OK;
 
 err:
-    uct_ib_mlx5_destroy_qp(&self->tx.wq.super);
+    uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
     return status;
 }
 
@@ -976,6 +978,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                        uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
+                                                       uct_ib_mlx5_md_t);
 
     uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
     uct_rc_mlx5_ep_clean_qp(self, &self->tx.wq.super);
@@ -984,7 +988,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
         uct_rc_mlx5_ep_clean_qp(self, &self->tm_qp);
         uct_ib_mlx5_iface_put_res_domain(&self->tm_qp);
         uct_rc_iface_remove_qp(&iface->super, self->tm_qp.qp_num);
-        uct_ib_mlx5_destroy_qp(&self->tm_qp);
+        uct_ib_mlx5_destroy_qp(md, &self->tm_qp);
     }
 #endif
 
@@ -1000,7 +1004,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_ib_mlx5_verbs_srq_cleanup(&iface->rx.srq, iface->rx.srq.verbs.srq);
 
     uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
-    uct_ib_mlx5_destroy_qp(&self->tx.wq.super);
+    uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
 }
 
 ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,

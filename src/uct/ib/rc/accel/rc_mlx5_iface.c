@@ -255,9 +255,9 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_iface_t *ib_iface           = &iface->super.super;
     ucs_status_t status;
-#if HAVE_DECL_MLX5DV_CREATE_QP
     uct_ib_mlx5_md_t *md               = ucs_derived_of(ib_iface->super.md,
                                                         uct_ib_mlx5_md_t);
+#if HAVE_DECL_MLX5DV_CREATE_QP
     uct_ib_device_t *dev               = &md->super.dev;
     struct mlx5dv_qp_init_attr dv_attr = {};
 
@@ -322,7 +322,7 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     return UCS_OK;
 
 err_destory_qp:
-    uct_ib_mlx5_destroy_qp(qp);
+    uct_ib_mlx5_destroy_qp(md, qp);
 err:
     return status;
 }
@@ -534,8 +534,10 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
 static void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(rc_iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md              = ucs_derived_of(rc_iface->super.super.md,
+                                                       uct_ib_mlx5_md_t);
 
-    uct_rc_mlx5_destroy_srq(&iface->rx.srq);
+    uct_rc_mlx5_destroy_srq(md, &iface->rx.srq);
 }
 
 static void uct_rc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
