@@ -586,6 +586,8 @@ uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
             goto err_free;
         }
         mem->size = size;
+    } else {
+        mem->size = 0;
     }
 
     mem->mem = mlx5dv_devx_umem_reg(md->super.dev.ibv_context, buf, size, 0);
@@ -618,7 +620,7 @@ uct_ib_mlx5_md_buf_free(uct_ib_mlx5_md_t *md, void *buf, uct_ib_mlx5_devx_umem_t
     }
 
     mlx5dv_devx_umem_dereg(mem->mem);
-    if (md->super.fork_init) {
+    if (md->super.fork_init && mem->size) {
         ret = madvise(buf, mem->size, MADV_DOFORK);
         if (ret != 0) {
             ucs_warn("madvise(DOFORK, buf=%p, len=%zu) failed: %m", buf, mem->size);
