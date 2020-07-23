@@ -578,28 +578,30 @@ typedef enum {
  * compatibility support.
  */
 typedef enum {
-    UCP_OP_ATTR_FIELD_REQUEST       = UCS_BIT(0),  /**< request field */
-    UCP_OP_ATTR_FIELD_CALLBACK      = UCS_BIT(1),  /**< cb field */
-    UCP_OP_ATTR_FIELD_USER_DATA     = UCS_BIT(2),  /**< user_data field */
-    UCP_OP_ATTR_FIELD_DATATYPE      = UCS_BIT(3),  /**< datatype field */
-    UCP_OP_ATTR_FIELD_FLAGS         = UCS_BIT(4),  /**< operation-specific flags */
-    UCP_OP_ATTR_FIELD_REPLY_BUFFER  = UCS_BIT(5),  /**< reply_buffer field */
+    UCP_OP_ATTR_FIELD_REQUEST            = UCS_BIT(0),  /**< request field */
+    UCP_OP_ATTR_FIELD_CALLBACK           = UCS_BIT(1),  /**< cb field */
+    UCP_OP_ATTR_FIELD_USER_DATA          = UCS_BIT(2),  /**< user_data field */
+    UCP_OP_ATTR_FIELD_DATATYPE           = UCS_BIT(3),  /**< datatype field */
+    UCP_OP_ATTR_FIELD_FLAGS              = UCS_BIT(4),  /**< operation-specific flags */
+    UCP_OP_ATTR_FIELD_REPLY_BUFFER       = UCS_BIT(5),  /**< reply_buffer field */
+    UCP_OP_ATTR_FIELD_TARGET_DATATYPE    = UCS_BIT(6),  /**< target datatype field */
+    UCP_OP_ATTR_FIELD_TARGET_MEMORY_TYPE = UCS_BIT(7),  /**< target memory type field */
 
-    UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
-    UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
-                                                        even if it delays remote 
-                                                        data delivery. Note for
-                                                        implementer: this option
-                                                        can disable zero copy
-                                                        and/or rendezvous protocols
-                                                        which require
-                                                        synchronization with the
-                                                        remote peer before releasing
-                                                        the local send buffer */
-    UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL = UCS_BIT(18)  /**< force immediate complete
-                                                        operation, fail if the
-                                                        operation cannot be
-                                                        completed immediately */
+    UCP_OP_ATTR_FLAG_NO_IMM_CMPL         = UCS_BIT(16), /**< deny immediate completion */
+    UCP_OP_ATTR_FLAG_FAST_CMPL           = UCS_BIT(17), /**< expedite local completion,
+                                                             even if it delays remote
+                                                             data delivery. Note for
+                                                             implementer: this option
+                                                             can disable zero copy
+                                                             and/or rendezvous protocols
+                                                             which require
+                                                             synchronization with the
+                                                             remote peer before releasing
+                                                             the local send buffer */
+    UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL      = UCS_BIT(18)  /**< force immediate complete
+                                                             operation, fail if the
+                                                             operation cannot be
+                                                             completed immediately */
 } ucp_op_attr_t;
 
 
@@ -1313,6 +1315,24 @@ typedef struct {
      * @ref ucp_atomic_op_nbx.
      */
     void          *reply_buffer;
+
+    /**
+     * Datatype descriptor for the elements in the target buffer. In case the
+     * op_attr_mask & UCP_OP_ATTR_FIELD_TARGET_DATATYPE bit is not set, then use
+     * default datatype ucp_dt_make_contig(1).
+     */
+    ucp_datatype_t target_datatype;
+
+    /**
+     * Memory type of the target buffer, see @ref ucs_memory_type_t for possible
+     * memory types. An optimization hint to avoid memory type detection for
+     * request target buffer, i. e. destination buffer in @ref ucp_mem_copy_nbx.
+     * If this value is not set (along with its corresponding bit
+     * in the op_attr_mask - @ref UCP_OP_ATTR_FIELD_TARGET_MEMORY_TYPE), then use
+     * default @ref UCS_MEMORY_TYPE_UNKNOWN, which means the memory type will be
+     * detected internally.
+     */
+    ucs_memory_type_t target_memory_type;
 } ucp_request_param_t;
 
 
@@ -2355,6 +2375,37 @@ typedef struct ucp_mem_advise_params {
  */
 ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
                             ucp_mem_advise_params_t *params);
+
+
+/**
+ * @ingroup UCP_MEM
+ * @brief Memory copy routine
+ *
+ * This routine performs memory copy from @a src to @a dest buffer, given the
+ * corresponding data and memory types specified in @a params. Refer to
+ * @ref ucp_request_param_t.target_datatype for @a dest data type and
+ *  @ref ucp_request_param_t.datatype for @a src data type.
+ *
+ * @param [in]  worker      Worker handle
+ * @param [in]  dest        Destination buffer to copy into
+ * @param [in]  dest_count  Number of elements of
+ *                          @ref ucp_request_param_t.target_datatype to copy from
+ *                          @a src buffer.
+ * @param [in]  src         Source buffer to copy from
+ * @param [in]  src_count   Number of elements of @ref ucp_request_param_t.datatype
+ *                          to copy into @a dest buffer.
+ * @param [in]  params      Operation parameters, see @ref ucp_request_param_t
+ *
+ * @return NULL                 - The operation was completed immediately
+ * @return UCS_PTR_IS_ERR(_ptr) - The operation failed
+ * @return otherwise            - Operation was scheduled and can be completed in
+ *                                any point in time. The request handle is
+ *                                returned to the application in order to track
+ *                                the progress of this operation.
+ */
+ucs_status_ptr_t ucp_mem_copy_nbx(ucp_worker_h worker, void *dest,
+                                  size_t dest_count, const void *src,
+                                  size_t src_count, ucp_request_param_t *params);
 
 
 /**
