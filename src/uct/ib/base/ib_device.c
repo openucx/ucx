@@ -782,7 +782,7 @@ ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, int port_num,
     /* realpath name is of form /sys/devices/.../0000:05:00.0/infiniband/mlx5_0
      * and bus_id is constructed from 0000:05:00.0 */
 
-    /* Make sure there is /infiniband/mlx5_0 suffix in ib_realpath*/
+    /* Make sure there is /infiniband/mlx5 substring in ib_realpath*/
     /* doesn't handle non-mlx devices */
     tmp = strstr(ib_realpath, "/infiniband/mlx5");
     if (NULL == tmp) {
