@@ -784,7 +784,7 @@ ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, int port_num,
 
     /* Make sure there is /infiniband/mlx5_0 suffix in ib_realpath*/
     /* doesn't handle non-mlx devices */
-    tmp = strstr(ib_realpath, "/infiniband/mlx5_0");
+    tmp = strstr(ib_realpath, "/infiniband/mlx5");
     if (NULL == tmp) {
         return UCS_ERR_NO_RESOURCE;
     }
