@@ -427,6 +427,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
                                 ctx->params.super.iov_stride);
     printf("     -T <threads>   number of threads in the test (%d)\n",
                                 ctx->params.super.thread_count);
+    printf("     -o             do not progress the responder in one-sided tests\n");
     printf("     -B             register memory with NONBLOCK flag\n");
     printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
     printf("                    file is a test to run, first word is test name, the rest of\n");
