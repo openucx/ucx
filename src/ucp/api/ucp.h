@@ -1211,8 +1211,8 @@ typedef struct ucp_mem_map_params {
 
      /*
       * Memory type (for possible memory types see @ref ucs_memory_type_t)
-      * This value is optional. The meaning of this field depends on the
-      * operation type.
+      * It is an optimization hint to avoid memory type detection for map buffer.
+      * The meaning of this field depends on the operation type.
       *
       * - Memory allocation: (@ref UCP_MEM_MAP_ALLOCATE flag is set) This field
       *    specifies the type of memory to allocate. If it's not set (along with its
