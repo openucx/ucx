@@ -584,6 +584,7 @@ typedef enum {
     UCP_OP_ATTR_FIELD_DATATYPE      = UCS_BIT(3),  /**< datatype field */
     UCP_OP_ATTR_FIELD_FLAGS         = UCS_BIT(4),  /**< operation-specific flags */
     UCP_OP_ATTR_FIELD_REPLY_BUFFER  = UCS_BIT(5),  /**< reply_buffer field */
+    UCP_OP_ATTR_FIELD_MEMORY_TYPE   = UCS_BIT(6),  /**< memory type field */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
@@ -1313,6 +1314,15 @@ typedef struct {
      * @ref ucp_atomic_op_nbx.
      */
     void          *reply_buffer;
+
+    /**
+     * Memory type of the buffer. see @ref ucs_memory_type_t for possible memory types.
+     * An optimization hint to avoid memory type detection for request buffer.
+     * If this value is not set (along with its corresponding bit in the op_attr_mask -
+     * @ref UCP_OP_ATTR_FIELD_MEMORY_TYPE), then use default @ref UCS_MEMORY_TYPE_UNKNOWN
+     * which means the memory type will be detected internally.
+     */
+    ucs_memory_type_t memory_type;
 } ucp_request_param_t;
 
 
