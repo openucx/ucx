@@ -15,6 +15,7 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
+#include <malloc.h>
 #include <stdio.h>
 
 
@@ -389,3 +390,35 @@ int ucs_memtrack_is_enabled()
 }
 
 #endif
+
+int ucs_posix_memalign_realloc(void **ptr, size_t boundary, size_t size,
+                               const char *name)
+{
+    size_t old_size;
+    void *tmp;
+    int ret;
+
+    /* obtain previous size, to reduce the size for memcpy() below */
+    old_size = malloc_usable_size(*ptr);
+
+    /* first try to realloc() - the region may be extended (not guaranteed) */
+    tmp = ucs_realloc(*ptr, size, name);
+    if (tmp == NULL) {
+        return -1;
+    }
+
+    /* for some consistency with realloc() - failure leaves a valid pointer */
+    *ptr = tmp;
+
+    if (((uintptr_t)tmp % boundary) == 0) {
+        return 0;
+    }
+
+    ret = ucs_posix_memalign(ptr, boundary, size, name);
+    if (ret == 0) {
+        memcpy(*ptr, tmp, ucs_min(size, old_size));
+        ucs_free(tmp);
+    }
+
+    return ret;
+}
