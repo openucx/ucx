@@ -5,229 +5,173 @@
 * See file LICENSE for terms.
 */
 
-#include <common/test.h>
-
 #include "test_ucp_atomic.h"
 extern "C" {
-#include <ucp/core/ucp_context.h>
-}
-
-std::vector<ucp_test_param>
-test_ucp_atomic::enum_test_params(const ucp_params_t& ctx_params,
-                                  const std::string& name,
-                                  const std::string& test_case_name,
-                                  const std::string& tls)
-{
-    std::vector<ucp_test_param> result;
-    generate_test_params_variant(ctx_params, name,
-                                 test_case_name, tls, UCP_ATOMIC_MODE_CPU, result);
-    generate_test_params_variant(ctx_params, name,
-                                 test_case_name, tls, UCP_ATOMIC_MODE_DEVICE, result);
-    generate_test_params_variant(ctx_params, name,
-                                 test_case_name, tls, UCP_ATOMIC_MODE_GUESS, result);
-    return result;
-}
-
-void test_ucp_atomic::init() {
-    const char *atomic_mode =
-                    (GetParam().variant == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
-                    (GetParam().variant == UCP_ATOMIC_MODE_DEVICE) ? "device" :
-                    (GetParam().variant == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
-                    "";
-    modify_config("ATOMIC_MODE", atomic_mode);
-    test_ucp_memheap::init();
+#include <ucp/core/ucp_types.h> // for atomic mode
 }
 
 template <typename T>
-void test_ucp_atomic::blocking_add(entity *e,  size_t max_size, void *memheap_addr,
-                                   ucp_rkey_h rkey, std::string& expected_data)
-{
-    ucs_status_t status;
-    T add, prev;
-
-    prev = *(T*)memheap_addr;
-    add  = (T)ucs::rand() * (T)ucs::rand();
-
-    if (sizeof(T) == sizeof(uint32_t)) {
-        status = ucp_atomic_add32(e->ep(), add, (uintptr_t)memheap_addr, rkey);
-    } else if (sizeof(T) == sizeof(uint64_t)) {
-        status = ucp_atomic_add64(e->ep(), add, (uintptr_t)memheap_addr, rkey);
-    } else {
-        status = UCS_ERR_UNSUPPORTED;
-    }
-    ASSERT_UCS_OK(status);
-
-    expected_data.resize(sizeof(T));
-    *(T*)&expected_data[0] = add + prev;
-}
-
-void test_ucp_atomic::unaligned_blocking_add64(entity *e,  size_t max_size,
-                                               void *memheap_addr, ucp_rkey_h rkey,
-                                               std::string& expected_data)
-{
-    ucs_status_t status;
+class test_ucp_atomic : public test_ucp_memheap {
+public:
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
+                     const std::string& test_case_name, const std::string& tls)
     {
-        /* Test that unaligned addresses generate error */
-        scoped_log_handler slh(hide_errors_logger);
-        status = ucp_atomic_add64(e->ep(), 0, (uintptr_t)memheap_addr + 1, rkey);
+        std::vector<ucp_test_param> result;
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name, tls, UCP_ATOMIC_MODE_CPU, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name, tls, UCP_ATOMIC_MODE_DEVICE, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name, tls, UCP_ATOMIC_MODE_GUESS, result);
+        return result;
     }
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-    expected_data.clear();
-}
 
-template <typename T>
-ucs_status_t test_ucp_atomic::ucp_atomic_post_nbi(ucp_ep_h ep, ucp_atomic_post_op_t opcode,
-                                                  T value, void *remote_addr,
-                                                  ucp_rkey_h rkey)
-{
-    return ucp_atomic_post(ep, opcode, value, sizeof(T), (uintptr_t)remote_addr, rkey);
-}
-
-template <typename T>
-ucs_status_t test_ucp_atomic::ucp_atomic_post_nbx(ucp_ep_h ep, ucp_atomic_op_t opcode,
-                                                  T value, void *remote_addr,
-                                                  ucp_rkey_h rkey)
-{
-    ucp_request_param_t param;
-
-    param.op_attr_mask    = UCP_OP_ATTR_FIELD_DATATYPE;
-    param.datatype        = ucp_dt_make_contig(sizeof(T));
-    ucs_status_ptr_t sptr = ucp_atomic_op_nbx(ep, opcode, &value, 1,
-                                              (uint64_t)remote_addr, rkey,
-                                              &param);
-    EXPECT_FALSE(UCS_PTR_IS_PTR(sptr));
-
-    return UCS_PTR_STATUS(sptr);
-}
-
-template <typename T, ucp_atomic_post_op_t OP>
-void test_ucp_atomic::nb_post(entity *e,  size_t max_size, void *memheap_addr,
-                              ucp_rkey_h rkey, std::string& expected_data)
-{
-    ucs_status_t status;
-    T val, prev;
-
-    prev   = *(T*)memheap_addr;
-    val    = (T)ucs::rand() * (T)ucs::rand();
-
-    status = test_ucp_atomic::ucp_atomic_post_nbi<T>(e->ep(), OP, val, memheap_addr, rkey);
-
-    if (status == UCS_INPROGRESS) {
-        flush_worker(*e);
-    } else {
-        ASSERT_UCS_OK(status);
-    }
-    expected_data.resize(sizeof(T));
-    *(T*)&expected_data[0] = atomic_op_val<T, OP>(val, prev);
-}
-
-template <typename T, ucp_atomic_op_t OP>
-void test_ucp_atomic::nbx_post(entity *e,  size_t max_size, void *memheap_addr,
-                               ucp_rkey_h rkey, std::string& expected_data)
-{
-    T val, prev;
-
-    prev   = *(T*)memheap_addr;
-    val    = (T)ucs::rand() * (T)ucs::rand();
-
-    ASSERT_UCS_OK(test_ucp_atomic::ucp_atomic_post_nbx<T>(e->ep(), OP, val,
-                                                          memheap_addr, rkey));
-
-    expected_data.resize(sizeof(T));
-    *(T*)&expected_data[0] = nbx_atomic_op_val<T, OP>(val, prev);
-}
-
-template <ucp_atomic_post_op_t OP>
-void test_ucp_atomic::unaligned_nb_post(entity *e,  size_t max_size,
-                                        void *memheap_addr, ucp_rkey_h rkey,
-                                        std::string& expected_data)
-{
-    ucs_status_t status;
+    void post(size_t size, void *target_ptr, ucp_rkey_h rkey,
+              void *expected_data, void *arg)
     {
-        /* Test that unaligned addresses generate error */
-        scoped_log_handler slh(hide_errors_logger);
-        status = test_ucp_atomic::ucp_atomic_post_nbi<uint64_t>
-                (e->ep(), OP, 0, (void *)((uintptr_t)memheap_addr + 1), rkey);
-    }
-    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
-    expected_data.clear();
-}
+        ucp_atomic_op_t op = *(ucp_atomic_op_t*)arg;
+        T value            = (T)ucs::rand() * (T)ucs::rand();
+        T prev             = *(T*)target_ptr;
+        *(T*)expected_data = atomic_op_result(op, value, prev, 0);
 
-template <typename T>
-ucs_status_ptr_t test_ucp_atomic::ucp_atomic_fetch(ucp_ep_h ep, 
-                                                   ucp_atomic_fetch_op_t opcode,
-                                                   T value, T *result,
-                                                   void *remote_addr, ucp_rkey_h rkey)
-{
-    return ucp_atomic_fetch_nb(ep, opcode, value, result, sizeof(T),
-                               (uintptr_t)remote_addr, rkey, send_completion);
-}
-
-template <typename T, ucp_atomic_fetch_op_t FOP>
-void test_ucp_atomic::nb_fetch(entity *e,  size_t max_size,
-                               void *memheap_addr, ucp_rkey_h rkey,
-                               std::string& expected_data)
-{
-    void *amo_req;
-    T val, prev, result;
-
-    prev    = *(T*)memheap_addr;
-    val     = (T)ucs::rand() * (T)ucs::rand();
-
-    amo_req = test_ucp_atomic::ucp_atomic_fetch<T>(e->ep(), FOP,
-                                                   val, &result, memheap_addr, rkey);
-    if(UCS_PTR_IS_PTR(amo_req)){
-        request_wait(amo_req);
+        ucp_request_param_t param;
+        param.op_attr_mask = 0;
+        do_atomic(op, size, target_ptr, rkey, value, param);
     }
 
-    EXPECT_EQ(prev, result);
+    void misaligned_post(size_t size, void *target_ptr, ucp_rkey_h rkey,
+                         void *expected_data, void *arg)
+    {
+        *(T*)expected_data = *(T*)target_ptr; /* remote should not change */
 
-    expected_data.resize(sizeof(T));
-    *(T*)&expected_data[0] = atomic_fop_val<T, FOP>(val, prev);
-}
-
-template <typename T>
-void test_ucp_atomic::nb_cswap(entity *e,  size_t max_size, void *memheap_addr,
-                    ucp_rkey_h rkey, std::string& expected_data)
-{
-    T compare, swap, prev, result;
-    void *amo_req;
-
-    prev = *(T*)memheap_addr;
-    if ((ucs::rand() % 2) == 0) {
-        compare = prev; /* success mode */
-    } else {
-        compare = ~prev; /* fail mode */
-    }
-    swap = result = (T)ucs::rand() * (T)ucs::rand();
-
-    amo_req = test_ucp_atomic::ucp_atomic_fetch<T>(e->ep(), UCP_ATOMIC_FETCH_OP_CSWAP,
-                                                   compare, &result,
-                                                   memheap_addr, rkey);
-    if(UCS_PTR_IS_PTR(amo_req)){
-        request_wait(amo_req);
+        ucp_request_param_t param;
+        param.op_attr_mask = 0;
+        ucs_status_t status = do_atomic(*(ucp_atomic_op_t*)arg, size,
+                                        UCS_PTR_BYTE_OFFSET(target_ptr, 1),
+                                        rkey, 0, param);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
     }
 
-    EXPECT_EQ(prev, result);
+    void fetch(size_t size, void *target_ptr, ucp_rkey_h rkey,
+               void *expected_data, void *arg)
+    {
+        ucp_atomic_op_t op = *(ucp_atomic_op_t*)arg;
+        T value             = (T)ucs::rand() * (T)ucs::rand();
+        T prev             = *(T*)target_ptr;
+        T reply_data       = ((op == UCP_ATOMIC_OP_CSWAP) && (ucs::rand() % 2)) ?
+                              prev : /* cswap success */
+                              ((T)ucs::rand() * (T)ucs::rand());
+        *(T*)expected_data  = atomic_op_result(op, value, prev, reply_data);
 
-    expected_data.resize(sizeof(T));
-    if (compare == prev) {
-        *(T*)&expected_data[0] = swap;
-    } else {
-        *(T*)&expected_data[0] = prev;
+        ucp_request_param_t param;
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_REPLY_BUFFER;
+        param.reply_buffer = &reply_data;
+
+        do_atomic(op, size, target_ptr, rkey, value, param);
+
+        EXPECT_EQ(prev, reply_data); /* expect the previous value */
     }
-}
 
-template <typename T, typename F>
-void test_ucp_atomic::test(F f, bool malloc_allocate) {
-    test_blocking_xfer(static_cast<blocking_send_func_t>(f), 
-                       DEFAULT_SIZE, DEFAULT_ITERS,
-                       sizeof(T),
-                       malloc_allocate, false);
-}
+protected:
+    static const uint64_t POST_ATOMIC_OPS  = UCS_BIT(UCP_ATOMIC_OP_ADD) |
+                                             UCS_BIT(UCP_ATOMIC_OP_AND) |
+                                             UCS_BIT(UCP_ATOMIC_OP_OR) |
+                                             UCS_BIT(UCP_ATOMIC_OP_XOR);
+    static const uint64_t FETCH_ATOMIC_OPS = POST_ATOMIC_OPS |
+                                             UCS_BIT(UCP_ATOMIC_OP_SWAP) |
+                                             UCS_BIT(UCP_ATOMIC_OP_CSWAP);
 
+    virtual void init() {
+        const char *atomic_mode =
+                        (GetParam().variant == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
+                        (GetParam().variant == UCP_ATOMIC_MODE_DEVICE) ? "device" :
+                        (GetParam().variant == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
+                        "";
+        modify_config("ATOMIC_MODE", atomic_mode);
+        test_ucp_memheap::init();
+    }
 
-class test_ucp_atomic32 : public test_ucp_atomic {
+    static unsigned default_num_iters() {
+        return ucs_max(100 / ucs::test_time_multiplier(), 1);
+    }
+
+    void test(send_func_t send_func, uint64_t op_mask,
+              unsigned num_iters = default_num_iters()) {
+        test_all_opcodes(send_func, num_iters, op_mask, true);
+        test_all_opcodes(send_func, num_iters, op_mask, false);
+    }
+
+private:
+    static T atomic_op_result(ucp_atomic_op_t op, T x, T y, T z) {
+        /* coverity[switch_selector_expr_is_constant] */
+        switch (op) {
+        case UCP_ATOMIC_OP_ADD:
+            return x + y;
+        case UCP_ATOMIC_OP_SWAP:
+            return x;
+        case UCP_ATOMIC_OP_CSWAP:
+            return (x == y) ? z : y;
+        case UCP_ATOMIC_OP_AND:
+            return x & y;
+        case UCP_ATOMIC_OP_OR:
+            return x | y;
+        case UCP_ATOMIC_OP_XOR:
+            return x ^ y;
+        default:
+            return 0;
+        }
+    }
+
+    static std::string opcode_name(ucp_atomic_op_t op) {
+        switch (op) {
+        case UCP_ATOMIC_OP_ADD:
+            return "ADD";
+        case UCP_ATOMIC_OP_SWAP:
+            return "SWAP";
+        case UCP_ATOMIC_OP_CSWAP:
+            return "CSWAP";
+        case UCP_ATOMIC_OP_AND:
+            return "AND";
+        case UCP_ATOMIC_OP_OR:
+            return "OR";
+        case UCP_ATOMIC_OP_XOR:
+            return "XOR";
+        default:
+            return 0;
+        }
+    }
+
+    ucs_status_t do_atomic(ucp_atomic_op_t op, size_t size, void *target_ptr,
+                           ucp_rkey_h rkey, T value, ucp_request_param_t& param) {
+
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype      = ucp_dt_make_contig(sizeof(T));
+
+        EXPECT_EQ(sizeof(T), size);
+        ucs_status_ptr_t status_ptr = ucp_atomic_op_nbx(sender().ep(), op,
+                                                        &value, 1,
+                                                        (uintptr_t)target_ptr,
+                                                        rkey, &param);
+        return request_wait(status_ptr);
+    }
+
+    void test_all_opcodes(send_func_t send_func, unsigned num_iters,
+                          uint64_t op_mask, int is_ep_flush) {
+        ucs::detail::message_stream ms("INFO");
+
+        unsigned op_value;
+        ucs_for_each_bit(op_value, op_mask) {
+            ucp_atomic_op_t op = static_cast<ucp_atomic_op_t>(op_value);
+            ms << opcode_name(op) << " ";
+            test_xfer(send_func, sizeof(T), num_iters, sizeof(T),
+                      UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST, 0,
+                      is_ep_flush, &op);
+        }
+    }
+};
+
+class test_ucp_atomic32 : public test_ucp_atomic<uint32_t> {
 public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
@@ -236,84 +180,17 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_atomic32, atomic_add) {
-    test<uint32_t>(&test_ucp_atomic32::blocking_add<uint32_t>, false);
-    test<uint32_t>(&test_ucp_atomic32::blocking_add<uint32_t>, true);
+UCS_TEST_P(test_ucp_atomic32, post) {
+    test(static_cast<send_func_t>(&test_ucp_atomic32::post), POST_ATOMIC_OPS);
 }
 
-UCS_TEST_P(test_ucp_atomic32, atomic_add_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_ADD>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_ADD>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_add_nbx) {
-    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_ADD>, false);
-    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_ADD>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_and_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_AND>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_AND>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_and_nbx) {
-    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_AND>, false);
-    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_AND>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_or_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_OR>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_OR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_or_nbx) {
-    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_OR>, false);
-    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_OR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_xor_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_XOR>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_post<uint32_t, UCP_ATOMIC_POST_OP_XOR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_xor_nbx) {
-    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_XOR>, false);
-    test<uint32_t>(&test_ucp_atomic32::nbx_post<uint32_t, UCP_ATOMIC_OP_XOR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_fadd_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FADD>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FADD>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_fand_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FAND>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FAND>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_for_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FOR>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FOR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_fxor_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FXOR>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_FXOR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_swap_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_SWAP>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_fetch<uint32_t, UCP_ATOMIC_FETCH_OP_SWAP>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic32, atomic_cswap_nb) {
-    test<uint32_t>(&test_ucp_atomic32::nb_cswap<uint32_t>, false);
-    test<uint32_t>(&test_ucp_atomic32::nb_cswap<uint32_t>, true);
+UCS_TEST_P(test_ucp_atomic32, fetch) {
+    test(static_cast<send_func_t>(&test_ucp_atomic32::fetch), FETCH_ATOMIC_OPS);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic32)
 
-class test_ucp_atomic64 : public test_ucp_atomic {
+class test_ucp_atomic64 : public test_ucp_atomic<uint64_t> {
 public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
@@ -322,105 +199,32 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_atomic64, atomic_add) {
-    test<uint64_t>(&test_ucp_atomic64::blocking_add<uint64_t>, false);
-    test<uint64_t>(&test_ucp_atomic64::blocking_add<uint64_t>, true);
+UCS_TEST_P(test_ucp_atomic64, post) {
+    test(static_cast<send_func_t>(&test_ucp_atomic64::post), POST_ATOMIC_OPS);
 }
 
-UCS_TEST_P(test_ucp_atomic64, atomic_add_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_ADD>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_ADD>, true);
+UCS_TEST_P(test_ucp_atomic64, fetch) {
+    test(static_cast<send_func_t>(&test_ucp_atomic64::fetch), FETCH_ATOMIC_OPS);
 }
 
-UCS_TEST_P(test_ucp_atomic64, atomic_add_nbx) {
-    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_ADD>, false);
-    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_ADD>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_and_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_AND>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_AND>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_and_nbx) {
-    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_AND>, false);
-    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_AND>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_or_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_OR>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_OR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_or_nbx) {
-    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_OR>, false);
-    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_OR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_xor_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_XOR>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_post<uint64_t, UCP_ATOMIC_POST_OP_XOR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_xor_nbx) {
-    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_XOR>, false);
-    test<uint64_t>(&test_ucp_atomic64::nbx_post<uint64_t, UCP_ATOMIC_OP_XOR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_fadd_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FADD>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FADD>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_fand_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FAND>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FAND>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_for_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FOR>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FOR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_fxor_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FXOR>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_FXOR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_swap_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_SWAP>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_fetch<uint64_t, UCP_ATOMIC_FETCH_OP_SWAP>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, atomic_cswap_nb) {
-    test<uint64_t>(&test_ucp_atomic64::nb_cswap<uint64_t>, false);
-    test<uint64_t>(&test_ucp_atomic64::nb_cswap<uint64_t>, true);
-}
 
 #if ENABLE_PARAMS_CHECK
-UCS_TEST_P(test_ucp_atomic64, unaligned_atomic_add) {
-    test<uint64_t>(&test_ucp_atomic::unaligned_blocking_add64, false);
-    test<uint64_t>(&test_ucp_atomic::unaligned_blocking_add64, true);
+UCS_TEST_P(test_ucp_atomic32, misaligned_post) {
+    {
+        /* Test that unaligned addresses generate error */
+        scoped_log_handler slh(hide_errors_logger);
+        test(static_cast<send_func_t>(&test_ucp_atomic32::misaligned_post),
+             UCS_BIT(UCP_ATOMIC_OP_ADD), 1);
+    }
 }
 
-UCS_TEST_P(test_ucp_atomic64, unaligned_atomic_add_nb) {
-    test<uint64_t>(&test_ucp_atomic::unaligned_nb_post<UCP_ATOMIC_POST_OP_ADD>, false);
-    test<uint64_t>(&test_ucp_atomic::unaligned_nb_post<UCP_ATOMIC_POST_OP_ADD>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, unaligned_atomic_and_nb) {
-    test<uint64_t>(&test_ucp_atomic::unaligned_nb_post<UCP_ATOMIC_POST_OP_AND>, false);
-    test<uint64_t>(&test_ucp_atomic::unaligned_nb_post<UCP_ATOMIC_POST_OP_AND>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, unaligned_atomic_or_nb) {
-    test<uint64_t>(&test_ucp_atomic::unaligned_nb_post<UCP_ATOMIC_POST_OP_OR>, false);
-    test<uint64_t>(&test_ucp_atomic::unaligned_nb_post<UCP_ATOMIC_POST_OP_OR>, true);
-}
-
-UCS_TEST_P(test_ucp_atomic64, unaligned_atomic_xor_nb) {
-    test<uint64_t>(&test_ucp_atomic::unaligned_nb_post<UCP_ATOMIC_POST_OP_XOR>, false);
-    test<uint64_t>(&test_ucp_atomic::unaligned_nb_post<UCP_ATOMIC_POST_OP_XOR>, true);
+UCS_TEST_P(test_ucp_atomic64, misaligned_post) {
+    {
+        /* Test that unaligned addresses generate error */
+        scoped_log_handler slh(hide_errors_logger);
+        test(static_cast<send_func_t>(&test_ucp_atomic64::misaligned_post),
+             UCS_BIT(UCP_ATOMIC_OP_ADD), 1);
+    }
 }
 #endif
 

@@ -14,51 +14,31 @@
 class test_ucp_memheap : public ucp_test {
 public:
     /*
-     * @param [in]  max_size       Maximal size of data to send.
-     * @param [in]  memheap_addr   VA to perform the RMA operation to,
-     * @param [in]  rkey           Memheap remote key.
-     * @param [out] expected_data  What should the memheap contain at the given
-     *                             address after the operation (also can be used
-     *                             as a source/destination data).
+     * Function type for memheap send operation
+     *
+     * @param [in]  size            Size of data to send
+     * @param [in]  target_ptr      VA to perform the RMA operation to
+     * @param [in]  rkey            RMA remote key
+     * @param [in]  expected_data   Buffer to fill with expected data at 'target_ptr'.
+     * @param [in]  arg             User-defined argument
+     *
+     * @note The expected data buffer memory type is 'send_mem_type' as passed
+     *       to @ref test_xfer
+     * @note The expected_data buffer does not have to be filled during the
+     *       function itself, however it must be there after endpoint/worker flush.
      */
-    typedef void (test_ucp_memheap::* blocking_send_func_t)(entity *e,
-                                                            size_t max_size,
-                                                            void *memheap_addr,
-                                                            ucp_rkey_h rkey,
-                                                            std::string& expected_data);
-
-    /*
-     * @param [in]  max_size       Maximal size of data to send.
-     * @param [in]  memheap_addr   VA to perform the RMA operation to,
-     * @param [in]  rkey           Memheap remote key.
-     * @param [out] expected_data  What should the memheap contain at the given
-     *                             address after the operation (also can be used
-     *                             as a source/destination data).
-     */
-    typedef void (test_ucp_memheap::* nonblocking_send_func_t)(entity *e,
-                                                               size_t max_size,
-                                                               void *memheap_addr,
-                                                               ucp_rkey_h rkey,
-                                                               std::string& expected_data);
-
-    static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
-                                                        const std::string& name,
-                                                        const std::string& test_case_name,
-                                                        const std::string& tls);
-
+    typedef void
+    (test_ucp_memheap::* send_func_t)(size_t size, void *target_ptr,
+                                      ucp_rkey_h rkey, void *expected_data,
+                                      void *arg);
 
 protected:
-    const static size_t DEFAULT_SIZE  = 0;
-    const static int    DEFAULT_ITERS = 0;
+    virtual void init();
 
-    void test_blocking_xfer(blocking_send_func_t send, size_t len, int max_iters,
-                            size_t alignment, bool malloc_allocate, bool is_ep_flush);
-
-    void test_nonblocking_implicit_stream_xfer(nonblocking_send_func_t send, 
-                                               size_t len, int max_iters, 
-                                               size_t alignment, bool malloc_allocate, 
-                                               bool is_ep_flush);
+    void test_xfer(send_func_t send_func, size_t size, unsigned num_iters,
+                   size_t alignment, ucs_memory_type_t send_mem_type,
+                   ucs_memory_type_t target_mem_type, unsigned mem_map_flags,
+                   bool is_ep_flush, void *arg);
 };
-
 
 #endif
