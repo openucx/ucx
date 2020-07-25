@@ -133,8 +133,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
 
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
-                      uintptr_t datatype, size_t count, ucp_tag_t tag,
-                      uint32_t flags)
+                      uintptr_t datatype, ucs_memory_type_t memory_type,
+                      size_t count, ucp_tag_t tag, uint32_t flags)
 {
     req->flags                  = flags | UCP_REQUEST_FLAG_SEND_TAG;
     req->send.ep                = ep;
@@ -145,9 +145,8 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);
-    req->send.mem_type     = ucp_memory_type_detect(ep->worker->context,
-                                                    (void*)buffer,
-                                                    req->send.length);
+    req->send.mem_type     = ucp_get_memory_type(ep->worker->context, (void*)buffer,
+                                                 req->send.length, memory_type);
     req->send.lane         = ucp_ep_config(ep)->tag.lane;
     req->send.pending_lane = UCP_NULL_LANE;
 }
@@ -249,6 +248,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
     ucp_request_t *req;
     ucs_status_ptr_t ret;
     uintptr_t datatype;
+    ucs_memory_type_t memory_type;
     uint32_t attr_mask;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_TAG,
@@ -281,11 +281,14 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         goto out;
     }
 
+    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
+                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
+
     req = ucp_request_get_param(ep->worker, param,
                                 {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                  goto out;});
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag, 0);
+    ucp_tag_send_req_init(req, ep, buffer, datatype, memory_type, count, tag, 0);
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            param, ucp_ep_config(ep)->tag.proto);
 out:
@@ -302,6 +305,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
     ucp_request_t *req;
     ucs_status_ptr_t ret;
     uintptr_t datatype;
+    ucs_memory_type_t memory_type;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
@@ -312,6 +316,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
 
     datatype = (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
                param->datatype : ucp_dt_make_contig(1);
+
+    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
+                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
 
     if (!ucp_ep_config_test_rndv_support(ucp_ep_config(ep))) {
         ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
@@ -328,7 +335,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                                 {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                  goto out;});
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag,
+    ucp_tag_send_req_init(req, ep, buffer, datatype, memory_type, count, tag,
                           UCP_REQUEST_FLAG_SYNC);
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                            param, ucp_ep_config(ep)->tag.sync_proto);

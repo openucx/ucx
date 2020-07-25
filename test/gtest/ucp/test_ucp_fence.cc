@@ -4,10 +4,10 @@
 * See file LICENSE for terms.
 */
 
-#include "test_ucp_atomic.h"
-#include "common/gtest.h"
+#include "ucp_test.h"
 
-class test_ucp_fence : public test_ucp_atomic {
+
+class test_ucp_fence : public ucp_test {
 public:
     typedef void (test_ucp_fence::* send_func_t)(entity *e, uint64_t *initial_buf,
                                                  uint64_t *result_buf, void *memheap_addr,

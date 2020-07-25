@@ -55,6 +55,13 @@
    obj:*libcuda*.so*
 }
 {
+   fun:gdr_open
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:gdr_open
+}
+{
    gdr_get_info_ioctl
    Memcheck:Param
    ioctl(generic)

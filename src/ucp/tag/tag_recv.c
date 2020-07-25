@@ -30,13 +30,16 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                             UCP_REQUEST_FLAG_CALLBACK : 0;
     ucp_eager_first_hdr_t *eagerf_hdr;
     ucp_request_queue_t *req_queue;
-    ucs_memory_type_t mem_type;
+    ucs_memory_type_t memory_type;
     size_t hdr_len, recv_len;
     ucs_status_t status;
     uint64_t msg_id;
 
     ucp_trace_req(req, "%s buffer %p dt 0x%lx count %zu tag %"PRIx64"/%"PRIx64,
                   debug_name, buffer, datatype, count, tag, tag_mask);
+
+    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
+                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
 
     /* First, check the fast path case - single fragment
      * in this case avoid initializing most of request fields
@@ -56,10 +59,10 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         recv_len                      = rdesc->length - hdr_len;
         req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
         req->recv.tag.info.length     = recv_len;
-        mem_type                      = ucp_memory_type_detect(worker->context,
-                                                               buffer, recv_len);
+        memory_type                   = ucp_get_memory_type(worker->context, buffer,
+                                                            recv_len, memory_type);
 
-        status = ucp_dt_unpack_only(worker, buffer, count, datatype, mem_type,
+        status = ucp_dt_unpack_only(worker, buffer, count, datatype, memory_type,
                                     UCS_PTR_BYTE_OFFSET(rdesc + 1, hdr_len),
                                     recv_len, 1);
         ucp_recv_desc_release(rdesc);
@@ -93,8 +96,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     req->flags              = common_flags | req_flags;
     req->recv.length        = ucp_dt_length(datatype, count, buffer,
                                             &req->recv.state);
-    req->recv.mem_type      = ucp_memory_type_detect(worker->context, buffer,
-                                                     req->recv.length);
+    req->recv.mem_type      = ucp_get_memory_type(worker->context, buffer,
+                                                  req->recv.length, memory_type);
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {

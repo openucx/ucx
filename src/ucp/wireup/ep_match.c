@@ -49,7 +49,8 @@ ucp_ep_match_address_str(const ucs_conn_match_ctx_t *conn_match_ctx,
 const ucs_conn_match_ops_t ucp_ep_match_ops = {
     .get_address = ucp_ep_match_get_address,
     .get_conn_sn = ucp_ep_match_get_conn_sn,
-    .address_str = ucp_ep_match_address_str
+    .address_str = ucp_ep_match_address_str,
+    .purge_cb    = NULL
 };
 
 ucp_ep_match_conn_sn_t ucp_ep_match_get_sn(ucp_worker_h worker,
@@ -85,26 +86,26 @@ void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
 ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
                                ucp_ep_match_conn_sn_t conn_sn, int is_exp)
 {
-        ucp_ep_flags_t UCS_V_UNUSED exp_ep_flags = UCP_EP_FLAG_ON_MATCH_CTX |
-                                                   (is_exp ?
-                                                    0 : UCP_EP_FLAG_DEST_EP);
-        ucs_conn_match_elem_t *conn_match;
-        ucp_ep_h ep;
+    ucp_ep_flags_t UCS_V_UNUSED exp_ep_flags = UCP_EP_FLAG_ON_MATCH_CTX |
+                                              (is_exp ?
+                                               0 : UCP_EP_FLAG_DEST_EP);
+    ucs_conn_match_elem_t *conn_match;
+    ucp_ep_h ep;
 
-        conn_match = ucs_conn_match_get_elem(&worker->conn_match_ctx, &dest_uuid,
-                                             (ucs_conn_sn_t)conn_sn, is_exp, 1);
-        if (conn_match == NULL) {
-            return NULL;
-        }
+    conn_match = ucs_conn_match_get_elem(&worker->conn_match_ctx, &dest_uuid,
+                                         (ucs_conn_sn_t)conn_sn, is_exp, 1);
+    if (conn_match == NULL) {
+        return NULL;
+    }
 
-        ep = ucp_ep_from_ext_gen(ucs_container_of(conn_match, ucp_ep_ext_gen_t,
-                                                  ep_match.conn_match));
+    ep = ucp_ep_from_ext_gen(ucs_container_of(conn_match, ucp_ep_ext_gen_t,
+                                              ep_match.conn_match));
 
-        ucs_assertv(ucs_test_all_flags(ep->flags, exp_ep_flags),
-                    "ep=%p flags=0x%x exp_flags=0x%x", ep, ep->flags,
-                    exp_ep_flags);
-        ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
-        return ep;
+    ucs_assertv(ucs_test_all_flags(ep->flags, exp_ep_flags),
+                "ep=%p flags=0x%x exp_flags=0x%x", ep, ep->flags,
+                exp_ep_flags);
+    ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
+    return ep;
 }
 
 void ucp_ep_match_remove_ep(ucp_worker_h worker, ucp_ep_h ep)
