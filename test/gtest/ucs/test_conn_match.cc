@@ -21,6 +21,9 @@ public:
 
     test_conn_match() {
         m_address_length = 0;
+        m_added_elems    = 0;
+        m_removed_elems  = 0;
+        m_purged_elems   = 0;
     }
 
 private:
@@ -30,6 +33,7 @@ private:
         conn_match_ops.get_address = get_address;
         conn_match_ops.get_conn_sn = get_conn_sn;
         conn_match_ops.address_str = address_str;
+        conn_match_ops.purge_cb    = purge_cb;
 
         ucs_conn_match_init(&m_conn_match_ctx, address_length,
                             &conn_match_ops);
@@ -66,6 +70,13 @@ protected:
                                         max_size));
     }
 
+    static void purge_cb(ucs_conn_match_ctx_t *conn_match_ctx,
+                         ucs_conn_match_elem_t *conn_match) {
+        EXPECT_EQ(&m_conn_match_ctx, conn_match_ctx);
+        m_purged_elems++;
+        delete conn_elem_from_match_elem(conn_match);
+    }
+
     void init_new_address_length(size_t address_length) {
         ucs_conn_match_cleanup(&m_conn_match_ctx);
         conn_match_init(address_length);
@@ -88,6 +99,7 @@ protected:
 
     void cleanup() {
         ucs_conn_match_cleanup(&m_conn_match_ctx);
+        EXPECT_EQ(m_added_elems - m_removed_elems, m_purged_elems);
     }
 
     void insert(const void *dest_address, ucs_conn_sn_t conn_sn,
@@ -96,6 +108,7 @@ protected:
                               &elem.elem, queue_type);
         elem.queue_type = queue_type;
         elem.conn_sn    = conn_sn;
+        m_added_elems++;
     }
 
     conn_elem_t *retrieve(const void *dest_address, ucs_conn_sn_t conn_sn,
@@ -110,6 +123,7 @@ protected:
         conn_elem_t *conn_elem = conn_elem_from_match_elem(conn_match);
         EXPECT_EQ(queue_type, conn_elem->queue_type);
         check_conn_elem(conn_elem, dest_address, conn_sn);
+        m_removed_elems++;
 
         return conn_elem;
     }
@@ -137,6 +151,7 @@ protected:
     void remove_conn(conn_elem_t &elem) {
         ucs_conn_match_remove_elem(&m_conn_match_ctx, &elem.elem,
                                    elem.queue_type);
+        m_removed_elems++;
     }
 
     ucs_conn_sn_t get_next_sn(const void *dest_address) {
@@ -148,10 +163,14 @@ private:
     static ucs_conn_match_ctx_t m_conn_match_ctx;
     size_t                      m_address_length;
     static const size_t         m_default_address_length;
+    size_t                      m_added_elems;
+    size_t                      m_removed_elems;
+    static size_t               m_purged_elems;
 };
 
 
 const size_t test_conn_match::m_default_address_length = 64;
+size_t test_conn_match::m_purged_elems                 = 0;
 ucs_conn_match_ctx_t test_conn_match::m_conn_match_ctx = {};
 
 
@@ -260,5 +279,60 @@ UCS_TEST_F(test_conn_match, random_insert_retrieve) {
 
             delete[] (uint8_t*)conn_elems[i][0].dest_address;
         }
+    }
+}
+
+UCS_TEST_F(test_conn_match, purge_elems) {
+    const size_t        max_addresses  = 128;
+    const ucs_conn_sn_t max_conns      = 128;
+    const size_t        address_length = 8;
+    std::vector<std::vector<conn_elem_t*> > conn_elems(max_addresses);
+
+    init_new_address_length(address_length);
+
+    for (size_t i = 0; i < max_addresses; i++) {
+        ucs_conn_sn_t num_conns = (ucs::rand() % max_conns) + 1;
+        void *dest_address      = alloc_address(i, address_length);
+
+        conn_elems[i].resize(num_conns);
+
+        for (ucs_conn_sn_t conn = 0; conn < num_conns; conn++) {
+            conn_elems[i][conn] = new conn_elem_t;
+
+            conn_elem_t *conn_elem = conn_elems[i][conn];
+            EXPECT_EQ(conn, get_next_sn(dest_address));
+
+            conn_elem->dest_address = dest_address;
+
+            ucs_conn_match_queue_type_t queue_type = (ucs::rand() & 1) ?
+                                                     UCS_CONN_MATCH_QUEUE_EXP :
+                                                     UCS_CONN_MATCH_QUEUE_UNEXP;
+            insert(dest_address, conn, queue_type, *conn_elem);
+            EXPECT_EQ(queue_type, conn_elem->queue_type);
+            EXPECT_EQ(conn, conn_elem->conn_sn);
+        }
+    }
+
+    /* remove some elements */
+    for (size_t i = 0; i < max_addresses; i++) {
+        const void *dest_address = conn_elems[i][0]->dest_address;
+
+        for (ucs_conn_sn_t conn = 0; conn < conn_elems[i].size(); conn++) {
+            conn_elem_t *conn_elem = conn_elems[i][conn];
+
+            if (ucs::rand() & 1) {
+                conn_elem_t *test_conn_elem = retrieve(conn_elem->dest_address,
+                                                       conn_elem->conn_sn,
+                                                       conn_elem->queue_type);
+                EXPECT_EQ(conn_elem, test_conn_elem);
+                delete test_conn_elem;
+            } else {
+                /* the elements that will be purged don't need the destination
+                 * address anymore, so, the address will be deleted below */
+                conn_elem->dest_address = NULL;
+            }
+        }
+
+        delete[] (uint8_t*)dest_address;
     }
 }

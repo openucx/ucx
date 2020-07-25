@@ -77,7 +77,7 @@ typedef ucs_conn_sn_t
 /**
  * Function to get string representation of the connection address.
  *
- * @param [in] conn_match_ctx    Pointer to the connection matching context.
+ * @param [in]  conn_match_ctx   Pointer to the connection matching context.
  * @param [in]  address          Pointer to the connection address.
  * @param [out] str              A string filled with the address.
  * @param [in]  max_size         Size of a string (considering '\0'-terminated symbol).
@@ -88,6 +88,16 @@ typedef const char*
 (*ucs_conn_match_address_str_t)(const ucs_conn_match_ctx_t *conn_match_ctx,
                                 const void *address, char *str, size_t max_size);
 
+/**
+ * Callback that is invoked from @ref ucs_conn_match_cleanup function.
+ *
+ * @param [in] conn_match_ctx   Pointer to the connection matching context.
+ * @param [in] elem             Pointer to the connection matching element.
+ */
+typedef void
+(*ucs_conn_match_purge_cb_t)(ucs_conn_match_ctx_t *conn_match_ctx,
+                             ucs_conn_match_elem_t *elem);
+
 
 /**
  * Connection matching operations
@@ -96,6 +106,7 @@ typedef struct ucs_conn_match_ops {
     ucs_conn_match_get_address_t get_address;
     ucs_conn_match_get_conn_sn_t get_conn_sn;
     ucs_conn_match_address_str_t address_str;
+    ucs_conn_match_purge_cb_t    purge_cb;
 } ucs_conn_match_ops_t;
 
 
