@@ -205,6 +205,7 @@ private:
     static bool check_test_param(const std::string& name,
                                  const std::string& test_case_name,
                                  const ucp_test_param& test_param);
+    ucs_status_t request_process(void *req, int worker_index, bool wait);
 
 protected:
     virtual void init();
@@ -219,7 +220,8 @@ protected:
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
     void flush_worker(const entity &e, int worker_index = 0);
     void disconnect(entity& entity);
-    void request_wait(void *req, int worker_index = 0);
+    ucs_status_t request_wait(void *req, int worker_index = 0);
+    void request_release(void *req);
     void set_ucp_config(ucp_config_t *config);
     int max_connections();
 

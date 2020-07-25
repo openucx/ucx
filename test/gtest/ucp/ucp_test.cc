@@ -190,32 +190,51 @@ void ucp_test::disconnect(entity& e) {
     }
 }
 
-void ucp_test::request_wait(void *req, int worker_index)
+ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
 {
     if (req == NULL) {
-        return;
+        return UCS_OK;
     }
 
     if (UCS_PTR_IS_ERR(req)) {
         ucs_error("operation returned error: %s",
                   ucs_status_string(UCS_PTR_STATUS(req)));
-        return;
+        return UCS_PTR_STATUS(req);
     }
 
     ucs_status_t status;
-    ucs_time_t deadline = ucs::get_deadline();
-    do {
-        progress(worker_index);
+    if (wait) {
+        ucs_time_t deadline = ucs::get_deadline();
+        do {
+            progress(worker_index);
+            status = ucp_request_check_status(req);
+        } while ((status == UCS_INPROGRESS) && (ucs_get_time() < deadline));
+    } else {
         status = ucp_request_check_status(req);
-    } while ((status == UCS_INPROGRESS) && (ucs_get_time() < deadline));
+    }
 
-    if (status != UCS_OK) {
+    if (status == UCS_INPROGRESS) {
+        if (wait) {
+            ucs_error("request %p did not complete on time", req);
+        }
+    } else if (status != UCS_OK) {
         /* UCS errors are suppressed in case of error handling tests */
         ucs_error("request %p completed with error %s", req,
                   ucs_status_string(status));
     }
 
     ucp_request_release(req);
+    return status;
+}
+
+ucs_status_t ucp_test::request_wait(void *req, int worker_index)
+{
+    return request_process(req, worker_index, true);
+}
+
+void ucp_test::request_release(void *req)
+{
+    request_process(req, 0, false);
 }
 
 void ucp_test::set_ucp_config(ucp_config_t *config) {
