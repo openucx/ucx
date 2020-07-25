@@ -22,6 +22,7 @@ noinst_HEADERS = \
 	malloc/malloc_hook.h \
 	malloc/allocator.h \
 	mmap/mmap.h \
+	util/khash_safe.h \
 	util/replace.h \
 	util/log.h \
 	util/reloc.h \

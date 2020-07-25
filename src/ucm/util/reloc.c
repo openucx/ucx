@@ -16,11 +16,12 @@
 
 #include "reloc.h"
 
-#include <ucs/datastruct/khash.h>
+#include <ucm/util/khash_safe.h>
+#include <ucm/util/sys.h>
+
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
-#include <ucm/util/sys.h>
 
 #include <sys/fcntl.h>
 #include <sys/mman.h>
