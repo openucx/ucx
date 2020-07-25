@@ -217,8 +217,8 @@ void test_ucp_peer_failure::smoke_test(bool stable_pair) {
     void *rreq = recv_nb(stable_pair ? stable_receiver() : failing_receiver());
     void *sreq = send_nb(stable_pair ? stable_sender()   : failing_sender(),
                          stable_pair ? m_stable_rkey     : m_failing_rkey);
-    wait(sreq);
-    wait(rreq);
+    request_wait(sreq);
+    request_wait(rreq);
     EXPECT_EQ(m_sbuf, m_rbuf);
 }
 
@@ -370,7 +370,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
             m_failing_rkey.reset();
 
             void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
-            wait(creq);
+            request_wait(creq);
 
             unsigned allocd_eps_after =
                     ucs_strided_alloc_inuse_count(&sender().worker()->ep_alloc);

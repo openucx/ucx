@@ -98,7 +98,7 @@ UCS_TEST_P(test_ucp_stream_onesided, recv_connected_ep_cleanup) {
 
     EXPECT_EQ(sizeof(send_data), wait_stream_recv(rreq));
     EXPECT_EQ(send_data, recv_data);
-    wait(sreq);
+    request_wait(sreq);
 
     rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1, dt, ucp_recv_cb,
                               &recvd_length, UCP_STREAM_RECV_FLAG_WAITALL);
@@ -118,7 +118,7 @@ UCS_TEST_P(test_ucp_stream_onesided, send_recv_no_ep) {
     ucp::data_type_desc_t dt_desc(ucp_dt_make_contig(sizeof(uint64_t)),
                                   &send_data, sizeof(send_data));
     void *sreq = stream_send_nb(dt_desc);
-    wait(sreq);
+    request_wait(sreq);
 
     /* must not receive data before ep is created on receiver side */
     static const size_t max_eps = 10;
@@ -209,7 +209,7 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
         ucp::data_type_desc_t dt_desc(datatype, sbuf.data(), i);
         sstatus = stream_send_nb(dt_desc);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
-        wait(sstatus);
+        request_wait(sstatus);
         ssize += i;
     }
 
@@ -260,7 +260,7 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
         ucp::data_type_desc_t dt_desc(dt, sbuf.data(), i);
         sstatus = stream_send_nb(dt_desc);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
-        wait(sstatus);
+        request_wait(sstatus);
         ssize += i;
     }
 
@@ -273,7 +273,7 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
                                       sbuf.data(), align_tail);
         sstatus = stream_send_nb(dt_desc);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
-        wait(sstatus);
+        request_wait(sstatus);
         ssize += align_tail;
     }
 
@@ -346,7 +346,7 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
     for (size_t i = 0; i < n_msgs; ++i) {
         void *sreq = stream_send_nb(dt_desc);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sreq));
-        wait(sreq);
+        request_wait(sreq);
         scount += sbuf.size();
     }
 
@@ -417,7 +417,7 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
             ucp::data_type_desc_t dt_desc(datatype, sbuf.data(), send_i);
             sstatus = stream_send_nb(dt_desc);
             EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
-            wait(sstatus);
+            request_wait(sstatus);
             ssize += send_i;
             send_i *= 2;
         }
@@ -605,7 +605,7 @@ UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
                 ucp_stream_data_release(receiver().ep(), rdata);
             }
         }
-        wait(sreq);
+        request_wait(sreq);
     }
 }
 

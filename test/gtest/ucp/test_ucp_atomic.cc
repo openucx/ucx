@@ -177,7 +177,7 @@ void test_ucp_atomic::nb_fetch(entity *e,  size_t max_size,
     amo_req = test_ucp_atomic::ucp_atomic_fetch<T>(e->ep(), FOP,
                                                    val, &result, memheap_addr, rkey);
     if(UCS_PTR_IS_PTR(amo_req)){
-        wait(amo_req);
+        request_wait(amo_req);
     }
 
     EXPECT_EQ(prev, result);
@@ -205,7 +205,7 @@ void test_ucp_atomic::nb_cswap(entity *e,  size_t max_size, void *memheap_addr,
                                                    compare, &result,
                                                    memheap_addr, rkey);
     if(UCS_PTR_IS_PTR(amo_req)){
-        wait(amo_req);
+        request_wait(amo_req);
     }
 
     EXPECT_EQ(prev, result);

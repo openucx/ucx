@@ -55,7 +55,7 @@ public:
                             (uintptr_t)memheap_addr, rkey, send_completion);
         ASSERT_UCS_PTR_OK(status);
         if (UCS_PTR_IS_PTR(status)) {
-            wait(status);
+            request_wait(status);
         }
     }
 
@@ -84,7 +84,7 @@ public:
                             (uintptr_t)memheap_addr, rkey, send_completion);
         ASSERT_UCS_PTR_OK(status);
         if (UCS_PTR_IS_PTR(status)) {
-            wait(status);
+            request_wait(status);
         }
     }
 

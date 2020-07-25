@@ -219,7 +219,7 @@ protected:
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
     void flush_worker(const entity &e, int worker_index = 0);
     void disconnect(entity& entity);
-    void wait(void *req, int worker_index = 0);
+    void request_wait(void *req, int worker_index = 0);
     void set_ucp_config(ucp_config_t *config);
     int max_connections();
 
