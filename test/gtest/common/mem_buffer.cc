@@ -257,6 +257,33 @@ bool mem_buffer::compare(const void *expected, const void *buffer,
     }
 }
 
+bool mem_buffer::compare(const void *expected, const void *buffer,
+                         size_t length, ucs_memory_type_t mem_type_expected,
+                         ucs_memory_type_t mem_type_buffer)
+{
+    ucs::handle<void*> expected_copy, buffer_copy;
+    const void *expected_host, *buffer_host;
+
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type_expected)) {
+        expected_host = expected;
+    } else {
+        expected_copy.reset(malloc(length), free);
+        copy_from(expected_copy.get(), expected, length, mem_type_expected);
+        expected_host = expected_copy.get();
+    }
+
+    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type_buffer)) {
+        buffer_host = buffer;
+    } else {
+        buffer_copy.reset(malloc(length), free);
+        copy_from(buffer_copy.get(), buffer, length, mem_type_buffer);
+        buffer_host = buffer_copy.get();
+    }
+
+    return memcmp(expected_host, buffer_host, length) == 0;
+
+}
+
 std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
 {
     return ucs_memory_type_names[mem_type];
