@@ -226,6 +226,16 @@ test_base::wrap_errors_logger(const char *file, unsigned line, const char *funct
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
 
+unsigned test_base::num_errors()
+{
+    return m_total_errors - m_num_errors_before;
+}
+
+unsigned test_base::num_warnings()
+{
+    return m_total_warnings - m_num_warnings_before;
+}
+
 void test_base::SetUpProxy() {
     ucs_assert(m_state == NEW);
     m_num_valgrind_errors_before = VALGRIND_COUNT_ERRORS;
@@ -274,13 +284,11 @@ void test_base::TearDownProxy() {
     if (num_valgrind_errors > 0) {
         ADD_FAILURE() << "Got " << num_valgrind_errors << " valgrind errors during the test";
     }
-    int num_errors = m_total_errors - m_num_errors_before;
-    if (num_errors > 0) {
-        ADD_FAILURE() << "Got " << num_errors << " errors during the test";
+    if (num_errors() > 0) {
+        ADD_FAILURE() << "Got " << num_errors() << " errors during the test";
     }
-    int num_warnings = m_total_warnings - m_num_warnings_before;
-    if (num_warnings > 0) {
-        ADD_FAILURE() << "Got " << num_warnings << " warnings during the test";
+    if (num_warnings() > 0) {
+        ADD_FAILURE() << "Got " << num_warnings() << " warnings during the test";
     }
 }
 
