@@ -79,7 +79,7 @@ ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     }
 
     iface->cq[dir]                 = cq;
-    iface->config.max_inl_cqe[dir] = dv_attr.cqe_size / 2;
+    iface->config.max_inl_cqe[dir] = (inl > 0) ? (dv_attr.cqe_size / 2) : 0;
     return UCS_OK;
 #else
     return uct_ib_verbs_create_cq(iface, dir, init_attr, preferred_cpu, inl);
