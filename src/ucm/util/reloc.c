@@ -57,6 +57,7 @@ KHASH_MAP_INIT_STR(ucm_dl_symbol_hash, void*);
 /* Hash of loaded dynamic objects */
 typedef struct {
     khash_t(ucm_dl_symbol_hash) symbols;
+    uintptr_t                   start, end;
 } ucm_dl_info_t;
 
 KHASH_MAP_INIT_INT64(ucm_dl_info_hash, ucm_dl_info_t)
@@ -229,8 +230,13 @@ ucm_reloc_dl_apply_patch(const ucm_dl_info_t *dl_info, const char *dl_basename,
               patch->symbol, dl_basename, entry, prev_value, patch->value);
 
     /* store default entry to prev_value to guarantee valid pointers
-     * throughout life time of the process */
-    if (store_prev) {
+     * throughout life time of the process
+     * ignore symbols which point back to the same library, since they probably
+     * point to own .plt rather than to the real function.
+     */
+    if (store_prev &&
+        !((prev_value >= (void*)dl_info->start) &&
+          (prev_value <  (void*)dl_info->end))) {
         patch->prev_value = prev_value;
         ucm_debug("'%s' prev_value is %p", patch->symbol, prev_value);
     }
@@ -285,10 +291,10 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
     size_t pltrelsz, relasz;
     ucm_dl_info_t *dl_info;
     ucs_status_t status;
-    ElfW(Phdr) *dphdr;
+    ElfW(Phdr) *phdr, *dphdr;
+    int i, ret, found_pt_load;
     ElfW(Sym) *symtab;
     khiter_t khiter;
-    int i, ret;
     int phsize;
 
     status = ucm_reloc_get_aux_phsize(&phsize);
@@ -309,18 +315,32 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
     }
 
     kh_init_inplace(ucm_dl_symbol_hash, &dl_info->symbols);
+    dl_info->start = UINTPTR_MAX;
+    dl_info->end   = 0;
 
-    /* find PT_DYNAMIC */
-    dphdr = NULL;
+    /* Scan program headers for PT_LOAD and PT_DYNAMIC */
+    dphdr         = NULL;
+    found_pt_load = 0;
     for (i = 0; i < phdr_info->dlpi_phnum; ++i) {
-        dphdr = UCS_PTR_BYTE_OFFSET(phdr_info->dlpi_phdr, phsize * i);
-        if (dphdr->p_type == PT_DYNAMIC) {
-            break;
+        phdr = UCS_PTR_BYTE_OFFSET(phdr_info->dlpi_phdr, phsize * i);
+        if (phdr->p_type == PT_LOAD) {
+            /* Found loadable section - update address range */
+            dl_info->start = ucs_min(dl_info->start, dlpi_addr + phdr->p_vaddr);
+            dl_info->end   = ucs_max(dl_info->end, phdr->p_vaddr + phdr->p_memsz);
+            found_pt_load  = 1;
+        } else if (phdr->p_type == PT_DYNAMIC) {
+            /* Found dynamic section */
+            dphdr = phdr;
         }
     }
+
     if (dphdr == NULL) {
-        /* No dynamic section */
         ucm_debug("%s has no dynamic section - skipping", dl_name)
+        goto out;
+    }
+
+    if (!found_pt_load) {
+        ucm_debug("%s has no loaded sections - skipping", dl_name)
         goto out;
     }
 
@@ -351,8 +371,9 @@ static ucs_status_t ucm_reloc_dl_info_get(const struct dl_phdr_info *phdr_info,
                                                strtab, symtab, dl_name);
     }
 
-    ucm_debug("added dl_info %p for %s with %u symbols", dl_info,
-              ucs_basename(dl_name), num_symbols);
+    ucm_debug("added dl_info %p for %s with %u symbols range 0x%lx..0x%lx",
+              dl_info, ucs_basename(dl_name), num_symbols, dl_info->start,
+              dl_info->end);
 
 out:
     *dl_info_p = dl_info;
@@ -433,7 +454,14 @@ static int ucm_reloc_phdr_iterator(struct dl_phdr_info *phdr_info, size_t size,
         return -1; /* stop iteration if got a real error */
     }
 
-    store_prev  = phdr_info->dlpi_addr == ctx->libucm_base_addr;
+    /*
+     * Prefer taking the previous value from main program, if exists,
+     * Otherwise, use the current module (libucm.so)
+     */
+    store_prev = (phdr_info->dlpi_addr == 0) ||
+                 ((ctx->patch->prev_value == NULL) &&
+                  (phdr_info->dlpi_addr == ctx->libucm_base_addr));
+
     ctx->status = ucm_reloc_dl_apply_patch(dl_info, ucs_basename(dl_name),
                                            store_prev, ctx->patch);
     if (ctx->status != UCS_OK) {
