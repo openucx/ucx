@@ -445,7 +445,7 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
              * and return the EP to the user, otherwise - destroy this EP
              * and try to search another EP w/o TX capability or create
              * new EP */
-            status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
+            status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ, 0);
             if (status != UCS_OK) {
                 uct_tcp_ep_destroy_internal(&ep->super.super);
                 ep = NULL;

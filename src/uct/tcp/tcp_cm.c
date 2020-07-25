@@ -142,7 +142,9 @@ static void uct_tcp_cm_trace_conn_pkt(const uct_tcp_ep_t *ep,
                              str_addr, UCS_SOCKADDR_STRING_LEN));
 }
 
-ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t event)
+ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
+                                   uct_tcp_cm_conn_event_t event,
+                                   int log_error)
 {
     uct_tcp_iface_t *iface     = ucs_derived_of(ep->super.super.iface,
                                                 uct_tcp_iface_t);
@@ -199,11 +201,11 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t eve
         uct_tcp_cm_trace_conn_pkt(ep, UCS_LOG_LEVEL_TRACE,
                                   "%s sent to", event);
     } else {
+        ucs_assert(status != UCS_ERR_NO_PROGRESS);
         status = uct_tcp_ep_handle_io_err(ep, "send", status);
         uct_tcp_cm_trace_conn_pkt(ep,
-                                  (((status == UCS_ERR_NO_PROGRESS) ||
-                                    (status == UCS_ERR_CANCELED)) ?
-                                   UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR),
+                                  (log_error && (status != UCS_ERR_CANCELED)) ?
+                                  UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR,
                                   "unable to send %s to", event);
     }
     return status;
@@ -347,7 +349,7 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
         event |= UCT_TCP_CM_CONN_WAIT_REQ;
     }
 
-    status = uct_tcp_cm_send_event(connect_ep, event);
+    status = uct_tcp_cm_send_event(connect_ep, event, 0);
     if (status != UCS_OK) {
         return 0;
     }
@@ -441,7 +443,7 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
         goto out;
     } else {
         /* Just accept this connection and make it operational for RX events */
-        status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_ACK);
+        status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_ACK, 1);
         if (status != UCS_OK) {
             goto out;
         }
@@ -522,7 +524,7 @@ static ucs_status_t uct_tcp_cm_conn_complete(uct_tcp_ep_t *ep,
 {
     ucs_status_t status;
 
-    status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ);
+    status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ, 1);
     if (status != UCS_OK) {
         goto out;
     }
