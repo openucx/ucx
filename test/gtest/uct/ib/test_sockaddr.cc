@@ -370,14 +370,15 @@ class test_uct_cm_sockaddr : public uct_test {
     friend class uct_test::entity;
 protected:
     enum {
-        TEST_STATE_CONNECT_REQUESTED   = UCS_BIT(0),
-        TEST_STATE_CLIENT_CONNECTED    = UCS_BIT(1),
-        TEST_STATE_SERVER_CONNECTED    = UCS_BIT(2),
-        TEST_STATE_CLIENT_DISCONNECTED = UCS_BIT(3),
-        TEST_STATE_SERVER_DISCONNECTED = UCS_BIT(4),
-        TEST_STATE_SERVER_REJECTED     = UCS_BIT(5),
-        TEST_STATE_CLIENT_GOT_REJECT   = UCS_BIT(6),
-        TEST_STATE_CLIENT_GOT_ERROR    = UCS_BIT(7)
+        TEST_STATE_CONNECT_REQUESTED             = UCS_BIT(0),
+        TEST_STATE_CLIENT_CONNECTED              = UCS_BIT(1),
+        TEST_STATE_SERVER_CONNECTED              = UCS_BIT(2),
+        TEST_STATE_CLIENT_DISCONNECTED           = UCS_BIT(3),
+        TEST_STATE_SERVER_DISCONNECTED           = UCS_BIT(4),
+        TEST_STATE_SERVER_REJECTED               = UCS_BIT(5),
+        TEST_STATE_CLIENT_GOT_REJECT             = UCS_BIT(6),
+        TEST_STATE_CLIENT_GOT_ERROR              = UCS_BIT(7),
+        TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE = UCS_BIT(8)
     };
 
     enum {
@@ -644,6 +645,8 @@ protected:
 
         if (status == UCS_ERR_REJECTED) {
             self->m_state |= TEST_STATE_CLIENT_GOT_REJECT;
+        } else if ((status == UCS_ERR_UNREACHABLE) || (status == UCS_ERR_NOT_CONNECTED)) {
+            self->m_state |= TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE;
         } else if (status != UCS_OK) {
             self->m_state |= TEST_STATE_CLIENT_GOT_ERROR;
         } else {
@@ -726,7 +729,8 @@ protected:
 
         EXPECT_FALSE(m_state &
                      (TEST_STATE_SERVER_CONNECTED  | TEST_STATE_CLIENT_CONNECTED |
-                      TEST_STATE_CLIENT_GOT_REJECT | TEST_STATE_CLIENT_GOT_ERROR));
+                      TEST_STATE_CLIENT_GOT_REJECT | TEST_STATE_CLIENT_GOT_ERROR |
+                      TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE));
 
         deadline = ucs_get_time() + ucs_time_from_sec(DEFAULT_TIMEOUT_SEC) *
                                     ucs::test_time_multiplier();
@@ -991,11 +995,13 @@ UCS_TEST_P(test_uct_cm_sockaddr, err_handle)
     EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
 
     /* with the TCP port space (which is currently tested with rdmacm),
-     * a REJECT event will be generated on the client side.
+     * a REJECT event will be generated on the client side and since it's a
+     * reject from the network, it would be passed to upper layer as
+     * UCS_ERR_UNREACHABLE.
      * with tcp_sockcm, an EPOLLERR event will be generated and transformed
      * to an error code. */
-    wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_REJECT);
-    EXPECT_TRUE(ucs_test_all_flags(m_state, TEST_STATE_CLIENT_GOT_REJECT));
+    wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE);
+    EXPECT_TRUE(ucs_test_all_flags(m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE));
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
@@ -1013,11 +1019,13 @@ UCS_TEST_P(test_uct_cm_sockaddr, conn_to_non_exist_server_port)
                       client_connect_cb, client_disconnect_cb, this);
 
     /* with the TCP port space (which is currently tested with rdmacm),
-     * a REJECT event will be generated on the client side.
+     * a REJECT event will be generated on the client side and since it's a
+     * reject from the network, it would be passed to upper layer as
+     * UCS_ERR_UNREACHABLE.
      * with tcp_sockcm, an EPOLLERR event will be generated and transformed
      * to an error code. */
-    wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_REJECT);
-    EXPECT_TRUE(ucs_test_all_flags(m_state, TEST_STATE_CLIENT_GOT_REJECT));
+    wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE);
+    EXPECT_TRUE(ucs_test_all_flags(m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE));
 }
 
 UCS_TEST_P(test_uct_cm_sockaddr, connect_client_to_server_with_delay)
@@ -1135,8 +1143,8 @@ UCS_TEST_P(test_uct_cm_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
         m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
                           client_connect_cb, client_disconnect_cb, this);
 
-        wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_ERROR, 300);
-        EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_ERROR);
+        wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE, 300);
+        EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE);
 
         EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
         EXPECT_FALSE(m_state &

@@ -57,13 +57,28 @@ static ucs_status_t uct_tcp_sockcm_event_err_to_ucs_err_log(int fd,
     ucs_status_t status;
 
     status = ucs_socket_getopt(fd, SOL_SOCKET, SO_ERROR, (void*)&error, sizeof(error));
-    if ((status != UCS_OK) || (error != ECONNREFUSED)) {
-        *log_level = UCS_LOG_LEVEL_ERROR;
-        return UCS_ERR_IO_ERROR;
+    if (status != UCS_OK) {
+        goto err;
     }
 
-    *log_level = UCS_LOG_LEVEL_DEBUG;
-    return UCS_ERR_REJECTED;
+    ucs_debug("error event on fd %d: %s", fd, strerror(error));
+
+    switch (error) {
+    /* UCS_ERR_REJECT is returned only for user's explicit reject */
+    case ECONNREFUSED:
+        *log_level = UCS_LOG_LEVEL_DEBUG;
+        return UCS_ERR_NOT_CONNECTED;
+    case ENETUNREACH:
+    case ETIMEDOUT:
+        *log_level = UCS_LOG_LEVEL_DEBUG;
+        return UCS_ERR_UNREACHABLE;
+    default:
+        goto err;
+    }
+
+err:
+    *log_level = UCS_LOG_LEVEL_ERROR;
+    return UCS_ERR_IO_ERROR;
 }
 
 void uct_tcp_sa_data_handler(int fd, int events, void *arg)
@@ -94,9 +109,12 @@ void uct_tcp_sa_data_handler(int fd, int events, void *arg)
             uct_tcp_sockcm_ep_handle_event_status(ep, status, events, "failed to receive");
             return;
         }
-    }
 
-    if (events & UCS_EVENT_SET_EVWRITE) {
+        /* an upper layer callback may have been called in the uct_tcp_sockcm_ep_recv()
+         * function, where the upper layer may have destroyed the endpoint.
+         * therefore, don't attempt to send from this ep now (if events has also EVWRITE).
+         * write in the next entry to this function */
+    } else if (events & UCS_EVENT_SET_EVWRITE) {
         status = uct_tcp_sockcm_ep_send(ep);
         if (status != UCS_OK) {
             uct_tcp_sockcm_ep_handle_event_status(ep, status, events, "failed to send");

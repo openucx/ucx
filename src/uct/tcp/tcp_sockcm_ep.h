@@ -22,9 +22,12 @@ typedef enum uct_tcp_sockcm_ep_state {
     UCT_TCP_SOCKCM_EP_DISCONNECTING               = UCS_BIT(11), /* @ref uct_ep_disconnect was called on the ep */
     UCT_TCP_SOCKCM_EP_GOT_DISCONNECT              = UCS_BIT(12), /* ep received a disconnect notice from the remote peer */
     UCT_TCP_SOCKCM_EP_FAILED                      = UCS_BIT(13), /* ep is in error state due to an internal local error */
-    UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECTED         = UCS_BIT(14), /* ep on the client side received a reject from the server
+    UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECT           = UCS_BIT(14), /* ep on the client side received a reject from the server
                                                                     (debug flag) */
-    UCT_TCP_SOCKCM_EP_PACK_CB_FAILED              = UCS_BIT(15)  /* the upper layer's priv_pack_cb failed */
+    UCT_TCP_SOCKCM_EP_PACK_CB_FAILED              = UCS_BIT(15), /* the upper layer's priv_pack_cb failed */
+    UCT_TCP_SOCKCM_EP_SERVER_REJECT_CALLED        = UCS_BIT(16), /* ep on the server called reject API call */
+    UCT_TCP_SOCKCM_EP_SERVER_REJECT_SENT          = UCS_BIT(17)  /* ep on the server sent the reject message to the client */
+
 } uct_tcp_sockcm_ep_state_t;
 
 
@@ -34,7 +37,7 @@ typedef enum uct_tcp_sockcm_ep_state {
 struct uct_tcp_sockcm_ep {
     uct_cm_base_ep_t   super;
     int                fd;        /* the fd of the socket on the ep */
-    uint16_t           state;     /* ep state (uct_tcp_sockcm_ep_state_t) */
+    uint32_t           state;     /* ep state (uct_tcp_sockcm_ep_state_t) */
     uct_tcp_listener_t *listener; /* the listener the ep belongs to - used on the server side */
     ucs_list_link_t    list;      /* list item on the cm ep_list - used on the server side */
     struct {
@@ -63,6 +66,8 @@ ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h* e
 ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags);
 
 ucs_status_t uct_tcp_sockcm_ep_send(uct_tcp_sockcm_ep_t *cep);
+
+ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep);
 
 ucs_status_t uct_tcp_sockcm_ep_recv(uct_tcp_sockcm_ep_t *cep);
 
