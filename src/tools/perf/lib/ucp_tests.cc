@@ -22,6 +22,9 @@ extern "C" {
 #include <limits>
 
 
+#define UCP_PERF_LAST_ITER_SN    1
+
+
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, unsigned FLAGS>
 class ucp_perf_test_runner {
 public:
@@ -191,7 +194,17 @@ public:
             op_started();
             return UCS_OK;
         case UCX_PERF_CMD_PUT:
-            *((uint8_t*)buffer + length - 1) = sn;
+            /* coverity[switch_selector_expr_is_constant] */
+            switch (TYPE) {
+            case UCX_PERF_TEST_TYPE_PINGPONG:
+                *((uint8_t*)buffer + length - 1) = sn;
+                break;
+            case UCX_PERF_TEST_TYPE_STREAM_UNI:
+                *((uint8_t*)buffer + length - 1) = 0;
+                break;
+            default:
+                return UCS_ERR_INVALID_PARAM;
+            }
             return ucp_put(ep, buffer, length, remote_addr, rkey);
         case UCX_PERF_CMD_GET:
             return ucp_get(ep, buffer, length, remote_addr, rkey);
@@ -301,6 +314,37 @@ public:
         }
     }
 
+    /* wait for the last iteration to be completed in case of
+     * unidirectional PUT test, since it need to progress responder
+     * for SW-based RMA implementations */
+    void wait_last_iter(void *buffer)
+    {
+        volatile uint8_t *ptr = (uint8_t*)buffer;
+
+        if ((CMD == UCX_PERF_CMD_PUT) &&
+            (TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI)) {
+            while (*ptr != UCP_PERF_LAST_ITER_SN) {
+                progress_responder();
+            }
+        }
+    }
+
+    /* send the special flag as a last iteration in case of
+     * unidirectional PUT test, since responder is waiting for
+     * this message */
+    ucs_status_t send_last_iter(ucp_ep_h ep, void *buffer,
+                                uint64_t remote_addr, ucp_rkey_h rkey)
+    {
+        if ((CMD == UCX_PERF_CMD_PUT) &&
+            (TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI)) {
+            fence();
+            *(uint8_t*)buffer = UCP_PERF_LAST_ITER_SN;
+            return ucp_put(ep, buffer, sizeof(uint8_t), remote_addr, rkey);
+        }
+
+        return UCS_OK;
+    }
+
     void flush()
     {
         if (m_perf.params.flags & UCX_PERF_TEST_FLAG_FLUSH_EP) {
@@ -308,6 +352,11 @@ public:
         } else {
             ucp_worker_flush(m_perf.ucp.worker);
         }
+    }
+
+    void fence()
+    {
+        ucp_worker_fence(m_perf.ucp.worker);
     }
 
     ucs_status_t run_pingpong()
@@ -432,6 +481,8 @@ public:
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
+
+            wait_last_iter(recv_buffer);
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype, sn,
@@ -439,6 +490,8 @@ public:
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
+
+            send_last_iter(ep, send_buffer, remote_addr, rkey);
         }
 
         wait_window(m_max_outstanding, true);
