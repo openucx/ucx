@@ -970,8 +970,8 @@ protected:
                                    ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
         }
 
-        wait(sreq);
-        wait(rreq);
+        request_wait(sreq);
+        request_wait(rreq);
 
         compare_buffers(send_buf, recv_buf);
     }
@@ -1007,8 +1007,8 @@ protected:
                                       &recv_length, UCP_STREAM_RECV_FLAG_WAITALL);
         }
 
-        wait(sreq);
-        wait(rreq);
+        request_wait(sreq);
+        request_wait(rreq);
 
         compare_buffers(send_buf, recv_buf);
     }
@@ -1051,7 +1051,7 @@ protected:
         (this->*rma_func)(send_buf, recv_buf, rkey, reqs);
 
         while (!reqs.empty()) {
-            wait(reqs.back());
+            request_wait(reqs.back());
             reqs.pop_back();
         }
 
@@ -1073,7 +1073,7 @@ protected:
         ucs_status_ptr_t sreq = ucp_am_send_nb(sender().ep(), 0, &sb[0], size,
                                                ucp_dt_make_contig(1),
                                                scomplete_cb, 0);
-        wait(sreq);
+        request_wait(sreq);
         wait_for_flag(&am_received);
         EXPECT_TRUE(am_received);
 

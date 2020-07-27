@@ -121,8 +121,8 @@ UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
         void *rreq = ucp_tag_recv_nb(receiver().worker(), m_recv_buffer->ptr(),
                                      m_size, ucp_dt_make_contig(1), 1, 1,
                                      (ucp_tag_recv_callback_t)ucs_empty_function);
-        wait(sreq);
-        wait(rreq);
+        request_wait(sreq);
+        request_wait(rreq);
 
         mem_buffer::pattern_check(m_recv_buffer->ptr(), m_size, SEED, mem_type());
     }

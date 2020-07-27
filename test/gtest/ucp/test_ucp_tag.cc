@@ -463,8 +463,8 @@ UCS_TEST_P(test_ucp_tag_fallback, fallback)
                                                  MSG_SIZE, 0, &param);
     ASSERT_UCS_PTR_OK(send_req);
 
-    wait(send_req);
-    wait(recv_req);
+    request_wait(send_req);
+    request_wait(recv_req);
 
     munmap(send_buffer, MSG_SIZE);
 }
