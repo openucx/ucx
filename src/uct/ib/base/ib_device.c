@@ -774,6 +774,7 @@ ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, int port_num,
     char *pcie_bus;
     char *tmp;
     int i, bus_len;
+    int num_inputs;
 
     if (NULL == realpath(dev->ibv_context->device->ibdev_path, ib_realpath)) {
         return UCS_ERR_NO_RESOURCE;
@@ -799,8 +800,13 @@ ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, int port_num,
         }
     }
 
-    sscanf(pcie_bus, "%hx %hhx %hhx %hhx", &bus_id->domain, &bus_id->bus,
-                                           &bus_id->slot, &bus_id->function);
+    num_inputs = sscanf(pcie_bus, "%hx %hhx %hhx %hhx", &bus_id->domain,
+                                                        &bus_id->bus,
+                                                        &bus_id->slot,
+                                                        &bus_id->function);
+    if (num_inputs != 4) {
+        return UCS_ERR_NO_RESOURCE;
+    }
 
     ucs_debug("ib device = %s:%d, bus id = %hu:%hhu:%hhu.%hhu",
                uct_ib_device_name(dev), port_num, bus_id->domain, bus_id->bus,

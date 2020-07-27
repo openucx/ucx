@@ -198,6 +198,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, path_mtu),
                 UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
 
+  {"ENABLE_CUDA_AFFINITY", "y",
+   "Prefer IB devices closest to detected CUDA device\n",
+   ucs_offsetof(uct_ib_iface_config_t, enable_cuda_affinity), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -1212,29 +1216,30 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
         goto err;
     }
 
-    self->ops                       = ops;
+    self->ops                         = ops;
 
-    self->config.rx_payload_offset  = sizeof(uct_ib_iface_recv_desc_t) +
-                                      ucs_max(sizeof(uct_recv_desc_t) +
-                                              rx_headroom,
-                                              init_attr->rx_priv_len +
-                                              init_attr->rx_hdr_len);
-    self->config.rx_hdr_offset      = self->config.rx_payload_offset -
-                                      init_attr->rx_hdr_len;
-    self->config.rx_headroom_offset = self->config.rx_payload_offset -
-                                      rx_headroom;
-    self->config.seg_size           = init_attr->seg_size;
-    self->config.roce_path_factor   = config->roce_path_factor;
-    self->config.tx_max_poll        = config->tx.max_poll;
-    self->config.rx_max_poll        = config->rx.max_poll;
-    self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
-                                              config->rx.queue_len / 4);
-    self->config.port_num           = port_num;
-    self->config.sl                 = config->sl;
-    self->config.hop_limit          = config->hop_limit;
-    self->release_desc.cb           = uct_ib_iface_release_desc;
-    self->config.enable_res_domain  = config->enable_res_domain;
-    self->config.qp_type            = init_attr->qp_type;
+    self->config.rx_payload_offset    = sizeof(uct_ib_iface_recv_desc_t) +
+                                        ucs_max(sizeof(uct_recv_desc_t) +
+                                                rx_headroom,
+                                                init_attr->rx_priv_len +
+                                                init_attr->rx_hdr_len);
+    self->config.rx_hdr_offset        = self->config.rx_payload_offset -
+                                        init_attr->rx_hdr_len;
+    self->config.rx_headroom_offset   = self->config.rx_payload_offset -
+                                        rx_headroom;
+    self->config.seg_size             = init_attr->seg_size;
+    self->config.roce_path_factor     = config->roce_path_factor;
+    self->config.tx_max_poll          = config->tx.max_poll;
+    self->config.rx_max_poll          = config->rx.max_poll;
+    self->config.rx_max_batch         = ucs_min(config->rx.max_batch,
+                                                config->rx.queue_len / 4);
+    self->config.port_num             = port_num;
+    self->config.sl                   = config->sl;
+    self->config.hop_limit            = config->hop_limit;
+    self->release_desc.cb             = uct_ib_iface_release_desc;
+    self->config.enable_res_domain    = config->enable_res_domain;
+    self->config.enable_cuda_affinity = config->enable_cuda_affinity;
+    self->config.qp_type              = init_attr->qp_type;
     uct_ib_iface_set_path_mtu(self, config);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
@@ -1452,16 +1457,6 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
     ucs_sys_bus_id_t cuda_bus_id;
     ucs_status_t status;
 
-    status = uct_ib_device_bus(dev, iface->config.port_num, &ib_bus_id);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = ucs_topo_find_device_by_bus_id(&ib_bus_id, &ib_sys_device);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     status = ucm_get_mem_type_current_device_info(UCS_MEMORY_TYPE_CUDA,
                                                   &cuda_bus_id);
     if (status != UCS_OK) {
@@ -1470,6 +1465,16 @@ static ucs_status_t uct_ib_iface_get_cuda_latency(uct_ib_iface_t *iface,
     }
 
     status = ucs_topo_find_device_by_bus_id(&cuda_bus_id, &cuda_sys_device);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_ib_device_bus(dev, iface->config.port_num, &ib_bus_id);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_topo_find_device_by_bus_id(&ib_bus_id, &ib_sys_device);
     if (status != UCS_OK) {
         return status;
     }
@@ -1579,13 +1584,15 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     iface_attr->latency.c += numa_latency;
     iface_attr->latency.m  = 0;
 
-    status = uct_ib_iface_get_cuda_latency(iface, &cuda_latency);
-    if (status != UCS_OK) {
-        return status;
-    }
+    if (iface->config.enable_cuda_affinity != UCS_NO) {
+        status = uct_ib_iface_get_cuda_latency(iface, &cuda_latency);
+        if (status != UCS_OK) {
+            return status;
+        }
 
-    iface_attr->latency.c += cuda_latency;
-    iface_attr->latency.m  = 0;
+        iface_attr->latency.c += cuda_latency;
+        iface_attr->latency.m  = 0;
+    }
 
     /* Wire speed calculation: Width * SignalRate * Encoding */
     width                 = ib_port_widths[width_idx];

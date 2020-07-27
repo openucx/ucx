@@ -162,6 +162,9 @@ struct uct_ib_iface_config {
 
     /* Path MTU size */
     uct_ib_mtu_t            path_mtu;
+
+    /* Allow IB devices to be penalized based on distance from CUDA device */
+    int                     enable_cuda_affinity;
 };
 
 
@@ -260,6 +263,7 @@ struct uct_ib_iface {
         uint8_t               traffic_class;
         uint8_t               hop_limit;
         uint8_t               enable_res_domain;   /* Disable multiple resource domains */
+        uint8_t               enable_cuda_affinity;
         uint8_t               qp_type;
         uint8_t               force_global_addr;
         enum ibv_mtu          path_mtu;
