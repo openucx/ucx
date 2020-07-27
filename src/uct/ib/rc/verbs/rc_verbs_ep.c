@@ -82,7 +82,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
                            size_t iovcnt, size_t iov_total_length,
                            uint64_t remote_addr, uct_rkey_t rkey,
                            uct_completion_t *comp, uct_rc_send_handler_t handler,
-                           int opcode)
+                           uint16_t op_flags, int opcode)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
@@ -104,8 +104,9 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED, INT_MAX);
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp,
-                              ep->txcnt.pi, UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
-                              iov_total_length);
+                              ep->txcnt.pi,
+                              op_flags | UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,
+                              iov, iovcnt, iov_total_length);
     return UCS_INPROGRESS;
 }
 
@@ -197,7 +198,7 @@ ucs_status_t uct_rc_verbs_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, siz
     uct_rc_verbs_ep_fence_put(iface, ep, &rkey, &remote_addr);
     status = uct_rc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, 0ul, remote_addr, rkey,
                                         comp, uct_rc_ep_send_op_completion_handler,
-                                        IBV_WR_RDMA_WRITE);
+                                        0, IBV_WR_RDMA_WRITE);
     UCT_TL_EP_STAT_OP_IF_SUCCESS(status, &ep->super.super, PUT, ZCOPY,
                                  uct_iov_total_length(iov, iovcnt));
     return status;
@@ -248,6 +249,7 @@ ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     status = uct_rc_verbs_ep_rdma_zcopy(ep, iov, iovcnt, total_length, remote_addr,
                                         uct_ib_md_direct_rkey(rkey), comp,
                                         uct_rc_ep_get_zcopy_completion_handler,
+                                        UCT_RC_IFACE_SEND_OP_FLAG_IOV,
                                         IBV_WR_RDMA_READ);
     if (!UCS_STATUS_IS_ERR(status)) {
         UCT_RC_RDMA_READ_POSTED(&iface->super, total_length);

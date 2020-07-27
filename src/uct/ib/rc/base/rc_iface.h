@@ -98,6 +98,11 @@ enum {
 
 /* flags for uct_rc_iface_send_op_t */
 enum {
+#ifdef NVALGRIND
+    UCT_RC_IFACE_SEND_OP_FLAG_IOV   = 0,
+#else
+    UCT_RC_IFACE_SEND_OP_FLAG_IOV   = UCS_BIT(12), /* save iovec to make mem defined */
+#endif
 #if UCS_ENABLE_ASSERT
     UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY = UCS_BIT(13), /* zcopy */
     UCT_RC_IFACE_SEND_OP_FLAG_IFACE = UCS_BIT(14), /* belongs to iface ops buffer */
@@ -284,6 +289,9 @@ struct uct_rc_iface_send_op {
                                                   get_bcopy completions */
     };
     uct_completion_t              *user_comp;
+#ifndef NVALGRIND
+    struct iovec                  *iov;        /* get_zcopy with valgrind */
+#endif
 };
 
 

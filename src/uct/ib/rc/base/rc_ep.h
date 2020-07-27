@@ -222,6 +222,9 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                            void *data, size_t length, size_t valid_length,
                            char *buffer, size_t max);
 
+void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
+                               size_t iovcnt);
+
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
 void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
@@ -336,7 +339,8 @@ uct_rc_txqp_add_send_op_sn(uct_rc_txqp_t *txqp, uct_rc_iface_send_op_t *op, uint
 static UCS_F_ALWAYS_INLINE void
 uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                           uct_rc_send_handler_t handler, uct_completion_t *comp,
-                          uint16_t sn, uint16_t flags, size_t length)
+                          uint16_t sn, uint16_t flags, const uct_iov_t *iov,
+                          size_t iovcnt, size_t length)
 {
     uct_rc_iface_send_op_t *op;
 
@@ -349,6 +353,10 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     op->user_comp = comp;
     op->flags    |= flags;
     op->length    = length;
+    if (op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IOV) {
+        /* coverity[dead_error_line] */
+        uct_rc_ep_send_op_set_iov(op, iov, iovcnt);
+    }
     uct_rc_txqp_add_send_op_sn(txqp, op, sn);
 }
 

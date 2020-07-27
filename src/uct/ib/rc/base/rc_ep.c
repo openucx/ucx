@@ -160,20 +160,71 @@ void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
     }
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_rc_op_release_iface_resources(uct_rc_iface_send_op_t *op, int is_get_zcopy)
+void uct_rc_ep_send_op_set_iov(uct_rc_iface_send_op_t *op, const uct_iov_t *iov,
+                               size_t iovcnt)
 {
-    uct_rc_iface_send_desc_t *desc;
-    uct_rc_iface_t *iface;
+#ifndef NVALGRIND
+    size_t op_iovcnt = iovcnt;
+    ucs_iov_iter_t iov_iter;
 
-    if (is_get_zcopy) {
-        op->iface->tx.reads_available += op->length;
+    if (!RUNNING_ON_VALGRIND) {
         return;
     }
 
-    desc  = ucs_derived_of(op, uct_rc_iface_send_desc_t);
-    iface = ucs_container_of(ucs_mpool_obj_owner(desc), uct_rc_iface_t, tx.mp);
+    op->iov = ucs_malloc(sizeof(*op->iov) * iovcnt, "rc_get_zcopy_iov");
+    if (op->iov == NULL) {
+        return;
+    }
+
+    ucs_iov_iter_init(&iov_iter);
+    uct_iov_to_iovec(op->iov, &op_iovcnt, iov, iovcnt, SIZE_MAX, &iov_iter);
+#endif
+}
+
+static UCS_F_NOINLINE void
+uct_rc_ep_send_op_completed_iov(uct_rc_iface_send_op_t *op)
+{
+#ifndef NVALGRIND
+    struct iovec *iov_entry = op->iov;
+    size_t length           = 0;
+
+    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IOV);
+
+    if (iov_entry == NULL) {
+        return;
+    }
+
+    while (length < op->length) {
+        /* The memory might not be HOST */
+        VALGRIND_MAKE_MEM_DEFINED_IF_ADDRESSABLE(iov_entry->iov_base,
+                                                 iov_entry->iov_len);
+        length += iov_entry->iov_len;
+        ++iov_entry;
+    }
+
+    ucs_free(op->iov);
+    op->iov = NULL;
+#endif
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_get_bcopy(uct_rc_iface_send_op_t *op)
+{
+    uct_rc_iface_send_desc_t *desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+    uct_rc_iface_t          *iface = ucs_container_of(ucs_mpool_obj_owner(desc),
+                                                      uct_rc_iface_t, tx.mp);
+
     iface->tx.reads_available += op->length;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_op_release_get_zcopy(uct_rc_iface_send_op_t *op)
+{
+    op->iface->tx.reads_available += op->length;
+    if (RUNNING_ON_VALGRIND) {
+        uct_rc_ep_send_op_completed_iov(op);
+    }
+    op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_IOV;
 }
 
 void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
@@ -184,7 +235,7 @@ void uct_rc_ep_get_bcopy_handler(uct_rc_iface_send_op_t *op, const void *resp)
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
 
-    uct_rc_op_release_iface_resources(op, 0);
+    uct_rc_op_release_get_bcopy(op);
     uct_invoke_completion(desc->super.user_comp, UCS_OK);
     ucs_mpool_put(desc);
 }
@@ -197,14 +248,14 @@ void uct_rc_ep_get_bcopy_handler_no_completion(uct_rc_iface_send_op_t *op,
     VALGRIND_MAKE_MEM_DEFINED(resp, desc->super.length);
 
     desc->unpack_cb(desc->super.unpack_arg, resp, desc->super.length);
-    uct_rc_op_release_iface_resources(op, 0);
+    uct_rc_op_release_get_bcopy(op);
     ucs_mpool_put(desc);
 }
 
 void uct_rc_ep_get_zcopy_completion_handler(uct_rc_iface_send_op_t *op,
                                             const void *resp)
 {
-    uct_rc_op_release_iface_resources(op, 1);
+    uct_rc_op_release_get_zcopy(op);
     uct_rc_ep_send_op_completion_handler(op, resp);
 }
 
@@ -361,9 +412,9 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
             /* Need to release rdma_read resources taken by get operations  */
             if ((op->handler == uct_rc_ep_get_bcopy_handler) ||
                 (op->handler == uct_rc_ep_get_bcopy_handler_no_completion)) {
-                uct_rc_op_release_iface_resources(op, 0);
+                uct_rc_op_release_get_bcopy(op);
             } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
-                uct_rc_op_release_iface_resources(op, 1);
+                uct_rc_op_release_get_zcopy(op);
             }
         }
         op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
