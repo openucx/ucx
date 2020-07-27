@@ -160,13 +160,13 @@ void ucp_test::short_progress_loop(int worker_index) const {
 void ucp_test::flush_ep(const entity &e, int worker_index, int ep_index)
 {
     void *request = e.flush_ep_nb(worker_index, ep_index);
-    wait(request, worker_index);
+    request_wait(request, worker_index);
 }
 
 void ucp_test::flush_worker(const entity &e, int worker_index)
 {
     void *request = e.flush_worker_nb(worker_index);
-    wait(request, worker_index);
+    request_wait(request, worker_index);
 }
 
 void ucp_test::disconnect(entity& e) {
@@ -190,7 +190,7 @@ void ucp_test::disconnect(entity& e) {
     }
 }
 
-void ucp_test::wait(void *req, int worker_index)
+void ucp_test::request_wait(void *req, int worker_index)
 {
     if (req == NULL) {
         return;

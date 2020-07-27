@@ -171,7 +171,7 @@ void test_ucp_am::do_send_process_data_test(int test_release, uint16_t am_id,
                                  send_reply);
 
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
-        wait(sstatus);
+        request_wait(sstatus);
         sent_ams++;
 
         if (send_reply) {
@@ -234,7 +234,7 @@ void test_ucp_am::do_send_process_data_iov_test(size_t size)
         sstatus = ucp_am_send_nb(sender().ep(), 0,
                                  send_dt_desc.buf(), iovcnt, DATATYPE_IOV,
                                  (ucp_send_callback_t) ucs_empty_function, 0);
-        wait(sstatus);
+        request_wait(sstatus);
         EXPECT_FALSE(UCS_PTR_IS_ERR(sstatus));
         sent_ams++;
     }

@@ -312,7 +312,7 @@ void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
                 req = NULL;
             }
             if (UCS_PTR_IS_PTR(req)) {
-                wait(req);
+                request_wait(req);
             } else {
                 ASSERT_UCS_OK(UCS_PTR_STATUS(req));
             }
@@ -364,7 +364,7 @@ void test_ucp_wireup::disconnect(ucp_ep_h ep) {
     if (!UCS_PTR_IS_PTR(req)) {
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     }
-    wait(req);
+    request_wait(req);
 }
 
 void test_ucp_wireup::disconnect(ucp_test::entity &e) {
@@ -374,7 +374,7 @@ void test_ucp_wireup::disconnect(ucp_test::entity &e) {
 void test_ucp_wireup::waitall(std::vector<void*> reqs)
 {
     while (!reqs.empty()) {
-        wait(reqs.back());
+        request_wait(reqs.back());
         reqs.pop_back();
     }
 }
@@ -1303,7 +1303,7 @@ UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
     request_t *req = (request_t *)ucp_ep_flush_nb(sender().ep(), 0, flush_cb);
     if (UCS_PTR_IS_PTR(req)) {
         req->test = this;
-        wait(req);
+        request_wait(req);
     } else {
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     }
@@ -1367,8 +1367,8 @@ protected:
                         receiver().worker(), &recv_data[0], size,
                         ucp_dt_make_contig(1), 1, 1,
                         (ucp_tag_recv_callback_t)ucs_empty_function);
-        wait(sreq);
-        wait(rreq);
+        request_wait(sreq);
+        request_wait(rreq);
 
         EXPECT_EQ(send_data, recv_data);
     }

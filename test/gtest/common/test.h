@@ -46,7 +46,7 @@ public:
 
 protected:
     class scoped_log_handler {
-public:
+    public:
         scoped_log_handler(ucs_log_func_t handler) {
             ucs_log_push_handler(handler);
         }
@@ -97,6 +97,10 @@ public:
                        ucs_log_level_t level,
                        const ucs_log_component_config_t *comp_conf,
                        const char *message, va_list ap);
+
+    unsigned num_errors();
+
+    unsigned num_warnings();
 
     state_t                         m_state;
     bool                            m_initialized;

@@ -33,7 +33,7 @@ public:
         void *request = ucp_atomic_fetch_nb(e->ep(), UCP_ATOMIC_FETCH_OP_FADD,
                                             *initial_buf, (T*)result_buf, sizeof(T),
                                             (uintptr_t)memheap_addr, rkey, send_cb);
-        wait(request);
+        request_wait(request);
     }
 
     template <typename T, typename F>

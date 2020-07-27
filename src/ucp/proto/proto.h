@@ -43,6 +43,15 @@ typedef uint64_t ucp_proto_id_mask_t;
 
 
 /**
+ * Protocol flags for internal usage, to allow searching for specific protocols
+ */
+enum {
+    UCP_PROTO_FLAG_AM_SHORT  = UCS_BIT(0), /* The protocol uses only uct_ep_am_short() */
+    UCP_PROTO_FLAG_PUT_SHORT = UCS_BIT(1)  /* The protocol uses only uct_ep_put_short() */
+};
+
+
+/**
  * Key for looking up protocol configuration by operation parameters
  */
 typedef struct {
@@ -62,8 +71,11 @@ typedef struct {
  * Protocol and its private configuration
  */
 typedef struct {
-    const ucp_proto_t       *proto;  /* Protocol definition */
-    const void              *priv;   /* Protocol private configuration space */
+    const ucp_proto_t        *proto;       /* Protocol definition */
+    const void               *priv;        /* Protocol private configuration space */
+    ucp_proto_select_param_t select_param; /* Copy of protocol selection parameters,
+                                              used to re-select protocol for existing
+                                              in-progress request */
 } ucp_proto_config_t;
 
 
@@ -96,9 +108,13 @@ typedef struct {
  */
 typedef struct {
     /* Input parameters */
-    ucp_worker_h                   worker;         /* Worker to initialize on */
-    const ucp_proto_select_param_t *sel_param;     /* Operation parameters */
-    const ucp_ep_config_key_t      *ep_config_key; /* Endpoint configuration */
+    ucp_worker_h                   worker;           /* Worker to initialize on */
+    const ucp_proto_select_param_t *select_param;    /* Operation parameters */
+    const ucp_ep_config_key_t      *ep_config_key;   /* Endpoint configuration */
+    const ucp_rkey_config_key_t    *rkey_config_key; /* Remote key configuration,
+                                                        may be NULL */
+    const char                     *proto_name;      /* Name of the initialized
+                                                        protocol, for debugging */
 
     /* Output parameters */
     void                           *priv;       /* Pointer to priv buffer */
@@ -138,6 +154,7 @@ typedef void
  */
 struct ucp_proto {
     const char                      *name;      /* Protocol name */
+    unsigned                        flags;      /* Protocol flags for special handling */
     ucp_proto_init_func_t           init;       /* Initialization function */
     ucp_proto_config_str_func_t     config_str; /* Configuration dump function */
     uct_pending_callback_t          progress;   /* UCT progress function */
