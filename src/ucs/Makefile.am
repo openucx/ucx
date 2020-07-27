@@ -26,6 +26,7 @@ nobase_dist_libucs_la_HEADERS = \
 	config/global_opts.h \
 	config/parser.h \
 	config/types.h \
+	datastruct/array.h \
 	datastruct/callbackq.h \
 	datastruct/hlist.h \
 	datastruct/khash.h \
@@ -76,6 +77,7 @@ noinst_HEADERS = \
 	arch/atomic.h \
 	arch/cpu.h \
 	datastruct/arbiter.h \
+	datastruct/array.inl \
 	datastruct/frag_list.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.inl \

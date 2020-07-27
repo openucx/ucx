@@ -7,6 +7,7 @@
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/datastruct/array.inl>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/hlist.h>
 #include <ucs/datastruct/ptr_array.h>
@@ -795,3 +796,125 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_locked_perf,
     }
 }
 
+typedef struct {
+    int  num1;
+    int  num2;
+} test_value_type_t;
+
+static bool operator==(const test_value_type_t& v1, const test_value_type_t &v2) {
+    return (v1.num1 == v2.num1) && (v1.num2 == v2.num2);
+}
+
+static std::ostream& operator<<(std::ostream& os, const test_value_type_t &v) {
+    return os << "<" << v.num1 << "," << v.num2 << ">";
+}
+
+UCS_ARRAY_DEFINE_INLINE(test_2num, unsigned, test_value_type_t);
+
+UCS_TEST_F(test_datatype, dynamic_array_2int_grow) {
+    ucs_array_t(test_2num) test_array;
+    test_value_type_t value;
+    ucs_status_t status;
+
+    ucs_array_init_dynamic(test_2num, &test_array);
+    EXPECT_FALSE(ucs_array_is_fixed(&test_array));
+
+    /* grow the array enough to contain 'value_index' */
+    unsigned value_index = 9;
+    status = ucs_array_reserve(test_2num, &test_array, value_index + 1);
+    ASSERT_UCS_OK(status);
+
+    value.num1 = ucs::rand();
+    value.num2 = ucs::rand();
+
+    /* save the value in the array and check it's there */
+    ucs_array_elem(&test_array, value_index) = value;
+    EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
+
+    /* grow the array to larger size, check the value is not changed */
+    status = ucs_array_reserve(test_2num, &test_array, 40);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
+
+    /* grow the array with smaller size, check the value is not changed */
+    status = ucs_array_reserve(test_2num, &test_array, 30);
+    ASSERT_UCS_OK(status);
+    EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
+
+    ucs_array_cleanup_dynamic(test_2num, &test_array);
+}
+
+UCS_ARRAY_DEFINE_INLINE(test_1int, size_t, int);
+
+UCS_TEST_F(test_datatype, dynamic_array_int_append) {
+    static const size_t NUM_ELEMS = 1000;
+
+    ucs_array_t(test_1int) test_array;
+    std::vector<int> vec;
+    ucs_status_t status;
+
+    ucs_array_init_dynamic(test_1int, &test_array);
+    EXPECT_FALSE(ucs_array_is_fixed(&test_array));
+
+    /* push same elements to the array and the std::vector */
+    for (size_t i = 0; i < NUM_ELEMS; ++i) {
+        int value = ucs::rand();
+        size_t idx;
+        status = ucs_array_append(test_1int, &test_array, &idx);
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(i, idx);
+        ucs_array_elem(&test_array, idx) = value;
+        vec.push_back(value);
+    }
+
+    /* validate array size and capacity */
+    EXPECT_EQ(NUM_ELEMS, ucs_array_length(&test_array));
+    EXPECT_GE(ucs_array_capacity(&test_array), NUM_ELEMS);
+
+    /* validate array contents  */
+    for (size_t i = 0; i < NUM_ELEMS; ++i) {
+        EXPECT_EQ(vec[i], ucs_array_elem(&test_array, i));
+    }
+
+    /* test set_length */
+    size_t new_length = NUM_ELEMS * 2 / 3;
+    ucs_array_set_length(&test_array, new_length);
+    EXPECT_EQ(new_length, ucs_array_length(&test_array));
+
+    ucs_array_set_length(&test_array, NUM_ELEMS);
+    EXPECT_EQ(NUM_ELEMS, ucs_array_length(&test_array));
+
+    /* set length to max capacity */
+    new_length = ucs_array_capacity(&test_array);
+    ucs_array_set_length(&test_array, new_length);
+    EXPECT_EQ(new_length, ucs_array_length(&test_array));
+
+    ucs_array_cleanup_dynamic(test_1int, &test_array);
+}
+
+UCS_TEST_F(test_datatype, fixed_array) {
+    const size_t num_elems = 100;
+    int buffer[num_elems];
+    ucs_status_t status;
+
+    ucs_array_t(test_1int) test_array = \
+            UCS_ARRAY_FIXED_INITIALIZER(buffer, num_elems);
+
+    /* check initial capacity */
+    size_t initial_capacity = ucs_array_capacity(&test_array);
+    EXPECT_LE(initial_capacity, num_elems);
+    EXPECT_GE(initial_capacity, num_elems - 1);
+
+    /* append one element */
+    size_t idx;
+    status = ucs_array_append(test_1int, &test_array, &idx);
+    ASSERT_UCS_OK(status);
+
+    ucs_array_elem(&test_array, idx) = 17;
+    EXPECT_EQ(0u, idx);
+    EXPECT_EQ(1u, ucs_array_length(&test_array));
+
+    /* check end capacity */
+    EXPECT_EQ(initial_capacity - 1, ucs_array_available_length(&test_array));
+    EXPECT_EQ(&ucs_array_elem(&test_array, 1), ucs_array_end(&test_array));
+}
