@@ -6,7 +6,8 @@
 
 #include <common/test.h>
 
-#include "test_ucp_memheap.h"
+#include "ucp_test.h"
+
 extern "C" {
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_mm.h>
@@ -14,7 +15,7 @@ extern "C" {
 #include <ucp/core/ucp_ep.inl>
 }
 
-class test_ucp_mmap : public test_ucp_memheap {
+class test_ucp_mmap : public ucp_test {
 public:
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
@@ -22,17 +23,26 @@ public:
         return params;
     }
 
-    static int rand_flags() {
-        if ((ucs::rand() % 2) == 0) {
-            return 0;
-        } else {
-            return UCP_MEM_MAP_NONBLOCK;
-        }
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
+                     const std::string& test_case_name, const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name, tls, 0, result);
+        generate_test_params_variant(ctx_params, name,
+                                     test_case_name + "/map_nb",
+                                     tls, UCP_MEM_MAP_NONBLOCK, result);
+        return result;
     }
 
     virtual void init() {
         ucs::skip_on_address_sanitizer();
-        test_ucp_memheap::init();
+        ucp_test::init();
+    }
+
+    unsigned mem_map_flags() const {
+        return GetParam().variant;
     }
 
 protected:
@@ -178,7 +188,7 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
                             UCP_MEM_MAP_PARAM_FIELD_FLAGS;
         params.address    = NULL;
         params.length     = size;
-        params.flags      = rand_flags() | UCP_MEM_MAP_ALLOCATE;
+        params.flags      = mem_map_flags() | UCP_MEM_MAP_ALLOCATE;
 
         status = ucp_mem_map(sender().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
@@ -212,7 +222,7 @@ UCS_TEST_P(test_ucp_mmap, reg) {
                             UCP_MEM_MAP_PARAM_FIELD_FLAGS;
         params.address    = ptr;
         params.length     = size;
-        params.flags      = rand_flags();
+        params.flags      = mem_map_flags();
 
         status = ucp_mem_map(sender().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
@@ -252,7 +262,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
         params.address     = buf.ptr();
         params.length      = size;
         params.memory_type = alloc_mem_type;
-        params.flags       = rand_flags();
+        params.flags       = mem_map_flags();
 
         status = ucp_mem_map(sender().ucph(), &params, &memh);
         ASSERT_UCS_OK(status);
@@ -284,7 +294,7 @@ void test_ucp_mmap::test_length0(unsigned flags)
                         UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     params.address    = NULL;
     params.length     = 0;
-    params.flags      = rand_flags() | flags;
+    params.flags      = mem_map_flags() | flags;
 
     status = ucp_mem_map(sender().ucph(), &params, &memh[0]);
     ASSERT_UCS_OK(status);
