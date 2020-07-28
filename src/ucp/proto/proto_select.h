@@ -59,4 +59,18 @@ typedef struct {
 } ucp_proto_select_t;
 
 
+ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
+
+
+void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
+
+
+void ucp_proto_select_dump(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
+                           ucp_worker_cfg_index_t rkey_cfg_index,
+                           ucp_proto_select_t *proto_select, FILE *stream);
+
+
+void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
+                                ucs_string_buffer_t *strb);
+
 #endif

@@ -35,6 +35,10 @@ protected:
     }
 };
 
+UCS_TEST_P(test_ucp_proto, dump_info) {
+    ucp_ep_print_info(sender().ep(), stdout);
+}
+
 UCS_TEST_P(test_ucp_proto, rkey_config) {
     ucp_rkey_config_key_t rkey_config_key;
 

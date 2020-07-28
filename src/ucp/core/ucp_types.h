@@ -62,6 +62,18 @@ typedef struct ucp_proto                ucp_proto_t;
 
 
 /**
+ * Operation for which protocol is selected
+ */
+typedef enum {
+    UCP_OP_ID_TAG_SEND,
+    UCP_OP_ID_TAG_SEND_SYNC,
+    UCP_OP_ID_PUT,
+    UCP_OP_ID_GET,
+    UCP_OP_ID_LAST
+} ucp_operation_id_t;
+
+
+/**
  * Active message codes
  */
 enum {

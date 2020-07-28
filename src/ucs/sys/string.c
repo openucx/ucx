@@ -152,6 +152,17 @@ char *ucs_memunits_to_str(size_t value, char *buf, size_t max)
     return buf;
 }
 
+const char *ucs_memunits_range_str(size_t range_start, size_t range_end,
+                                   char *buf, size_t max)
+{
+    char buf_start[64], buf_end[64];
+
+    snprintf(buf, max, "%s..%s",
+             ucs_memunits_to_str(range_start, buf_start, sizeof(buf_start)),
+             ucs_memunits_to_str(range_end,   buf_end,   sizeof(buf_end)));
+    return buf;
+}
+
 ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
 {
     char units[3];

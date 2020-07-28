@@ -20,10 +20,10 @@
  *
  * @return datatype class of a datatype handle
  */
-static UCS_F_ALWAYS_INLINE enum ucp_dt_type
+static UCS_F_ALWAYS_INLINE ucp_dt_class_t
 ucp_datatype_class(ucp_datatype_t datatype)
 {
-    return (enum ucp_dt_type)(datatype & UCP_DATATYPE_CLASS_MASK);
+    return (ucp_dt_class_t)(datatype & UCP_DATATYPE_CLASS_MASK);
 }
 
 /**
