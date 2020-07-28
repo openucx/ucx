@@ -480,8 +480,8 @@ ucs_status_t ucm_cuda_get_current_device_info(ucs_sys_bus_id_t *bus_id,
     /* Find cuda dev that the current ctx is using and find it's path*/
     cu_err = cuCtxGetDevice(&cuda_device);
     if (CUDA_SUCCESS != cu_err) {
-        ucm_error("no find current set device");
-        return UCS_OK;
+        ucm_debug("no cuda device context found");
+        return UCS_ERR_NO_RESOURCE;
     }
 
     attribute = CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID;

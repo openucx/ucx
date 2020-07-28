@@ -16,6 +16,7 @@
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/sock.h>
+#include <ucs/sys/topo.h>
 
 #include <endian.h>
 #include <linux/ip.h>
@@ -270,6 +271,16 @@ ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev,
  */
 const char *uct_ib_device_name(uct_ib_device_t *dev);
 
+
+/**
+ * For the given IB device find the associated bus information
+ *
+ * @param [in]  dev             IB device.
+ * @param [in]  port_num        Port number.
+ * @param [out] bus_id          Bus information.
+ */
+ucs_status_t uct_ib_device_bus(uct_ib_device_t *dev, int port_num,
+                               ucs_sys_bus_id_t *bus_id);
 
 /**
  * @return whether the port is InfiniBand
