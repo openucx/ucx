@@ -81,7 +81,7 @@ jobs:
           echo "corrupter_pid=$corrupter_pid"
           azure_set_variable "corrupter_pid" "$corrupter_pid"
         displayName: Start network corrupter
-        timeoutInMinutes: 1
+        timeoutInMinutes: 5
 
       - bash: |
           set -eE
@@ -89,7 +89,7 @@ jobs:
           ./buildlib/az-io_demo.sh workspace=$(workspace)
         displayName: Start server
         name: server
-        timeoutInMinutes: 1
+        timeoutInMinutes: 5
 
       - task: SSH@0
         inputs:
@@ -116,7 +116,7 @@ jobs:
           fi
         displayName: Kill the server
         condition: always()
-        timeoutInMinutes: 1
+        timeoutInMinutes: 5
 
       - bash: |
           set -eE
@@ -131,4 +131,4 @@ jobs:
           ./buildlib/az-network-corrupter.sh reset=yes
         displayName: Kill corrupter
         condition: always()
-        timeoutInMinutes: 1
+        timeoutInMinutes: 10
