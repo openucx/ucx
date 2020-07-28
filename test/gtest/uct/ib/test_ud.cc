@@ -117,7 +117,7 @@ public:
             progress();
         }
         EXPECT_EQ(value, ep->dest_ep_id);
-        EXPECT_EQ(value, ep->conn_id);
+        EXPECT_EQ(value, ep->conn_sn);
         EXPECT_EQ(value, ep->ep_id);
     }
 
@@ -733,7 +733,7 @@ UCS_TEST_P(test_ud, connect_iface_2k) {
         ASSERT_EQ(cids[i], (unsigned)UCT_UD_EP_NULL_ID);
         cids[i] = ep(m_e1,i)->dest_ep_id;
         ASSERT_NE((unsigned)UCT_UD_EP_NULL_ID, ep(m_e1,i)->dest_ep_id);
-        EXPECT_EQ(i, ep(m_e1,i)->conn_id);
+        EXPECT_EQ(i, ep(m_e1,i)->conn_sn);
         EXPECT_EQ(i, ep(m_e1,i)->ep_id);
     }
 }

@@ -16,7 +16,6 @@
 
 #define UCT_UD_QP_HASH_SIZE     256
 #define UCT_UD_TX_MODERATION    64
-#define UCT_UD_HASH_SIZE        997
 #define UCT_UD_RX_BATCH_MIN     8
 
 #define UCT_UD_INITIAL_PSN      1   /* initial packet serial number */
