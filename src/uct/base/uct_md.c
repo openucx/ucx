@@ -432,7 +432,9 @@ ucs_status_t uct_mem_alloc_fill_params(const uct_mem_alloc_params_t *params,
             if (*method == UCT_ALLOC_METHOD_MD) {
 
                 if (params->mds.count == 0) {
-                    ucs_error("No MDs provided for allocation");
+                    /* TODO: not calling ucs_error for now because when this
+                     * call is made in uct_mem_alloc, there could be other
+                     * methods attempted*/
                     return UCS_ERR_INVALID_PARAM;
                 }
 
