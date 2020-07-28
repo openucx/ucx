@@ -174,12 +174,53 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
     iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
     iface_attr->overhead   = 75e-9; /* Software overhead */
 
-    iface_attr->ep_addr_len = sizeof(uct_rc_ep_address_t);
+    iface_attr->ep_addr_len = sizeof(uct_rc_verbs_ep_address_t);
     if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
         iface_attr->ep_addr_len += sizeof(mr_id);
     }
 
     return UCS_OK;
+}
+
+ucs_status_t uct_rc_verbs_iface_flush_mem_create(uct_rc_verbs_iface_t *iface)
+{
+    uct_ib_md_t *md = uct_ib_iface_md(&iface->super.super);
+    ucs_status_t status;
+    struct ibv_mr *mr;
+    void *mem;
+
+    if (iface->flush_mr != NULL) {
+        ucs_assert(iface->flush_mem != NULL);
+        return UCS_OK;
+    }
+
+    /*
+     * Map a whole page for the remote side to issue a dummy RDMA_WRITE on it,
+     * to flush its outstanding operations. A whole page is used to prevent any
+     * other allocations from using same page, so it would be fork-safe.
+     */
+    mem = ucs_mmap(NULL, ucs_get_page_size(), PROT_READ|PROT_WRITE,
+                   MAP_PRIVATE|MAP_ANONYMOUS, -1, 0, "flush_mem");
+    if (mem == MAP_FAILED) {
+        ucs_error("failed to allocate page for remote flush: %m");
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    status = uct_ib_reg_mr(md->pd, mem, ucs_get_page_size(),
+                           UCT_IB_MEM_ACCESS_FLAGS, &mr, 0);
+    if (status != UCS_OK) {
+        goto err_munmap;
+    }
+
+    iface->flush_mem = mem;
+    iface->flush_mr  = mr;
+    return UCS_OK;
+
+err_munmap:
+    ucs_munmap(mem, ucs_get_page_size());
+err:
+    return status;
 }
 
 static ucs_status_t
@@ -199,8 +240,8 @@ void uct_rc_iface_verbs_cleanup_rx(uct_rc_iface_t *rc_iface)
     uct_ib_destroy_srq(iface->srq);
 }
 
-static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worker,
-                           const uct_iface_params_t *params,
+static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
+                           uct_worker_h worker, const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
     uct_rc_verbs_iface_config_t *config =
@@ -218,7 +259,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
     init_attr.cq_len[UCT_IB_DIR_TX]  = config->super.tx_cq_len;
     init_attr.seg_size               = config->super.super.super.seg_size;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, md,
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, tl_md,
                               worker, params, &config->super.super, &init_attr);
 
     self->config.tx_max_wr           = ucs_min(config->tx_max_wr,
@@ -227,6 +268,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h md, uct_worker_h worke
                                                self->config.tx_max_wr / 4);
     self->super.config.fence_mode    = (uct_rc_fence_mode_t)config->super.super.fence_mode;
     self->super.progress             = uct_rc_verbs_iface_progress;
+    self->flush_mem                  = NULL;
+    self->flush_mr                   = NULL;
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {
@@ -365,6 +408,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
 {
     uct_base_iface_progress_disable(&self->super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
+    if (self->flush_mr != NULL) {
+        uct_ib_dereg_mr(self->flush_mr);
+        ucs_assert(self->flush_mem != NULL);
+        ucs_munmap(self->flush_mem, ucs_get_page_size());
+    }
     if (self->fc_desc != NULL) {
         ucs_mpool_put(self->fc_desc);
     }

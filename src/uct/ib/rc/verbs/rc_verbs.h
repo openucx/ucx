@@ -11,6 +11,7 @@
 #include <uct/ib/rc/base/rc_ep.h>
 #include <ucs/type/class.h>
 
+
 #define UCT_RC_VERBS_IFACE_FOREACH_TXWQE(_iface, _i, _wc, _num_wcs) \
       status = uct_ib_poll_cq((_iface)->super.cq[UCT_IB_DIR_TX], &_num_wcs, _wc); \
       if (status != UCS_OK) { \
@@ -21,10 +22,24 @@
       for (_i = 0; _i < _num_wcs; ++_i)
 
 
+enum {
+    UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR = UCS_BIT(0)
+};
+
+
+typedef struct uct_rc_verbs_ep_address {
+    uint8_t          flags;
+    uct_ib_uint24_t  qp_num;
+    uint64_t         flush_addr;
+    uint32_t         flush_rkey;
+} UCS_S_PACKED uct_rc_verbs_ep_address_t;
+
+
 typedef struct uct_rc_verbs_txcnt {
     uint16_t       pi;      /* producer (post_send) count */
     uint16_t       ci;      /* consumer (ibv_poll_cq) completion count */
 } uct_rc_verbs_txcnt_t;
+
 
 /**
  * RC verbs communication context.
@@ -34,6 +49,10 @@ typedef struct uct_rc_verbs_ep {
     uct_rc_verbs_txcnt_t   txcnt;
     uct_ib_fence_info_t    fi;
     struct ibv_qp          *qp;
+    struct {
+        uintptr_t          remote_addr;
+        uint32_t           rkey;
+    } flush;
 } uct_rc_verbs_ep_t;
 
 
@@ -58,7 +77,9 @@ typedef struct uct_rc_verbs_iface {
     struct ibv_sge              inl_sge[2];
     uct_rc_am_short_hdr_t       am_inl_hdr;
     ucs_mpool_t                 short_desc_mp;
-    uct_rc_iface_send_desc_t   *fc_desc; /* used when max_inline is zero */
+    uct_rc_iface_send_desc_t    *fc_desc; /* used when max_inline is zero */
+    struct ibv_mr               *flush_mr; /* MR for writing dummy value to flush */
+    void                        *flush_mem;
     struct {
         size_t                  short_desc_size;
         size_t                  max_inline;
@@ -67,6 +88,8 @@ typedef struct uct_rc_verbs_iface {
     } config;
 } uct_rc_verbs_iface_t;
 
+
+ucs_status_t uct_rc_verbs_iface_flush_mem_create(uct_rc_verbs_iface_t *iface);
 
 UCS_CLASS_DECLARE(uct_rc_verbs_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, const uct_ep_params_t *);

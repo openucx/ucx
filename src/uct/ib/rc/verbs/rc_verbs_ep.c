@@ -386,6 +386,36 @@ ucs_status_t uct_rc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, ui
                                   remote_addr, rkey, comp);
 }
 
+static ucs_status_t uct_rc_verbs_ep_post_flush(uct_rc_verbs_ep_t *ep)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                 uct_rc_verbs_iface_t);
+    struct ibv_send_wr wr;
+    struct ibv_sge sge;
+    int inl_flag;
+
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+
+    /*
+     * Send small RDMA_WRITE as a flush operation
+     * (some adapters do not support 0-size RDMA_WRITE or inline sends)
+     */
+    sge.addr               = (uintptr_t)iface->flush_mem;
+    sge.length             = 1;
+    sge.lkey               = iface->flush_mr->lkey;
+    wr.next                = NULL;
+    wr.sg_list             = &sge;
+    wr.num_sge             = 1;
+    wr.opcode              = IBV_WR_RDMA_WRITE;
+    wr.wr.rdma.remote_addr = ep->flush.remote_addr;
+    wr.wr.rdma.rkey        = ep->flush.rkey;
+    inl_flag               = (iface->config.max_inline >= sge.length) ?
+                             IBV_SEND_INLINE : 0;
+
+    uct_rc_verbs_ep_post_send(iface, ep, &wr, inl_flag | IBV_SEND_SIGNALED, 1);
+    return UCS_OK;
+}
+
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                    uct_completion_t *comp)
 {
@@ -405,7 +435,7 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
-        status = uct_rc_verbs_ep_put_short(tl_ep, NULL, 0, 0, 0);
+        status = uct_rc_verbs_ep_post_flush(ep);
         if (status != UCS_OK) {
             return status;
         }
@@ -482,18 +512,27 @@ ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
 
 ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
-    uct_rc_verbs_ep_t *ep        = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_ep_address_t *rc_addr = (uct_rc_ep_address_t*)addr;
-    uct_ib_md_t *md              = uct_ib_iface_md(ucs_derived_of(
-                                   tl_ep->iface, uct_ib_iface_t));
-    void *ptr                    = rc_addr + 1;
+    uct_rc_verbs_iface_t *iface        = ucs_derived_of(tl_ep->iface,
+                                                       uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_ib_md_t *md                    = uct_ib_iface_md(&iface->super.super);
+    uct_rc_verbs_ep_address_t *rc_addr = (uct_rc_verbs_ep_address_t*)addr;
+    ucs_status_t status;
     uint8_t mr_id;
 
+    status = uct_rc_verbs_iface_flush_mem_create(iface);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     rc_addr->flags      = 0;
+    rc_addr->flush_addr = (uintptr_t)iface->flush_mem;
+    rc_addr->flush_rkey = iface->flush_mr->rkey;
     uct_ib_pack_uint24(rc_addr->qp_num, ep->qp->qp_num);
+
     if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
-        rc_addr->flags |= UCT_RC_ADDR_HAS_ATOMIC_MR;
-        *(uint8_t*)ptr  = mr_id;
+        rc_addr->flags          |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
+        *(uint8_t*)(rc_addr + 1) = mr_id;
     }
     return UCS_OK;
 }
@@ -502,11 +541,13 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                            const uct_device_addr_t *dev_addr,
                                            const uct_ep_addr_t *ep_addr)
 {
-    uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
-    uct_rc_iface_t *iface              = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
-    const uct_ib_address_t *ib_addr    = (const uct_ib_address_t *)dev_addr;
-    const uct_rc_ep_address_t *rc_addr = (const uct_rc_ep_address_t*)ep_addr;
-    const void *ptr                    = rc_addr + 1;
+    uct_rc_verbs_ep_t *ep                    = ucs_derived_of(tl_ep,
+                                                              uct_rc_verbs_ep_t);
+    uct_rc_iface_t *iface                    = ucs_derived_of(tl_ep->iface,
+                                                              uct_rc_iface_t);
+    const uct_ib_address_t *ib_addr          = (const uct_ib_address_t *)dev_addr;
+    const uct_rc_verbs_ep_address_t *rc_addr =
+                                    (const uct_rc_verbs_ep_address_t*)ep_addr;
     ucs_status_t status;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
@@ -516,14 +557,18 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                         ep->super.path_index, &ah_attr,
                                         &path_mtu);
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
+
     qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
     status = uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu);
     if (status != UCS_OK) {
         return status;
     }
 
-    if (rc_addr->flags & UCT_RC_ADDR_HAS_ATOMIC_MR) {
-        ep->super.atomic_mr_offset = *(uint8_t*)ptr;
+    ep->flush.remote_addr = rc_addr->flush_addr;
+    ep->flush.rkey        = rc_addr->flush_rkey;
+
+    if (rc_addr->flags & UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR) {
+        ep->super.atomic_mr_offset = *(uint8_t*)(rc_addr + 1);
     } else {
         ep->super.atomic_mr_offset = 0;
     }
