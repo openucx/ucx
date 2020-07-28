@@ -161,7 +161,7 @@ struct ucp_request {
                     ucp_rkey_h           rkey;            /* key for remote send buffer */
                     ucp_lane_map_t       lanes_map_avail; /* used lanes map */
                     ucp_lane_map_t       lanes_map_all;   /* actual lanes map */
-                    uint8_t              lanes_count;     /* actual lanes map */
+                    uint8_t              lanes_count;     /* actual lanes count */
                     uint8_t              rkey_index[UCP_MAX_LANES];
                 } rndv_get;
 

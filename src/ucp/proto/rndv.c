@@ -81,9 +81,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
 
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_rndv_is_get_zcopy(sreq->send.mem_type, sreq->send.length,
-                              worker->context->config.ext.rndv_pipeline_send_thresh,
-                              worker->context->config.ext.rndv_mode)) {
+        ucp_rndv_is_get_zcopy(sreq, worker->context)) {
         /* pack rkey, ask target to do get_zcopy */
         rndv_rts_hdr->address = (uintptr_t)sreq->send.buffer;
         packed_rkey_size = ucp_rkey_pack_uct(worker->context,
@@ -166,9 +164,7 @@ ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq)
     ucs_status_t status;
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_rndv_is_get_zcopy(sreq->send.mem_type, sreq->send.length,
-                              ep->worker->context->config.ext.rndv_pipeline_send_thresh,
-                              ep->worker->context->config.ext.rndv_mode)) {
+        ucp_rndv_is_get_zcopy(sreq, ep->worker->context)) {
 
         /* register a contiguous buffer for rma_get */
         md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
