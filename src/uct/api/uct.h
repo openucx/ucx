@@ -18,6 +18,7 @@
 #include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/linear_func.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/sys/topo.h>
 #include <ucs/type/status.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
@@ -2150,14 +2151,14 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @param [in]     md           Memory domain to detect memory type
  * @param [in]     addr         Memory address to detect.
  * @param [in]     length       Size of memory
- * @param [out]    mem_type_p   Filled with memory type of the address range if
+ * @param [out]    mem_info_p   Filled with memory info of the address range if
                                 function succeeds
- * @return UCS_OK               If memory type is successfully detected
+ * @return UCS_OK               If memory info is successfully detected
  *         UCS_ERR_INVALID_ADDR If failed to detect memory type
  */
-ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
+ucs_status_t uct_md_detect_memory_info(uct_md_h md, const void *addr,
                                        size_t length,
-                                       ucs_memory_type_t *mem_type_p);
+                                       ucs_mem_info_t *mem_info_p);
 
 
 /**

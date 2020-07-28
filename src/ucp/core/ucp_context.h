@@ -363,8 +363,9 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
 
-ucs_memory_type_t
-ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t length);
+void
+ucp_mem_info_detect_mds(ucp_context_h context, const void *address,
+                        size_t length, ucs_mem_info_t *mem_info);
 
 /**
  * Calculate a small value to overcome float imprecision
@@ -430,6 +431,7 @@ static UCS_F_ALWAYS_INLINE ucs_memory_type_t
 ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length)
 {
     ucs_memory_type_t mem_type;
+    ucs_mem_info_t mem_info;
     ucs_status_t status;
 
     if (ucs_likely(context->num_mem_type_detect_mds == 0)) {
@@ -456,7 +458,8 @@ ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length
          * UCT memory domains */
     }
 
-    return ucp_memory_type_detect_mds(context, address, length);
+    ucp_mem_info_detect_mds(context, address, length, &mem_info);
+    return mem_info.mem_type;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t

@@ -131,7 +131,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack           = uct_cuda_copy_mkey_pack,
     .mem_reg             = uct_cuda_copy_mem_reg,
     .mem_dereg           = uct_cuda_copy_mem_dereg,
-    .detect_memory_type  = uct_cuda_base_detect_memory_type,
+    .detect_memory_info  = uct_cuda_base_detect_memory_info,
 };
 
 static ucs_status_t

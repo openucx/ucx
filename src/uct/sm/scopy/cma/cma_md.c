@@ -150,7 +150,7 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
         .mkey_pack          = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
         .mem_reg            = uct_cma_mem_reg,
         .mem_dereg          = (uct_md_mem_dereg_func_t)ucs_empty_function_return_success,
-        .detect_memory_type = ucs_empty_function_return_unsupported,
+        .detect_memory_info = ucs_empty_function_return_unsupported,
     };
     static uct_md_t md = {
         .ops          = &md_ops,
