@@ -208,7 +208,7 @@ ucs_status_t uct_rc_verbs_iface_flush_mem_create(uct_rc_verbs_iface_t *iface)
     }
 
     status = uct_ib_reg_mr(md->pd, mem, ucs_get_page_size(),
-                           UCT_IB_MEM_ACCESS_FLAGS, &mr, 0);
+                           UCT_IB_MEM_ACCESS_FLAGS, &mr);
     if (status != UCS_OK) {
         goto err_munmap;
     }
