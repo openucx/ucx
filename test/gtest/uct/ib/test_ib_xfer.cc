@@ -26,6 +26,38 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp64,
                     TEST_UCT_FLAG_RECV_ZCOPY);
 }
 
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_zcopy_inlresp0,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY),
+                     "IB_TX_INLINE_RESP=0") {
+    EXPECT_EQ(1u, sender().iface_attr().cap.get.min_zcopy);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+                    sender().iface_attr().cap.get.min_zcopy,
+                    sender().iface_attr().cap.get.max_zcopy,
+                    TEST_UCT_FLAG_RECV_ZCOPY);
+}
+
+#if HAVE_DEVX
+/* test mlx5dv_create_qp() */
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_zcopy_inlresp0_devx_no,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY),
+                     "IB_TX_INLINE_RESP=0", "MLX5_DEVX=n") {
+    EXPECT_EQ(1u, sender().iface_attr().cap.get.min_zcopy);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+                    sender().iface_attr().cap.get.min_zcopy,
+                    sender().iface_attr().cap.get.max_zcopy,
+                    TEST_UCT_FLAG_RECV_ZCOPY);
+}
+#endif
+
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_zcopy_inlresp64,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY),
+                     "IB_TX_INLINE_RESP=64") {
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
+                    sender().iface_attr().cap.get.min_zcopy,
+                    sender().iface_attr().cap.get.max_zcopy,
+                    TEST_UCT_FLAG_RECV_ZCOPY);
+}
+
 UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_inlresp)
 
 

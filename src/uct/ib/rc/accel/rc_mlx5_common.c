@@ -962,6 +962,36 @@ void uct_rc_mlx5_iface_common_dm_cleanup(uct_rc_mlx5_iface_common_t *iface)
 #endif
 }
 
+#if HAVE_DECL_MLX5DV_CREATE_QP
+void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
+                                        struct ibv_qp_init_attr_ex *qp_attr,
+                                        struct mlx5dv_qp_init_attr *dv_attr,
+                                        unsigned scat2cqe_dir_mask)
+{
+#if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
+    dv_attr->comp_mask   |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
+    dv_attr->create_flags = 0;
+
+    if ((scat2cqe_dir_mask & UCS_BIT(UCT_IB_DIR_RX)) &&
+        (iface->super.super.config.max_inl_cqe[UCT_IB_DIR_RX] == 0)) {
+        /* make sure responder scatter2cqe is disabled */
+        dv_attr->create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
+    }
+    if (scat2cqe_dir_mask & UCS_BIT(UCT_IB_DIR_TX)) {
+        if (iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] == 0) {
+            /* tell the driver to not signal all send WRs, so it will disable
+             * requester scatter2cqe
+             */
+            qp_attr->sq_sig_all = 0;
+        } else {
+            /* force-enable requester scatter2cqe, regardless of SIGNAL_ALL_WR */
+            dv_attr->create_flags |= MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
+        }
+    }
+#endif
+}
+#endif
+
 void uct_rc_mlx5_iface_common_query(uct_ib_iface_t *ib_iface,
                                     uct_iface_attr_t *iface_attr,
                                     size_t max_inline, size_t max_tag_eager_iov)

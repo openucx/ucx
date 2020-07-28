@@ -284,10 +284,9 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 
     uct_ib_iface_fill_attr(ib_iface, &attr->super);
-#if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
-    dv_attr.comp_mask    = MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
-    dv_attr.create_flags = MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
-#endif
+    uct_rc_mlx5_common_fill_dv_qp_attr(iface, &attr->super.ibv, &dv_attr,
+                                       UCS_BIT(UCT_IB_DIR_TX) |
+                                       UCS_BIT(UCT_IB_DIR_RX));
     qp->verbs.qp = mlx5dv_create_qp(dev->ibv_context, &attr->super.ibv, &dv_attr);
     if (qp->verbs.qp == NULL) {
         ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT"): failed: %m",

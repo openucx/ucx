@@ -325,6 +325,8 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     dv_attr.comp_mask                   = MLX5DV_QP_INIT_ATTR_MASK_DC;
     dv_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCI;
     dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
+    uct_rc_mlx5_common_fill_dv_qp_attr(&iface->super, &attr.super.ibv, &dv_attr,
+                                       UCS_BIT(UCT_IB_DIR_TX));
     qp = mlx5dv_create_qp(dev->ibv_context, &attr.super.ibv, &dv_attr);
     if (qp == NULL) {
         ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT", DCI): failed: %m",
@@ -476,8 +478,11 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     dv_init_attr.dc_init_attr.dc_type        = MLX5DV_DCTYPE_DCT;
     dv_init_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
 
-    iface->rx.dct.verbs.qp = mlx5dv_create_qp(dev->ibv_context,
-                                              &init_attr, &dv_init_attr);
+    uct_rc_mlx5_common_fill_dv_qp_attr(&iface->super, &init_attr, &dv_init_attr,
+                                       UCS_BIT(UCT_IB_DIR_RX));
+
+    iface->rx.dct.verbs.qp = mlx5dv_create_qp(dev->ibv_context, &init_attr,
+                                              &dv_init_attr);
     if (iface->rx.dct.verbs.qp == NULL) {
         ucs_error("mlx5dv_create_qp(DCT) failed: %m");
         return UCS_ERR_INVALID_PARAM;

@@ -705,6 +705,13 @@ uct_rc_mlx5_am_hdr_fill(uct_rc_mlx5_hdr_t *rch, uint8_t id)
     rch->rc_hdr.am_id = id;
 }
 
+#if HAVE_DECL_MLX5DV_CREATE_QP
+void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
+                                        struct ibv_qp_init_attr_ex *qp_attr,
+                                        struct mlx5dv_qp_init_attr *dv_attr,
+                                        unsigned scat2cqe_dir_mask);
+#endif
+
 #if HAVE_DEVX
 ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
