@@ -23,7 +23,7 @@
 /* Minimal reserve size when appending new data */
 #define UCS_STRING_BUFFER_RESERVE  32
 
-UCS_ARRAY_FUNCS(string_buffer, size_t, char, static UCS_F_ALWAYS_INLINE)
+UCS_ARRAY_IMPL(string_buffer, size_t, char, static UCS_F_ALWAYS_INLINE)
 
 void ucs_string_buffer_init(ucs_string_buffer_t *strb)
 {
@@ -52,7 +52,7 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
 
     /* try to write to existing buffer */
     va_start(ap, fmt);
-    max_print = ucs_array_end_capacity(&strb->str);
+    max_print = ucs_array_available_length(&strb->str);
     ret       = vsnprintf(ucs_array_end(&strb->str), max_print, fmt, ap);
     va_end(ap);
 
@@ -70,7 +70,7 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
         }
 
         va_start(ap, fmt);
-        max_print = ucs_array_end_capacity(&strb->str);
+        max_print = ucs_array_available_length(&strb->str);
         ret       = vsnprintf(ucs_array_end(&strb->str), max_print, fmt, ap);
         va_end(ap);
 
@@ -83,7 +83,7 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
 
     /* \0 should be written by vsnprintf */
 out:
-    ucs_assert(ucs_array_end_capacity(&strb->str) >= 1);
+    ucs_assert(ucs_array_available_length(&strb->str) >= 1);
     ucs_assert(*ucs_array_end(&strb->str) == '\0');
 }
 
