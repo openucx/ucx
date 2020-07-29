@@ -143,12 +143,11 @@ void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select)
     kh_destroy_inplace(ucp_proto_select_hash, &proto_select->hash);
 }
 
-static void
-ucp_proto_select_dump_all(ucp_worker_h worker,
-                          ucp_worker_cfg_index_t ep_cfg_index,
-                          ucp_worker_cfg_index_t rkey_cfg_index,
-                          const ucp_proto_select_param_t *select_param,
-                          FILE *stream)
+void ucp_proto_select_dump_all(ucp_worker_h worker,
+                               ucp_worker_cfg_index_t ep_cfg_index,
+                               ucp_worker_cfg_index_t rkey_cfg_index,
+                               const ucp_proto_select_param_t *select_param,
+                               FILE *stream)
 {
     static const char *proto_info_fmt =
                                 "#     %-18s %-12s %-20s %-18s %-12s %s\n";

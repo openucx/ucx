@@ -39,6 +39,25 @@ UCS_TEST_P(test_ucp_proto, dump_info) {
     ucp_ep_print_info(sender().ep(), stdout);
 }
 
+UCS_TEST_P(test_ucp_proto, dump_protocols) {
+    ucp_proto_select_param_t select_param;
+    ucs_string_buffer_t strb;
+
+    select_param.op_id    = UCP_OP_ID_TAG_SEND;
+    select_param.op_flags = 0;
+    select_param.dt_class = UCP_DATATYPE_CONTIG;
+    select_param.mem_type = UCS_MEMORY_TYPE_HOST;
+    select_param.sys_dev  = 0;
+    select_param.sg_count = 1;
+
+    ucp_proto_select_param_str(&select_param, &strb);
+    UCS_TEST_MESSAGE << ucs_string_buffer_cstr(&strb);
+    ucs_string_buffer_cleanup(&strb);
+
+    ucp_proto_select_dump_all(sender().worker(), sender().ep()->cfg_index,
+                              UCP_WORKER_CFG_INDEX_NULL, &select_param, stdout);
+}
+
 UCS_TEST_P(test_ucp_proto, rkey_config) {
     ucp_rkey_config_key_t rkey_config_key;
 
