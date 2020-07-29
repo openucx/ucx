@@ -52,6 +52,12 @@ static void uct_tcp_sockcm_ep_client_connect_cb(uct_tcp_sockcm_ep_t *cep,
     uct_cm_ep_client_connect_cb(&cep->super, remote_data, status);
 }
 
+static void uct_tcp_sockcm_ep_disconnect_cb(uct_tcp_sockcm_ep_t *cep)
+{
+    cep->state |= UCT_TCP_SOCKCM_EP_DISCONNECTED;
+    uct_cm_ep_disconnect_cb(&cep->super);
+}
+
 static void uct_tcp_sockcm_ep_server_notify_cb(uct_tcp_sockcm_ep_t *cep,
                                                ucs_status_t status)
 {
@@ -74,13 +80,13 @@ ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags)
                                                              UCS_SOCKADDR_STRING_LEN));
 
     if ((cep->state & UCT_TCP_SOCKCM_EP_FAILED) &&
-        !(cep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT)) {
+        !(cep->state & UCT_TCP_SOCKCM_EP_DISCONNECTED)) {
         status = UCS_ERR_NOT_CONNECTED;
         goto out;
     }
 
     if (ucs_unlikely(cep->state & UCT_TCP_SOCKCM_EP_DISCONNECTING)) {
-        if (cep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT) {
+        if (cep->state & UCT_TCP_SOCKCM_EP_DISCONNECTED) {
             ucs_error("duplicate call of uct_ep_disconnect on a disconnected ep "
                       "(fd=%d state=%d peer=%s)", cep->fd, cep->state,
                       uct_tcp_sockcm_cm_ep_peer_addr_str(cep, peer_str,
@@ -155,7 +161,7 @@ static void uct_tcp_sockcm_ep_invoke_error_cb(uct_tcp_sockcm_ep_t *cep,
 
     if (uct_tcp_sockcm_ep_is_connected(cep)) {
         /* ep is already connected, call disconnect callback */
-        uct_cm_ep_disconnect_cb(&cep->super);
+        uct_tcp_sockcm_ep_disconnect_cb(cep);
     } else if (cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT) {
         remote_data.field_mask = 0;
         uct_tcp_sockcm_ep_client_connect_cb(cep, &remote_data, status);
@@ -244,8 +250,6 @@ static ucs_status_t uct_tcp_sockcm_ep_handle_remote_disconnect(uct_tcp_sockcm_ep
     } else {
         cb_status   = UCS_ERR_CONNECTION_RESET;
     }
-
-    cep->state |= UCT_TCP_SOCKCM_EP_GOT_DISCONNECT;
 
     uct_tcp_sockcm_ep_reset_comm_ctx(cep);
     return cb_status;
@@ -425,7 +429,7 @@ static int uct_tcp_sockcm_ep_send_skip_event(uct_tcp_sockcm_ep_t *cep)
     /* if the ep got a disconnect notice from the peer or had an internal local
      * error, it should have removed its fd from the async handlers.
      * therefore, no send events should get here afterwards */
-    ucs_assert(!(cep->state & (UCT_TCP_SOCKCM_EP_GOT_DISCONNECT |
+    ucs_assert(!(cep->state & (UCT_TCP_SOCKCM_EP_DISCONNECTED |
                                UCT_TCP_SOCKCM_EP_FAILED)));
 
     if (cep->state & UCT_TCP_SOCKCM_EP_DISCONNECTING) {
@@ -558,9 +562,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_handle_data_received(uct_tcp_sockcm
     if (cep->state & UCT_TCP_SOCKCM_EP_DATA_SENT) {
         ucs_assert(ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_SERVER_CREATED |
                                                   UCT_TCP_SOCKCM_EP_DATA_RECEIVED));
-
         ucs_assert(hdr->length == 0);
-        ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT));
 
         uct_tcp_sockcm_ep_server_notify_cb(cep, (ucs_status_t)hdr->status);
 
@@ -585,6 +587,8 @@ ucs_status_t uct_tcp_sockcm_ep_handle_data_received(uct_tcp_sockcm_ep_t *cep)
     const uct_tcp_sockcm_priv_data_hdr_t *hdr;
     ucs_status_t status;
 
+    ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_DISCONNECTED));
+
     cep->state |= UCT_TCP_SOCKCM_EP_DATA_RECEIVED;
     /* if the data was received, drop the header_received flag to receive new messages */
     cep->state &= ~UCT_TCP_SOCKCM_EP_HDR_RECEIVED;
@@ -594,7 +598,6 @@ ucs_status_t uct_tcp_sockcm_ep_handle_data_received(uct_tcp_sockcm_ep_t *cep)
         status = uct_tcp_sockcm_ep_server_handle_data_received(cep);
     } else {
         ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT);
-        ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_GOT_DISCONNECT));
 
         hdr = (const uct_tcp_sockcm_priv_data_hdr_t *)cep->comm_ctx.buf;
         if ((ucs_status_t)hdr->status == UCS_ERR_REJECTED) {
@@ -656,7 +659,7 @@ ucs_status_t uct_tcp_sockcm_ep_recv(uct_tcp_sockcm_ep_t *cep)
      * error or the client received a reject from the server, it should have
      * removed its fd from the async handlers.
      * therefore, no recv events should get here afterwards */
-    ucs_assert(!(cep->state & (UCT_TCP_SOCKCM_EP_GOT_DISCONNECT |
+    ucs_assert(!(cep->state & (UCT_TCP_SOCKCM_EP_DISCONNECTED |
                                UCT_TCP_SOCKCM_EP_CLIENT_GOT_REJECT |
                                UCT_TCP_SOCKCM_EP_FAILED)));
 

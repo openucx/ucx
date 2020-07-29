@@ -511,6 +511,7 @@ public:
         case UCS_ERR_REJECTED:
         case UCS_ERR_UNREACHABLE:
         case UCS_ERR_CONNECTION_RESET:
+        case UCS_ERR_NOT_CONNECTED:
             UCS_TEST_MESSAGE << "ignoring error " <<ucs_status_string(status)
                              << " on endpoint " << ep;
             return;

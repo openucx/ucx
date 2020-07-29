@@ -68,6 +68,9 @@ static ucs_status_t uct_tcp_sockcm_event_err_to_ucs_err_log(int fd,
     case ECONNREFUSED:
         *log_level = UCS_LOG_LEVEL_DEBUG;
         return UCS_ERR_NOT_CONNECTED;
+    case EPIPE:
+        *log_level = UCS_LOG_LEVEL_DEBUG;
+        return UCS_ERR_CONNECTION_RESET;
     case ENETUNREACH:
     case ETIMEDOUT:
         *log_level = UCS_LOG_LEVEL_DEBUG;
