@@ -141,11 +141,6 @@ typedef struct uct_ud_iface_ops {
     void                      (*ep_free)(uct_ep_h ep);
     ucs_status_t              (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                            struct ibv_qp **qp_p);
-    ucs_status_t              (*unpack_peer_address)(uct_ud_iface_t *iface,
-                                                     const uct_ib_address_t *ib_addr,
-                                                     const uct_ud_iface_addr_t *if_addr,
-                                                     int path_index, void *address_p);
-    void*                     (*ep_get_peer_address)(uct_ud_ep_t *ud_ep);
 } uct_ud_iface_ops_t;
 
 
@@ -559,29 +554,6 @@ uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
     if (!ucs_arbiter_is_empty(&iface->tx.pending_q)) {
         iface->tx.async_before_pending = 1;
     }
-}
-
-
-static UCS_F_ALWAYS_INLINE void *uct_ud_ep_get_peer_address(uct_ud_ep_t *ud_ep)
-{
-    uct_ib_iface_t *ib_iface   = ucs_derived_of(ud_ep->super.super.iface,
-                                                uct_ib_iface_t);
-    uct_ud_iface_ops_t *ud_ops = ucs_derived_of(ib_iface->ops,
-                                                uct_ud_iface_ops_t);
-    return ud_ops->ep_get_peer_address(ud_ep);
-}
-
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_ud_iface_unpack_peer_address(uct_ud_iface_t *iface,
-                                 const uct_ib_address_t *ib_addr,
-                                 const uct_ud_iface_addr_t *if_addr,
-                                 unsigned path_index, void *address_p)
-{
-    uct_ud_iface_ops_t *ud_ops = ucs_derived_of(iface->super.ops,
-                                                uct_ud_iface_ops_t);
-    return ud_ops->unpack_peer_address(iface, ib_addr, if_addr,
-                                       path_index, address_p);
 }
 
 
