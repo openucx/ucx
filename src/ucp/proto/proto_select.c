@@ -4,6 +4,10 @@
  * See file LICENSE for terms.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "proto.h"
 #include "proto_select.inl"
 
@@ -148,7 +152,7 @@ ucp_proto_select_dump_all(ucp_worker_h worker,
 {
     static const char *proto_info_fmt =
                                 "#     %-18s %-12s %-20s %-18s %-12s %s\n";
-    ucp_proto_select_init_protocols_t proto_init;
+    ucp_proto_select_init_protocols_t *proto_init;
     ucs_string_buffer_t config_strb;
     size_t range_start, range_end;
     const ucp_proto_caps_t *caps;
@@ -161,21 +165,28 @@ ucp_proto_select_dump_all(ucp_worker_h worker,
     unsigned i;
     void *priv;
 
+    /* Allocate on heap, since the structure is quite large */
+    proto_init = ucs_malloc(sizeof(*proto_init), "proto_init");
+    if (proto_init == NULL) {
+        fprintf(stream, "<Could not allocate memory>\n");
+        return;
+    }
+
     status = ucp_proto_select_init_protocols(worker, ep_cfg_index, rkey_cfg_index,
-                                             select_param, &proto_init);
+                                             select_param, proto_init);
     if (status != UCS_OK) {
         fprintf(stream, "<%s>\n", ucs_status_string(status));
-        return;
+        goto out_free;
     }
 
     fprintf(stream, proto_info_fmt, "PROTOCOL", "SIZE", "TIME (nsec)",
             "BANDWIDTH (MiB/s)", "THRESHOLD", "CONIFURATION");
 
-    ucs_for_each_bit(proto_id, proto_init.mask) {
+    ucs_for_each_bit(proto_id, proto_init->mask) {
 
-        priv = UCS_PTR_BYTE_OFFSET(proto_init.priv_buf,
-                                   proto_init.priv_offsets[proto_id]);
-        caps = &proto_init.caps[proto_id];
+        priv = UCS_PTR_BYTE_OFFSET(proto_init->priv_buf,
+                                   proto_init->priv_offsets[proto_id]);
+        caps = &proto_init->caps[proto_id];
 
         /* Get protocol configuration */
         ucp_proto_id_call(proto_id, config_str, priv, &config_strb);
@@ -212,7 +223,9 @@ ucp_proto_select_dump_all(ucp_worker_h worker,
     }
     fprintf(stream, "#\n");
 
-    ucs_free(proto_init.priv_buf);
+    ucs_free(proto_init->priv_buf);
+out_free:
+    ucs_free(proto_init);
 }
 
 static void
