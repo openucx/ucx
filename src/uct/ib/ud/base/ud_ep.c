@@ -493,31 +493,26 @@ static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
     return UCS_OK;
 }
 
-ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
-                                               uct_ep_h *new_ep_p)
+ucs_status_t uct_ud_ep_create_connected_common(uct_ud_iface_t *iface,
+                                               const uct_ib_address_t *ib_addr,
+                                               const uct_ud_iface_addr_t *if_addr,
+                                               unsigned path_index,
+                                               uct_ud_ep_t **new_ep_p,
+                                               uct_ud_send_skb_t **skb_p)
 {
-    uct_ud_iface_t *iface              = ucs_derived_of(ep_params->iface,
-                                                        uct_ud_iface_t);
-    const uct_ib_address_t *ib_addr    = (const uct_ib_address_t*)
-                                         ep_params->dev_addr;
-    const uct_ud_iface_addr_t *if_addr = (const uct_ud_iface_addr_t*)
-                                         ep_params->iface_addr;
-    int path_index                     = UCT_EP_PARAMS_GET_PATH_INDEX(ep_params);
-    uct_ud_send_skb_t *skb;
     uct_ep_params_t params;
     ucs_status_t status;
     uct_ud_ep_t *ep;
     uct_ep_h new_ep_h;
 
-    uct_ud_enter(iface);
-
     ep = uct_ud_iface_cep_lookup(iface, ib_addr, if_addr, UCT_UD_EP_CONN_ID_MAX,
                                  path_index);
-    if (ep != NULL) {
+    if (ep) {
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
         ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
-        status     = UCS_OK;
-        goto out_set_ep;
+        *new_ep_p = ep;
+        *skb_p    = NULL;
+        return UCS_ERR_ALREADY_EXISTS;
     }
 
     params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
@@ -527,13 +522,13 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
 
     status = uct_ep_create(&params, &new_ep_h);
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
+    ep = ucs_derived_of(new_ep_h, uct_ud_ep_t);
 
-    ep     = ucs_derived_of(new_ep_h, uct_ud_ep_t);
     status = uct_ud_ep_connect_to_iface(ep, ib_addr, if_addr);
     if (status != UCS_OK) {
-        goto err;
+        return status;
     }
 
     status = uct_ud_iface_cep_insert(iface, ib_addr, if_addr, ep,
@@ -542,36 +537,18 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         goto err_cep_insert;
     }
 
-    status = uct_ud_iface_unpack_peer_address(iface, ib_addr, if_addr,
-                                              ep->path_index,
-                                              uct_ud_ep_get_peer_address(ep));
-    if (status != UCS_OK) {
-        uct_ud_ep_disconnect_from_iface(&ep->super.super);
-        goto err;
-    }
-
-    skb = uct_ud_ep_prepare_creq(ep);
-    if (skb != NULL) {
-        uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
-                              UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED, 1);
-        uct_ud_iface_complete_tx_skb(iface, ep, skb);
-        uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_SENT);
-    } else {
+    *skb_p = uct_ud_ep_prepare_creq(ep);
+    if (!*skb_p) {
+        status = UCS_ERR_NO_RESOURCE;
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREQ);
     }
 
-out_set_ep:
-    /* cppcheck-suppress autoVariables */
-    *new_ep_p = &ep->super.super;
-out:
-    uct_ud_leave(iface);
+    *new_ep_p = ep;
     return status;
 
 err_cep_insert:
     uct_ud_ep_disconnect_from_iface(&ep->super.super);
-err:
-    *new_ep_p = NULL;
-    goto out;
+    return status;
 }
 
 void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep,
@@ -583,15 +560,11 @@ void uct_ud_ep_destroy_connected(uct_ud_ep_t *ep,
     uct_ud_ep_disconnect_from_iface(&ep->super.super);
 }
 
-ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
-                                     const uct_device_addr_t *dev_addr,
-                                     const uct_ep_addr_t *uct_ep_addr)
+ucs_status_t uct_ud_ep_connect_to_ep(uct_ud_ep_t *ep,
+                                     const uct_ib_address_t *ib_addr,
+                                     const uct_ud_ep_addr_t *ep_addr)
 {
-    uct_ud_ep_t *ep                   = ucs_derived_of(tl_ep, uct_ud_ep_t);
-    uct_ud_iface_t *iface             = ucs_derived_of(ep->super.super.iface,
-                                                       uct_ud_iface_t);
-    const uct_ib_address_t *ib_addr   = (const uct_ib_address_t*)dev_addr;
-    const uct_ud_ep_addr_t *ep_addr   = (const uct_ud_ep_addr_t*)uct_ep_addr;
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     uct_ib_device_t UCS_V_UNUSED *dev = uct_ib_iface_device(&iface->super);
     char buf[128];
 
@@ -603,18 +576,14 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_ud_ep_reset(ep);
 
-    ucs_debug(UCT_IB_IFACE_FMT" slid %d qpn 0x%x epid %u connected to %s "
-              "qpn 0x%x epid %u", UCT_IB_IFACE_ARG(&iface->super),
+    ucs_debug(UCT_IB_IFACE_FMT" slid %d qpn 0x%x epid %u connected to %s qpn 0x%x "
+              "epid %u", UCT_IB_IFACE_ARG(&iface->super),
               dev->port_attr[iface->super.config.port_num - dev->first_port].lid,
               iface->qp->qp_num, ep->ep_id,
               uct_ib_address_str(ib_addr, buf, sizeof(buf)),
               uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num),
               ep->dest_ep_id);
-
-    return uct_ud_iface_unpack_peer_address(iface, ib_addr,
-                                            &ep_addr->iface_addr,
-                                            ep->path_index,
-                                            uct_ud_ep_get_peer_address(ep));
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -677,8 +646,8 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
 
 static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 {
-    uct_ud_ctl_hdr_t *ctl = (uct_ud_ctl_hdr_t *)(neth + 1);
     uct_ud_ep_t *ep;
+    uct_ud_ctl_hdr_t *ctl = (uct_ud_ctl_hdr_t *)(neth + 1);
 
     ucs_assert_always(ctl->type == UCT_UD_PACKET_CREQ);
 
@@ -686,7 +655,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
                                  &ctl->conn_req.ep_addr.iface_addr,
                                  ctl->conn_req.conn_id,
                                  ctl->conn_req.path_index);
-    if (ep == NULL) {
+    if (!ep) {
         ep = uct_ud_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
         ep->rx.ooo_pkts.head_sn = neth->psn;
@@ -695,11 +664,11 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_PRIVATE);
     } else {
         if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
-            /* simultaneuous CREQ */
+            /* simultanuous CREQ */
             uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
             ep->rx.ooo_pkts.head_sn = neth->psn;
             uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
-            ucs_debug("simultaneuous CREQ ep=%p"
+            ucs_debug("simultanuous CREQ ep=%p"
                       "(iface=%p conn_id=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
                       ep, iface, ep->conn_id, ep->ep_id,
                       ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
@@ -755,9 +724,9 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     if (uct_ud_ep_is_connected(ep)) {
         ucs_assertv_always(ep->dest_ep_id == ctl->conn_rep.src_ep_id,
-                           "ep %p [id=%d dest_ep_id=%d flags=0x%x] "
+                           "ep [id=%d dest_ep_id=%d flags=0x%x] "
                            "crep [neth->dest=%d dst_ep_id=%d src_ep_id=%d]",
-                           ep, ep->ep_id, ep->dest_ep_id, ep->path_index, ep->flags,
+                           ep->ep_id, ep->dest_ep_id, ep->path_index, ep->flags,
                            uct_ud_neth_get_dest_id(neth), ctl->conn_rep.src_ep_id);
     }
 
