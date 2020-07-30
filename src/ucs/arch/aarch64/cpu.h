@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -33,6 +33,7 @@ BEGIN_C_DECLS
 
 #define ucs_aarch64_dmb(_op)          asm volatile ("dmb " #_op ::: "memory")
 #define ucs_aarch64_isb(_op)          asm volatile ("isb " #_op ::: "memory")
+#define ucs_aarch64_dsb(_op)          asm volatile ("dsb " #_op ::: "memory")
 
 /* The macro is used to serialize stores across Normal NC (or Device) and WB
  * memory, (see Arm Spec, B2.7.2).  Based on recent changes in Linux kernel:
