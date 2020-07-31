@@ -977,18 +977,26 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
         /* make sure responder scatter2cqe is disabled */
         dv_attr->create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
     }
+#endif
+
     if (scat2cqe_dir_mask & UCS_BIT(UCT_IB_DIR_TX)) {
         if (iface->super.super.config.max_inl_cqe[UCT_IB_DIR_TX] == 0) {
-            /* tell the driver to not signal all send WRs, so it will disable
-             * requester scatter2cqe
+            /* Tell the driver to not signal all send WRs, so it will disable
+             * requester scatter2cqe. Set this also for older driver which
+             * doesn't support specific scatter2cqe flags.
              */
             qp_attr->sq_sig_all = 0;
-        } else {
-            /* force-enable requester scatter2cqe, regardless of SIGNAL_ALL_WR */
+        }
+#if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
+        else if (!(dv_attr->create_flags &
+                   MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE)) {
+            /* force-enable requester scatter2cqe, regardless of SIGNAL_ALL_WR,
+             * unless it was already disabled on responder side (otherwise
+             * mlx5 driver check fails) */
             dv_attr->create_flags |= MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
         }
-    }
 #endif
+    }
 }
 #endif
 
