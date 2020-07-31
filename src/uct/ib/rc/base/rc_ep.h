@@ -209,15 +209,6 @@ struct uct_rc_ep {
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*);
 
 
-typedef struct uct_rc_ep_address {
-    uint8_t          flags;
-    uct_ib_uint24_t  qp_num;
-} UCS_S_PACKED uct_rc_ep_address_t;
-
-enum {
-    UCT_RC_ADDR_HAS_ATOMIC_MR = UCS_BIT(0)
-};
-
 void uct_rc_ep_packet_dump(uct_base_iface_t *iface, uct_am_trace_type_t type,
                            void *data, size_t length, size_t valid_length,
                            char *buffer, size_t max);
