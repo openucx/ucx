@@ -99,6 +99,12 @@ bool test_md::check_caps(uint64_t flags)
     return ((md() == NULL) || ucs_test_all_flags(m_md_attr.cap.flags, flags));
 }
 
+bool test_md::check_reg_mem_type(ucs_memory_type_t mem_type)
+{
+    return ((md() == NULL) || (check_caps(UCT_MD_FLAG_REG) &&
+                (m_md_attr.cap.reg_mem_types & UCS_BIT(mem_type))));
+}
+
 void test_md::alloc_memory(void **address, size_t size, char *fill_buffer,
                            ucs_memory_type_t mem_type)
 {
@@ -123,7 +129,6 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
                      !check_caps(UCT_MD_FLAG_ALLOC |
                                  UCT_MD_FLAG_RKEY_PTR)) {
     size_t size;
-    uct_md_attr_t md_attr;
     void *rkey_buffer;
     ucs_status_t status;
     unsigned *rva, *lva;
@@ -141,9 +146,7 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
     EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, size);
 
     // pack
-    status = uct_md_query(md(), &md_attr);
-    ASSERT_UCS_OK(status);
-    rkey_buffer = malloc(md_attr.rkey_packed_size);
+    rkey_buffer = malloc(md_attr().rkey_packed_size);
     if (rkey_buffer == NULL) {
         // make coverity happy
         uct_md_mem_free(md(), memh);
@@ -220,20 +223,16 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
 
 UCS_TEST_P(test_md, mem_type_detect_mds) {
 
-    uct_md_attr_t md_attr;
     ucs_status_t status;
     ucs_memory_type_t mem_type;
     int mem_type_id;
     void *address;
 
-    status = uct_md_query(md(), &md_attr);
-    ASSERT_UCS_OK(status);
-
-    if (!md_attr.cap.detect_mem_types) {
+    if (!md_attr().cap.detect_mem_types) {
         UCS_TEST_SKIP_R("MD can't detect any memory types");
     }
 
-    ucs_for_each_bit(mem_type_id, md_attr.cap.detect_mem_types) {
+    ucs_for_each_bit(mem_type_id, md_attr().cap.detect_mem_types) {
         alloc_memory(&address, UCS_KBYTE, NULL,
                      static_cast<ucs_memory_type_t>(mem_type_id));
         status = uct_md_detect_memory_type(md(), address, 1024, &mem_type);
@@ -245,17 +244,14 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
 UCS_TEST_SKIP_COND_P(test_md, reg,
                      !check_caps(UCT_MD_FLAG_REG)) {
     size_t size;
-    uct_md_attr_t md_attr;
     ucs_status_t status;
     void *address;
     uct_mem_h memh;
 
-    status = uct_md_query(md(), &md_attr);
-    ASSERT_UCS_OK(status);
     for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
         ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
 
-        if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type_id))) {
+        if (!(md_attr().cap.reg_mem_types & UCS_BIT(mem_type_id))) {
             UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
                              << "registration is not supported by "
                              << GetParam().md_name;
@@ -293,14 +289,11 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
                      !check_caps(UCT_MD_FLAG_REG)) {
     static const unsigned count = 10000;
     ucs_status_t status;
-    uct_md_attr_t md_attr;
     void *ptr;
 
-    status = uct_md_query(md(), &md_attr);
-    ASSERT_UCS_OK(status);
     for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
         ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
-        if (!(md_attr.cap.reg_mem_types & UCS_BIT(mem_type_id))) {
+        if (!(md_attr().cap.reg_mem_types & UCS_BIT(mem_type_id))) {
             UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
                              << " registration is not supported by "
                              << GetParam().md_name;
@@ -401,17 +394,8 @@ UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
  * allocates and releases memory.
  */
 UCS_TEST_SKIP_COND_P(test_md, reg_multi_thread,
-                     !check_caps(UCT_MD_FLAG_REG)) {
+                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST)) {
     ucs_status_t status;
-    uct_md_attr_t md_attr;
-
-    status = uct_md_query(md(), &md_attr);
-    ASSERT_UCS_OK(status);
-
-    if (!(md_attr.cap.reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
-        UCS_TEST_SKIP_R("not host memory type");
-    }
-
     pthread_t thread_id;
     int stop_flag = 0;
     pthread_create(&thread_id, NULL, alloc_thread, &stop_flag);
@@ -490,6 +474,55 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
     }
 
     freeifaddrs(ifaddr);
+}
+
+UCS_TEST_SKIP_COND_P(test_md, fork,
+                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST),
+                     "RCACHE_CHECK_PFN=1")
+{
+    static size_t REG_SIZE = 100;
+    ucs_status_t status;
+    int thread_status;
+    uct_mem_h memh;
+    char *page = NULL;
+    pid_t pid;
+
+    EXPECT_EQ(0, posix_memalign((void **)&page, ucs_get_page_size(), REG_SIZE));
+    memset(page, 42, REG_SIZE);
+
+    status = uct_md_mem_reg(md(), page, REG_SIZE, UCT_MD_MEM_ACCESS_ALL, &memh);
+    ASSERT_UCS_OK(status);
+    ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
+
+    /* dereg can keep the region pinned in the registration cache */
+    status = uct_md_mem_dereg(md(), memh);
+    EXPECT_UCS_OK(status);
+
+    pid = fork();
+    if (pid == 0) {
+        char buf[REG_SIZE];
+        memset(buf, 42, REG_SIZE);
+        /* child touch the page */
+        EXPECT_EQ(0, memcmp(page, buf, REG_SIZE));
+        exit(0);
+    }
+
+    EXPECT_NE(-1, pid);
+    memset(page, 42, REG_SIZE);
+
+    /* verify that rcache was flushed before fork()
+     * PFN failure will be triggered otherwise */
+    status = uct_md_mem_reg(md(), page, REG_SIZE, UCT_MD_MEM_ACCESS_ALL, &memh);
+    ASSERT_UCS_OK(status);
+    ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
+
+    status = uct_md_mem_dereg(md(), memh);
+    EXPECT_UCS_OK(status);
+
+    ASSERT_EQ(pid, wait(&thread_status));
+    ASSERT_TRUE(WIFEXITED(thread_status));
+
+    free(page);
 }
 
 #define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \

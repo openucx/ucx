@@ -54,6 +54,8 @@ struct ucs_rcache {
 
     char                     *name;    /**< Name of the cache, for debug purpose */
     UCS_STATS_NODE_DECLARE(stats)
+
+    ucs_list_link_t          list;     /**< list entry in global ucs_rcache list */
 };
 
 #endif

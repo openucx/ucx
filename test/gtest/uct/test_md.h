@@ -36,6 +36,7 @@ protected:
     virtual void modify_config(const std::string& name, const std::string& value,
                                bool optional);
     bool check_caps(uint64_t flags);
+    bool check_reg_mem_type(ucs_memory_type_t mem_type);
     void alloc_memory(void **address, size_t size, char *fill,
                       ucs_memory_type_t mem_type);
     void check_memory(void *address, void *expect, size_t size,

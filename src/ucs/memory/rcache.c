@@ -98,6 +98,9 @@ static ucs_stats_class_t ucs_rcache_stats_class = {
 #endif
 
 
+static pthread_mutex_t ucs_rcache_global_list_lock = PTHREAD_MUTEX_INITIALIZER;
+static UCS_LIST_HEAD(ucs_rcache_global_list);
+
 static void __ucs_rcache_region_log(const char *file, int line, const char *function,
                                     ucs_log_level_t level, ucs_rcache_t *rcache,
                                     ucs_rcache_region_t *region, const char *fmt,
@@ -816,6 +819,70 @@ void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_PUTS, 1);
 }
 
+static void ucs_rcache_before_fork(void)
+{
+    ucs_rcache_t *rcache;
+
+    pthread_mutex_lock(&ucs_rcache_global_list_lock);
+    ucs_list_for_each(rcache, &ucs_rcache_global_list, list) {
+        if (rcache->params.flags & UCS_RCACHE_FLAG_PURGE_ON_FORK) {
+            /* Fork will trigger process memory invalidation. Cache
+             * invalidation intended to solve following cases:
+             * - Pinned memory with MADV_DONTFORK (e.g IB/MD):
+             *   If a registered region shares a page with other allocation in
+             *   the process, that allocation won't be available in child
+             *   process as expected.
+             * - Pinned memory without MADV_DONTFORK (e.g KNEM/MD):
+             *   DONTFORK is generally required to avoid registration cache
+             *   becoming out of sync with virt-to-phys MMU mapping.
+             *   We compensate for the absence of DONTFORK by removing all
+             *   registered memory regions, and they could be registered
+             *   again on-demand.
+             * - Other use cases shouldn't be affected
+             */
+            pthread_rwlock_wrlock(&rcache->pgt_lock);
+            ucs_rcache_invalidate_range(rcache, 0, UCS_PGT_ADDR_MAX, 0);
+            pthread_rwlock_unlock(&rcache->pgt_lock);
+        }
+    }
+    pthread_mutex_unlock(&ucs_rcache_global_list_lock);
+}
+
+static ucs_status_t ucs_rcache_global_list_add(ucs_rcache_t *rcache)
+{
+    ucs_status_t status         = UCS_OK;
+    static int atfork_installed = 0;
+    int ret;
+
+    pthread_mutex_lock(&ucs_rcache_global_list_lock);
+    if (atfork_installed ||
+        !(rcache->params.flags & UCS_RCACHE_FLAG_PURGE_ON_FORK)) {
+        goto out_list_add;
+    }
+
+    ret = pthread_atfork(ucs_rcache_before_fork, NULL, NULL);
+    if (ret != 0) {
+        ucs_warn("pthread_atfork failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    atfork_installed = 1;
+
+out_list_add:
+    ucs_list_add_tail(&ucs_rcache_global_list, &rcache->list);
+
+out:
+    pthread_mutex_unlock(&ucs_rcache_global_list_lock);
+    return status;
+}
+
+static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache) {
+    pthread_mutex_lock(&ucs_rcache_global_list_lock);
+    ucs_list_del(&rcache->list);
+    pthread_mutex_unlock(&ucs_rcache_global_list_lock);
+}
+
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
                            const char *name, ucs_stats_node_t *stats_parent)
 {
@@ -888,8 +955,16 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_destroy_mp;
     }
 
+    status = ucs_rcache_global_list_add(self);
+    if (status != UCS_OK) {
+        goto err_unset_event;
+    }
+
     return UCS_OK;
 
+err_unset_event:
+    ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
+                            self);
 err_destroy_mp:
     ucs_mpool_cleanup(&self->mp, 1);
 err_cleanup_pgtable:
@@ -913,6 +988,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 {
     ucs_status_t status;
 
+    ucs_rcache_global_list_remove(self);
     ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
                             self);
     ucs_rcache_check_inv_queue(self, 0);
