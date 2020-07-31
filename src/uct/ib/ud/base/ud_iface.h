@@ -562,16 +562,6 @@ uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
 }
 
 
-static UCS_F_ALWAYS_INLINE void *uct_ud_ep_get_peer_address(uct_ud_ep_t *ud_ep)
-{
-    uct_ib_iface_t *ib_iface   = ucs_derived_of(ud_ep->super.super.iface,
-                                                uct_ib_iface_t);
-    uct_ud_iface_ops_t *ud_ops = ucs_derived_of(ib_iface->ops,
-                                                uct_ud_iface_ops_t);
-    return ud_ops->ep_get_peer_address(ud_ep);
-}
-
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_unpack_peer_address(uct_ud_iface_t *iface,
                                  const uct_ib_address_t *ib_addr,

@@ -493,6 +493,15 @@ static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
     return UCS_OK;
 }
 
+static void *uct_ud_ep_get_peer_address(uct_ud_ep_t *ud_ep)
+{
+    uct_ib_iface_t *ib_iface   = ucs_derived_of(ud_ep->super.super.iface,
+                                                uct_ib_iface_t);
+    uct_ud_iface_ops_t *ud_ops = ucs_derived_of(ib_iface->ops,
+                                                uct_ud_iface_ops_t);
+    return ud_ops->ep_get_peer_address(ud_ep);
+}
+
 ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
                                                uct_ep_h *new_ep_p)
 {
@@ -755,7 +764,7 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     if (uct_ud_ep_is_connected(ep)) {
         ucs_assertv_always(ep->dest_ep_id == ctl->conn_rep.src_ep_id,
-                           "ep %p [id=%d dest_ep_id=%d flags=0x%x] "
+                           "ep=%p [id=%d dest_ep_id=%d flags=0x%x] "
                            "crep [neth->dest=%d dst_ep_id=%d src_ep_id=%d]",
                            ep, ep->ep_id, ep->dest_ep_id, ep->path_index, ep->flags,
                            uct_ud_neth_get_dest_id(neth), ctl->conn_rep.src_ep_id);
