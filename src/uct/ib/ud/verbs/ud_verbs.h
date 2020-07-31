@@ -15,23 +15,28 @@
 
 
 typedef struct {
-    uct_ud_ep_t          super;
-    uint32_t             dest_qpn;
-    struct ibv_ah       *ah;
+    uint32_t                          dest_qpn;
+    struct ibv_ah                     *ah;
+} uct_ud_verbs_ep_peer_address_t;
+
+
+typedef struct {
+    uct_ud_ep_t                       super;
+    uct_ud_verbs_ep_peer_address_t    peer_address;
 } uct_ud_verbs_ep_t;
 
 
 typedef struct {
-    uct_ud_iface_t          super;
+    uct_ud_iface_t                    super;
     struct {
-        struct ibv_sge      sge[UCT_IB_MAX_IOV];
-        struct ibv_send_wr  wr_inl;
-        struct ibv_send_wr  wr_skb;
-        uint16_t            send_sn;
-        uint16_t            comp_sn;
+        struct ibv_sge                sge[UCT_IB_MAX_IOV];
+        struct ibv_send_wr            wr_inl;
+        struct ibv_send_wr            wr_skb;
+        uint16_t                      send_sn;
+        uint16_t                      comp_sn;
     } tx;
     struct {
-        size_t              max_send_sge;
+        size_t                        max_send_sge;
     } config;
 } uct_ud_verbs_iface_t;
 
