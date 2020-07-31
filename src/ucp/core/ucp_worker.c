@@ -618,7 +618,6 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     ucp_worker_h worker         = (ucp_worker_h)arg;
     ucp_lane_index_t lane;
     ucs_status_t ret_status;
-    ucp_ep_ext_gen_t *ep_ext;
     ucp_ep_h ucp_ep;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -627,8 +626,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
               worker, uct_ep, ucs_status_string(status));
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
-    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
-        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
+    kh_foreach_value(&worker->all_eps, ucp_ep,
         for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
             if ((uct_ep == ucp_ep->uct_eps[lane]) ||
                 ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
@@ -638,7 +636,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
                 return ret_status;
             }
         }
-    }
+    );
 
     ucs_error("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
               uct_ep, worker);
@@ -1816,10 +1814,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->num_ifaces        = 0;
     worker->am_message_id     = ucs_generate_uuid(0);
     worker->rkey_ptr_cb_id    = UCS_CALLBACKQ_ID_NULL;
+    worker->all_eps_ctr       = 0;
     ucs_queue_head_init(&worker->rkey_ptr_reqs);
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
-    ucs_list_head_init(&worker->all_eps);
+    kh_init_inplace(ucp_worker_eps_hash, &worker->all_eps);
     ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
                         &ucp_ep_match_ops);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
@@ -1977,12 +1976,11 @@ err_free:
 
 static void ucp_worker_destroy_eps(ucp_worker_h worker)
 {
-    ucp_ep_ext_gen_t *ep_ext, *tmp;
+    ucp_ep_h ep;
 
     ucs_debug("worker %p: destroy all endpoints", worker);
-    ucs_list_for_each_safe(ep_ext, tmp, &worker->all_eps, ep_list) {
-        ucp_ep_disconnected(ucp_ep_from_ext_gen(ep_ext), 1);
-    }
+    kh_foreach_value(&worker->all_eps, ep, ucp_ep_disconnected(ep, 1));
+    kh_destroy_inplace(ucp_worker_eps_hash, &worker->all_eps);
 }
 
 static void ucp_worker_destroy_ep_configs(ucp_worker_h worker)
@@ -2336,4 +2334,14 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     fprintf(stream, "#\n");
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+}
+
+ucp_ep_hash_key_t ucp_worker_gen_ep_hash_key(ucp_worker_h worker, ucp_ep_h ep,
+                                             unsigned ep_init_flags)
+{
+    UCS_STATIC_ASSERT(sizeof(ucp_ep_hash_key_t) >= sizeof(uintptr_t));
+
+    return (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ?
+           (((++worker->all_eps_ctr) << 1) | UCP_EP_HASH_KEY_ID_FLAG) :
+           (uintptr_t)ep;
 }

@@ -297,7 +297,7 @@ struct ucp_request {
             ucp_send_nbx_callback_t cb;         /* Completion callback */
             uct_worker_cb_id_t      prog_id;    /* Progress callback ID */
             int                     comp_count; /* Countdown to request completion */
-            ucp_ep_ext_gen_t        *next_ep;   /* Next endpoint to flush */
+            khiter_t                next_ep;    /* Next endpoint to flush */
         } flush_worker;
     };
 };

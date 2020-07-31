@@ -104,8 +104,9 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ep->am_lane                     = UCP_NULL_LANE;
     ep->flags                       = 0;
     ep->conn_sn                     = UCP_EP_MATCH_CONN_SN_MAX;
+    ucp_ep_ext_gen(ep)->lkey        = UCP_EP_HASH_INVALID_KEY;
+    ucp_ep_ext_gen(ep)->rkey        = UCP_EP_HASH_INVALID_KEY;
     ucp_ep_ext_gen(ep)->user_data   = NULL;
-    ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
     ucp_ep_ext_gen(ep)->err_cb      = NULL;
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
                       sizeof(ucp_ep_ext_gen(ep)->listener));
@@ -132,8 +133,6 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ucs_list_head_init(&ucp_ep_ext_gen(ep)->ep_list);
-
     *ep_p = ep;
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
     return UCS_OK;
@@ -144,19 +143,30 @@ err:
     return status;
 }
 
-ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, const char *peer_name,
-                                  const char *message, ucp_ep_h *ep_p)
+ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
+                                  const char *peer_name, const char *message,
+                                  ucp_ep_h *ep_p)
 {
     ucs_status_t status;
     ucp_ep_h ep;
+    ucp_ep_hash_key_t key;
+    khiter_t i;
+    int r;
 
     status = ucp_ep_create_base(worker, peer_name, message, &ep);
     if (status != UCS_OK) {
         return status;
     }
 
-    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    key = ucp_worker_gen_ep_hash_key(worker, ep, ep_init_flags);
+    i   = kh_put(ucp_worker_eps_hash, &worker->all_eps, key, &r);
+    if (ucs_unlikely(r == UCS_KH_PUT_FAILED)) {
+        ucp_ep_delete(ep);
+        return UCS_ERR_NO_MEMORY;
+    }
 
+    kh_value(&worker->all_eps, i) = ep;
+    ucp_ep_ext_gen(ep)->lkey      = key;
     *ep_p = ep;
 
     return UCS_OK;
@@ -167,7 +177,9 @@ void ucp_ep_delete(ucp_ep_h ep)
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
     UCS_STATS_NODE_FREE(ep->stats);
-    ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
+    kh_del(ucp_worker_eps_hash, &ep->worker->all_eps,
+           kh_get(ucp_worker_eps_hash, &ep->worker->all_eps,
+                  ucp_ep_ext_gen(ep)->lkey));
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
 
@@ -181,7 +193,8 @@ ucp_ep_create_sockaddr_aux(ucp_worker_h worker, unsigned ep_init_flags,
     ucp_ep_h ep;
 
     /* allocate endpoint */
-    status = ucp_worker_create_ep(worker, remote_address->name, "listener", &ep);
+    status = ucp_worker_create_ep(worker, ep_init_flags, remote_address->name,
+                                  "listener", &ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -352,7 +365,8 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ucp_ep_h ep;
 
     /* allocate endpoint */
-    status = ucp_worker_create_ep(worker, remote_address->name, message, &ep);
+    status = ucp_worker_create_ep(worker, ep_init_flags, remote_address->name,
+                                  message, &ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -381,6 +395,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
 {
     char peer_name[UCS_SOCKADDR_STRING_LEN];
     ucp_wireup_ep_t *wireup_ep;
+    unsigned ep_init_flags;
     ucs_status_t status;
     ucp_ep_h ep;
 
@@ -395,13 +410,14 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     /* allocate endpoint */
     ucs_sockaddr_str(params->sockaddr.addr, peer_name, sizeof(peer_name));
 
-    status = ucp_worker_create_ep(worker, peer_name, "from api call", &ep);
+    ep_init_flags = ucp_ep_init_flags(worker, params);
+    status        = ucp_worker_create_ep(worker, ep_init_flags, peer_name,
+                                         "from api call", &ep);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = ucp_ep_init_create_wireup(ep, ucp_ep_init_flags(worker, params),
-                                       &wireup_ep);
+    status = ucp_ep_init_create_wireup(ep, ep_init_flags, &wireup_ep);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -474,7 +490,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 
         ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
         ucp_ep_flush_state_reset(*ep_p);
-        ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
+        ucp_ep_update_rkey(*ep_p, sa_data->ep_key);
         /* send wireup request message, to connect the client to the server's
            new endpoint */
         ucs_assert(!((*ep_p)->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
@@ -490,7 +506,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
             goto non_cm_err_reject;
         }
 
-        ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
+        ucp_ep_update_rkey(*ep_p, sa_data->ep_key);
         /* the server's ep should be aware of the sent address from the client */
         (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
         /* NOTE: protect union */
@@ -634,7 +650,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     if ((remote_address.uuid == worker->uuid) &&
         !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
-        ucp_ep_update_dest_ep_ptr(ep, (uintptr_t)ep);
+        ucp_ep_update_rkey(ep, ucp_ep_ext_gen(ep)->lkey);
         ucp_ep_flush_state_reset(ep);
     } else {
         ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn, 1);

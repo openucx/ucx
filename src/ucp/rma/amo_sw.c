@@ -24,7 +24,7 @@ static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
     size_t length;
 
     atomich->address    = req->send.rma.remote_addr;
-    atomich->req.ep_ptr = ucp_ep_dest_ep_ptr(ep);
+    atomich->req.ep_key = ucp_ep_dest_ep_key(ep);
     atomich->req.reqptr = fetch ? (uintptr_t)req : 0;
     atomich->length     = size;
     atomich->opcode     = req->send.amo.uct_op;
@@ -199,8 +199,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
-    ucp_ep_h ep                      = ucp_worker_get_ep_by_ptr(worker,
-                                                                atomicreqh->req.ep_ptr);
+    ucp_ep_h ep                      = ucp_worker_get_ep_by_key(worker,
+                                                                atomicreqh->req.ep_key);
     ucp_rsc_index_t amo_rsc_idx      = ucs_ffs64_safe(worker->atomic_tls);
     ucp_request_t *req;
 
@@ -285,10 +285,12 @@ static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     case UCP_AM_ID_ATOMIC_REQ:
         atomich = data;
         snprintf(buffer, max,
-                 "ATOMIC_REQ [addr 0x%lx len %u reqptr 0x%lx ep 0x%lx op %d]",
+                 "ATOMIC_REQ [addr 0x%lx len %u reqptr 0x%lx ep_key 0x%lx ep %p op %d]",
                  atomich->address, atomich->length, atomich->req.reqptr,
-                 atomich->req.ep_ptr, atomich->opcode);
-        header_len = sizeof(*atomich);;
+                 atomich->req.ep_key,
+                 ucp_worker_get_ep_by_key(worker, atomich->req.ep_key),
+                 atomich->opcode);
+        header_len = sizeof(*atomich);
         break;
     case UCP_AM_ID_ATOMIC_REP:
         reph = data;

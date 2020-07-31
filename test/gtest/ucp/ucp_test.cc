@@ -3,6 +3,9 @@
 * See file LICENSE for terms.
 */
 
+#define __STDC_LIMIT_MACROS /* NOTE: fixes undefined macro defs from stdint.h
+                                     for old compilers */
+
 #include "ucp_test.h"
 #include <common/test_helpers.h>
 #include <ifaddrs.h>

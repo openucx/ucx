@@ -32,6 +32,21 @@ ucp_worker_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
 KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t,
            1, ucp_worker_rkey_config_hash_func, ucp_worker_rkey_config_is_equal);
 
+KHASH_IMPL(ucp_worker_eps_hash, ucp_ep_hash_key_t, ucp_ep_h, 1,
+           kh_int64_hash_func, kh_int64_hash_equal);
+
+static UCS_F_ALWAYS_INLINE khiter_t
+ucp_worker_next_ep_iter(ucp_worker_h worker, khiter_t i)
+{
+    for (; i != kh_end(&worker->all_eps); ++i) {
+        if (kh_exist(&worker->all_eps, i)) {
+            return i;
+        }
+    }
+
+    return kh_end(&worker->all_eps);
+}
+
 /**
  * @return Worker name
  */
@@ -42,12 +57,24 @@ ucp_worker_get_name(ucp_worker_h worker)
 }
 
 /**
- * @return endpoint by a pointer received from remote side
+ * @return endpoint by a key received from remote side
  */
 static UCS_F_ALWAYS_INLINE ucp_ep_h
-ucp_worker_get_ep_by_ptr(ucp_worker_h worker, uintptr_t ep_ptr)
+ucp_worker_get_ep_by_key(ucp_worker_h worker, ucp_ep_hash_key_t ep_key)
 {
-    ucp_ep_h ep = (ucp_ep_h)ep_ptr;
+    ucp_ep_h ep;
+
+    ucs_assert(ep_key != UCP_EP_HASH_INVALID_KEY);
+
+    if (ep_key & UCP_EP_HASH_KEY_ID_FLAG) {
+        ep = kh_value(&worker->all_eps, kh_get(ucp_worker_eps_hash,
+                                               &worker->all_eps, ep_key));
+    } else {
+        ep = (ucp_ep_h)(ep_key);
+        ucs_assert(ep == kh_value(&worker->all_eps,
+                                  kh_get(ucp_worker_eps_hash, &worker->all_eps,
+                                         ep_key)));
+    }
 
     ucs_assert(ep != NULL);
     ucs_assertv(ep->worker == worker, "worker=%p ep=%p ep->worker=%p", worker,

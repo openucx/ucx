@@ -95,7 +95,7 @@ static void ucp_cm_priv_data_pack(ucp_wireup_sockaddr_data_t *sa_data,
     ucs_assert((int)ucp_ep_config(ep)->key.err_mode <= UINT8_MAX);
     ucs_assert(dev_index != UCP_NULL_RESOURCE);
 
-    sa_data->ep_ptr    = (uintptr_t)ep;
+    sa_data->ep_key    = ucp_ep_ext_gen(ep)->lkey;
     sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
     sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
     sa_data->dev_index = dev_index;
@@ -312,7 +312,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     }
 
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
-    ucp_ep_update_dest_ep_ptr(ucp_ep, progress_arg->sa_data->ep_ptr);
+    ucp_ep_update_rkey(ucp_ep, progress_arg->sa_data->ep_key);
 
     /* Get tl bitmap from tmp_ep, because it contains initial configuration. */
     tl_bitmap = ucp_ep_get_tl_bitmap(wireup_ep->tmp_ep);
@@ -792,7 +792,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 
     ep->flags                   |= UCP_EP_FLAG_LISTENER;
     ucp_ep_ext_gen(ep)->listener = conn_request->listener;
-    ucp_ep_update_dest_ep_ptr(ep, conn_request->sa_data.ep_ptr);
+    ucp_ep_update_rkey(ep, conn_request->sa_data.ep_key);
     ucp_listener_schedule_accept_cb(ep);
     *ep_p = ep;
 

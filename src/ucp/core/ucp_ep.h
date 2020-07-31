@@ -20,6 +20,8 @@
 
 
 #define UCP_MAX_IOV                16UL
+#define UCP_EP_HASH_KEY_ID_FLAG    0x1
+#define UCP_EP_HASH_INVALID_KEY    UINT64_MAX
 
 
 /* Endpoint flags type */
@@ -365,13 +367,19 @@ typedef struct {
 } ucp_ep_close_proto_req_t;
 
 
+/* Hash map to find ucp ep by ep id */
+typedef uint64_t ucp_ep_hash_key_t;
+KHASH_TYPE(ucp_worker_eps_hash, ucp_ep_hash_key_t, ucp_ep_h);
+typedef khash_t(ucp_worker_eps_hash) ucp_worker_eps_hash_t;
+
+
 /*
  * Endpoint extension for generic non fast-path data
  */
 typedef struct {
-    uintptr_t                     dest_ep_ptr;   /* Remote EP pointer */
+    ucp_ep_hash_key_t             lkey;          /* Key in worker's all eps hash table */
+    ucp_ep_hash_key_t             rkey;          /* Remote EP key */
     void                          *user_data;    /* User data associated with ep */
-    ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
 
     /* Endpoint match context and remote completion status are mutually exclusive,
@@ -421,7 +429,7 @@ enum {
 
 
 struct ucp_wireup_sockaddr_data {
-    uintptr_t                 ep_ptr;        /**< Endpoint pointer */
+    ucp_ep_hash_key_t         ep_key;        /**< Endpoint key */
     uint8_t                   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
@@ -461,8 +469,9 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
 ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
                                 const char *message, ucp_ep_h *ep_p);
 
-ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, const char *peer_name,
-                                  const char *message, ucp_ep_h *ep_p);
+ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
+                                  const char *peer_name, const char *message,
+                                  ucp_ep_h *ep_p);
 
 void ucp_ep_delete(ucp_ep_h ep);
 

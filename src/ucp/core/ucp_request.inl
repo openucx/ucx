@@ -640,13 +640,14 @@ ucp_send_request_next_am_bw_lane(ucp_request_t *req)
     }
 }
 
-static UCS_F_ALWAYS_INLINE uintptr_t ucp_request_get_dest_ep_ptr(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE ucp_ep_hash_key_t
+ucp_request_get_ep_rkey(ucp_request_t *req)
 {
-    /* This function may return 0, but in such cases the message should not be
-     * sent at all because the am_lane would point to a wireup (proxy) endpoint.
-     * So only the receiver side has an assertion that ep_ptr != 0.
-     */
-    return ucp_ep_dest_ep_ptr(req->send.ep);
+    /* This function may return UCP_EP_HASH_INVALID_KEY, but in such cases the
+     * message should not be sent at all because the am_lane would point to a
+     * wireup (proxy) endpoint. So only the receiver side has an assertion that
+     * ep rkey != UCP_EP_HASH_INVALID_KEY. */
+    return ucp_ep_dest_ep_key(req->send.ep);
 }
 
 static UCS_F_ALWAYS_INLINE uint32_t

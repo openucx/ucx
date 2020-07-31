@@ -44,7 +44,7 @@ typedef union {
 
 typedef struct {
     ucp_am_hdr_t             super;
-    uintptr_t                ep_ptr; /* ep which can be used for reply */
+    ucp_ep_hash_key_t        ep_key; /* ep which can be used for reply */
 } UCS_S_PACKED ucp_am_reply_hdr_t;
 
 
@@ -58,7 +58,7 @@ typedef struct {
 typedef struct {
     uint64_t                 msg_id;     /* method to match parts of the same AM */
     size_t                   offset;     /* offset in the entire AM buffer */
-    uintptr_t                ep_ptr;     /* ep which can be used for reply */
+    ucp_ep_hash_key_t        ep_key;     /* ep which can be used for reply */
 } UCS_S_PACKED ucp_am_mid_hdr_t;
 
 

@@ -156,14 +156,15 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
     return &ucp_ep_ext_gen(ep)->flush_state;
 }
 
-static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
+static UCS_F_ALWAYS_INLINE ucp_ep_hash_key_t ucp_ep_dest_ep_key(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT
     if (!(ep->flags & UCP_EP_FLAG_DEST_EP)) {
-        return 0; /* Let remote side assert if it gets NULL pointer */
+        /* Let remote side assert if it gets invalid key */
+        return UCP_EP_HASH_INVALID_KEY;
     }
 #endif
-    return ucp_ep_ext_gen(ep)->dest_ep_ptr;
+    return ucp_ep_ext_gen(ep)->rkey;
 }
 
 /*
@@ -180,18 +181,18 @@ ucp_ep_resolve_dest_ep_ptr(ucp_ep_h ep, ucp_lane_index_t lane)
     return ucp_wireup_connect_remote(ep, lane);
 }
 
-static inline void ucp_ep_update_dest_ep_ptr(ucp_ep_h ep, uintptr_t ep_ptr)
+static inline void ucp_ep_update_rkey(ucp_ep_h ep, ucp_ep_hash_key_t rkey)
 {
     if (ep->flags & UCP_EP_FLAG_DEST_EP) {
-        ucs_assertv(ep_ptr == ucp_ep_ext_gen(ep)->dest_ep_ptr,
-                    "ep=%p ep_ptr=0x%lx ep->dest_ep_ptr=0x%lx",
-                    ep, ep_ptr, ucp_ep_ext_gen(ep)->dest_ep_ptr);
+        ucs_assertv(rkey == ucp_ep_ext_gen(ep)->rkey,
+                    "ep=%p rkey=0x%lx ep->rkey=0x%lx", ep, rkey,
+                    ucp_ep_ext_gen(ep)->rkey);
     }
 
-    ucs_assert(ep_ptr != 0);
-    ucs_trace("ep %p: set dest_ep_ptr to 0x%lx", ep, ep_ptr);
-    ep->flags                      |= UCP_EP_FLAG_DEST_EP;
-    ucp_ep_ext_gen(ep)->dest_ep_ptr = ep_ptr;
+    ucs_assert(rkey != UCP_EP_HASH_INVALID_KEY);
+    ucs_trace("ep %p: set rkey to 0x%lx", ep, rkey);
+    ep->flags               |= UCP_EP_FLAG_DEST_EP;
+    ucp_ep_ext_gen(ep)->rkey = rkey;
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)

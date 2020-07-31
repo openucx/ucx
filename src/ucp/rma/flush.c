@@ -436,15 +436,15 @@ static void ucp_worker_flush_ep_flushed_cb(ucp_request_t *req)
 
 static unsigned ucp_worker_flush_progress(void *arg)
 {
-    ucp_request_t *req        = arg;
-    ucp_worker_h worker       = req->flush_worker.worker;
-    ucp_ep_ext_gen_t *next_ep = req->flush_worker.next_ep;
+    ucp_request_t *req  = arg;
+    ucp_worker_h worker = req->flush_worker.worker;
+    khiter_t next_ep    = req->flush_worker.next_ep;
     void *ep_flush_request;
     ucs_status_t status;
     ucp_ep_h ep;
 
     status = ucp_worker_flush_check(worker);
-    if ((status == UCS_OK) || (&next_ep->ep_list == &worker->all_eps)) {
+    if ((status == UCS_OK) || (next_ep == kh_end(&worker->all_eps))) {
         /* If all ifaces are flushed, or we finished going over all endpoints,
          * no need to progress this request actively any more. Just wait until
          * all associated endpoint flush requests are completed.
@@ -457,9 +457,9 @@ static unsigned ucp_worker_flush_progress(void *arg)
         /* Some endpoints are not flushed yet. Take next endpoint from the list
          * and start flush operation on it.
          */
-        ep                        = ucp_ep_from_ext_gen(next_ep);
-        req->flush_worker.next_ep = ucs_list_next(&next_ep->ep_list,
-                                                  ucp_ep_ext_gen_t, ep_list);
+        ep      = kh_value(&worker->all_eps, next_ep);
+        next_ep = ucp_worker_next_ep_iter(worker, ++next_ep);
+        req->flush_worker.next_ep = next_ep;
 
         ep_flush_request = ucp_ep_flush_internal(ep, UCT_FLUSH_FLAG_LOCAL,
                                                  UCP_REQUEST_FLAG_RELEASED,
@@ -500,8 +500,8 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
     req->flush_worker.comp_count = 1; /* counting starts from 1, and decremented
                                          when finished going over all endpoints */
     req->flush_worker.prog_id    = UCS_CALLBACKQ_ID_NULL;
-    req->flush_worker.next_ep    = ucs_list_head(&worker->all_eps,
-                                                 ucp_ep_ext_gen_t, ep_list);
+    req->flush_worker.next_ep    = ucp_worker_next_ep_iter(worker,
+                                                           kh_begin(&worker->all_eps));
 
     ucp_request_set_send_callback_param(param, req, flush_worker);
     uct_worker_progress_register_safe(worker->uct, ucp_worker_flush_progress,

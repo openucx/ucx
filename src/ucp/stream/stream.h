@@ -13,7 +13,7 @@
 
 
 typedef struct {
-    uintptr_t                ep_ptr;
+    ucp_ep_hash_key_t        ep_key;
 } UCS_S_PACKED ucp_stream_am_hdr_t;
 
 

@@ -8,6 +8,7 @@
 #define UCP_PROTO_AM_H_
 
 #include <ucp/core/ucp_types.h>
+#include <ucp/core/ucp_ep.h>
 #include <ucs/sys/compiler.h>
 
 
@@ -15,7 +16,7 @@
  * Header segment for a transaction
  */
 typedef struct {
-    uintptr_t                 ep_ptr;
+    ucp_ep_hash_key_t         ep_key;
     uintptr_t                 reqptr;
 } UCS_S_PACKED ucp_request_hdr_t;
 

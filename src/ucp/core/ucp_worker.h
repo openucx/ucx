@@ -229,7 +229,8 @@ typedef struct ucp_worker {
     void                          *user_data;    /* User-defined data */
     ucs_strided_alloc_t           ep_alloc;      /* Endpoint allocator */
     ucs_list_link_t               stream_ready_eps; /* List of EPs with received stream data */
-    ucs_list_link_t               all_eps;       /* List of all endpoints */
+    ucp_worker_eps_hash_t         all_eps;       /* Hash table of all endpoints */
+    uint64_t                      all_eps_ctr;   /* Counter of all created EPs, used for hash key generator */
     ucs_conn_match_ctx_t          conn_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            **ifaces;      /* Array of pointers to interfaces,
                                                     one for each resource */
@@ -302,8 +303,12 @@ void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
 
 int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
                                         void *arg);
+
 ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
                                       uct_ep_h uct_ep, ucp_lane_index_t lane,
                                       ucs_status_t status);
+
+ucp_ep_hash_key_t ucp_worker_gen_ep_hash_key(ucp_worker_h worker, ucp_ep_h ep,
+                                             unsigned ep_init_flags);
 
 #endif

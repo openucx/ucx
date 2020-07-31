@@ -44,12 +44,12 @@ typedef union {
 
 typedef struct {
     uint64_t                  address;
-    uintptr_t                 ep_ptr;
+    ucp_ep_hash_key_t         ep_key;
 } UCS_S_PACKED ucp_put_hdr_t;
 
 
 typedef struct {
-    uintptr_t                 ep_ptr;
+    ucp_ep_hash_key_t         ep_key;
 } UCS_S_PACKED ucp_cmpl_hdr_t;
 
 

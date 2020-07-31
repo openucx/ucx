@@ -30,7 +30,7 @@ ucp_stream_send_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
     UCS_STATIC_ASSERT(sizeof(ep->worker->uuid) == sizeof(uint64_t));
 
     return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_STREAM_DATA,
-                           ucp_ep_dest_ep_ptr(ep), buffer, length);
+                           ucp_ep_dest_ep_key(ep), buffer, length);
 }
 
 static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
@@ -211,7 +211,7 @@ static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)
     ucp_request_t       *req = arg;
     size_t              length;
 
-    hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
+    hdr->ep_key = ucp_request_get_ep_rkey(req);
 
     ucs_assert(req->send.state.dt.offset == 0);
 
@@ -242,7 +242,7 @@ static size_t ucp_stream_pack_am_first_dt(void *dest, void *arg)
     ucp_request_t       *req = arg;
     size_t              length;
 
-    hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
+    hdr->ep_key = ucp_request_get_ep_rkey(req);
     length      = ucs_min(ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr),
                           req->send.length);
 
@@ -258,7 +258,7 @@ static size_t ucp_stream_pack_am_middle_dt(void *dest, void *arg)
     ucp_request_t       *req = arg;
     size_t              length;
 
-    hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
+    hdr->ep_key = ucp_request_get_ep_rkey(req);
     length      = ucs_min(ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr),
                           req->send.length - req->send.state.dt.offset);
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
@@ -288,7 +288,7 @@ static ucs_status_t ucp_stream_eager_zcopy_single(uct_pending_req_t *self)
     ucp_request_t       *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_stream_am_hdr_t hdr;
 
-    hdr.ep_ptr = ucp_request_get_dest_ep_ptr(req);
+    hdr.ep_key = ucp_request_get_ep_rkey(req);
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_STREAM_DATA, &hdr,
                                   sizeof(hdr), ucp_proto_am_zcopy_req_complete);
 }
@@ -298,7 +298,7 @@ static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
     ucp_request_t       *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_stream_am_hdr_t hdr;
 
-    hdr.ep_ptr = ucp_request_get_dest_ep_ptr(req);
+    hdr.ep_key = ucp_request_get_ep_rkey(req);
     return ucp_do_am_zcopy_multi(self,
                                  UCP_AM_ID_STREAM_DATA,
                                  UCP_AM_ID_STREAM_DATA,

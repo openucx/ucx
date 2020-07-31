@@ -530,7 +530,7 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_assert(am_length >= sizeof(ucp_stream_am_hdr_t));
 
-    ep     = ucp_worker_get_ep_by_ptr(worker, data->hdr.ep_ptr);
+    ep     = ucp_worker_get_ep_by_key(worker, data->hdr.ep_key);
     ep_ext = ucp_ep_ext_proto(ep);
 
     if (ucs_unlikely(ep->flags & UCP_EP_FLAG_CLOSED)) {
@@ -564,10 +564,10 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     size_t                    hdr_len = sizeof(*hdr);
     char                      *p;
 
-    snprintf(buffer, max, "STREAM ep_ptr 0x%lx", hdr->ep_ptr);
+    snprintf(buffer, max, "STREAM ep_key 0x%lx", hdr->ep_key);
     p = buffer + strlen(buffer);
 
-    ucs_assert(hdr->ep_ptr != 0);
+    ucs_assert(hdr->ep_key != UCP_EP_HASH_INVALID_KEY);
     ucp_dump_payload(worker->context, p, buffer + max - p,
                      UCS_PTR_BYTE_OFFSET(data, hdr_len), length - hdr_len);
 }
