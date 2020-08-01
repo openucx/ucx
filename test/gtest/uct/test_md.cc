@@ -482,7 +482,7 @@ UCS_TEST_SKIP_COND_P(test_md, fork,
 {
     static size_t REG_SIZE = 100;
     ucs_status_t status;
-    int thread_status;
+    int child_status;
     uct_mem_h memh;
     char *page = NULL;
     pid_t pid;
@@ -519,8 +519,8 @@ UCS_TEST_SKIP_COND_P(test_md, fork,
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);
 
-    ASSERT_EQ(pid, wait(&thread_status));
-    ASSERT_TRUE(WIFEXITED(thread_status));
+    ASSERT_EQ(pid, waitpid(pid, &child_status, 0));
+    ASSERT_TRUE(WIFEXITED(child_status)) << ucs::exit_status_info(child_status);
 
     free(page);
 }
