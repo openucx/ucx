@@ -564,9 +564,12 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         /* - ignore close event on failed ep, since all lanes are destroyed in
              generic err flow
-           - close request is valid only if all lanes are flushed, transport
-             error is unexpected */
-        ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
+           - if close req is valid this is ucp_ep_close_nb request and it will
+             be completed as the ep is destroyed, i.e. flushed and disconnected
+             with any status */
+        if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+            ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
+        }
     } else if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
         /* if the EP is local connected, need to flush it from main thread first */
         ucp_ep_cm_remote_disconnect_progress(ucp_ep);
