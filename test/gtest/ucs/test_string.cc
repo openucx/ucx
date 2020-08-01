@@ -76,6 +76,18 @@ UCS_TEST_F(test_string_buffer, rtrim) {
     ucs_string_buffer_cleanup(&strb);
 }
 
+UCS_TEST_F(test_string_buffer, fixed) {
+    char buf[17];
+    UCS_STRING_BUFFER_FIXED(strb, buf);
+
+    ucs_string_buffer_appendf(&strb, "%s", "im");
+    ucs_string_buffer_appendf(&strb, "%s", "mrmeeseeks");
+    ucs_string_buffer_appendf(&strb, "%s", "lookatme");
+
+    EXPECT_LE(ucs_string_buffer_length(&strb), sizeof(buf) - 1);
+    EXPECT_EQ(std::string("immrmeeseeksloo"), ucs_string_buffer_cstr(&strb));
+}
+
 class test_string_set : public ucs::test {
 };
 

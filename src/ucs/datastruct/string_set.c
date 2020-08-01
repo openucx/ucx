@@ -132,11 +132,8 @@ ucs_status_t ucs_string_set_print_sorted(const ucs_string_set_t *sset,
 
     /* append the sorted strings to the string buffer */
     for (idx = 0; idx < count; ++idx) {
-        status = ucs_string_buffer_appendf(strb, "%s%s", (idx > 0) ? sep : "",
-                                           sorted_strings[idx]);
-        if (status != UCS_OK) {
-            goto out_free_array;
-        }
+        ucs_string_buffer_appendf(strb, "%s%s", (idx > 0) ? sep : "",
+                                  sorted_strings[idx]);
     }
 
     status = UCS_OK;
