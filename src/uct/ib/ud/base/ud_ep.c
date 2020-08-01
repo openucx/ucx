@@ -1227,9 +1227,9 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
 
 static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
+    int ctl_flags = 0;
     uct_ud_ctl_desc_t *cdesc;
     uct_ud_send_skb_t *skb;
-    int is_inline;
 
     /* Do not send ACKs if not connected yet. It may happen if CREQ and CREP
      * from peer are lost. Need to wait for CREP resend from peer.
@@ -1244,10 +1244,9 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 #if UCS_ENABLE_ASSERT
         skb->lkey  = 0;
 #endif
-        is_inline  = 1;
+        ctl_flags |= UCT_UD_IFACE_SEND_CTL_FLAG_INLINE;
     } else {
         skb        = uct_ud_iface_ctl_skb_get(iface);
-        is_inline  = 0;
     }
 
     uct_ud_neth_init_data(ep, skb->neth);
@@ -1256,19 +1255,20 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     skb->neth->packet_type = ep->dest_ep_id;
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
         skb->neth->packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
+        ctl_flags              |= UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED;
     }
 
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_NACK)) {
         skb->neth->packet_type |= UCT_UD_PACKET_FLAG_NAK;
     }
 
-    if (is_inline) {
-        uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
-                              UCT_UD_IFACE_SEND_CTL_FLAG_INLINE, 1);
+    if (ctl_flags & UCT_UD_IFACE_SEND_CTL_FLAG_INLINE) {
+        uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0, ctl_flags, 1);
     } else {
         /* if skb is taken from memory pool, release it in send completion */
         cdesc             = uct_ud_ctl_desc(skb);
-        cdesc->sn         = uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0, 0, 1);
+        cdesc->sn         = uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0,
+                                                  ctl_flags, 1);
         cdesc->self_skb   = skb;
         cdesc->resent_skb = NULL;
         cdesc->ep         = NULL;

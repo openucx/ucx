@@ -55,6 +55,13 @@
    obj:*libcuda*.so*
 }
 {
+   fun:gdr_open
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:gdr_open
+}
+{
    gdr_get_info_ioctl
    Memcheck:Param
    ioctl(generic)
@@ -228,4 +235,45 @@
    uct_rc_verbs_iface_post_recv_common_cond
    Memcheck:Cond
    fun:uct_rc_verbs_iface_post_recv_common
+}
+{
+   gdrcopy_ioctl
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:gdr_pin_buffer
+}
+{
+   gdr_map
+   Memcheck:Cond
+   fun:gdr_map
+}
+{
+   gdr_copy_to_mapping_cond
+   Memcheck:Cond
+   ...
+   fun:gdr_copy_to_mapping
+}
+{
+   fun:gdr_copy_from_mapping_cond
+   Memcheck:Cond
+   ...
+   fun:gdr_copy_from_mapping
+}
+{
+   gdr_copy_to_mapping_value8
+   Memcheck:Value8
+   ...
+   fun:gdr_copy_to_mapping
+}
+{
+   gdr_copy_from_mapping_value8
+   Memcheck:Value8
+   ...
+   fun:gdr_copy_from_mapping
+}
+{
+   gdr_unmap
+   Memcheck:Cond
+   fun:gdr_unmap
 }
