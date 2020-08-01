@@ -1844,13 +1844,27 @@ int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
     return -1;
 }
 
-void ucp_ep_config_lane_info_str(ucp_context_h context,
+static void ucp_ep_config_cm_lane_info_str(ucp_worker_h worker,
+                                           const ucp_ep_config_key_t *key,
+                                           ucp_lane_index_t lane,
+                                           char *buf, size_t max)
+{
+    ucp_context_h context        = worker->context;
+    ucp_rsc_index_t cmpt_index   = worker->cms[lane].cmpt_idx;
+    const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
+
+    ucs_snprintf_zero(buf, max, "lane[%d]: %2d:%s cm",
+                      lane, cmpt_index, tl_cmpt->attr.name);
+}
+
+void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  const ucp_ep_config_key_t *key,
                                  const unsigned *addr_indices,
                                  ucp_lane_index_t lane,
                                  ucp_rsc_index_t aux_rsc_index,
                                  char *buf, size_t max)
 {
+    ucp_context_h context = worker->context;
     uct_tl_resource_desc_t *rsc;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t proxy_lane;
@@ -1860,6 +1874,11 @@ void ucp_ep_config_lane_info_str(ucp_context_h context,
     char *p, *endp;
     char *desc_str;
     int prio;
+
+    if (lane == key->cm_lane) {
+        ucp_ep_config_cm_lane_info_str(worker, key, lane, buf, max);
+        return;
+    }
 
     p          = buf;
     endp       = buf + max;
@@ -1958,7 +1977,7 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
-        ucp_ep_config_lane_info_str(context, &config->key, addr_indices, lane,
+        ucp_ep_config_lane_info_str(worker, &config->key, addr_indices, lane,
                                     aux_rsc_index, lane_info, sizeof(lane_info));
         fprintf(stream, "#                 %s\n", lane_info);
     }
