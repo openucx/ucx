@@ -175,6 +175,7 @@ static void ucs_async_handler_put(ucs_async_handler_t *handler)
 static ucs_status_t ucs_async_handler_add(int min_id, int max_id,
                                           ucs_async_handler_t *handler)
 {
+    ucs_async_handler_t *handler_from_hash;
     int hash_extra_status;
     ucs_status_t status;
     khiter_t hash_it;
@@ -194,12 +195,22 @@ static ucs_status_t ucs_async_handler_add(int min_id, int max_id,
                        (max_id - min_id));
         hash_it = kh_put(ucs_async_handler, &ucs_async_global_context.handlers,
                          id, &hash_extra_status);
-        if (hash_extra_status == -1) {
+        if (hash_extra_status == UCS_KH_PUT_FAILED) {
             ucs_error("Failed to add async handler " UCS_ASYNC_HANDLER_FMT
                       " to hash", UCS_ASYNC_HANDLER_ARG(handler));
             status = UCS_ERR_NO_MEMORY;
             goto out_unlock;
-        } else if (hash_extra_status != 0) {
+        } else if (hash_extra_status == UCS_KH_PUT_KEY_PRESENT) {
+            if ((max_id - min_id) == 1) {
+                handler_from_hash = kh_value(&ucs_async_global_context.handlers,
+                                             hash_it);
+                ucs_error("async handler %s() uses id %d,"
+                          " new async handler %s couldn't use this id",
+                          ucs_debug_get_symbol_name(handler_from_hash->cb), i,
+                          ucs_debug_get_symbol_name(handler->cb));
+                break;
+            }
+        } else {
             handler->id = id;
             ucs_assert(id != -1);
             break;
