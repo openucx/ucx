@@ -25,6 +25,7 @@
 #include <ucm/mmap/mmap.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
+#include <ucm/util/khash_safe.h>
 #include <ucm/util/sys.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/sys/compiler.h>
@@ -34,14 +35,6 @@
 #include <ucs/type/spinlock.h>
 
 
-/* make khash allocate memory directly from operating system */
-#define kmalloc  ucm_sys_malloc
-#define kcalloc  ucm_sys_calloc
-#define kfree    ucm_sys_free
-#define krealloc ucm_sys_realloc
-#include <ucs/datastruct/khash.h>
-
-#include <string.h>
 #include <netdb.h>
 
 
@@ -667,6 +660,7 @@ static void ucm_malloc_install_symbols(ucm_reloc_patch_t *patches)
     ucm_reloc_patch_t *patch;
 
     for (patch = patches; patch->symbol != NULL; ++patch) {
+        patch->prev_value = NULL;
         ucm_reloc_modify(patch);
     }
 }
