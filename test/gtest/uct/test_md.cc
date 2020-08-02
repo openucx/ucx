@@ -520,7 +520,15 @@ UCS_TEST_SKIP_COND_P(test_md, fork,
     EXPECT_UCS_OK(status);
 
     ASSERT_EQ(pid, waitpid(pid, &child_status, 0));
-    EXPECT_EQ(0, child_status) << ucs::exit_status_info(child_status);
+    EXPECT_TRUE(WIFEXITED(child_status)) << ucs::exit_status_info(child_status);
+
+    if (!RUNNING_ON_VALGRIND) {
+        /* Under valgrind, leaks are possible due to early exit, so don't expect
+         * an exit status of 0
+         */
+        EXPECT_EQ(0, WEXITSTATUS(child_status)) <<
+                ucs::exit_status_info(child_status);
+    }
 
     free(page);
 }
