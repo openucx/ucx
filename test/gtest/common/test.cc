@@ -33,6 +33,16 @@ test_base::test_base() :
     push_config();
 }
 
+static void dofork_cb(ucs_sys_vma_info_t *info, void *ctx) {
+    int ret;
+
+    if (info->flags & UCS_SYS_VMA_FLAG_DONTCOPY) {
+        ret = madvise((void*)info->start, info->end - info->start, MADV_DOFORK);
+        EXPECT_EQ(0, ret) << "errno: " << errno << std::hex << " 0x"
+            << info->start << "-0x" << info->end;
+    }
+}
+
 test_base::~test_base() {
     while (!m_config_stack.empty()) {
         pop_config();
@@ -42,6 +52,9 @@ test_base::~test_base() {
                        m_state == NEW ||    /* can be skipped from a class constructor */
                        m_state == ABORTED,
                        "state=%d", m_state);
+
+    /* make sure no DONTFORK memory areas left behing */
+    ucs_sys_iterate_vm(NULL, SIZE_MAX, dofork_cb, NULL);
 }
 
 void test_base::set_num_threads(unsigned num_threads) {
