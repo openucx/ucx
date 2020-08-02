@@ -129,14 +129,10 @@ public:
             int ret = system(cmd_str.c_str());
             if (ret == 0) {
                 return true;
+            } else if (ret == -1) {
+                system_ret_str = ucs::to_string(errno);
             } else {
-                system_ret_str = "return value: ";
-                if (ret == -1) {
-                    system_ret_str += ucs::to_string(ret) +
-                                      ", errno: " + ucs::to_string(errno);
-                } else {
-                    system_ret_str += ucs::to_string(WEXITSTATUS(ret));
-                }
+                system_ret_str = ucs::exit_status_info(ret);
             }
 
             ucs_log_flush();

@@ -19,6 +19,7 @@ unsigned test_base::m_total_warnings = 0;
 unsigned test_base::m_total_errors   = 0;
 std::vector<std::string> test_base::m_errors;
 std::vector<std::string> test_base::m_warnings;
+std::vector<std::string> test_base::m_first_warns_and_errors;
 
 test_base::test_base() :
                 m_state(NEW),
@@ -138,6 +139,15 @@ test_base::count_warns_logger(const char *file, unsigned line, const char *funct
     } else if (level == UCS_LOG_LEVEL_WARN) {
         ++m_total_warnings;
     }
+    if (m_first_warns_and_errors.size() < 5) {
+        /* Save the first few errors/warnings which cause the test to fail */
+        va_list ap2;
+        va_copy(ap2, ap);
+        std::stringstream ss;
+        ss << file << ":" << line << " " << format_message(message, ap2);
+        va_end(ap2);
+        m_first_warns_and_errors.push_back(ss.str());
+    }
     pthread_mutex_unlock(&m_logger_mutex);
     return UCS_LOG_FUNC_RC_CONTINUE;
 }
@@ -244,6 +254,7 @@ void test_base::SetUpProxy() {
 
     m_errors.clear();
     m_warnings.clear();
+    m_first_warns_and_errors.clear();
     m_num_log_handlers_before    = ucs_log_num_handlers();
     ucs_log_push_handler(count_warns_logger);
 
@@ -284,11 +295,13 @@ void test_base::TearDownProxy() {
     if (num_valgrind_errors > 0) {
         ADD_FAILURE() << "Got " << num_valgrind_errors << " valgrind errors during the test";
     }
-    if (num_errors() > 0) {
-        ADD_FAILURE() << "Got " << num_errors() << " errors during the test";
-    }
-    if (num_warnings() > 0) {
-        ADD_FAILURE() << "Got " << num_warnings() << " warnings during the test";
+    if ((num_errors() > 0) || (num_warnings() > 0)) {
+        ADD_FAILURE() << "Got " << num_errors() << " errors "
+                      << "and " << num_warnings() << " warnings "
+                      << "during the test";
+        for (size_t i = 0; i < m_first_warns_and_errors.size(); ++i) {
+            UCS_TEST_MESSAGE << "< " << m_first_warns_and_errors[i] << " >";
+        }
     }
 }
 

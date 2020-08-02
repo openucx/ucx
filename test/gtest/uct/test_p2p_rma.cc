@@ -144,7 +144,8 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, madvise,
                   sender_ep(), sendbuf, recvbuf, true);
     flush();
 
-    EXPECT_EQ(0, system(cmd_str));
+    int exit_status = system(cmd_str);
+    EXPECT_EQ(0, exit_status) << ucs::exit_status_info(exit_status);
 
     blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
                   sender_ep(), sendbuf, recvbuf, true);
