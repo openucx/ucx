@@ -520,7 +520,7 @@ UCS_TEST_SKIP_COND_P(test_md, fork,
     EXPECT_UCS_OK(status);
 
     ASSERT_EQ(pid, waitpid(pid, &child_status, 0));
-    ASSERT_TRUE(WIFEXITED(child_status)) << ucs::exit_status_info(child_status);
+    EXPECT_EQ(0, child_status) << ucs::exit_status_info(child_status);
 
     free(page);
 }
