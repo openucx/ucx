@@ -76,4 +76,6 @@ void ucp_am_ep_init(ucp_ep_h ep);
 
 void ucp_am_ep_cleanup(ucp_ep_h ep);
 
+size_t ucp_am_max_header_size(ucp_worker_h worker);
+
 #endif
