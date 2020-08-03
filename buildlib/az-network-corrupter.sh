@@ -13,7 +13,7 @@ manager_script=/hpc/noarch/git_projects/swx_infrastructure/clusters/bin/manage_h
 
 if [ "x$reset" = "xyes" ]; then
     echo "Resetting interface on $(hostname)..."
-    sudo "$manager_script" "$(hostname)" "bond-up"
+    ${manager_script} "$(hostname)" "bond-up"
     exit $?
 fi
 
@@ -22,10 +22,10 @@ sleep ${initial_delay}
 
 for i in $(seq 1 ${cycles}); do
     echo "#$i Put it down! And sleep ${downtime}"
-    sudo "$manager_script" "$(hostname)" "bond-down"
+    ${manager_script} "$(hostname)" "bond-down"
     sleep "$downtime"
 
     echo "#$i Put it up! And sleep ${uptime}"
-    sudo "$manager_script" "$(hostname)" "bond-up"
+    ${manager_script} "$(hostname)" "bond-up"
     sleep "$uptime"
 done
