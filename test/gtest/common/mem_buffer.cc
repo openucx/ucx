@@ -281,7 +281,6 @@ bool mem_buffer::compare(const void *expected, const void *buffer,
     }
 
     return memcmp(expected_host, buffer_host, length) == 0;
-
 }
 
 std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
