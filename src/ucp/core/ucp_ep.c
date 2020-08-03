@@ -21,6 +21,7 @@
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/proto/rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
@@ -1744,14 +1745,22 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
     }
 
+    status = ucp_proto_select_init(&config->proto_select);
+    if (status != UCS_OK) {
+        goto err_free_dst_mds;
+    }
+
     return UCS_OK;
 
+err_free_dst_mds:
+    ucs_free(config->key.dst_md_cmpts);
 err:
     return status;
 }
 
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config)
 {
+    ucp_proto_select_cleanup(&config->proto_select);
     ucs_free(config->key.dst_md_cmpts);
 }
 
@@ -2031,11 +2040,13 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 
 void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 {
+    ucp_worker_h    worker  = ep->worker;
+    ucp_ep_config_t *config = ucp_ep_config(ep);
     ucp_rsc_index_t aux_rsc_index;
     ucp_lane_index_t wireup_lane;
     uct_ep_h wireup_ep;
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     fprintf(stream, "#\n");
     fprintf(stream, "# UCP endpoint\n");
@@ -2052,12 +2063,16 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
         }
     }
 
-    ucp_ep_config_print(stream, ep->worker, ucp_ep_config(ep), NULL,
-                        aux_rsc_index);
-
+    ucp_ep_config_print(stream, worker, config, NULL, aux_rsc_index);
     fprintf(stream, "#\n");
 
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+    if (worker->context->config.ext.proto_enable) {
+        ucp_proto_select_dump(worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+                              &config->proto_select, stream);
+        fprintf(stream, "#\n");
+    }
+
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,

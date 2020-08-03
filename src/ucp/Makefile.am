@@ -48,6 +48,7 @@ noinst_HEADERS = \
 	proto/proto_am.h \
 	proto/proto_am.inl \
 	proto/proto_select.h \
+	proto/proto_select.inl \
 	proto/proto.h \
 	proto/rndv.h \
 	rma/rma.h \
@@ -96,6 +97,7 @@ libucp_la_SOURCES = \
 	dt/dt.c \
 	proto/lane_type.c \
 	proto/proto_am.c \
+	proto/proto_select.c \
 	proto/proto.c \
 	proto/rndv.c \
 	rma/amo_basic.c \

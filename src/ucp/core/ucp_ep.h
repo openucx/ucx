@@ -11,6 +11,7 @@
 #include "ucp_types.h"
 
 #include <ucp/proto/lane_type.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/wireup/ep_match.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/queue.h>
@@ -319,6 +320,8 @@ struct ucp_ep_config {
         const ucp_request_send_proto_t   *reply_proto;
     } am_u;
 
+    /* Protocol selection data */
+    ucp_proto_select_t            proto_select;
 };
 
 

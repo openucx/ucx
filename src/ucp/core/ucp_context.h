@@ -14,6 +14,7 @@
 #include "ucp_thread.h"
 
 #include <ucp/api/ucp.h>
+#include <ucp/proto/proto.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
@@ -345,7 +346,9 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 
 extern ucp_am_handler_t ucp_am_handlers[];
-extern const char       *ucp_feature_str[];
+extern const char      *ucp_feature_str[];
+extern const char  *ucp_operation_names[];
+
 
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
                       const void *data, size_t length);

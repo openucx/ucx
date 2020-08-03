@@ -97,6 +97,24 @@ char *ucs_memunits_to_str(size_t value, char *buf, size_t max);
 
 
 /**
+ * Convert a pair of memory units values to a range string which is abbreviated
+ * if possible.
+ *
+ * For example:
+ *  1024, 4096 -> 1kb..4kb
+ *
+ * @param range_start  Range start value.
+ * @param range_end    Range end value.
+ * @param buf          Buffer to place the string.
+ * @param max          Maximal length of the buffer.
+ *
+ * @return Pointer to 'buf', which holds the resulting string.
+ */
+const char *ucs_memunits_range_str(size_t range_start, size_t range_end,
+                                   char *buf, size_t max);
+
+
+/**
  * Convert a string holding memory units to a numeric value.
  *
  *  @param buf   String to convert
