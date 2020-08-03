@@ -301,7 +301,8 @@ static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
 
-    return (ep->txqp.available > 0) && uct_rc_fc_has_resources(iface, &ep->fc);
+    return (uct_rc_txqp_available(&ep->txqp) > 0) &&
+           uct_rc_fc_has_resources(iface, &ep->fc);
 }
 
 static UCS_F_ALWAYS_INLINE void
