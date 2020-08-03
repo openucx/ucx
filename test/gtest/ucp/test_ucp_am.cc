@@ -16,6 +16,7 @@
 #include "ucp_test.h"
 
 extern "C" {
+#include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
 }
 
@@ -28,19 +29,30 @@ extern "C" {
 
 class test_ucp_am_base : public ucp_test {
 public:
-    int sent_ams;
-    int replies;
-    int recv_ams;
-    void *reply;
-    void *for_release[NUM_MESSAGES];
-    int release;
-
     static ucp_params_t get_ctx_params() {
         ucp_params_t params = ucp_test::get_ctx_params();
         params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
         params.features     = UCP_FEATURE_AM;
         return params;
     }
+
+    virtual void init() {
+        modify_config("MAX_EAGER_LANES", "2");
+
+        ucp_test::init();
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+};
+
+class test_ucp_am : public test_ucp_am_base {
+public:
+    int sent_ams;
+    int replies;
+    int recv_ams;
+    void *reply;
+    void *for_release[NUM_MESSAGES];
+    int release;
 
     static ucs_status_t ucp_process_am_cb(void *arg, void *data,
                                           size_t length,
@@ -52,26 +64,34 @@ public:
                                              ucp_ep_h reply_ep,
                                              unsigned flags);
 
-    ucs_status_t am_handler(test_ucp_am_base *me, void *data,
+    ucs_status_t am_handler(test_ucp_am *me, void *data,
                             size_t  length, unsigned flags);
+
+protected:
+    void do_set_am_handler_realloc_test();
+    void do_send_process_data_test(int test_release, uint16_t am_id,
+                                   int send_reply);
+    void do_send_process_data_iov_test(size_t size);
+    void set_handlers(uint16_t am_id);
+    void set_reply_handlers();
 };
 
-ucs_status_t test_ucp_am_base::ucp_process_reply_cb(void *arg, void *data,
-                                                    size_t length,
-                                                    ucp_ep_h reply_ep,
-                                                    unsigned flags)
+ucs_status_t test_ucp_am::ucp_process_reply_cb(void *arg, void *data,
+                                               size_t length,
+                                               ucp_ep_h reply_ep,
+                                               unsigned flags)
 {
-    test_ucp_am_base *self = reinterpret_cast<test_ucp_am_base*>(arg);
+    test_ucp_am *self = reinterpret_cast<test_ucp_am*>(arg);
     self->replies++;
     return UCS_OK;
 }
 
-ucs_status_t test_ucp_am_base::ucp_process_am_cb(void *arg, void *data,
-                                                 size_t length,
-                                                 ucp_ep_h reply_ep,
-                                                 unsigned flags)
+ucs_status_t test_ucp_am::ucp_process_am_cb(void *arg, void *data,
+                                            size_t length,
+                                            ucp_ep_h reply_ep,
+                                            unsigned flags)
 {
-    test_ucp_am_base *self = reinterpret_cast<test_ucp_am_base*>(arg);
+    test_ucp_am *self = reinterpret_cast<test_ucp_am*>(arg);
 
     if (reply_ep) {
         self->reply = ucp_am_send_nb(reply_ep, UCP_REPLY_ID, NULL, 1,
@@ -84,8 +104,8 @@ ucs_status_t test_ucp_am_base::ucp_process_am_cb(void *arg, void *data,
     return self->am_handler(self, data, length, flags);
 }
 
-ucs_status_t test_ucp_am_base::am_handler(test_ucp_am_base *me, void *data,
-                                          size_t length, unsigned flags)
+ucs_status_t test_ucp_am::am_handler(test_ucp_am *me, void *data,
+                                     size_t length, unsigned flags)
 {
     ucs_status_t status;
     std::vector<char> cmp(length, (char)length);
@@ -107,31 +127,6 @@ ucs_status_t test_ucp_am_base::am_handler(test_ucp_am_base *me, void *data,
     return status;
 }
 
-class test_ucp_am : public test_ucp_am_base {
-public:
-    ucp_ep_params_t get_ep_params() {
-        ucp_ep_params_t params = test_ucp_am_base::get_ep_params();
-        params.field_mask     |= UCP_EP_PARAM_FIELD_FLAGS;
-        params.flags          |= UCP_EP_PARAMS_FLAGS_NO_LOOPBACK;
-        return params;
-    }
-
-    virtual void init() {
-        modify_config("MAX_EAGER_LANES", "2");
-
-        ucp_test::init();
-        sender().connect(&receiver(), get_ep_params());
-        receiver().connect(&sender(), get_ep_params());
-    }
-
-protected:
-    void do_set_am_handler_realloc_test();
-    void do_send_process_data_test(int test_release, uint16_t am_id,
-                                   int send_reply);
-    void do_send_process_data_iov_test(size_t size);
-    void set_handlers(uint16_t am_id);
-    void set_reply_handlers();
-};
 
 void test_ucp_am::set_reply_handlers()
 {
@@ -323,3 +318,50 @@ UCS_TEST_P(test_ucp_am, max_am_header)
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
+
+
+class test_ucp_am_nbx : public test_ucp_am_base {
+    // To be extended in the following PRs
+};
+
+UCS_TEST_P(test_ucp_am_nbx, set_invalid_handler)
+{
+    ucp_am_handler_param_t params;
+
+    params.id           = 0;
+    params.cb           = NULL;
+    params.field_mask   = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                          UCP_AM_HANDLER_PARAM_FIELD_CB;
+    ucs_status_t status = ucp_worker_set_am_recv_handler(sender().worker(),
+                                                         &params);
+    EXPECT_UCS_OK(status);
+
+    // Check that error is returned if id or callback is not set
+    scoped_log_handler wrap_err(wrap_errors_logger);
+
+    params.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID;
+    status            = ucp_worker_set_am_recv_handler(sender().worker(),
+                                                       &params);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    params.field_mask = UCP_AM_HANDLER_PARAM_FIELD_CB;
+    status            = ucp_worker_set_am_recv_handler(sender().worker(),
+                                                       &params);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    params.field_mask = 0ul;
+    status            = ucp_worker_set_am_recv_handler(sender().worker(),
+                                                       &params);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    // Check that error is returned if private flag is requested by the user
+    params.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                        UCP_AM_HANDLER_PARAM_FIELD_CB |
+                        UCP_AM_HANDLER_PARAM_FIELD_FLAGS;
+    params.flags      = UCP_AM_CB_PRIV_FLAG_NBX;
+    status            = ucp_worker_set_am_recv_handler(sender().worker(),
+                                                       &params);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)

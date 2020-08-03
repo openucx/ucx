@@ -10,24 +10,32 @@
 
 #include "ucp_ep.h"
 
+#include <ucs/datastruct/array.h>
+
 
 #define UCP_AM_CB_BLOCK_SIZE 16
+
+
+enum {
+    UCP_AM_CB_PRIV_FIRST_FLAG = UCS_BIT(15),
+
+    /* Indicates that cb was set with ucp_worker_set_am_recv_handler */
+    UCP_AM_CB_PRIV_FLAG_NBX   = UCP_AM_CB_PRIV_FIRST_FLAG
+};
 
 
 /**
  * Data that is stored about each callback registered with a worker
  */
 typedef struct ucp_am_entry {
-    ucp_am_callback_t        cb;       /* user defined callback*/
-    void                     *context; /* user defined callback argument */
-    unsigned                 flags;    /* flags affecting callback behavior */
+    union {
+        ucp_am_callback_t      cb_old;   /* user defined callback, used by legacy API */
+        ucp_am_recv_callback_t cb;       /* user defined callback */
+    };
+    void                       *context;   /* user defined callback argument */
+    unsigned                   flags;      /* flags affecting callback behavior
+                                              (set by the user) */
 } ucp_am_entry_t;
-
-
-typedef struct ucp_am_context {
-    ucp_am_entry_t           *cbs;          /* array of callbacks and their data */
-    size_t                   cbs_array_len; /* len of callbacks array */
-} ucp_am_context_t;
 
 
 typedef union {
@@ -77,5 +85,9 @@ void ucp_am_ep_init(ucp_ep_h ep);
 void ucp_am_ep_cleanup(ucp_ep_h ep);
 
 size_t ucp_am_max_header_size(ucp_worker_h worker);
+
+
+UCS_ARRAY_DECLARE_TYPE(ucp_am_cbs, unsigned, ucp_am_entry_t)
+
 
 #endif

@@ -649,12 +649,24 @@ typedef enum {
  * The enumeration allows specifying which fields in @ref ucp_am_handler_param_t
  * are present. It is used to enable backward compatibility support.
  */
-typedef enum {
-    UCP_AM_HANDLER_ATTR_FIELD_ID       = UCS_BIT(0), /**< id field */
-    UCP_AM_HANDLER_ATTR_FIELD_FLAGS    = UCS_BIT(1), /**< flags field */
-    UCP_AM_HANDLER_ATTR_FIELD_CB       = UCS_BIT(2), /**< cb field */
-    UCP_AM_HANDLER_ATTR_FIELD_ARG      = UCS_BIT(3)  /**< arg field */
-} ucp_am_handler_attr_field;
+enum ucp_am_handler_param_field {
+    /**
+     * Indicates that @ref ucp_am_handler_param_t.id field is valid.
+     */
+    UCP_AM_HANDLER_PARAM_FIELD_ID      = UCS_BIT(0),
+    /**
+     * Indicates that @ref ucp_am_handler_param_t.flags field is valid.
+     */
+    UCP_AM_HANDLER_PARAM_FIELD_FLAGS   = UCS_BIT(1),
+    /**
+     * Indicates that @ref ucp_am_handler_param_t.cb field is valid.
+     */
+    UCP_AM_HANDLER_PARAM_FIELD_CB      = UCS_BIT(2),
+    /**
+     * Indicates that @ref ucp_am_handler_param_t.arg field is valid.
+     */
+    UCP_AM_HANDLER_PARAM_FIELD_ARG     = UCS_BIT(3)
+};
 
 
 /**
@@ -1412,7 +1424,7 @@ typedef struct {
 typedef struct ucp_am_handler_param {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_am_handler_attr_field. Fields not specified in this mask will
+     * @ref ucp_am_handler_param_field. Fields not specified in this mask will
      * be ignored. Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                 field_mask;

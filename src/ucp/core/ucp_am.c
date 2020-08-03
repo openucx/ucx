@@ -20,6 +20,10 @@
 #include <ucp/dt/dt.h>
 #include <ucp/dt/dt.inl>
 
+#include <ucs/datastruct/array.inl>
+
+
+UCS_ARRAY_IMPL(ucp_am_cbs, unsigned, ucp_am_entry_t, static)
 
 ucs_status_t ucp_am_init(ucp_worker_h worker)
 {
@@ -27,8 +31,7 @@ ucs_status_t ucp_am_init(ucp_worker_h worker)
         return UCS_OK;
     }
 
-    worker->am.cbs_array_len = 0ul;
-    worker->am.cbs           = NULL;
+    ucs_array_init_dynamic(ucp_am_cbs, &worker->am);
 
     return UCS_OK;
 }
@@ -39,8 +42,7 @@ void ucp_am_cleanup(ucp_worker_h worker)
         return;
     }
 
-    ucs_free(worker->am.cbs);
-    worker->am.cbs_array_len = 0;
+    ucs_array_cleanup_dynamic(ucp_am_cbs, &worker->am);
 }
 
 void ucp_am_ep_init(ucp_ep_h ep)
@@ -117,55 +119,84 @@ UCS_PROFILE_FUNC_VOID(ucp_am_data_release, (worker, data),
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_set_am_handler,
-                 (worker, id, cb, arg, flags),
-                 ucp_worker_h worker, uint16_t id,
-                 ucp_am_callback_t cb, void *arg,
-                 uint32_t flags)
+static void ucp_worker_am_init_handler(ucp_worker_h worker, uint16_t id,
+                                       void *context, unsigned flags,
+                                       ucp_am_callback_t cb_old,
+                                       ucp_am_recv_callback_t cb)
 {
-    size_t num_entries;
-    ucp_am_entry_t *am_cbs;
-    int i;
+    ucp_am_entry_t *am_cb = &ucs_array_elem(&worker->am, id);
+
+    am_cb->context = context;
+    am_cb->flags   = flags;
+
+    if (cb_old != NULL) {
+        ucs_assert(cb == NULL);
+        am_cb->cb_old = cb_old;
+    } else {
+        am_cb->cb     = cb;
+    }
+}
+
+static ucs_status_t ucp_worker_set_am_handler_common(ucp_worker_h worker,
+                                                     uint16_t id,
+                                                     unsigned flags)
+{
+    ucs_status_t status;
+    unsigned i, capacity;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_ERR_INVALID_PARAM);
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
-
-    if (id >= worker->am.cbs_array_len) {
-        num_entries = ucs_align_up_pow2(id + 1, UCP_AM_CB_BLOCK_SIZE);
-        am_cbs      = ucs_realloc(worker->am.cbs, num_entries *
-                                  sizeof(ucp_am_entry_t),
-                                  "UCP AM callback array");
-        if (ucs_unlikely(am_cbs == NULL)) {
-            ucs_error("failed to grow UCP am cbs array to %zu", num_entries);
-            return UCS_ERR_NO_MEMORY;
-        }
-
-        for (i = worker->am.cbs_array_len; i < num_entries; ++i) {
-            am_cbs[i].cb      = NULL;
-            am_cbs[i].context = NULL;
-            am_cbs[i].flags   = 0;
-        }
-
-        worker->am.cbs           = am_cbs;
-        worker->am.cbs_array_len = num_entries;
+    if (flags >= UCP_AM_CB_PRIV_FIRST_FLAG) {
+        ucs_error("unsupported flags requested for UCP AM handler: 0x%x",
+                  flags);
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    worker->am.cbs[id].cb      = cb;
-    worker->am.cbs[id].context = arg;
-    worker->am.cbs[id].flags   = flags;
+    if (id >= ucs_array_length(&worker->am)) {
+        status = ucs_array_reserve(ucp_am_cbs, &worker->am, id + 1);
+        if (status != UCS_OK) {
+            return status;
+        }
 
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+        capacity = ucs_array_capacity(&worker->am);
+
+        for (i = ucs_array_length(&worker->am); i < capacity; ++i) {
+            ucp_worker_am_init_handler(worker, id, NULL, 0, NULL, NULL);
+        }
+
+        ucs_array_set_length(&worker->am, capacity);
+    }
 
     return UCS_OK;
+}
+
+ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
+                                       ucp_am_callback_t cb, void *arg,
+                                       uint32_t flags)
+{
+    ucs_status_t status;
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
+    status = ucp_worker_set_am_handler_common(worker, id, flags);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    ucp_worker_am_init_handler(worker, id, arg, flags, cb, NULL);
+
+out:
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_am_recv_check_id(ucp_worker_h worker,
                                                     uint16_t am_id)
 {
-    if (ucs_unlikely((am_id >= worker->am.cbs_array_len) ||
-                     (worker->am.cbs[am_id].cb == NULL))) {
+    if (ucs_unlikely((am_id >= ucs_array_length(&worker->am)) ||
+                     (ucs_array_elem(&worker->am, am_id).cb == NULL))) {
         ucs_warn("UCP Active Message was received with id : %u, but there"
                  " is no registered callback for that id", am_id);
         return 0;
@@ -202,7 +233,35 @@ ucp_am_fill_first_header(ucp_am_first_hdr_t *hdr, ucp_request_t *req)
 ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
                                             const ucp_am_handler_param_t *param)
 {
-    return UCS_ERR_NOT_IMPLEMENTED;
+    ucs_status_t status;
+    uint16_t id;
+    unsigned flags;
+
+    if (!ucs_test_all_flags(param->field_mask, UCP_AM_HANDLER_PARAM_FIELD_ID |
+                                               UCP_AM_HANDLER_PARAM_FIELD_CB)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    id    = param->id;
+    flags = UCP_PARAM_VALUE(AM_HANDLER, param, flags, FLAGS, 0);
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
+
+    status = ucp_worker_set_am_handler_common(worker, id, flags);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    /* cb should always be set (can be NULL) */
+    ucp_worker_am_init_handler(worker, id,
+                               UCP_PARAM_VALUE(AM_HANDLER, param, arg, ARG, NULL),
+                               flags | UCP_AM_CB_PRIV_FLAG_NBX,
+                               NULL, param->cb);
+
+out:
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+
+    return status;
 }
 
 static size_t
@@ -545,6 +604,7 @@ ucp_am_handler_common(ucp_worker_h worker, void *hdr_end, size_t hdr_size,
     ucp_recv_desc_t *desc = NULL;
     ucs_status_t status;
     unsigned flags;
+    void *arg;
 
     if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
         return UCS_OK;
@@ -556,9 +616,10 @@ ucp_am_handler_common(ucp_worker_h worker, void *hdr_end, size_t hdr_size,
         flags = 0;
     }
 
-    status = worker->am.cbs[am_id].cb(worker->am.cbs[am_id].context,
-                                      hdr_end, total_length - hdr_size,
-                                      reply_ep, flags);
+    arg    = ucs_array_elem(&worker->am, am_id).context;
+    status = ucs_array_elem(&worker->am, am_id).cb_old(arg, hdr_end,
+                                                       total_length - hdr_size,
+                                                       reply_ep, flags);
     if (status != UCS_INPROGRESS) {
         return UCS_OK; /* we do not need UCT desc, just return UCS_OK */
     }
@@ -643,6 +704,7 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
     ucp_am_first_hdr_t *first_hdr;
     void *msg;
     ucp_ep_h reply_ep;
+    void *arg;
 
     ucp_am_copy_data_fragment(first_rdesc, data, length, offset);
 
@@ -666,9 +728,11 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
     reply_ep = (first_hdr->super.super.flags & UCP_AM_SEND_REPLY)        ?
                ucp_worker_get_ep_by_ptr(worker, first_hdr->super.ep_ptr) : NULL;
 
-    status   = worker->am.cbs[am_id].cb(worker->am.cbs[am_id].context, msg,
-                                        first_hdr->total_size, reply_ep,
-                                        UCP_CB_PARAM_FLAG_DATA);
+    arg      = ucs_array_elem(&worker->am, am_id).context;
+    status   = ucs_array_elem(&worker->am, am_id).cb_old(arg, msg,
+                                                         first_hdr->total_size,
+                                                         reply_ep,
+                                                         UCP_CB_PARAM_FLAG_DATA);
     if (status != UCS_INPROGRESS) {
         goto out_free_data;
     }
