@@ -81,6 +81,9 @@ protected:
 
     ucp_rkey_h get_rkey(ucp_ep_h ep, ucp_mem_h memh);
 
+    bool ep_iface_has_caps(const entity& e, const std::string& tl,
+                           uint64_t caps);
+
 protected:
     vec_type                               m_send_data;
     vec_type                               m_recv_data;
@@ -377,6 +380,25 @@ void test_ucp_wireup::waitall(std::vector<void*> reqs)
         request_wait(reqs.back());
         reqs.pop_back();
     }
+}
+
+bool test_ucp_wireup::ep_iface_has_caps(const entity& e, const std::string& tl,
+                                        uint64_t caps)
+{
+    ucp_worker_h worker = e.worker();
+    ucp_context_h ctx   = worker->context;
+
+    for (unsigned i = 0; i < worker->num_ifaces; ++i) {
+        ucp_worker_iface_t *wiface = worker->ifaces[i];
+
+        char* name = ctx->tl_rscs[wiface->rsc_index].tl_rsc.tl_name;
+        if ((tl.empty() || !strcmp(name, tl.c_str())) &&
+            ucs_test_all_flags(wiface->attr.cap.flags, caps)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 class test_ucp_wireup_1sided : public test_ucp_wireup {
@@ -1086,6 +1108,7 @@ public:
                 return true;
             }
         }
+
         return false;
     }
 
@@ -1103,8 +1126,10 @@ public:
             }
 
             ASSERT_TRUE(ctx->num_tls > worker->num_ifaces);
-            EXPECT_TRUE(worker_has_tls(worker, better_tl, i));
-            EXPECT_FALSE(worker_has_tls(worker, tl, i));
+            EXPECT_TRUE(worker_has_tls(worker, better_tl, i)) <<
+                " transport " << better_tl << " should not be closed";
+            EXPECT_FALSE(worker_has_tls(worker, tl, i)) <<
+                " transport " << better_tl << " should be closed";
         }
     }
 };
@@ -1125,9 +1150,12 @@ UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
 
     // Set some big enough number of endpoints for DC to be more performance
     // efficient than RC. Now check that DC is selected over RC.
-    modify_config("NUM_EPS", "1000");
-    entity *e = create_entity();
-    check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
+    // TODO: enable test when keepalive feature is enabled for DC transport
+    //modify_config("NUM_EPS", "1000");
+    //entity *e = create_entity();
+    //check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
+    EXPECT_FALSE(ep_iface_has_caps(sender(), "dc_mlx5",
+                                   UCT_IFACE_FLAG_EP_CHECK));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc, "rc")
