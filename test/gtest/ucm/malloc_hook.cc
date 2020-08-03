@@ -23,7 +23,9 @@ extern "C" {
 #include <ucm/malloc/malloc_hook.h>
 #include <ucm/bistro/bistro.h>
 #include <ucs/sys/sys.h>
+#ifdef HAVE_MALLOC_H
 #include <malloc.h>
+#endif
 }
 
 #if HAVE_MALLOC_SET_STATE && HAVE_MALLOC_GET_STATE

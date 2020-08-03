@@ -10,7 +10,9 @@
 #include <ucm/api/ucm.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
+#ifdef HAVE_MALLOC_H
 #include <malloc.h>
+#endif
 #include <dlfcn.h>
 #include <unistd.h>
 #include <string.h>
