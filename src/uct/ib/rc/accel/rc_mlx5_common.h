@@ -583,7 +583,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_handle_rndv_fin(uct_rc_mlx5_iface_common_t *iface, uint32_t app_ctx)
 {
     int found;
-    void *rndv_comp;
+    void *rndv_comp = NULL;
 
     found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, app_ctx, rndv_comp);
     ucs_assert_always(found > 0);
