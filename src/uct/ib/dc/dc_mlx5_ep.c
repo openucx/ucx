@@ -271,7 +271,7 @@ uct_dc_mlx5_ep_short_dm(uct_dc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
                         unsigned opcode, uint8_t fm_ce_se,
                         uint64_t rdma_raddr, uct_rkey_t rdma_rkey)
 {
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_iface_t *iface     = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
     uct_rc_iface_send_desc_t *desc = NULL;
     void *buffer;
     ucs_status_t status;

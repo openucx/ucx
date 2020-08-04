@@ -651,8 +651,8 @@ int ucs_sockaddr_cmp(const struct sockaddr *sa1,
                      ucs_status_t *status_p)
 {
     int result          = 1;
+    uint16_t port1      = 0, port2 = 0;
     ucs_status_t status = UCS_OK;
-    uint16_t port1 = 0, port2 = 0;
 
     if (!ucs_sockaddr_is_known_af(sa1) ||
         !ucs_sockaddr_is_known_af(sa2)) {
