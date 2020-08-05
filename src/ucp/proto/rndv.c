@@ -957,7 +957,7 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     ucp_ep_h ep                      = rndv_req->send.ep;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
     ucp_worker_h worker              = rreq->recv.worker;
-    ucp_md_index_t dst_md_index;
+    ucp_md_index_t dst_md_index      = 0;
     ucp_lane_index_t i, lane;
     ucs_status_t status;
     unsigned rkey_index;

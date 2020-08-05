@@ -175,10 +175,10 @@ static void ucs_async_handler_put(ucs_async_handler_t *handler)
 static ucs_status_t ucs_async_handler_add(int min_id, int max_id,
                                           ucs_async_handler_t *handler)
 {
+    khiter_t hash_it = 0;
     ucs_async_handler_t *handler_from_hash;
     int hash_extra_status;
     ucs_status_t status;
-    khiter_t hash_it;
     int i, id;
 
     pthread_rwlock_wrlock(&ucs_async_global_context.handlers_lock);

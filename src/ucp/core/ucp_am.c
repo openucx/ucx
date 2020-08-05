@@ -739,7 +739,7 @@ ucp_am_long_middle_handler(void *am_arg, void *am_data, size_t am_length,
                                                           mid_hdr->ep_ptr);
     ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
     uint64_t msg_id            = mid_hdr->msg_id;
-    ucp_recv_desc_t *mid_rdesc, *first_rdesc;
+    ucp_recv_desc_t *mid_rdesc = NULL, *first_rdesc = NULL;
     ucs_status_t status;
 
     first_rdesc = ucp_am_find_first_rdesc(worker, ep_ext, msg_id);

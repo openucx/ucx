@@ -132,7 +132,7 @@ uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                        uct_rc_mlx5_iface_common_t);
-    uct_rc_iface_send_desc_t *desc;
+    uct_rc_iface_send_desc_t *desc    = NULL;
     void *buffer;
     ucs_status_t status;
     uct_ib_log_sge_t log_sge;
