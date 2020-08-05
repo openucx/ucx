@@ -49,7 +49,7 @@ ucp_proto_common_get_iface_attr(const ucp_proto_common_init_params_t *params,
 }
 
 static size_t ucp_proto_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
-                                      ptrdiff_t field_offset)
+                                             ptrdiff_t field_offset)
 {
     return *(const size_t*)UCS_PTR_BYTE_OFFSET(iface_attr, field_offset);
 }
@@ -139,7 +139,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                     continue;
                 }
             } else {
-                /* Memory domain which does not requite a registration for zero
+                /* Memory domain which does not require a registration for zero
                  * copy operation must be able to access the relevant memory type
                  * TODO UCT should expose a bitmap of accessible memory types
                  */
