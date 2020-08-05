@@ -8,6 +8,25 @@
 #include <uct/test_p2p_mix.h>
 
 
+class uct_p2p_rma_test_xfer : public uct_p2p_rma_test {};
+
+UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_xfer, fence,
+                     !check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
+
+    mapped_buffer sendbuf(64, 0, sender());
+    mapped_buffer recvbuf(64, 0, receiver());
+
+    blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::put_bcopy),
+                  sender_ep(), sendbuf, recvbuf, true);
+
+    uct_ep_fence(sender_ep(), 0);
+
+    blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::put_bcopy),
+                  sender_ep(), sendbuf, recvbuf, true);
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(uct_p2p_rma_test_xfer)
+
 class uct_p2p_rma_test_inlresp : public uct_p2p_rma_test {};
 
 UCS_TEST_SKIP_COND_P(uct_p2p_rma_test_inlresp, get_bcopy_inlresp0,

@@ -568,7 +568,7 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ep->flush.rkey        = rc_addr->flush_rkey;
 
     if (rc_addr->flags & UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR) {
-        ep->super.atomic_mr_offset = *(uint8_t*)(rc_addr + 1);
+        ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(*(uint8_t*)(rc_addr + 1));
     } else {
         ep->super.atomic_mr_offset = 0;
     }
