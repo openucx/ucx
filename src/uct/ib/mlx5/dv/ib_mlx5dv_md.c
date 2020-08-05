@@ -256,13 +256,13 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
     intptr_t addr;
     uint8_t mr_id;
 
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_KSM)) {
+        return uct_ib_mlx5_reg_atomic_key(ibmd, ib_memh);
+    }
+
     status = uct_ib_mlx5_md_get_atomic_mr_id(ibmd, &mr_id);
     if (status != UCS_OK) {
         return status;
-    }
-
-    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_KSM)) {
-        return UCS_ERR_UNSUPPORTED;
     }
 
     if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
@@ -322,7 +322,12 @@ static ucs_status_t uct_ib_mlx5_devx_dereg_atomic_key(uct_ib_md_t *ibmd,
                                                       uct_ib_mem_t *ib_memh)
 {
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
+    uct_ib_mlx5_md_t *md    = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
     int ret;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_KSM)) {
+        return UCS_OK;
+    }
 
     ret = mlx5dv_devx_obj_destroy(memh->atomic_dvmr);
     if (ret != 0) {

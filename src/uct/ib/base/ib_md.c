@@ -906,9 +906,9 @@ static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
     /* create umr only if a user requested atomic access to the
      * memory region and the hardware supports it.
      */
-    if ((((memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) &&
-        !(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR)) ||
-        (memh->flags & UCT_IB_MEM_FLAG_RELAXED_ORDERING)) &&
+    if (((memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) ||
+         (memh->flags & UCT_IB_MEM_FLAG_RELAXED_ORDERING)) &&
+        !(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) &&
         (memh != md->global_odp))
     {
         /* create UMR on-demand */
