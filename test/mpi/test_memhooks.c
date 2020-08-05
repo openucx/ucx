@@ -3,7 +3,11 @@
  *
  * See file LICENSE for terms.
  */
-#define _GNU_SOURCE /* For basename */
+
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <mpi.h>
 
 #include <ucs/sys/preprocessor.h>
