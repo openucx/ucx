@@ -551,6 +551,21 @@ typedef struct {
     }
 
 
+/**
+ * Helper macro to invoke the function from iface operations.
+ *
+ * @param _iface    UCT interface.
+ * @param _ops_type Type of iface operations.
+ * @param _func     Function to call.
+ * @param ...       Parameters that is passed to the function.
+ */
+#define uct_iface_invoke_ops_func(_iface, _ops_type, _func, ...) \
+    ({ \
+        _ops_type *__ops = ucs_derived_of((_iface)->ops, _ops_type); \
+        __ops->_func(__VA_ARGS__); \
+    })
+
+
 extern ucs_config_field_t uct_iface_config_table[];
 
 
