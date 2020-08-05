@@ -75,6 +75,9 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
 
+    status = uct_md_mkey_pack(md(), memh, rkey_buffer);
+    EXPECT_UCS_OK(status);
+
 #ifdef HAVE_MLX5_HW
     uct_ib_md_t *ib_md = (uct_ib_md_t *)md();
 
@@ -111,17 +114,22 @@ bool test_ib_md::has_ksm() const {
 }
 
 bool test_ib_md::check_umr(uct_ib_md_t *ib_md) const {
-#if HAVE_DEVX
-    return has_ksm();
-#elif HAVE_EXP_UMR
     if (ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
+#if HAVE_DEVX
+        if (ucs_derived_of(ib_md, uct_ib_mlx5_md_t)->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+            return has_ksm();
+        } else {
+            return ib_md->relaxed_order;
+        }
+#elif HAVE_EXP_UMR
         uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
         return mlx5_md->umr_qp != NULL;
-    }
-    return false;
 #else
-    return false;
+        return false;
 #endif
+    } else {
+        return ib_md->relaxed_order;
+    }
 }
 
 UCS_TEST_P(test_ib_md, ib_md_umr_rcache, "REG_METHODS=rcache") {
@@ -148,6 +156,12 @@ UCS_TEST_P(test_ib_md, ib_md_umr_direct, "REG_METHODS=direct") {
 UCS_TEST_P(test_ib_md, ib_md_umr_ksm) {
     std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
     ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
+}
+
+UCS_TEST_P(test_ib_md, relaxed_order, "PCI_RELAXED_ORDERING=on") {
+    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
+
+    ib_md_umr_check(&rkey_buffer[0], true);
 }
 
 #if HAVE_UMR_KSM
