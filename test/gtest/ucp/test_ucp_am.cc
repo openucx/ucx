@@ -10,6 +10,8 @@
 #include <vector>
 #include <math.h>
 
+#include <common/test.h>
+
 #include "ucp_datatype.h"
 #include "ucp_test.h"
 
@@ -298,7 +300,7 @@ UCS_TEST_P(test_ucp_am, set_am_handler_realloc)
 
 UCS_TEST_P(test_ucp_am, max_am_header)
 {
-    size_t min_am_bcopy       = SIZE_MAX;
+    size_t min_am_bcopy       = std::numeric_limits<size_t>::max();
     bool has_tl_with_am_bcopy = false;
 
     for (ucp_rsc_index_t idx = 0; idx < sender().ucph()->num_tls; ++idx) {
