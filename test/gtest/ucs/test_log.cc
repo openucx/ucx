@@ -13,8 +13,7 @@ extern "C" {
 #include <ucs/sys/compiler.h>
 }
 
-class log_test : public ucs::test {
-
+class log_test : private ucs::clear_dontcopy_regions, public ucs::test {
 public:
     virtual void init() {
         /* skip because logger does not support file
