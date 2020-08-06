@@ -466,22 +466,23 @@ size_t ucs_get_page_size()
     return page_size;
 }
 
-void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
-                           size_t *max_page_size_p)
+void ucs_sys_iterate_vm(void *address, size_t size, ucs_sys_vma_cb_t cb,
+                        void *ctx)
 {
-    int found = 0;
+    ucs_sys_vma_info_t info;
     unsigned long start, end;
     unsigned long page_size_kb;
-    size_t page_size;
     char buf[1024];
+    char *p, *save;
     FILE *file;
     int n;
 
     file = fopen(UCS_PROCESS_SMAPS_FILE, "r");
     if (!file) {
-        goto out;
+        return;
     }
 
+    /* coverity[tainted_data_argument] */
     while (fgets(buf, sizeof(buf), file) != NULL) {
         n = sscanf(buf, "%lx-%lx", &start, &end);
         if (n != 2) {
@@ -497,29 +498,69 @@ void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
             continue;
         }
 
+        memset(&info, 0, sizeof(info));
+        info.start = start;
+        info.end   = end;
+
         while (fgets(buf, sizeof(buf), file) != NULL) {
             n = sscanf(buf, "KernelPageSize: %lu kB", &page_size_kb);
-            if (n < 1) {
+            if (n == 1) {
+                info.page_size = page_size_kb * UCS_KBYTE;
                 continue;
             }
 
-            page_size = page_size_kb * UCS_KBYTE;
-            if (found) {
-                *min_page_size_p = ucs_min(*min_page_size_p, page_size);
-                *max_page_size_p = ucs_max(*max_page_size_p, page_size);
-            } else {
-                found            = 1;
-                *min_page_size_p = page_size;
-                *max_page_size_p = page_size;
+            n = 9;
+            if (memcmp(buf, "VmFlags: ", n) == 0) {
+                p = buf + n;
+                while ((p = strtok_r(p, " \n", &save)) != NULL) {
+                    if (strcmp(p, "dc") == 0) {
+                        info.flags |= UCS_SYS_VMA_FLAG_DONTCOPY;
+                    }
+
+                    p = NULL;
+                }
+
+                break;
             }
-            break;
         }
+
+        cb(&info, ctx);
     }
 
     fclose(file);
+}
 
-out:
-    if (!found) {
+typedef struct {
+    int    found;
+    size_t min_page_size;
+    size_t max_page_size;
+} ucs_mem_page_size_info_t;
+
+static void ucs_get_mem_page_size_cb(ucs_sys_vma_info_t *mem_info, void *ctx)
+{
+    ucs_mem_page_size_info_t *info = (ucs_mem_page_size_info_t *)ctx;
+
+    if (info->found) {
+        info->min_page_size = ucs_min(info->min_page_size, mem_info->page_size);
+        info->max_page_size = ucs_max(info->max_page_size, mem_info->page_size);
+    } else {
+        info->found         = 1;
+        info->min_page_size = mem_info->page_size;
+        info->max_page_size = mem_info->page_size;
+    }
+}
+
+void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
+                           size_t *max_page_size_p)
+{
+    ucs_mem_page_size_info_t info = {};
+
+    ucs_sys_iterate_vm(address, size, ucs_get_mem_page_size_cb, &info);
+
+    if (info.found) {
+        *min_page_size_p = info.min_page_size;
+        *max_page_size_p = info.max_page_size;
+    } else {
         *min_page_size_p = *max_page_size_p = ucs_get_page_size();
     }
 }

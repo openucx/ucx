@@ -24,6 +24,23 @@ extern "C" {
 #include <net/if.h>
 
 
+#define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
+                   knem, \
+                   cma, \
+                   posix, \
+                   sysv, \
+                   xpmem, \
+                   cuda_cpy, \
+                   cuda_ipc, \
+                   rocm_cpy, \
+                   rocm_ipc, \
+                   ib, \
+                   ugni, \
+                   sockcm, \
+                   rdmacm \
+                   )
+
 void* test_md::alloc_thread(void *arg)
 {
     volatile int *stop_flag = (int*)arg;
@@ -476,7 +493,12 @@ UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
     freeifaddrs(ifaddr);
 }
 
-UCS_TEST_SKIP_COND_P(test_md, fork,
+UCT_MD_INSTANTIATE_TEST_CASE(test_md)
+
+class test_md_fork : private ucs::clear_dontcopy_regions, public test_md {
+};
+
+UCS_TEST_SKIP_COND_P(test_md_fork, fork,
                      !check_reg_mem_type(UCS_MEMORY_TYPE_HOST),
                      "RCACHE_CHECK_PFN=1")
 {
@@ -533,22 +555,5 @@ UCS_TEST_SKIP_COND_P(test_md, fork,
     free(page);
 }
 
-#define UCT_MD_INSTANTIATE_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_MD_INSTANTIATE_TEST_CASE, _test_case, \
-                   knem, \
-                   cma, \
-                   posix, \
-                   sysv, \
-                   xpmem, \
-                   cuda_cpy, \
-                   cuda_ipc, \
-                   rocm_cpy, \
-                   rocm_ipc, \
-                   ib, \
-                   ugni, \
-                   sockcm, \
-                   rdmacm \
-                   )
-
-UCT_MD_INSTANTIATE_TEST_CASE(test_md)
+UCT_MD_INSTANTIATE_TEST_CASE(test_md_fork)
 

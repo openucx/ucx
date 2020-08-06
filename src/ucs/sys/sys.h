@@ -83,6 +83,27 @@ typedef enum {
 } ucs_sys_namespace_type_t;
 
 
+/* virtual memory area flags */
+typedef enum {
+    UCS_SYS_VMA_FLAG_DONTCOPY = UCS_BIT(0),
+} ucs_sys_vma_info_flags_t;
+
+
+/* information about virtual memory area */
+typedef struct {
+    unsigned long start;
+    unsigned long end;
+    size_t        page_size;
+    uint32_t      flags;
+} ucs_sys_vma_info_t;
+
+
+/**
+ * Callback function type used in ucs_sys_iterate_vm.
+ */
+typedef void (*ucs_sys_vma_cb_t)(ucs_sys_vma_info_t *info, void *ctx);
+
+
 /**
  * Callback function type used in ucs_sys_readdir.
  */
@@ -240,12 +261,24 @@ size_t ucs_get_page_size();
 
 
 /**
- * Get page size of a memory region.
+ * Get info for memory range.
  *
- * @param [in]  address          Memory region start address,
- * @param [in]  size             Memory region size.
- * @param [out] min_page_size_p  Set to the minimal page size in the memory region.
- * @param [out] max_page_size_p  Set to the maximal page size in the memory region.
+ * @param address     Memory range start address,
+ * @param size        Memory range size.
+ * @param cb          Callback function which is called for every vm area.
+ * @param ctx         Context argument passed to @a cb call.
+ */
+void ucs_sys_iterate_vm(void *address, size_t size, ucs_sys_vma_cb_t cb,
+                        void *ctx);
+
+
+/**
+ * Get page size of a memory range.
+ *
+ * @param [in]  address          Memory range start address,
+ * @param [in]  size             Memory range size.
+ * @param [out] min_page_size_p  Set to the minimal page size in the memory range.
+ * @param [out] max_page_size_p  Set to the maximal page size in the memory range.
  */
 void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
                            size_t *max_page_size_p);
