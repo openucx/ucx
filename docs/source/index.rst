@@ -39,6 +39,7 @@ UCX is a member of `UCF consortium <https://www.ucfconsortium.org>`_.
    download
    running
    faq
+   glossaries
 
 
 Quick start
