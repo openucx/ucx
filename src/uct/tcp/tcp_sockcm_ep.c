@@ -613,7 +613,6 @@ ucs_status_t uct_tcp_sockcm_ep_handle_data_received(uct_tcp_sockcm_ep_t *cep)
          * he will send it from the main thread */
     }
 
-out:
     return status;
 }
 
