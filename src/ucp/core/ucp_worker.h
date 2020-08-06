@@ -19,6 +19,7 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/datastruct/conn_match.h>
+#include <ucs/datastruct/ptr_map.h>
 #include <ucs/arch/bitops.h>
 
 
@@ -254,6 +255,7 @@ typedef struct ucp_worker {
     ucs_cpu_set_t                 cpu_mask;        /* Save CPU mask for subsequent calls to ucp_worker_listen */
 
     ucp_worker_rkey_config_hash_t rkey_config_hash; /* rkey config key -> index */
+    ucs_ptr_map_t                 ptr_map;         /* UCP objects key to ptr mapping */
 
     unsigned                      ep_config_count; /* Current number of ep configurations */
     ucp_ep_config_t               ep_config[UCP_WORKER_MAX_EP_CONFIG];

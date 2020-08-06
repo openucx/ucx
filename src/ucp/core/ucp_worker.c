@@ -22,6 +22,7 @@
 #include <ucp/stream/stream.h>
 #include <ucs/config/parser.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/sys/string.h>
@@ -1823,6 +1824,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
                         &ucp_ep_match_ops);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    status = ucs_ptr_map_init(&worker->ptr_map);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
@@ -1847,7 +1852,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
                                   ucs_stats_get_root(), "-%p", worker);
     if (status != UCS_OK) {
-        goto err_free;
+        goto err_destroy_ptr_map;
     }
 
     status = UCS_STATS_NODE_ALLOC(&worker->tm_offload_stats,
@@ -1969,6 +1974,8 @@ err_free_tm_offload_stats:
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
 err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
+err_destroy_ptr_map:
+    ucs_ptr_map_destroy(&worker->ptr_map);
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     ucs_free(worker);
@@ -2020,6 +2027,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_async_context_cleanup(&worker->async);
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    ucs_ptr_map_destroy(&worker->ptr_map);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
