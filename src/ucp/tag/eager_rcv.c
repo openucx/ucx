@@ -155,8 +155,8 @@ ucp_eager_common_middle_handler(ucp_worker_t *worker, void *data, size_t length,
                                 uint16_t flags, uint16_t priv_length)
 {
     ucp_eager_middle_hdr_t *hdr = data;
+    ucp_recv_desc_t *rdesc      = NULL;
     ucp_tag_frag_match_t *matchq;
-    ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_status_t status;
     size_t recv_len;
