@@ -12,7 +12,9 @@
 #include <ucs/sys/string.h>
 #include <common/test_helpers.h>
 #include <algorithm>
+#ifdef HAVE_MALLOC_H
 #include <malloc.h>
+#endif
 #include <ifaddrs.h>
 
 
