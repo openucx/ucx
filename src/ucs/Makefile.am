@@ -86,6 +86,8 @@ noinst_HEADERS = \
 	datastruct/sglib.h \
 	datastruct/sglib_wrapper.h \
 	datastruct/conn_match.h \
+	datastruct/ptr_map.h \
+	datastruct/ptr_map.inl \
 	debug/assert.h \
 	debug/debug.h \
 	debug/log.h \
