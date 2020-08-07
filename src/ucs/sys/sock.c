@@ -202,6 +202,9 @@ static ucs_status_t ucs_socket_check_errno(int io_errno)
     } else if (io_errno == ETIMEDOUT) {
         /* Connection establishment procedure timed out */
         return UCS_ERR_TIMED_OUT;
+    } else if (io_errno == EPIPE) {
+        /* The local end has been shut down */
+        return UCS_ERR_CONNECTION_RESET;
     }
 
     return UCS_ERR_IO_ERROR;
