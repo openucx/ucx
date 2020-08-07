@@ -10,8 +10,14 @@
 #include <vector>
 #include <math.h>
 
+#include <common/test.h>
+
 #include "ucp_datatype.h"
 #include "ucp_test.h"
+
+extern "C" {
+#include <ucp/core/ucp_ep.inl>
+}
 
 #define NUM_MESSAGES 17
 
@@ -290,6 +296,30 @@ UCS_TEST_P(test_ucp_am, send_process_iov_am)
 UCS_TEST_P(test_ucp_am, set_am_handler_realloc)
 {
     do_set_am_handler_realloc_test();
+}
+
+UCS_TEST_P(test_ucp_am, max_am_header)
+{
+    size_t min_am_bcopy       = std::numeric_limits<size_t>::max();
+    bool has_tl_with_am_bcopy = false;
+
+    for (ucp_rsc_index_t idx = 0; idx < sender().ucph()->num_tls; ++idx) {
+        uct_iface_attr_t *attr = ucp_worker_iface_get_attr(sender().worker(), idx);
+        if (attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+            min_am_bcopy = ucs_min(min_am_bcopy, attr->cap.am.max_bcopy);
+            has_tl_with_am_bcopy = true;
+        }
+    }
+
+    EXPECT_TRUE(has_tl_with_am_bcopy);
+
+    ucp_worker_attr_t attr;
+    attr.field_mask = UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER;
+
+    ASSERT_UCS_OK(ucp_worker_query(sender().worker(), &attr));
+
+    EXPECT_GE(attr.max_am_header, 64ul);
+    EXPECT_LT(attr.max_am_header, min_am_bcopy);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am)

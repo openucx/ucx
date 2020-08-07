@@ -2064,6 +2064,10 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
                                   (void**)&attr->address);
     }
 
+    if (attr->field_mask & UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER) {
+        attr->max_am_header = ucp_am_max_header_size(worker);
+    }
+
     return status;
 }
 

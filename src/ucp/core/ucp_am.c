@@ -70,6 +70,35 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
     }
 }
 
+size_t ucp_am_max_header_size(ucp_worker_h worker)
+{
+    uct_iface_attr_t *if_attr;
+    ucp_rsc_index_t iface_id;
+    size_t max_am_header, max_uct_fragment;
+
+    if (!(worker->context->config.features & UCP_FEATURE_AM)) {
+        return 0ul;
+    }
+
+    max_am_header = SIZE_MAX;
+
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        if_attr = &worker->ifaces[iface_id]->attr;
+
+        /* UCT_IFACE_FLAG_AM_BCOPY is required by UCP AM feature, therefore
+         * at least one interface should support it.
+         */
+        if (if_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+            max_uct_fragment = ucs_max(if_attr->cap.am.max_bcopy,
+                                       sizeof(ucp_am_first_hdr_t)) -
+                               sizeof(ucp_am_first_hdr_t);
+            max_am_header = ucs_min(max_am_header, max_uct_fragment);
+        }
+    }
+
+    return max_am_header;
+}
+
 UCS_PROFILE_FUNC_VOID(ucp_am_data_release, (worker, data),
                       ucp_worker_h worker, void *data)
 {
