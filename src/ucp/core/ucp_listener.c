@@ -268,6 +268,11 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
                       ucs_sockaddr_str(params->sockaddr.addr, addr_str,
                                        UCS_SOCKADDR_STRING_LEN),
                       ucs_status_string(status));
+
+            if (status == UCS_ERR_BUSY) {
+                goto err_destroy_listeners;
+            }
+
             continue;
         }
 
@@ -300,20 +305,22 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
         }
     }
 
-    if (listener->num_rscs > 0) {
-        status = ucs_sockaddr_copy((struct sockaddr *)&listener->sockaddr,
-                                   addr);
-        if (status != UCS_OK) {
-            goto err_destroy_listeners;
-        }
+    if (listener->num_rscs == 0) {
+        ucs_assert(status != UCS_OK);
+        goto err_destroy_listeners;
     }
 
-    /* return the status of the last call of uct_listener_create if no listener
-       was created */
-    return (listener->num_rscs > 0) ? UCS_OK : status;
+    status = ucs_sockaddr_copy((struct sockaddr *)&listener->sockaddr, addr);
+    if (status != UCS_OK) {
+        goto err_destroy_listeners;
+    }
+
+    return UCS_OK;
 
 err_destroy_listeners:
     ucp_listener_close_uct_listeners(listener);
+    /* if no listener was created, return the status of the last call of
+     * uct_listener_create. else, return the error status that invoked this label. */
     return status;
 }
 
