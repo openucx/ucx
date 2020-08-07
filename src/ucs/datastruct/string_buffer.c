@@ -114,7 +114,7 @@ const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb)
         return "";
     }
 
-    c_str = &ucs_array_elem(&strb->str, 0);
+    c_str = ucs_array_begin(&strb->str);
     ucs_assert(c_str != NULL);
     return c_str;
 }

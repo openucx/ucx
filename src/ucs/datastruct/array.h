@@ -130,12 +130,11 @@ BEGIN_C_DECLS
  *
  * @param _name     Array name
  * @param _array    Array to add element to
- * @param _index_p  Filled with the index of the added element
  *
  * @return UCS_OK if added, UCS_ERR_NO_MEMORY if cannot grow the array
  */
-#define ucs_array_append(_name, _array, _index_p) \
-   UCS_ARRAY_IDENTIFIER(_name, _append)(_array, _index_p)
+#define ucs_array_append(_name, _array) \
+   UCS_ARRAY_IDENTIFIER(_name, _append)(_array)
 
 
 /**
@@ -179,6 +178,20 @@ BEGIN_C_DECLS
 
 
 /**
+ * @return Pointer to the first array element
+ */
+#define ucs_array_begin(_array) \
+    ((_array)->buffer)
+
+
+/**
+ * @return Pointer to last array element
+ */
+#define ucs_array_last(_array) \
+    ((_array)->buffer + ucs_array_length(_array) - 1)
+
+
+/**
  * @return Pointer to array end element (first non-valid element)
  */
 #define ucs_array_end(_array) \
@@ -206,6 +219,16 @@ BEGIN_C_DECLS
                     (size_t)ucs_array_capacity(_array)); \
         ucs_array_length(_array) = (_new_length); \
     }
+
+
+/**
+ * Iterate over array elements
+ *
+ * @param _elem    Pointer variable to the current array element
+ * @param _array   Array to iterate over
+ */
+#define ucs_array_for_each(_elem, _array) \
+    for (_elem = ucs_array_begin(_array); _elem < ucs_array_end(_array); ++_elem)
 
 
 /* Internal flag to distinguish between fixed/dynamic array */

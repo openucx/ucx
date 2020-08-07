@@ -859,11 +859,10 @@ UCS_TEST_F(test_datatype, dynamic_array_int_append) {
     /* push same elements to the array and the std::vector */
     for (size_t i = 0; i < NUM_ELEMS; ++i) {
         int value = ucs::rand();
-        size_t idx;
-        status = ucs_array_append(test_1int, &test_array, &idx);
+        status = ucs_array_append(test_1int, &test_array);
         ASSERT_UCS_OK(status);
-        EXPECT_EQ(i, idx);
-        ucs_array_elem(&test_array, idx) = value;
+        EXPECT_EQ(i + 1, ucs_array_length(&test_array));
+        *ucs_array_last(&test_array) = value;
         vec.push_back(value);
     }
 
@@ -874,6 +873,14 @@ UCS_TEST_F(test_datatype, dynamic_array_int_append) {
     /* validate array contents  */
     for (size_t i = 0; i < NUM_ELEMS; ++i) {
         EXPECT_EQ(vec[i], ucs_array_elem(&test_array, i));
+    }
+
+    /* test for_each */
+    int *array_iter;
+    std::vector<int>::iterator vec_iter = vec.begin();
+    ucs_array_for_each(array_iter, &test_array) {
+        EXPECT_EQ(*vec_iter, *array_iter);
+        ++vec_iter;
     }
 
     /* test set_length */
@@ -906,10 +913,10 @@ UCS_TEST_F(test_datatype, fixed_array) {
     EXPECT_GE(initial_capacity, num_elems - 1);
 
     /* append one element */
-    size_t idx;
-    status = ucs_array_append(test_1int, &test_array, &idx);
+    status = ucs_array_append(test_1int, &test_array);
     ASSERT_UCS_OK(status);
 
+    size_t idx = ucs_array_length(&test_array) - 1;
     ucs_array_elem(&test_array, idx) = 17;
     EXPECT_EQ(0u, idx);
     EXPECT_EQ(1u, ucs_array_length(&test_array));
