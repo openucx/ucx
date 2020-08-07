@@ -6,6 +6,7 @@
 #ifndef UCP_TEST_H_
 #define UCP_TEST_H_
 
+#define __STDC_LIMIT_MACROS
 #include <ucp/api/ucp.h>
 #include <ucs/time/time.h>
 #include <common/mem_buffer.h>

@@ -236,7 +236,7 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
                                        UCP_RECV_DESC_FLAG_EAGER_SYNC)) {
         priv = (ucp_offload_last_ssend_hdr_t*)UCS_PTR_BYTE_OFFSET(data,
                                                                   -sizeof(*priv));
-        ucp_tag_offload_sync_send_ack(req->recv.worker, priv->ssend_ack.ep_ptr,
+        ucp_tag_offload_sync_send_ack(req->recv.worker, priv->ssend_ack.ep_id,
                                       priv->ssend_ack.sender_tag, recv_flags);
     }
 

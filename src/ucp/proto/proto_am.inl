@@ -465,7 +465,7 @@ ucp_proto_get_short_max(const ucp_request_t *req,
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*
-ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, uintptr_t ep_ptr)
+ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucs_ptr_map_key_t ep_id)
 {
     ucp_request_t *req;
 
@@ -475,7 +475,7 @@ ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, uintptr_t ep_ptr)
     }
 
     req->flags              = 0;
-    req->send.ep            = ucp_worker_get_ep_by_ptr(worker, ep_ptr);
+    req->send.ep            = ucp_worker_get_ep_by_id(worker, ep_id);
     req->send.uct.func      = ucp_proto_progress_am_single;
     req->send.proto.comp_cb = ucp_request_put;
     req->send.proto.status  = UCS_OK;

@@ -10,6 +10,7 @@
 
 #include "proto_am.inl"
 
+#include <ucp/core/ucp_request.inl>
 #include <ucp/tag/offload.h>
 
 
@@ -36,7 +37,7 @@ static size_t ucp_proto_pack(void *dest, void *arg)
     case UCP_AM_ID_OFFLOAD_SYNC_ACK:
         off_rep_hdr = dest;
         off_rep_hdr->sender_tag = req->send.proto.sender_tag;
-        off_rep_hdr->ep_ptr     = ucp_request_get_dest_ep_ptr(req);
+        off_rep_hdr->ep_id      = ucp_send_request_get_ep_remote_id(req);
         return sizeof(*off_rep_hdr);
     }
 

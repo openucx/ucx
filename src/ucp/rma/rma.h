@@ -11,6 +11,7 @@
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/proto/proto_am.h>
 #include <uct/api/uct.h>
+#include <ucs/datastruct/ptr_map.h>
 
 
 /**
@@ -44,12 +45,12 @@ typedef union {
 
 typedef struct {
     uint64_t                  address;
-    uintptr_t                 ep_ptr;
+    uint64_t                  ep_id;
 } UCS_S_PACKED ucp_put_hdr_t;
 
 
 typedef struct {
-    uintptr_t                 ep_ptr;
+    uint64_t                  ep_id;
 } UCS_S_PACKED ucp_cmpl_hdr_t;
 
 
