@@ -75,7 +75,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
     ssize_t packed_rkey_size;
 
     rndv_rts_hdr->sreq.reqptr = (uintptr_t)sreq;
-    rndv_rts_hdr->sreq.ep_ptr = ucp_request_get_dest_ep_ptr(sreq);
+    rndv_rts_hdr->sreq.ep_id  = ucp_send_request_get_ep_remote_id(sreq);
     rndv_rts_hdr->size        = sreq->send.length;
     rndv_rts_hdr->flags       = flags;
 
@@ -1117,8 +1117,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr),
         goto out;
     }
 
-    rndv_req->send.ep           = ucp_worker_get_ep_by_ptr(worker,
-                                                           rndv_rts_hdr->sreq.ep_ptr);
+    rndv_req->send.ep           = ucp_worker_get_ep_by_id(worker,
+                                                    rndv_rts_hdr->sreq.ep_id);
     rndv_req->flags             = 0;
     rndv_req->send.mdesc        = NULL;
     rndv_req->send.pending_lane = UCP_NULL_LANE;
@@ -1719,14 +1719,14 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
-        ucs_assert(rndv_rts_hdr->sreq.ep_ptr != 0);
+        ucs_assert(rndv_rts_hdr->sreq.ep_id != UCP_EP_ID_INVALID);
 
         /* RNDV is supported with TAG protocol only */
         ucs_assert(rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_TAG);
 
-        snprintf(buffer, max, "RNDV_RTS tag %"PRIx64" ep_ptr %lx sreq 0x%lx "
+        snprintf(buffer, max, "RNDV_RTS tag %"PRIx64" ep_id 0x%"PRIx64" sreq 0x%lx "
                  "address 0x%"PRIx64" size %zu", rndv_rts_hdr->tag.tag,
-                 rndv_rts_hdr->sreq.ep_ptr, rndv_rts_hdr->sreq.reqptr,
+                 rndv_rts_hdr->sreq.ep_id, rndv_rts_hdr->sreq.reqptr,
                  rndv_rts_hdr->address, rndv_rts_hdr->size);
         if (rndv_rts_hdr->address) {
             ucp_rndv_dump_rkey(rndv_rts_hdr + 1, buffer + strlen(buffer),

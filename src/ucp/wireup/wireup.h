@@ -72,8 +72,9 @@ typedef struct ucp_wireup_msg {
     uint8_t                 type;         /* Message type */
     ucp_err_handling_mode_t err_mode;     /* Peer error handling mode */
     ucp_ep_match_conn_sn_t  conn_sn;      /* Connection sequence number */
-    uintptr_t               src_ep_ptr;   /* Endpoint of source */
-    uintptr_t               dest_ep_ptr;  /* Endpoint of destination (0 - invalid) */
+    uint64_t                src_ep_id;    /* Endpoint ID of source */
+    uint64_t                dst_ep_id;    /* Endpoint ID of destination, can be
+                                             UCP_EP_ID_INVALID */
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
