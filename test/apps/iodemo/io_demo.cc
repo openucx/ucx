@@ -21,8 +21,7 @@
 #include <algorithm>
 #include <limits>
 
-#define ALIGNMENT 4096
-
+#define ALIGNMENT       4096
 
 /* IO operation type */
 typedef enum {
@@ -39,21 +38,21 @@ static const char *io_op_names[] = {
 
 /* test options */
 typedef struct {
-    const char           *server_addr;
-    int                  port_num;
-    long                 client_retries;
-    double               client_timeout;
-    double               client_runtime_limit;
-    size_t               iomsg_size;
-    size_t               min_data_size;
-    size_t               max_data_size;
-    size_t               chunk_size;
-    long                 iter_count;
-    long                 window_size;
-    std::vector<io_op_t> operations;
-    unsigned             random_seed;
-    size_t               num_buffers;
-    bool                 verbose;
+    std::vector<const char*> server_addrs;
+    int                      port_num;
+    long                     client_retries;
+    double                   client_timeout;
+    double                   client_runtime_limit;
+    size_t                   iomsg_size;
+    size_t                   min_data_size;
+    size_t                   max_data_size;
+    size_t                   chunk_size;
+    long                     iter_count;
+    long                     window_size;
+    std::vector<io_op_t>     operations;
+    unsigned                 random_seed;
+    size_t                   num_buffers;
+    bool                     verbose;
 } options_t;
 
 #define LOG         UcxLog("[DEMO]", true)
@@ -539,12 +538,12 @@ public:
         return (_status == OK);
     }
 
-    UcxConnection* connect() {
+    UcxConnection* connect(const char* server_addr) {
         struct sockaddr_in connect_addr;
         memset(&connect_addr, 0, sizeof(connect_addr));
         connect_addr.sin_family = AF_INET;
         connect_addr.sin_port   = htons(opts().port_num);
-        inet_pton(AF_INET, opts().server_addr, &connect_addr.sin_addr);
+        inet_pton(AF_INET, server_addr, &connect_addr.sin_addr);
 
         return UcxContext::connect((const struct sockaddr*)&connect_addr,
                                    sizeof(connect_addr));
@@ -565,9 +564,19 @@ public:
     }
 
     bool run() {
-        UcxConnection* conn = connect();
-        if (!conn) {
-            return false;
+        std::vector<UcxConnection*> conn;
+        conn.resize(opts().server_addrs.size());
+        for (size_t i = 0; i < conn.size(); i++) {
+            conn[i] = connect(opts().server_addrs[i]);
+            if (!conn[i]) {
+                LOG << "Connect to server ["
+                    << opts().server_addrs[i]
+                    << "] Failed!";
+                for (size_t j = 0; j < i; j++) {
+                    delete conn[j];
+                }
+                return false;
+            }
         }
 
         _status = OK;
@@ -593,14 +602,15 @@ public:
                 break;
             }
 
-            io_op_t op = get_op();
+            size_t conn_num = IoDemoRandom::rand(0, conn.size() - 1);
+            io_op_t op      = get_op();
             size_t size;
             switch (op) {
             case IO_READ:
-                size = do_io_read(conn, total_iter);
+                size = do_io_read(conn[conn_num], total_iter);
                 break;
             case IO_WRITE:
-                size = do_io_write(conn, total_iter);
+                size = do_io_write(conn[conn_num], total_iter);
                 break;
             default:
                 abort();
@@ -636,7 +646,9 @@ public:
             check_time_limit(curr_time);
         }
 
-        delete conn;
+        for (size_t i = 0; i < conn.size(); i++) {
+            delete conn[i];
+        }
         return (_status == OK) || (_status == RUNTIME_EXCEEDED);
     }
 
@@ -823,7 +835,6 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     bool found;
     int c;
 
-    test_opts->server_addr          = NULL;
     test_opts->port_num             = 1337;
     test_opts->client_retries       = std::numeric_limits<long>::max();
     test_opts->client_timeout       = 1.0;
@@ -950,8 +961,8 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         }
     }
 
-    if (optind < argc) {
-        test_opts->server_addr = argv[optind];
+    while (optind < argc) {
+        test_opts->server_addrs.push_back(argv[optind++]);
     }
 
     if (test_opts->operations.size() == 0) {
@@ -1009,7 +1020,7 @@ int main(int argc, char **argv)
         return ret;
     }
 
-    if (test_opts.server_addr == NULL) {
+    if (test_opts.server_addrs.empty()) {
         return do_server(test_opts);
     } else {
         return do_client(test_opts);
