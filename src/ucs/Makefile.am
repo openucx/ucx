@@ -27,6 +27,7 @@ nobase_dist_libucs_la_HEADERS = \
 	config/parser.h \
 	config/types.h \
 	datastruct/array.h \
+	datastruct/array.inl \
 	datastruct/callbackq.h \
 	datastruct/hlist.h \
 	datastruct/khash.h \
@@ -77,7 +78,6 @@ noinst_HEADERS = \
 	arch/atomic.h \
 	arch/cpu.h \
 	datastruct/arbiter.h \
-	datastruct/array.inl \
 	datastruct/frag_list.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.inl \
@@ -127,6 +127,7 @@ libucs_la_SOURCES = \
 	config/ucm_opts.c \
 	config/parser.c \
 	datastruct/arbiter.c \
+	datastruct/array.c \
 	datastruct/callbackq.c \
 	datastruct/frag_list.c \
 	datastruct/mpmc.c \
