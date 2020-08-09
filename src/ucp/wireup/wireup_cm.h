@@ -26,10 +26,13 @@ int ucp_ep_init_flags_has_cm(unsigned ep_init_flags);
 
 ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                            uct_listener_h uct_listener,
-                                           uct_conn_request_h uct_conn_req);
+                                           uct_conn_request_h uct_conn_req,
+                                           ucp_rsc_index_t cm_idx);
 
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
                                             const ucp_ep_params_t *params);
+
+ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep);
 
 void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                    const uct_cm_listener_conn_request_args_t

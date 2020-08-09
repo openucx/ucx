@@ -706,7 +706,7 @@ void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
     }
 }
 
-static uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
+uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     uct_ep_h uct_ep = ep->uct_eps[lane];
 
@@ -1146,9 +1146,9 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     return status;
 }
 
-static void ucp_wireup_connect_remote_purge_cb(uct_pending_req_t *self, void *arg)
+void ucp_wireup_pending_purge_cb(uct_pending_req_t *self, void *arg)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_queue_head_t *queue = arg;
 
     ucs_trace_req("ep %p: extracted request %p from pending queue", req->send.ep,
@@ -1220,7 +1220,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
      * could not be progressed any more after switching to wireup proxy).
      */
     ucs_queue_head_init(&tmp_q);
-    uct_ep_pending_purge(uct_ep, ucp_wireup_connect_remote_purge_cb, &tmp_q);
+    uct_ep_pending_purge(uct_ep, ucp_wireup_pending_purge_cb, &tmp_q);
 
     /* the wireup ep should use the existing [am_lane] as next_ep */
     ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);

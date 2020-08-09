@@ -81,6 +81,7 @@ static ucs_status_t uct_tcp_sockcm_event_err_to_ucs_err_log(int fd,
 
 err:
     *log_level = UCS_LOG_LEVEL_ERROR;
+    ucs_error("error event on fd %d: %s", fd, strerror(error));
     return UCS_ERR_IO_ERROR;
 }
 
