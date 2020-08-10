@@ -84,14 +84,14 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
     if (kh_put_status == UCS_KH_PUT_KEY_PRESENT) {
         *sys_dev = kh_value(&ucs_topo_ctx.bus_to_sys_dev_hash, hash_it);
-        ucs_debug("bus id %"PRId64 " exists. sys_dev = %u", bus_id_bit_rep,
+        ucs_debug("bus id 0x%"PRIx64" exists. sys_dev = %u", bus_id_bit_rep,
                   *sys_dev);
     } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
         *sys_dev = ucs_topo_ctx.sys_dev_to_bus_lookup.count;
         ucs_assert(*sys_dev < UCS_TOPO_MAX_SYS_DEVICES);
         kh_value(&ucs_topo_ctx.bus_to_sys_dev_hash, hash_it) = *sys_dev;
-        ucs_debug("bus id %"PRId64 " doesn't exist. sys_dev = %u",
+        ucs_debug("bus id 0x%"PRIx64" doesn't exist. sys_dev = %u",
                   bus_id_bit_rep, *sys_dev);
 
         ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[*sys_dev] = *bus_id;
