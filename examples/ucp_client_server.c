@@ -797,9 +797,9 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
 
     if (send_recv_type == CLIENT_SERVER_SEND_RECV_AM) {
         /* Initialize Active Message data handler */
-        param.field_mask = UCP_AM_HANDLER_ATTR_FIELD_ID |
-                           UCP_AM_HANDLER_ATTR_FIELD_CB |
-                           UCP_AM_HANDLER_ATTR_FIELD_ARG;
+        param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                           UCP_AM_HANDLER_PARAM_FIELD_CB |
+                           UCP_AM_HANDLER_PARAM_FIELD_ARG;
         param.id         = TEST_AM_ID;
         param.cb         = ucp_am_data_cb;
         param.arg        = ucp_data_worker; /* not used in our callback */

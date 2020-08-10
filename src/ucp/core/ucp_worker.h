@@ -244,8 +244,8 @@ typedef struct ucp_worker {
                                                   * are in-progress */
     uct_worker_cb_id_t            rkey_ptr_cb_id;/* RKEY PTR worker callback queue ID */
     ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
-    ucp_am_context_t              am;            /* Array of AM callbacks and their data */
-    uint64_t                      am_message_id; /* For matching long am's */
+    ucs_array_t(ucp_am_cbs)       am;            /* Array of AM callbacks and their data */
+    uint64_t                      am_message_id; /* For matching long AMs */
     ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */
 
     UCS_STATS_NODE_DECLARE(stats)
