@@ -50,23 +50,15 @@ public:
 
     void get_b(size_t size, void *target_ptr, ucp_rkey_h rkey,
                void *expected_data, void *arg) {
-        ucs_status_ptr_t status_ptr;
-        ucp_request_param_t param;
-
-        param.op_attr_mask = 0;
-        status_ptr = ucp_get_nbx(sender().ep(), expected_data, size,
-                                 (uintptr_t)target_ptr, rkey, &param);
+        ucs_status_ptr_t status_ptr = do_get(size, target_ptr, rkey,
+                                             expected_data);
         request_wait(status_ptr);
     }
 
     void get_nbi(size_t size, void *target_ptr, ucp_rkey_h rkey,
                  void *expected_data, void *arg) {
-        ucs_status_ptr_t status_ptr;
-        ucp_request_param_t param;
-
-        param.op_attr_mask = 0;
-        status_ptr = ucp_get_nbx(sender().ep(), expected_data, size,
-                                 (uintptr_t)target_ptr, rkey, &param);
+        ucs_status_ptr_t status_ptr = do_get(size, target_ptr, rkey,
+                                             expected_data);
         request_release(status_ptr);
     }
 
@@ -110,6 +102,15 @@ private:
                            (uintptr_t)target_ptr, rkey, &param);
     }
 
+    ucs_status_ptr_t do_get(size_t size, void *target_ptr, ucp_rkey_h rkey,
+                            void *expected_data) {
+        ucp_request_param_t param;
+
+        param.op_attr_mask = 0;
+        return ucp_get_nbx(sender().ep(), expected_data, size,
+                           (uintptr_t)target_ptr, rkey, &param);
+    }
+
     void test_message_sizes(send_func_t send_func,
                             ucs_memory_type_t send_mem_type,
                             ucs_memory_type_t target_mem_type,
@@ -135,7 +136,7 @@ private:
             ms << num_iters << "x" << size << " ";
             fflush(stdout);
 
-            ucs_memory_type_t mem_types[2] = {send_mem_type, target_mem_type};
+            ucs_memory_type_t mem_types[] = {send_mem_type, target_mem_type};
             test_xfer(send_func, size, num_iters, 1, send_mem_type,
                       target_mem_type, mem_map_flags, is_ep_flush(), mem_types);
        }

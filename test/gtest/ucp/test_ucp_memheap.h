@@ -19,7 +19,7 @@ public:
      * @param [in]  size            Size of data to send
      * @param [in]  target_ptr      VA to perform the RMA operation to
      * @param [in]  rkey            RMA remote key
-     * @param [in]  expected_data   Buffer to fill with expected data at 'target_ptr'.
+     * @param [in]  expected_data   Buffer to fill with expected data at 'target_ptr'
      * @param [in]  arg             User-defined argument
      *
      * @note The expected data buffer memory type is 'send_mem_type' as passed

@@ -5,9 +5,10 @@
 * See file LICENSE for terms.
 */
 
-#include "test_ucp_atomic.h"
+#include "test_ucp_memheap.h"
+
 extern "C" {
-#include <ucp/core/ucp_types.h> // for atomic mode
+#include <ucp/core/ucp_types.h> /* for atomic mode */
 }
 
 template <typename T>
@@ -37,7 +38,8 @@ public:
 
         ucp_request_param_t param;
         param.op_attr_mask = 0;
-        do_atomic(op, size, target_ptr, rkey, value, param);
+        ucs_status_t status = do_atomic(op, size, target_ptr, rkey, value, param);
+        ASSERT_UCS_OK(status);
     }
 
     void misaligned_post(size_t size, void *target_ptr, ucp_rkey_h rkey,
@@ -46,7 +48,7 @@ public:
         *(T*)expected_data = *(T*)target_ptr; /* remote should not change */
 
         ucp_request_param_t param;
-        param.op_attr_mask = 0;
+        param.op_attr_mask  = 0;
         ucs_status_t status = do_atomic(*(ucp_atomic_op_t*)arg, size,
                                         UCS_PTR_BYTE_OFFSET(target_ptr, 1),
                                         rkey, 0, param);
@@ -57,18 +59,19 @@ public:
                void *expected_data, void *arg)
     {
         ucp_atomic_op_t op = *(ucp_atomic_op_t*)arg;
-        T value             = (T)ucs::rand() * (T)ucs::rand();
+        T value            = (T)ucs::rand() * (T)ucs::rand();
         T prev             = *(T*)target_ptr;
         T reply_data       = ((op == UCP_ATOMIC_OP_CSWAP) && (ucs::rand() % 2)) ?
-                              prev : /* cswap success */
-                              ((T)ucs::rand() * (T)ucs::rand());
-        *(T*)expected_data  = atomic_op_result(op, value, prev, reply_data);
+                             prev : /* cswap success */
+                             ((T)ucs::rand() * (T)ucs::rand());
+        *(T*)expected_data = atomic_op_result(op, value, prev, reply_data);
 
         ucp_request_param_t param;
         param.op_attr_mask = UCP_OP_ATTR_FIELD_REPLY_BUFFER;
         param.reply_buffer = &reply_data;
 
-        do_atomic(op, size, target_ptr, rkey, value, param);
+        ucs_status_t status = do_atomic(op, size, target_ptr, rkey, value, param);
+        ASSERT_UCS_OK(status);
 
         EXPECT_EQ(prev, reply_data); /* expect the previous value */
     }
@@ -76,9 +79,9 @@ public:
 protected:
     static const uint64_t POST_ATOMIC_OPS  = UCS_BIT(UCP_ATOMIC_OP_ADD) |
                                              UCS_BIT(UCP_ATOMIC_OP_AND) |
-                                             UCS_BIT(UCP_ATOMIC_OP_OR) |
+                                             UCS_BIT(UCP_ATOMIC_OP_OR)  |
                                              UCS_BIT(UCP_ATOMIC_OP_XOR);
-    static const uint64_t FETCH_ATOMIC_OPS = POST_ATOMIC_OPS |
+    static const uint64_t FETCH_ATOMIC_OPS = POST_ATOMIC_OPS             |
                                              UCS_BIT(UCP_ATOMIC_OP_SWAP) |
                                              UCS_BIT(UCP_ATOMIC_OP_CSWAP);
 
@@ -104,7 +107,6 @@ protected:
 
 private:
     static T atomic_op_result(ucp_atomic_op_t op, T x, T y, T z) {
-        /* coverity[switch_selector_expr_is_constant] */
         switch (op) {
         case UCP_ATOMIC_OP_ADD:
             return x + y;
@@ -143,7 +145,7 @@ private:
     }
 
     ucs_status_t do_atomic(ucp_atomic_op_t op, size_t size, void *target_ptr,
-                           ucp_rkey_h rkey, T value, ucp_request_param_t& param) {
+                           ucp_rkey_h rkey, T value, ucp_request_param_t &param) {
 
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_DATATYPE;
         param.datatype      = ucp_dt_make_contig(sizeof(T));
