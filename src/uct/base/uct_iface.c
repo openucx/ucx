@@ -175,12 +175,6 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
 }
 
-ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
-                          uct_completion_t *comp)
-{
-    return ep->iface->ops.ep_check(ep, flags, comp);
-}
-
 ucs_status_t uct_iface_event_fd_get(uct_iface_h iface, int *fd_p)
 {
     return iface->ops.iface_event_fd_get(iface, fd_p);
@@ -365,7 +359,6 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     ops->ep_pending_purge    = uct_ep_failed_purge;
     ops->ep_flush            = (uct_ep_flush_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_fence            = (uct_ep_fence_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_destroy          = uct_ep_failed_destroy;
     ops->ep_get_address      = (uct_ep_get_address_func_t)ucs_empty_function_return_ep_timeout;

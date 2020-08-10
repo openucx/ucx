@@ -206,10 +206,6 @@ typedef ucs_status_t (*uct_ep_flush_func_t)(uct_ep_h ep,
 
 typedef ucs_status_t (*uct_ep_fence_func_t)(uct_ep_h ep, unsigned flags);
 
-typedef ucs_status_t (*uct_ep_check_func_t)(uct_ep_h ep,
-                                            unsigned flags,
-                                            uct_completion_t *comp);
-
 /* endpoint - connection establishment */
 
 typedef ucs_status_t (*uct_ep_create_func_t)(const uct_ep_params_t *params,
@@ -329,7 +325,6 @@ typedef struct uct_iface_ops {
     /* endpoint - synchronization */
     uct_ep_flush_func_t                 ep_flush;
     uct_ep_fence_func_t                 ep_fence;
-    uct_ep_check_func_t                 ep_check;
 
     /* endpoint - connection establishment */
     uct_ep_create_func_t                ep_create;

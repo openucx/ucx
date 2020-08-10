@@ -145,7 +145,6 @@ static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
     .ep_pending_add           = (uct_ep_pending_add_func_t)ucs_empty_function_return_unsupported,
     .ep_flush                 = (uct_ep_flush_func_t)ucs_empty_function_return_success,
     .ep_fence                 = (uct_ep_fence_func_t)ucs_empty_function_return_unsupported,
-    .ep_check                 = (uct_ep_check_func_t)ucs_empty_function_return_unsupported,
     .ep_create                = (uct_ep_create_func_t)ucs_empty_function_return_unsupported,
     .iface_flush              = (uct_iface_flush_func_t)ucs_empty_function_return_unsupported,
     .iface_fence              = (uct_iface_fence_func_t)ucs_empty_function_return_unsupported,

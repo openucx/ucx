@@ -68,8 +68,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
                                    UCT_IFACE_FLAG_GET_BCOPY        |
                                    UCT_IFACE_FLAG_ATOMIC_CPU       |
                                    UCT_IFACE_FLAG_PENDING          |
-                                   UCT_IFACE_FLAG_CB_SYNC          |
-                                   UCT_IFACE_FLAG_EP_CHECK;
+                                   UCT_IFACE_FLAG_CB_SYNC;
 
     attr->cap.atomic32.op_flags   =
     attr->cap.atomic64.op_flags   = UCS_BIT(UCT_ATOMIC_OP_ADD)     |
@@ -298,7 +297,6 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_atomic32_fetch        = uct_sm_ep_atomic32_fetch,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
-    .ep_check                 = ucs_empty_function_return_success,
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_self_ep_t),

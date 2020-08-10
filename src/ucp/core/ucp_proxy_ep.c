@@ -100,7 +100,6 @@ UCP_PROXY_EP_DEFINE_OP(ucs_status_t, pending_add, uct_pending_req_t*, unsigned)
 UCP_PROXY_EP_DEFINE_OP(void, pending_purge, uct_pending_purge_callback_t, void*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, flush, unsigned, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, fence, unsigned)
-UCP_PROXY_EP_DEFINE_OP(ucs_status_t, check, unsigned, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, get_address, uct_ep_addr_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, connect_to_ep, const uct_device_addr_t*,
                        const uct_ep_addr_t*)
@@ -149,7 +148,6 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     UCP_PROXY_EP_SET_OP(ep_pending_purge);
     UCP_PROXY_EP_SET_OP(ep_flush);
     UCP_PROXY_EP_SET_OP(ep_fence);
-    UCP_PROXY_EP_SET_OP(ep_check);
     UCP_PROXY_EP_SET_OP(ep_destroy);
     UCP_PROXY_EP_SET_OP(ep_get_address);
     UCP_PROXY_EP_SET_OP(ep_connect_to_ep);
