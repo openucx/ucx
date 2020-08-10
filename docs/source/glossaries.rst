@@ -6,14 +6,14 @@ Glossaries
 Keyword     Description
 =========== ====================================================================================================================================================
 ACK         Acknowledge
-am          Active Message
+AM          Active Message
 AMO         Atomic Memory Operation
 ANL         Argonne National Laboratory
-AZP         AZure Pipeline
+AZP         Azure Pipeline
 bcopy       Buffered copy
 Bistro      Binary Instrumentation
 BTL         Open MPI's Byte Transfer Layer
-cm          Connection Manager
+CM          Connection Manager
 CMA         Linux Kernel Cross Memory Attach
 CQ          Completion Queue(InfiniBand)
 CQE         Completion Queue Entry(InfiniBand)
@@ -21,9 +21,9 @@ csmock      static analysis tools
 CUDA        Compute Unified Device Architecture(NVIDIA)
 DC          Dynamically Connected transport(Mellanox/Nvidia InfiniBand)
 DPM         Direct Packet Mode
-ep          EndPoint
+EP          EndPoint
 FC          Flow Control
-fd          File Descriptor
+FD          File Descriptor
 GDR         GPUDirect RDMA
 gtest       Google Test
 HPC         High Performance Computing
@@ -32,16 +32,16 @@ IB          InfiniBand
 iface       Interaface
 IPC         Inter Process Communication
 JUCX        Java API over UCP
-KLM         A new sophisticated way of creating memory regions.(Mellanox)
+KLM         A new sophisticated way of creating memory regions(Mellanox)
 KNEM        Inria's Kernel module for process to process zero copy (https://knem.gitlabpages.inria.fr)
 LDPM        Legacy DPM
 LLNL        Lawrence Livermore National Laboratory
-madvise     give advice about use of memory. See manual madvise(2)
-md          Memory Domain
+madvise     give advice about use of memory. See madvise(2)
+MD          Memory Domain
 MEMH        Memory Handle
 MLX         Mellanox Technologies
 mlx5        Mellanox-5 generation of Mellanox device driver
-mm          Memory Mapper
+MM          Memory Mapper
 MP-XRQ      Multi-Packet XRQ
 MPI         Message Passing INterface
 MPICH       ANL MPI Implementation
@@ -50,13 +50,13 @@ NAK         Negative Acknowledge
 ODP         OnDemand Paging
 OFA         OpenFabrics Alliance
 OMPI        OpenMPI
-OOB         Out of band
+OOB         Out of band / Out of box
 OOO         Out of Order
 OPA         Omni-Path Architecture
 Open MPI    A MPI Implementation
 ORNL        Oak Ridge National Laboratory
 PCIe        PCI Express
-PFN         Physical Page Frame
+PFN         Physical Frame Number
 PGAS        Partitioned Global Address Space
 POSIX       Portable operating system interface
 ppn         processes per node
@@ -68,18 +68,18 @@ RDMA        Remote Direct Memory Access
 REQ         Request
 rkey        Remote KEY
 RMA         Remote Memory Access
-RNR         Receiver Not Ready
+RnR         Receiver Not Ready
 RoCE        RDMA over Converged Ethernet
 ROCm        Radeon Open Compute platform(AMD)
 RTE         Run Time Environment
 RX          Receive
-Skb         Socket Buffer
-sm          Shared Memory
+skb         Socket Buffer
+SM          Shared Memory
 SM          Subnet Manager(InfiniBand)
 SockCM      Socket Connection Manager
 SRQ         Shared Receive Queue
-SYSV        UNIX System V
-tl          Transport Layer
+SysV        UNIX System V
+TL          Transport Layer
 TLS         Transpot LayerS
 TM          Tag Matching
 TX          Transmit
@@ -88,7 +88,7 @@ UCC         Unified Collective Communications
 UCF         Unified Communication Framework
 UCM         Unified Communication Memory
 UCP         Unified Communication Protocols Higher level API
-UCS         Unified Communication Service Common utilities.
+UCS         Unified Communication Service Common utilities
 UCT         Unified Communication Transport Lower level API
 UCX         Unified Communication X
 UD          Unreliable Datagram (InfiniBand)
