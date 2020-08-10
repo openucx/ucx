@@ -1662,14 +1662,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
 {
+    unsigned config_count = 64;
     ucs_thread_mode_t uct_thread_mode;
-    unsigned config_count;
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
-
-    config_count = ucs_min((context->num_tls + 1) * (context->num_tls + 1) * context->num_tls,
-                           UINT8_MAX);
 
     worker = ucs_calloc(1, sizeof(*worker) +
                            sizeof(*worker->ep_config) * config_count,
