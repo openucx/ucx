@@ -56,6 +56,11 @@ public:
     static bool compare(const void *expected, const void *buffer,
                         size_t length, ucs_memory_type_t mem_type);
 
+    /* compare when both expected data and buffer can be different mem types */
+    static bool compare(const void *expected, const void *buffer,
+                        size_t length, ucs_memory_type_t mem_type_expected,
+                        ucs_memory_type_t mem_type_buffer);
+
     /* return the string name of a memory type */
     static std::string mem_type_name(ucs_memory_type_t mem_type);
 
