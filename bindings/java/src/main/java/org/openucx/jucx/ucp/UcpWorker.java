@@ -147,6 +147,13 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         return recvTaggedNonBlocking(recvBuffer, 0, 0, callback);
     }
 
+    public UcpRequest recvTaggedNonBlocking(long[] localAddresses, long[] sizes,
+                                            long tag, long tagMask,
+                                            UcxCallback callback) {
+        return recvTaggedIovNonBlockingNative(getNativeId(), localAddresses, sizes, tag,
+            tagMask, callback);
+    }
+
     /**
      * Non-blocking probe and return a message.
      * This routine probes (checks) if a messages described by the {@code tag} and
@@ -253,6 +260,12 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native UcpRequest recvTaggedNonBlockingNative(long workerId, long localAddress,
                                                                  long size, long tag, long tagMask,
                                                                  UcxCallback callback);
+
+    private static native UcpRequest recvTaggedIovNonBlockingNative(long workerId,
+                                                                    long[] localAddresses,
+                                                                    long[] sizes,
+                                                                    long tag, long tagMask,
+                                                                    UcxCallback callback);
 
     private static native UcpTagMessage tagProbeNonBlockingNative(long workerId, long tag,
                                                                   long tagMask, boolean remove);

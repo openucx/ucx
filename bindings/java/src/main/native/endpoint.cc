@@ -205,6 +205,31 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, j
 }
 
 JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedIovNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                    jlong ep_ptr, jlongArray addresses,
+                                                                    jlongArray sizes, jlong tag,
+                                                                    jobject callback)
+{
+    jsize iovcnt = env->GetArrayLength(addresses);
+    ucp_dt_iov_t* iovec = (ucp_dt_iov_t*)ucs_malloc(sizeof(ucp_dt_iov_t) * iovcnt, "JUCX iov vector");
+
+    fill_iov_vector(env, addresses, sizes, iovec, iovcnt);
+
+    ucs_status_ptr_t request = ucp_tag_send_nb((ucp_ep_h)ep_ptr, iovec, iovcnt,
+                                               ucp_dt_make_iov(), tag, jucx_request_callback);
+
+    if (UCS_PTR_IS_PTR(request)) {
+        struct jucx_context *ctx = (struct jucx_context *)request;
+        ctx->iovec = iovec;
+    } else {
+        ucs_free(iovec);
+    }
+
+    ucs_trace_req("JUCX: send_tag_iov_nb request %p, tag: %ld", request, tag);
+    return process_request(request, callback);
+}
+
+JNIEXPORT jobject JNICALL
 Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamNonBlockingNative(JNIEnv *env, jclass cls,
                                                                   jlong ep_ptr, jlong addr,
                                                                   jlong size, jobject callback)
@@ -213,6 +238,31 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamNonBlockingNative(JNIEnv *env, j
                                                   ucp_dt_make_contig(1), jucx_request_callback, 0);
 
     ucs_trace_req("JUCX: send_stream_nb request %p, size: %zu", request, size);
+    return process_request(request, callback);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamIovNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                     jlong ep_ptr, jlongArray addresses,
+                                                                     jlongArray sizes,
+                                                                     jobject callback)
+{
+    jsize iovcnt = env->GetArrayLength(addresses);
+    ucp_dt_iov_t* iovec = (ucp_dt_iov_t*)ucs_malloc(sizeof(ucp_dt_iov_t) * iovcnt, "JUCX iov vector");
+
+    fill_iov_vector(env, addresses, sizes, iovec, iovcnt);
+
+    ucs_status_ptr_t request = ucp_stream_send_nb((ucp_ep_h)ep_ptr, iovec, iovcnt,
+                                                  ucp_dt_make_iov(), jucx_request_callback, 0);
+
+    if (UCS_PTR_IS_PTR(request)) {
+        struct jucx_context *ctx = (struct jucx_context *)request;
+        ctx->iovec = iovec;
+    } else {
+        ucs_free(iovec);
+    }
+
+    ucs_trace_req("JUCX: send_stream_iov_nb request %p", request);
     return process_request(request, callback);
 }
 
@@ -228,6 +278,40 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamNonBlockingNative(JNIEnv *env, j
                                                   &rlength, flags);
 
     ucs_trace_req("JUCX: recv_stream_nb request %p, size: %zu", request, size);
+
+    if (request == NULL) {
+        // If request completed immidiately.
+        return process_completed_stream_recv(rlength, callback);
+    }
+
+    return process_request(request, callback);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamIovNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                     jlong ep_ptr,
+                                                                     jlongArray addresses, jlongArray sizes,
+                                                                     jlong flags, jobject callback)
+{
+    size_t rlength;
+
+    jsize iovcnt = env->GetArrayLength(addresses);
+    ucp_dt_iov_t* iovec = (ucp_dt_iov_t*)ucs_malloc(sizeof(ucp_dt_iov_t) * iovcnt, "JUCX iov vector");
+
+    fill_iov_vector(env, addresses, sizes, iovec, iovcnt);
+
+    ucs_status_ptr_t request = ucp_stream_recv_nb((ucp_ep_h)ep_ptr, iovec, iovcnt,
+                                                  ucp_dt_make_iov(), stream_recv_callback,
+                                                  &rlength, flags);
+
+    ucs_trace_req("JUCX: recv_stream_iov_nb request %p", request);
+
+    if (UCS_PTR_IS_PTR(request)) {
+        struct jucx_context *ctx = (struct jucx_context *)request;
+        ctx->iovec = iovec;
+    } else {
+        ucs_free(iovec);
+    }
 
     if (request == NULL) {
         // If request completed immidiately.

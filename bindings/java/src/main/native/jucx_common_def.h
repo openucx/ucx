@@ -7,6 +7,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack.h>
 #include <ucs/profile/profile.h>
 #include <ucs/type/spinlock.h>
 
@@ -57,6 +58,7 @@ struct jucx_context {
     ucs_status_t status;
     ucs_recursive_spinlock_t lock;
     size_t length;
+    ucp_dt_iov_t* iovec;
 };
 
 void jucx_request_init(void *request);
@@ -105,5 +107,24 @@ jobject new_rkey_instance(JNIEnv *env, ucp_rkey_h rkey);
  */
 jobject new_tag_msg_instance(JNIEnv *env, ucp_tag_message_h msg_tag,
                              ucp_tag_recv_info_t *info_tag);
+
+/**
+ * @brief Creates iov vector from array of addresses and sizes
+ */
+UCS_F_ALWAYS_INLINE void fill_iov_vector(JNIEnv *env,
+                                         jlongArray addr_array, jlongArray size_array,
+                                         ucp_dt_iov_t* iovec, int iovcnt)
+{
+    jlong* addresses = env->GetLongArrayElements(addr_array, NULL);
+    jlong* sizes = env->GetLongArrayElements(size_array, NULL);
+
+    for (int i = 0; i < iovcnt; i++) {
+        iovec[i].buffer = (void *)addresses[i];
+        iovec[i].length = sizes[i];
+    }
+
+    env->ReleaseLongArrayElements(addr_array, addresses, 0);
+    env->ReleaseLongArrayElements(size_array, sizes, 0);
+}
 
 #endif

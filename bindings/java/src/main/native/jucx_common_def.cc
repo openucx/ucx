@@ -151,6 +151,7 @@ static inline void jucx_context_reset(struct jucx_context* ctx)
     ctx->jucx_request = NULL;
     ctx->status = UCS_INPROGRESS;
     ctx->length = 0;
+    ctx->iovec = NULL;
 }
 
 void jucx_request_init(void *request)
@@ -174,6 +175,8 @@ static inline void set_jucx_request_completed(JNIEnv *env, jobject jucx_request,
     env->SetObjectField(jucx_request, native_id_field, NULL);
     if ((ctx != NULL) && (ctx->length > 0)) {
         env->SetLongField(jucx_request, recv_size_field, ctx->length);
+    } else if ((ctx != NULL) && (ctx->iovec != NULL)) {
+        ucs_free(ctx->iovec);
     }
 }
 

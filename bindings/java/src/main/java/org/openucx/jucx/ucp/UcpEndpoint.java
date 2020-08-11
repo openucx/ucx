@@ -207,6 +207,15 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * Iov version of non blocking send operaation
+     */
+    public UcpRequest sendTaggedNonBlocking(long[] localAddresses, long[] sizes,
+                                            long tag, UcxCallback callback) {
+        return sendTaggedIovNonBlockingNative(getNativeId(),
+            localAddresses, sizes, tag, callback);
+    }
+
+    /**
      * This routine sends data that is described by the local address to the destination endpoint.
      * The routine is non-blocking and therefore returns immediately, however the actual send
      * operation may be delayed. The send operation is considered completed when it is safe
@@ -215,6 +224,11 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      */
     public UcpRequest sendStreamNonBlocking(long localAddress, long size, UcxCallback callback) {
         return sendStreamNonBlockingNative(getNativeId(), localAddress, size, callback);
+    }
+
+    public UcpRequest sendStreamNonBlocking(long[] localAddresses, long[] sizes,
+                                            UcxCallback callback) {
+        return sendStreamIovNonBlockingNative(getNativeId(), localAddresses, sizes, callback);
     }
 
     public UcpRequest sendStreamNonBlocking(ByteBuffer buffer, UcxCallback callback) {
@@ -233,6 +247,12 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     public UcpRequest recvStreamNonBlocking(long localAddress, long size, long flags,
                                             UcxCallback callback) {
         return recvStreamNonBlockingNative(getNativeId(), localAddress, size, flags, callback);
+    }
+
+    public UcpRequest recvStreamNonBlocking(long[] localAddresses, long[] sizes, long flags,
+                                            UcxCallback callback) {
+        return recvStreamIovNonBlockingNative(getNativeId(),
+            localAddresses, sizes, flags, callback);
     }
 
     public UcpRequest recvStreamNonBlocking(ByteBuffer buffer, long flags, UcxCallback callback) {
@@ -293,12 +313,27 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
                                                                  long size, long tag,
                                                                  UcxCallback callback);
 
+    private static native UcpRequest sendTaggedIovNonBlockingNative(long enpointId,
+                                                                    long[] localAddresses,
+                                                                    long[] sizes, long tag,
+                                                                    UcxCallback callback);
+
     private static native UcpRequest sendStreamNonBlockingNative(long enpointId, long localAddress,
                                                                  long size, UcxCallback callback);
+
+    private static native UcpRequest sendStreamIovNonBlockingNative(long enpointId,
+                                                                    long[] localAddresses,
+                                                                    long[] sizes,
+                                                                    UcxCallback callback);
 
     private static native UcpRequest recvStreamNonBlockingNative(long enpointId, long localAddress,
                                                                  long size, long flags,
                                                                  UcxCallback callback);
+
+    private static native UcpRequest recvStreamIovNonBlockingNative(long enpointId,
+                                                                    long[] localAddresses,
+                                                                    long[] sizes, long flags,
+                                                                    UcxCallback callback);
 
     private static native UcpRequest flushNonBlockingNative(long enpointId, UcxCallback callback);
 
