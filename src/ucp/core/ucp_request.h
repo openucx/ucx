@@ -129,6 +129,8 @@ struct ucp_request {
                         } tag;
 
                         struct {
+                            void         *header;
+                            uint32_t     header_length;
                             uint16_t     am_id;
                             unsigned     flags;
                         } am;

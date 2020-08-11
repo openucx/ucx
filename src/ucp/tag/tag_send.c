@@ -20,13 +20,6 @@
 #include <string.h>
 
 
-#define UCP_TAG_SEND_CHECK_STATUS(_status, _ret, _done) \
-    if (ucs_likely((_status) != UCS_ERR_NO_RESOURCE)) { \
-        _ret = UCS_STATUS_PTR(_status); /* UCS_OK also goes here */ \
-        _done; \
-    }
-
-
 static UCS_F_ALWAYS_INLINE size_t
 ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
                            size_t max_iov, size_t rndv_rma_thresh,
@@ -263,14 +256,14 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
 
     if (ucs_likely(attr_mask == 0)) {
         status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer, count, tag);
-        UCP_TAG_SEND_CHECK_STATUS(status, ret, goto out);
+        ucp_request_send_check_status(status, ret, goto out);
         datatype = ucp_dt_make_contig(1);
     } else if (attr_mask == UCP_OP_ATTR_FIELD_DATATYPE) {
         datatype = param->datatype;
         if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
             status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer,
                                       ucp_contig_dt_length(datatype, count), tag);
-            UCP_TAG_SEND_CHECK_STATUS(status, ret, goto out);
+            ucp_request_send_check_status(status, ret, goto out);
         }
     } else {
         datatype = ucp_dt_make_contig(1);

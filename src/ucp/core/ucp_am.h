@@ -13,9 +13,6 @@
 #include <ucs/datastruct/array.h>
 
 
-#define UCP_AM_CB_BLOCK_SIZE 16
-
-
 enum {
     UCP_AM_CB_PRIV_FIRST_FLAG = UCS_BIT(15),
 
@@ -40,9 +37,9 @@ typedef struct ucp_am_entry {
 
 typedef union {
     struct {
-        uint16_t             am_id;   /* index into callback array */
-        uint16_t             flags;   /* operation flags */
-        uint32_t             padding;
+        uint16_t             am_id;         /* index into callback array */
+        uint16_t             flags;         /* operation flags */
+        uint32_t             header_length; /* user header length */
     };
 
     uint64_t                 u64;     /* this is used to ensure the size of
