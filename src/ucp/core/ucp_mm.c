@@ -295,9 +295,8 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
             goto err_free_memh;
         }
     } else {
-        memh->mem_type     = (memory_type == UCS_MEMORY_TYPE_UNKNOWN) ?
-                             ucp_memory_type_detect(context, address, length) :
-                             memory_type;
+        memh->mem_type     = ucp_get_memory_type(context, address, length,
+                                                 memory_type);
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
