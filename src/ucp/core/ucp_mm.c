@@ -177,6 +177,7 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
 {
     uct_allocated_memory_t mem;
     uct_alloc_method_t method;
+    uct_mem_alloc_params_t params;
     unsigned method_index, md_index, num_mds;
     ucs_status_t status;
     uct_md_h *mds;
@@ -203,8 +204,20 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
             }
         }
 
-        status = uct_mem_alloc(memh->address, length, uct_flags, &method, 1, mds,
-                               num_mds, name, &mem);
+        memset(&params, 0, sizeof(params));
+        params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+        params.flags           = uct_flags;
+        params.name            = name;
+        params.mem_type        = UCS_MEMORY_TYPE_HOST;
+        params.address         = memh->address;
+        params.mds.mds         = mds;
+        params.mds.count       = num_mds;
+
+        status = uct_mem_alloc(length, &method, 1, &params, &mem);
         if (status == UCS_OK) {
             goto allocated;
         }

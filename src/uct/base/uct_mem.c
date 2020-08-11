@@ -56,14 +56,17 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
     return mm_flags;
 }
 
-ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
-                           uct_alloc_method_t *methods, unsigned num_methods,
-                           uct_md_h *mds, unsigned num_mds,
-                           const char *alloc_name, uct_allocated_memory_t *mem)
+ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
+                           unsigned num_methods,
+                           const uct_mem_alloc_params_t *params,
+                           uct_allocated_memory_t *mem)
 {
-    uct_alloc_method_t *method;
+    const char *alloc_name;
+    const uct_alloc_method_t *method;
+    ucs_memory_type_t mem_type;
     uct_md_attr_t md_attr;
     ucs_status_t status;
+    unsigned flags;
     size_t alloc_length;
     unsigned md_index;
     uct_mem_h memh;
@@ -77,21 +80,22 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
     ssize_t huge_page_size;
 #endif
 
-    if (min_length == 0) {
-        ucs_error("Allocation length cannot be 0");
-        return UCS_ERR_INVALID_PARAM;
+    status = uct_mem_alloc_check_params(length, methods, num_methods, params);
+    if (status != UCS_OK) {
+        return status;
     }
 
-    if (num_methods == 0) {
-        ucs_error("No allocation methods provided");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if ((flags & UCT_MD_MEM_FLAG_FIXED) &&
-        (!addr || ((uintptr_t)addr % ucs_get_page_size()))) {
-        ucs_debug("UCT_MD_MEM_FLAG_FIXED requires valid page size aligned address");
-        return UCS_ERR_INVALID_PARAM;
-    }
+    /* set defaults in case some param fields are not set */
+    address      = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS) ?
+                   params->address : NULL;
+    flags        = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) ?
+                   params->flags : (UCT_MD_MEM_ACCESS_LOCAL_READ |
+                                    UCT_MD_MEM_ACCESS_LOCAL_WRITE);
+    alloc_name   = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_NAME) ?
+                   params->name : "anonymous-uct_mem_alloc";
+    mem_type     = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE) ?
+                   params->mem_type : UCS_MEMORY_TYPE_HOST;
+    alloc_length = length;
 
     for (method = methods; method < methods + num_methods; ++method) {
         ucs_trace("trying allocation method %s", uct_alloc_method_names[*method]);
@@ -99,8 +103,8 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
         switch (*method) {
         case UCT_ALLOC_METHOD_MD:
             /* Allocate with one of the specified memory domains */
-            for (md_index = 0; md_index < num_mds; ++md_index) {
-                md = mds[md_index];
+            for (md_index = 0; md_index < params->mds.count; ++md_index) {
+                md = params->mds.mds[md_index];
                 status = uct_md_query(md, &md_attr);
                 if (status != UCS_OK) {
                     ucs_error("Failed to query MD");
@@ -119,15 +123,19 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                     continue;
                 }
 
+                /* Check if MD supports allocation on requested mem_type */
+                if (!(md_attr.cap.alloc_mem_types & UCS_BIT(mem_type))) {
+                    continue;
+                }
+
                 /* Allocate memory using the MD.
                  * If the allocation fails, it's considered an error and we don't
                  * fall-back, because this MD already exposed support for memory
                  * allocation.
                  */
-                alloc_length = min_length;
-                address = addr;
-                status = uct_md_mem_alloc(md, &alloc_length, &address, flags,
-                                          alloc_name, &memh);
+                status = uct_md_mem_alloc(md, &alloc_length, &address,
+                                          mem_type, flags, alloc_name,
+                                          &memh);
                 if (status != UCS_OK) {
                     ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
                               alloc_length, md->component->name,
@@ -137,16 +145,29 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 
                 ucs_assert(memh != UCT_MEM_HANDLE_NULL);
                 mem->md       = md;
-                mem->mem_type = md_attr.cap.access_mem_type;
+                mem->mem_type = mem_type;
                 mem->memh     = memh;
                 goto allocated;
 
             }
+
+            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+                /* assumes that only MDs are capable of allocating non-host
+                 * memory
+                 */
+                ucs_error("unable to allocated requested memory type");
+                return UCS_ERR_UNSUPPORTED;
+            }
+
             break;
 
         case UCT_ALLOC_METHOD_THP:
+            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+                break;
+            }
+
 #ifdef MADV_HUGEPAGE
-            /* Fixed option is not supported for thp allocation*/
+            /* Fixed option is not supported for "thp" allocation */
             if (flags & UCT_MD_MEM_FLAG_FIXED) {
                 break;
             }
@@ -160,8 +181,8 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 break;
             }
 
-            alloc_length = ucs_align_up(min_length, huge_page_size);
-            if (alloc_length >= 2 * min_length) {
+            alloc_length = ucs_align_up(length, huge_page_size);
+            if (alloc_length >= (2 * length)) {
                 break;
             }
 
@@ -183,6 +204,10 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             break;
 
         case UCT_ALLOC_METHOD_HEAP:
+            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+                break;
+            }
+
             /* Allocate aligned memory using libc allocator */
 
             /* Fixed option is not supported for heap allocation*/
@@ -190,7 +215,6 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 break;
             }
 
-            alloc_length = min_length;
             ret = ucs_posix_memalign(&address, UCS_SYS_CACHE_LINE_SIZE,
                                      alloc_length UCS_MEMTRACK_VAL);
             if (ret == 0) {
@@ -201,9 +225,11 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
             break;
 
         case UCT_ALLOC_METHOD_MMAP:
+            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+                break;
+            }
+
             /* Request memory from operating system using mmap() */
-            alloc_length = min_length;
-            address      = addr;
 
             status = ucs_mmap_alloc(&alloc_length, &address,
                                     uct_mem_get_mmap_flags(flags)
@@ -212,16 +238,20 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
                 goto allocated_without_md;
             }
 
-            ucs_trace("failed to mmap %zu bytes: %s", min_length,
+            ucs_trace("failed to mmap %zu bytes: %s", length,
                       ucs_status_string(status));
             break;
 
         case UCT_ALLOC_METHOD_HUGE:
+            if (mem_type != UCS_MEMORY_TYPE_HOST) {
+                break;
+            }
+
 #ifdef SHM_HUGETLB
             /* Allocate huge pages */
-            alloc_length = min_length;
-            address = (flags & UCT_MD_MEM_FLAG_FIXED) ? addr : NULL;
-            status = ucs_sysv_alloc(&alloc_length, min_length * 2, &address,
+            address = (flags & UCT_MD_MEM_FLAG_FIXED) ?
+                      params->address : NULL;
+            status = ucs_sysv_alloc(&alloc_length, length * 2, &address,
                                     SHM_HUGETLB, alloc_name, &shmid);
             if (status == UCS_OK) {
                 goto allocated_without_md;
@@ -231,7 +261,7 @@ ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
 #endif
 
             ucs_trace("failed to allocate %zu bytes from hugetlb: %s",
-                      min_length, ucs_status_string(status));
+                      length, ucs_status_string(status));
             break;
 
         default:
@@ -284,13 +314,25 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
                                  const char *name, uct_allocated_memory_t *mem)
 {
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    void *address           = NULL;
     uct_md_attr_t md_attr;
     ucs_status_t status;
+    uct_mem_alloc_params_t params;
 
-    status = uct_mem_alloc(NULL, length, UCT_MD_MEM_ACCESS_ALL,
-                           iface->config.alloc_methods,
-                           iface->config.num_alloc_methods, &iface->md, 1,
-                           name, mem);
+    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.flags           = UCT_MD_MEM_ACCESS_ALL;
+    params.name            = name;
+    params.mem_type        = UCS_MEMORY_TYPE_HOST;
+    params.address         = address;
+    params.mds.mds         = &iface->md;
+    params.mds.count       = 1;
+
+    status = uct_mem_alloc(length, iface->config.alloc_methods,
+                           iface->config.num_alloc_methods, &params, mem);
     if (status != UCS_OK) {
         goto err;
     }
