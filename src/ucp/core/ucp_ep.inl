@@ -147,11 +147,29 @@ static UCS_F_ALWAYS_INLINE ucp_ep_h ucp_ep_from_ext_proto(ucp_ep_ext_proto_t *ep
     return (ucp_ep_h)ucs_strided_elem_get(ep_ext, 2, 0);
 }
 
+static inline int
+ucp_ep_config_key_has_cm_lane(const ucp_ep_config_key_t *config_key)
+{
+    return config_key->cm_lane != UCP_NULL_LANE;
+}
+
+static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
+{
+    return (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+           ucp_ep_config_key_has_cm_lane(&ucp_ep_config(ep)->key);
+}
+
+static UCS_F_ALWAYS_INLINE ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
+{
+    return ucp_ep_config(ep)->key.cm_lane;
+}
+
 static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 {
     ucs_assert(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_LISTENER));
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_LISTENER) ||
+               ucp_ep_has_cm_lane(ep));
     ucs_assert(!(ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
     return &ucp_ep_ext_gen(ep)->flush_state;
 }
@@ -234,23 +252,6 @@ ucp_ep_config_get_dst_md_cmpt(const ucp_ep_config_key_t *key,
     unsigned idx = ucs_popcount(key->reachable_md_map & UCS_MASK(dst_md_index));
 
     return key->dst_md_cmpts[idx];
-}
-
-static inline int
-ucp_ep_config_key_has_cm_lane(const ucp_ep_config_key_t *config_key)
-{
-    return config_key->cm_lane != UCP_NULL_LANE;
-}
-
-static inline int ucp_ep_has_cm_lane(ucp_ep_h ep)
-{
-    return (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-           ucp_ep_config_key_has_cm_lane(&ucp_ep_config(ep)->key);
-}
-
-static UCS_F_ALWAYS_INLINE ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
-{
-    return ucp_ep_config(ep)->key.cm_lane;
 }
 
 static inline int

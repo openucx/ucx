@@ -229,6 +229,10 @@ void ucp_proxy_ep_replace(ucp_proxy_ep_t *proxy_ep)
      * is pointed to by another proxy ep. if so, redirect that other proxy ep
      * to point to the underlying uct ep. */
     for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+        if (ucp_ep->uct_eps[lane] == NULL) {
+            continue;
+        }
+
         ucp_proxy_ep_replace_if_owned(ucp_ep->uct_eps[lane], &proxy_ep->super,
                                       tl_ep);
     }

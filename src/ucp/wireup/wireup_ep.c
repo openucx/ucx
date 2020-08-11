@@ -43,6 +43,17 @@ ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
     return uct_ep_connect_to_ep(wireup_ep->super.uct_ep, dev_addr, ep_addr);
 }
 
+static void
+ucp_wireup_destroy_tmp_ep_complete_cb(void *request, ucs_status_t status,
+                                      void *user_data)
+{
+    ucp_wireup_ep_t *wireup_ep = (ucp_wireup_ep_t*)user_data;
+
+    wireup_ep->flags &= ~UCP_WIREUP_EP_FLAG_DESTROY_TMP_EP;
+    ucs_assert(wireup_ep->tmp_ep == NULL);
+    ucp_request_release(request);
+}
+
 /*
  * We switch the endpoint in this function (instead in wireup code) since
  * this is guaranteed to run from the main thread.
@@ -50,10 +61,12 @@ ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
 static unsigned ucp_wireup_ep_progress(void *arg)
 {
     ucp_wireup_ep_t *wireup_ep = arg;
-    ucp_ep_h ucp_ep = wireup_ep->super.ucp_ep;
+    ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
     ucs_queue_head_t tmp_pending_queue;
     uct_pending_req_t *uct_req;
     ucp_request_t *req;
+    ucp_ep_h flushed_ep;
+    int ret;
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
 
@@ -75,6 +88,20 @@ static unsigned ucp_wireup_ep_progress(void *arg)
         goto out_unblock;
     }
 
+    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_DESTROY_TMP_EP) {
+        goto out_unblock;
+    }
+
+    if (wireup_ep->tmp_ep != NULL) {
+        ++ucp_ep->worker->flush_ops_count;
+        ret = ucp_wireup_destroy_tmp_ep(ucp_ep, wireup_ep, UCT_FLUSH_FLAG_LOCAL,
+                                        ucp_wireup_destroy_tmp_ep_complete_cb);
+        if (!ret) {
+            wireup_ep->flags |= UCP_WIREUP_EP_FLAG_DESTROY_TMP_EP;
+            goto out_unblock;
+        }
+    }
+
     ucs_trace("ep %p: switching wireup_ep %p to ready state", ucp_ep, wireup_ep);
 
     /* Move wireup pending queue to temporary queue and remove references to
@@ -93,10 +120,19 @@ static unsigned ucp_wireup_ep_progress(void *arg)
 
     /* Replay pending requests */
     ucs_queue_for_each_extract(uct_req, &tmp_pending_queue, priv, 1) {
-        req = ucs_container_of(uct_req, ucp_request_t, send.uct);
-        ucs_assert(req->send.ep == ucp_ep);
+        req        = ucs_container_of(uct_req, ucp_request_t, send.uct);
+        flushed_ep = !ucp_ep_has_cm_lane(req->send.ep) ?
+                     ucp_ep : req->send.ep;
+        ucs_assert(((req->send.ep == ucp_ep) ||
+                    /* it may happen that UCP EPs are not the same, it happens
+                     * when some operation was scheduled on the main UCP EP
+                     * and then after reconfiguration the transport choosen for
+                     * send was removed from the main EP and moved to CM tmp EP
+                     * that is responsible for this UCT EP now */
+                    ucp_ep_has_cm_lane(req->send.ep)) &&
+                   (req->send.ep->worker == ucp_ep->worker));
         ucp_request_send(req, 0);
-        --ucp_ep->worker->flush_ops_count;
+        --flushed_ep->worker->flush_ops_count;
     }
 
     return 0;
@@ -386,11 +422,12 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
         uct_ep_destroy(self->sockaddr_ep);
     }
 
+    UCS_ASYNC_BLOCK(&worker->async);
     if (self->tmp_ep != NULL) {
-        ucp_ep_disconnected(self->tmp_ep, 1);
+        ++worker->flush_ops_count;
+        ucp_wireup_destroy_tmp_ep(ucp_ep, self, UCT_FLUSH_FLAG_CANCEL, NULL);
     }
 
-    UCS_ASYNC_BLOCK(&worker->async);
     --worker->flush_ops_count;
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
@@ -645,25 +682,21 @@ out:
     return status;
 }
 
-void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep, int is_owner)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
     ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->super.uct_ep == NULL);
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
+    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, is_owner);
 }
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
-    uct_ep_h next_ep;
-
     ucs_assert_always(wireup_ep != NULL);
-    next_ep = wireup_ep->super.uct_ep;
-    wireup_ep->super.uct_ep = NULL;
-    return next_ep;
+    return ucp_proxy_ep_extract(uct_ep);
 }
 
 void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep)

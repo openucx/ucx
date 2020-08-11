@@ -21,6 +21,7 @@
 enum {
     UCP_WIREUP_EP_FLAG_READY           = UCS_BIT(0), /**< next_ep is fully connected */
     UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED = UCS_BIT(1), /**< Debug: next_ep connected to remote */
+    UCP_WIREUP_EP_FLAG_DESTROY_TMP_EP  = UCS_BIT(2), /**< wireup ep is in progress to destroy TMP EP */
 };
 
 
@@ -82,7 +83,7 @@ ucs_status_t
 ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
                           const ucp_unpacked_address_t *remote_address);
 
-void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep, int is_owner);
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 

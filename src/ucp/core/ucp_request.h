@@ -209,6 +209,15 @@ struct ucp_request {
                 } disconnect;
 
                 struct {
+                    uct_worker_h          uct_worker;     /* UCT worker where discard UCT EP operation
+                                                           * submitted on */
+                    uct_ep_h              uct_ep;         /* UCT EP that should be flushed and
+                                                             destroyed */
+                    unsigned              ep_flush_flags; /* Flags that should be passed into
+                                                             @ref uct_ep_flush */
+                } discard_uct_ep;
+
+                struct {
                     uint64_t              remote_addr; /* Remote address */
                     ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;       /* Atomic argument */

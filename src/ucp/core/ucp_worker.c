@@ -445,7 +445,8 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
         if (lane != failed_lane) {
             ucs_trace("ep %p: destroy uct_ep[%d]=%p", ucp_ep, lane,
                       ucp_ep->uct_eps[lane]);
-            uct_ep_destroy(ucp_ep->uct_eps[lane]);
+            ucp_worker_discard_uct_ep(ucp_ep->worker, ucp_ep->uct_eps[lane],
+                                      UCT_FLUSH_FLAG_CANCEL);
             ucp_ep->uct_eps[lane] = NULL;
         }
     }
@@ -2306,7 +2307,6 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address)
     ucs_free(address);
 }
 
-
 void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 {
     ucp_context_h context = worker->context;
@@ -2349,4 +2349,105 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     fprintf(stream, "#\n");
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+}
+
+static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
+{
+    uct_ep_h uct_ep = (uct_ep_h)arg;
+
+    ucs_debug("destroy uct_ep=%p", uct_ep);
+    uct_ep_destroy(uct_ep);
+
+    return 1;
+}
+
+static void
+ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self,
+                                     ucs_status_t status)
+{
+    uct_worker_cb_id_t cb_id    = UCS_CALLBACKQ_ID_NULL;
+    ucp_request_t *req          = ucs_container_of(self, ucp_request_t,
+                                                   send.state.uct_comp);
+    uct_ep_h uct_ep             = req->send.discard_uct_ep.uct_ep;
+
+    ucs_trace_req("flush completion req=%p status=%d", req, status);
+
+    uct_worker_progress_register_safe(req->send.discard_uct_ep.uct_worker,
+                                      ucp_worker_discard_uct_ep_destroy_progress,
+                                      uct_ep, UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+
+    ucp_request_put(req);
+}
+
+static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
+{
+    ucp_request_t *req = (ucp_request_t*)arg;
+    uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
+    ucs_status_t status;
+
+    req->send.state.uct_comp.func  = ucp_worker_discard_uct_ep_flush_comp;
+    req->send.state.uct_comp.count = 1;
+
+    for (;;) {
+        status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
+                              &req->send.state.uct_comp);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);
+            if (status == UCS_OK) {
+                break;
+            }
+        } else {
+            if (status != UCS_INPROGRESS) {
+                ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp,
+                                                     status);
+            }
+            break;
+        }
+    }
+
+    return 1;
+}
+
+void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
+                               unsigned ep_flush_flags)
+{
+    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_wireup_ep_t *wireup_ep;
+    ucp_request_t *req;
+    int is_owner;
+
+    ucs_assert(uct_ep != NULL);
+
+    if (ucp_wireup_ep_test(uct_ep)) {
+        wireup_ep = ucp_wireup_ep(uct_ep);
+        ucs_assert(wireup_ep != NULL);
+
+        is_owner = wireup_ep->super.is_owner;
+        uct_ep   = ucp_wireup_ep_extract_next_ep(uct_ep);
+
+        /* destroy WIREUP EP allocated for this UCT EP, since
+         * discard operation most likely won't have an access to
+         * UCP EP as it could be destroyed by the caller */
+        uct_ep_destroy(&wireup_ep->super.super);
+
+        if (!is_owner) {
+            /* do nothing, if this wireup EP is not an owner for UCT EP */
+            return;
+        }
+    }
+
+    req = ucp_request_get(worker);
+    if (ucs_unlikely(req == NULL)) {
+        ucs_error("unable to allocate reqquest");
+        return;
+    }
+
+    ucs_assert(!ucp_wireup_ep_test(uct_ep));
+    req->send.discard_uct_ep.uct_worker     = worker->uct;
+    req->send.discard_uct_ep.uct_ep         = uct_ep;
+    req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
+    uct_worker_progress_register_safe(worker->uct,
+                                      ucp_worker_discard_uct_ep_progress,
+                                      req, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &cb_id);
 }
