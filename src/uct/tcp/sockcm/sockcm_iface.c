@@ -295,7 +295,7 @@ static UCS_CLASS_INIT_FUNC(uct_sockcm_iface_t, uct_md_h md, uct_worker_h worker,
 
     UCT_CHECK_PARAM((params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) ||
                     (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT),
-                    "Invalid open mode %zu", params->open_mode);
+                    "Invalid open mode %"PRIu64, params->open_mode);
 
     UCT_CHECK_PARAM(!(params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER) ||
                     (params->field_mask & UCT_IFACE_PARAM_FIELD_SOCKADDR),

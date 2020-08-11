@@ -508,8 +508,9 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
     conn_req_args.client_address = client_saddr;
     ucs_strncpy_safe(conn_req_args.dev_name, ifname_str, UCT_DEVICE_NAME_MAX);
 
-    ucs_debug("fd %d: remote_data: (field_mask=%zu) dev_addr: %s (length=%zu), "
-              "conn_priv_data_length=%zu", cep->fd, remote_data.field_mask,
+    ucs_debug("fd %d: remote_data: (field_mask=%"PRIu64") "
+              "dev_addr: %s (length=%zu), conn_priv_data_length=%zu",
+              cep->fd, remote_data.field_mask,
               ucs_sockaddr_str((const struct sockaddr*)remote_data.dev_addr,
                                peer_str, UCS_SOCKADDR_STRING_LEN),
               remote_data.dev_addr_length, remote_data.conn_priv_data_length);
@@ -783,7 +784,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
     ucs_status_t status;
 
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
-        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
+        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%"PRIx64,
                   params->field_mask);
         status = UCS_ERR_INVALID_PARAM;
         goto err;

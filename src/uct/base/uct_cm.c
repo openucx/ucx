@@ -114,7 +114,7 @@ void uct_cm_ep_server_conn_notify_cb(uct_cm_base_ep_t *cep, ucs_status_t status)
 static ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
 {
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
-        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
+        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%"PRIx64,
                   params->field_mask);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -122,7 +122,8 @@ static ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ||
         !(params->sockaddr_cb_flags & UCT_CB_FLAG_ASYNC)) {
         ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS and UCT_CB_FLAG_ASYNC "
-                  "should be set. field_mask 0x%lx, sockaddr_cb_flags 0x%x",
+                  "should be set. field_mask 0x%"PRIx64
+                  ", sockaddr_cb_flags 0x%x",
                   params->field_mask, params->sockaddr_cb_flags);
         return UCS_ERR_UNSUPPORTED;
     }

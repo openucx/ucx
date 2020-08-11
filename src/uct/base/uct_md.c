@@ -244,7 +244,7 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER)) {
         tl = uct_find_tl(md->component, md_attr.cap.flags, NULL);
     } else {
-        ucs_error("Invalid open mode %zu", params->open_mode);
+        ucs_error("Invalid open mode %"PRIu64, params->open_mode);
         return status;
     }
 
