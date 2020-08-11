@@ -663,4 +663,11 @@ ucp_request_param_datatype(const ucp_request_param_t *param)
            param->datatype : ucp_dt_make_contig(1);
 }
 
+static UCS_F_ALWAYS_INLINE ucs_memory_type_t
+ucp_request_param_mem_type(const ucp_request_param_t *param)
+{
+    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
+           param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
+}
+
 #endif

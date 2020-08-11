@@ -174,8 +174,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
         goto out;
     }
 
-    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
-                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
+    memory_type = ucp_request_param_mem_type(param);
 
     req = ucp_request_get_param(ep->worker, param,
                                 {

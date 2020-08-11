@@ -281,12 +281,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         goto out;
     }
 
-    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
-                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
-
-    req = ucp_request_get_param(ep->worker, param,
-                                {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                                 goto out;});
+    memory_type = ucp_request_param_mem_type(param);
+    req         = ucp_request_get_param(ep->worker, param,
+                                        {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                         goto out;});
 
     ucp_tag_send_req_init(req, ep, buffer, datatype, memory_type, count, tag, 0);
     ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
@@ -314,11 +312,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
     ucs_trace_req("send_sync_nbx buffer %p count %zu tag %"PRIx64" to %s",
                   buffer, count, tag, ucp_ep_peer_name(ep));
 
-    datatype = (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
-               param->datatype : ucp_dt_make_contig(1);
-
-    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
-                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
+    datatype    = ucp_request_param_datatype(param);
+    memory_type = ucp_request_param_mem_type(param);
 
     if (!ucp_ep_config_test_rndv_support(ucp_ep_config(ep))) {
         ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);

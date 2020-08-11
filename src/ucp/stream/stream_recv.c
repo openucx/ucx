@@ -306,11 +306,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nbx,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
-    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
-                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
-
-    attr_mask = param->op_attr_mask &
-                (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
+    memory_type = ucp_request_param_mem_type(param);
+    attr_mask   = param->op_attr_mask & (UCP_OP_ATTR_FIELD_DATATYPE |
+                                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
     if (ucs_likely(attr_mask == 0)) {
         datatype  = ucp_dt_make_contig(1);
         dt_length = count; /* use dt_lendth to suppress coverity false positive */
