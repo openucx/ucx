@@ -151,7 +151,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
 {
     ucs_trace_req("completing receive request %p (%p) "UCP_REQUEST_FLAGS_FMT
-                  " stag 0x%" PRIx64 " len %zu, %s",
+                  " stag 0x%" PRIx64" len %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.tag.info.sender_tag, req->recv.tag.info.length,
                   ucs_status_string(status));
