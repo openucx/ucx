@@ -257,7 +257,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
-   "RNDV size threshold to enable sender side pipeline for mem type \n",
+   "RNDV size threshold to enable sender side pipeline for mem type\n",
    ucs_offsetof(ucp_config_t, ctx.rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"MEMTYPE_CACHE", "y",

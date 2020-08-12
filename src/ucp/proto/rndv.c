@@ -606,7 +606,7 @@ static void ucp_rndv_req_init_get_zcopy_lane_map(ucp_request_t *rndv_req)
     }
 
     if (ucs_popcount(lane_map) > 1) {
-        /* remove lanes if bandwidth is too less compare to best lane*/
+        /* remove lanes if bandwidth is too less compare to best lane */
         ucs_for_each_bit(lane_idx, lane_map) {
             ucs_assert(lane_idx < UCP_MAX_LANES);
             lane       = ep_config->rndv.get_zcopy_lanes[lane_idx];
@@ -616,7 +616,8 @@ static void ucp_rndv_req_init_get_zcopy_lane_map(ucp_request_t *rndv_req)
 
             if ((lane_bw/max_lane_bw) <
                 (1. / context->config.ext.multi_lane_max_ratio)) {
-                lane_map &= ~UCS_BIT(lane_idx);
+                lane_map                                    &= ~UCS_BIT(lane_idx);
+                rndv_req->send.rndv_get.rkey_index[lane_idx] = UCP_NULL_RESOURCE;
             }
         }
     }
@@ -661,7 +662,7 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
 
     rndv_req->send.lane = ucp_rndv_get_zcopy_get_lane(rndv_req, &uct_rkey);
     if (rndv_req->send.lane == UCP_NULL_LANE) {
-        return UCS_ERR_NO_RESOURCE;
+        return UCS_ERR_UNREACHABLE;
     }
 
     UCP_WORKER_STAT_RNDV(ep->worker, GET_ZCOPY, 1);
@@ -771,7 +772,7 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, uintptr_t rreq_ptr,
     ucp_worker_h worker = sreq->send.ep->worker;
     ucp_request_t *freq;
     ucp_mem_desc_t *mdesc;
-    int i;
+    ucp_lane_index_t i;
 
     /* GET fragment to stage buffer */
 
@@ -802,8 +803,8 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, uintptr_t rreq_ptr,
     freq->send.rndv_get.lanes_count     = ucs_popcount(lanes_map);
 
     for (i = 0; i < UCP_MAX_LANES; i++) {
-        freq->send.rndv_get.rkey_index[i] = (rkey_index) ? rkey_index[i]
-                                                         : UCP_NULL_RESOURCE;
+        freq->send.rndv_get.rkey_index[i] = rkey_index ? rkey_index[i]
+                                                       : UCP_NULL_RESOURCE;
     }
 
     return ucp_request_send(freq, 0);
