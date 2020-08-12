@@ -150,6 +150,12 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     public UcpRequest recvTaggedNonBlocking(long[] localAddresses, long[] sizes,
                                             long tag, long tagMask,
                                             UcxCallback callback) {
+
+        if (localAddresses.length != sizes.length) {
+            throw new UcxException("Arrays of not equal sizes: " +
+                localAddresses.length + " != " + sizes.length);
+        }
+
         return recvTaggedIovNonBlockingNative(getNativeId(), localAddresses, sizes, tag,
             tagMask, callback);
     }

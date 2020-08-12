@@ -59,6 +59,13 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         }
     }
 
+    private void checkArraySizes(long[] array1, long[] array2) {
+        if (array1.length != array2.length) {
+            throw new UcxException("Arrays of not equal sizes: " +
+                array1.length + " != " + array2.length);
+        }
+    }
+
     /**
      * Non-blocking remote memory put operation.
      * This routine initiates a storage of contiguous block of data that is
@@ -166,7 +173,6 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      */
     public void getNonBlockingImplicit(long remoteAddress, UcpRemoteKey remoteKey,
                                        long localAddress, long size) {
-
         getNonBlockingImplicitNative(getNativeId(), remoteAddress, remoteKey.getNativeId(),
               localAddress, size);
     }
@@ -193,9 +199,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
     public UcpRequest sendTaggedNonBlocking(long localAddress, long size,
                                             long tag, UcxCallback callback) {
-
-        return sendTaggedNonBlockingNative(getNativeId(),
-            localAddress, size, tag, callback);
+        return sendTaggedNonBlockingNative(getNativeId(), localAddress, size, tag, callback);
     }
 
     /**
@@ -211,8 +215,10 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      */
     public UcpRequest sendTaggedNonBlocking(long[] localAddresses, long[] sizes,
                                             long tag, UcxCallback callback) {
-        return sendTaggedIovNonBlockingNative(getNativeId(),
-            localAddresses, sizes, tag, callback);
+        checkArraySizes(localAddresses, sizes);
+
+        return sendTaggedIovNonBlockingNative(getNativeId(), localAddresses, sizes,
+            tag, callback);
     }
 
     /**
@@ -228,12 +234,13 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
     public UcpRequest sendStreamNonBlocking(long[] localAddresses, long[] sizes,
                                             UcxCallback callback) {
+        checkArraySizes(localAddresses, sizes);
+
         return sendStreamIovNonBlockingNative(getNativeId(), localAddresses, sizes, callback);
     }
 
     public UcpRequest sendStreamNonBlocking(ByteBuffer buffer, UcxCallback callback) {
-        return sendStreamNonBlockingNative(getNativeId(), UcxUtils.getAddress(buffer),
-            buffer.remaining(), callback);
+        return sendStreamNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(), callback);
     }
 
     /**
@@ -251,8 +258,10 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
     public UcpRequest recvStreamNonBlocking(long[] localAddresses, long[] sizes, long flags,
                                             UcxCallback callback) {
-        return recvStreamIovNonBlockingNative(getNativeId(),
-            localAddresses, sizes, flags, callback);
+        checkArraySizes(localAddresses, sizes);
+
+        return recvStreamIovNonBlockingNative(getNativeId(), localAddresses, sizes, flags,
+            callback);
     }
 
     public UcpRequest recvStreamNonBlocking(ByteBuffer buffer, long flags, UcxCallback callback) {

@@ -164,10 +164,8 @@ Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedIovNonBlockingNative(JNIEnv *env, 
                                                                    jlong tag, jlong tag_mask,
                                                                    jobject callback)
 {
-    jsize iovcnt = env->GetArrayLength(addresses);
-    ucp_dt_iov_t* iovec = (ucp_dt_iov_t*)ucs_malloc(sizeof(ucp_dt_iov_t) * iovcnt, "JUCX iov vector");
-
-    fill_iov_vector(env, addresses, sizes, iovec, iovcnt);
+    int iovcnt;
+    ucp_dt_iov_t* iovec = get_ucp_iov(env, addresses, sizes, iovcnt);
 
     ucs_status_ptr_t request = ucp_tag_recv_nb((ucp_worker_h)ucp_worker_ptr,
                                                 iovec, iovcnt,

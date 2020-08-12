@@ -111,10 +111,19 @@ jobject new_tag_msg_instance(JNIEnv *env, ucp_tag_message_h msg_tag,
 /**
  * @brief Creates iov vector from array of addresses and sizes
  */
-UCS_F_ALWAYS_INLINE void fill_iov_vector(JNIEnv *env,
-                                         jlongArray addr_array, jlongArray size_array,
-                                         ucp_dt_iov_t* iovec, int iovcnt)
+UCS_F_ALWAYS_INLINE ucp_dt_iov_t* get_ucp_iov(JNIEnv *env,
+                                              jlongArray addr_array, jlongArray size_array,
+                                              int &iovcnt)
 {
+    iovcnt = env->GetArrayLength(addr_array);
+    ucp_dt_iov_t* iovec = (ucp_dt_iov_t*)ucs_malloc(sizeof(*iovec) * iovcnt, "JUCX iov vector");
+
+    if (ucs_unlikely(iovec == NULL)) {
+        ucs_error("failed to allocate buffer for %d iovec", iovcnt);
+        JNU_ThrowException(env, "failed to allocate buffer for iovec");
+        return NULL;
+    }
+
     jlong* addresses = env->GetLongArrayElements(addr_array, NULL);
     jlong* sizes = env->GetLongArrayElements(size_array, NULL);
 
@@ -125,6 +134,8 @@ UCS_F_ALWAYS_INLINE void fill_iov_vector(JNIEnv *env,
 
     env->ReleaseLongArrayElements(addr_array, addresses, 0);
     env->ReleaseLongArrayElements(size_array, sizes, 0);
+
+    return iovec;
 }
 
 #endif
