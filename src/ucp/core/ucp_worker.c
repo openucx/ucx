@@ -1824,10 +1824,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
                         &ucp_ep_match_ops);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
-    status = ucs_ptr_map_init(&worker->ptr_map);
-    if (status != UCS_OK) {
-        goto err_free;
-    }
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
@@ -1847,6 +1843,11 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                           context->config.ext.max_worker_name + 1);
     ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
                       getpid());
+
+    status = ucs_ptr_map_init(&worker->ptr_map);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
