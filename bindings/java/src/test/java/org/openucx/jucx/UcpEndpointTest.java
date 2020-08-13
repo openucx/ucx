@@ -445,6 +445,99 @@ public class UcpEndpointTest extends UcxTest {
     }
 
     @Test
+    public void testIovOperations() throws Exception {
+        int NUM_IOV = 6;
+        long buffMultiplier = 10L;
+
+        UcpMemMapParams memMapParams = new UcpMemMapParams().allocate();
+        // Crerate 2 contexts + 2 workers
+        UcpParams params = new UcpParams().requestTagFeature().requestStreamFeature();
+        UcpWorkerParams workerParams = new UcpWorkerParams();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+        UcpWorker worker1 = context1.newWorker(workerParams);
+        UcpWorker worker2 = context2.newWorker(workerParams);
+
+        UcpEndpoint ep = worker1.newEndpoint(
+            new UcpEndpointParams().setUcpAddress(worker2.getAddress()));
+
+        UcpEndpoint recvEp = worker2.newEndpoint(new UcpEndpointParams()
+            .setUcpAddress(worker1.getAddress()));
+
+        UcpMemory[] sendBuffers = new UcpMemory[NUM_IOV];
+        long[] sendAddresses = new long[NUM_IOV];
+        long[] sizes = new long[NUM_IOV];
+
+        UcpMemory[] recvBuffers = new UcpMemory[NUM_IOV];
+        long[] recvAddresses = new long[NUM_IOV];
+
+        long totalSize = 0L;
+
+        for (int i = 0; i < NUM_IOV; i++) {
+            long bufferSize = (i + 1) * buffMultiplier;
+            totalSize += bufferSize;
+            memMapParams.setLength(bufferSize);
+
+            sendBuffers[i] = context1.memoryMap(memMapParams);
+            sendAddresses[i] = sendBuffers[i].getAddress();
+            sizes[i] = bufferSize;
+
+            ByteBuffer buf = UcxUtils.getByteBufferView(sendAddresses[i], (int)bufferSize);
+            buf.putInt(0, (i + 1));
+
+            recvBuffers[i] = context2.memoryMap(memMapParams);
+            recvAddresses[i] = recvBuffers[i].getAddress();
+        }
+
+        ep.sendTaggedNonBlocking(sendAddresses, sizes, 0L, null);
+        UcpRequest recv = worker2.recvTaggedNonBlocking(recvAddresses, sizes, 0L, 0L, null);
+
+        while (!recv.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        assertEquals(totalSize, recv.getRecvSize());
+
+        for (int i = 0; i < NUM_IOV; i++) {
+            ByteBuffer buf = UcxUtils.getByteBufferView(recvAddresses[i], (int)sizes[i]);
+            assertEquals((i + 1), buf.getInt(0));
+            recvBuffers[i].deregister();
+        }
+
+        // Test 6 send IOV to 3 recv IOV
+        recvBuffers = new UcpMemory[NUM_IOV / 2];
+        recvAddresses = new long[NUM_IOV / 2];
+        long[] recvSizes = new long[NUM_IOV / 2];
+        totalSize = 0L;
+
+        for (int i = 0; i < NUM_IOV / 2; i++) {
+            long bufferLength = (i + 1) * buffMultiplier * 2;
+            totalSize += bufferLength;
+            recvBuffers[i] = context2.memoryMap(memMapParams.setLength(bufferLength));
+            recvAddresses[i] = recvBuffers[i].getAddress();
+            recvSizes[i] = bufferLength;
+        }
+
+        ep.sendStreamNonBlocking(sendAddresses, sizes, null);
+        recv = recvEp.recvStreamNonBlocking(recvAddresses, recvSizes, 0, null);
+
+        while (!recv.isCompleted()) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        assertEquals(totalSize, recv.getRecvSize());
+        ByteBuffer buf = UcxUtils.getByteBufferView(recvAddresses[0], (int)recvSizes[0]);
+        assertEquals(1, buf.getInt(0));
+
+        Collections.addAll(resources, context1, context2, worker1, worker2, ep);
+        Collections.addAll(resources, sendBuffers);
+        Collections.addAll(resources, recvBuffers);
+        closeResources();
+    }
+
+    @Test
     public void testEpErrorHandler() {
         // Crerate 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestTagFeature();

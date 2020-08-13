@@ -144,15 +144,45 @@ JNIEXPORT jobject JNICALL
 Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedNonBlockingNative(JNIEnv *env, jclass cls,
                                                                 jlong ucp_worker_ptr,
                                                                 jlong laddr, jlong size,
-                                                                jlong tag, jlong tagMask,
+                                                                jlong tag, jlong tag_mask,
                                                                 jobject callback)
 {
     ucs_status_ptr_t request = ucp_tag_recv_nb((ucp_worker_h)ucp_worker_ptr,
                                                 (void *)laddr, size,
-                                                ucp_dt_make_contig(1), tag, tagMask,
+                                                ucp_dt_make_contig(1), tag, tag_mask,
                                                 recv_callback);
 
     ucs_trace_req("JUCX: tag_recv_nb request %p, msg size: %zu, tag: %ld", request, size, tag);
+
+    return process_request(request, callback);
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedIovNonBlockingNative(JNIEnv *env, jclass cls,
+                                                                   jlong ucp_worker_ptr,
+                                                                   jlongArray addresses, jlongArray sizes,
+                                                                   jlong tag, jlong tag_mask,
+                                                                   jobject callback)
+{
+    int iovcnt;
+    ucp_dt_iov_t* iovec = get_ucp_iov(env, addresses, sizes, iovcnt);
+    if (iovec == NULL) {
+        return NULL;
+    }
+
+    ucs_status_ptr_t request = ucp_tag_recv_nb((ucp_worker_h)ucp_worker_ptr,
+                                                iovec, iovcnt,
+                                                ucp_dt_make_iov(), tag, tag_mask,
+                                                recv_callback);
+
+    if (UCS_PTR_IS_PTR(request)) {
+        struct jucx_context *ctx = (struct jucx_context *)request;
+        ctx->iovec = iovec;
+    } else {
+        ucs_free(iovec);
+    }
+
+    ucs_trace_req("JUCX: tag_recv_iov_nb request %p, tag: %ld", request, tag);
 
     return process_request(request, callback);
 }
