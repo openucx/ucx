@@ -522,7 +522,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nb,
                  (ep, id, payload, count, datatype, cb, flags),
                  ucp_ep_h ep, uint16_t id, const void *payload,
-                 size_t count, uintptr_t datatype,
+                 size_t count, ucp_datatype_t datatype,
                  ucp_send_callback_t cb, unsigned flags)
 {
     ucs_status_t status;

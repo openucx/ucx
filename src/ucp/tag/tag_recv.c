@@ -158,7 +158,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
                  (worker, buffer, count, datatype, tag, tag_mask, request),
                  ucp_worker_h worker, void *buffer, size_t count,
-                 uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
+                 ucp_datatype_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
                  void *request)
 {
     ucp_request_param_t param = {
@@ -177,7 +177,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
                  (worker, buffer, count, datatype, tag, tag_mask, cb),
                  ucp_worker_h worker, void *buffer, size_t count,
-                 uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
+                 ucp_datatype_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
                  ucp_tag_recv_callback_t cb)
 {
     ucp_request_param_t param = {
@@ -223,7 +223,7 @@ out:
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
                  (worker, buffer, count, datatype, message, cb),
                  ucp_worker_h worker, void *buffer, size_t count,
-                 uintptr_t datatype, ucp_tag_message_h message,
+                 ucp_datatype_t datatype, ucp_tag_message_h message,
                  ucp_tag_recv_callback_t cb)
 {
     ucp_request_param_t param = {

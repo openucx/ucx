@@ -190,7 +190,7 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t length, ucp_tag_t ta
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
                  (ep, buffer, count, datatype, tag, cb),
                  ucp_ep_h ep, const void *buffer, size_t count,
-                 uintptr_t datatype, ucp_tag_t tag, ucp_send_callback_t cb)
+                 ucp_datatype_t datatype, ucp_tag_t tag, ucp_send_callback_t cb)
 {
     ucp_request_param_t param = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FIELD_CALLBACK,
@@ -204,7 +204,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nb,
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_send_nbr,
                  (ep, buffer, count, datatype, tag, request),
                  ucp_ep_h ep, const void *buffer, size_t count,
-                 uintptr_t datatype, ucp_tag_t tag, void *request)
+                 ucp_datatype_t datatype, ucp_tag_t tag, void *request)
 {
     ucp_request_param_t param = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FIELD_REQUEST |
@@ -228,7 +228,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_send_nbr,
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nb,
                  (ep, buffer, count, datatype, tag, cb),
                  ucp_ep_h ep, const void *buffer, size_t count,
-                 uintptr_t datatype, ucp_tag_t tag, ucp_send_callback_t cb)
+                 ucp_datatype_t datatype, ucp_tag_t tag, ucp_send_callback_t cb)
 {
     ucp_request_param_t param = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FIELD_CALLBACK,
