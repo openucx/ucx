@@ -12,6 +12,7 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_select.h>
+#include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
 }
 
@@ -35,27 +36,30 @@ protected:
     }
 };
 
-UCS_TEST_P(test_ucp_proto, dump_info) {
-    ucp_ep_print_info(sender().ep(), stdout);
-}
-
 UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_proto_select_param_t select_param;
     ucs_string_buffer_t strb;
 
-    select_param.op_id    = UCP_OP_ID_TAG_SEND;
-    select_param.op_flags = 0;
-    select_param.dt_class = UCP_DATATYPE_CONTIG;
-    select_param.mem_type = UCS_MEMORY_TYPE_HOST;
-    select_param.sys_dev  = 0;
-    select_param.sg_count = 1;
+    select_param.op_id      = UCP_OP_ID_TAG_SEND;
+    select_param.op_flags   = 0;
+    select_param.dt_class   = UCP_DATATYPE_CONTIG;
+    select_param.mem_type   = UCS_MEMORY_TYPE_HOST;
+    select_param.sys_dev    = 0;
+    select_param.sg_count   = 1;
+    select_param.padding[0] = 0;
+    select_param.padding[1] = 0;
 
     ucp_proto_select_param_str(&select_param, &strb);
     UCS_TEST_MESSAGE << ucs_string_buffer_cstr(&strb);
     ucs_string_buffer_cleanup(&strb);
 
-    ucp_proto_select_dump_all(sender().worker(), sender().ep()->cfg_index,
-                              UCP_WORKER_CFG_INDEX_NULL, &select_param, stdout);
+    ucp_worker_h worker                   = sender().worker();
+    ucp_worker_cfg_index_t ep_cfg_index   = sender().ep()->cfg_index;
+    ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+
+    ucp_proto_select_lookup(worker, &worker->ep_config[ep_cfg_index].proto_select,
+                            ep_cfg_index, rkey_cfg_index, &select_param, 0);
+    ucp_ep_print_info(sender().ep(), stdout);
 }
 
 UCS_TEST_P(test_ucp_proto, rkey_config) {

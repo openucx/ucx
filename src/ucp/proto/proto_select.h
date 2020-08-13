@@ -69,13 +69,26 @@ void ucp_proto_select_dump(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_in
                            ucp_worker_cfg_index_t rkey_cfg_index,
                            ucp_proto_select_t *proto_select, FILE *stream);
 
-void ucp_proto_select_dump_all(ucp_worker_h worker,
-                               ucp_worker_cfg_index_t ep_cfg_index,
-                               ucp_worker_cfg_index_t rkey_cfg_index,
-                               const ucp_proto_select_param_t *select_param,
-                               FILE *stream);
 
 void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
                                 ucs_string_buffer_t *strb);
+
+
+ucp_proto_select_elem_t *
+ucp_proto_select_lookup_slow(ucp_worker_h worker,
+                             ucp_proto_select_t *proto_select,
+                             ucp_worker_cfg_index_t ep_cfg_index,
+                             ucp_worker_cfg_index_t rkey_cfg_index,
+                             const ucp_proto_select_param_t *select_param);
+
+
+const ucp_proto_threshold_elem_t*
+ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
+                                 size_t msg_length);
+
+
+void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
+                                ucs_string_buffer_t *strb);
+
 
 #endif
