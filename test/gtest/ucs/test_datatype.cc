@@ -11,6 +11,7 @@ extern "C" {
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/hlist.h>
 #include <ucs/datastruct/ptr_array.h>
+#include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/time/time.h>
 #include <ucs/arch/cpu.h>
@@ -998,4 +999,33 @@ UCS_TEST_F(test_datatype, fixed_array) {
     /* check end capacity */
     EXPECT_EQ(initial_capacity - 1, ucs_array_available_length(&test_array));
     EXPECT_EQ(&ucs_array_elem(&test_array, 1), ucs_array_end(&test_array));
+}
+
+UCS_TEST_F(test_datatype, ptr_map) {
+    typedef std::map<ucs_ptr_map_key_t, char*> std_map_t;
+
+    const size_t N = 10 * UCS_KBYTE;
+    ucs_ptr_map_key_t ptr_key;
+    ucs_ptr_map_t     ptr_map;
+    std_map_t         std_map;
+    ucs_status_t      status;
+
+    status = ucs_ptr_map_init(&ptr_map);
+    ASSERT_EQ(UCS_OK, status);
+
+    for (size_t i = 0; i < N; ++i) {
+        char *ptr = new char;
+        status = ucs_ptr_map_put(&ptr_map, ptr, ucs::rand() % 2, &ptr_key);
+        ASSERT_EQ(UCS_OK, status);
+        std_map[ptr_key] = ptr;
+    }
+
+    for (std_map_t::iterator i = std_map.begin(); i != std_map.end(); ++i) {
+        ASSERT_EQ(i->second, ucs_ptr_map_get(&ptr_map, i->first));
+        status = ucs_ptr_map_del(&ptr_map, i->first);
+        ASSERT_EQ(UCS_OK, status);
+        delete i->second;
+    }
+
+    ucs_ptr_map_destroy(&ptr_map);
 }
