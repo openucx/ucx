@@ -165,6 +165,80 @@ UCS_TEST_F(test_datatype, hlist_basic) {
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
 }
 
+UCS_TEST_F(test_datatype, hlist_for_each_extract_if) {
+    elem_t elem1, elem2, elem3;
+    ucs_hlist_head_t head;
+    std::vector<int> v;
+    elem_t *elem;
+
+    elem1.i = 1;
+    elem2.i = 2;
+    elem3.i = 3;
+
+    /* initialize list, should be empty */
+    ucs_hlist_head_init(&head);
+    EXPECT_TRUE(ucs_hlist_is_empty(&head));
+
+    /* add one element to head */
+    ucs_hlist_add_head(&head, &elem1.hlist);
+    EXPECT_FALSE(ucs_hlist_is_empty(&head));
+
+    EXPECT_EQ(&elem1, ucs_hlist_head_elem(&head, elem_t, hlist));
+
+    /* test iteration over single-element list, don't remove */
+    ucs_hlist_for_each_extract_if(elem, &head, hlist, false) {
+        v.push_back(elem->i);
+    }
+    ASSERT_TRUE(v.empty());
+    ASSERT_FALSE(ucs_hlist_is_empty(&head));
+
+    /* test iteration over single-element list, remove */
+    ucs_hlist_for_each_extract_if(elem, &head, hlist, true) {
+        v.push_back(elem->i);
+    }
+    ASSERT_TRUE(ucs_hlist_is_empty(&head));
+    ASSERT_EQ(1ul, v.size());
+    EXPECT_EQ(1, v[0]);
+    v.clear();
+
+    /* when list is empty, extract_head should return NULL */
+    ucs_hlist_link_t *helem = ucs_hlist_extract_head(&head);
+    EXPECT_TRUE(helem == NULL);
+
+    /* test iteration over empty list */
+    v.clear();
+    ucs_hlist_for_each_extract_if(elem, &head, hlist, true) {
+        v.push_back(elem->i);
+    }
+    ASSERT_EQ(0ul, v.size());
+
+    ucs_hlist_for_each_extract_if(elem, &head, hlist, false) {
+        v.push_back(elem->i);
+    }
+    ASSERT_EQ(0ul, v.size());
+
+    /* add 3 elements */
+    ucs_hlist_add_tail(&head, &elem2.hlist);
+    ucs_hlist_add_head(&head, &elem1.hlist);
+    ucs_hlist_add_tail(&head, &elem3.hlist);
+
+    /* iterate and extract 2 elements */
+    v.clear();
+    ucs_hlist_for_each_extract_if(elem, &head, hlist, elem->i < 3) {
+        v.push_back(elem->i);
+    }
+    ASSERT_EQ(2ul, v.size());
+    EXPECT_EQ(1, v[0]);
+    EXPECT_EQ(2, v[1]);
+    /* iterate and extract last element */
+    ucs_hlist_for_each_extract_if(elem, &head, hlist, elem->i < 100) {
+        v.push_back(elem->i);
+    }
+    EXPECT_EQ(3, v[2]);
+
+    EXPECT_TRUE(ucs_hlist_is_empty(&head));
+}
+
 UCS_TEST_F(test_datatype, queue) {
 
     ucs_queue_head_t head;

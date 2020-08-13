@@ -266,6 +266,22 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
          _elem = ucs_hlist_extract_head_elem(_head, typeof(*(_elem)), _member))
 
 
+/**
+ * Iterate over detached-head list, while removing the head element passes
+ * @a _cond or the list becomes empty.
+ *
+ * @param _elem     Variable to hold the current list element
+ * @param _head     Pointer to list head.
+ * @param _member   List element inside the containing structure.
+ * @param _cond     Condition to test for @a _head element before extract it.
+ */
+#define ucs_hlist_for_each_extract_if(_elem, _head, _member, _cond) \
+    for (_elem = ucs_hlist_head_elem(_head, typeof(*(_elem)), _member); \
+         _elem != UCS_PTR_BYTE_OFFSET(NULL, -ucs_offsetof(typeof(*(_elem)), _member)) && (_cond); \
+         ucs_hlist_extract_head(_head), \
+         _elem = ucs_hlist_head_elem(_head, typeof(*(_elem)), _member))
+
+
 END_C_DECLS
 
 #endif
