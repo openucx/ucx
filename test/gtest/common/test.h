@@ -13,6 +13,9 @@
 #include <stdint.h>
 #endif
 
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
+
 #include "test_helpers.h"
 
 #include <ucs/debug/log.h>

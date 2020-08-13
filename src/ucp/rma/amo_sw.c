@@ -285,7 +285,8 @@ static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     case UCP_AM_ID_ATOMIC_REQ:
         atomich = data;
         snprintf(buffer, max,
-                 "ATOMIC_REQ [addr 0x%lx len %u reqptr 0x%lx ep 0x%lx op %d]",
+                 "ATOMIC_REQ [addr 0x%"PRIx64" len %u reqptr "
+                 "0x%"PRIxPTR" ep 0x%"PRIxPTR" op %d]",
                  atomich->address, atomich->length, atomich->req.reqptr,
                  atomich->req.ep_ptr, atomich->opcode);
         header_len = sizeof(*atomich);;

@@ -762,7 +762,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self, status),
     ucp_request_t *rndv_req = freq->send.rndv_get.rreq;
     ucp_request_t *rreq     = rndv_req->send.rndv_get.rreq;
 
-    ucs_trace_req("freq:%p: recv_frag_get done. rreq:%p length:%ld offset:%ld",
+    ucs_trace_req("freq:%p: recv_frag_get done. rreq:%p length:%ld"
+                  " offset:%"PRIu64,
                   freq, rndv_req, freq->send.length,
                   freq->send.rndv_get.remote_address - rndv_req->send.rndv_get.remote_address);
 
@@ -986,8 +987,8 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
         /* We should be able to find a lane, because ucp_rndv_is_rkey_ptr()
          * already checked that (rkey->md_map & ep_config->rkey_ptr_dst_mds) != 0
          */
-        ucs_fatal("failed to find a lane to access remote memory domains 0x%lx",
-                  rkey->md_map);
+        ucs_fatal("failed to find a lane to access remote memory domains "
+                  "0x%"PRIx64, rkey->md_map);
     }
 
     rkey_index = ucs_bitmap2idx(rkey->md_map, dst_md_index);
@@ -1502,8 +1503,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucs_status_t status;
     int is_pipeline_rndv;
 
-    ucp_trace_req(sreq, "received rtr address 0x%lx remote rreq 0x%lx",
-                  rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_ptr);
+    ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq "
+                  "0x%"PRIxPTR, rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_ptr);
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_rtr_recv", 0);
 
     if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
@@ -1655,24 +1656,24 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         }
         break;
     case UCP_AM_ID_RNDV_ATS:
-        snprintf(buffer, max, "RNDV_ATS sreq 0x%lx status '%s'",
+        snprintf(buffer, max, "RNDV_ATS sreq 0x%"PRIu64" status '%s'",
                  rep_hdr->reqptr, ucs_status_string(rep_hdr->status));
         break;
     case UCP_AM_ID_RNDV_RTR:
-        snprintf(buffer, max, "RNDV_RTR sreq 0x%lx rreq 0x%lx address 0x%lx",
-                 rndv_rtr_hdr->sreq_ptr, rndv_rtr_hdr->rreq_ptr,
-                 rndv_rtr_hdr->address);
+        snprintf(buffer, max, "RNDV_RTR sreq 0x%"PRIxPTR" rreq 0x%"PRIxPTR
+                 " address 0x%"PRIx64, rndv_rtr_hdr->sreq_ptr,
+                 rndv_rtr_hdr->rreq_ptr, rndv_rtr_hdr->address);
         if (rndv_rtr_hdr->address) {
             ucp_rndv_dump_rkey(rndv_rtr_hdr + 1, buffer + strlen(buffer),
                                max - strlen(buffer));
         }
         break;
     case UCP_AM_ID_RNDV_DATA:
-        snprintf(buffer, max, "RNDV_DATA rreq 0x%"PRIx64" offset %zu",
+        snprintf(buffer, max, "RNDV_DATA rreq 0x%"PRIxPTR" offset %zu",
                  rndv_data->rreq_ptr, rndv_data->offset);
         break;
     case UCP_AM_ID_RNDV_ATP:
-        snprintf(buffer, max, "RNDV_ATP sreq 0x%lx status '%s'",
+        snprintf(buffer, max, "RNDV_ATP sreq 0x%"PRIx64" status '%s'",
                  rep_hdr->reqptr, ucs_status_string(rep_hdr->status));
         break;
     default:

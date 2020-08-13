@@ -120,7 +120,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
-    ucs_trace("packing rkeys for buffer %p memh %p md_map 0x%lx",
+    ucs_trace("packing rkeys for buffer %p memh %p md_map 0x%"PRIx64,
               memh->address, memh, memh->md_map);
 
     if (memh->length == 0) {
@@ -199,7 +199,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
 
     /* Read remote MD map */
     remote_md_map = *(ucp_md_map_t*)p;
-    ucs_trace("ep %p: unpacking rkey with md_map 0x%lx", ep, remote_md_map);
+    ucs_trace("ep %p: unpacking rkey with md_map 0x%"PRIx64, ep, remote_md_map);
 
     /* MD map for the unpacked rkey */
     md_map   = remote_md_map & ucp_ep_config(ep)->key.reachable_md_map;
@@ -507,8 +507,8 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 
     rkey->cache.ep_cfg_index  = ep->cfg_index;
 
-    ucs_trace("rkey %p ep %p @ cfg[%d] %s: lane[%d] rkey 0x%"PRIx64" "
-              "%s: lane[%d] rkey 0x%"PRIx64"",
+    ucs_trace("rkey %p ep %p @ cfg[%d] %s: lane[%d] rkey 0x%"PRIxPTR
+              " %s: lane[%d] rkey 0x%"PRIxPTR,
               rkey, ep, ep->cfg_index,
               rkey->cache.rma_proto->name, rkey->cache.rma_lane, rkey->cache.rma_rkey,
               rkey->cache.amo_proto->name, rkey->cache.amo_lane, rkey->cache.amo_rkey);

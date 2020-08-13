@@ -219,8 +219,8 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
         goto free_addr;
     }
 
-    ucs_debug("client ep %p created on device %s idx %d, tl_bitmap 0x%zx", ep,
-              dev_name, dev_index, tl_bitmap);
+    ucs_debug("client ep %p created on device %s idx %d, tl_bitmap 0x%"PRIx64,
+              ep, dev_name, dev_index, tl_bitmap);
     /* Pass real ep (not tmp_ep), because only its pointer and err_mode is
      * taken from the config. */
     ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
@@ -763,7 +763,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                                           ep_init_flags,
                                           "conn_request on uct_listener", &ep);
     if (status != UCS_OK) {
-        ucs_warn("server ep %p failed to connect to worker address on device %s, tl_bitmap 0x%zx, status %s",
+        ucs_warn("server ep %p failed to connect to worker address on "
+                 "device %s, tl_bitmap 0x%"PRIx64", status %s",
                  ep, conn_request->dev_name, tl_bitmap,
                  ucs_status_string(status));
         uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
@@ -772,7 +773,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 
     status = ucp_wireup_connect_local(ep, remote_addr, NULL);
     if (status != UCS_OK) {
-        ucs_warn("server ep %p failed to connect to remote address on device %s, tl_bitmap 0x%zx, status %s",
+        ucs_warn("server ep %p failed to connect to remote address on "
+                 "device %s, tl_bitmap 0x%"PRIx64", status %s",
                  ep, conn_request->dev_name, tl_bitmap,
                  ucs_status_string(status));
         uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
@@ -783,7 +785,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     status = ucp_ep_cm_connect_server_lane(ep, conn_request->uct.listener,
                                            conn_request->uct_req);
     if (status != UCS_OK) {
-        ucs_warn("server ep %p failed to connect CM lane on device %s, tl_bitmap 0x%zx, status %s",
+        ucs_warn("server ep %p failed to connect CM lane on device %s, "
+                 "tl_bitmap 0x%"PRIx64", status %s",
                  ep, conn_request->dev_name, tl_bitmap,
                  ucs_status_string(status));
         ucp_ep_destroy_internal(ep);

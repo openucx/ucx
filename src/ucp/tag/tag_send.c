@@ -46,7 +46,7 @@ ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
     case UCP_DATATYPE_GENERIC:
         return rndv_am_thresh;
     default:
-        ucs_error("Invalid data type %lx", req->send.datatype);
+        ucs_error("Invalid data type 0x%"PRIx64, req->send.datatype);
     }
 
     return SIZE_MAX;
@@ -85,8 +85,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
         zcopy_thresh = rndv_thresh;
     }
 
-    ucs_trace_req("select tag request(%p) progress algorithm datatype=%lx "
-                  "buffer=%p length=%zu max_short=%zd rndv_thresh=%zu "
+    ucs_trace_req("select tag request(%p) progress algorithm datatype=0x%"PRIx64
+                  " buffer=%p length=%zu max_short=%zd rndv_thresh=%zu "
                   "zcopy_thresh=%zu zcopy_enabled=%d",
                   req, req->send.datatype, req->send.buffer, req->send.length,
                   max_short, rndv_thresh, zcopy_thresh,

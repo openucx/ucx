@@ -223,8 +223,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     int flags;
     int level;
 
-    ucs_trace_func("context=%p md_map=0x%lx buffer=%p length=%zu datatype=0x%lu "
-                   "state=%p", context, md_map, buffer, length, datatype, state);
+    ucs_trace_func("context=%p md_map=0x%"PRIx64" buffer=%p length=%zu "
+                   "datatype=0x%"PRIx64" state=%p", context, md_map, buffer,
+                   length, datatype, state);
 
     status = UCS_OK;
     flags  = UCT_MD_MEM_ACCESS_RMA | uct_flags;
@@ -268,7 +269,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
         break;
     default:
         status = UCS_ERR_INVALID_PARAM;
-        ucs_error("Invalid data type %lx", datatype);
+        ucs_error("Invalid data type 0x%"PRIx64, datatype);
     }
 
 err:
@@ -276,8 +277,9 @@ err:
         level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
                 UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
         ucs_log(level,
-                "failed to register user buffer datatype 0x%lx address %p len %zu:"
-                " %s", datatype, buffer, length, ucs_status_string(status));
+                "failed to register user buffer datatype 0x%"PRIx64
+                " address %p len %zu: %s", datatype, buffer, length,
+                ucs_status_string(status));
     }
     return status;
 }
@@ -286,8 +288,8 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req_d
                       ucp_context_t *context, ucp_datatype_t datatype,
                       ucp_dt_state_t *state, ucp_request_t *req_dbg)
 {
-    ucs_trace_func("context=%p datatype=0x%lu state=%p", context, datatype,
-                   state);
+    ucs_trace_func("context=%p datatype=0x%"PRIx64" state=%p", context,
+                   datatype, state);
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:

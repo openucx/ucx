@@ -130,7 +130,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
 
             ucs_log(level,
                     "failed to register address %p mem_type bit 0x%lx length %zu on "
-                    "md[%d]=%s: %s (md reg_mem_types 0x%lx)",
+                    "md[%d]=%s: %s (md reg_mem_types 0x%"PRIx64")",
                     address, UCS_BIT(mem_type), length, md_index,
                     context->tl_mds[md_index].rsc.md_name,
                     ucs_status_string(status),
@@ -313,7 +313,7 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
         }
     }
 
-    ucs_debug("%s buffer %p length %zu memh %p md_map 0x%lx",
+    ucs_debug("%s buffer %p length %zu memh %p md_map 0x%"PRIx64,
               (memh->alloc_method == UCT_ALLOC_METHOD_LAST) ? "mapped" : "allocated",
               memh->address, memh->length, memh, memh->md_map);
     *memh_p = memh;

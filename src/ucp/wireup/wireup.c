@@ -924,7 +924,7 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
     }
 
     ucs_log(log_level,
-            "%s: am_lane %s wireup_lane %s cm_lane %s reachable_mds 0x%lx",
+            "%s: am_lane %s wireup_lane %s cm_lane %s reachable_mds 0x%"PRIx64,
             title, ucp_wireup_get_lane_index_str(key->am_lane, am_lane_str,
                                                  sizeof(am_lane_str)),
             ucp_wireup_get_lane_index_str(key->wireup_lane, wireup_lane_str,
