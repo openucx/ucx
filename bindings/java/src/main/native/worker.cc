@@ -166,6 +166,9 @@ Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedIovNonBlockingNative(JNIEnv *env, 
 {
     int iovcnt;
     ucp_dt_iov_t* iovec = get_ucp_iov(env, addresses, sizes, iovcnt);
+    if (iovec == NULL) {
+        return NULL;
+    }
 
     ucs_status_ptr_t request = ucp_tag_recv_nb((ucp_worker_h)ucp_worker_ptr,
                                                 iovec, iovcnt,

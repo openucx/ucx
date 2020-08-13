@@ -213,6 +213,9 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedIovNonBlockingNative(JNIEnv *env
     int iovcnt;
 
     ucp_dt_iov_t* iovec = get_ucp_iov(env, addresses, sizes, iovcnt);
+    if (iovec == NULL) {
+        return NULL;
+    }
 
     ucs_status_ptr_t request = ucp_tag_send_nb((ucp_ep_h)ep_ptr, iovec, iovcnt,
                                                ucp_dt_make_iov(), tag, jucx_request_callback);
@@ -249,6 +252,9 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamIovNonBlockingNative(JNIEnv *env
     int iovcnt;
 
     ucp_dt_iov_t* iovec = get_ucp_iov(env, addresses, sizes, iovcnt);
+    if (iovec == NULL) {
+        return NULL;
+    }
 
     ucs_status_ptr_t request = ucp_stream_send_nb((ucp_ep_h)ep_ptr, iovec, iovcnt,
                                                   ucp_dt_make_iov(), jucx_request_callback, 0);
@@ -296,6 +302,9 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamIovNonBlockingNative(JNIEnv *env
     int iovcnt;
 
     ucp_dt_iov_t* iovec = get_ucp_iov(env, addresses, sizes, iovcnt);
+    if (iovec == NULL) {
+        return NULL;
+    }
 
     ucs_status_ptr_t request = ucp_stream_recv_nb((ucp_ep_h)ep_ptr, iovec, iovcnt,
                                                   ucp_dt_make_iov(), stream_recv_callback,

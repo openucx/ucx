@@ -22,4 +22,11 @@ public abstract class UcxParams {
         fieldMask = 0L;
         return this;
     }
+
+    public static void checkArraySizes(long[] array1, long[] array2) {
+        if (array1.length != array2.length) {
+            throw new UcxException("Arrays of not equal sizes: " +
+                array1.length + " != " + array2.length);
+        }
+    }
 }

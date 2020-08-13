@@ -59,13 +59,6 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         }
     }
 
-    private void checkArraySizes(long[] array1, long[] array2) {
-        if (array1.length != array2.length) {
-            throw new UcxException("Arrays of not equal sizes: " +
-                array1.length + " != " + array2.length);
-        }
-    }
-
     /**
      * Non-blocking remote memory put operation.
      * This routine initiates a storage of contiguous block of data that is
@@ -215,7 +208,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      */
     public UcpRequest sendTaggedNonBlocking(long[] localAddresses, long[] sizes,
                                             long tag, UcxCallback callback) {
-        checkArraySizes(localAddresses, sizes);
+        UcxParams.checkArraySizes(localAddresses, sizes);
 
         return sendTaggedIovNonBlockingNative(getNativeId(), localAddresses, sizes,
             tag, callback);
@@ -234,7 +227,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
     public UcpRequest sendStreamNonBlocking(long[] localAddresses, long[] sizes,
                                             UcxCallback callback) {
-        checkArraySizes(localAddresses, sizes);
+        UcxParams.checkArraySizes(localAddresses, sizes);
 
         return sendStreamIovNonBlockingNative(getNativeId(), localAddresses, sizes, callback);
     }
@@ -258,7 +251,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
     public UcpRequest recvStreamNonBlocking(long[] localAddresses, long[] sizes, long flags,
                                             UcxCallback callback) {
-        checkArraySizes(localAddresses, sizes);
+        UcxParams.checkArraySizes(localAddresses, sizes);
 
         return recvStreamIovNonBlockingNative(getNativeId(), localAddresses, sizes, flags,
             callback);

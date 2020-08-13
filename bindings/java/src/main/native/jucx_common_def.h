@@ -117,7 +117,6 @@ UCS_F_ALWAYS_INLINE ucp_dt_iov_t* get_ucp_iov(JNIEnv *env,
 {
     iovcnt = env->GetArrayLength(addr_array);
     ucp_dt_iov_t* iovec = (ucp_dt_iov_t*)ucs_malloc(sizeof(*iovec) * iovcnt, "JUCX iov vector");
-
     if (ucs_unlikely(iovec == NULL)) {
         ucs_error("failed to allocate buffer for %d iovec", iovcnt);
         JNU_ThrowException(env, "failed to allocate buffer for iovec");
