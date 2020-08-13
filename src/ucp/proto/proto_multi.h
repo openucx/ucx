@@ -42,7 +42,7 @@ typedef struct {
 
 
 /**
- * Initializatoin parameters for multi-lane protocol
+ * Initialization parameters for multi-lane protocol
  */
 typedef struct {
     ucp_proto_common_init_params_t super;

@@ -33,9 +33,13 @@ typedef struct {
 
 
 typedef struct {
-    ucp_lane_map_t          lane_map;
-    ucp_lane_index_t        lane0;
-    int                     is_multi;
+    ucp_lane_map_t          lane_map;      /* Which lanes are used for sending
+                                              data in the protocol */
+    ucp_lane_index_t        lane0;         /* The lane which is used to send the
+                                              first fragment, to detect fragment
+                                              size and performance ranges */
+    int                     is_multi;      /* Whether the protocol can send
+                                              multiple fragments */
 } ucp_proto_common_perf_params_t;
 
 

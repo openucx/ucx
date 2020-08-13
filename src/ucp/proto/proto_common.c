@@ -109,6 +109,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
     num_lanes = 0;
     ucs_for_each_bit(lane, lane_map) {
         /* Check if lane type matches */
+        ucs_assert(lane < UCP_MAX_LANES);
         if (!(ep_config_key->lanes[lane].lane_types & UCS_BIT(lane_type))) {
             ucs_trace("lane[%d]: no %s", lane,
                       ucp_lane_type_info[lane_type].short_name);
@@ -177,11 +178,10 @@ ucp_proto_common_recv_time(const ucp_proto_common_init_params_t *params,
     return recv_time;
 }
 
-static void
-ucp_proto_common_add_perf(const ucp_proto_common_init_params_t *params,
-                          ucs_linear_func_t func)
+static void ucp_proto_common_add_perf(const ucp_proto_init_params_t *params,
+                                      ucs_linear_func_t func)
 {
-    ucp_proto_caps_t *caps = params->super.caps;
+    ucp_proto_caps_t *caps = params->caps;
     unsigned i;
 
     for (i = 0; i < caps->num_ranges; ++i) {
@@ -208,7 +208,7 @@ ucp_proto_common_add_overheads(const ucp_proto_common_init_params_t *params,
         }
     }
 
-    ucp_proto_common_add_perf(params, send_overheads);
+    ucp_proto_common_add_perf(&params->super, send_overheads);
 }
 
 static void
