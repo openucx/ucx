@@ -88,7 +88,8 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nb,
                  (ep, buffer, count, datatype, cb, flags),
                  ucp_ep_h ep, const void *buffer, size_t count,
-                 uintptr_t datatype, ucp_send_callback_t cb, unsigned flags)
+                 ucp_datatype_t datatype, ucp_send_callback_t cb,
+                 unsigned flags)
 {
     ucp_request_param_t param = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
