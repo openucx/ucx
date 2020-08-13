@@ -155,12 +155,14 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t             remote_address; /* address of the sender's data buffer */
-                    uintptr_t            remote_request; /* pointer to the sender's request */
-                    ucp_request_t        *rreq;          /* receive request on the recv side */
-                    ucp_rkey_h           rkey;           /* key for remote send buffer */
-                    ucp_lane_map_t       lanes_map;      /* used lanes map */
-                    ucp_lane_index_t     lane_count;     /* number of lanes used in transaction */
+                    uint64_t             remote_address;  /* address of the sender's data buffer */
+                    uintptr_t            remote_request;  /* pointer to the sender's request */
+                    ucp_request_t        *rreq;           /* receive request on the recv side */
+                    ucp_rkey_h           rkey;            /* key for remote send buffer */
+                    ucp_lane_map_t       lanes_map_avail; /* used lanes map */
+                    ucp_lane_map_t       lanes_map_all;   /* actual lanes map */
+                    uint8_t              lanes_count;     /* actual lanes count */
+                    uint8_t              rkey_index[UCP_MAX_LANES];
                 } rndv_get;
 
                 struct {

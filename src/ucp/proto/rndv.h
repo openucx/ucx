@@ -65,13 +65,13 @@ ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq);
 void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr);
 
-static UCS_F_ALWAYS_INLINE int ucp_rndv_is_get_zcopy(ucs_memory_type_t mem_type,
-                                                     ucp_rndv_mode_t rndv_mode)
+static UCS_F_ALWAYS_INLINE int
+ucp_rndv_is_get_zcopy(ucp_request_t *req, ucp_context_h context)
 {
-    return ((rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ||
-            ((rndv_mode == UCP_RNDV_MODE_AUTO) &&
-             (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
-              UCP_MEM_IS_ROCM(mem_type))));
+    return ((context->config.ext.rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ||
+            ((context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) &&
+             (!UCP_MEM_IS_CUDA(req->send.mem_type) ||
+              (req->send.length < context->config.ext.rndv_pipeline_send_thresh))));
 }
 
 #endif
