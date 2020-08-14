@@ -154,6 +154,9 @@ struct ucp_ep_config_key {
      * reachable_md_map */
     ucp_rsc_index_t          *dst_md_cmpts;
 
+    /* Bitmap of lanes to ep_check keepalive operations. */
+    ucp_lane_map_t           ep_check_map;
+
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
     ucs_status_t             status;
