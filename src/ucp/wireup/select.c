@@ -1520,10 +1520,12 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_ep_h ep           = select_params->ep;
     ucp_worker_h worker   = ep->worker;
     ucp_context_h context = worker->context;
+    uint64_t dev_map_used = 0;
     ucp_rsc_index_t rsc_index;
     ucp_md_index_t md_index;
     ucp_lane_index_t lane;
     ucp_lane_index_t i;
+    ucp_rsc_index_t dev_index;
 
     key->num_lanes = select_ctx->num_lanes;
     /* Construct the endpoint configuration key:
@@ -1571,6 +1573,15 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_TAG)) {
             ucs_assert(key->tag_lane == UCP_NULL_LANE);
             key->tag_lane = lane;
+        }
+
+        /* add lanes to ep_check map */
+        dev_index = context->tl_rscs[key->lanes[lane].rsc_index].dev_index;
+        ucs_assert(dev_index < (sizeof(dev_map_used) * 8));
+        if (!(UCS_BIT(dev_index) & dev_map_used)) {
+            ucs_assert(!(key->ep_check_map & UCS_BIT(lane)));
+            key->ep_check_map |= UCS_BIT(lane);
+            dev_map_used      |= UCS_BIT(dev_index);
         }
     }
 

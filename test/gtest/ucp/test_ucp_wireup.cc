@@ -1466,3 +1466,33 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, connect, is_self()) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcv, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, ib, "ib")
+
+class test_ucp_wireup_keepalive : public test_ucp_wireup {
+public:
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
+                     const std::string& test_case_name, const std::string& tls)
+    {
+        return enum_test_params_features(ctx_params, name, test_case_name, tls,
+                                         UCP_FEATURE_RMA | UCP_FEATURE_TAG);
+    }
+
+    void init() {
+        test_ucp_wireup::init();
+
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+};
+
+/* test if EP has non-empty keepalive lanes mask */
+UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
+    if (!ep_iface_has_caps(sender(), "", UCT_IFACE_FLAG_EP_CHECK)) {
+        UCS_TEST_SKIP_R("Unsupported");
+    }
+
+    ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep());
+    EXPECT_NE(ep_config->key.ep_check_map, 0);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)

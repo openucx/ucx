@@ -78,6 +78,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->rma_bw_md_map    = 0;
     key->reachable_md_map = 0;
     key->dst_md_cmpts     = NULL;
+    key->ep_check_map     = 0;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->status           = UCS_OK;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
@@ -981,6 +982,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->wireup_lane      != key2->wireup_lane)                              ||
         (key1->cm_lane          != key2->cm_lane)                                  ||
         (key1->rkey_ptr_lane    != key2->rkey_ptr_lane)                            ||
+        (key1->ep_check_map     != key2->ep_check_map)                             ||
         (key1->err_mode         != key2->err_mode)                                 ||
         (key1->status           != key2->status))
     {
