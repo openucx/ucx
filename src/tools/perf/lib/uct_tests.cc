@@ -10,6 +10,8 @@
 #  include "config.h"
 #endif
 
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
 #include <tools/perf/lib/libperf_int.h>
 
 extern "C" {
