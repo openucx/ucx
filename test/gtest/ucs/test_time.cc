@@ -19,7 +19,7 @@ UCS_TEST_F(test_time, time_calc) {
     double value = ucs::rand() % UCS_USEC_PER_SEC;
 
     EXPECT_NEAR(value * 1000ull, ucs_time_to_msec(ucs_time_from_sec (value)), 0.000001);
-    EXPECT_NEAR(value * 1000ull, ucs_time_to_usec(ucs_time_from_msec(value)), 0.01);
+    EXPECT_NEAR(value * 1000ull, ucs_time_to_usec(ucs_time_from_msec(value)), 0.02);
     EXPECT_NEAR(value * 1000ull, ucs_time_to_nsec(ucs_time_from_usec(value)), 20.0);
 }
 
