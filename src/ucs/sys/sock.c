@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
 * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -654,10 +655,9 @@ ucs_status_t ucs_sockaddr_set_inet_addr(struct sockaddr *addr,
     }
 }
 
-ucs_status_t ucs_sockaddr_inet_addr_sizeof(const struct sockaddr *addr,
-                                           size_t *size_p)
+ucs_status_t ucs_sockaddr_inet_addr_size(sa_family_t af, size_t *size_p)
 {
-    switch (addr->sa_family) {
+    switch (af) {
     case AF_INET:
         *size_p = UCS_IPV4_ADDR_LEN;
         return UCS_OK;
@@ -665,9 +665,15 @@ ucs_status_t ucs_sockaddr_inet_addr_sizeof(const struct sockaddr *addr,
         *size_p = UCS_IPV6_ADDR_LEN;
         return UCS_OK;
     default:
-        ucs_error("unknown address family: %d", addr->sa_family);
+        ucs_error("unknown address family: %d", af);
         return UCS_ERR_INVALID_PARAM;
     }
+}
+
+ucs_status_t
+ucs_sockaddr_inet_addr_sizeof(const struct sockaddr *addr, size_t *size_p)
+{
+    return ucs_sockaddr_inet_addr_size(addr->sa_family, size_p);
 }
 
 int ucs_sockaddr_is_known_af(const struct sockaddr *sa)
@@ -897,6 +903,40 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
     freeifaddrs(ifaddrs);
 
     return status;
+}
+
+static ucs_status_t ucs_sockaddr_ifreq(const char *if_name,
+                                       unsigned long request,
+                                       struct sockaddr_in *dest)
+{
+    ucs_status_t status;
+    struct ifreq ifr;
+
+    status = ucs_netif_ioctl(if_name, request, &ifr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (ifr.ifr_addr.sa_family != AF_INET) {
+        ucs_error("%s address is not INET", if_name);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    memcpy(dest, &ifr.ifr_addr, sizeof(*dest));
+
+    return UCS_OK;
+}
+
+ucs_status_t
+ucs_sockaddr_get_ifaddr(const char *if_name, struct sockaddr_in *addr)
+{
+    return ucs_sockaddr_ifreq(if_name, SIOCGIFADDR, addr);
+}
+
+ucs_status_t
+ucs_sockaddr_get_ifmask(const char *if_name, struct sockaddr_in *mask)
+{
+    return ucs_sockaddr_ifreq(if_name, SIOCGIFNETMASK, mask);
 }
 
 const char *ucs_sockaddr_address_family_str(sa_family_t af)

@@ -54,29 +54,6 @@ UCS_TEST_F(test_math, circular_compare) {
     EXPECT_TRUE(  UCS_CIRCULAR_COMPARE32(0xffffffffU, <,  0x7fffffffU) );
 }
 
-UCS_TEST_F(test_math, bitops) {
-    EXPECT_EQ(0u,  ucs_ffs64(0xfffff));
-    EXPECT_EQ(16u, ucs_ffs64(0xf0000));
-    EXPECT_EQ(1u,  ucs_ffs64(0x4002));
-    EXPECT_EQ(41u, ucs_ffs64(1ull<<41));
-
-    EXPECT_EQ(0u,  ucs_ilog2(1));
-    EXPECT_EQ(2u,  ucs_ilog2(4));
-    EXPECT_EQ(2u,  ucs_ilog2(5));
-    EXPECT_EQ(2u,  ucs_ilog2(7));
-    EXPECT_EQ(14u, ucs_ilog2(17000));
-    EXPECT_EQ(40u, ucs_ilog2(1ull<<40));
-
-    EXPECT_EQ(0,  ucs_popcount(0));
-    EXPECT_EQ(2,  ucs_popcount(5));
-    EXPECT_EQ(16, ucs_popcount(0xffff));
-    EXPECT_EQ(48, ucs_popcount(0xffffffffffffUL));
-
-    EXPECT_EQ(0, ucs_count_trailing_zero_bits(1));
-    EXPECT_EQ(28, ucs_count_trailing_zero_bits(0x10000000));
-    EXPECT_EQ(32, ucs_count_trailing_zero_bits(0x100000000UL));
-}
-
 #define TEST_ATOMIC_ADD(_bitsize) \
     { \
         typedef uint##_bitsize##_t inttype; \
