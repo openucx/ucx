@@ -17,20 +17,25 @@
 ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
 {
     ucp_proto_single_priv_t *spriv = params->super.super.priv;
+    ucp_proto_common_perf_params_t perf_params;
     ucp_lane_index_t num_lanes;
 
     num_lanes = ucp_proto_common_find_lanes(&params->super, params->lane_type,
                                             params->tl_cap_flags, &spriv->lane,
-                                            1);
+                                            1, 0);
     if (num_lanes == 0) {
         ucs_trace("no lanes for %s", params->super.super.proto_name);
         return UCS_ERR_UNSUPPORTED;
     }
 
     *params->super.super.priv_size = sizeof(ucp_proto_single_priv_t);
-    spriv->md_index                = ucp_proto_common_get_md_index(&params->super,
+    spriv->md_index                = ucp_proto_common_get_md_index(&params->super.super,
                                                                    spriv->lane);
-    ucp_proto_common_calc_perf(&params->super, spriv->lane);
+    perf_params.lane_map           = UCS_BIT(spriv->lane);
+    perf_params.lane0              = spriv->lane;
+    perf_params.is_multi           = 0;
+
+    ucp_proto_common_calc_perf(&params->super, &perf_params);
     return UCS_OK;
 }
 

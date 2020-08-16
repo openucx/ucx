@@ -48,6 +48,7 @@ noinst_HEADERS = \
 	proto/proto_am.h \
 	proto/proto_am.inl \
 	proto/proto_common.h \
+	proto/proto_multi.h \
 	proto/proto_select.h \
 	proto/proto_select.inl \
 	proto/proto_single.h \
@@ -100,6 +101,7 @@ libucp_la_SOURCES = \
 	proto/lane_type.c \
 	proto/proto_am.c \
 	proto/proto_common.c \
+	proto/proto_multi.c \
 	proto/proto_select.c \
 	proto/proto_single.c \
 	proto/proto.c \
@@ -111,6 +113,7 @@ libucp_la_SOURCES = \
 	rma/rma_send.c \
 	rma/rma_sw.c \
 	rma/flush.c \
+	tag/eager_multi.c \
 	tag/eager_rcv.c \
 	tag/eager_snd.c \
 	tag/eager_single.c \
