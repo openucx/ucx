@@ -121,7 +121,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
                       sizeof(ucp_ep_ext_gen(ep)->listener));
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
-                      sizeof(ucp_ep_ext_gen(ep)->flush_state));
+                      sizeof(ucp_ep_ext_gen(ep)->proto_state));
     memset(&ucp_ep_ext_gen(ep)->ep_match, 0,
            sizeof(ucp_ep_ext_gen(ep)->ep_match));
 
@@ -536,7 +536,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         }
 
         ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
-        ucp_ep_flush_state_reset(*ep_p);
+        ucp_ep_proto_state_reset(*ep_p);
         ucp_ep_update_remote_id(*ep_p, sa_data->ep_id);
         /* send wireup request message, to connect the client to the server's
            new endpoint */
@@ -558,7 +558,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
         /* NOTE: protect union */
         ucs_assert(!((*ep_p)->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                                       UCP_EP_FLAG_FLUSH_STATE_VALID)));
+                                       UCP_EP_FLAG_PROTO_STATE_VALID)));
         status = ucp_wireup_send_pre_request(*ep_p);
         if (status != UCS_OK) {
             goto non_cm_err_destroy_ep;
@@ -669,7 +669,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
             ucp_ep_destroy_internal(ep);
         }
 
-        ucp_ep_flush_state_reset(ep);
+        ucp_ep_proto_state_reset(ep);
         ucp_stream_ep_activate(ep);
         goto out_free_address;
     }
@@ -699,7 +699,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     if ((remote_address.uuid == worker->uuid) &&
         !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
         ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
-        ucp_ep_flush_state_reset(ep);
+        ucp_ep_proto_state_reset(ep);
     } else {
         ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
                             UCS_CONN_MATCH_QUEUE_EXP);
@@ -891,7 +891,7 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
 {
     ucs_trace("ep %p: setting close request %p, %s", ep, request, debug_msg);
 
-    ucp_ep_flush_state_invalidate(ep);
+    ucp_ep_proto_state_invalidate(ep);
     ucp_ep_ext_gen(ep)->close_req.req = request;
     ep->flags                        |= UCP_EP_FLAG_CLOSE_REQ_VALID;
 }
@@ -2244,4 +2244,34 @@ unsigned ucp_ep_do_keepalive(ucp_ep_h ep)
     }
 
     return 1;
+}
+
+void ucp_ep_proto_state_purge(ucp_ep_h ucp_ep, ucs_status_t status)
+{
+    uct_ep_h wireup_ep;
+    ucp_request_t *req;
+
+    if (ucp_ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX | UCP_EP_FLAG_LISTENER |
+                         UCP_EP_FLAG_CLOSE_REQ_VALID)) {
+        /* proto state is not valid yet or already invalidated */
+        return;
+    }
+
+    wireup_ep = ucp_ep->uct_eps[ucp_ep_get_wireup_msg_lane(ucp_ep)];
+    if ((wireup_ep != NULL) && ucp_wireup_ep_test(wireup_ep)) {
+        /* proto state is not valid yet */
+        return;
+    }
+
+    ucs_hlist_for_each_extract(req, &ucp_ep_proto_state(ucp_ep)->reqs,
+                               send.msg_proto.list_link) {
+        ucp_rndv_ats_complete(req, status);
+    }
+
+    ucs_hlist_for_each_extract(req, &ucp_ep_flush_state(ucp_ep)->reqs,
+                               send.flush.link) {
+        ucp_ep_flush_request_ff(req, status);
+    }
+
+    ucp_ep_proto_state_invalidate(ucp_ep);
 }

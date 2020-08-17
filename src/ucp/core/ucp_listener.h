@@ -8,7 +8,7 @@
 #ifndef UCP_LISTENER_H_
 #define UCP_LISTENER_H_
 
-#include "ucp_worker.h"
+#include <ucp/core/ucp_types.h>
 
 /**
  * UCP listener

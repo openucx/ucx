@@ -75,7 +75,7 @@ enum {
     UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21),/* DEBUG: Partial worker address was sent
                                                                to the remote peer when starting
                                                                connection establishment on this EP */
-    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22) /* DEBUG: flush_state is valid */
+    UCP_EP_FLAG_PROTO_STATE_VALID      = UCS_BIT(22) /* DEBUG: proto_state is valid */
 };
 
 
@@ -363,11 +363,22 @@ typedef struct ucp_ep {
  * Status of protocol-level remote completions
  */
 typedef struct {
-    ucs_queue_head_t              reqs;         /* Queue of flush requests which
+    ucs_hlist_head_t              reqs;         /* Queue of flush requests which
                                                    are waiting for remote completion */
     uint32_t                      send_sn;      /* Sequence number of sent operations */
     uint32_t                      cmpl_sn;      /* Sequence number of completions */
 } ucp_ep_flush_state_t;
+
+
+/**
+ * Status of protocol-level remote completions
+ */
+typedef struct {
+    ucp_ep_flush_state_t          flush;        /* FLush state */
+    ucs_hlist_head_t              reqs;         /* List of requests which are
+                                                   waiting for remote
+                                                   completion */
+} ucp_ep_proto_state_t;
 
 
 /**
@@ -405,7 +416,7 @@ typedef struct {
      */
     union {
         ucp_ep_match_elem_t       ep_match;      /* Matching with remote endpoints */
-        ucp_ep_flush_state_t      flush_state;   /* Remove completion status */
+        ucp_ep_proto_state_t      proto_state;   /* Remote completion status */
         ucp_listener_h            listener;      /* Listener that may be associated with ep */
         ucp_ep_close_proto_req_t  close_req;     /* Close protocol request */
     };
@@ -592,5 +603,7 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
  *                          operation is not supported or not done
  */
 unsigned ucp_ep_do_keepalive(ucp_ep_h ep);
+
+void ucp_ep_proto_state_purge(ucp_ep_h ucp_ep, ucs_status_t status);
 
 #endif

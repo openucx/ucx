@@ -17,17 +17,9 @@
 #include <ucp/tag/tag_match.inl>
 #include <ucp/tag/offload.h>
 #include <ucp/proto/proto_am.inl>
+#include <ucp/rndv/rndv.inl>
 #include <ucs/datastruct/queue.h>
 
-
-static UCS_F_ALWAYS_INLINE int
-ucp_rndv_is_get_zcopy(ucp_request_t *req, ucp_context_h context)
-{
-    return ((context->config.ext.rndv_mode == UCP_RNDV_MODE_GET_ZCOPY) ||
-            ((context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) &&
-             (!UCP_MEM_IS_CUDA(req->send.mem_type) ||
-              (req->send.length < context->config.ext.rndv_pipeline_send_thresh))));
-}
 
 static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
                                             const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
@@ -1297,6 +1289,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
     }
 }
 
+void ucp_rndv_ats_complete(ucp_request_t *sreq, ucs_status_t status)
+{
+    /* dereg the original send request and set it to complete */
+    UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_ats_recv", 0);
+    if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
+        ucp_tag_offload_cancel_rndv(sreq);
+    }
+    ucp_rndv_complete_send(sreq, status);
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
                  (arg, data, length, flags),
                  void *arg, void *data, size_t length, unsigned flags)
@@ -1306,12 +1308,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
     ucp_request_t *sreq      = ucp_worker_extract_request_by_id(worker,
                                                                 rep_hdr->req_id);
 
-    /* dereg the original send request and set it to complete */
-    UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_ats_recv", 0);
-    if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
-        ucp_tag_offload_cancel_rndv(sreq);
-    }
-    ucp_rndv_complete_send(sreq, rep_hdr->status);
+    ucs_hlist_del(&ucp_ep_proto_state(sreq->send.ep)->reqs,
+                  &sreq->send.msg_proto.list_link);
+    ucp_rndv_ats_complete(sreq, rep_hdr->status);
     return UCS_OK;
 }
 
@@ -1665,6 +1664,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id"
                   "0x%"PRIx64, rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_id);
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_rtr_recv", 0);
+
+    ucs_hlist_del(&ucp_ep_proto_state(sreq->send.ep)->reqs,
+                  &sreq->send.msg_proto.list_link);
 
     if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
         /* Do not deregister memory here, because am zcopy rndv may

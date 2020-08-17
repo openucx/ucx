@@ -390,7 +390,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     ucs_assert(ep->flags & UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR);
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
-    ucp_ep_flush_state_reset(ep);
+    ucp_ep_proto_state_reset(ep);
 
     if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
@@ -433,10 +433,10 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         ep = ucp_worker_get_ep_by_id(worker, msg->dst_ep_id);
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
         if (!(ep->flags & UCP_EP_FLAG_LISTENER)) {
-            /* Reset flush state only if it's not a client-server wireup on
+            /* Reset proto state only if it's not a client-server wireup on
              * server side with long address exchange when listener (united with
-             * flush state) should be valid until user's callback invoking */
-            ucp_ep_flush_state_reset(ep);
+             * proto state) should be valid until user's callback invoking */
+            ucp_ep_proto_state_reset(ep);
         }
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     } else {
@@ -458,7 +458,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
             ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
                                 UCS_CONN_MATCH_QUEUE_UNEXP);
         } else {
-            ucp_ep_flush_state_reset(ep);
+            ucp_ep_proto_state_reset(ep);
         }
 
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
@@ -589,7 +589,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     ucp_ep_match_remove_ep(worker, ep);
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
-    ucp_ep_flush_state_reset(ep);
+    ucp_ep_proto_state_reset(ep);
 
     /* Connect p2p addresses to remote endpoint */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {

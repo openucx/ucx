@@ -9,8 +9,8 @@
 #  include "config.h"
 #endif
 
-#include "ucp_am.h"
 #include "ucp_worker.h"
+#include "ucp_am.h"
 #include "ucp_rkey.h"
 #include "ucp_request.inl"
 
@@ -492,6 +492,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     }
 
     ucp_stream_ep_cleanup(ucp_ep);
+    ucp_ep_proto_state_purge(ucp_ep, status);
 
     /* Set failed lane to index 0 */
     ucp_ep->uct_eps[0] = &ucp_failed_tl_ep;

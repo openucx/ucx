@@ -75,7 +75,7 @@ void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
                !(ep->flags & UCP_EP_FLAG_REMOTE_ID));
     /* NOTE: protect union */
     ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                              UCP_EP_FLAG_FLUSH_STATE_VALID |
+                              UCP_EP_FLAG_PROTO_STATE_VALID |
                               UCP_EP_FLAG_LISTENER)));
     ep->flags                             |= UCP_EP_FLAG_ON_MATCH_CTX;
     ucp_ep_ext_gen(ep)->ep_match.dest_uuid = dest_uuid;

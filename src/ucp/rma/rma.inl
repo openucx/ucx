@@ -87,10 +87,10 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
     --ep->worker->flush_ops_count;
     ++flush_state->cmpl_sn;
 
-    ucs_queue_for_each_extract(req, &flush_state->reqs, send.flush.queue,
-                               UCS_CIRCULAR_COMPARE32(req->send.flush.cmpl_sn,
-                                                      <= ,
-                                                      flush_state->cmpl_sn)) {
+    ucs_hlist_for_each_extract_if(req, &flush_state->reqs, send.flush.link,
+                                  UCS_CIRCULAR_COMPARE32(req->send.flush.cmpl_sn,
+                                                         <= ,
+                                                         flush_state->cmpl_sn)) {
         ucp_ep_flush_remote_completed(req);
     }
 }

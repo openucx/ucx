@@ -12,6 +12,7 @@
 
 #include "ucp_context.h"
 #include "ucp_request.h"
+#include "ucp_worker.h"
 
 #include <ucs/config/parser.h>
 #include <ucs/algorithm/crc.h>

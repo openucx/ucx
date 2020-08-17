@@ -16,6 +16,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_mm.h>
+#include <ucp/rndv/rndv.inl>
 #include <ucp/tag/tag_match.inl>
 #include <ucs/sys/sys.h>
 
@@ -549,6 +550,7 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     ucp_rndv_rts_hdr_t *rndv_rts_hdr;
     unsigned rndv_hdr_len;
     size_t packed_len;
+    ucs_status_t status;
 
     ucs_assert((UCP_DT_IS_CONTIG(req->send.datatype) &&
                (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) ||
@@ -561,16 +563,26 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     rndv_hdr_len = sizeof(ucp_rndv_rts_hdr_t) + ucp_ep_config(ep)->rndv.rkey_size;
     rndv_rts_hdr = ucs_alloca(rndv_hdr_len);
     packed_len   = ucp_tag_rndv_rts_pack(rndv_rts_hdr, req);
+    ucs_assert((rndv_rts_hdr->address != 0) || !UCP_DT_IS_CONTIG(req->send.datatype) ||
+               !ucp_rndv_is_get_zcopy(req, ep->worker->context));
+    status = uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane],
+                                     req->send.msg_proto.tag.tag,
+                                     rndv_rts_hdr, packed_len, 0);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
 
-    return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane],
-                                   req->send.msg_proto.tag.tag,
-                                   rndv_rts_hdr, packed_len, 0);
+    ucs_hlist_add_tail(&ucp_ep_proto_state(ep)->reqs,
+                       &req->send.msg_proto.list_link);
+    return UCS_OK;
 }
 
 static void ucp_tag_offload_rndv_zcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
+    ucs_hlist_del(&ucp_ep_proto_state(req->send.ep)->reqs,
+                  &req->send.msg_proto.list_link);
     ucp_proto_am_zcopy_req_complete(req, self->status);
 }
 
@@ -615,6 +627,9 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
 
     req->flags                   |= UCP_REQUEST_FLAG_OFFLOADED;
     req->send.tag_offload.rndv_op = rndv_op;
+    ucs_hlist_add_tail(&ucp_ep_proto_state(ep)->reqs,
+                       &req->send.msg_proto.list_link);
+
     return UCS_OK;
 }
 

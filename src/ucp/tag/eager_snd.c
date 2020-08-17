@@ -213,7 +213,15 @@ void ucp_tag_eager_sync_completion(ucp_request_t *req, uint32_t flag,
 
     ucs_assertv(!(req->flags & flag), "req->flags=%d flag=%d", req->flags, flag);
     req->flags |= flag;
+
+    if (flag & UCP_REQUEST_FLAG_LOCAL_COMPLETED) {
+        ucs_hlist_add_tail(&ucp_ep_proto_state(req->send.ep)->reqs,
+                           &req->send.msg_proto.list_link);
+    }
+
     if (ucs_test_all_flags(req->flags, all_completed)) {
+        ucs_hlist_del(&ucp_ep_proto_state(req->send.ep)->reqs,
+                      &req->send.msg_proto.list_link);
         ucp_request_complete_send(req, status);
     }
 }

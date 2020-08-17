@@ -27,13 +27,13 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
 
     /* NOTE: protect union */
     ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                              UCP_EP_FLAG_FLUSH_STATE_VALID)));
+                              UCP_EP_FLAG_PROTO_STATE_VALID)));
     ucs_assert(ep->flags   & UCP_EP_FLAG_LISTENER);
 
     ep->flags &= ~UCP_EP_FLAG_LISTENER;
     ep->flags |= UCP_EP_FLAG_USED;
     ucp_stream_ep_activate(ep);
-    ucp_ep_flush_state_reset(ep);
+    ucp_ep_proto_state_reset(ep);
 
     /*
      * listener is NULL if the EP was created with UCP_EP_PARAM_FIELD_EP_ADDR

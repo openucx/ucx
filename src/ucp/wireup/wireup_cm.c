@@ -668,7 +668,7 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
      * TODO: set the ucp_ep to error state to prevent user from sending more
      *       ops.
      */
-    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
+    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_PROTO_STATE_VALID);
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_CLOSED));
     req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, 0,
                                 &ucp_request_null_param, NULL,
@@ -820,8 +820,7 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
         return status;
     }
 
-    ucp_ep_flush_state_reset(ucp_ep);
-
+    ucp_ep_proto_state_reset(ucp_ep);
     return UCS_OK;
 }
 

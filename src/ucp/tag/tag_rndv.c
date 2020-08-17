@@ -83,11 +83,28 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     size_t packed_rkey_size;
+    ucs_status_t status;
+
+    if (ucs_unlikely(!(sreq->send.ep->flags & UCP_EP_FLAG_REMOTE_ID))) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    /* RTR can arrive directly from am_short in case of self-transport, so need
+     * to add to the list before the call and remove if it's failed */
+    ucs_hlist_add_tail(&ucp_ep_proto_state(sreq->send.ep)->reqs,
+                       &sreq->send.msg_proto.list_link);
 
     /* send the RTS. the pack_cb will pack all the necessary fields in the RTS */
     packed_rkey_size = ucp_ep_config(sreq->send.ep)->rndv.rkey_size;
-    return ucp_do_am_single(self, UCP_AM_ID_RNDV_RTS, ucp_tag_rndv_rts_pack,
-                            sizeof(ucp_tag_rndv_rts_hdr_t) + packed_rkey_size);
+    status = ucp_do_am_single(self, UCP_AM_ID_RNDV_RTS, ucp_tag_rndv_rts_pack,
+                              sizeof(ucp_tag_rndv_rts_hdr_t) + packed_rkey_size);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_hlist_del(&ucp_ep_proto_state(sreq->send.ep)->reqs,
+                      &sreq->send.msg_proto.list_link);
+        return status;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
