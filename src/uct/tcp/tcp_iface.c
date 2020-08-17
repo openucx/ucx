@@ -80,6 +80,11 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 8, "receive",
                                 ucs_offsetof(uct_tcp_iface_config_t, rx_mpool), ""),
 
+  {"PORT_RANGE", "0",
+   "Generate a random TCP port number from that range. A value of zero means\n "
+   "let the operating system select the port number.",
+   ucs_offsetof(uct_tcp_iface_config_t, port_range), UCS_CONFIG_TYPE_RANGE_SPEC},
+
   {NULL}
 };
 
@@ -321,6 +326,41 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .iface_is_reachable       = uct_tcp_iface_is_reachable
 };
 
+static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
+{
+    struct sockaddr_in bind_addr = iface->config.ifaddr;
+    unsigned port_range_start    = iface->port_range.first;
+    unsigned port_range_end      = iface->port_range.last;
+    ucs_status_t status;
+    int port, retry;
+
+    /* retry is 1 for a range of ports or when port value is zero.
+     * retry is 0 for a single value port that is not zero */
+    retry = (port_range_start == 0) || (port_range_start < port_range_end);
+
+    do {
+        if (port_range_end != 0) {
+            status = ucs_rand_range(port_range_start, port_range_end, &port);
+            if (status != UCS_OK) {
+                break;
+            }
+        } else {
+            port = 0;   /* let the operating system choose the port */
+        }
+
+        status = ucs_sockaddr_set_port((struct sockaddr *)&bind_addr, port);
+        if (status != UCS_OK) {
+            break;
+        }
+
+        status = ucs_socket_server_init((struct sockaddr *)&bind_addr,
+                                        sizeof(bind_addr), ucs_socket_max_conn(),
+                                        retry, &iface->listen_fd);
+    } while (retry && (status == EADDRINUSE));
+
+    return status;
+}
+
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
 {
     struct sockaddr_in bind_addr = iface->config.ifaddr;
@@ -329,10 +369,7 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
     ucs_status_t status;
     int ret;
 
-    bind_addr.sin_port = 0;     /* use a random port */
-    status = ucs_socket_server_init((struct sockaddr *)&bind_addr,
-                                    sizeof(bind_addr), ucs_socket_max_conn(),
-                                    &iface->listen_fd);
+    status = uct_tcp_iface_server_init(iface);
     if (status != UCS_OK) {
         goto err;
     }
@@ -366,6 +403,53 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
 err_close_sock:
     close(iface->listen_fd);
 err:
+    return status;
+}
+
+static ucs_status_t uct_tcp_iface_set_port_range(uct_tcp_iface_t *iface,
+                                                 uct_tcp_iface_config_t *config)
+{
+    ucs_range_spec_t system_port_range;
+    unsigned start_range, end_range;
+    ucs_status_t status;
+
+    if ((config->port_range.first == 0) && (config->port_range.last == 0)) {
+        /* using a random port */
+        goto out_set_config;
+    }
+
+    /* get the system configuration for usable ports range */
+    status = ucs_sockaddr_get_ip_local_port_range(&system_port_range);
+    if (status != UCS_OK) {
+        /* using the user's config */
+        goto out_set_config;
+    }
+
+    /* find a common range between the user's ports range and the one on the system */
+    start_range = ucs_max(system_port_range.first, config->port_range.first);
+    end_range   = ucs_min(system_port_range.last, config->port_range.last);
+
+    if (start_range > end_range) {
+        /* there is no common range */
+        ucs_error("the requested TCP port range (%d-%d) is outside of system's "
+                  "configured port range (%d-%d)",
+                  config->port_range.first, config->port_range.last,
+                  system_port_range.first, system_port_range.last);
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    iface->port_range.first = start_range;
+    iface->port_range.last  = end_range;
+    ucs_debug("using TCP port range: %d-%d", iface->port_range.first, iface->port_range.last);
+    return UCS_OK;
+
+out_set_config:
+    iface->port_range.first = config->port_range.first;
+    iface->port_range.last  = config->port_range.last;
+    ucs_debug("using TCP port range: %d-%d", iface->port_range.first, iface->port_range.last);
+    return UCS_OK;
+out:
     return status;
 }
 
@@ -455,6 +539,11 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
+
+    status = uct_tcp_iface_set_port_range(self, config);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     ucs_list_head_init(&self->ep_list);
     ucs_conn_match_init(&self->conn_match_ctx,
