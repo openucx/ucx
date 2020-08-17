@@ -11,10 +11,12 @@
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
 
+
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/datastruct/ptr_map.inl>
 #include <ucp/dt/dt.inl>
 #include <inttypes.h>
 
@@ -677,6 +679,13 @@ ucp_request_param_mem_type(const ucp_request_param_t *param)
 {
     return (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
            param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
+ucp_send_request_get_id(ucp_request_t *req)
+{
+    return ucp_worker_get_request_id(req->send.ep->worker, req,
+                                     ucp_ep_use_indirect_id(req->send.ep));
 }
 
 #endif

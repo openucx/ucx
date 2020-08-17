@@ -177,9 +177,14 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err;
     }
 
+    if ((worker->context->config.ext.proto_indirect_id == UCS_CONFIG_ON) ||
+        ((worker->context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
+         (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE))) {
+        ep->flags |= UCP_EP_FLAG_INDIRECT_ID;
+    }
+
     status = ucs_ptr_map_put(&worker->ptr_map, ep,
-                             !!(ep_init_flags &
-                                UCP_EP_INIT_ERR_MODE_PEER_FAILURE),
+                             !!(ep->flags & UCP_EP_FLAG_INDIRECT_ID),
                              &ucp_ep_ext_gen(ep)->ids->local);
     if (status != UCS_OK) {
         goto err_destroy_ep_base;

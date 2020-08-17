@@ -104,6 +104,8 @@ typedef struct ucp_context_config {
     size_t                                 listener_backlog;
     /** Enable new protocol selection logic */
     int                                    proto_enable;
+    /** Enable indirect IDs to object pointers in wire protocols */
+    ucs_on_off_auto_value_t                proto_indirect_id;
 } ucp_context_config_t;
 
 

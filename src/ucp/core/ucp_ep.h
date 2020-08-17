@@ -62,6 +62,9 @@ enum {
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_TEMPORARY              = UCS_BIT(13),/* the temporary EP which holds
                                                         temporary wireup configuration */
+    UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
+                                                        indirect endpoint id instead of pointer,
+                                                        can be replaced with looking at local ID */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */

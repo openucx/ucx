@@ -25,7 +25,8 @@ static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
 
     atomich->address    = req->send.rma.remote_addr;
     atomich->req.ep_id  = ucp_ep_remote_id(ep);
-    atomich->req.reqptr = fetch ? (uintptr_t)req : 0;
+    atomich->req.req_id = fetch ? ucp_send_request_get_id(req) :
+                          UCP_REQUEST_ID_INVALID;
     atomich->length     = size;
     atomich->opcode     = req->send.amo.uct_op;
 
@@ -99,7 +100,7 @@ static size_t ucp_amo_sw_pack_atomic_reply(void *dest, void *arg)
     ucp_rma_rep_hdr_t *hdr = dest;
     ucp_request_t *req     = arg;
 
-    hdr->req = req->send.get_reply.req;
+    hdr->req_id = req->send.get_reply.req_id;
 
     switch (req->send.length) {
     case sizeof(uint32_t):
@@ -216,7 +217,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
          *       EP and continue SW AMO protocol */
     }
 
-    if (atomicreqh->req.reqptr == 0) {
+    if (atomicreqh->req.req_id == UCP_REQUEST_ID_INVALID) {
         /* atomic operation without result */
         switch (atomicreqh->length) {
         case sizeof(uint32_t):
@@ -248,10 +249,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
             ucs_fatal("invalid atomic length: %u", atomicreqh->length);
         }
 
-        req->send.ep               = ep;
-        req->send.atomic_reply.req = atomicreqh->req.reqptr;
-        req->send.length           = atomicreqh->length;
-        req->send.uct.func         = ucp_progress_atomic_reply;
+        req->send.ep                  = ep;
+        req->send.atomic_reply.req_id = atomicreqh->req.req_id;
+        req->send.length              = atomicreqh->length;
+        req->send.uct.func            = ucp_progress_atomic_reply;
         ucp_request_send(req, 0);
     }
 
@@ -261,9 +262,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
+    ucp_worker_h worker    = arg;
     ucp_rma_rep_hdr_t *hdr = data;
     size_t frag_length     = length - sizeof(*hdr);
-    ucp_request_t *req     = (ucp_request_t*)hdr->req;
+    ucp_request_t *req     = ucp_worker_extract_request_by_id(worker,
+                                                              hdr->req_id);
     ucp_ep_h ep            = req->send.ep;
 
     memcpy(req->send.buffer, hdr + 1, frag_length);
@@ -285,15 +288,15 @@ static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     case UCP_AM_ID_ATOMIC_REQ:
         atomich = data;
         snprintf(buffer, max,
-                 "ATOMIC_REQ [addr 0x%"PRIx64" len %u reqptr "
-                 "0x%"PRIxPTR" ep_id 0x%"PRIx64" op %d]",
-                 atomich->address, atomich->length, atomich->req.reqptr,
+                 "ATOMIC_REQ [addr 0x%"PRIx64" len %u req_id 0x%"PRIu64
+                 " ep_id 0x%"PRIx64" op %d]",
+                 atomich->address, atomich->length, atomich->req.req_id,
                  atomich->req.ep_id, atomich->opcode);
         header_len = sizeof(*atomich);;
         break;
     case UCP_AM_ID_ATOMIC_REP:
         reph = data;
-        snprintf(buffer, max, "ATOMIC_REP [reqptr 0x%lx]", reph->req);
+        snprintf(buffer, max, "ATOMIC_REP [req_id 0x%"PRIu64"]", reph->req_id);
         header_len = sizeof(*reph);
         break;
     default:
