@@ -30,12 +30,12 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 
 static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->cap.flags            = UCT_MD_FLAG_REG;
+    md_attr->cap.flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_CUDA;
     md_attr->cap.detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->cap.max_alloc        = 0;
+    md_attr->cap.max_alloc        = ULONG_MAX;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = 0;
     md_attr->reg_cost             = ucs_linear_func_make(0, 0);
@@ -119,6 +119,31 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
     return UCS_OK;
 }
 
+static ucs_status_t uct_cuda_copy_mem_alloc(uct_md_h md,
+                                            size_t *length_p,
+                                            void **address_p,
+                                            unsigned flags,
+                                            const char *alloc_name,
+                                            uct_mem_h *memh_p)
+{
+    ucs_status_t status;
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaMalloc(address_p, *length_p));
+
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *memh_p = *address_p;
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_cuda_copy_mem_free(uct_md_h md, uct_mem_h memh)
+{
+    return UCT_CUDA_FUNC_LOG_ERR(cudaFree(memh));
+}
+
+
 static void uct_cuda_copy_md_close(uct_md_h uct_md) {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
 
@@ -128,6 +153,8 @@ static void uct_cuda_copy_md_close(uct_md_h uct_md) {
 static uct_md_ops_t md_ops = {
     .close               = uct_cuda_copy_md_close,
     .query               = uct_cuda_copy_md_query,
+    .mem_alloc           = uct_cuda_copy_mem_alloc,
+    .mem_free            = uct_cuda_copy_mem_free,
     .mkey_pack           = uct_cuda_copy_mkey_pack,
     .mem_reg             = uct_cuda_copy_mem_reg,
     .mem_dereg           = uct_cuda_copy_mem_dereg,
