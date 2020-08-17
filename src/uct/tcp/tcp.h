@@ -291,6 +291,7 @@ typedef struct uct_tcp_iface {
                                                       * are in progress + how many EPs are
                                                       * waiting for PUT Zcopy operation ACKs
                                                       * (0/1 for each EP) */
+    ucs_range_spec_t              port_range;        /** Range of ports to use for bind() */
 
     struct {
         size_t                    tx_seg_size;       /* TX AM buffer size */
@@ -346,6 +347,7 @@ typedef struct uct_tcp_iface_config {
     unsigned                       syn_cnt;
     uct_iface_mpool_config_t       tx_mpool;
     uct_iface_mpool_config_t       rx_mpool;
+    ucs_range_spec_t               port_range;
 } uct_tcp_iface_config_t;
 
 

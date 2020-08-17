@@ -18,6 +18,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/config/types.h>
+#include <ucs/config/parser.h>
 
 #include <errno.h>
 #include <sys/socket.h>
