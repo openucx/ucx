@@ -101,6 +101,19 @@ struct ucs_mpool_ops {
     ucs_status_t (*chunk_alloc)(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
     /**
+     * Allocate a chunk of data only memory to be used by the mpool.
+     *
+     * @param mp           Memory pool structure.
+     * @param size_p       Points to minimal size to allocate. The function may
+     *                      modify it to the actual allocated size. which must be
+     *                      larger or equal.
+     * @param chunk_p      Filled with a pointer to the allocated chunk.
+     *
+     * @return             Error status.
+     */
+    ucs_status_t (*chunk_data_alloc)(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+
+    /**
      * Release previously allocated chunk of memory.
      *
      * @param mp           Memory pool structure.
