@@ -124,43 +124,49 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_exp_medium) {
     EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
-    request_release(my_recv_req);
+    request_free(my_recv_req);
 }
 
 UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
     static const size_t size = 50000;
-    request *my_recv_req;
+    request user_data;
+    request *ucx_req;
 
     std::vector<char> sendbuf(size, 0);
     std::vector<char> recvbuf(size, 0);
 
+    request_init(&user_data);
+
     /* 1st send */
 
-    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
-    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
-    ASSERT_TRUE(my_recv_req != NULL); /* Couldn't be completed because didn't send yet */
+    ucx_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff,
+                      &user_data);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(ucx_req));
+    ASSERT_TRUE(ucx_req != NULL); /* Couldn't be completed because didn't send yet */
 
     send_b(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
 
-    wait(my_recv_req);
-    request_release(my_recv_req);
+    wait(ucx_req, &user_data);
+    request_free(ucx_req);
 
     /* 2nd send */
 
     ucs::fill_random(sendbuf);
+    request_init(&user_data);
 
-    my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
-    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
-    ASSERT_TRUE(my_recv_req != NULL); /* Couldn't be completed because didn't send yet */
+    ucx_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff,
+                      &user_data);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(ucx_req));
+    ASSERT_TRUE(ucx_req != NULL); /* Couldn't be completed because didn't send yet */
 
     request *my_send_req;
     my_send_req = send_nb(&sendbuf[0], sendbuf.size(), DATATYPE, 0x111337);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
 
-    wait(my_recv_req);
+    wait(ucx_req, &user_data);
 
-    EXPECT_EQ(sendbuf.size(),      my_recv_req->info.length);
-    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    EXPECT_EQ(sendbuf.size(),      user_data.info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, user_data.info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 
     short_progress_loop();
@@ -168,9 +174,9 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
     if (my_send_req != NULL) {
         EXPECT_TRUE(my_send_req->completed);
         EXPECT_EQ(UCS_OK, my_send_req->status);
-        request_release(my_send_req);
+        request_free(my_send_req);
     }
-    request_release(my_recv_req);
+    request_free(ucx_req);
 }
 
 UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=inf") {
@@ -232,12 +238,12 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=inf")
         if (sreq1 != NULL) {
             wait(sreq1);
             EXPECT_TRUE(sreq1->completed);
-            request_release(sreq1);
+            request_free(sreq1);
         }
         if (sreq2 != NULL) {
             wait(sreq2);
             EXPECT_TRUE(sreq2->completed);
-            request_release(sreq2);
+            request_free(sreq2);
         }
 
         /* Receives should be completed with correct length */
@@ -259,8 +265,8 @@ UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_medium_wildcard, "RNDV_THRESH=inf")
             EXPECT_EQ(sendbuf1, recvbuf2);
         }
 
-        request_release(rreq1);
-        request_release(rreq2);
+        request_free(rreq1);
+        request_free(rreq2);
     }
 }
 
@@ -287,7 +293,7 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_nb_partial_exp_medium) {
     EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
 
-    request_release(my_recv_req);
+    request_free(my_recv_req);
 }
 
 UCS_TEST_P(test_ucp_tag_match, send_nb_recv_unexp) {
@@ -313,7 +319,7 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_recv_unexp) {
     if (my_send_req != NULL) {
         EXPECT_TRUE(my_send_req->completed);
         EXPECT_EQ(UCS_OK, my_send_req->status);
-        request_release(my_send_req);
+        request_free(my_send_req);
     }
 }
 
@@ -378,7 +384,7 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_nb_exp) {
     EXPECT_EQ(sizeof(send_data),   my_recv_req->info.length);
     EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
     EXPECT_EQ(send_data, recv_data);
-    request_release(my_recv_req);
+    request_free(my_recv_req);
 }
 
 UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
@@ -415,7 +421,7 @@ UCS_TEST_P(test_ucp_tag_match, send_nb_multiple_recv_unexp) {
         if (send_reqs[i] != NULL) {
             EXPECT_TRUE(send_reqs[i]->completed);
             EXPECT_EQ(UCS_OK, send_reqs[i]->status);
-            request_release(send_reqs[i]);
+            request_free(send_reqs[i]);
         }
     }
 }
@@ -447,7 +453,7 @@ UCS_TEST_P(test_ucp_tag_match, sync_send_unexp) {
 
     EXPECT_TRUE(my_send_req->completed);
     EXPECT_EQ(UCS_OK, my_send_req->status);
-    request_release(my_send_req);
+    request_free(my_send_req);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match)
@@ -528,7 +534,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, sync_send_unexp, "RNDV_THRESH=1048576") {
 
     EXPECT_TRUE(my_send_req->completed);
     EXPECT_EQ(UCS_OK, my_send_req->status);
-    request_release(my_send_req);
+    request_free(my_send_req);
 }
 
 UCS_TEST_P(test_ucp_tag_match_rndv, req_exp, "RNDV_THRESH=1048576") {
@@ -562,7 +568,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, req_exp, "RNDV_THRESH=1048576") {
     EXPECT_EQ(sendbuf, recvbuf);
 
     wait_and_validate(my_send_req);
-    request_release(my_recv_req);
+    request_free(my_recv_req);
 }
 
 UCS_TEST_P(test_ucp_tag_match_rndv, rts_unexp, "RNDV_THRESH=1048576") {
@@ -663,7 +669,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, post_larger_recv, "RNDV_THRESH=0") {
         EXPECT_TRUE(std::equal(sendbuf.begin(), sendbuf.end(), recvbuf.begin()));
 
         wait_and_validate(my_send_req);
-        request_release(my_recv_req);
+        request_free(my_recv_req);
     }
 }
 
@@ -699,7 +705,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, req_exp_auto_thresh, "RNDV_THRESH=auto") {
 
     /* sender - get the ATS and set send request to completed */
     wait_and_validate(my_send_req);
-    request_release(my_recv_req);
+    request_free(my_recv_req);
 }
 
 UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
