@@ -773,7 +773,6 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
                 size_t &roffset   = roffsets[sender_idx];
                 ucp::data_type_desc_t &dt_desc =
                     dt_rdescs[sender_idx].forward_to(roffset);
-                EXPECT_TRUE(dt_desc.is_valid());
                 size_t length;
                 void *rreq = ucp_stream_recv_nb(poll_eps[i].ep,
                                                 dt_desc.buf(),
