@@ -129,6 +129,13 @@
     }
 
 
+#define ucp_request_send_check_status(_status, _ret, _done) \
+    if (ucs_likely((_status) != UCS_ERR_NO_RESOURCE)) { \
+        _ret = UCS_STATUS_PTR(_status); /* UCS_OK also goes here */ \
+        _done; \
+    }
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {

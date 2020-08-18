@@ -293,35 +293,133 @@ UCS_TEST_P(test_ucp_am, set_am_handler_realloc)
     do_set_am_handler_realloc_test();
 }
 
-UCS_TEST_P(test_ucp_am, max_am_header)
-{
-    size_t min_am_bcopy       = std::numeric_limits<size_t>::max();
-    bool has_tl_with_am_bcopy = false;
-
-    for (ucp_rsc_index_t idx = 0; idx < sender().ucph()->num_tls; ++idx) {
-        uct_iface_attr_t *attr = ucp_worker_iface_get_attr(sender().worker(), idx);
-        if (attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
-            min_am_bcopy = ucs_min(min_am_bcopy, attr->cap.am.max_bcopy);
-            has_tl_with_am_bcopy = true;
-        }
-    }
-
-    EXPECT_TRUE(has_tl_with_am_bcopy);
-
-    ucp_worker_attr_t attr;
-    attr.field_mask = UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER;
-
-    ASSERT_UCS_OK(ucp_worker_query(sender().worker(), &attr));
-
-    EXPECT_GE(attr.max_am_header, 64ul);
-    EXPECT_LT(attr.max_am_header, min_am_bcopy);
-}
-
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
 
 
 class test_ucp_am_nbx : public test_ucp_am_base {
-    // To be extended in the following PRs
+public:
+    std::vector<ucp_test_param>
+    static enum_test_params(const ucp_params_t& ctx_params,
+                            const std::string& name,
+                            const std::string& test_case_name,
+                            const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+
+        generate_test_params_variant(ctx_params, name, test_case_name,
+                                      tls, 0, result);
+        generate_test_params_variant(ctx_params, name, test_case_name,
+                                      tls, UCP_AM_SEND_REPLY, result);
+
+        return result;
+    }
+
+    size_t max_am_hdr() {
+        ucp_worker_attr_t attr;
+        attr.field_mask = UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER;
+
+        ASSERT_UCS_OK(ucp_worker_query(sender().worker(), &attr));
+        return attr.max_am_header;
+    }
+
+    void set_am_data_handler(entity &e, uint16_t am_id, void *arg) {
+        ucp_am_handler_param_t param;
+
+        /* Initialize Active Message data handler */
+        param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                           UCP_AM_HANDLER_PARAM_FIELD_CB |
+                           UCP_AM_HANDLER_PARAM_FIELD_ARG;
+        param.id         = am_id;
+        param.cb         = am_data_cb;
+        param.arg        = arg;
+        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
+    }
+
+    ucs_status_ptr_t send_am(const ucp::data_type_desc_t& dt_desc,
+                             unsigned flags = 0, const void *hdr = NULL,
+                             unsigned hdr_length = 0)
+    {
+        ucp_request_param_t param;
+        param.op_attr_mask      = UCP_OP_ATTR_FIELD_DATATYPE;
+        param.datatype          = dt_desc.dt();
+
+        if (flags != 0) {
+            param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;
+            param.flags         = flags;
+        }
+
+        ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID,
+                                                hdr, hdr_length, dt_desc.buf(),
+                                                dt_desc.count(), &param);
+        return sptr;
+    }
+
+    void test_am_send_recv(size_t size, size_t header_size = 0ul,
+                           unsigned flags = 0, bool hold_desc = false)
+    {
+        std::string sbuf(size, 'd');
+        std::string hbuf(header_size, 'h');
+        m_am_received = false;
+
+        set_am_data_handler(receiver(), TEST_AM_NBX_ID, this);
+
+        ucp::data_type_desc_t sdt_desc(ucp_dt_make_contig(1), &sbuf[0], size);
+
+        ucs_status_ptr_t sptr = send_am(sdt_desc, GetParam().variant,
+                                        hbuf.c_str(), header_size);
+
+        wait_for_flag(&m_am_received);
+        request_wait(sptr);
+        EXPECT_TRUE(m_am_received);
+    }
+
+    void test_am(size_t size) {
+        size_t small_hdr_size = 8;
+
+        test_am_send_recv(size, 0);
+        test_am_send_recv(size, small_hdr_size);
+
+        if (max_am_hdr() > small_hdr_size) {
+            test_am_send_recv(size, max_am_hdr());
+        }
+    }
+
+    void am_data_handler(const void *header, size_t header_length, void *data,
+                         size_t length, const ucp_am_recv_param_t *rx_param)
+    {
+        ASSERT_FALSE(m_am_received);
+        EXPECT_EQ(std::string::npos,
+                  std::string((const char*)data, length).find_first_not_of('d'));
+
+        if (header_length != 0) {
+            EXPECT_EQ(std::string::npos,
+                      std::string((const char*)header,
+                                  header_length).find_first_not_of('h'));
+        }
+
+        bool has_reply_ep = GetParam().variant == UCP_AM_SEND_REPLY;
+
+        EXPECT_EQ(has_reply_ep, rx_param->recv_attr &
+                                UCP_AM_RECV_ATTR_FIELD_REPLY_EP);
+        EXPECT_EQ(has_reply_ep, rx_param->reply_ep != NULL);
+
+        EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
+
+        m_am_received = true;
+    }
+
+    static ucs_status_t am_data_cb(void *arg, const void *header,
+                                   size_t header_length, void *data,
+                                   size_t length,
+                                   const ucp_am_recv_param_t *param)
+    {
+        test_ucp_am_nbx *self = reinterpret_cast<test_ucp_am_nbx*>(arg);
+        self->am_data_handler(header, header_length, data, length, param);
+        return UCS_OK;
+    }
+
+    static const uint16_t TEST_AM_NBX_ID = 0;
+    volatile bool         m_am_received;
 };
 
 UCS_TEST_P(test_ucp_am_nbx, set_invalid_handler)
@@ -362,6 +460,42 @@ UCS_TEST_P(test_ucp_am_nbx, set_invalid_handler)
     status            = ucp_worker_set_am_recv_handler(sender().worker(),
                                                        &params);
     EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+}
+
+UCS_TEST_P(test_ucp_am_nbx, max_am_header)
+{
+    size_t min_am_bcopy       = std::numeric_limits<size_t>::max();
+    bool has_tl_with_am_bcopy = false;
+
+    for (ucp_rsc_index_t idx = 0; idx < sender().ucph()->num_tls; ++idx) {
+        uct_iface_attr_t *attr = ucp_worker_iface_get_attr(sender().worker(), idx);
+        if (attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+            min_am_bcopy = ucs_min(min_am_bcopy, attr->cap.am.max_bcopy);
+            has_tl_with_am_bcopy = true;
+        }
+    }
+
+    EXPECT_TRUE(has_tl_with_am_bcopy);
+
+    EXPECT_GE(max_am_hdr(), 64ul);
+    EXPECT_LT(max_am_hdr(), min_am_bcopy);
+}
+
+UCS_TEST_P(test_ucp_am_nbx, short_send)
+{
+    test_am(1);
+}
+
+UCS_TEST_P(test_ucp_am_nbx, short_bcopy_send, "ZCOPY_THRESH=-1",
+                                              "RNDV_THRESH=-1")
+{
+    test_am(4096);
+}
+
+UCS_TEST_P(test_ucp_am_nbx, long_bcopy_send, "ZCOPY_THRESH=-1",
+                                             "RNDV_THRESH=-1")
+{
+    test_am(65536);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
