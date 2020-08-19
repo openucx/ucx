@@ -50,10 +50,11 @@ static int num_iterations            = DEFAULT_NUM_ITERATIONS;
 
 
 typedef enum {
-    CLIENT_SERVER_SEND_RECV_STREAM  = UCS_BIT(0),
-    CLIENT_SERVER_SEND_RECV_TAG     = UCS_BIT(1),
-    CLIENT_SERVER_SEND_RECV_AM      = UCS_BIT(2),
-    CLIENT_SERVER_SEND_RECV_DEFAULT = CLIENT_SERVER_SEND_RECV_STREAM
+    CLIENT_SERVER_SEND_RECV_STREAM   = UCS_BIT(0),
+    CLIENT_SERVER_SEND_RECV_TAG      = UCS_BIT(1),
+    CLIENT_SERVER_SEND_RECV_AM       = UCS_BIT(2),
+    CLIENT_SERVER_SEND_RECV_AM_FETCH = UCS_BIT(3),
+    CLIENT_SERVER_SEND_RECV_DEFAULT  = CLIENT_SERVER_SEND_RECV_STREAM
 } send_recv_type_t;
 
 
@@ -83,9 +84,11 @@ typedef struct test_req {
 static struct {
     volatile int complete;
     int          is_rndv;
+    int          is_fetch;
     void         *desc;
     void         *recv_buf;
-} am_data_desc = {0, 0, NULL, NULL};
+    ucp_ep_h     reply_ep;
+} am_data_desc = {0, 0, 0, NULL, NULL, NULL};
 
 
 /**
@@ -115,10 +118,10 @@ stream_recv_cb(void *request, ucs_status_t status, size_t length,
 }
 
 /**
- * The callback on the receiving side, which is invoked upon receiving the
+ * The callback, which is invoked upon completion of sending or receiving the
  * active message.
  */
-static void am_recv_cb(void *request, ucs_status_t status, size_t length,
+static void am_comp_cb(void *request, ucs_status_t status, size_t length,
                        void *user_data)
 {
     test_req_t *ctx = user_data;
@@ -378,12 +381,25 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
         am_data_desc.is_rndv = 1;
         am_data_desc.desc    = data;
         return UCS_INPROGRESS;
+    } else if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_FETCH_DATA) {
+        if (!(param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP)) {
+            fprintf(stderr, "reply ep is not provided with data fetch request");
+            am_data_desc.reply_ep = NULL;
+        } else {
+            am_data_desc.reply_ep = param->reply_ep;
+        }
+
+        am_data_desc.is_fetch = 1;
+        am_data_desc.desc     = data;
+        return UCS_INPROGRESS;
     }
 
     /* Message delivered with eager protocol, data should be available
      * immediately
      */
-    am_data_desc.is_rndv = 0;
+    am_data_desc.is_rndv  = 0;
+    am_data_desc.is_fetch = 0;
+    am_data_desc.reply_ep = NULL;
     memcpy(am_data_desc.recv_buf, data, length);
 
 out:
@@ -422,7 +438,7 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
              * to confirm data transfer from the sender to the "recv_message"
              * buffer. */
             params.op_attr_mask |= UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
-            params.cb.recv_am    = (ucp_am_data_recv_nbx_callback_t)am_recv_cb,
+            params.cb.am         = am_comp_cb,
             request              = ucp_am_data_recv_nbx(am_data_desc.desc,
                                                         &recv_message,
                                                         TEST_STRING_LEN,
@@ -434,10 +450,62 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
         }
     } else {
         /* Client sends a message to the server using the AM API */
-        params.cb.send = (ucp_send_nbx_callback_t)send_cb,
-        request        = ucp_am_send_nbx(ep, TEST_AM_ID, NULL, 0ul,
-                                         test_message, TEST_STRING_LEN,
-                                         &params);
+        params.cb.am = am_comp_cb,
+        request      = ucp_am_send_nbx(ep, TEST_AM_ID, NULL, 0ul, test_message,
+                                       TEST_STRING_LEN, &params);
+    }
+
+    return request_finalize(ucp_worker, request, &ctx, is_server, recv_message,
+                            current_iter);
+}
+
+/**
+ * Send and receive a message using Active Message fetch data API.
+ * The server sends a request for data to the client and waits until the client
+ * replies.
+ * The client receives a data request from the server and sends the data back.
+ */
+static int send_recv_am_fetch(ucp_worker_h ucp_worker, ucp_ep_h ep,
+                              int is_server, int current_iter)
+{
+    char recv_message[TEST_STRING_LEN] = "";
+    test_req_t *request;
+    ucp_request_param_t params;
+    test_req_t ctx;
+
+    ctx.complete          = 0;
+    params.op_attr_mask   = UCP_OP_ATTR_FIELD_CALLBACK |
+                            UCP_OP_ATTR_FIELD_USER_DATA;
+    params.user_data      = &ctx;
+
+    if (is_server) {
+        /* Server sends a request for data using the AM API. It has to specify
+         * UCP_AM_SEND_FETCH_DATA flag and params.reply_buffer. */
+        params.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS |
+                               UCP_OP_ATTR_FIELD_REPLY_BUFFER;
+        params.flags         = UCP_AM_SEND_FETCH_DATA;
+        params.reply_buffer  = recv_message; /* result will be stored here */
+        params.cb.am         = am_comp_cb,
+
+        /* Note this request will be completed when the data is ready in
+         * params.reply_buffer (recv_message). */
+        request              = ucp_am_send_nbx(ep, TEST_AM_ID, NULL, 0ul,
+                                               NULL, /* send buffer is ignored
+                                                        for fetch data request */
+                                               TEST_STRING_LEN,
+                                               &params);
+    } else {
+        while (!am_data_desc.complete) {
+            ucp_worker_progress(ucp_worker);
+        }
+        am_data_desc.complete = 0;
+
+        /* Client sends a message to the server buffer using the AM reply API */
+        params.cb.send = send_cb,
+        request        = ucp_am_send_reply_nbx(am_data_desc.reply_ep,
+                                               am_data_desc.desc,
+                                               test_message, TEST_STRING_LEN,
+                                               &params);
     }
 
     return request_finalize(ucp_worker, request, &ctx, is_server, recv_message,
@@ -524,6 +592,11 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
             } else if (!strcasecmp(optarg, "am")) {
                 /* TODO: uncomment below when AM API is fully supported.
                  * *send_recv_type = CLIENT_SERVER_SEND_RECV_AM; */
+                fprintf(stderr, "AM API is not fully supported yet\n");
+                return -1;
+            } else if (!strcasecmp(optarg, "am_fetch")) {
+                /* TODO: uncomment below when AM API is fully supported.
+                 * *send_recv_type = CLIENT_SERVER_SEND_RECV_AM_FETCH; */
                 fprintf(stderr, "AM API is not fully supported yet\n");
                 return -1;
             } else {
@@ -613,6 +686,10 @@ static int client_server_communication(ucp_worker_h worker, ucp_ep_h ep,
     case CLIENT_SERVER_SEND_RECV_AM:
         /* Client-Server communication via AM API. */
         ret = send_recv_am(worker, ep, is_server, current_iter);
+        break;
+    case CLIENT_SERVER_SEND_RECV_AM_FETCH:
+        /* Client-Server communication via AM fetch API. */
+        ret = send_recv_am_fetch(worker, ep, is_server, current_iter);
         break;
     default:
         fprintf(stderr, "unknown send-recv type %d\n", send_recv_type);
@@ -795,7 +872,8 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
         goto err;
     }
 
-    if (send_recv_type == CLIENT_SERVER_SEND_RECV_AM) {
+    if ((send_recv_type == CLIENT_SERVER_SEND_RECV_AM) ||
+        (send_recv_type == CLIENT_SERVER_SEND_RECV_AM_FETCH)) {
         /* Initialize Active Message data handler */
         param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
                            UCP_AM_HANDLER_PARAM_FIELD_CB |
