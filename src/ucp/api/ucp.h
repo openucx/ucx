@@ -2795,6 +2795,7 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  * @note Currently Active Message API supports communication operations with
  *       host memory only.
  *
+ * @param [in]  worker     Worker that is used for the receive operation.
  * @param [in]  data_desc  Data descriptor, provided in
                            @ref ucp_am_recv_callback_t routine.
  * @param [in]  buffer     Pointer to the buffer to receive the data.
@@ -2810,7 +2811,8 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *                                the application is responsible for releasing
  *                                the handle using @ref ucp_request_free routine.
  */
-ucs_status_ptr_t ucp_am_data_recv_nbx(void *data_desc, void *buffer, size_t count,
+ucs_status_ptr_t ucp_am_data_recv_nbx(ucp_worker_h worker, void *data_desc,
+                                      void *buffer, size_t count,
                                       const ucp_request_param_t *param);
 
 

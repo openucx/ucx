@@ -423,7 +423,8 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
              * buffer. */
             params.op_attr_mask |= UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
             params.cb.recv_am    = (ucp_am_data_recv_nbx_callback_t)am_recv_cb,
-            request              = ucp_am_data_recv_nbx(am_data_desc.desc,
+            request              = ucp_am_data_recv_nbx(ucp_worker,
+                                                        am_data_desc.desc,
                                                         &recv_message,
                                                         TEST_STRING_LEN,
                                                         &params);
