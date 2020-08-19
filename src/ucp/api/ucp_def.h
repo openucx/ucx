@@ -515,7 +515,7 @@ typedef void (*ucp_tag_recv_nbx_callback_t)(void *request, ucs_status_t status,
  * @ingroup UCP_COMM
  * @brief Completion callback for non-blocking Active Message receives.
  *
- * This callback routine is invoked whenever the @ref ucp_am_data_recv_nbx
+ * This callback routine is invoked whenever the @ref ucp_am_recv_nbx
  * "receive operation" is completed and the data is ready in the receive buffer.
  *
  * @param [in]  request   The completed receive request.
@@ -528,8 +528,8 @@ typedef void (*ucp_tag_recv_nbx_callback_t)(void *request, ucs_status_t status,
  * @param [in]  user_data User data passed to "user_data" value,
  *                        see @ref ucp_request_param_t
  */
-typedef void (*ucp_am_data_recv_nbx_callback_t)(void *request, ucs_status_t status,
-                                                size_t length, void *user_data);
+typedef void (*ucp_am_recv_nbx_callback_t)(void *request, ucs_status_t status,
+                                           size_t length, void *user_data);
 
 
 /**
@@ -624,7 +624,7 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  *                            @ref ucp_am_recv_param_t.recv_attr. Otherwise
  *                            it points to the internal UCP descriptor which
  *                            can further be used for initiating data receive
- *                            by using @ref ucp_am_data_recv_nbx routine.
+ *                            by using @ref ucp_am_recv_nbx routine.
  * @param [in]  length        Length of data. If @a UCP_AM_RECV_ATTR_FLAG_RNDV
  *                            flag is set in @ref ucp_am_recv_param_t.recv_attr,
  *                            it indicates the required receive buffer size for
@@ -644,7 +644,7 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  *                        a pointer to the data must be passed into
  *                        @ref ucp_am_data_release or, in the case of rendezvous
  *                        descriptor, data receive is initiated by
- *                        @ref ucp_am_data_recv_nbx.
+ *                        @ref ucp_am_recv_nbx.
  *
  * @return otherwise      Can only be returned if @a param->recv_attr contains
  *                        UCP_AM_RECV_ATTR_FLAG_RNDV. In this case data
