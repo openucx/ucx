@@ -675,9 +675,9 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id, const void *payload,
 }
 
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_data_recv_nbx,
-                 (data_desc, buffer, count, param),
-                 void *data_desc, void *buffer, size_t count,
-                 const ucp_request_param_t *param)
+                 (worker, data_desc, buffer, count, param),
+                 ucp_worker_h worker, void *data_desc, void *buffer,
+                 size_t count, const ucp_request_param_t *param)
 {
     return UCS_STATUS_PTR(UCS_ERR_NOT_IMPLEMENTED);
 }
