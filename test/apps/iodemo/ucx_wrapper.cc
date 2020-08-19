@@ -102,6 +102,7 @@ bool UcxContext::init()
     status = ucp_worker_create(_context, &worker_params, &_worker);
     if (status != UCS_OK) {
         ucp_cleanup(_context);
+        _context = NULL;
         UCX_LOG << "ucp_worker_create() failed: " << ucs_status_string(status);
         return false;
     }
