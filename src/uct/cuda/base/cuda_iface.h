@@ -58,20 +58,20 @@
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
-#define UCT_CUDADRV_CTX_ACTIVE(_state)                                       \
-    {                                                                        \
-        CUcontext cur_ctx;                                                   \
-        CUdevice dev;                                                        \
-        unsigned flags;                                                      \
-                                                                             \
-        _state = 0;                                                          \
-        /* avoid active state check if no cuda activity */                   \
-        if ((CUDA_SUCCESS == cuCtxGetCurrent(&cur_ctx)) &&                   \
-            (NULL != cur_ctx)) {                                             \
-            UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&dev));                  \
-            UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxGetState(dev, &flags, \
-                                                                &_state));   \
-        }                                                                    \
+#define UCT_CUDADRV_CTX_ACTIVE(_state)                                        \
+    {                                                                         \
+        CUcontext _cur_ctx;                                                   \
+        CUdevice _dev;                                                        \
+        unsigned _flags;                                                      \
+                                                                              \
+        _state = 0;                                                           \
+        /* avoid active state check if no cuda activity */                    \
+        if ((CUDA_SUCCESS == cuCtxGetCurrent(&_cur_ctx)) &&                   \
+            (NULL != _cur_ctx)) {                                             \
+            UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&_dev));                  \
+            UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxGetState(_dev, &_flags,\
+                                                                &_state));    \
+        }                                                                     \
     }
 
 
