@@ -525,6 +525,8 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
 
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
 
+void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker);
+
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
 uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep);
