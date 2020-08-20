@@ -55,6 +55,8 @@ stages:
             tag: $(Build.SourceBranchName)
             isDraft: true
             addChangeLog: false
+            releaseNotesSource: file
+            releaseNotesFile: NEWS
             assetUploadMode: replace
             assets: |
               ./ucx-*.tar.gz
