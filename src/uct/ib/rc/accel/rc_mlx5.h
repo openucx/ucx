@@ -109,6 +109,8 @@ ucs_status_t uct_rc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
 
 ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags);
 
+ucs_status_t uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
