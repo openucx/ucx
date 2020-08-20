@@ -185,6 +185,16 @@ uint64_t ucs_generate_uuid(uint64_t seed);
 
 
 /**
+ * Returns a value one greater than the maximum file descriptor
+ * number that can be opened by this process. Attempts to exceed
+ * this limit yield the error EMFILE.
+ *
+ * @return The maximal number of files that could be opened simultaneously.
+ */
+int ucs_sys_max_open_files();
+
+
+/**
  * Open an output stream according to user configuration:
  *   - file:<name> - file name, %p, %h, %c are substituted.
  *   - stdout
