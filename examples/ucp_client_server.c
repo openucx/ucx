@@ -428,7 +428,7 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
                                                    &recv_message,
                                                    TEST_STRING_LEN, &params);
         } else {
-            /* Data is arrived eagerly and is ready for use, no need to
+            /* Data has arrived eagerly and is ready for use, no need to
              * initiate receive operation. */
             request = NULL;
         }
