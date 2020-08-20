@@ -11,7 +11,6 @@
 #include <ucs/sys/string.h>
 #include <ucs/config/parser.h>
 
-#include <sys/resource.h>
 #include <set>
 
 namespace ucs {
@@ -335,16 +334,13 @@ int max_tcp_connections()
 {
     static int max_conn = 0;
 
-    if (!max_conn) {
-        max_conn = 65535 - 1024; /* limit on number of ports */
-
-        /* Limit numer of endpoints to number of open files, for TCP */
-        struct rlimit rlim;
-        int ret = getrlimit(RLIMIT_NOFILE, &rlim);
-        if (ret == 0) {
-            /* assume no more than 100 fd-s are already used */
-            max_conn = ucs_min((static_cast<int>(rlim.rlim_cur) - 100) / 2, max_conn);
-        }
+    if (max_conn == 0) {
+        /* assume no more than 100 fd-s are already used and consider
+         * that each side of the connection could create 2 socket fds
+         * (1 - from ucp_ep_create() API function, 2 - from accepting
+         * the remote connection), i.e. 4 socket fds per connection  */
+        max_conn = std::min((ucs_sys_max_open_files() - 100) / 4,
+                            65535 - 1024/* limit on number of ports */);
     }
 
     return max_conn;
