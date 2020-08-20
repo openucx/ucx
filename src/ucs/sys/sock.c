@@ -41,7 +41,9 @@ static void ucs_socket_print_error_info(int sys_errno)
 {
     if (sys_errno == EMFILE) {
         ucs_error("the maximal number of files that could be opened "
-                  "simultaneously (%d) was reached, try to increase the limit",
+                  "simultaneously was reached, try to increase the "
+                  "limit. Please, set max open files (ulimit -n) "
+                  "to the greater value (current: %d)",
                   ucs_sys_max_open_files());
     }
 }
