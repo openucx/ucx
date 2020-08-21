@@ -1492,7 +1492,7 @@ UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
     }
 
     ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep());
-    EXPECT_NE(ep_config->key.ep_check_map, 0);
+    EXPECT_NE(0, ep_config->key.ep_check_map);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)
