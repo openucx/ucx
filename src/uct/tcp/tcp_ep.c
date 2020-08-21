@@ -1292,7 +1292,7 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     uct_tcp_iface_t *iface = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
     uct_tcp_am_hdr_t *hdr  = NULL;
     struct iovec iov[UCT_TCP_EP_AM_SHORTV_IOV_COUNT];
-    uint32_t payload_length;
+    uint32_t UCS_V_UNUSED payload_length;
     size_t offset;
     ucs_status_t status;
 
