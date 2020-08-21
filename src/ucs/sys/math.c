@@ -28,11 +28,11 @@ static uint64_t ucs_large_primes[] = {
     9929050207ull, 9929050217ull, 9929050249ull, 9929050253ull
 };
 
-uint64_t ucs_get_prime(unsigned index)
+uint64_t ucs_get_prime(unsigned index_val)
 {
     static const unsigned num_primes = sizeof(ucs_large_primes) / sizeof(ucs_large_primes[0]);
 
-    return ucs_large_primes[index % num_primes];
+    return ucs_large_primes[index_val % num_primes];
 }
 
 void ucs_rand_seed_init()
