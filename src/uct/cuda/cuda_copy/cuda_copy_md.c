@@ -37,17 +37,17 @@ static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 
     UCT_CUDADRV_CTX_ACTIVE(active);
     if (!active) {
-        return UCS_ERR_NO_DEVICE;
-    }
+        total = 0;
+    } else {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&dev));
+        if (status != UCS_OK) {
+            return status;
+        }
 
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&dev));
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceTotalMem(&total, dev));
-    if (status != UCS_OK) {
-        return status;
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceTotalMem(&total, dev));
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     md_attr->cap.flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
