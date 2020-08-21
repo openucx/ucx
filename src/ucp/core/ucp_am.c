@@ -674,7 +674,7 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id, const void *payload,
     return ucp_am_send_nbx(ep, id, NULL, 0, payload, count, &params);
 }
 
-UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_nbx,
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
                  (worker, data_desc, buffer, count, param),
                  ucp_worker_h worker, void *data_desc, void *buffer,
                  size_t count, const ucp_request_param_t *param)

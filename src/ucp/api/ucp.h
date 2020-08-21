@@ -635,7 +635,7 @@ typedef enum {
      * Indicates that the arriving data was sent using rendezvous protocol.
      * In this case @a data parameter of the @ref ucp_am_recv_callback_t points
      * to the internal UCP descriptor, which can be used for obtaining the actual
-     * data by calling @ref ucp_am_recv_nbx routine. This flag is mutually
+     * data by calling @ref ucp_am_recv_data_nbx routine. This flag is mutually
      * exclusive with @a UCP_AM_RECV_ATTR_FLAG_DATA.
      */
     UCP_AM_RECV_ATTR_FLAG_RNDV         = UCS_BIT(17)
@@ -1321,7 +1321,7 @@ struct ucp_tag_recv_info {
  * @ingroup UCP_CONTEXT
  * @brief Operation parameters passed to @ref ucp_tag_send_nbx,
  *        @ref ucp_tag_send_sync_nbx, @ref ucp_tag_recv_nbx, @ref ucp_put_nbx,
- *        @ref ucp_get_nbx, @ref ucp_am_send_nbx and @ref ucp_am_recv_nbx.
+ *        @ref ucp_get_nbx, @ref ucp_am_send_nbx and @ref ucp_am_recv_data_nbx.
  *
  * The structure @ref ucp_request_param_t is used to specify datatype of
  * operation, provide user request in case the external request is used,
@@ -1381,10 +1381,10 @@ typedef struct {
      * send or receive operation is completed.
      */
     union {
-        ucp_send_nbx_callback_t        send;
-        ucp_tag_recv_nbx_callback_t    recv;
-        ucp_stream_recv_nbx_callback_t recv_stream;
-        ucp_am_recv_nbx_callback_t     recv_am;
+        ucp_send_nbx_callback_t         send;
+        ucp_tag_recv_nbx_callback_t     recv;
+        ucp_stream_recv_nbx_callback_t  recv_stream;
+        ucp_am_recv_data_nbx_callback_t recv_am;
     }              cb;
 
     /**
@@ -2811,9 +2811,9 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *                                the application is responsible for releasing
  *                                the handle using @ref ucp_request_free routine.
  */
-ucs_status_ptr_t ucp_am_recv_nbx(ucp_worker_h worker, void *data_desc,
-                                 void *buffer, size_t count,
-                                 const ucp_request_param_t *param);
+ucs_status_ptr_t ucp_am_recv_data_nbx(ucp_worker_h worker, void *data_desc,
+                                      void *buffer, size_t count,
+                                      const ucp_request_param_t *param);
 
 
 /**
