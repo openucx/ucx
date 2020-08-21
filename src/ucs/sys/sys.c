@@ -26,6 +26,7 @@
 #include <sys/shm.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <net/if.h>
 #include <dirent.h>
 #include <sched.h>
@@ -292,6 +293,24 @@ uint64_t ucs_generate_uuid(uint64_t seed)
            ucs_get_prime(3) * tv.tv_sec +
            ucs_get_prime(4) * tv.tv_usec +
            __sumup_host_name(5);
+}
+
+int ucs_sys_max_open_files()
+{
+    static int file_limit = 0;
+    struct rlimit rlim;
+    int ret;
+
+    if (file_limit == 0) {
+        ret = getrlimit(RLIMIT_NOFILE, &rlim);
+        if (ret == 0) {
+            file_limit = (int)rlim.rlim_cur;
+        } else {
+            file_limit = 1024;
+        }
+    }
+
+    return file_limit;
 }
 
 ucs_status_t

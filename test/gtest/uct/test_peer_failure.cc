@@ -453,6 +453,10 @@ void test_uct_peer_failure_multiple::init()
         test_uct_peer_failure::m_nreceivers = tx_queue_len;
     }
 
+    test_uct_peer_failure::m_nreceivers =
+        std::min(test_uct_peer_failure::m_nreceivers,
+                 static_cast<size_t>(max_connections()));
+
     test_uct_peer_failure::m_tx_window  = tx_queue_len / 3;
 
     test_uct_peer_failure::init();
