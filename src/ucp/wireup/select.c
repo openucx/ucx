@@ -833,7 +833,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
     select_info.path_index = 0;  /**< Only one lane per CM device */
 
     /* server is not a proxy because it can create all lanes connected */
-    return ucp_wireup_add_lane_desc(&select_info, select_info.rsc_index,
+    return ucp_wireup_add_lane_desc(&select_info, UCP_MAX_MDS,
                                     UCP_LANE_TYPE_CM, 0, select_ctx);
 }
 
