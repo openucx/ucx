@@ -8,6 +8,7 @@
 extern "C" {
 #include <ucs/arch/atomic.h>
 }
+#include <list>
 
 class uct_flush_test : public uct_test {
 public:
@@ -542,3 +543,265 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, am_pending_flush_nb,
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_flush_test)
+
+class uct_cancel_test : public uct_test {
+    class peer {
+        uct_cancel_test &test;
+
+    public:
+
+        struct peer *m_peer;
+        entity *m_e;
+        mapped_buffer *m_buf1k;
+        mapped_buffer *m_buf8k;
+        mapped_buffer *m_buf32;
+
+        peer(uct_cancel_test *test, peer *peer) :
+            test(*test), m_peer(peer),
+            m_e(NULL), m_buf1k(NULL), m_buf8k(NULL), m_buf32(NULL) {}
+
+        void init() {
+            m_e = test.uct_test::create_entity(0, error_handler_cb);
+            test.m_entities.push_back(m_e);
+            m_buf1k = new mapped_buffer(1 * 1024, 0, *m_e);
+            m_buf8k = new mapped_buffer(8 * 1024, 0, *m_e);
+            m_buf32 = new mapped_buffer(32, 0, *m_e);
+            uct_iface_set_am_handler(m_e->iface(), 0, am_cb, &test,
+                                     UCT_CB_FLAG_ASYNC);
+        }
+
+        void cleanup() {
+            if (m_buf1k) {
+                delete m_buf1k;
+                delete m_buf8k;
+                delete m_buf32;
+                m_buf1k = NULL;
+            }
+        }
+
+        ~peer() {
+            cleanup();
+        }
+
+        void connect() {
+            m_e->connect(0, *m_peer->m_e, 0);
+            m_peer->m_e->connect(0, *m_e, 0);
+        }
+    };
+
+    peer s0;
+    peer s1;
+
+    virtual void init() {
+        uct_test::init();
+
+        s0.init();
+        check_skip_test_tl();
+        s1.init();
+
+        s0.connect();
+        flush();
+    }
+
+    virtual void cleanup() {
+        flush();
+
+        s0.cleanup();
+        s1.cleanup();
+
+        uct_test::cleanup();
+    }
+
+    static ucs_status_t
+    error_handler_cb(void *arg, uct_ep_h ep, ucs_status_t status) {
+        uct_cancel_test *test = reinterpret_cast<uct_cancel_test*>(arg);
+        return test->error_handler(ep, status);
+    }
+
+    static ucs_status_t am_cb(void *arg, void *data, size_t length, unsigned flags) {
+        uct_cancel_test *test = reinterpret_cast<uct_cancel_test*>(arg);
+        return test->am(data, length, flags);
+    }
+
+    ucs_status_t error_handler(uct_ep_h ep, ucs_status_t status) {
+        EXPECT_EQ(UCS_ERR_CANCELED, status);
+        return UCS_OK;
+    }
+
+    ucs_status_t am(void *data, size_t length, unsigned flags) {
+        return UCS_OK;
+    }
+
+    void check_skip_test_tl() {
+        const resource *r = dynamic_cast<const resource*>(GetParam());
+
+        if ((r->tl_name != "rc_mlx5") &&
+            (r->tl_name != "rc_verbs")) {
+            UCS_TEST_SKIP_R("not supported yet");
+        }
+
+        check_skip_test();
+    }
+
+public:
+    uct_cancel_test() : uct_test(), s0(this, &s1), s1(this, &s0) {}
+
+    ucs_status_t am_bcopy(peer *s) {
+        mapped_buffer &sendbuf = *s->m_buf32;
+        ssize_t packed_len;
+
+        packed_len = uct_ep_am_bcopy(s->m_e->ep(0), 0, mapped_buffer::pack,
+                                     (void*)&sendbuf, 0);
+        if (packed_len >= 0) {
+            EXPECT_EQ(sendbuf.length(), (size_t)packed_len);
+            return UCS_OK;
+        } else {
+            return (ucs_status_t)packed_len;
+        }
+    }
+
+    ucs_status_t am_zcopy(peer *s) {
+        mapped_buffer &sendbuf = *s->m_buf8k;
+        ucs_status_t status;
+        size_t header_length = 0;
+        uct_iov_t iov;
+
+        iov.buffer = (char*)sendbuf.ptr() + header_length;
+        iov.count  = 1;
+        iov.length = sendbuf.length() - header_length;
+        iov.memh   = sendbuf.memh();
+        status = uct_ep_am_zcopy(s->m_e->ep(0), 0, sendbuf.ptr(), header_length,
+                                 &iov, 1, 0, NULL);
+        return status;
+    }
+
+    ucs_status_t get_zcopy(peer *s) {
+        mapped_buffer &sendbuf = *s->m_buf8k;
+        mapped_buffer &recvbuf = *s->m_peer->m_buf8k;
+
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
+                sendbuf.memh(), s->m_e->iface_attr().cap.get.max_iov);
+
+        return uct_ep_get_zcopy(s->m_e->ep(0), iov, iovcnt, recvbuf.addr(),
+                                recvbuf.rkey(), NULL);
+    }
+
+    ucs_status_t get_bcopy(peer *s) {
+        mapped_buffer &sendbuf = *s->m_buf32;
+        mapped_buffer &recvbuf = *s->m_peer->m_buf32;
+
+        return uct_ep_get_bcopy(s->m_e->ep(0), (uct_unpack_callback_t)memcpy,
+                                sendbuf.ptr(), sendbuf.length(),
+                                recvbuf.addr(), recvbuf.rkey(), NULL);
+    }
+
+    struct comp : public uct_completion_t {
+        comp() : flag(false) {
+            count = 0;
+            func  = comp_cb;
+        }
+
+        volatile bool flag;
+        static void comp_cb(uct_completion_t *self, ucs_status_t status) {
+            comp *c = static_cast<comp*>(self);
+            ASSERT_TRUE((status == UCS_OK) || (status == UCS_ERR_CANCELED));
+            c->flag = true;
+        }
+    };
+
+    void flush_and_reconnect() {
+        std::list<entity *> flushing;
+        ucs_status_t status = UCS_OK;
+        struct comp done;
+
+        flushing.push_back(s0.m_e);
+        flushing.push_back(s1.m_e);
+        done.count = flushing.size();
+        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(50.0);
+        while (!flushing.empty() && ucs_get_time() < loop_end_limit) {
+            std::list<entity *>::iterator i = flushing.begin();
+            while (i != flushing.end()) {
+                status = uct_ep_flush((*i)->ep(0), UCT_FLUSH_FLAG_CANCEL, &done);
+                if (status == UCS_ERR_NO_RESOURCE) {
+                    i++;
+                } else {
+                    ASSERT_UCS_OK_OR_INPROGRESS(status);
+                    i = flushing.erase(i);
+                    if (status == UCS_OK) {
+                        done.count--;
+                    }
+                }
+            }
+
+            short_progress_loop();
+        }
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+
+        if (done.count) {
+            wait_for_flag(&done.flag);
+        }
+
+        s1.m_e->destroy_eps();
+        s1.m_e->connect(0, *s0.m_e, 0);
+    }
+
+    typedef ucs_status_t (uct_cancel_test::* send_func_t)(peer *s);
+
+    void fill(send_func_t send) {
+        ucs_status_t status;
+        std::list<peer *> filling;
+
+        filling.push_back(&s0);
+        filling.push_back(&s1);
+        while (!filling.empty()) {
+            std::list<peer *>::iterator i = filling.begin();
+            while (i != filling.end()) {
+                status = (this->*send)(*i);
+                if (status == UCS_ERR_NO_RESOURCE) {
+                    i = filling.erase(i);
+                } else {
+                    ASSERT_UCS_OK_OR_INPROGRESS(status);
+                    i++;
+                }
+            }
+        }
+    }
+
+    int count() {
+        return 100;
+    }
+};
+
+UCS_TEST_SKIP_COND_P(uct_cancel_test, am_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY)) {
+    for (int i = 0; i < count(); ++i) {
+        fill(&uct_cancel_test::am_zcopy);
+        flush_and_reconnect();
+    }
+}
+
+UCS_TEST_SKIP_COND_P(uct_cancel_test, am_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY)) {
+    for (int i = 0; i < count(); ++i) {
+        fill(&uct_cancel_test::am_bcopy);
+        flush_and_reconnect();
+    }
+}
+
+UCS_TEST_SKIP_COND_P(uct_cancel_test, get_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_BCOPY)) {
+    for (int i = 0; i < count(); ++i) {
+        fill(&uct_cancel_test::get_bcopy);
+        flush_and_reconnect();
+    }
+}
+
+UCS_TEST_SKIP_COND_P(uct_cancel_test, get_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
+    for (int i = 0; i < count(); ++i) {
+        fill(&uct_cancel_test::get_zcopy);
+        flush_and_reconnect();
+    }
+}
+
+UCT_INSTANTIATE_TEST_CASE(uct_cancel_test)
