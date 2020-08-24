@@ -145,6 +145,10 @@ void ucp_wireup_remote_connected(ucp_ep_h ep);
 unsigned ucp_ep_init_flags(const ucp_worker_h worker,
                            const ucp_ep_params_t *params);
 
+ucp_lane_index_t ucp_wireup_ep_lane_used_by_another_ep(ucp_ep_h ep,
+                                                       ucp_ep_h another_ep,
+                                                       ucp_lane_index_t lane);
+
 ucs_status_t
 ucp_wireup_connect_local(ucp_ep_h ep,
                          const ucp_unpacked_address_t *remote_address,

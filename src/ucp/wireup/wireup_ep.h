@@ -21,6 +21,7 @@
 enum {
     UCP_WIREUP_EP_FLAG_READY           = UCS_BIT(0), /**< next_ep is fully connected */
     UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED = UCS_BIT(1), /**< Debug: next_ep connected to remote */
+    UCP_WIREUP_EP_FLAG_DESTROY_TMP_EP  = UCS_BIT(2)  /**< wireup ep is in progress to destroy TMP EP */
 };
 
 

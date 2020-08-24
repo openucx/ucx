@@ -271,9 +271,9 @@ ucp_wireup_match_p2p_lanes(ucp_ep_h ep,
 
 static ucs_status_t
 ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
-                               const ucp_unpacked_address_t *remote_address,
-                               const uct_ep_addr_t **ep_addr_p,
-                               const uct_device_addr_t **dev_addr_p)
+                                const ucp_unpacked_address_t *remote_address,
+                                const uct_ep_addr_t **ep_addr_p,
+                                const uct_device_addr_t **dev_addr_p)
 {
     const ucp_address_entry_t *address;
     unsigned ep_addr_index;
@@ -290,6 +290,35 @@ ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
     }
 
     return UCS_ERR_UNREACHABLE;
+}
+
+static ucp_lane_index_t
+ucp_wireup_ep_lane_used_by_another_ep_config(ucp_ep_config_key_t *ep_config_key,
+                                             ucp_ep_config_key_t *another_ep_config_key,
+                                             ucp_lane_index_t lane)
+{
+    ucp_lane_index_t another_lane;
+
+    for (another_lane = 0; another_lane < another_ep_config_key->num_lanes;
+         ++another_lane) {
+        if (ucp_ep_config_lane_is_equal(ep_config_key,
+                                        another_ep_config_key,
+                                        lane, 0)) {
+            return another_lane;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
+ucp_lane_index_t ucp_wireup_ep_lane_used_by_another_ep(ucp_ep_h ep,
+                                                       ucp_ep_h another_ep,
+                                                       ucp_lane_index_t lane)
+{
+    return ucp_wireup_ep_lane_used_by_another_ep_config(
+                       &ucp_ep_config(ep)->key,
+                       &ucp_ep_config(another_ep)->key,
+                       lane);
 }
 
 ucs_status_t
