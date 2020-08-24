@@ -41,7 +41,7 @@ public:
 
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
-        receiver().connect(&sender(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params()); 
     }
 };
 
