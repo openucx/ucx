@@ -84,8 +84,8 @@ static void UCS_F_MAYBE_UNUSED ucs_ptr_array_dump(ucs_ptr_array_t *ptr_array)
 #if UCS_ENABLE_ASSERT
     unsigned i;
 
-    ucs_trace_data("ptr_array start %p size %u",
-                   ptr_array->start, ptr_array->size);
+    ucs_trace_data("ptr_array start %p size %u count %u",
+                   ptr_array->start, ptr_array->size, ptr_array->count);
     for (i = 0; i < ptr_array->size; ++i) {
         if (ucs_ptr_array_is_free(ptr_array, i)) {
             ucs_trace_data("(%u) [%u]=<free> [%u]=<next>", i,
@@ -109,6 +109,7 @@ static void ucs_ptr_array_clear(ucs_ptr_array_t *ptr_array)
 {
     ptr_array->start            = NULL;
     ptr_array->size             = 0;
+    ptr_array->count            = 0;
     ptr_array->freelist         = UCS_PTR_ARRAY_SENTINEL;
 }
 
@@ -122,19 +123,16 @@ void ucs_ptr_array_init(ucs_ptr_array_t *ptr_array, const char *name)
 
 void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array)
 {
-    unsigned i, inuse;
+    unsigned i;
 
-    inuse = 0;
-    for (i = 0; i < ptr_array->size; ++i) {
-        if (!ucs_ptr_array_is_free(ptr_array, i)) {
-            ++inuse;
-            ucs_trace("ptr_array(%p) idx %d is not free during cleanup",
-                      ptr_array, i);
+    if (ptr_array->count > 0) {
+        ucs_warn("releasing ptr_array with %u used items", ptr_array->count);
+        for (i = 0; i < ptr_array->size; ++i) {
+            if (!ucs_ptr_array_is_free(ptr_array, i)) {
+                ucs_trace("ptr_array(%p) idx %d is not free during cleanup:"
+                          " 0x%"PRIx64, ptr_array, i, ptr_array->start[i]);
+            }
         }
-    }
-
-    if (inuse > 0) {
-        ucs_warn("releasing ptr_array with %u used items", inuse);
     }
 
     ucs_free(ptr_array->start);
@@ -200,6 +198,8 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value)
     ptr_array->freelist = ucs_ptr_array_freelist_get_next(*elem);
     *elem               = (uintptr_t)value;
 
+    ptr_array->count++;
+
     return element_index;
 }
 
@@ -219,6 +219,7 @@ void ucs_ptr_array_set(ucs_ptr_array_t *ptr_array, unsigned element_index,
 
     next = ucs_ptr_array_freelist_get_next(ptr_array->start[element_index]);
     ptr_array->start[element_index] = (uintptr_t)new_val;
+    ptr_array->count++;
 
     /* update the "next index" in the free list (removing element_index from it) */
     free_iter = ptr_array->freelist;
@@ -250,6 +251,7 @@ void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned element_index)
     uint32_t size_free_ahead;
 
     ucs_assert_always(!ucs_ptr_array_is_free(ptr_array, element_index));
+    ucs_assert(ptr_array->count > 0);
 
     if (ucs_ptr_array_is_free(ptr_array, element_index + 1)) {
         next_elem = &ptr_array->start[element_index + 1];
@@ -265,6 +267,7 @@ void ucs_ptr_array_remove(ucs_ptr_array_t *ptr_array, unsigned element_index)
     ucs_assert(__ucs_ptr_array_is_free(ptr_array->start[element_index + size_free_ahead - 1]));
 
     ptr_array->freelist = element_index;
+    ptr_array->count--;
 }
 
 void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned element_index,
