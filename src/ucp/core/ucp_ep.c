@@ -68,7 +68,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].rsc_index    = UCP_NULL_RESOURCE;
         key->lanes[i].proxy_lane   = UCP_NULL_LANE;
         key->lanes[i].lane_types   = 0;
-        key->lanes[i].dst_md_index = UCP_MAX_MDS;
+        key->lanes[i].dst_md_index = UCP_NULL_RESOURCE;
     }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_lane      = UCP_NULL_LANE;
