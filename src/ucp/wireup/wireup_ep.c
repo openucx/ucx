@@ -646,14 +646,14 @@ out:
     return status;
 }
 
-void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep, int is_owner)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
     ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->super.uct_ep == NULL);
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
+    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, is_owner);
 }
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)

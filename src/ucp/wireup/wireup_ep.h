@@ -82,7 +82,7 @@ ucs_status_t
 ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
                           const ucp_unpacked_address_t *remote_address);
 
-void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep, int is_owner);
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 

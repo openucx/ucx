@@ -195,7 +195,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
                 goto out;
             }
 
-            ucp_wireup_ep_set_next_ep(tmp_ep->uct_eps[lane_idx], tl_ep);
+            ucp_wireup_ep_set_next_ep(tmp_ep->uct_eps[lane_idx], tl_ep, 1);
         } else {
             ucs_assert(ucp_worker_is_tl_2iface(worker, rsc_idx));
         }
@@ -251,24 +251,48 @@ ucp_cm_client_connect_prog_arg_free(ucp_cm_client_connect_progress_arg_t *arg)
     ucs_free(arg);
 }
 
-static void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep,
-                                     ucp_ep_h ucp_ep)
+static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
+                                 int change_ownership)
 {
-    ucp_ep_h tmp_ep = wireup_cm_ep->tmp_ep;
-    ucp_wireup_ep_t *w_ep;
+    int to_is_owner, from_is_owner;
     ucp_lane_index_t lane_idx;
+    ucs_status_t status;
+    uct_ep_h uct_ep;
 
-    for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(tmp_ep); ++lane_idx) {
-        if (tmp_ep->uct_eps[lane_idx] != NULL) {
-            ucs_assert(ucp_ep->uct_eps[lane_idx] == NULL);
-            ucp_ep->uct_eps[lane_idx] = tmp_ep->uct_eps[lane_idx];
-            w_ep = ucs_derived_of(ucp_ep->uct_eps[lane_idx], ucp_wireup_ep_t);
-            w_ep->super.ucp_ep = ucp_ep;
-        }
+    if (change_ownership) {
+        to_is_owner   = 1;
+        from_is_owner = 0;
+    } else {
+        to_is_owner   = 0;
+        from_is_owner = 1;
     }
 
-    ucp_ep_destroy_base(tmp_ep); /* not needed anymore */
-    wireup_cm_ep->tmp_ep = NULL;
+    for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(from_ep); ++lane_idx) {
+        if ((lane_idx == ucp_ep_get_cm_lane(from_ep)) ||
+            (from_ep->uct_eps[lane_idx] == NULL)) {
+            continue;
+        }
+
+        ucs_assert(to_ep->uct_eps[lane_idx] == NULL);
+        status = ucp_wireup_ep_create(to_ep, &to_ep->uct_eps[lane_idx]);
+        if (status != UCS_OK) {
+            /* coverity[leaked_storage] */
+            continue;
+        }
+
+        uct_ep = ucp_wireup_extract_lane(from_ep, lane_idx);
+        ucp_wireup_ep_set_next_ep(to_ep->uct_eps[lane_idx],
+                                  uct_ep, to_is_owner);
+
+        if (from_ep->uct_eps[lane_idx] == NULL) {
+            /* from_ep must be the owner EP in this case */
+            ucs_assert(from_is_owner);
+            from_ep->uct_eps[lane_idx] = uct_ep;
+        } else {
+            ucp_wireup_ep_set_next_ep(from_ep->uct_eps[lane_idx],
+                                      uct_ep, from_is_owner);
+        }
+    }
 }
 
 /*
@@ -281,7 +305,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_worker_h worker                                = ucp_ep->worker;
     ucp_context_h context                              = worker->context;
     uct_ep_h uct_cm_ep                                 = ucp_ep_get_cm_uct_ep(ucp_ep);
-    ucp_wireup_ep_t *wireup_ep;
+    ucp_wireup_ep_t *cm_wireup_ep;
     ucp_unpacked_address_t addr;
     uint64_t tl_bitmap;
     ucp_rsc_index_t dev_index;
@@ -292,9 +316,9 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
-    ucs_assert(wireup_ep != NULL);
-    ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
+    cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
+    ucs_assert(cm_wireup_ep != NULL);
+    ucs_assert(cm_wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
 
     status = ucp_address_unpack(worker, progress_arg->sa_data + 1,
                                 UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
@@ -317,14 +341,14 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_ep_update_remote_id(ucp_ep, progress_arg->sa_data->ep_id);
 
     /* Get tl bitmap from tmp_ep, because it contains initial configuration. */
-    tl_bitmap = ucp_ep_get_tl_bitmap(wireup_ep->tmp_ep);
+    tl_bitmap = ucp_ep_get_tl_bitmap(cm_wireup_ep->tmp_ep);
     ucs_assert(tl_bitmap != 0);
     rsc_index = ucs_ffs64(tl_bitmap);
     dev_index = context->tl_rscs[rsc_index].dev_index;
 
     /* Restore initial configuration from tmp_ep created for packing local
      * addresses. */
-    ucp_cm_client_restore_ep(wireup_ep, ucp_ep);
+    ucp_cm_copy_ep_lanes(ucp_ep, cm_wireup_ep->tmp_ep, 1);
 
 #ifdef ENABLE_ASSERT
     ucs_for_each_bit(rsc_index, tl_bitmap) {
@@ -333,7 +357,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 #endif
 
     tl_bitmap = ucp_context_dev_idx_tl_bitmap(context, dev_index);
-    status    = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
+    status    = ucp_wireup_init_lanes(ucp_ep, cm_wireup_ep->ep_init_flags,
                                       tl_bitmap, &addr, addr_indices);
     if (status != UCS_OK) {
         goto out_free_addr;
@@ -357,7 +381,7 @@ out_free_addr:
     ucs_free(addr.address_list);
 out:
     if (status != UCS_OK) {
-        ucp_worker_set_ep_failed(worker, ucp_ep, &wireup_ep->super.super,
+        ucp_worker_set_ep_failed(worker, ucp_ep, &cm_wireup_ep->super.super,
                                  ucp_ep_get_cm_lane(ucp_ep), status);
     }
 
@@ -640,7 +664,7 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
         return status;
     }
 
-    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep);
+    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep, 1);
     ucp_ep_flush_state_reset(ucp_ep);
 
     return UCS_OK;
@@ -966,7 +990,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         return status;
     }
 
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, 1);
     return UCS_OK;
 }
 
