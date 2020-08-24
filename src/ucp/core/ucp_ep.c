@@ -963,6 +963,18 @@ out:
     return;
 }
 
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane, int compare_types)
+{
+    return (key1->lanes[lane].rsc_index    == key2->lanes[lane].rsc_index)    &&
+           (key1->lanes[lane].proxy_lane   == key2->lanes[lane].proxy_lane)   &&
+           (key1->lanes[lane].dst_md_index == key2->lanes[lane].dst_md_index) &&
+           (key1->lanes[lane].path_index   == key2->lanes[lane].path_index)   &&
+           ((key1->lanes[lane].lane_types  == key2->lanes[lane].lane_types) ||
+            !compare_types);
+}
+
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2)
 {
@@ -988,11 +1000,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     }
 
     for (lane = 0; lane < key1->num_lanes; ++lane) {
-        if ((key1->lanes[lane].rsc_index != key2->lanes[lane].rsc_index) ||
-            (key1->lanes[lane].proxy_lane != key2->lanes[lane].proxy_lane) ||
-            (key1->lanes[lane].dst_md_index != key2->lanes[lane].dst_md_index) ||
-            (key1->lanes[lane].path_index != key2->lanes[lane].path_index) ||
-            (key1->lanes[lane].lane_types  != key2->lanes[lane].lane_types))
+        if (!ucp_ep_config_lane_is_equal(key1, key2, lane, 1))
         {
             return 0;
         }
