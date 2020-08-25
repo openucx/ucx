@@ -387,6 +387,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     }
 
     if (self->tmp_ep != NULL) {
+        ucs_assert(!(self->tmp_ep->flags & UCP_EP_FLAG_USED));
         ucp_ep_disconnected(self->tmp_ep, 1);
     }
 
@@ -534,7 +535,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
     /* pack client data */
     ucs_assert((int)ucp_ep_config(ucp_ep)->key.err_mode <= UINT8_MAX);
     sa_data->err_mode  = ucp_ep_config(ucp_ep)->key.err_mode;
-    sa_data->ep_ptr    = (uintptr_t)ucp_ep;
+    sa_data->ep_id     = ucp_ep_local_id(ucp_ep);
     sa_data->dev_index = UCP_NULL_RESOURCE; /* Not used */
 
     attrs = ucp_worker_iface_get_attr(worker, sockaddr_rsc);

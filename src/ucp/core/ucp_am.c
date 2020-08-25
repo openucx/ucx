@@ -227,16 +227,16 @@ ucp_am_fill_middle_header(ucp_am_mid_hdr_t *hdr, ucp_request_t *req)
 {
     hdr->msg_id = req->send.msg_proto.message_id;
     hdr->offset = req->send.state.dt.offset;
-    hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
+    hdr->ep_id  = ucp_send_request_get_ep_remote_id(req);
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_am_fill_first_header(ucp_am_first_hdr_t *hdr, ucp_request_t *req)
 {
     ucp_am_fill_header(&hdr->super.super, req);
-    hdr->super.ep_ptr = ucp_request_get_dest_ep_ptr(req);
-    hdr->msg_id       = req->send.msg_proto.message_id;
-    hdr->total_size   = req->send.length;
+    hdr->super.ep_id = ucp_send_request_get_ep_remote_id(req);
+    hdr->msg_id      = req->send.msg_proto.message_id;
+    hdr->total_size  = req->send.length;
 }
 
 ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
@@ -327,10 +327,9 @@ ucp_am_bcopy_pack_args_single_reply(void *dest, void *arg)
     ucs_assert(req->send.state.dt.offset == 0);
 
     ucp_am_fill_header(&reply_hdr->super, req);
-
-    reply_hdr->ep_ptr = ucp_request_get_dest_ep_ptr(req);
-    length            = ucp_am_bcopy_pack_data(reply_hdr + 1, req,
-                                               req->send.length);
+    reply_hdr->ep_id = ucp_send_request_get_ep_remote_id(req);
+    length           = ucp_am_bcopy_pack_data(reply_hdr + 1, req,
+                                              req->send.length);
 
     ucs_assert(length == req->send.length + req->send.msg_proto.am.header_length);
 
@@ -487,7 +486,7 @@ static ucs_status_t ucp_am_zcopy_single_reply(uct_pending_req_t *self)
     ucp_am_reply_hdr_t reply_hdr;
 
     ucp_am_fill_header(&reply_hdr.super, req);
-    reply_hdr.ep_ptr = ucp_request_get_dest_ep_ptr(req);
+    reply_hdr.ep_id = ucp_send_request_get_ep_remote_id(req);
 
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_SINGLE_REPLY,
                                   &reply_hdr, sizeof(reply_hdr),
@@ -632,7 +631,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         goto out;
     }
 
-    status = ucp_ep_resolve_dest_ep_ptr(ep, ep->am_lane);
+    status = ucp_ep_resolve_remote_id(ep, ep->am_lane);
     if (ucs_unlikely(status != UCS_OK)) {
         ret = UCS_STATUS_PTR(status);
         goto out;
@@ -773,7 +772,7 @@ ucp_am_handler_reply(void *am_arg, void *am_data, size_t am_length,
     ucp_worker_h worker     = (ucp_worker_h)am_arg;
     ucp_ep_h reply_ep;
 
-    reply_ep = ucp_worker_get_ep_by_ptr(worker, hdr->ep_ptr);
+    reply_ep = ucp_worker_get_ep_by_id(worker, hdr->ep_id);
 
     return ucp_am_handler_common(worker, &hdr->super, sizeof(*hdr),
                                  am_length, reply_ep, am_flags);
@@ -835,9 +834,8 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
     ucs_list_del(&first_rdesc->am_first.list);
 
     first_hdr = (ucp_am_first_hdr_t*)(first_rdesc + 1);
-    reply_ep  = (first_hdr->super.super.flags & UCP_AM_SEND_REPLY)        ?
-                ucp_worker_get_ep_by_ptr(worker, first_hdr->super.ep_ptr) : NULL;
-
+    reply_ep  = (first_hdr->super.super.flags & UCP_AM_SEND_REPLY) ?
+                ucp_worker_get_ep_by_id(worker, first_hdr->super.ep_id) : NULL;
     status    = ucp_am_invoke_cb(worker, &first_hdr->super.super,
                                  sizeof(*first_hdr), first_hdr->total_size,
                                  reply_ep, 1);
@@ -866,12 +864,13 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
 }
 
 static ucs_status_t ucp_am_long_first_handler(void *am_arg, void *am_data,
-                                              size_t am_length, unsigned am_flags)
+                                              size_t am_length,
+                                              unsigned am_flags)
 {
     ucp_worker_h worker           = am_arg;
     ucp_am_first_hdr_t *first_hdr = am_data;
-    ucp_ep_h ep                   = ucp_worker_get_ep_by_ptr(worker,
-                                                             first_hdr->super.ep_ptr);
+    ucp_ep_h ep                   = ucp_worker_get_ep_by_id(worker,
+                                                    first_hdr->super.ep_id);
     ucp_ep_ext_proto_t *ep_ext    = ucp_ep_ext_proto(ep);
     ucp_recv_desc_t *mid_rdesc, *first_rdesc;
     ucp_ep_h reply_ep;
@@ -940,8 +939,8 @@ ucp_am_long_middle_handler(void *am_arg, void *am_data, size_t am_length,
 {
     ucp_worker_h worker        = am_arg;
     ucp_am_mid_hdr_t *mid_hdr  = am_data;
-    ucp_ep_h ep                = ucp_worker_get_ep_by_ptr(worker,
-                                                          mid_hdr->ep_ptr);
+    ucp_ep_h ep                = ucp_worker_get_ep_by_id(worker,
+                                                         mid_hdr->ep_id);
     ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
     uint64_t msg_id            = mid_hdr->msg_id;
     ucp_recv_desc_t *mid_rdesc = NULL, *first_rdesc = NULL;
