@@ -113,10 +113,8 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     ucp_rsc_index_t dev_index           = UCP_NULL_RESOURCE;
     ucp_ep_config_key_t key;
     uint64_t tl_bitmap;
-    uct_ep_h tl_ep;
     ucp_wireup_ep_t *cm_wireup_ep;
     uct_cm_attr_t cm_attr;
-    uct_ep_params_t tl_ep_params;
     void* ucp_addr;
     size_t ucp_addr_size;
     ucs_status_t status;
@@ -185,17 +183,14 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
         tl_bitmap |= UCS_BIT(rsc_idx);
         if (ucp_ep_config(tmp_ep)->p2p_lanes & UCS_BIT(lane_idx)) {
-            tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
-                                      UCT_EP_PARAM_FIELD_PATH_INDEX;
-            tl_ep_params.iface      = ucp_worker_iface(worker, rsc_idx)->iface;
-            tl_ep_params.path_index = ucp_ep_get_path_index(tmp_ep, lane_idx);
-            status = uct_ep_create(&tl_ep_params, &tl_ep);
+            status = ucp_wireup_ep_connect(tmp_ep->uct_eps[lane_idx], 0,
+                                           rsc_idx,
+                                           ucp_ep_get_path_index(tmp_ep,
+                                                                 lane_idx),
+                                           0, NULL);
             if (status != UCS_OK) {
-                /* coverity[leaked_storage] */
                 goto out;
             }
-
-            ucp_wireup_ep_set_next_ep(tmp_ep->uct_eps[lane_idx], tl_ep);
         } else {
             ucs_assert(ucp_worker_is_tl_2iface(worker, rsc_idx));
         }
