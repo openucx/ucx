@@ -439,7 +439,6 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
         status = uct_ep_flush(m_e1->ep(0), flags, NULL);
         progress();
         if (flags & UCT_FLUSH_FLAG_CANCEL) {
-            ASSERT_UCS_OK_OR_INPROGRESS(status);
             flags = UCT_FLUSH_FLAG_LOCAL;
             continue;
         }

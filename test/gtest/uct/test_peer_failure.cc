@@ -269,35 +269,8 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
         flush();
     }
 
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, NULL, 0, NULL, 1);
-
-    /* Check that all ep operations return pre-defined error code */
-    EXPECT_EQ(uct_ep_am_short(ep0(), 0, 0, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_am_bcopy(ep0(), 0, NULL, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_am_zcopy(ep0(), 0, NULL, 0, iov, iovcnt, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_bcopy(ep0(), NULL, NULL, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_zcopy(ep0(), iov, iovcnt, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_get_bcopy(ep0(), NULL, NULL, 0, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_get_zcopy(ep0(), iov, iovcnt, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic_cswap64(ep0(), 0, 0, 0, 0, NULL, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic_cswap32(ep0(), 0, 0, 0, 0, NULL, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_flush(ep0(), 0, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_get_address(ep0(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
+    ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_flush(ep0(), 0, NULL));
     EXPECT_EQ(uct_ep_pending_add(ep0(), NULL, 0), UCS_ERR_BUSY);
-    EXPECT_EQ(uct_ep_connect_to_ep(ep0(), NULL, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
 
     EXPECT_GT(m_err_count, 0ul);
 }
@@ -341,8 +314,6 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
         flush();
     }
 
-    EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, uct_ep_am_short(ep0(), 0, 0, NULL, 0));
-
     uct_ep_pending_purge(ep0(), purge_cb, NULL);
     EXPECT_EQ(num_pend_sends, m_req_purge_count);
     EXPECT_GE(m_err_count, 0ul);
@@ -366,47 +337,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send,
         send_recv_am(1);
         flush();
     }
-
-    /* test flushing one operations */
-    send_recv_am(0, UCS_ERR_ENDPOINT_TIMEOUT);
-    send_recv_am(1, UCS_OK);
-    flush();
-
-    /* test flushing many operations */
-    for (size_t i = 0; i < (m_tx_window * 10 / ucs::test_time_multiplier()); ++i) {
-        send_recv_am(0, UCS_ERR_ENDPOINT_TIMEOUT);
-        send_recv_am(1, UCS_OK);
-    }
-    flush();
 }
-
-
-UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send_after,
-                     !check_caps(m_required_caps))
-{
-    set_am_handlers();
-
-    {
-        scoped_log_handler slh(wrap_errors_logger);
-        kill_receiver();
-        for (int i = 0; i < 100; ++i) {
-            send_am(0);
-        }
-        flush();
-    }
-
-    send_recv_am(0, UCS_ERR_ENDPOINT_TIMEOUT);
-
-    m_am_count = 0;
-    send_am(1);
-    ucs_debug("flushing");
-    flush_ep(1);
-    ucs_debug("flushed");
-    wait_for_flag(&m_am_count);
-    EXPECT_EQ(m_am_count, 1ul);
-}
-
-UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure)
 
 class test_uct_peer_failure_cb : public test_uct_peer_failure {
 public:
@@ -433,118 +364,6 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_cb, desproy_ep_cb,
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_cb)
-
-class test_uct_peer_failure_multiple : public test_uct_peer_failure
-{
-public:
-    virtual void init();
-
-protected:
-    size_t get_tx_queue_len() const;
-};
-
-void test_uct_peer_failure_multiple::init()
-{
-    size_t tx_queue_len = get_tx_queue_len();
-
-    if (ucs_get_page_size() > 4096) {
-        /* NOTE: Too much receivers may cause failure of ibv_open_device */
-        test_uct_peer_failure::m_nreceivers = 10;
-    } else {
-        test_uct_peer_failure::m_nreceivers = tx_queue_len;
-    }
-
-    test_uct_peer_failure::m_nreceivers =
-        std::min(test_uct_peer_failure::m_nreceivers,
-                 static_cast<size_t>(max_connections()));
-
-    test_uct_peer_failure::m_tx_window  = tx_queue_len / 3;
-
-    test_uct_peer_failure::init();
-
-    m_receivers.reserve(m_nreceivers);
-    while (m_receivers.size() < m_nreceivers) {
-        new_receiver();
-    }
-}
-
-size_t test_uct_peer_failure_multiple::get_tx_queue_len() const
-{
-    bool        set = true;
-    std::string name, val;
-    size_t      tx_queue_len;
-
-    if (has_rc()) {
-        name = "RC_RC_IB_TX_QUEUE_LEN";
-    } else if (has_transport("dc_mlx5")) {
-        name = "DC_RC_IB_TX_QUEUE_LEN";
-    } else if (has_ud()) {
-        name = "UD_IB_TX_QUEUE_LEN";
-    } else {
-        set  = false;
-        name = "TX_QUEUE_LEN";
-    }
-
-    if (get_config(name, val)) {
-        tx_queue_len = ucs::from_string<size_t>(val);
-        EXPECT_LT(0ul, tx_queue_len);
-    } else {
-        tx_queue_len = 256;
-        UCS_TEST_MESSAGE << name << " setting not found, "
-                         << "taken test default value: " << tx_queue_len;
-        if (set) {
-            UCS_TEST_ABORT(name + " config name must be found for %s transport" +
-                           GetParam()->tl_name);
-        }
-    }
-
-    return tx_queue_len;
-}
-
-/* Skip under valgrind due to brk segment overflow.
- * See https://bugs.kde.org/show_bug.cgi?id=352742 */
-UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
-                     (RUNNING_ON_VALGRIND ||
-                      !check_caps(m_required_caps)),
-                     "RC_TM_ENABLE?=n")
-{
-    ucs_time_t timeout  = ucs_get_time() +
-                          ucs_time_from_sec(200 * ucs::test_time_multiplier());
-
-    {
-        scoped_log_handler slh(wrap_errors_logger);
-        for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
-            for (size_t i = 0; i < m_tx_window; ++i) {
-                send_am(idx);
-            }
-            kill_receiver();
-        }
-        flush(timeout);
-
-        /* if EPs are not failed yet, these ops should trigger that */
-        for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
-            for (size_t i = 0; i < m_tx_window; ++i) {
-                send_am(idx);
-            }
-        }
-
-        flush(timeout);
-    }
-
-    for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
-        send_recv_am(idx, UCS_ERR_ENDPOINT_TIMEOUT);
-    }
-
-    m_am_count = 0;
-    send_am(m_nreceivers - 1);
-    ucs_debug("flushing");
-    flush_ep(m_nreceivers - 1);
-    ucs_debug("flushed");
-    wait_for_flag(&m_am_count);
-    EXPECT_EQ(m_am_count, 1ul);
-}
-
-UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_multiple)
 
 class test_uct_peer_failure_keepalive : public test_uct_peer_failure
 {
