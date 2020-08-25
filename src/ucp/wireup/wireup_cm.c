@@ -280,6 +280,9 @@ static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
             continue;
         }
 
+        ucs_assert(!ucp_wireup_ep_test(from_ep->uct_eps[lane_idx]) ||
+                   ucp_wireup_ep(from_ep->uct_eps[lane_idx])->super.is_owner);
+
         uct_ep = ucp_wireup_extract_lane(from_ep, lane_idx);
         ucp_wireup_ep_set_next_ep(to_ep->uct_eps[lane_idx],
                                   uct_ep, to_is_owner);
