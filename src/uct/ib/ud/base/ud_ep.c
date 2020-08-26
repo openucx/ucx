@@ -933,6 +933,19 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         return UCS_OK; /* Nothing was ever sent */
     }
 
+    /* The check for emptiness of TX window must go before checking EP window,
+     * since in case of error flow, when EP is flushed with the `CANCEL` flag,
+     * `uct_ud_ep_no_window()` returns true, but TX window is empty. So, it
+     * leads that `uct_iface_flush()`/`uct_ep_flush(LOCAL)` aren't completed
+     * after `uct_ep_flush(CANCEL)`.
+     */
+    if (ucs_queue_is_empty(&ep->tx.window) &&
+        ucs_queue_is_empty(&iface->tx.async_comp_q)) {
+        /* No outstanding operations */
+        ucs_assert(ep->tx.resend_count == 0);
+        return UCS_OK;
+    }
+
     if (!uct_ud_iface_can_tx(iface) || !uct_ud_iface_has_skbs(iface) ||
         uct_ud_ep_no_window(ep))
     {
@@ -940,13 +953,6 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
          * operations by not starting the flush.
          */
         return UCS_ERR_NO_RESOURCE;
-    }
-
-    if (ucs_queue_is_empty(&ep->tx.window) &&
-        ucs_queue_is_empty(&iface->tx.async_comp_q)) {
-        /* No outstanding operations */
-        ucs_assert(ep->tx.resend_count == 0);
-        return UCS_OK;
     }
 
     /* Expedite acknowledgment on the last skb in the window */
