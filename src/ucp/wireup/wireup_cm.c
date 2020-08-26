@@ -272,9 +272,10 @@ static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
     to_is_owner   = change_ownership;
     from_is_owner = !change_ownership;
 
-    ucs_assertv_always(to_ep->cfg_index == from_ep->cfg_index,
-                       "to_ep=%p (cfg_index=%u) must has the same "
-                       "configuration as from_ep=%p (cfg_index=%u)",
+    ucs_assertv_always(ucp_ep_config_is_equal(&ucp_ep_config(to_ep)->key,
+                                              &ucp_ep_config(from_ep)->key),
+                       "to_ep=%p (cfg_index=%u) must has a configuration that "
+                       "is equal to from_ep=%p (cfg_index=%u) configuration",
                        to_ep, to_ep->cfg_index, from_ep, from_ep->cfg_index);
 
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(from_ep); ++lane_idx) {
