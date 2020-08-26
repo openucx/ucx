@@ -1810,7 +1810,7 @@ static FORCEINLINE int win32munmap(void* ptr, size_t size) {
 
 #if !USE_LOCKS
 #define USE_LOCK_BIT               (0U)
-#define INITIAL_LOCK(l)            (0)
+()#define INITIAL_LOCK(l)            (0)
 #define DESTROY_LOCK(l)            (0)
 #define ACQUIRE_MALLOC_GLOBAL_LOCK()
 #define RELEASE_MALLOC_GLOBAL_LOCK()

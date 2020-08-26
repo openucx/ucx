@@ -109,6 +109,10 @@ static UCS_F_ALWAYS_INLINE void uct_ud_ep_ca_ack(uct_ud_ep_t *ep)
     ep->tx.max_psn = ep->tx.acked_psn + ep->ca.cwnd;
 }
 
+static void uct_ud_ep_reset_max_psn(uct_ud_ep_t *ep)
+{
+    ep->tx.max_psn = ep->tx.psn + ep->ca.cwnd;
+}
 
 static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 {
@@ -116,9 +120,9 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
     ep->ca.cwnd        = UCT_UD_CA_MIN_WINDOW;
     ep->ca.wmax        = ucs_derived_of(ep->super.super.iface,
                                         uct_ud_iface_t)->config.max_window;
-    ep->tx.max_psn     = ep->tx.psn + ep->ca.cwnd;
     ep->tx.acked_psn   = UCT_UD_INITIAL_PSN - 1;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
+    uct_ud_ep_reset_max_psn(ep);
     ucs_queue_head_init(&ep->tx.window);
 
     ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
@@ -221,7 +225,7 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
 
 static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
 {
-    uct_ud_ep_tx_stop(ep);
+    uct_ud_ep_reset_max_psn(ep);
     uct_ud_ep_purge_outstanding(ep);
     ep->tx.acked_psn = (uct_ud_psn_t)(ep->tx.psn - 1);
     uct_ud_ep_window_release(ep, status, 0);
@@ -933,19 +937,6 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         return UCS_OK; /* Nothing was ever sent */
     }
 
-    /* The check for emptiness of TX window must go before checking EP window,
-     * since in case of error flow, when EP is flushed with the `CANCEL` flag,
-     * `uct_ud_ep_no_window()` returns true, but TX window is empty. So, it
-     * leads that `uct_iface_flush()`/`uct_ep_flush(LOCAL)` aren't completed
-     * after `uct_ep_flush(CANCEL)`.
-     */
-    if (ucs_queue_is_empty(&ep->tx.window) &&
-        ucs_queue_is_empty(&iface->tx.async_comp_q)) {
-        /* No outstanding operations */
-        ucs_assert(ep->tx.resend_count == 0);
-        return UCS_OK;
-    }
-
     if (!uct_ud_iface_can_tx(iface) || !uct_ud_iface_has_skbs(iface) ||
         uct_ud_ep_no_window(ep))
     {
@@ -953,6 +944,13 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
          * operations by not starting the flush.
          */
         return UCS_ERR_NO_RESOURCE;
+    }
+
+    if (ucs_queue_is_empty(&ep->tx.window) &&
+        ucs_queue_is_empty(&iface->tx.async_comp_q)) {
+        /* No outstanding operations */
+        ucs_assert(ep->tx.resend_count == 0);
+        return UCS_OK;
     }
 
     /* Expedite acknowledgment on the last skb in the window */
