@@ -177,7 +177,6 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err;
     }
 
-    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
     status = ucs_ptr_map_put(&worker->ptr_map, ep,
                              !!(ep_init_flags &
                                 UCP_EP_INIT_ERR_MODE_PEER_FAILURE),
@@ -186,6 +185,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_destroy_ep_base;
     }
 
+    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
     *ep_p = ep;
 
     return UCS_OK;
