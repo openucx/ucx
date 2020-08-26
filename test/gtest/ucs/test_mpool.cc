@@ -12,6 +12,7 @@ extern "C" {
 #include <limits.h>
 #include <vector>
 #include <queue>
+#include <cuda.h>
 
 class test_mpool : public ucs::test {
 protected:
@@ -23,6 +24,21 @@ protected:
     static void test_free(ucs_mpool_t *mp, void *chunk) {
         free(chunk);
     }
+
+    static ucs_status_t device_alloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p) {
+        auto status = cuMemAlloc((CUdeviceptr*)chunk_p, *size_p);
+        if (status != CUDA_SUCCESS) {
+            const char* err;
+            cuGetErrorString(status, &err);
+            printf("cu %s\n", err);
+        }
+        return status != CUDA_SUCCESS ? UCS_ERR_NO_MEMORY : UCS_OK;
+    }
+
+    static void device_free(ucs_mpool_t *mp, void *chunk) {
+        cuMemFree((CUdeviceptr)chunk);
+    }
+
 
     static ucs_log_func_rc_t
     mpool_log_handler(const char *file, unsigned line, const char *function,
@@ -85,7 +101,9 @@ UCS_TEST_F(test_mpool, basic) {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
        NULL,
-       NULL
+       NULL,
+       NULL,
+       NULL,
     };
 
     push_config();
@@ -125,6 +143,43 @@ UCS_TEST_F(test_mpool, basic) {
     pop_config();
 }
 
+UCS_TEST_F(test_mpool, device_alloc) {
+    ucs_status_t status;
+    ucs_mpool_t mp;
+
+    ucs_mpool_ops_t ops = {
+       test_alloc,
+       test_free,
+       NULL,
+       NULL,
+       device_alloc,
+       device_free,
+    };
+
+    cuInit(0);
+    CUcontext ctx;
+    CUdevice dev;
+    cuDeviceGet(&dev, 0);
+    cuCtxCreate(&ctx, 0, dev);
+
+    status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
+                            5, 18, &ops, "device");
+    ASSERT_UCS_OK(status);
+
+    void **obj = (void**)ucs_mpool_get(&mp);
+
+    EXPECT_TRUE(obj != NULL);
+    EXPECT_TRUE(*obj != NULL);
+
+    ucs_mpool_put(obj);
+
+    ucs_mpool_cleanup(&mp, 1);
+
+    cuCtxDestroy(ctx);
+}
+
+
+
 UCS_TEST_F(test_mpool, custom_alloc) {
     ucs_status_t status;
     ucs_mpool_t mp;
@@ -133,7 +188,9 @@ UCS_TEST_F(test_mpool, custom_alloc) {
        test_alloc,
        test_free,
        NULL,
-       NULL
+       NULL,
+       NULL,
+       NULL,
     };
 
     status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
@@ -156,7 +213,9 @@ UCS_TEST_F(test_mpool, grow) {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
        NULL,
-       NULL
+       NULL,
+       NULL,
+       NULL,
     };
 
     status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
@@ -181,6 +240,8 @@ UCS_TEST_F(test_mpool, infinite) {
     ucs_mpool_ops_t ops = {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
+       NULL,
+       NULL,
        NULL,
        NULL
     };

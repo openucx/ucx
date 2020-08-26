@@ -18,6 +18,12 @@
 #include <ucs/sys/sys.h>
 
 
+static inline int ucs_mpool_want_separate_metadata(ucs_mpool_ops_t* ops)
+{
+    return ops != NULL && ops->chunk_data_alloc != NULL
+                       && ops->chunk_data_release != NULL;
+}
+
 static inline unsigned ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
 {
     return ucs_align_up_pow2(data->elem_size, data->alignment);
@@ -27,8 +33,11 @@ static inline ucs_mpool_elem_t *ucs_mpool_chunk_elem(ucs_mpool_data_t *data,
                                                      ucs_mpool_chunk_t *chunk,
                                                      unsigned elem_index)
 {
-    return UCS_PTR_BYTE_OFFSET(chunk->elems,
-                               elem_index * ucs_mpool_elem_total_size(data));
+    return ucs_mpool_want_separate_metadata(data->ops)
+           ? UCS_PTR_BYTE_OFFSET(chunk->elems,
+               elem_index * (sizeof(ucs_mpool_elem_t) + sizeof(void*)))
+           : UCS_PTR_BYTE_OFFSET(chunk->elems,
+                                 elem_index * ucs_mpool_elem_total_size(data));
 }
 
 static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
@@ -136,6 +145,9 @@ void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
         if (leak_check) {
             ucs_mpool_chunk_leak_check(mp, chunk);
         }
+        if (ucs_mpool_want_separate_metadata(data->ops)) {
+            data->ops->chunk_data_release(mp, chunk->data_elems);
+        }
         data->ops->chunk_release(mp, chunk);
     }
 
@@ -165,6 +177,11 @@ void *ucs_mpool_get(ucs_mpool_t *mp)
     return ucs_mpool_get_inline(mp);
 }
 
+void **ucs_mpool_get_ptr(ucs_mpool_t *mp)
+{
+    return (void**)ucs_mpool_get_inline(mp);
+}
+
 void ucs_mpool_put(void *obj)
 {
     ucs_mpool_put_inline(obj);
@@ -173,7 +190,7 @@ void ucs_mpool_put(void *obj)
 void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
 {
     ucs_mpool_data_t *data = mp->data;
-    size_t chunk_size, chunk_padding;
+    size_t chunk_size, chunk_padding, chunk_data_size;
     ucs_mpool_chunk_t *chunk;
     ucs_mpool_elem_t *elem;
     ucs_status_t status;
@@ -184,35 +201,88 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
         return;
     }
 
-    chunk_size = sizeof(ucs_mpool_chunk_t) + data->alignment +
-                 (num_elems * ucs_mpool_elem_total_size(data));
-    status = data->ops->chunk_alloc(mp, &chunk_size, &ptr);
-    if (status != UCS_OK) {
-        ucs_error("Failed to allocate memory pool (name=%s) chunk: %s",
-                  ucs_mpool_name(mp), ucs_status_string(status));
-        return;
-    }
+    /* check for separate metadata/data allocations */
+    if (ucs_mpool_want_separate_metadata(data->ops)) {
 
-    /* Calculate padding, and update element count according to allocated size */
-    chunk            = ptr;
-    chunk_padding    = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
-                                   data->alignment);
-    chunk->elems     = UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
-    chunk->num_elems = ucs_min(data->quota, (chunk_size - chunk_padding - sizeof(*chunk)) /
-                       ucs_mpool_elem_total_size(data));
+        chunk_size = sizeof(ucs_mpool_chunk_t) 
+                   + num_elems * (sizeof(ucs_mpool_elem_t) + sizeof(void*));
 
-    ucs_debug("mpool %s: allocated chunk %p of %lu bytes with %u elements",
-              ucs_mpool_name(mp), chunk, chunk_size, chunk->num_elems);
-
-    for (i = 0; i < chunk->num_elems; ++i) {
-        elem         = ucs_mpool_chunk_elem(data, chunk, i);
-        if (data->ops->obj_init != NULL) {
-            data->ops->obj_init(mp, elem + 1, chunk);
+        /* allocate metadata memory */
+        status = data->ops->chunk_alloc(mp, &chunk_size, &ptr);
+        if (status != UCS_OK) {
+            ucs_error("Failed to allocate memory pool (name=%s) chunk: %s",
+                      ucs_mpool_name(mp), ucs_status_string(status));
+            return;
         }
 
-        ucs_mpool_add_to_freelist(mp, elem, 0);
-        if (data->tail == NULL) {
-            data->tail = elem;
+        chunk             = ptr;
+        chunk->elems      = chunk + 1;
+        chunk->num_elems  = num_elems;
+
+        /* allocate device/data memory */
+        chunk_data_size = num_elems * ucs_mpool_elem_total_size(data);
+        status = data->ops->chunk_data_alloc(mp, &chunk_data_size, &ptr);
+        if (status != UCS_OK) {
+            ucs_error("Failed to allocate memory pool (name=%s) data chunk: %s",
+                      ucs_mpool_name(mp), ucs_status_string(status));
+            return;
+        }
+
+        chunk->data_elems = ptr;
+
+        ucs_debug("mpool %s: allocated meta/data chunk %p/%p of %lu/%lu bytes with %u elements",
+                  ucs_mpool_name(mp), chunk, chunk->data_elems, 
+                  chunk_size, chunk_data_size, chunk->num_elems);
+
+        for (i = 0; i < chunk->num_elems; ++i) {
+            elem = ucs_mpool_chunk_elem(data, chunk, i);
+            /* set the pointer into the data only segment */
+            void** dptr = (void**)(elem + 1);
+            *dptr = chunk->data_elems + i * ucs_mpool_elem_total_size(data);
+
+            /* initialise data object */
+            if (data->ops->obj_init != NULL) {
+                data->ops->obj_init(mp, *dptr, chunk);
+            }
+
+            ucs_mpool_add_to_freelist(mp, elem, 0);
+            if (data->tail == NULL) {
+                data->tail = elem;
+            }
+        }
+    }
+    else {
+
+        chunk_size = sizeof(ucs_mpool_chunk_t) + data->alignment +
+                     (num_elems * ucs_mpool_elem_total_size(data));
+        status = data->ops->chunk_alloc(mp, &chunk_size, &ptr);
+        if (status != UCS_OK) {
+            ucs_error("Failed to allocate memory pool (name=%s) chunk: %s",
+                      ucs_mpool_name(mp), ucs_status_string(status));
+            return;
+        }
+
+        /* Calculate padding, and update element count according to allocated size */
+        chunk            = ptr;
+        chunk_padding    = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
+                                       data->alignment);
+        chunk->elems     = UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
+        chunk->num_elems = ucs_min(data->quota, (chunk_size - chunk_padding - sizeof(*chunk)) /
+                           ucs_mpool_elem_total_size(data));
+
+        ucs_debug("mpool %s: allocated chunk %p of %lu bytes with %u elements",
+                  ucs_mpool_name(mp), chunk, chunk_size, chunk->num_elems);
+
+        for (i = 0; i < chunk->num_elems; ++i) {
+            elem         = ucs_mpool_chunk_elem(data, chunk, i);
+            if (data->ops->obj_init != NULL) {
+                data->ops->obj_init(mp, elem + 1, chunk);
+            }
+
+            ucs_mpool_add_to_freelist(mp, elem, 0);
+            if (data->tail == NULL) {
+                data->tail = elem;
+            }
         }
     }
 

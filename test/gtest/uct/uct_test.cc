@@ -252,7 +252,8 @@ void uct_test::set_interface_rscs(uct_component_h cmpt, const char *name,
 }
 
 bool uct_test::is_interface_usable(struct ifaddrs *ifa, const char *name) {
-    if (!(ucs_netif_flags_is_active(ifa->ifa_flags)) ||
+    if (!ifa || !(ucs_netif_flags_is_active(ifa->ifa_flags)) ||
+        !ifa->ifa_addr ||
         !(ucs::is_inet_addr(ifa->ifa_addr))) {
         return false;
     }
