@@ -291,8 +291,8 @@ static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
 
         status = ucp_wireup_ep_create(to_ep, &to_ep->uct_eps[lane_idx]);
         if (status != UCS_OK) {
-            /* coverity[leaked_storage] */
-            continue;
+            ucs_fatal("%p: failed to create WIREUP EP to wrap %p UCT EP: %s",
+                      to_ep, uct_ep, ucs_status_string(status));
         }
 
         ucs_assert(!ucp_wireup_ep_test(from_ep->uct_eps[lane_idx]) ||
