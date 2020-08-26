@@ -122,6 +122,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     ucp_rsc_index_t rsc_idx;
     const char *dev_name;
     ucp_ep_h tmp_ep;
+    uint8_t path_index;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -183,11 +184,9 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
         tl_bitmap |= UCS_BIT(rsc_idx);
         if (ucp_ep_config(tmp_ep)->p2p_lanes & UCS_BIT(lane_idx)) {
-            status = ucp_wireup_ep_connect(tmp_ep->uct_eps[lane_idx], 0,
-                                           rsc_idx,
-                                           ucp_ep_get_path_index(tmp_ep,
-                                                                 lane_idx),
-                                           0, NULL);
+            path_index = ucp_ep_get_path_index(tmp_ep, lane_idx);
+            status     = ucp_wireup_ep_connect(tmp_ep->uct_eps[lane_idx], 0,
+                                               rsc_idx, path_index, 0, NULL);
             if (status != UCS_OK) {
                 goto out;
             }
