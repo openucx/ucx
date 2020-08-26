@@ -52,9 +52,10 @@ union ucs_mpool_elem {
  * Memory pool chunk, which contains many elements.
  */
 struct ucs_mpool_chunk {
-    ucs_mpool_chunk_t      *next;      /* Next chunk */
-    void                   *elems;     /* Array of elements */
-    unsigned               num_elems;  /* How many elements */
+    ucs_mpool_chunk_t      *next;       /* Next chunk */
+    void                   *elems;      /* Array of elements */
+    unsigned               num_elems;   /* How many elements */
+    void                   *data_elems; /* Separate data allocation */
 };
 
 
@@ -140,6 +141,9 @@ struct ucs_mpool_ops {
      * @param obj          Object to initialize.
      */
     void         (*obj_cleanup)(ucs_mpool_t *mp, void *obj);
+
+    ucs_status_t (*chunk_data_alloc)(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+    void         (*chunk_data_release)(ucs_mpool_t *mp, void *chunk);
 };
 
 
@@ -209,6 +213,15 @@ int ucs_mpool_is_empty(ucs_mpool_t *mp);
  * @return New allocated object, or NULL if cannot allocate.
  */
 void *ucs_mpool_get(ucs_mpool_t *mp);
+
+/**
+ * Get an element from the memory pool allocated with separate data/metadata.
+ *
+ * @param mp               Memory pool structure.
+ *
+ * @return Pointer to newly allocated object, or NULL if cannot allocate.
+ */
+void **ucs_mpool_get_ptr(ucs_mpool_t *mp);
 
 
 /**
