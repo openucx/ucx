@@ -1,8 +1,8 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
-*
-* See file LICENSE for terms.
-*/
+ * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
 
 #include "ucp_test.h"
 #include <uct/api/uct.h>
@@ -67,7 +67,7 @@ protected:
 
             if (i < wireup_ep_count) {
                 status = ucp_wireup_ep_create(&ucp_ep, &discard_ep);
-                EXPECT_UCS_OK(status);
+                ASSERT_UCS_OK(status);
 
                 wireup_eps.push_back(discard_ep);
                 ucp_wireup_ep_set_next_ep(discard_ep, &eps[i]);
@@ -93,6 +93,11 @@ protected:
                                       UCT_FLUSH_FLAG_LOCAL);
         }
 
+        void *flush_req = sender().flush_worker_nb(0);
+
+        ASSERT_FALSE(flush_req == NULL);
+        ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
+
         do {
             progress();
 
@@ -113,11 +118,15 @@ protected:
                     EXPECT_EQ(UCS_INPROGRESS, status);
                 }
             }
-        } while (sender().worker()->flush_ops_count > 0);
+        } while (ucp_request_check_status(flush_req) == UCS_INPROGRESS);
 
+        EXPECT_UCS_OK(ucp_request_check_status(flush_req));
+        EXPECT_EQ(m_created_ep_count, m_destroyed_ep_count);
         EXPECT_EQ(m_created_ep_count, total_ep_count);
         EXPECT_TRUE(m_flush_comps.empty());
         EXPECT_TRUE(m_pending_reqs.empty());
+
+        ucp_request_release(flush_req);
 
         /* check that uct_ep_destroy() was called for the all EPs that
          * were created in the test */

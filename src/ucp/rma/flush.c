@@ -383,7 +383,7 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
 
-    if (worker->flush_ops_count) {
+    if (worker->flush_ops_count != 0) {
         return UCS_INPROGRESS;
     }
 
@@ -444,16 +444,17 @@ static unsigned ucp_worker_flush_progress(void *arg)
     ucp_ep_h ep;
 
     status = ucp_worker_flush_check(worker);
-    if ((status == UCS_OK) || (&next_ep->ep_list == &worker->all_eps)) {
+    if ((status == UCS_OK) && (&next_ep->ep_list == &worker->all_eps)) {
         /* If all ifaces are flushed, or we finished going over all endpoints,
-         * no need to progress this request actively any more. Just wait until
-         * all associated endpoint flush requests are completed.
+         * and all scheduled operations on worker were completed or iface flush
+         * failed with error, no need to progress this request actively anymore.
          */
         ucp_worker_flush_complete_one(req, UCS_OK, 1);
     } else if (status != UCS_INPROGRESS) {
         /* Error returned from uct iface flush */
         ucp_worker_flush_complete_one(req, status, 1);
-    } else if (worker->context->config.ext.flush_worker_eps) {
+    } else if ((worker->context->config.ext.flush_worker_eps) &&
+               (&next_ep->ep_list != &worker->all_eps)) {
         /* Some endpoints are not flushed yet. Take next endpoint from the list
          * and start flush operation on it.
          */
