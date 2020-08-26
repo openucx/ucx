@@ -274,14 +274,15 @@ static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
         }
 
         ucs_assert(to_ep->uct_eps[lane_idx] == NULL);
-        status = ucp_wireup_ep_create(to_ep, &to_ep->uct_eps[lane_idx]);
-        if (status != UCS_OK) {
-            /* coverity[leaked_storage] */
-            continue;
-        }
 
         uct_ep = ucp_wireup_extract_lane(from_ep, lane_idx);
         if (uct_ep == NULL) {
+            continue;
+        }
+
+        status = ucp_wireup_ep_create(to_ep, &to_ep->uct_eps[lane_idx]);
+        if (status != UCS_OK) {
+            /* coverity[leaked_storage] */
             continue;
         }
 
