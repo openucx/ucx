@@ -255,6 +255,10 @@ ucp_cm_client_connect_prog_arg_free(ucp_cm_client_connect_progress_arg_t *arg)
  * Copies lanes from the one UCP EP to the another UCP EP. The function
  * creates new WIREUP EPs for all lanes in @to_ep and sets UCT EP of
  * the TLs from @from_ep. Both EPs have to be created and initalized.
+ * @to_ep should not have initialized the lanes by UCT EPs that will be
+ * overwritten by UCT EPs from the @from_ep's lanes.
+ * After copying UCT EPs, @to_ep should try to reconfigure lanes and
+ * some of the copied UCT EPs could be re-used in the new configuration.
  *
  * @param [in] to_ep               UCP EP handle to copy the lanes to.
  * @param [in] from_ep             UCP EP handle to copy the lanes from.
@@ -278,7 +282,7 @@ static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
             continue;
         }
 
-        ucs_assert(to_ep->uct_eps[lane_idx] == NULL);
+        ucs_assert_always(to_ep->uct_eps[lane_idx] == NULL);
 
         uct_ep = ucp_wireup_extract_lane(from_ep, lane_idx);
         if (uct_ep == NULL) {
@@ -302,7 +306,7 @@ static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
                                   uct_ep, to_is_owner);
 
         if (from_ep->uct_eps[lane_idx] == NULL) {
-            /* from_ep must be the owner EP in this case */
+            /* from_ep must be the owner of the UCT EP in this case */
             ucs_assert(from_is_owner);
             from_ep->uct_eps[lane_idx] = uct_ep;
         } else {
