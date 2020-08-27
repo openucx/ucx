@@ -11,6 +11,25 @@
 #include "rdmacm_listener.h"
 
 
+#define UCS_RDMACM_MAX_BACKLOG_PATH        "/proc/sys/net/rdma_ucm/max_backlog"
+
+
+static long ucs_rdmacm_max_backlog()
+{
+    long max_backlog;
+
+    if (ucs_read_file_number(&max_backlog, 1,
+                             UCS_RDMACM_MAX_BACKLOG_PATH) == UCS_OK) {
+        ucs_assert(max_backlog <= INT_MAX);
+        return max_backlog;
+    } else {
+        ucs_warn("unable to read max_backlog value from %s file",
+                 UCS_RDMACM_MAX_BACKLOG_PATH);
+        max_backlog = 1024;
+        return max_backlog;
+    }
+}
+
 UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
                     const struct sockaddr *saddr, socklen_t socklen,
                     const uct_listener_params_t *params)
@@ -41,8 +60,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
         goto err_destroy_id;
     }
 
-    backlog = (params->field_mask & UCT_LISTENER_PARAM_FIELD_BACKLOG) ?
-              params->backlog : SOMAXCONN;
+    backlog = uct_cm_set_listener_backlog(params, ucs_rdmacm_max_backlog());
+
     if (rdma_listen(self->id, backlog)) {
         ucs_error("rdma_listen(id:=%p addr=%s backlog=%d) failed: %m",
                   self->id, ucs_sockaddr_str(saddr, ip_port_str,

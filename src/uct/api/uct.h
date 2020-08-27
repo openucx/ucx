@@ -1205,7 +1205,7 @@ struct uct_listener_params {
 
     /**
      * Backlog of incoming connection requests.
-     * If not specified, SOMAXCONN, as defined in <sys/socket.h>, will be used.
+     * If not specified, each CM transport will select its own value.
      */
     int                                     backlog;
 
