@@ -67,7 +67,6 @@ public:
     void init() {
         if (GetParam().variant & TEST_MODIFIER_CM) {
             modify_config("SOCKADDR_CM_ENABLE", "yes");
-            modify_config("SOCKADDR_TLS_PRIORITY","rdmacm,tcp");
         }
         get_sockaddr();
         ucp_test::init();
@@ -139,6 +138,33 @@ public:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
+    int is_skip_interface(struct ifaddrs *ifa) {
+        int skip = 0;
+
+        if (!has_transport("tcp") && !has_transport("all") &&
+            !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
+            /* IB transports require an IPoIB/RoCE interface since they
+             * use rdmacm for connection establishment, which supports
+             * only IPoIB IP addresses. therefore, if the interface
+             * isn't as such, we continue to the next one. */
+            skip = 1;
+        } else if (!ucs::is_rdmacm_netdev(ifa->ifa_name) &&
+                   !(GetParam().variant & TEST_MODIFIER_CM)) {
+            /* old client-server API (without CM) ran only with
+             * IPoIB/RoCE interface */
+            skip = 1;
+        } else if ((has_transport("tcp") || has_transport("all")) &&
+                   (ifa->ifa_addr->sa_family == AF_INET6)) {
+            /* the tcp transport (and 'all' which may fallback to tcp_sockcmm)
+             * can run either on an rdma-enabled interface (IPoIB/RoCE)
+             * or any interface with IPv4 address because IPv6 isn't supported
+             * by the tcp transport yet */
+            skip = 1;
+        }
+
+        return skip;
+    }
+
     void get_sockaddr() {
         std::vector<ucs::sock_addr_storage> saddrs;
         struct ifaddrs* ifaddrs;
@@ -151,18 +177,7 @@ public:
             if (ucs_netif_flags_is_active(ifa->ifa_flags) &&
                 ucs::is_inet_addr(ifa->ifa_addr))
             {
-                if (!has_transport("tcp") && !has_transport("all") &&
-                    !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
-                    /* IB transports require an IPoIB/RoCE interface since they
-                     * use rdmacm for connection establishment, which supports
-                     * only IPoIB IP addresses. therefore, if the interface
-                     * isn't as such, we continue to the next one. */
-                    continue;
-                } else if (ifa->ifa_addr->sa_family == AF_INET6) {
-                    /* the tcp transport (and 'all' which may fallback to tcp_sockcmm)
-                     * can run either on an rdma-enabled interface (IPoIB/RoCE)
-                     * or any interface with IPv4 address because IPv6 isn't supported
-                     * by the tcp transport yet */
+                if (is_skip_interface(ifa)) {
                     continue;
                 }
 
