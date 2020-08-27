@@ -102,6 +102,14 @@ ucs_mpool_ops_t ucp_frag_mpool_ops = {
 };
 
 
+#define ucp_worker_discard_uct_ep_hash_key(_uct_ep) \
+    kh_int64_hash_func((uintptr_t)(_uct_ep))
+
+
+KHASH_IMPL(ucp_worker_discard_uct_ep_hash, uct_ep_h, char, 0,
+           ucp_worker_discard_uct_ep_hash_key, kh_int64_hash_equal);
+
+
 static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker,
                                              ucp_worker_event_fd_op_t op,
                                              int event_fd)
@@ -617,15 +625,16 @@ out:
 static ucs_status_t
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
-    ucp_worker_h worker         = (ucp_worker_h)arg;
+    ucp_worker_h worker = (ucp_worker_h)arg;
     ucp_lane_index_t lane;
     ucs_status_t ret_status;
     ucp_ep_ext_gen_t *ep_ext;
     ucp_ep_h ucp_ep;
+    khiter_t iter;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_debug("worker %p: error handler called for uct_ep %p: %s",
+    ucs_debug("worker %p: error handler called for UCT EP %p: %s",
               worker, uct_ep, ucs_status_string(status));
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
@@ -642,11 +651,21 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         }
     }
 
-    ucs_error("no uct_ep_h %p associated with ucp_ep_h on ucp_worker_h %p",
-              uct_ep, worker);
+    iter = kh_get(ucp_worker_discard_uct_ep_hash,
+                  &worker->discard_uct_ep_hash, uct_ep);
+    if (iter != kh_end(&worker->discard_uct_ep_hash)) {
+        ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
+                  uct_ep, worker);
+        ret_status = UCS_OK;
+    } else {
+        ucs_error("no UCT EP %p associated with UCP EP on UCP Worker %p",
+                  uct_ep, worker);
+        ret_status = UCS_ERR_NO_ELEM;
+    }
+
     UCS_ASYNC_UNBLOCK(&worker->async);
 
-    return UCS_ERR_NO_ELEM;
+    return ret_status;
 }
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
@@ -1825,6 +1844,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
                         &ucp_ep_match_ops);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
@@ -2028,6 +2048,8 @@ void ucp_worker_destroy(ucp_worker_h worker)
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
     ucs_conn_match_cleanup(&worker->conn_match_ctx);
+    kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
+                       &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     ucs_ptr_map_destroy(&worker->ptr_map);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
@@ -2356,12 +2378,22 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     ucp_request_t *req  = (ucp_request_t*)arg;
     uct_ep_h uct_ep     = req->send.discard_uct_ep.uct_ep;
     ucp_worker_h worker = req->send.discard_uct_ep.ucp_worker;
+    khiter_t iter;
 
     ucp_trace_req(req, "destroy uct_ep=%p", uct_ep);
-    uct_ep_destroy(uct_ep);
     ucp_request_put(req);
+
     UCS_ASYNC_BLOCK(&worker->async);
+    uct_ep_destroy(uct_ep);
     --worker->flush_ops_count;
+    iter = kh_get(ucp_worker_discard_uct_ep_hash,
+                  &worker->discard_uct_ep_hash, uct_ep);
+    if (iter == kh_end(&worker->discard_uct_ep_hash)) {
+        ucs_fatal("no %p UCT EP in the %p worker hash of discarded UCT EPs",
+                  uct_ep, worker);
+    }
+    kh_del(ucp_worker_discard_uct_ep_hash,
+           &worker->discard_uct_ep_hash, iter);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     return 1;
@@ -2428,7 +2460,9 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_wireup_ep_t *wireup_ep;
     ucp_request_t *req;
+    khiter_t UCS_V_UNUSED iter;
     int is_owner;
+    int ret;
 
     ucs_assert(uct_ep != NULL);
 
@@ -2465,6 +2499,16 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
     }
 
     ++worker->flush_ops_count;
+    iter = kh_put(ucp_worker_discard_uct_ep_hash,
+                  &worker->discard_uct_ep_hash,
+                  uct_ep, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        ucs_fatal("failed to put %p UCT EP into the %p worker hash",
+                  uct_ep, worker);
+    } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
+        ucs_fatal("%p UCT EP is already present in the %p worker hash",
+                  uct_ep, worker);
+    }
 
     ucs_assert(!ucp_wireup_ep_test(uct_ep));
     req->send.uct.func                      = ucp_worker_discard_uct_ep_pending_cb;

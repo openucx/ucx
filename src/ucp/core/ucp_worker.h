@@ -172,6 +172,11 @@ KHASH_TYPE(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t
 typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
 
 
+/* Hash set to UCT EPs that are being discarded on UCP Worker */
+KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, char);
+typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
+
+
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
  * some auxiliary info needed for tag matching offloads.
@@ -207,61 +212,63 @@ struct ucp_worker_cm {
  * UCP worker (thread context).
  */
 typedef struct ucp_worker {
-    unsigned                      flags;         /* Worker flags */
-    ucs_async_context_t           async;         /* Async context for this worker */
-    ucp_context_h                 context;       /* Back-reference to UCP context */
-    uint64_t                      uuid;          /* Unique ID for wireup */
-    uct_worker_h                  uct;           /* UCT worker handle */
-    ucs_mpool_t                   req_mp;        /* Memory pool for requests */
-    ucs_mpool_t                   rkey_mp;       /* Pool for small memory keys */
-    uint64_t                      atomic_tls;    /* Which resources can be used for atomics */
+    unsigned                         flags;               /* Worker flags */
+    ucs_async_context_t              async;               /* Async context for this worker */
+    ucp_context_h                    context;             /* Back-reference to UCP context */
+    uint64_t                         uuid;                /* Unique ID for wireup */
+    uct_worker_h                     uct;                 /* UCT worker handle */
+    ucs_mpool_t                      req_mp;              /* Memory pool for requests */
+    ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
+    uint64_t                         atomic_tls;          /* Which resources can be used for atomics */
 
-    int                           inprogress;
-    char                          name[UCP_WORKER_NAME_MAX]; /* Worker name */
+    int                              inprogress;
+    char                             name[UCP_WORKER_NAME_MAX]; /* Worker name */
 
-    unsigned                      flush_ops_count;/* Number of pending operations */
+    unsigned                         flush_ops_count;     /* Number of pending operations */
 
-    int                           event_fd;      /* Allocated (on-demand) event fd for wakeup */
-    ucs_sys_event_set_t           *event_set;    /* Allocated UCS event set for wakeup */
-    int                           eventfd;       /* Event fd to support signal() calls */
-    unsigned                      uct_events;    /* UCT arm events */
-    ucs_list_link_t               arm_ifaces;    /* List of interfaces to arm */
+    int                              event_fd;            /* Allocated (on-demand) event fd for wakeup */
+    ucs_sys_event_set_t              *event_set;          /* Allocated UCS event set for wakeup */
+    int                              eventfd;             /* Event fd to support signal() calls */
+    unsigned                         uct_events;          /* UCT arm events */
+    ucs_list_link_t                  arm_ifaces;          /* List of interfaces to arm */
 
-    void                          *user_data;    /* User-defined data */
-    ucs_strided_alloc_t           ep_alloc;      /* Endpoint allocator */
-    ucs_list_link_t               stream_ready_eps; /* List of EPs with received stream data */
-    ucs_list_link_t               all_eps;       /* List of all endpoints */
-    ucs_conn_match_ctx_t          conn_match_ctx;  /* Endpoint-to-endpoint matching context */
-    ucp_worker_iface_t            **ifaces;      /* Array of pointers to interfaces,
-                                                    one for each resource */
-    unsigned                      num_ifaces;    /* Number of elements in ifaces array  */
-    unsigned                      num_active_ifaces; /* Number of activated ifaces  */
-    uint64_t                      scalable_tl_bitmap; /* Map of scalable tl resources */
-    ucp_worker_cm_t               *cms;          /* Array of CMs, one for each component */
-    ucs_mpool_t                   am_mp;         /* Memory pool for AM receives */
-    ucs_mpool_t                   reg_mp;        /* Registered memory pool */
-    ucs_mpool_t                   rndv_frag_mp;  /* Memory pool for RNDV fragments */
-    ucs_queue_head_t              rkey_ptr_reqs; /* Queue of submitted RKEY PTR requests that
-                                                  * are in-progress */
-    uct_worker_cb_id_t            rkey_ptr_cb_id;/* RKEY PTR worker callback queue ID */
-    ucp_tag_match_t               tm;            /* Tag-matching queues and offload info */
-    ucs_array_t(ucp_am_cbs)       am;            /* Array of AM callbacks and their data */
-    uint64_t                      am_message_id; /* For matching long AMs */
-    ucp_ep_h                      mem_type_ep[UCS_MEMORY_TYPE_LAST];/* memory type eps */
+    void                             *user_data;          /* User-defined data */
+    ucs_strided_alloc_t              ep_alloc;            /* Endpoint allocator */
+    ucs_list_link_t                  stream_ready_eps;    /* List of EPs with received stream data */
+    ucs_list_link_t                  all_eps;             /* List of all endpoints */
+    ucs_conn_match_ctx_t             conn_match_ctx;      /* Endpoint-to-endpoint matching context */
+    ucp_worker_iface_t               **ifaces;            /* Array of pointers to interfaces,
+                                                             one for each resource */
+    unsigned                         num_ifaces;          /* Number of elements in ifaces array  */
+    unsigned                         num_active_ifaces;   /* Number of activated ifaces  */
+    uint64_t                         scalable_tl_bitmap;  /* Map of scalable tl resources */
+    ucp_worker_cm_t                  *cms;                /* Array of CMs, one for each component */
+    ucs_mpool_t                      am_mp;               /* Memory pool for AM receives */
+    ucs_mpool_t                      reg_mp;              /* Registered memory pool */
+    ucs_mpool_t                      rndv_frag_mp;        /* Memory pool for RNDV fragments */
+    ucs_queue_head_t                 rkey_ptr_reqs;       /* Queue of submitted RKEY PTR requests that
+                                                           * are in-progress */
+    uct_worker_cb_id_t               rkey_ptr_cb_id;      /* RKEY PTR worker callback queue ID */
+    ucp_tag_match_t                  tm;                  /* Tag-matching queues and offload info */
+    ucs_array_t(ucp_am_cbs)          am;                  /* Array of AM callbacks and their data */
+    uint64_t                         am_message_id;       /* For matching long AMs */
+    ucp_ep_h                         mem_type_ep[UCS_MEMORY_TYPE_LAST]; /* Memory type EPs */
 
     UCS_STATS_NODE_DECLARE(stats)
     UCS_STATS_NODE_DECLARE(tm_offload_stats)
 
-    ucs_cpu_set_t                 cpu_mask;        /* Save CPU mask for subsequent calls to ucp_worker_listen */
+    ucs_cpu_set_t                    cpu_mask;            /* Save CPU mask for subsequent calls to
+                                                             ucp_worker_listen */
 
-    ucp_worker_rkey_config_hash_t rkey_config_hash; /* rkey config key -> index */
-    ucs_ptr_map_t                 ptr_map;         /* UCP objects key to ptr mapping */
+    ucp_worker_rkey_config_hash_t    rkey_config_hash;    /* RKEY config key -> index */
+    ucp_worker_discard_uct_ep_hash_t discard_uct_ep_hash; /* Hash of discarded UCT EPs */
+    ucs_ptr_map_t                    ptr_map;             /* UCP objects key to ptr mapping */
 
-    unsigned                      ep_config_count; /* Current number of ep configurations */
-    ucp_ep_config_t               ep_config[UCP_WORKER_MAX_EP_CONFIG];
+    unsigned                         ep_config_count;     /* Current number of ep configurations */
+    ucp_ep_config_t                  ep_config[UCP_WORKER_MAX_EP_CONFIG];
 
-    unsigned                      rkey_config_count; /* Current number of rkey configurations */
-    ucp_rkey_config_t             rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
+    unsigned                         rkey_config_count;   /* Current number of rkey configurations */
+    ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
 } ucp_worker_t;
 
 
