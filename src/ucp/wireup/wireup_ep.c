@@ -39,6 +39,7 @@ ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
+    ucs_assert(!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED));
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
     return uct_ep_connect_to_ep(wireup_ep->super.uct_ep, dev_addr, ep_addr);
 }
