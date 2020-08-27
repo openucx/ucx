@@ -223,10 +223,9 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep, uint64_t *tl_bitmap,
     ucp_worker_h worker = ep->worker;
     ucp_ep_h tmp_ep     = ucp_ep_get_cm_wireup_ep(ep)->tmp_ep;
     ucs_status_t status = UCS_ERR_NO_RESOURCE;
-    uct_ep_params_t tl_ep_params;
     ucp_lane_index_t lane_idx;
     ucp_rsc_index_t rsc_idx;
-    uct_ep_h tl_ep;
+    uint8_t path_index;
 
     *tl_bitmap = 0;
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(tmp_ep); ++lane_idx) {
@@ -250,23 +249,18 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep, uint64_t *tl_bitmap,
 
         *tl_bitmap |= UCS_BIT(rsc_idx);
         if (ucp_ep_config(tmp_ep)->p2p_lanes & UCS_BIT(lane_idx)) {
-            tl_ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE |
-                                      UCT_EP_PARAM_FIELD_PATH_INDEX;
-            tl_ep_params.iface      = ucp_worker_iface(worker, rsc_idx)->iface;
-            tl_ep_params.path_index = ucp_ep_get_path_index(tmp_ep, lane_idx);
-            status = uct_ep_create(&tl_ep_params, &tl_ep);
+            path_index = ucp_ep_get_path_index(tmp_ep, lane_idx);
+            status     = ucp_wireup_ep_connect(tmp_ep->uct_eps[lane_idx], 0,
+                                               rsc_idx, path_index, 0, NULL);
             if (status != UCS_OK) {
                 goto out;
             }
-
-            ucp_wireup_ep_set_next_ep(tmp_ep->uct_eps[lane_idx], tl_ep);
         } else {
             ucs_assert(ucp_worker_is_tl_2iface(worker, rsc_idx));
         }
     }
 
 out:
-    /* coverity[leaked_storage] */
     return status;
 }
 
