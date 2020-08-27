@@ -49,12 +49,11 @@ ucp_wireup_tmp_ep_destroy_complete_cb(void *request, ucs_status_t status,
 {
     ucp_wireup_ep_t *wireup_ep = (ucp_wireup_ep_t*)user_data;
 
-    if (wireup_ep == NULL) {
-        /* check for NULL pointer to workaround Coverity warning (it wrongly
-         * assumes that this callback could be called upon GET/PUT operation) */
-        ucs_fatal("req=%p: user_data passed to the TMP EP destroy cb is NULL",
-                  (ucp_request_t*)request - 1);
-    }
+    /* check for NULL pointer to workaround Coverity warning (it wrongly
+     * assumes that this callback could be called upon GET/PUT operation) */
+    ucs_assertv_always(wireup_ep == NULL,
+                       "req=%p: user_data passed to the TMP EP destroy cb "
+                       "mustn't be NULL", (ucp_request_t*)request - 1);
 
     wireup_ep->flags &= ~UCP_WIREUP_EP_FLAG_DESTROY_TMP_EP;
     ucs_assert(wireup_ep->tmp_ep == NULL);
@@ -107,7 +106,7 @@ int ucp_wireup_tmp_ep_destroy(ucp_ep_h ep, ucp_wireup_ep_t *wireup_ep,
     ucs_assert(tmp_ep != ep);
 
     /* to prevent flush+destroy UCT EPs that are used by the main EP,
-     * they have to be remove from the TMP EP lanes and their WIREUP
+     * they have to be removed from the TMP EP lanes and their WIREUP
      * EPs have to be destroyed */
     for (lane = 0; lane < ucp_ep_num_lanes(tmp_ep); ++lane) {
         if (tmp_ep->uct_eps[lane] != NULL) {
