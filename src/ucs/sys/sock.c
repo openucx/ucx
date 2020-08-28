@@ -364,8 +364,10 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 }
 
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int silent_err_in_use, int *listen_fd)
+                                    int backlog, int silent_err_in_use,
+                                    int allow_addr_inuse, int *listen_fd)
 {
+    int so_reuse_optval = 1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_log_level_t bind_log_level;
     ucs_status_t status;
@@ -381,6 +383,14 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
     status = ucs_sys_fcntl_modfl(fd, O_NONBLOCK, 0);
     if (status != UCS_OK) {
         goto err_close_socket;
+    }
+
+    if (allow_addr_inuse) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_REUSEADDR,
+                                   &so_reuse_optval, sizeof(so_reuse_optval));
+        if (status != UCS_OK) {
+            goto err_close_socket;
+        }
     }
 
     ret = bind(fd, saddr, socklen);
