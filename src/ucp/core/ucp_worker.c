@@ -658,7 +658,8 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
                   uct_ep, worker);
         ret_status = UCS_OK;
     } else {
-        ucs_error("no UCT EP %p associated with UCP EP on UCP Worker %p",
+        ucs_error("UCT EP %p isn't associated with UCP EP and was not scheduled "
+                  "to be discarded on UCP Worker %p",
                   uct_ep, worker);
         ret_status = UCS_ERR_NO_ELEM;
     }
