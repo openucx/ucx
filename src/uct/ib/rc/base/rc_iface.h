@@ -157,6 +157,7 @@ typedef struct uct_rc_iface_common_config {
         unsigned             rnr_retry_count;
         size_t               max_get_zcopy;
         size_t               max_get_bytes;
+        int                  poll_always;
     } tx;
 
     struct {
@@ -234,6 +235,7 @@ struct uct_rc_iface {
         unsigned             tx_min_inline;
         unsigned             tx_ops_count;
         uint16_t             tx_moderation;
+        uint8_t              tx_poll_always;
 
         /* Threshold to send "soft" FC credit request. The peer will try to
          * piggy-back credits grant to the counter AM, if any. */
@@ -528,6 +530,12 @@ uct_rc_iface_invoke_pending_cb(uct_rc_iface_t *iface, uct_pending_req_t *req)
                    ucs_status_string(status));
 
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_iface_poll_tx(uct_rc_iface_t *iface, unsigned count)
+{
+    return (count == 0) || iface->config.tx_poll_always;
 }
 
 #endif
