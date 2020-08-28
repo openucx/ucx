@@ -110,7 +110,10 @@ int ucp_wireup_tmp_ep_destroy(ucp_ep_h ep, ucp_wireup_ep_t *wireup_ep,
      * EPs have to be destroyed */
     for (lane = 0; lane < ucp_ep_num_lanes(tmp_ep); ++lane) {
         if (tmp_ep->uct_eps[lane] != NULL) {
-            found_lane = ucp_wireup_ep_lane_used_by_another_ep(tmp_ep, ep, lane);
+            found_lane =
+                ucp_wireup_ep_configs_use_same_lane(&ucp_ep_config(tmp_ep)->key,
+                                                    &ucp_ep_config(ep)->key,
+                                                    lane);
             if (found_lane != UCP_NULL_LANE) {
                 uct_ep = tmp_ep->uct_eps[lane];
                 ucs_assert(ucp_wireup_ep_test(uct_ep) &&

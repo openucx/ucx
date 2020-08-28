@@ -292,10 +292,10 @@ ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
     return UCS_ERR_UNREACHABLE;
 }
 
-static ucp_lane_index_t
-ucp_wireup_ep_lane_used_by_another_ep_config(ucp_ep_config_key_t *ep_config_key,
-                                             ucp_ep_config_key_t *another_ep_config_key,
-                                             ucp_lane_index_t lane)
+ucp_lane_index_t
+ucp_wireup_ep_configs_use_same_lane(ucp_ep_config_key_t *ep_config_key,
+                                    ucp_ep_config_key_t *another_ep_config_key,
+                                    ucp_lane_index_t lane)
 {
     ucp_lane_index_t another_lane;
 
@@ -303,22 +303,12 @@ ucp_wireup_ep_lane_used_by_another_ep_config(ucp_ep_config_key_t *ep_config_key,
          ++another_lane) {
         if (ucp_ep_config_lane_is_equal(ep_config_key,
                                         another_ep_config_key,
-                                        lane, 0)) {
+                                        lane, another_lane, 0)) {
             return another_lane;
         }
     }
 
     return UCP_NULL_LANE;
-}
-
-ucp_lane_index_t ucp_wireup_ep_lane_used_by_another_ep(ucp_ep_h ep,
-                                                       ucp_ep_h another_ep,
-                                                       ucp_lane_index_t lane)
-{
-    return ucp_wireup_ep_lane_used_by_another_ep_config(
-                       &ucp_ep_config(ep)->key,
-                       &ucp_ep_config(another_ep)->key,
-                       lane);
 }
 
 ucs_status_t
