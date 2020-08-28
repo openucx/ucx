@@ -303,7 +303,7 @@ ucp_wireup_ep_configs_use_same_lane(ucp_ep_config_key_t *ep_config_key,
          ++another_lane) {
         if (ucp_ep_config_lane_is_equal(ep_config_key,
                                         another_ep_config_key,
-                                        lane, another_lane, 0)) {
+                                        lane, another_lane, 1)) {
             return another_lane;
         }
     }

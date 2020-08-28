@@ -51,7 +51,7 @@ ucp_wireup_tmp_ep_destroy_complete_cb(void *request, ucs_status_t status,
 
     /* check for NULL pointer to workaround Coverity warning (it wrongly
      * assumes that this callback could be called upon GET/PUT operation) */
-    ucs_assertv_always(wireup_ep == NULL,
+    ucs_assertv_always(wireup_ep != NULL,
                        "req=%p: user_data passed to the TMP EP destroy cb "
                        "mustn't be NULL", (ucp_request_t*)request - 1);
 
@@ -81,6 +81,10 @@ static void ucp_wireup_tmp_ep_flushed_cb(ucp_request_t *req)
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_ep_h tmp_ep          = req->send.ep;
 
+    /* schedule the destorying of TMP EP lanes to the main thread to
+     * not destroy UCT EP from the UCT EP flush callback, since
+     * UCT EP maybe touched during the progress after calling UCT
+     * flush completion callback */
     uct_worker_progress_register_safe(tmp_ep->worker->uct,
                                       ucp_wireup_tmp_ep_disconnect_progress,
                                       req, UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
