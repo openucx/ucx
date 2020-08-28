@@ -868,8 +868,9 @@ ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
                               iface_attr->cap.am.max_bcopy);
         }
 
-        ucs_assert(ucp_wireup_ep(ep->uct_eps[proxy_lane])->flags &
-                   UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);
+        ucs_assert((ucp_wireup_ep(ep->uct_eps[proxy_lane]) == NULL) ||
+                   (ucp_wireup_ep(ep->uct_eps[proxy_lane])->flags &
+                    UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED));
 
         /* Create a signaling ep to the proxy lane */
         if (proxy_lane == lane) {
