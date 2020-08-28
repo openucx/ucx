@@ -1265,7 +1265,8 @@ test_memtrack() {
 test_unused_env_var() {
 	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
-	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q "UCX_IB_PORTS"
+	#UCX_TCP_CM_ALLOW_ADDR_INUSE is currently set but not used. Remove when tcp_sockcm is set in the cms priority list
+	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS|UCX_TCP_CM_ALLOW_ADDR_INUSE"
 }
 
 test_env_var_aliases() {
