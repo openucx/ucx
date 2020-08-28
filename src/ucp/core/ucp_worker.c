@@ -2384,7 +2384,6 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     ucp_request_put(req);
 
     UCS_ASYNC_BLOCK(&worker->async);
-    uct_ep_destroy(uct_ep);
     --worker->flush_ops_count;
     iter = kh_get(ucp_worker_discard_uct_ep_hash,
                   &worker->discard_uct_ep_hash, uct_ep);
@@ -2394,6 +2393,7 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     }
     kh_del(ucp_worker_discard_uct_ep_hash,
            &worker->discard_uct_ep_hash, iter);
+    uct_ep_destroy(uct_ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     return 1;
