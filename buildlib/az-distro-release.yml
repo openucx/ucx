@@ -85,4 +85,6 @@ jobs:
           isDraft: true
           addChangeLog: false
           assetUploadMode: replace
+          releaseNotesSource: file
+          releaseNotesFile: NEWS
           assets: "./$(artifact_name)"
