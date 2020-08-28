@@ -54,9 +54,10 @@ static inline void uct_ugni_format_fma_amo(uct_ugni_rdma_fetch_desc_t *amo, gni_
 {
     if (NULL != comp) {
         amo->orig_comp_cb = comp;
-        comp = &amo->tmp;
-        amo->tmp.func = unpack_cb;
-        amo->tmp.count = 1;
+        comp              = &amo->tmp;
+        amo->tmp.func     = unpack_cb;
+        amo->tmp.count    = 1;
+        amo->tmp.status   = UCS_OK;
     }
 
     uct_ugni_format_fma(&amo->super, GNI_POST_AMO, buffer, remote_addr,
@@ -580,6 +581,8 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
 
     fma_desc->tmp.func  = uct_ugni_unalign_fma_get_cb;
     fma_desc->tmp.count = 1;
+    fma_desc->tmp.status = UCS_OK;
+
     uct_ugni_format_get_fma(fma_desc,
                             remote_addr, rkey, length,
                             ep, comp,
@@ -654,10 +657,12 @@ static ucs_status_t uct_ugni_ep_get_composed_fma_rdma(uct_ep_h tl_ep, void *buff
     fma_remote_start = rdma_remote_start + rdma_length;
     aligned_fma_remote_start = ucs_align_up_pow2(fma_remote_start, UGNI_GET_ALIGN);
     /* The FMA completion is used to signal when both descs have completed. */
-    fma_desc->tmp.count = 2;
-    fma_desc->tmp.func = assemble_composed_unaligned;
+    fma_desc->tmp.count  = 2;
+    fma_desc->tmp.status = UCS_OK;
+    fma_desc->tmp.func   = assemble_composed_unaligned;
     /* The RDMA completion is used to signal when both descs have been freed */
-    rdma->tmp.count = 2;
+    rdma->tmp.count  = 2;
+    rdma->tmp.status = UCS_OK;
     uct_ugni_format_get_fma(fma_desc, aligned_fma_remote_start, rkey, fma_length, ep, comp, &fma_desc->tmp, NULL, NULL);
     fma_desc->tail = aligned_fma_remote_start - fma_remote_start;
     uct_ugni_format_unaligned_rdma(rdma, buffer, rdma_remote_start, memh, rkey,
