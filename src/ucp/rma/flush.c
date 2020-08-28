@@ -300,6 +300,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
     req->send.uct.func          = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
     req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
+    req->send.state.uct_comp.status = UCS_OK;
 
     ucp_ep_flush_progress(req);
 

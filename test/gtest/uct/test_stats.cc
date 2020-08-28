@@ -27,8 +27,9 @@ extern "C" {
 class test_uct_stats : public uct_p2p_test {
 public:
     test_uct_stats() : uct_p2p_test(0), lbuf(NULL), rbuf(NULL) {
-        m_comp.func  = NULL;
-        m_comp.count = 0;
+        m_comp.func   = NULL;
+        m_comp.count  = 0;
+        m_comp.status = UCS_OK;
     }
 
     virtual void init() {
@@ -162,8 +163,9 @@ public:
     }
 
     void init_completion() {
-        m_comp.count = 2;
-        m_comp.func  = NULL;
+        m_comp.count  = 2;
+        m_comp.status = UCS_OK;
+        m_comp.func   = NULL;
     }
 
     void wait_for_completion(ucs_status_t status) {

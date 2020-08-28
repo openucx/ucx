@@ -278,9 +278,10 @@ UCS_TEST_P(test_dc, dcs_ep_flush_destroy) {
     EXPECT_EQ(1, iface->tx.stack_top);
     EXPECT_EQ(ep, iface->tx.dcis[ep->dci].ep);
 
-    comp.uct_comp.count = 1;
-    comp.uct_comp.func  = uct_comp_cb;
-    comp.e              = m_e1;
+    comp.uct_comp.count  = 1;
+    comp.uct_comp.func   = uct_comp_cb;
+    comp.uct_comp.status = UCS_OK;
+    comp.e               = m_e1;
 
     status = uct_ep_flush(m_e1->ep(0), 0, &comp.uct_comp);
     do {
