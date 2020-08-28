@@ -701,7 +701,7 @@ void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
         ucs_assert(ucp_wireup_ep_test(ep->uct_eps[lane]));
         ucs_trace("ep %p: wireup uct_ep[%d]=%p next set to %p%s", ep, lane,
                   ep->uct_eps[lane], uct_ep, info);
-        ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, 1);
+        ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, 1, 1);
         ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
     }
 }
@@ -868,6 +868,9 @@ ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
                               iface_attr->cap.am.max_bcopy);
         }
 
+        ucs_assert(ucp_wireup_ep(ep->uct_eps[proxy_lane])->flags &
+                   UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);
+
         /* Create a signaling ep to the proxy lane */
         if (proxy_lane == lane) {
             /* If proxy is to the same lane, temporarily remove the existing
@@ -876,7 +879,6 @@ ucs_status_t ucp_wireup_resolve_proxy_lanes(ucp_ep_h ep)
              * proxy, so ucp_wireup_extract_lane() handles both cases.
              */
             uct_ep = ucp_wireup_extract_lane(ep, proxy_lane);
-            ucs_assert_always(uct_ep != NULL);
             status = ucp_signaling_ep_create(ep, uct_ep, 1, &signaling_ep);
             if (status != UCS_OK) {
                 /* coverity[leaked_storage] */
@@ -1223,7 +1225,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     uct_ep_pending_purge(uct_ep, ucp_wireup_connect_remote_purge_cb, &tmp_q);
 
     /* the wireup ep should use the existing [am_lane] as next_ep */
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, 1);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, 1, 1);
 
     if (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
         status = ucp_wireup_send_request(ep);

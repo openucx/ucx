@@ -266,6 +266,8 @@ static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
     ucp_lane_index_t lane_idx;
     ucs_status_t status;
     uct_ep_h uct_ep;
+    int is_local_connected;
+    ucp_wireup_ep_t *from_wireup_ep;
 
     to_is_owner   = change_ownership;
     from_is_owner = !change_ownership;
@@ -287,25 +289,29 @@ static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
             continue;
         }
 
+        from_wireup_ep = ucp_wireup_ep(from_ep->uct_eps[lane_idx]);
+
+        is_local_connected = (from_wireup_ep == NULL) ||
+                             (from_wireup_ep->flags &
+                              UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);
+
         status = ucp_wireup_ep_create(to_ep, &to_ep->uct_eps[lane_idx]);
         if (status != UCS_OK) {
             ucs_fatal("%p: failed to create WIREUP EP to wrap %p UCT EP: %s",
                       to_ep, uct_ep, ucs_status_string(status));
         }
 
-        ucs_assert(!ucp_wireup_ep_test(from_ep->uct_eps[lane_idx]) ||
-                   ucp_wireup_ep(from_ep->uct_eps[lane_idx])->super.is_owner);
+        ucp_wireup_ep_set_next_ep(to_ep->uct_eps[lane_idx], uct_ep,
+                                  to_is_owner, is_local_connected);
 
-        ucp_wireup_ep_set_next_ep(to_ep->uct_eps[lane_idx],
-                                  uct_ep, to_is_owner);
-
-        if (from_ep->uct_eps[lane_idx] == NULL) {
+        if (from_wireup_ep == NULL) {
             /* from_ep must be the owner of the UCT EP in this case */
             ucs_assert(from_is_owner);
             from_ep->uct_eps[lane_idx] = uct_ep;
         } else {
-            ucp_wireup_ep_set_next_ep(from_ep->uct_eps[lane_idx],
-                                      uct_ep, from_is_owner);
+            ucs_assert(from_wireup_ep->super.is_owner);
+            ucp_wireup_ep_set_next_ep(from_ep->uct_eps[lane_idx], uct_ep,
+                                      from_is_owner, is_local_connected);
         }
     }
 }
@@ -679,7 +685,7 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
         return status;
     }
 
-    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep, 1);
+    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep, 1, 1);
     ucp_ep_flush_state_reset(ucp_ep);
 
     return UCS_OK;
@@ -1005,7 +1011,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         return status;
     }
 
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, 1);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, 1, 1);
     return UCS_OK;
 }
 
