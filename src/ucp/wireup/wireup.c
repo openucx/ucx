@@ -301,9 +301,9 @@ ucp_wireup_ep_configs_use_same_lane(ucp_ep_config_key_t *ep_config_key,
 
     for (another_lane = 0; another_lane < another_ep_config_key->num_lanes;
          ++another_lane) {
-        if (ucp_ep_config_lane_is_equal(ep_config_key,
-                                        another_ep_config_key,
-                                        lane, another_lane, 1)) {
+        if (ucp_ep_config_lane_tl_is_equal(ep_config_key,
+                                           another_ep_config_key,
+                                           lane, another_lane)) {
             return another_lane;
         }
     }
