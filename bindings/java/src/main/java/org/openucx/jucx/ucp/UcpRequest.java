@@ -20,6 +20,9 @@ public class UcpRequest extends UcxNativeStruct implements Closeable {
     private long recvSize;
 
     private UcpRequest(long nativeId) {
+        if (nativeId < 0) {
+            nativeId = 0L;
+        }
         setNativeId(nativeId);
     }
 
