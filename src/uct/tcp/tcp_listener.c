@@ -108,7 +108,7 @@ UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
                             params->user_data : NULL;
 
     backlog = uct_listener_backlog_adjust(params, ucs_socket_max_conn());
-    if (backlog == 0) {
+    if (backlog <= 0) {
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }

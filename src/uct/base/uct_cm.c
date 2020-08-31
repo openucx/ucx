@@ -238,8 +238,8 @@ int uct_listener_backlog_adjust(const uct_listener_params_t *params,
         backlog = max_value;
     }
 
-    if (backlog == 0) {
-        ucs_error("the backlog value cannot be zero");
+    if (backlog <= 0) {
+        ucs_error("the backlog value cannot be zero or negative");
     }
 
     return backlog;
