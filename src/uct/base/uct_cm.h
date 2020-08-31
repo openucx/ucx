@@ -108,11 +108,11 @@ extern ucs_config_field_t uct_cm_config_table[];
 UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
                   uct_component_h);
 
+int uct_listener_backlog_adjust(const uct_listener_params_t *params,
+                                int default_value);
+
 ucs_status_t uct_cm_set_common_data(uct_cm_base_ep_t *ep,
                                     const uct_ep_params_t *params);
-
-int uct_cm_set_listener_backlog(const uct_listener_params_t *params,
-                                int default_value);
 
 ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
                                const uct_cm_ep_priv_data_pack_args_t *pack_args,

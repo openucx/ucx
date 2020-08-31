@@ -60,7 +60,11 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
         goto err_destroy_id;
     }
 
-    backlog = uct_cm_set_listener_backlog(params, ucs_rdmacm_max_backlog());
+    backlog = uct_listener_backlog_adjust(params, ucs_rdmacm_max_backlog());
+    if (backlog == 0) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_destroy_id;
+    }
 
     if (rdma_listen(self->id, backlog)) {
         ucs_error("rdma_listen(id:=%p addr=%s backlog=%d) failed: %m",
