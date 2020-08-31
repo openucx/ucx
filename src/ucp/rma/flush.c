@@ -377,15 +377,17 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nbx, (ep, param),
     return request;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_flush_ops_count_check(ucp_worker_h worker)
+{
+    return !worker->flush_ops_count;
+}
+
 static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
 {
     ucp_rsc_index_t iface_id;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
-
-    if (worker->flush_ops_count != 0) {
-        return UCS_INPROGRESS;
-    }
 
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         wiface = worker->ifaces[iface_id];
@@ -444,7 +446,8 @@ static unsigned ucp_worker_flush_progress(void *arg)
     ucp_ep_h ep;
 
     status = ucp_worker_flush_check(worker);
-    if ((status == UCS_OK) && (&next_ep->ep_list == &worker->all_eps)) {
+    if (ucp_worker_flush_ops_count_check(worker) &&
+        ((status == UCS_OK) || (&next_ep->ep_list == &worker->all_eps))) {
         /* If all ifaces are flushed, or we finished going over all endpoints,
          * and all scheduled operations on worker were completed or iface flush
          * failed with error, no need to progress this request actively anymore.
@@ -487,9 +490,12 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
     ucs_status_t status;
     ucp_request_t *req;
 
-    status = ucp_worker_flush_check(worker);
-    if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
-        return UCS_STATUS_PTR(status);
+    if (ucp_worker_flush_ops_count_check(worker)) {
+        status = ucp_worker_flush_check(worker);
+        if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
+            /* UCS_OK could be returned here */
+            return UCS_STATUS_PTR(status);
+        }
     }
 
     req = ucp_request_get_param(worker, param,
