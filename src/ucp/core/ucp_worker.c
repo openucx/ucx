@@ -2394,8 +2394,9 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     }
     kh_del(ucp_worker_discard_uct_ep_hash,
            &worker->discard_uct_ep_hash, iter);
-    uct_ep_destroy(uct_ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
+
+    uct_ep_destroy(uct_ep);
 
     return 1;
 }
@@ -2419,10 +2420,14 @@ ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self,
                                       req, UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
 }
 
-static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
+/* Forward declaration to use in the pending callback */
+static unsigned ucp_worker_discard_uct_ep_progress(void *arg);
+
+static ucs_status_t
+ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
 {
+    ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
-    ucp_request_t *req       = (ucp_request_t*)arg;
     uct_ep_h uct_ep          = req->send.discard_uct_ep.uct_ep;
     ucp_worker_h worker      = req->send.discard_uct_ep.ucp_worker;
     ucs_status_t status;
@@ -2437,21 +2442,25 @@ static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
                                               ucp_worker_discard_uct_ep_progress,
                                               req, UCS_CALLBACKQ_FLAG_ONESHOT,
                                               &cb_id);
-            return 0;
+        } else {
+            ucs_assert(status == UCS_OK);
         }
-        ucs_assert(status == UCS_OK);
+
+        return UCS_ERR_NO_RESOURCE;
     } else if (status != UCS_INPROGRESS) {
         ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp, status);
+        return status;
     }
 
-    return 1;
+    return UCS_OK;
 }
 
-static ucs_status_t
-ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
+static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    return ucp_worker_discard_uct_ep_progress(req) ? UCS_OK : UCS_INPROGRESS;
+    ucp_request_t *req  = (ucp_request_t*)arg;
+    ucs_status_t status = ucp_worker_discard_uct_ep_pending_cb(&req->send.uct);
+
+    return !UCS_STATUS_IS_ERR(status);
 }
 
 /* must be called with async lock held */
