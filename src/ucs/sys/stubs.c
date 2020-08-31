@@ -26,6 +26,11 @@ int64_t ucs_empty_function_return_zero_int64()
     return 0;
 }
 
+int ucs_empty_function_return_zero_int()
+{
+    return 0;
+}
+
 unsigned ucs_empty_function_return_one()
 {
     return 1;
