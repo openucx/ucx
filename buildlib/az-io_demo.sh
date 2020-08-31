@@ -23,7 +23,7 @@ export UCX_RC_MAX_RD_ATOMIC=16
 export UCX_RC_ROCE_PATH_FACTOR=2
 export UCX_SOCKADDR_CM_ENABLE=y
 export UCX_RC_MAX_GET_ZCOPY=32k
-export UCX_RC_TX_NUM_GET_OPS=8
+export UCX_RC_TX_NUM_GET_BYTES=256K
 
 ## run server
 if [ "x$server_ip" = "x" ]; then
