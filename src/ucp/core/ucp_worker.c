@@ -1086,7 +1086,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         /* Cache tl_bitmap on the context, so the next workers would not need
          * to select best ifaces. */
         context->tl_bitmap = tl_bitmap;
-        ucs_debug("selected tl bitmap: 0x%lx (%d tls)",
+        ucs_debug("selected tl bitmap: 0x%"PRIx64" (%d tls)",
                   tl_bitmap, ucs_popcount(tl_bitmap));
     }
 
@@ -1101,7 +1101,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         }
     }
 
-    ucs_debug("selected scalable tl bitmap: 0x%lx (%d tls)",
+    ucs_debug("selected scalable tl bitmap: 0x%"PRIx64" (%d tls)",
               worker->scalable_tl_bitmap,
               ucs_popcount(worker->scalable_tl_bitmap));
 

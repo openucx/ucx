@@ -7,7 +7,7 @@
 #ifndef UCP_TAG_RNDV_H_
 #define UCP_TAG_RNDV_H_
 
-#include <ucp/proto/rndv.h>
+#include <ucp/rndv/rndv.h>
 
 
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
