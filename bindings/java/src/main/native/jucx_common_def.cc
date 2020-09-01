@@ -255,8 +255,14 @@ void stream_recv_callback(void *request, ucs_status_t status, size_t length)
 UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, jobject callback)
 {
     JNIEnv *env = get_jni_env();
-    jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor,
-                                          (native_ptr)request);
+    jobject jucx_request;
+    if (!UCS_PTR_IS_PTR(request)) {
+        jmethodID empty_constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
+        jucx_request = env->NewObject(jucx_request_cls, empty_constructor);
+    } else {
+        jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor,
+                                      (native_ptr)request);
+    }
 
     if (UCS_PTR_IS_PTR(request)) {
         struct jucx_context *ctx = (struct jucx_context *)request;

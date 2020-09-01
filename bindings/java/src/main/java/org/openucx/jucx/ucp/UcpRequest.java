@@ -20,11 +20,13 @@ public class UcpRequest extends UcxNativeStruct implements Closeable {
     private long recvSize;
 
     private UcpRequest(long nativeId) {
-        if (nativeId < 0) {
-            nativeId = 0L;
-        }
         setNativeId(nativeId);
     }
+
+    /**
+     * To initialize for failed and immediately completed requests.
+     */
+    private UcpRequest() { }
 
     /**
      * The size of the received data in bytes, valid only for recv requests, e.g.:
