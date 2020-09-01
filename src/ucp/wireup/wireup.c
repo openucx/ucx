@@ -293,18 +293,15 @@ ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
 }
 
 ucp_lane_index_t
-ucp_wireup_ep_configs_use_same_lane(ucp_ep_config_key_t *ep_config_key,
-                                    ucp_ep_config_key_t *another_ep_config_key,
-                                    ucp_lane_index_t lane)
+ucp_wireup_ep_configs_use_same_tl_lane(ucp_ep_config_key_t *key1,
+                                       ucp_ep_config_key_t *key2,
+                                       ucp_lane_index_t lane)
 {
-    ucp_lane_index_t another_lane;
+    ucp_lane_index_t lane_idx;
 
-    for (another_lane = 0; another_lane < another_ep_config_key->num_lanes;
-         ++another_lane) {
-        if (ucp_ep_config_lane_tl_is_equal(ep_config_key,
-                                           another_ep_config_key,
-                                           lane, another_lane)) {
-            return another_lane;
+    for (lane_idx = 0; lane_idx < key2->num_lanes; ++lane_idx) {
+        if (ucp_ep_config_lane_tl_is_equal(key1, lane, key2, lane_idx)) {
+            return lane_idx;
         }
     }
 

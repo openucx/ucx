@@ -451,7 +451,7 @@ struct ucp_wireup_sockaddr_data {
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
                                                   UCP_WIREUP_SA_DATA_xx */
-    ucp_rsc_index_t           dev_index;     /**< Device address index used to
+    uint8_t                   dev_index;     /**< Device address index used to
                                                   build remote address in
                                                   UCP_WIREUP_SA_DATA_CM_ADDR
                                                   mode */
@@ -538,8 +538,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 
 int ucp_ep_config_lane_tl_is_equal(const ucp_ep_config_key_t *key1,
-                                   const ucp_ep_config_key_t *key2,
                                    ucp_lane_index_t lane1,
+                                   const ucp_ep_config_key_t *key2,
                                    ucp_lane_index_t lane2);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,

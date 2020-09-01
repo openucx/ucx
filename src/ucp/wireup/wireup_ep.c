@@ -115,9 +115,9 @@ int ucp_wireup_tmp_ep_destroy(ucp_ep_h ep, ucp_wireup_ep_t *wireup_ep,
     for (lane = 0; lane < ucp_ep_num_lanes(tmp_ep); ++lane) {
         if (tmp_ep->uct_eps[lane] != NULL) {
             found_lane =
-                ucp_wireup_ep_configs_use_same_lane(&ucp_ep_config(tmp_ep)->key,
-                                                    &ucp_ep_config(ep)->key,
-                                                    lane);
+                ucp_wireup_ep_configs_use_same_tl_lane(&ucp_ep_config(tmp_ep)->key,
+                                                       &ucp_ep_config(ep)->key,
+                                                       lane);
             if (found_lane != UCP_NULL_LANE) {
                 uct_ep = tmp_ep->uct_eps[lane];
                 ucs_assert(ucp_wireup_ep_test(uct_ep) &&
@@ -496,6 +496,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
 {
     ucp_ep_h ucp_ep     = self->super.ucp_ep;
     ucp_worker_h worker = ucp_ep->worker;
+    int UCS_V_UNUSED ret;
 
     ucs_assert(ucs_queue_is_empty(&self->pending_q));
     ucs_assert(self->pending_count == 0);
@@ -515,7 +516,11 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     UCS_ASYNC_BLOCK(&worker->async);
     if (self->tmp_ep != NULL) {
         ucs_assert(!(self->tmp_ep->flags & UCP_EP_FLAG_USED));
-        ucp_wireup_tmp_ep_destroy(ucp_ep, self, UCT_FLUSH_FLAG_CANCEL, NULL);
+        /* TODO: replace by ucp_worker_discard_uct_ep() with FLUSH_CANCEL flag,
+         * since the TMP EP will never exist after completing the destroying
+         * of the TMP EP */
+        ret = ucp_wireup_tmp_ep_destroy(ucp_ep, self, UCT_FLUSH_FLAG_CANCEL, NULL);
+        ucs_assert(ret == 1);
     }
 
     --worker->flush_ops_count;

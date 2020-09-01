@@ -569,9 +569,10 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
                     ucp_lane_type_t lane_type,
                     ucp_wireup_select_context_t *select_ctx)
 {
-    int is_proxy = 0;
+    int is_proxy                    = 0;
+    ucp_address_entry_t *addr_entry = &select_params->address->address_list
+                                           [select_info->addr_index];
     ucp_md_index_t dst_md_index;
-    uint64_t remote_event_flags;
     ucp_rsc_index_t dst_dev_index;
 
     if ((lane_type == UCP_LANE_TYPE_AM) || (lane_type == UCP_LANE_TYPE_AM_BW) ||
@@ -580,17 +581,13 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
          * deactivate its interface and wait for signaled active message to wake up.
          * Use a proxy lane which would send the first active message as signaled to
          * make sure the remote interface will indeed wake up. */
-        remote_event_flags = select_params->address->address_list
-                                 [select_info->addr_index].iface_attr.event_flags;
-        is_proxy           = ucp_wireup_is_lane_proxy(select_params->ep->worker,
-                                                      select_info->rsc_index,
-                                                      remote_event_flags);
+        is_proxy = ucp_wireup_is_lane_proxy(select_params->ep->worker,
+                                            select_info->rsc_index,
+                                            addr_entry->iface_attr.event_flags);
     }
 
-    dst_md_index  = select_params->address->address_list
-                                 [select_info->addr_index].md_index;
-    dst_dev_index = select_params->address->address_list
-                                 [select_info->addr_index].dev_index;
+    dst_md_index  = addr_entry->md_index;
+    dst_dev_index = addr_entry->dev_index;
     return ucp_wireup_add_lane_desc(select_info, dst_md_index, dst_dev_index,
                                     lane_type, is_proxy, select_ctx);
 }
