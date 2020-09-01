@@ -419,9 +419,9 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
                                    unsigned path_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address)
 {
-    ucp_wireup_ep_t *wireup_ep     = ucp_wireup_ep(uct_ep);
-    ucp_ep_h ucp_ep                = wireup_ep->super.ucp_ep;
-    ucp_worker_h worker            = ucp_ep->worker;
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
+    ucp_worker_h worker        = ucp_ep->worker;
     uct_ep_params_t uct_ep_params;
     ucs_status_t status;
     uct_ep_h next_ep;
@@ -439,7 +439,7 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
         goto err;
     }
 
-    ucp_wireup_ep_set_next_ep(uct_ep, next_ep, 1, 0);
+    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
 
     ucs_debug("ep %p: created next_ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
               ucp_ep, wireup_ep->super.uct_ep, ucp_ep_peer_name(ucp_ep),
@@ -647,17 +647,12 @@ out:
     return status;
 }
 
-void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep,
-                               int is_owner, int is_local_connected)
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep, int is_owner)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
-    ucs_assert(wireup_ep != NULL);
-    ucs_assert(wireup_ep->super.uct_ep == NULL);
-    if (is_local_connected) {
-        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    }
     ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, is_owner);
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
 }
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)

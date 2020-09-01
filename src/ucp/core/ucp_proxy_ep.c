@@ -239,6 +239,7 @@ void ucp_proxy_ep_replace(ucp_proxy_ep_t *proxy_ep)
 void ucp_proxy_ep_set_uct_ep(ucp_proxy_ep_t *proxy_ep, uct_ep_h uct_ep,
                              int is_owner)
 {
+    ucs_assert((proxy_ep != NULL) && (proxy_ep->uct_ep == NULL));
     proxy_ep->uct_ep   = uct_ep;
     proxy_ep->is_owner = is_owner;
 }
