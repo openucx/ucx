@@ -492,10 +492,10 @@ ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
             (lane_desc->path_index == select_info->path_index))
         {
             lane = lane_desc - select_ctx->lane_descs;
-            ucs_assertv_always(dst_dev_index == lane_desc->dst_dev_index,
+            ucs_assertv_always(dst_md_index == lane_desc->dst_md_index,
                                "lane[%d].dst_md_index=%d, dst_md_index=%d",
                                lane, lane_desc->dst_md_index, dst_md_index);
-            ucs_assertv_always(dst_md_index == lane_desc->dst_md_index,
+            ucs_assertv_always(dst_dev_index == lane_desc->dst_dev_index,
                                "lane[%d].dst_dev_index=%d, dst_dev_index=%d",
                                lane, lane_desc->dst_dev_index, dst_dev_index);
             ucs_assertv_always(!(lane_desc->lane_types & UCS_BIT(lane_type)),

@@ -1029,8 +1029,10 @@ static  int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
                                         ucp_lane_index_t lane1,
                                         ucp_lane_index_t lane2)
 {
-    return !memcmp(&key1->lanes[lane1], &key2->lanes[lane2],
-                   sizeof(*key1->lanes));
+    return ucp_ep_config_lane_tl_is_equal(key1, key2, lane1, lane2)             &&
+           (key1->lanes[lane1].proxy_lane == key2->lanes[lane2].proxy_lane)     &&
+           (key1->lanes[lane1].dst_md_index == key2->lanes[lane2].dst_md_index) &&
+           (key1->lanes[lane1].lane_types == key2->lanes[lane2].lane_types);
 }
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
