@@ -705,7 +705,6 @@ ucs_status_t uct_tcp_sockcm_ep_set_sockopt(uct_tcp_sockcm_ep_t *ep)
     }
 
     return ucs_tcp_base_set_syn_cnt(ep->fd, tcp_sockcm->syn_cnt);
-
 }
 
 static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,

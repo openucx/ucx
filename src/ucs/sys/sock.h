@@ -207,20 +207,24 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
  * Open a socket, bind a sockadrr to that socket and start listening on it for
  * incoming connection requests.
  *
- * @param [in]  saddr           Sockaddr for the server to listen on.
- *                              If the port number inside is set to zero -
- *                              use a random port.
- * @param [in]  socklen         Size of saddr.
- * @param [in]  backlog         Length of the queue for pending connections -
- *                              for the listen() call.
- * @param [in]  silent_bind     Whether or not to print error message on bind
- *                              failure with EADDRINUSE.
- * @param [out] listen_fd       The fd that belongs to the server.
+ * @param [in]  saddr             Sockaddr for the server to listen on.
+ *                                If the port number inside is set to zero -
+ *                                use a random port.
+ * @param [in]  socklen           Size of saddr.
+ * @param [in]  backlog           Length of the queue for pending connections -
+ *                                for the listen() call.
+ * @param [in]  silent_bind       Whether or not to print error message on bind
+ *                                failure with EADDRINUSE.
+ * @param [in]  allow_addr_inuse  Whether or not to allow the socket to use an
+ *                                address that is already in use and was not
+ *                                released by another socket yet.
+ * @param [out] listen_fd         The fd that belongs to the server.
  *
  * @return UCS_OK on success or an error code on failure.
  */
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int silent_bind, int *listen_fd);
+                                    int backlog, int silent_bind, int allow_addr_inuse,
+                                    int *listen_fd);
 
 
 /**
