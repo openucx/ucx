@@ -106,8 +106,11 @@ UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
     self->conn_request_cb = params->conn_request_cb;
     self->user_data       = (params->field_mask & UCT_LISTENER_PARAM_FIELD_USER_DATA) ?
                             params->user_data : NULL;
-    backlog               = (params->field_mask & UCT_LISTENER_PARAM_FIELD_BACKLOG) ?
-                            params->backlog : ucs_socket_max_conn();
+
+    status = uct_listener_backlog_adjust(params, ucs_socket_max_conn(), &backlog);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     status = ucs_socket_server_init(saddr, socklen, backlog, 0,
                                     self->sockcm->allow_addr_inuse,

@@ -291,6 +291,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "require out of band synchronization before destroying UCP resources.",
    ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
 
+  {"LISTENER_BACKLOG", "auto",
+   "'auto' means that each transport would use its maximal allowed value.\n"
+   "If a value larger than what a transport supports is set, the backlog value\n"
+   "would be cut to that maximal value.",
+   ucs_offsetof(ucp_config_t, ctx.listener_backlog), UCS_CONFIG_TYPE_ULUNITS},
+
   {"PROTO_ENABLE", "n",
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
