@@ -1265,7 +1265,8 @@ test_memtrack() {
 test_unused_env_var() {
 	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
-	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q "UCX_IB_PORTS"
+	#UCX_TCP_CM_ALLOW_ADDR_INUSE is currently set but not used. Remove when tcp_sockcm is set in the cms priority list
+	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS|UCX_TCP_CM_ALLOW_ADDR_INUSE"
 }
 
 test_env_var_aliases() {
@@ -1632,6 +1633,7 @@ run_tests() {
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 100))"-"$((34000 + EXECUTOR_NUMBER * 100))"
+	export UCX_TCP_CM_ALLOW_ADDR_INUSE=y
 
 	# test cuda build if cuda modules available
 	do_distributed_task 2 4 build_cuda

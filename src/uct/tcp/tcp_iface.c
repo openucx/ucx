@@ -355,7 +355,7 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
 
         status = ucs_socket_server_init((struct sockaddr *)&bind_addr,
                                         sizeof(bind_addr), ucs_socket_max_conn(),
-                                        retry, &iface->listen_fd);
+                                        retry, 0, &iface->listen_fd);
     } while (retry && (status == UCS_ERR_BUSY));
 
     return status;
