@@ -207,7 +207,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     }
 
     if (cm_attr.max_conn_priv < (sizeof(*sa_data) + ucp_addr_size)) {
-        ucs_error("CM private data buffer is to small to pack UCP endpoint info, "
+        ucs_error("CM private data buffer is too small to pack UCP endpoint info, "
                   "ep %p/%p service data %lu, address length %lu, cm %p max_conn_priv %lu",
                   ep, tmp_ep, sizeof(*sa_data), ucp_addr_size, cm,
                   cm_attr.max_conn_priv);
