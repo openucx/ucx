@@ -256,15 +256,10 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
 {
     JNIEnv *env = get_jni_env();
     jobject jucx_request;
-    if (!UCS_PTR_IS_PTR(request)) {
-        jmethodID empty_constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
-        jucx_request = env->NewObject(jucx_request_cls, empty_constructor);
-    } else {
-        jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor,
-                                      (native_ptr)request);
-    }
 
     if (UCS_PTR_IS_PTR(request)) {
+        jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor,
+                                      (native_ptr)request);
         struct jucx_context *ctx = (struct jucx_context *)request;
         ucs_recursive_spin_lock(&ctx->lock);
         if (ctx->status == UCS_INPROGRESS) {
@@ -285,6 +280,8 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
         }
         ucs_recursive_spin_unlock(&ctx->lock);
     } else {
+        jmethodID empty_constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
+        jucx_request = env->NewObject(jucx_request_cls, empty_constructor);
         set_jucx_request_completed(env, jucx_request, NULL);
         if (UCS_PTR_IS_ERR(request)) {
             JNU_ThrowExceptionByStatus(env, UCS_PTR_STATUS(request));

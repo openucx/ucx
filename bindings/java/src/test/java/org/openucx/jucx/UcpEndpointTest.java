@@ -589,30 +589,4 @@ public class UcpEndpointTest extends UcxTest {
         worker1.close();
         context1.close();
     }
-
-    @Test
-    public void testFailedRequest() {
-        UcpParams params = new UcpParams().requestTagFeature();
-        UcpWorkerParams workerParams = new UcpWorkerParams();
-        UcpContext context1 = new UcpContext(params);
-        UcpContext context2 = new UcpContext(params);
-        UcpWorker worker1 = context1.newWorker(workerParams);
-        UcpWorker worker2 = context2.newWorker(workerParams);
-
-        UcpEndpoint ep = worker1.newEndpoint(
-            new UcpEndpointParams().setUcpAddress(worker2.getAddress()));
-
-        AtomicBoolean onErrorCalled = new AtomicBoolean(false);
-        ep.sendTaggedNonBlocking(123L, 123L, 1L, new UcxCallback() {
-            @Override
-            public void onError(int ucsStatus, String errorMsg) {
-                onErrorCalled.set(true);
-            }
-        });
-
-        // No progress needed since sendTaggedNb should  return error due to invalid address.
-        assertTrue(onErrorCalled.get());
-        Collections.addAll(resources, context1, context2, worker1, worker2, ep);
-        closeResources();
-    }
 }
