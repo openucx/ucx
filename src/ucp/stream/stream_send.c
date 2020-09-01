@@ -148,6 +148,8 @@ static ucs_status_t ucp_stream_contig_am_short(uct_pending_req_t *self)
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
+
+    req->send.lane = ucp_ep_get_am_lane(req->send.ep);
     return status;
 }
 
