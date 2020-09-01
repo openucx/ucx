@@ -31,7 +31,17 @@ int ucs_empty_function_return_zero_int()
     return 0;
 }
 
+size_t ucs_empty_function_return_zero_size_t()
+{
+    return 0;
+}
+
 unsigned ucs_empty_function_return_one()
+{
+    return 1;
+}
+
+int ucs_empty_function_return_one_int()
 {
     return 1;
 }
