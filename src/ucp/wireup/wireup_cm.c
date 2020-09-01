@@ -288,9 +288,6 @@ static void ucp_cm_copy_ep_lanes(ucp_ep_h to_ep, ucp_ep_h from_ep,
                                                lanes[lane_idx].rsc_index));
             continue;
         }
-
-        from_wireup_ep = ucp_wireup_ep(from_ep->uct_eps[lane_idx]);
-
         status = ucp_wireup_ep_create(to_ep, &to_ep->uct_eps[lane_idx]);
         if (status != UCS_OK) {
             ucs_fatal("%p: failed to create WIREUP EP to wrap %p UCT EP: %s",
