@@ -16,18 +16,18 @@
 
 static long ucs_rdmacm_max_backlog()
 {
-    long max_backlog;
+    static long max_backlog = 0;
 
-    if (ucs_read_file_number(&max_backlog, 1,
-                             UCS_RDMACM_MAX_BACKLOG_PATH) == UCS_OK) {
+    if ((max_backlog != 0) ||
+        (ucs_read_file_number(&max_backlog, 1, UCS_RDMACM_MAX_BACKLOG_PATH) == UCS_OK)) {
         ucs_assert(max_backlog <= INT_MAX);
-        return max_backlog;
     } else {
-        ucs_warn("unable to read max_backlog value from %s file",
+        ucs_diag("unable to read max_backlog value from %s file",
                  UCS_RDMACM_MAX_BACKLOG_PATH);
         max_backlog = 1024;
-        return max_backlog;
     }
+
+    return max_backlog;
 }
 
 UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
@@ -60,9 +60,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
         goto err_destroy_id;
     }
 
-    backlog = uct_listener_backlog_adjust(params, ucs_rdmacm_max_backlog());
-    if (backlog <= 0) {
-        status = UCS_ERR_INVALID_PARAM;
+    status = uct_listener_backlog_adjust(params, ucs_rdmacm_max_backlog(),
+                                         &backlog);
+    if (status != UCS_OK) {
         goto err_destroy_id;
     }
 

@@ -223,26 +223,27 @@ ucs_status_t uct_listener_reject(uct_listener_h listener,
     return listener->cm->ops->listener_reject(listener, conn_request);
 }
 
-int uct_listener_backlog_adjust(const uct_listener_params_t *params,
-                                int max_value)
+ucs_status_t uct_listener_backlog_adjust(const uct_listener_params_t *params,
+                                         int max_value, int *backlog)
 {
-    int backlog;
-
     if (params->field_mask & UCT_LISTENER_PARAM_FIELD_BACKLOG) {
         if (params->backlog > max_value) {
             ucs_diag("configure value %d is greater than the max_value %d. "
                      "using max_value", params->backlog, max_value);
+            *backlog = max_value;
+        } else {
+            *backlog = params->backlog;
         }
-        backlog = ucs_min(params->backlog, max_value);
     } else {
-        backlog = max_value;
+        *backlog = max_value;
     }
 
-    if (backlog <= 0) {
+    if (*backlog <= 0) {
         ucs_error("the backlog value cannot be zero or negative");
+        return UCS_ERR_INVALID_PARAM;
     }
 
-    return backlog;
+    return UCS_OK;
 }
 
 

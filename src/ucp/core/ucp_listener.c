@@ -246,7 +246,8 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
                                   UCT_LISTENER_PARAM_FIELD_BACKLOG;
     uct_params.conn_request_cb  = ucp_cm_server_conn_request_cb;
     uct_params.user_data        = listener;
-    uct_params.backlog          = ucs_min(INT_MAX, worker->context->config.ext.listener_backlog);
+    uct_params.backlog          = ucs_min((size_t)INT_MAX,
+                                          worker->context->config.ext.listener_backlog);
 
     listener->num_rscs          = 0;
     uct_listeners               = ucs_calloc(num_cms, sizeof(*uct_listeners),

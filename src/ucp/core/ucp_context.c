@@ -292,10 +292,9 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
 
   {"LISTENER_BACKLOG", "auto",
-   "Maximum number of pending connection requests for a listener.\n"
-   "auto means that each transport would use its system default.\n"
-   "If a value larger than a system default is set, the backlog value would be\n"
-   "cut to the system default.",
+   "'auto' means that each transport would use its maximal allowed value.\n"
+   "If a value larger than what a transport supports is set, the backlog value\n"
+   "would be cut to that maximal value.",
    ucs_offsetof(ucp_config_t, ctx.listener_backlog), UCS_CONFIG_TYPE_ULUNITS},
 
   {"PROTO_ENABLE", "n",
