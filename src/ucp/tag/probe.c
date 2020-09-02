@@ -12,7 +12,7 @@
 #include "tag_match.inl"
 
 #include <ucp/api/ucp.h>
-#include <ucp/proto/rndv.h>
+#include <ucp/rndv/rndv.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucs/datastruct/queue.h>
 

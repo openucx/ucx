@@ -824,12 +824,11 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    select_info.priority   = 0;  /**< Currently we have only 1 CM
-                                      implementation */
+    select_info.priority   = 0;  /**< Currently we have only 1 active CM */
     select_info.rsc_index  = UCP_NULL_RESOURCE; /**< RSC doesn't matter for CM */
     select_info.addr_index = 0;  /**< This makes sense only for transport
                                       lanes */
-    select_info.score      = 0.; /**< TODO: when we have > 1 CM implementation */
+    select_info.score      = 0.; /**< TODO: when we have > 1 active CMs */
     select_info.path_index = 0;  /**< Only one lane per CM device */
 
     /* server is not a proxy because it can create all lanes connected */

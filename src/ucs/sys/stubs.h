@@ -23,7 +23,10 @@ BEGIN_C_DECLS
 void ucs_empty_function();
 unsigned ucs_empty_function_return_zero();
 unsigned ucs_empty_function_return_one();
+int ucs_empty_function_return_one_int();
 int64_t ucs_empty_function_return_zero_int64();
+int ucs_empty_function_return_zero_int();
+size_t ucs_empty_function_return_zero_size_t();
 ucs_status_t ucs_empty_function_return_success();
 ucs_status_t ucs_empty_function_return_unsupported();
 ucs_status_t ucs_empty_function_return_inprogress();

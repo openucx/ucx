@@ -107,7 +107,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which is equivalent to all UCT components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SOCKADDR_TLS_PRIORITY", "rdmacm,sockcm",
+  {"SOCKADDR_TLS_PRIORITY", "rdmacm,tcp,sockcm",
    "Priority of sockaddr transports for client/server connection establishment.\n"
    "The '*' wildcard expands to all the available sockaddr transports.",
    ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -290,6 +290,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "establishment and enables synchronized close protocol which does not\n"
    "require out of band synchronization before destroying UCP resources.",
    ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
+
+  {"LISTENER_BACKLOG", "auto",
+   "'auto' means that each transport would use its maximal allowed value.\n"
+   "If a value larger than what a transport supports is set, the backlog value\n"
+   "would be cut to that maximal value.",
+   ucs_offsetof(ucp_config_t, ctx.listener_backlog), UCS_CONFIG_TYPE_ULUNITS},
 
   {"PROTO_ENABLE", "n",
    "Experimental: enable new protocol selection logic",

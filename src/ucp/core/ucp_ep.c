@@ -22,7 +22,7 @@
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/proto/proto_select.h>
-#include <ucp/proto/rndv.h>
+#include <ucp/rndv/rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
 #include <ucs/datastruct/queue.h>
@@ -177,7 +177,6 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err;
     }
 
-    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
     status = ucs_ptr_map_put(&worker->ptr_map, ep,
                              !!(ep_init_flags &
                                 UCP_EP_INIT_ERR_MODE_PEER_FAILURE),
@@ -186,6 +185,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_destroy_ep_base;
     }
 
+    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
     *ep_p = ep;
 
     return UCS_OK;
@@ -270,7 +270,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
 
     if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
         if (ucp_ep_config(ep)->key.err_mode != params->err_mode) {
-            ucs_error("asymmetric endpoint configuration not supported, "
+            ucs_error("asymmetric endpoint configuration is not supported, "
                       "error handling level mismatch");
             return UCS_ERR_UNSUPPORTED;
         }
@@ -826,7 +826,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_worker_err_handle_remove_filter, ep);
 
-    /* remove pending slow-path function it wasn't removed yet */
+    /* remove pending slow-path function if it wasn't removed yet */
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_listener_accept_cb_remove_filter, ep);
 
@@ -2153,7 +2153,7 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
     return zcopy_thresh;
 }
 
-ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
+ucp_wireup_ep_t* ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 
