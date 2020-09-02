@@ -1091,6 +1091,16 @@ private:
     }
 };
 
+UCS_TEST_P(test_ucp_sockaddr_protocols, stream_short_exp)
+{
+    test_stream_send_recv(1, true);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, stream_short_unexp)
+{
+    test_stream_send_recv(1, false);
+}
+
 UCS_TEST_P(test_ucp_sockaddr_protocols, tag_zcopy_4k_exp,
            "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
 {
