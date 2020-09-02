@@ -67,12 +67,12 @@ ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
     if (ret < 0) {
         ucs_assert(ret > UCS_ERR_LAST);
         status = (ucs_status_t)ret;
-        ucs_error("private data pack function failed with error: %s",
+        ucs_debug("private data pack function failed with error: %s",
                   ucs_status_string(status));
         goto out;
     } else if (ret > priv_data_max) {
         status = UCS_ERR_EXCEEDS_LIMIT;
-        ucs_error("private data pack function returned %zd (max: %zu)",
+        ucs_debug("private data pack function returned %zd (max: %zu)",
                   ret, priv_data_max);
         goto out;
     }

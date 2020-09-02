@@ -465,6 +465,7 @@ typedef struct ucp_conn_request {
         uct_iface_h             iface;
     } uct;
     uct_conn_request_h          uct_req;
+    ucp_rsc_index_t             cm_idx;
     char                        dev_name[UCT_DEVICE_NAME_MAX];
     uct_device_addr_t           *remote_dev_addr;
     struct sockaddr_storage     client_address;

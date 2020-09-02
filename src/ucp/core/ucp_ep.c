@@ -270,7 +270,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
 
     if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
         if (ucp_ep_config(ep)->key.err_mode != params->err_mode) {
-            ucs_error("asymmetric endpoint configuration not supported, "
+            ucs_error("asymmetric endpoint configuration is not supported, "
                       "error handling level mismatch");
             return UCS_ERR_UNSUPPORTED;
         }
@@ -826,7 +826,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_worker_err_handle_remove_filter, ep);
 
-    /* remove pending slow-path function it wasn't removed yet */
+    /* remove pending slow-path function if it wasn't removed yet */
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_listener_accept_cb_remove_filter, ep);
 
@@ -2153,7 +2153,7 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
     return zcopy_thresh;
 }
 
-ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
+ucp_wireup_ep_t* ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 

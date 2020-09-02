@@ -149,4 +149,9 @@ ucs_status_t
 ucp_wireup_connect_local(ucp_ep_h ep,
                          const ucp_unpacked_address_t *remote_address,
                          const ucp_lane_index_t *lanes2remote);
+
+uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
+
+void ucp_wireup_pending_purge_cb(uct_pending_req_t *self, void *arg);
+
 #endif

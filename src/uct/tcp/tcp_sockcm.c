@@ -73,6 +73,7 @@ static ucs_status_t uct_tcp_sockcm_event_err_to_ucs_err_log(int fd,
         *log_level = UCS_LOG_LEVEL_DEBUG;
         return UCS_ERR_NOT_CONNECTED;
     case EPIPE:
+    case ECONNRESET:
         *log_level = UCS_LOG_LEVEL_DEBUG;
         return UCS_ERR_CONNECTION_RESET;
     case ENETUNREACH:
@@ -85,6 +86,7 @@ static ucs_status_t uct_tcp_sockcm_event_err_to_ucs_err_log(int fd,
 
 err:
     *log_level = UCS_LOG_LEVEL_ERROR;
+    ucs_error("error event on fd %d: %s", fd, strerror(error));
     return UCS_ERR_IO_ERROR;
 }
 

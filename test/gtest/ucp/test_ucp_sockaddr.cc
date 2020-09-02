@@ -19,6 +19,7 @@ extern "C" {
 
 #define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
         UCP_INSTANTIATE_TEST_CASE (_test_case) \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all, "all") \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm, "shm") \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,ud_v,ud_x,mm") \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, no_ud_ud_x, "dc_x,mm") \
@@ -137,6 +138,33 @@ public:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
+    int is_skip_interface(struct ifaddrs *ifa) {
+        int skip = 0;
+
+        if (!has_transport("tcp") && !has_transport("all") &&
+            !ucs::is_rdmacm_netdev(ifa->ifa_name)) {
+            /* IB transports require an IPoIB/RoCE interface since they
+             * use rdmacm for connection establishment, which supports
+             * only IPoIB IP addresses. therefore, if the interface
+             * isn't as such, we continue to the next one. */
+            skip = 1;
+        } else if (!ucs::is_rdmacm_netdev(ifa->ifa_name) &&
+                   !(GetParam().variant & TEST_MODIFIER_CM)) {
+            /* old client-server API (without CM) ran only with
+             * IPoIB/RoCE interface */
+            skip = 1;
+        } else if ((has_transport("tcp") || has_transport("all")) &&
+                   (ifa->ifa_addr->sa_family == AF_INET6)) {
+            /* the tcp transport (and 'all' which may fallback to tcp_sockcmm)
+             * can run either on an rdma-enabled interface (IPoIB/RoCE)
+             * or any interface with IPv4 address because IPv6 isn't supported
+             * by the tcp transport yet */
+            skip = 1;
+        }
+
+        return skip;
+    }
+
     void get_sockaddr() {
         std::vector<ucs::sock_addr_storage> saddrs;
         struct ifaddrs* ifaddrs;
@@ -147,9 +175,12 @@ public:
 
         for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
             if (ucs_netif_flags_is_active(ifa->ifa_flags) &&
-                ucs::is_inet_addr(ifa->ifa_addr) &&
-                ucs::is_rdmacm_netdev(ifa->ifa_name))
+                ucs::is_inet_addr(ifa->ifa_addr))
             {
+                if (is_skip_interface(ifa)) {
+                    continue;
+                }
+
                 saddrs.push_back(ucs::sock_addr_storage());
                 status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
                 ASSERT_UCS_OK(status);
@@ -512,7 +543,7 @@ public:
         case UCS_ERR_UNREACHABLE:
         case UCS_ERR_CONNECTION_RESET:
         case UCS_ERR_NOT_CONNECTED:
-            UCS_TEST_MESSAGE << "ignoring error " <<ucs_status_string(status)
+            UCS_TEST_MESSAGE << "ignoring error " << ucs_status_string(status)
                              << " on endpoint " << ep;
             return;
         default:
@@ -1248,15 +1279,16 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_64k, "ZCOPY_THRESH=512")
 }
 
 
-/* Only IB transports support CM for now
- * For DC case, allow fallback to UD if DC is not supported
- */
+
+/* For DC case, allow fallback to UD if DC is not supported */
 #define UCP_INSTANTIATE_CM_TEST_CASE(_test_case) \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcudx, "dc_x,ud") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,    "ud_v") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,   "ud_x") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,    "rc_v") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,   "rc_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ib,    "ib")
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ib,    "ib")   \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,   "tcp")  \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all,   "all")
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols)
