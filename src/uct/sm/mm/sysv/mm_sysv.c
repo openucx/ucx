@@ -176,22 +176,19 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
         .query                  = uct_sysv_md_query,
         .mem_alloc              = uct_sysv_mem_alloc,
         .mem_free               = uct_sysv_mem_free,
-        .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
-        .mem_reg                = (uct_md_mem_reg_func_t)ucs_empty_function_return_unsupported,
-        .mem_dereg              = (uct_md_mem_dereg_func_t)ucs_empty_function_return_unsupported,
+        .mem_advise             = ucs_empty_function_return_unsupported,
+        .mem_reg                = ucs_empty_function_return_unsupported,
+        .mem_dereg              = ucs_empty_function_return_unsupported,
         .mkey_pack              = uct_sysv_md_mkey_pack,
-        .is_sockaddr_accessible = (uct_md_is_sockaddr_accessible_func_t)ucs_empty_function_return_zero,
-        .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
+        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+        .detect_memory_type     = ucs_empty_function_return_unsupported
     },
-   .query                       = (uct_mm_mapper_query_func_t)
-                                      ucs_empty_function_return_success,
-   .iface_addr_length           = (uct_mm_mapper_iface_addr_length_func_t)
-                                      ucs_empty_function_return_zero_int64,
-   .iface_addr_pack             = (uct_mm_mapper_iface_addr_pack_func_t)
-                                      ucs_empty_function_return_success,
+   .query                       = ucs_empty_function_return_success,
+   .iface_addr_length           = ucs_empty_function_return_zero_size_t,
+   .iface_addr_pack             = ucs_empty_function_return_success,
    .mem_attach                  = uct_sysv_mem_attach,
    .mem_detach                  = uct_sysv_mem_detach,
-   .is_reachable                = (uct_mm_mapper_is_reachable_func_t)ucs_empty_function_return_one
+   .is_reachable                = ucs_empty_function_return_one_int
 };
 
 UCT_MM_TL_DEFINE(sysv, &uct_sysv_md_ops, uct_sysv_rkey_unpack,

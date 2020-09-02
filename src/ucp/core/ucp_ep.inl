@@ -68,8 +68,7 @@ static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t
     return ucp_ep_config(ep)->key.lanes[lane].rsc_index;
 }
 
-static inline ucp_rsc_index_t ucp_ep_get_path_index(ucp_ep_h ep,
-                                                    ucp_lane_index_t lane)
+static inline uint8_t ucp_ep_get_path_index(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     return ucp_ep_config(ep)->key.lanes[lane].path_index;
 }

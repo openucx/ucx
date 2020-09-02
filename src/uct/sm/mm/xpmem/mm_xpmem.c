@@ -534,21 +534,21 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
     .super = {
         .close                  = uct_mm_md_close,
         .query                  = uct_xpmem_md_query,
-        .mem_alloc              = (uct_md_mem_alloc_func_t)ucs_empty_function_return_unsupported,
-        .mem_free               = (uct_md_mem_free_func_t)ucs_empty_function_return_unsupported,
-        .mem_advise             = (uct_md_mem_advise_func_t)ucs_empty_function_return_unsupported,
+        .mem_alloc              = ucs_empty_function_return_unsupported,
+        .mem_free               = ucs_empty_function_return_unsupported,
+        .mem_advise             = ucs_empty_function_return_unsupported,
         .mem_reg                = uct_xmpem_mem_reg,
         .mem_dereg              = uct_xmpem_mem_dereg,
         .mkey_pack              = uct_xpmem_mkey_pack,
-        .is_sockaddr_accessible = (uct_md_is_sockaddr_accessible_func_t)ucs_empty_function_return_zero,
-        .detect_memory_type     = (uct_md_detect_memory_type_func_t)ucs_empty_function_return_unsupported
+        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+        .detect_memory_type     = ucs_empty_function_return_unsupported
     },
    .query                       = uct_xpmem_query,
    .iface_addr_length           = uct_xpmem_iface_addr_length,
    .iface_addr_pack             = uct_xpmem_iface_addr_pack,
    .mem_attach                  = uct_xpmem_mem_attach,
    .mem_detach                  = uct_xpmem_mem_detach,
-   .is_reachable                = (uct_mm_mapper_is_reachable_func_t)ucs_empty_function_return_one
+   .is_reachable                = ucs_empty_function_return_one_int
 };
 
 UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,
