@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.9.0-rc3 (August 29, 2020)
+## 1.9.0-rc4 (September 2, 2020)
 ### Features:
 #### UCX Core
 - Added a new class of communication APIs '*_nbx' that enable API extendability while
