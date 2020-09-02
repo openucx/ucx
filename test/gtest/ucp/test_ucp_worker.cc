@@ -115,7 +115,7 @@ protected:
                 if (status == UCS_OK) {
                     m_pending_reqs.pop_back();
                 } else {
-                    EXPECT_EQ(UCS_INPROGRESS, status);
+                    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
                 }
             }
         } while (ucp_request_check_status(flush_req) == UCS_INPROGRESS);

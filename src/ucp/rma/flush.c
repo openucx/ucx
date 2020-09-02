@@ -454,12 +454,16 @@ static unsigned ucp_worker_flush_progress(void *arg)
              * progress this request actively anymore.
              */
             ucp_worker_flush_complete_one(req, UCS_OK, 1);
+            goto out;
         } else if (status != UCS_INPROGRESS) {
             /* Error returned from uct iface flush */
             ucp_worker_flush_complete_one(req, status, 1);
+            goto out;
         }
-    } else if ((worker->context->config.ext.flush_worker_eps) &&
-               (&next_ep->ep_list != &worker->all_eps)) {
+    }
+
+    if ((worker->context->config.ext.flush_worker_eps) &&
+        (&next_ep->ep_list != &worker->all_eps)) {
         /* Some endpoints are not flushed yet. Take next endpoint from the list
          * and start flush operation on it.
          */
@@ -482,6 +486,7 @@ static unsigned ucp_worker_flush_progress(void *arg)
         }
     }
 
+out:
     return 0;
 }
 
