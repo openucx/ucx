@@ -488,7 +488,7 @@ enum ucp_send_am_flags {
                                               for AM sends. */
     UCP_AM_SEND_RNDV       = UCS_BIT(2), /**< Force UCP to use only rendezvous protocol
                                               for AM sends. */
-    UCP_AM_SEND_FETCH_DATA = UCS_BIT(3)  /**< Tells @ref ucp_am_send_nbx to send
+    UCP_AM_SEND_GET_REPLY  = UCS_BIT(3)  /**< Tells @ref ucp_am_send_nbx to send
                                               request for data. In this case reply
                                               buffer must be specified in
                                               @ref ucp_request_param_t passed to
@@ -594,16 +594,18 @@ typedef enum {
  * compatibility support.
  */
 typedef enum {
-    UCP_OP_ATTR_FIELD_REQUEST       = UCS_BIT(0),  /**< request field */
-    UCP_OP_ATTR_FIELD_CALLBACK      = UCS_BIT(1),  /**< cb field */
-    UCP_OP_ATTR_FIELD_USER_DATA     = UCS_BIT(2),  /**< user_data field */
-    UCP_OP_ATTR_FIELD_DATATYPE      = UCS_BIT(3),  /**< datatype field */
-    UCP_OP_ATTR_FIELD_FLAGS         = UCS_BIT(4),  /**< operation-specific flags */
-    UCP_OP_ATTR_FIELD_REPLY_BUFFER  = UCS_BIT(5),  /**< reply_buffer field */
-    UCP_OP_ATTR_FIELD_MEMORY_TYPE   = UCS_BIT(6),  /**< memory type field */
+    UCP_OP_ATTR_FIELD_REQUEST        = UCS_BIT(0),  /**< request field */
+    UCP_OP_ATTR_FIELD_CALLBACK       = UCS_BIT(1),  /**< cb field */
+    UCP_OP_ATTR_FIELD_USER_DATA      = UCS_BIT(2),  /**< user_data field */
+    UCP_OP_ATTR_FIELD_DATATYPE       = UCS_BIT(3),  /**< datatype field */
+    UCP_OP_ATTR_FIELD_FLAGS          = UCS_BIT(4),  /**< operation-specific flags */
+    UCP_OP_ATTR_FIELD_REPLY_BUFFER   = UCS_BIT(5),  /**< reply_buffer field */
+    UCP_OP_ATTR_FIELD_MEMORY_TYPE    = UCS_BIT(6),  /**< memory type field */
+    UCP_OP_ATTR_FIELD_REPLY_COUNT    = UCS_BIT(7),  /**< reply_count field */
+    UCP_OP_ATTR_FIELD_REPLY_DATATYPE = UCS_BIT(8),  /**< reply_datatype field */
 
-    UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
-    UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
+    UCP_OP_ATTR_FLAG_NO_IMM_CMPL     = UCS_BIT(16), /**< deny immediate completion */
+    UCP_OP_ATTR_FLAG_FAST_CMPL       = UCS_BIT(17), /**< expedite local completion,
                                                         even if it delays remote 
                                                         data delivery. Note for
                                                         implementer: this option
@@ -652,15 +654,14 @@ typedef enum {
     UCP_AM_RECV_ATTR_FLAG_RNDV         = UCS_BIT(17),
 
     /**
-     * Indicates that request for data (rather than data itself) is received.
-     * In this case @a data parameter of the @ref ucp_am_recv_callback_t points
-     * to the internal UCP descriptor, representing target buffer for sending
-     * data. This descriptor needs to be passed to @ref ucp_am_send_reply_nbx
-     * when sending reply back to the target. This flag is mutually
-     * exclusive with @a UCP_AM_RECV_ATTR_FLAG_DATA and
-     * UCP_AM_RECV_ATTR_FLAG_RNDV flags.
+     * Indicates that the remote side expects to get a reply message. The reply
+     * can be sent by calling @ref ucp_am_send_reply_nbx() function. In this
+     * case @a data parameter of the @ref ucp_am_recv_callback_t points to the
+     * internal UCP descriptor, representing target buffer for sending data.
+     * This descriptor needs to be passed to @ref ucp_am_send_reply_nbx when
+     * sending reply back to the target.
      */
-    UCP_AM_RECV_ATTR_FLAG_FETCH_DATA   = UCS_BIT(18)
+    UCP_AM_RECV_ATTR_FLAG_SEND_REPLY   = UCS_BIT(18)
 } ucp_am_recv_attr_t;
 
 
@@ -1412,7 +1413,7 @@ typedef struct {
     /**
      * Datatype descriptor for the elements in the buffer. In case the
      * op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE bit is not set, then use
-     * default datatype ucp_dt_make_contig(1)
+     * default datatype ucp_dt_make_contig(1).
      */
     ucp_datatype_t datatype;
 
@@ -1435,6 +1436,18 @@ typedef struct {
      * which means the memory type will be detected internally.
      */
     ucs_memory_type_t memory_type;
+
+    /**
+     * Number of elements to receive into @a reply_buffer.
+     */
+    size_t         reply_count;
+
+    /**
+     * Datatype descriptor for the elements in the @a reply_buffer. In case the
+     * op_attr_mask & UCP_OP_ATTR_FIELD_REPLY_DATATYPE bit is not set, then use
+     * default datatype ucp_dt_make_contig(1).
+     */
+    ucp_datatype_t reply_datatype;
 } ucp_request_param_t;
 
 
@@ -2763,10 +2776,15 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
  * @note This operation supports specific flags, which can be passed
  *       in @a param by @ref ucp_request_param_t.flags. The exact set of flags
  *       is defined by @ref ucp_send_am_flags.
- * @note If UCP_AM_SEND_FETCH_DATA is set in @ref ucp_request_param_t.flags,
+ * @note If UCP_AM_SEND_GET_REPLY is set in @ref ucp_request_param_t.flags,
  *       this routine can never complete "in-place". The routine will always
  *       return a request handle, which completes only when reply is received
- *       from the target.
+ *       from the target. Also, when fetching the data,
+ *       @ref ucp_request_param_t.reply_buffer and
+ *       @ref ucp_request_param_t.reply_count must be set along with the
+ *       corresponding op_attr_mask field flags
+ *       (@ref ucp_request_param_t.reply_datatype may also be needed if
+ *       non-default datatype is expected to be received in @a reply_buffer).
  *
  * @param [in]  ep            UCP endpoint where the Active Message will be run.
  * @param [in]  id            Active Message id. Specifies which registered
@@ -2777,24 +2795,17 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
  * @param [in]  header_length Active message header length in bytes.
  * @param [in]  buffer        Pointer to the data to be sent to the target node
  *                            of the Active Message. Ignored if
- *                            UCP_AM_SEND_FETCH_DATA flag is set in
- *                            @ref ucp_request_param_t.flags. In this case
- *                            @a count and @ref ucp_request_param_t.datatype
- *                            describe @ref ucp_request_param_t.reply_buffer,
- *                            where the fetched data will be stored.
- * @param [in]  count         Number of elements to send.
+ *                            UCP_AM_SEND_GET_REPLY flag is set in
+ *                            @ref ucp_request_param_t.flags.
+ * @param [in]  count         Number of elements to send. Ignored if
+ *                            UCP_AM_SEND_GET_REPLY flag is set in
+ *                            @ref ucp_request_param_t.flags.
  * @param [in]  param         Operation parameters, see @ref ucp_request_param_t.
  *
  * @note Sending only header without actual data is allowed and is recommended
  *       for transfering latency-critical amount of data.
  * @note The maximum allowed header size can be obtained by querying worker
  *       attributes by @ref ucp_worker_query routine.
- * @note When requesting data to be fetched (by means of UCP_AM_SEND_FETCH_DATA
- *       flag), only header can be sent, @a buffer parameter is ignored. Also,
- *       @ref ucp_request_param_t.reply_buffer must be provided for storing the
- *       result. The target will always receive a corresponding reply ep in its
- *       recv callback regardless of whether UCP_AM_SEND_REPLY is specified or
- *       not.
  *
  * @return NULL                 - Active Message was sent immediately.
  * @return UCS_PTR_IS_ERR(_ptr) - Error sending Active Message.
@@ -2817,7 +2828,7 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  * @brief Send data as a reply to Active Message data request.
  *
  * This routine sends data in reply to Active Message data request
- * (which can be sent by @ref ucp_am_send_nbx with UCP_AM_SEND_FETCH_DATA flag
+ * (which can be sent by @ref ucp_am_send_nbx with UCP_AM_SEND_GET_REPLY flag
  * set in request parameters). If the operation completes immediately, then the
  * routine returns NULL and the callback function is ignored, even if specified.
  * Otherwise, if no error is reported and a callback is requested (i.e. the
@@ -3895,6 +3906,9 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
  *          completes.
  * @note    Only ucp_dt_make_config(4) and ucp_dt_make_contig(8) are supported
  *          in @a param->datatype, see @ref ucp_dt_make_contig.
+ * @note    This routine ignores @a param.reply_count and
+ *          @a param.reply_datatype parameters, because @a param.reply_buffer
+ *          is supposed to be the same type and count as @a buffer.
  *
  * <table>
  * <caption id="atomic_ops">Atomic Operations Semantic</caption>

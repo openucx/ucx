@@ -381,7 +381,7 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
         am_data_desc.is_rndv = 1;
         am_data_desc.desc    = data;
         return UCS_INPROGRESS;
-    } else if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_FETCH_DATA) {
+    } else if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_SEND_REPLY) {
         if (!(param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP)) {
             fprintf(stderr, "reply ep is not provided with data fetch request");
             am_data_desc.reply_ep = NULL;
@@ -480,19 +480,22 @@ static int send_recv_am_fetch(ucp_worker_h ucp_worker, ucp_ep_h ep,
 
     if (is_server) {
         /* Server sends a request for data using the AM API. It has to specify
-         * UCP_AM_SEND_FETCH_DATA flag and params.reply_buffer. */
-        params.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS |
-                               UCP_OP_ATTR_FIELD_REPLY_BUFFER;
-        params.flags         = UCP_AM_SEND_FETCH_DATA;
-        params.reply_buffer  = recv_message; /* result will be stored here */
-        params.cb.am         = am_comp_cb,
+         * UCP_AM_SEND_GET_REPLY flag and params.reply_buffer. */
+        params.op_attr_mask  |= UCP_OP_ATTR_FIELD_FLAGS        |
+                                UCP_OP_ATTR_FIELD_REPLY_BUFFER |
+                                UCP_OP_ATTR_FIELD_REPLY_COUNT  |
+                                UCP_OP_ATTR_FIELD_REPLY_DATATYPE;
+        params.flags          = UCP_AM_SEND_GET_REPLY;
+        params.reply_buffer   = recv_message; /* result will be stored here */
+        params.reply_count    = TEST_STRING_LEN;
+        params.reply_datatype = ucp_dt_make_contig(1);
+        params.cb.am          = am_comp_cb,
 
         /* Note this request will be completed when the data is ready in
          * params.reply_buffer (recv_message). */
         request              = ucp_am_send_nbx(ep, TEST_AM_ID, NULL, 0ul,
-                                               NULL, /* send buffer is ignored
-                                                        for fetch data request */
-                                               TEST_STRING_LEN,
+                                               NULL, 0ul, /* send buffer is ignored
+                                                             for fetch data request */
                                                &params);
     } else {
         while (!am_data_desc.complete) {

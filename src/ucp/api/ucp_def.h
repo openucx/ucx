@@ -517,7 +517,7 @@ typedef void (*ucp_tag_recv_nbx_callback_t)(void *request, ucs_status_t status,
  *
  * This callback routine is invoked whenever the @ref ucp_am_data_recv_nbx
  * or @ref ucp_am_send_nbx is completed. If @ref ucp_am_send_nbx was invoked
- * with UCP_AM_SEND_FETCH_DATA flag, the completion callback is called when the
+ * with UCP_AM_SEND_GET_REPLY flag, the completion callback is called when the
  * data is ready in the reply buffer specified in the @ref ucp_request_param_t.
  * If @ref ucp_am_data_recv_nbx is completed, the completion callback is called
  * when the data is ready in the receive buffer.
@@ -528,10 +528,9 @@ typedef void (*ucp_tag_recv_nbx_callback_t)(void *request, ucs_status_t status,
  *                        an @ref ucs_status_t "error status" is returned.
  * @param [in]  length    The size of the received data in bytes, always
  *                        boundary of base datatype size. The value is valid
- *                        only if the status is UCS_OK. The value should be
- *                        ignored if completed @ref ucp_am_send_nbx routine was
- *                        invoked without UCP_AM_SEND_FETCH_DATA flag passed
- *                        in @ref ucp_request_param_t.flags.
+ *                        only if the status is UCS_OK and @ref ucp_am_send_nbx
+ *                        routine wais called with UCP_AM_SEND_GET_REPLY flag
+ *                        passed in @ref ucp_request_param_t.flags.
  * @param [in]  user_data User data passed to "user_data" value,
  *                        see @ref ucp_request_param_t
  */
@@ -621,42 +620,37 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  * callbacks with relatively short execution time to avoid blocking of
  * communication progress.
  *
- * @note If UCP_AM_RECV_ATTR_FLAG_FETCH_DATA flag is set in
- *       @ref ucp_am_recv_param_t.recv_attr, ucp_am_recv_param_t.reply_ep
- *       (together with corresponding flag UCP_AM_RECV_ATTR_FIELD_REPLY_EP)
- *       must also be present, so the user can reply to this ep by using
- *       @ref ucp_am_send_reply_nbx.
- *
  * @param [in]  arg           User-defined argument.
  * @param [in]  header        User defined active message header. Can be NULL.
  * @param [in]  header_length Active message header length in bytes. If this
  *                            value is 0, the @a header pointer is undefined
  *                            and should not be accessed.
- * @param [in]  data          Points to the received data if @a
- *                            UCP_AM_RECV_ATTR_FLAG_DATA flag is set in
- *                            @ref ucp_am_recv_param_t.recv_attr. Otherwise
+ * @param [in]  data          Points to the received data if none of @a
+ *                            UCP_AM_RECV_ATTR_FLAG_RNDV or
+ *                            @a UCP_AM_RECV_ATTR_FLAG_SEND_REPLY flags is set
+ *                            in @ref ucp_am_recv_param_t.recv_attr. Otherwise
  *                            it points to the internal UCP descriptor which
  *                            can further be used for either:
- *                            a) Initiating data receive by using
- *                               @ref ucp_am_data_recv_nbx routine if
- *                               @a UCP_AM_RECV_ATTR_FLAG_RNDV is set in
- *                               @ref ucp_am_recv_param_t.recv_attr.
- *                            b) Send data as a reply to data fetching request
- *                               by using @ref ucp_am_send_reply_nbx if
- *                               @a UCP_AM_RECV_ATTR_FLAG_FETCH_DATA is set in
- *                               @ref ucp_am_recv_param_t.recv_attr.
+ *                            - Initiating data receive by using
+ *                              @ref ucp_am_data_recv_nbx routine if
+ *                              @a UCP_AM_RECV_ATTR_FLAG_RNDV is set in
+ *                              @ref ucp_am_recv_param_t.recv_attr.
+ *                            - Send data as a reply to data fetching request
+ *                              by using @ref ucp_am_send_reply_nbx if
+ *                              @a UCP_AM_RECV_ATTR_FLAG_SEND_REPLY is set in
+ *                              @ref ucp_am_recv_param_t.recv_attr.
  * @param [in]  length        Length of data. If @a UCP_AM_RECV_ATTR_FLAG_RNDV
  *                            flag is set in @ref ucp_am_recv_param_t.recv_attr,
  *                            it indicates the required receive buffer size for
  *                            initiating rendezvous protocol.
- *                            If @a UCP_AM_RECV_ATTR_FLAG_FETCH_DATA is set in
+ *                            If @a UCP_AM_RECV_ATTR_FLAG_SEND_REPLY is set in
  *                            @ref ucp_am_recv_param_t.recv_attr, this value
  *                            represents a capacity of the target buffer.
  * @param [in]  param         Data receive parameters.
  *
  * @return UCS_OK         @a data will not persist after the callback returns.
  *                        If one of UCP_AM_RECV_ATTR_FLAG_RNDV or
- *                        UCP_AM_RECV_ATTR_FLAG_FETCH_DATA flags is set in
+ *                        UCP_AM_RECV_ATTR_FLAG_SEND_REPLY flags is set in
  *                        @a param->recv_attr, the data descriptor will be
  *                        dropped and the corresponding @ref ucp_am_send_nbx
  *                        call should complete with UCS_OK status.
@@ -664,18 +658,18 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  * @return UCS_INPROGRESS Can only be returned if @a param->recv_attr flags
  *                        contains one of UCP_AM_RECV_ATTR_FLAG_DATA,
  *                        UCP_AM_RECV_ATTR_FLAG_RNDV or
- *                        UCP_AM_RECV_ATTR_FLAG_FETCH_DATA. The @a data will
+ *                        UCP_AM_RECV_ATTR_FLAG_SEND_REPLY. The @a data will
  *                        persist after the callback has returned. To free the
  *                        memory, a pointer to the data must be passed into
  *                        @ref ucp_am_data_release or:
- *                        a) In the case of rendezvous descriptor, data receive
- *                           is initiated by @ref ucp_am_data_recv_nbx.
- *                        b) In the case of target buffer descriptor, reply is
- *                           initiated by @ref ucp_am_send_reply_nbx.
+ *                        - In the case of rendezvous descriptor, data receive
+ *                          is initiated by @ref ucp_am_data_recv_nbx.
+ *                        - In the case of target buffer descriptor, reply is
+ *                          initiated by @ref ucp_am_send_reply_nbx.
  *
  * @return otherwise      Can only be returned if @a param->recv_attr contains
  *                        UCP_AM_RECV_ATTR_FLAG_RNDV or
- *                        UCP_AM_RECV_ATTR_FLAG_FETCH_DATA. In this case data
+ *                        UCP_AM_RECV_ATTR_FLAG_SEND_REPLY. In this case data
  *                        descriptor @a data will be dropped and the
  *                        corresponding @ref ucp_am_send_nbx call should
  *                        complete with the status returned from the callback.
