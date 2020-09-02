@@ -447,15 +447,18 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
         /* Purge pending queue */
         ucs_trace("ep %p: purge pending on uct_ep[%d]=%p", ucp_ep, lane,
                   ucp_ep->uct_eps[lane]);
-        uct_ep_pending_purge(ucp_ep->uct_eps[lane], ucp_ep_err_pending_purge,
-                             UCS_STATUS_PTR(status));
 
         if (lane != failed_lane) {
             ucs_trace("ep %p: destroy uct_ep[%d]=%p", ucp_ep, lane,
                       ucp_ep->uct_eps[lane]);
             ucp_worker_discard_uct_ep(ucp_ep->worker, ucp_ep->uct_eps[lane],
-                                      UCT_FLUSH_FLAG_CANCEL);
+                                      UCT_FLUSH_FLAG_CANCEL,
+                                      ucp_ep_err_pending_purge,
+                                      UCS_STATUS_PTR(status));
             ucp_ep->uct_eps[lane] = NULL;
+        } else {
+            uct_ep_pending_purge(ucp_ep->uct_eps[lane], ucp_ep_err_pending_purge,
+                                 UCS_STATUS_PTR(status));
         }
     }
 
@@ -2466,7 +2469,9 @@ static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
 
 /* must be called with async lock held */
 void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
-                               unsigned ep_flush_flags)
+                               unsigned ep_flush_flags,
+                               uct_pending_purge_callback_t purge_cb,
+                               void *purge_arg)
 {
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_wireup_ep_t *wireup_ep;
@@ -2487,8 +2492,17 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
         if (wireup_ep->aux_ep != NULL) {
             /* discard the WIREUP EP's auxiliary EP */
             ucp_worker_discard_uct_ep(worker, wireup_ep->aux_ep,
-                                      ep_flush_flags);
+                                      ep_flush_flags,
+                                      purge_cb, purge_arg);
             ucp_wireup_ep_disown(&wireup_ep->super.super, wireup_ep->aux_ep);
+        }
+
+        if (purge_cb != NULL) {
+            /* purge the next UCT EP first to pass WIREUP MSGs to the user
+             * purge callback, otherwise, they will be release when purging
+             * the WIREUP EP */
+            uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
+            uct_ep_pending_purge(&wireup_ep->super.super, purge_cb, purge_arg);
         }
 
         /* destroy WIREUP EP allocated for this UCT EP, since
@@ -2500,6 +2514,8 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
             /* do nothing, if this wireup EP is not an owner for UCT EP */
             return;
         }
+    } else if (purge_cb != NULL) {
+        uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
     }
 
     req = ucp_request_get(worker);

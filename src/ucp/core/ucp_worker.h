@@ -318,6 +318,8 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
 
 /* must be called with async lock held */
 void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
-                               unsigned ep_flush_flags);
+                               unsigned ep_flush_flags,
+                               uct_pending_purge_callback_t purge_cb,
+                               void *purge_arg);
 
 #endif
