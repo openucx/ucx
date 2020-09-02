@@ -405,7 +405,7 @@ static void fill_random(C& c, size_t size) {
 template <typename T>
 static inline T random_upper() {
   return static_cast<T>((rand() / static_cast<double>(RAND_MAX)) *
-                        std::numeric_limits<T>::max());
+                        static_cast<double>(std::numeric_limits<T>::max()));
 }
 
 template <typename T>

@@ -22,7 +22,7 @@ enum {
  * Header for unexpected rendezvous
  */
 typedef struct {
-    uintptr_t      ep_ptr;
+    uint64_t       ep_id;        /* Endpoint ID */
     uintptr_t      reqptr;       /* Request pointer */
     uint8_t        md_index;     /* md index */
 } UCS_S_PACKED ucp_tag_offload_unexp_rndv_hdr_t;
@@ -32,7 +32,7 @@ typedef struct {
  * Header for sync send acknowledgment
  */
 typedef struct {
-    uintptr_t         ep_ptr;
+    uint64_t          ep_id;
     ucp_tag_t         sender_tag;
 } UCS_S_PACKED ucp_offload_ssend_hdr_t;
 

@@ -515,11 +515,11 @@ typedef void (*ucp_tag_recv_nbx_callback_t)(void *request, ucs_status_t status,
  * @ingroup UCP_COMM
  * @brief Completion callback for non-blocking Active Message sends and receives.
  *
- * This callback routine is invoked whenever the @ref ucp_am_data_recv_nbx
+ * This callback routine is invoked whenever the @ref ucp_am_recv_data_nbx
  * or @ref ucp_am_send_nbx is completed. If @ref ucp_am_send_nbx was invoked
  * with UCP_AM_SEND_GET_REPLY flag, the completion callback is called when the
  * data is ready in the reply buffer specified in the @ref ucp_request_param_t.
- * If @ref ucp_am_data_recv_nbx is completed, the completion callback is called
+ * If @ref ucp_am_recv_data_nbx is completed, the completion callback is called
  * when the data is ready in the receive buffer.
  *
  * @param [in]  request   The completed request.
@@ -632,7 +632,7 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  *                            it points to the internal UCP descriptor which
  *                            can further be used for either:
  *                            - Initiating data receive by using
- *                              @ref ucp_am_data_recv_nbx routine if
+ *                              @ref ucp_am_recv_data_nbx routine if
  *                              @a UCP_AM_RECV_ATTR_FLAG_RNDV is set in
  *                              @ref ucp_am_recv_param_t.recv_attr.
  *                            - Send data as a reply to data fetching request
@@ -663,7 +663,7 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  *                        memory, a pointer to the data must be passed into
  *                        @ref ucp_am_data_release or:
  *                        - In the case of rendezvous descriptor, data receive
- *                          is initiated by @ref ucp_am_data_recv_nbx.
+ *                          is initiated by @ref ucp_am_recv_data_nbx..
  *                        - In the case of target buffer descriptor, reply is
  *                          initiated by @ref ucp_am_send_reply_nbx.
  *

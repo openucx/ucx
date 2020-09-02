@@ -12,6 +12,8 @@ extern "C" {
 #include <common/test.h>
 #include "uct_test.h"
 
+#include <vector>
+
 
 class test_uct_peer_failure : public uct_test {
 private:
@@ -451,6 +453,10 @@ void test_uct_peer_failure_multiple::init()
         test_uct_peer_failure::m_nreceivers = tx_queue_len;
     }
 
+    test_uct_peer_failure::m_nreceivers =
+        std::min(test_uct_peer_failure::m_nreceivers,
+                 static_cast<size_t>(max_connections()));
+
     test_uct_peer_failure::m_tx_window  = tx_queue_len / 3;
 
     test_uct_peer_failure::init();
@@ -538,3 +544,32 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_multiple)
+
+class test_uct_peer_failure_keepalive : public test_uct_peer_failure
+{
+};
+
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK))
+{
+    ucs_status_t status;
+
+    scoped_log_handler slh(wrap_errors_logger);
+    flush();
+    EXPECT_EQ(0, m_err_count);
+    flush();
+
+    status = uct_ep_check(ep0(), 0, NULL);
+    ASSERT_UCS_OK(status);
+    flush();
+
+    kill_receiver();
+
+    status = uct_ep_check(ep0(), 0, NULL);
+    ASSERT_UCS_OK(status);
+    flush();
+
+    EXPECT_EQ(1, m_err_count);
+}
+
+UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_peer_failure_keepalive)

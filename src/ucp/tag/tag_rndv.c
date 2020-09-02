@@ -90,7 +90,7 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
                   sreq->send.length);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
-    status = ucp_ep_resolve_dest_ep_ptr(ep, sreq->send.lane);
+    status = ucp_ep_resolve_remote_id(ep, sreq->send.lane);
     if (status != UCS_OK) {
         return status;
     }

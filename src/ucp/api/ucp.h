@@ -647,7 +647,7 @@ typedef enum {
      * Indicates that the arriving data was sent using rendezvous protocol.
      * In this case @a data parameter of the @ref ucp_am_recv_callback_t points
      * to the internal UCP descriptor, which can be used for obtaining the actual
-     * data by calling @ref ucp_am_data_recv_nbx routine. This flag is mutually
+     * data by calling @ref ucp_am_recv_data_nbx routine. This flag is mutually
      * exclusive with @a UCP_AM_RECV_ATTR_FLAG_DATA and
      * UCP_AM_RECV_ATTR_FLAG_FETCH_DATA flags.
      */
@@ -1344,7 +1344,7 @@ struct ucp_tag_recv_info {
  * @ingroup UCP_CONTEXT
  * @brief Operation parameters passed to @ref ucp_tag_send_nbx,
  *        @ref ucp_tag_send_sync_nbx, @ref ucp_tag_recv_nbx, @ref ucp_put_nbx,
- *        @ref ucp_get_nbx, @ref ucp_am_send_nbx and @ref ucp_am_data_recv_nbx.
+ *        @ref ucp_get_nbx, @ref ucp_am_send_nbx and @ref ucp_am_recv_data_nbx.
  *
  * The structure @ref ucp_request_param_t is used to specify datatype of
  * operation, provide user request in case the external request is used,
@@ -2887,6 +2887,7 @@ ucs_status_ptr_t ucp_am_send_reply_nbx(ucp_ep_h ep, void *data_desc,
  * @note Currently Active Message API supports communication operations with
  *       host memory only.
  *
+ * @param [in]  worker     Worker that is used for the receive operation.
  * @param [in]  data_desc  Data descriptor, provided in
                            @ref ucp_am_recv_callback_t routine.
  * @param [in]  buffer     Pointer to the buffer to receive the data.
@@ -2902,7 +2903,8 @@ ucs_status_ptr_t ucp_am_send_reply_nbx(ucp_ep_h ep, void *data_desc,
  *                                the application is responsible for releasing
  *                                the handle using @ref ucp_request_free routine.
  */
-ucs_status_ptr_t ucp_am_data_recv_nbx(void *data_desc, void *buffer, size_t count,
+ucs_status_ptr_t ucp_am_recv_data_nbx(ucp_worker_h worker, void *data_desc,
+                                      void *buffer, size_t count,
                                       const ucp_request_param_t *param);
 
 

@@ -129,7 +129,8 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
          *   completion. In this case, the flush state may not even be initialized.
          */
         if ((req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL) ||
-            !ucs_test_all_flags(ep->flags, UCP_EP_FLAG_USED|UCP_EP_FLAG_DEST_EP)) {
+            !ucs_test_all_flags(ep->flags, UCP_EP_FLAG_USED |
+                                           UCP_EP_FLAG_REMOTE_ID)) {
             ucs_trace_req("flush request %p not waiting for remote completions",
                           req);
             req->send.flush.sw_done = 1;

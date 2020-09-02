@@ -375,7 +375,7 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
 
     if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) {
         /* Rendezvous request arrived, data contains an internal UCX descriptor,
-         * which has to be passed to ucp_am_data_recv_nbx function to confirm
+         * which has to be passed to ucp_am_recv_data_nbx function to confirm
          * data transfer.
          */
         am_data_desc.is_rndv = 1;
@@ -439,12 +439,13 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
              * buffer. */
             params.op_attr_mask |= UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
             params.cb.am         = am_comp_cb,
-            request              = ucp_am_data_recv_nbx(am_data_desc.desc,
+            request              = ucp_am_recv_data_nbx(ucp_worker,
+                                                        am_data_desc.desc,
                                                         &recv_message,
                                                         TEST_STRING_LEN,
                                                         &params);
         } else {
-            /* Data is arrived eagerly and is ready for use, no need to
+            /* Data has arrived eagerly and is ready for use, no need to
              * initiate receive operation. */
             request = NULL;
         }

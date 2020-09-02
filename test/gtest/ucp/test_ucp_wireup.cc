@@ -81,6 +81,9 @@ protected:
 
     ucp_rkey_h get_rkey(ucp_ep_h ep, ucp_mem_h memh);
 
+    bool ep_iface_has_caps(const entity& e, const std::string& tl,
+                           uint64_t caps);
+
 protected:
     vec_type                               m_send_data;
     vec_type                               m_recv_data;
@@ -379,6 +382,25 @@ void test_ucp_wireup::waitall(std::vector<void*> reqs)
     }
 }
 
+bool test_ucp_wireup::ep_iface_has_caps(const entity& e, const std::string& tl,
+                                        uint64_t caps)
+{
+    ucp_worker_h worker = e.worker();
+    ucp_context_h ctx   = worker->context;
+
+    for (unsigned i = 0; i < worker->num_ifaces; ++i) {
+        ucp_worker_iface_t *wiface = worker->ifaces[i];
+
+        char* name = ctx->tl_rscs[wiface->rsc_index].tl_rsc.tl_name;
+        if ((tl.empty() || !strcmp(name, tl.c_str())) &&
+            ucs_test_all_flags(wiface->attr.cap.flags, caps)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 class test_ucp_wireup_1sided : public test_ucp_wireup {
 public:
     static std::vector<ucp_test_param>
@@ -517,8 +539,9 @@ UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), BUFFER_LENGTH, 1);
     if (is_loopback() && (GetParam().variant & TEST_TAG)) {
         /* expect the endpoint to be connected to itself */
-        ucp_ep_h ep = sender().ep();
-        EXPECT_EQ((uintptr_t)ep, ucp_ep_dest_ep_ptr(ep));
+        ucp_ep_h ep         = sender().ep();
+        ucp_worker_h worker = sender().worker();
+        EXPECT_EQ(ep, ucp_worker_get_ep_by_id(worker, ucp_ep_remote_id(ep)));
     }
     flush_worker(sender());
 }
@@ -1086,6 +1109,7 @@ public:
                 return true;
             }
         }
+
         return false;
     }
 
@@ -1103,8 +1127,10 @@ public:
             }
 
             ASSERT_TRUE(ctx->num_tls > worker->num_ifaces);
-            EXPECT_TRUE(worker_has_tls(worker, better_tl, i));
-            EXPECT_FALSE(worker_has_tls(worker, tl, i));
+            EXPECT_TRUE(worker_has_tls(worker, better_tl, i)) <<
+                " transport " << better_tl << " should not be closed";
+            EXPECT_FALSE(worker_has_tls(worker, tl, i)) <<
+                " transport " << better_tl << " should be closed";
         }
     }
 };
@@ -1125,9 +1151,12 @@ UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
 
     // Set some big enough number of endpoints for DC to be more performance
     // efficient than RC. Now check that DC is selected over RC.
-    modify_config("NUM_EPS", "1000");
-    entity *e = create_entity();
-    check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
+    // TODO: enable test when keepalive feature is enabled for DC transport
+    //modify_config("NUM_EPS", "1000");
+    //entity *e = create_entity();
+    //check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
+    EXPECT_FALSE(ep_iface_has_caps(sender(), "dc_mlx5",
+                                   UCT_IFACE_FLAG_EP_CHECK));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc, "rc")
@@ -1438,3 +1467,33 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, connect, is_self()) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcv, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, ib, "ib")
+
+class test_ucp_wireup_keepalive : public test_ucp_wireup {
+public:
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
+                     const std::string& test_case_name, const std::string& tls)
+    {
+        return enum_test_params_features(ctx_params, name, test_case_name, tls,
+                                         UCP_FEATURE_RMA | UCP_FEATURE_TAG);
+    }
+
+    void init() {
+        test_ucp_wireup::init();
+
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+};
+
+/* test if EP has non-empty keepalive lanes mask */
+UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
+    if (!ep_iface_has_caps(sender(), "", UCT_IFACE_FLAG_EP_CHECK)) {
+        UCS_TEST_SKIP_R("Unsupported");
+    }
+
+    ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep());
+    EXPECT_NE(0, ep_config->key.ep_check_map);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)
