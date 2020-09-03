@@ -1339,9 +1339,10 @@ static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_sho
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                                      ucp_ep_msg_config_t *config, size_t max_short,
                                      size_t max_bcopy, size_t max_zcopy,
-                                     size_t max_iov, uint64_t short_flag,
-                                     uint64_t bcopy_flag, uint64_t zcopy_flag,
-                                     unsigned hdr_len, size_t adjust_min_val)
+                                     size_t max_iov, size_t max_hdr,
+                                     uint64_t short_flag, uint64_t bcopy_flag,
+                                     uint64_t zcopy_flag, unsigned hdr_len,
+                                     size_t adjust_min_val)
 {
     ucp_context_t *context = worker->context;
     const uct_md_attr_t *md_attr;
@@ -1372,6 +1373,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     }
 
     config->max_zcopy = max_zcopy;
+    config->max_hdr   = max_hdr;
     config->max_iov   = ucs_min(UCP_MAX_IOV, max_iov);
 
     if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
@@ -1624,7 +1626,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.tag.eager.max_short,
                                      iface_attr->cap.tag.eager.max_bcopy,
                                      iface_attr->cap.tag.eager.max_zcopy,
-                                     iface_attr->cap.tag.eager.max_iov,
+                                     iface_attr->cap.tag.eager.max_iov, 0,
                                      UCT_IFACE_FLAG_TAG_EAGER_SHORT,
                                      UCT_IFACE_FLAG_TAG_EAGER_BCOPY,
                                      UCT_IFACE_FLAG_TAG_EAGER_ZCOPY, 0,
@@ -1676,6 +1678,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.am.max_bcopy,
                                      iface_attr->cap.am.max_zcopy,
                                      iface_attr->cap.am.max_iov,
+                                     iface_attr->cap.am.max_hdr,
                                      UCT_IFACE_FLAG_AM_SHORT,
                                      UCT_IFACE_FLAG_AM_BCOPY,
                                      UCT_IFACE_FLAG_AM_ZCOPY,

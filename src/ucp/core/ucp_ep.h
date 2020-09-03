@@ -192,6 +192,7 @@ typedef struct ucp_ep_msg_config {
         ssize_t            max_short;
         size_t             max_bcopy;
         size_t             max_zcopy;
+        size_t             max_hdr;
         size_t             max_iov;
 
         /* zero-copy threshold for operations which do not have to wait for remote side */
