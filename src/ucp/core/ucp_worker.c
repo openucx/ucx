@@ -2501,7 +2501,7 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
             if (is_owner /* purge from the next UCT EP, if the WIREUP EP is
                           * an owner for it */) {
                 /* purge the next UCT EP first to pass WIREUP MSGs to the user
-                 * purge callback, otherwise, they will be release when purging
+                 * purge callback, otherwise, they will be released when purging
                  * the WIREUP EP */
                 uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
             }

@@ -77,12 +77,25 @@ protected:
             eps[i].iface = &iface;
             m_created_ep_count++;
 
-            unsigned expected_pending_purge_reqs_count =
-                (ep_pending_purge_func == ep_pending_purge_func_iter) ?
-                (m_pending_purge_reqs_count *
-                 (1 /* UCT EP */ +
-                  (i < wireup_ep_count) /* WIREUP EP */ +
-                  (i < wireup_aux_ep_count) /* AUX EP */)) : 0;
+            unsigned expected_pending_purge_reqs_count = 0;
+
+            if (ep_pending_purge_func == ep_pending_purge_func_iter) {
+                /* expected purging count is the number of pending
+                * reqyests in the UCT EP, in the WIREUP EP (if used)
+                * and in the AUX EP (if used) */
+                expected_pending_purge_reqs_count +=
+                    m_pending_purge_reqs_count;
+                
+                if (i < wireup_ep_count) {
+                    expected_pending_purge_reqs_count +=
+                        m_pending_purge_reqs_count;
+                }
+
+                if (i < wireup_aux_ep_count) {
+                    expected_pending_purge_reqs_count +=
+                        m_pending_purge_reqs_count;
+                }
+            }
             std::vector<uct_pending_req_t>
                 pending_reqs(expected_pending_purge_reqs_count);
 
