@@ -40,8 +40,8 @@ protected:
                           std::vector<uct_pending_req_t> &pending_reqs,
                           unsigned base = 0) {
         for (unsigned i = 0; i < m_pending_purge_reqs_count; i++) {
-            pending_reqs[i].func = func;
-            uct_ep_pending_add(uct_ep, &pending_reqs[i], 0);
+            pending_reqs[base + i].func = func;
+            uct_ep_pending_add(uct_ep, &pending_reqs[base + i], 0);
         }
     }
 
@@ -78,11 +78,13 @@ protected:
             m_created_ep_count++;
 
             unsigned expected_pending_purge_reqs_count = 0;
+            unsigned added_pending_purge_reqs_count    = 0;
 
             if (ep_pending_purge_func == ep_pending_purge_func_iter) {
                 /* expected purging count is the number of pending
-                 * requests in the UCT EP, in the WIREUP EP (if used)
-                 * and in the AUX EP (if used) */
+                 * requests in the WIREUP EP (if used) and in the
+                 * WIREUP AUX EP (if used) or UCT EP (if no WIREUP EP
+                 * or no WIREUP AUX EP) */
                 expected_pending_purge_reqs_count +=
                     m_pending_purge_reqs_count;
                 
@@ -90,12 +92,8 @@ protected:
                     expected_pending_purge_reqs_count +=
                         m_pending_purge_reqs_count;
                 }
-
-                if (i < wireup_aux_ep_count) {
-                    expected_pending_purge_reqs_count +=
-                        m_pending_purge_reqs_count;
-                }
             }
+
             std::vector<uct_pending_req_t>
                 pending_reqs(expected_pending_purge_reqs_count);
 
@@ -106,8 +104,7 @@ protected:
                 wireup_eps.push_back(discard_ep);
                 ucp_wireup_ep_set_next_ep(discard_ep, &eps[i]);
 
-                ucp_wireup_ep_t *wireup_ep  = ucp_wireup_ep(discard_ep);
-                wireup_ep->flags           |= UCP_WIREUP_EP_FLAG_READY;
+                ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(discard_ep);
 
                 if (i < wireup_aux_ep_count) {
                     eps[ep_count + created_wireup_aux_ep_count].iface = &iface;
@@ -121,23 +118,35 @@ protected:
                 }
 
                 if (expected_pending_purge_reqs_count > 0) {
-                    /* add WIREUP MSGs to the WIREUP EP */
+                    /* add WIREUP MSGs to the WIREUP EP (it will be added to
+                     * UCT EP or WIREUP AUX EP) */
                     add_pending_reqs(discard_ep,
                                      (uct_pending_callback_t)
                                      ucp_wireup_msg_progress,
                                      pending_reqs);
-
-                    /* add user's pending requests to the WIREUP EP */
-                    add_pending_reqs(discard_ep,
-                                     (uct_pending_callback_t)
-                                     ucs_empty_function,
-                                     pending_reqs, m_pending_purge_reqs_count);
+                    added_pending_purge_reqs_count +=
+                        m_pending_purge_reqs_count;
                 }
             } else {
                 discard_ep = &eps[i];
             }
 
             EXPECT_LE(m_created_ep_count, total_ep_count);
+
+
+            if (expected_pending_purge_reqs_count > 0) {
+                /* add user's pending requests */
+                add_pending_reqs(discard_ep,
+                                 (uct_pending_callback_t)
+                                 ucs_empty_function,
+                                 pending_reqs,
+                                 added_pending_purge_reqs_count);
+                added_pending_purge_reqs_count +=
+                    m_pending_purge_reqs_count;
+            }
+
+            EXPECT_EQ(expected_pending_purge_reqs_count,
+                      added_pending_purge_reqs_count);
 
             unsigned purged_reqs_count = 0;
             ucp_worker_discard_uct_ep(sender().worker(), discard_ep,
@@ -230,12 +239,36 @@ protected:
         (*count)++;
     }
 
+    static ucs_status_t
+    ep_pending_add_and_inc_count(uct_ep_h ep, uct_pending_req_t *req,
+                                 unsigned flags) {
+        std::map<uct_ep_h, unsigned>::iterator it =
+            m_pending_reqs_count.find(ep);
+        if (it == m_pending_reqs_count.end()) {
+            m_pending_reqs_count.insert(std::make_pair(ep, 1));
+        } else {
+            unsigned *count = &it->second;
+            (*count)++;
+        }
+        return UCS_OK;
+    }
+
     static void
     ep_pending_purge_func_iter(uct_ep_h ep,
                                uct_pending_purge_callback_t cb,
                                void *arg) {
         uct_pending_req_t req = {};
         for (unsigned i = 0; i < m_pending_purge_reqs_count; i++) {
+            std::map<uct_ep_h, unsigned>::iterator it =
+                m_pending_reqs_count.find(ep);
+            ASSERT_NE(it, m_pending_reqs_count.end());
+
+            unsigned *count = &it->second;
+            if (*count == 0) {
+                break;
+            }
+
+            (*count)--;
             cb(&req, arg);
         }
     }
@@ -249,6 +282,7 @@ protected:
 
     static std::vector<uct_completion_t*> m_flush_comps;
     static std::vector<uct_pending_req_t*> m_pending_reqs;
+    static std::map<uct_ep_h, unsigned> m_pending_reqs_count;
 };
 
 unsigned test_ucp_worker_discard::m_created_ep_count               = 0;
@@ -259,6 +293,7 @@ const unsigned test_ucp_worker_discard::m_pending_purge_reqs_count = 10;
 
 std::vector<uct_completion_t*> test_ucp_worker_discard::m_flush_comps;
 std::vector<uct_pending_req_t*> test_ucp_worker_discard::m_pending_reqs;
+std::map<uct_ep_h, unsigned> test_ucp_worker_discard::m_pending_reqs_count;
 
 
 UCS_TEST_P(test_ucp_worker_discard, flush_ok) {
@@ -276,13 +311,13 @@ UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_ok) {
 
 UCS_TEST_P(test_ucp_worker_discard, flush_ok_pending_purge) {
     test_worker_discard((void*)ucs_empty_function_return_success,
-                        (void*)ucs_empty_function,
+                        (void*)ep_pending_add_and_inc_count,
                         (void*)ep_pending_purge_func_iter);
 }
 
 UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_ok_pending_purge) {
     test_worker_discard((void*)ucs_empty_function_return_success,
-                        (void*)ucs_empty_function,
+                        (void*)ep_pending_add_and_inc_count,
                         (void*)ep_pending_purge_func_iter,
                         8, 6, 3);
 }

@@ -208,31 +208,54 @@ out:
     return status;
 }
 
-static void
-ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
-                            void *arg)
+void
+ucp_wireup_ep_pending_purge_common(ucp_wireup_ep_t *wireup_ep,
+                                   uct_pending_purge_callback_t wireup_msg_cb,
+                                   void *wireup_msg_arg,
+                                   uct_pending_purge_callback_t user_msg_cb,
+                                   void *user_msg_arg)
 {
-    ucp_wireup_ep_t   *wireup_ep = ucp_wireup_ep(uct_ep);
-    ucp_worker_h      worker;
+    ucp_worker_h worker;
     uct_pending_req_t *req;
-    ucp_request_t     *ucp_req;
+    ucp_request_t *ucp_req;
+    uct_ep_h uct_ep;
 
     worker = wireup_ep->super.ucp_ep->worker;
+
+    if (wireup_ep->pending_count > 0) {
+        uct_ep = ucp_wireup_ep_get_msg_ep(wireup_ep);
+        /* do purging on AUX EP or on UCT EP is WIREUP is an owner of it */
+        if ((uct_ep == wireup_ep->aux_ep) ||
+            wireup_ep->super.is_owner) {
+            uct_ep_pending_purge(uct_ep,
+                                 wireup_msg_cb, wireup_msg_arg);
+        }
+        if (wireup_msg_cb != ucp_wireup_ep_pending_req_release) {
+            /* reset the pending count, if it is not a request release
+             * callback */
+            wireup_ep->pending_count = 0;
+        }
+    }
+
+    ucs_assert(wireup_ep->pending_count == 0);
 
     ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
         ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
         UCS_ASYNC_BLOCK(&worker->async);
         --worker->flush_ops_count;
         UCS_ASYNC_UNBLOCK(&worker->async);
-        cb(&ucp_req->send.uct, arg);
+        user_msg_cb(&ucp_req->send.uct, user_msg_arg);
     }
+}
 
-    if (wireup_ep->pending_count > 0) {
-        uct_ep_pending_purge(ucp_wireup_ep_get_msg_ep(wireup_ep),
-                             ucp_wireup_ep_pending_req_release, arg);
-    }
-
-    ucs_assert(wireup_ep->pending_count == 0);
+static void
+ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
+                            void *arg)
+{
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_wireup_ep_pending_purge_common(wireup_ep,
+                                       ucp_wireup_ep_pending_req_release, NULL,
+                                       cb, arg);
 }
 
 static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,
