@@ -1399,6 +1399,7 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_single(uct_pending_req_t *self)
     hdr.rreq_id = sreq->send.msg_proto.rreq_id;
     hdr.offset  = 0;
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_RNDV_DATA, &hdr, sizeof(hdr),
+                                  NULL, 0ul,
                                   ucp_rndv_am_zcopy_send_req_complete);
 }
 
@@ -1414,6 +1415,7 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
                                  UCP_AM_ID_RNDV_DATA,
                                  &hdr, sizeof(hdr),
                                  &hdr, sizeof(hdr),
+                                 NULL, 0ul,
                                  ucp_rndv_am_zcopy_send_req_complete, 1);
 }
 

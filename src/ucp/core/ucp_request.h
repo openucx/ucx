@@ -121,21 +121,24 @@ struct ucp_request {
                 ucp_wireup_msg_t  wireup;
 
                 struct {
-                    ucp_lane_index_t     am_bw_index; /* AM BW lane index */
-                    uint64_t             message_id;  /* used to identify matching parts
-                                                         of a large message */
-                    ucs_ptr_map_key_t    rreq_id;     /* receive request ID on the
-                                                         recv side (used in AM rndv) */
+                    ucp_lane_index_t       am_bw_index; /* AM BW lane index */
+                    uint64_t               message_id;  /* used to identify matching parts
+                                                           of a large message */
+                    ucs_ptr_map_key_t      rreq_id;     /* receive request ID on the
+                                                           recv side (used in AM rndv) */
                     union {
                         struct {
-                            ucp_tag_t    tag;
+                            ucp_tag_t      tag;
                         } tag;
 
                         struct {
-                            void         *header;
-                            uint32_t     header_length;
-                            uint16_t     am_id;
-                            unsigned     flags;
+                            void           *header;
+                            ucp_mem_desc_t *reg_desc; /* pointer to pre-registered buffer,
+                                                         used for sending header with
+                                                         zcopy protocol */
+                            uint32_t       header_length;
+                            uint16_t       am_id;
+                            uint16_t       flags;
                         } am;
                     };
                 } msg_proto;
@@ -381,7 +384,8 @@ void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,
-                                    size_t dt_count,
+                                    size_t dt_count, size_t priv_iov_count,
+                                    size_t length,
                                     const ucp_ep_msg_config_t* msg_config,
                                     const ucp_request_send_proto_t *proto);
 
