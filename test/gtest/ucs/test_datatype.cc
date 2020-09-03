@@ -498,8 +498,14 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
 
     ucs_ptr_array_init(&pa, "ptr_array test");
 
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 0);
+    EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 1);
+
     index = ucs_ptr_array_insert(&pa, &a);
     EXPECT_EQ(0u, index);
+
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 1);
+    EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 0);
 
     index = ucs_ptr_array_insert(&pa, &b);
     EXPECT_EQ(1u, index);
@@ -542,13 +548,22 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 101, vc));
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5005, vc));
 
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 7);
+
     ucs_ptr_array_remove(&pa, 0);
     ucs_ptr_array_remove(&pa, 1);
     ucs_ptr_array_remove(&pa, 2);
     ucs_ptr_array_remove(&pa, 3);
     ucs_ptr_array_remove(&pa, 4);
     ucs_ptr_array_remove(&pa, 6);
+
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 1);
+    EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 0);
+
     ucs_ptr_array_remove(&pa, 100);
+
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 0);
+    EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 1);
 
     ucs_ptr_array_cleanup(&pa);
 }
