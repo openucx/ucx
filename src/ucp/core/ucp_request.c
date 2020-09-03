@@ -169,8 +169,7 @@ ucs_mpool_ops_t ucp_rndv_get_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
-int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status,
-                            unsigned pending_flags)
+int ucp_request_pending_add(ucp_request_t *req, unsigned pending_flags)
 {
     ucs_status_t status;
     uct_ep_h uct_ep;
@@ -183,7 +182,6 @@ int ucp_request_pending_add(ucp_request_t *req, ucs_status_t *req_status,
     if (status == UCS_OK) {
         ucs_trace_data("ep %p: added pending uct request %p to lane[%d]=%p",
                        req->send.ep, req, req->send.lane, uct_ep);
-        *req_status            = UCS_INPROGRESS;
         req->send.pending_lane = req->send.lane;
         return 1;
     } else if (status == UCS_ERR_BUSY) {
@@ -349,6 +347,8 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 {
     ucs_status_t status;
     int          multi;
+
+    req->status = UCS_INPROGRESS;
 
     if ((ssize_t)length <= max_short) {
         /* short */

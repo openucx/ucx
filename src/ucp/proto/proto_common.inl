@@ -93,7 +93,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
         goto out_put_request;
     }
 
-    status = ucp_request_send(req, 0);
+    ucp_request_send(req, 0);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         goto out_put_request;
     }
@@ -109,6 +109,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 out_put_request:
     ucs_trace_req("releasing send request %p, returning status %s", req,
                   ucs_status_string(status));
+    status = req->status;
     ucp_request_put_param(param, req);
     return UCS_STATUS_PTR(status);
 }

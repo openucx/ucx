@@ -556,12 +556,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
             if (status == UCS_ERR_NO_RESOURCE) {
                 if (lane != rndv_req->send.pending_lane) {
                     /* switch to new pending lane */
-                    pending_add_res = ucp_request_pending_add(rndv_req, &status, 0);
+                    pending_add_res = ucp_request_pending_add(rndv_req, 0);
                     if (!pending_add_res) {
                         /* failed to switch req to pending queue, try again */
                         continue;
                     }
-                    ucs_assert(status == UCS_INPROGRESS);
                     return UCS_OK;
                 }
             }
@@ -823,7 +822,7 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *rndv_req,
     ucp_request_send(freq, 0);
 }
 
-static ucs_status_t
+static void
 ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, ucs_ptr_map_key_t rreq_id,
                                 size_t length, uint64_t remote_address,
                                 ucs_memory_type_t remote_mem_type, ucp_rkey_h rkey,
@@ -839,14 +838,12 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, ucs_ptr_map_key_t rreq_id,
 
     freq = ucp_request_get(worker);
     if (ucs_unlikely(freq == NULL)) {
-        ucs_error("failed to allocate fragment receive request");
-        return UCS_ERR_NO_MEMORY;
+        ucs_fatal("failed to allocate fragment receive request");
     }
 
     mdesc = ucp_worker_mpool_get(&worker->rndv_frag_mp);
     if (ucs_unlikely(mdesc == NULL)) {
-        ucs_error("failed to allocate fragment memory desc");
-        return UCS_ERR_NO_MEMORY;
+        ucs_fatal("failed to allocate fragment memory desc");
     }
 
     freq->send.ep = sreq->send.ep;
@@ -868,7 +865,8 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, ucs_ptr_map_key_t rreq_id,
                                                        : UCP_NULL_RESOURCE;
     }
 
-    return ucp_request_send(freq, 0);
+    freq->status = UCS_INPROGRESS;
+    ucp_request_send(freq, 0);
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self),

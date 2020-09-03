@@ -112,9 +112,9 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
      * release the request and return the status.
      * Otherwise, return the request.
      */
-    status = ucp_request_send(req, 0);
+    ucp_request_send(req, 0);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        ucp_request_imm_cmpl_param(param, req, status, send);
+        ucp_request_imm_cmpl_param(param, req, send);
     }
 
     ucp_request_set_send_callback_param(param, req, send);

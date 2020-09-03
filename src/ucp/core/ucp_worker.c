@@ -468,7 +468,6 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     ucs_status_t status                         = err_handle_arg->status;
     ucp_worker_h worker                         = ucp_ep->worker;
     ucp_lane_index_t lane;
-    ucp_ep_config_key_t key;
     ucp_request_t *close_req;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -488,34 +487,10 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
                                   UCT_FLUSH_FLAG_CANCEL,
                                   ucp_ep_err_pending_purge,
                                   UCS_STATUS_PTR(status));
-        ucp_ep->uct_eps[lane] = NULL;
+        ucp_ep->uct_eps[lane] = &ucp_failed_tl_ep;
     }
 
     ucp_stream_ep_cleanup(ucp_ep);
-
-    /* Set failed lane to index 0 */
-    ucp_ep->uct_eps[0] = &ucp_failed_tl_ep;
-
-    /* Redirect all lanes to failed one */
-    key                    = ucp_ep_config(ucp_ep)->key;
-    key.am_lane            = 0;
-    key.wireup_lane        = 0;
-    key.tag_lane           = 0;
-    key.rma_lanes[0]       = 0;
-    key.rkey_ptr_lane      = UCP_NULL_LANE;
-    key.rma_bw_lanes[0]    = 0;
-    key.amo_lanes[0]       = 0;
-    key.lanes[0].rsc_index = UCP_NULL_RESOURCE;
-    key.num_lanes          = 1;
-    key.status             = status;
-
-    status = ucp_worker_get_ep_config(worker, &key, 0, &ucp_ep->cfg_index);
-    if (status != UCS_OK) {
-        ucs_fatal("ep %p: could not change configuration to error state: %s",
-                  ucp_ep, ucs_status_string(status));
-    }
-
-    ucp_ep->am_lane = 0;
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
@@ -526,7 +501,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
             close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
             ucp_ep_local_disconnect_progress(close_req);
         } else {
-            ucp_ep_invoke_err_cb(ucp_ep, key.status);
+            ucp_ep_invoke_err_cb(ucp_ep, status);
         }
     } else {
         ucs_debug("ep %p: destroy internal endpoint due to peer failure", ucp_ep);

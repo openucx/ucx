@@ -513,14 +513,8 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
                                     req->send.msg_proto.tag.tag,
                                     imm_data, iov, iovcnt, 0,
                                     &req->send.state.uct_comp);
-    if (status == UCS_OK) {
-        complete(req, UCS_OK);
-    } else if (status == UCS_INPROGRESS) {
-        ucp_request_send_state_advance(req, &dt_state,
-                                       UCP_REQUEST_SEND_PROTO_ZCOPY_AM, status);
-    }
 
-    return UCS_STATUS_IS_ERR(status) ? status : UCS_OK;
+    return ucp_am_zcopy_single_handle_status(req, &dt_state, status, complete);
 }
 
 static ucs_status_t ucp_tag_offload_eager_bcopy(uct_pending_req_t *self)
@@ -528,12 +522,7 @@ static ucs_status_t ucp_tag_offload_eager_bcopy(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_tag_offload_bcopy(self, 0ul,
                                                    ucp_tag_offload_pack_eager);
 
-    if (status == UCS_OK) {
-        ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_send_generic_dt_finish(req);
-        ucp_request_complete_send(req, UCS_OK);
-    }
-    return status;
+    return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
 
 static ucs_status_t ucp_tag_offload_eager_zcopy(uct_pending_req_t *self)
@@ -705,11 +694,9 @@ static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
                                       ucp_tag_offload_pack_eager);
     if (status == UCS_OK) {
         ucp_tag_offload_sync_posted(worker, req);
-        ucp_request_send_generic_dt_finish(req);
-        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
-                                      UCS_OK);
     }
-    return status;
+
+    return ucp_am_bcopy_handle_status_from_pending(self, 0, 1, status);
 }
 
 static ucs_status_t ucp_tag_offload_eager_sync_zcopy(uct_pending_req_t *self)

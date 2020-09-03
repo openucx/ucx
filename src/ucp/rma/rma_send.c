@@ -80,11 +80,13 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
     ucs_assert(status != UCS_ERR_NOT_IMPLEMENTED);
 
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        if (status != UCS_ERR_NO_RESOURCE) {
-            ucp_request_send_buffer_dereg(req);
-            ucp_request_complete_send(req, status);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            return UCS_ERR_NO_RESOURCE;
         }
-        return status;
+
+        ucp_request_send_buffer_dereg(req);
+        ucp_request_complete_send(req, status);
+        return UCS_OK;
     }
 
     ucs_assert(frag_length >= 0);
