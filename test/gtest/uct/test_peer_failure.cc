@@ -8,6 +8,8 @@
 
 extern "C" {
 #include <uct/api/uct.h>
+#include <uct/sm/mm/base/mm_ep.h>
+#include <uct/sm/scopy/cma/cma_ep.h>
 }
 #include <common/test.h>
 #include "uct_test.h"
@@ -111,9 +113,11 @@ public:
         m_entities.push_back(m_receivers.back());
         m_sender->connect(m_receivers.size() - 1, *m_receivers.back(), 0);
 
-        am_handler_setter(this)(m_receivers.back());
-        /* Make sure that TL is up and has resources */
-        send_recv_am(m_receivers.size() - 1);
+        if (m_sender->iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+            /* Make sure that TL is up and has resources */
+            am_handler_setter(this)(m_receivers.back());
+            send_recv_am(m_receivers.size() - 1);
+        }
     }
 
     void set_am_handlers()
@@ -547,6 +551,22 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_multiple)
 
 class test_uct_peer_failure_keepalive : public test_uct_peer_failure
 {
+public:
+    void kill_receiver()
+    {
+        /* Hack: for SHM-based transports we can't really terminate
+         * peer EP, but instead we bit change process owner info to force
+         * ep_check failure. Simulation of case when peer process is
+         * terminated and PID is immediately reused by another process */
+        uct_ep_h tl_ep = ep0();
+        if (has_mm()) {
+            uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
+            ASSERT_NE((void*)NULL, ep->keepalive);
+            ep->keepalive->starttime--;
+        }
+
+        test_uct_peer_failure::kill_receiver();
+    }
 };
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed,
@@ -557,7 +577,6 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed,
     scoped_log_handler slh(wrap_errors_logger);
     flush();
     EXPECT_EQ(0, m_err_count);
-    flush();
 
     status = uct_ep_check(ep0(), 0, NULL);
     ASSERT_UCS_OK(status);

@@ -10,6 +10,7 @@
 #endif
 
 #include "mm_ep.h"
+#include "uct/sm/base/sm_ep.h"
 
 #include <ucs/arch/atomic.h>
 
@@ -159,6 +160,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
     self->cached_tail     = self->fifo_ctl->tail;
     self->signal.addrlen  = self->fifo_ctl->signal_addrlen;
     self->signal.sockaddr = self->fifo_ctl->signal_sockaddr;
+    self->keepalive       = NULL;
 
     ucs_debug("created mm ep %p, connected to remote FIFO id 0x%"PRIx64,
               self, addr->fifo_seg_id);
@@ -176,6 +178,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
     uct_mm_iface_t  *iface = ucs_derived_of(self->super.super.iface, uct_mm_iface_t);
     uct_mm_remote_seg_t remote_seg;
 
+    ucs_free(self->keepalive);
     uct_mm_ep_pending_purge(&self->super.super, NULL, NULL);
 
     kh_foreach_value(&self->remote_segs, remote_seg, {
@@ -466,4 +469,43 @@ ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
     ucs_memory_cpu_store_fence();
     UCT_TL_EP_STAT_FLUSH(&ep->super);
     return UCS_OK;
+}
+
+ucs_status_t
+uct_mm_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_mm_ep_t *ep    = ucs_derived_of(tl_ep, uct_mm_ep_t);
+    uct_iface_h  iface = ep->super.super.iface;
+    ucs_status_t status;
+    int proc_len;
+
+    if (ep->keepalive == NULL) {
+        proc_len = uct_sm_ep_get_process_proc_dir(NULL, 0,
+                                                  ep->fifo_ctl->owner.pid);
+        if (proc_len <= 0) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        ep->keepalive = ucs_malloc(sizeof(*ep->keepalive) + proc_len + 1,
+                                   "mm_ep->keepalive");
+        if (ep->keepalive == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_set_ep_failed;
+        }
+
+        ep->keepalive->starttime = ep->fifo_ctl->owner.starttime;
+        uct_sm_ep_get_process_proc_dir(ep->keepalive->proc, proc_len + 1,
+                                       ep->fifo_ctl->owner.pid);
+    }
+
+    status = uct_sm_ep_check(ep->keepalive->proc, ep->keepalive->starttime,
+                             flags, comp);
+    if (status != UCS_OK) {
+        goto err_set_ep_failed;
+    }
+    return UCS_OK;
+
+err_set_ep_failed:
+    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_mm_ep_t), &ep->super.super,
+                             iface, status);
 }

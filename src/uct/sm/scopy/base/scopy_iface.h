@@ -12,7 +12,7 @@
 #include <uct/sm/base/sm_iface.h>
 
 #define uct_scopy_trace_data(_tx) \
-    ucs_trace_data("%s [tx %p iov %zu/%zu length %zu/%zu] to %"PRIx64"(%+ld)", \
+    ucs_trace_data("%s [tx %p iov %zu/%zu length %zu/%zu] to %" PRIx64 "(%+ld)", \
                    uct_scopy_tx_op_str[(_tx)->op], (_tx), \
                    (_tx)->iov_iter.iov_index, (_tx)->iov_cnt, \
                    uct_iov_iter_flat_offset((_tx)->iov, (_tx)->iov_cnt, \

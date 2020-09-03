@@ -368,6 +368,8 @@ protected:
     virtual bool has_rc() const;
     virtual bool has_rc_or_dc() const;
     virtual bool has_ib() const;
+    virtual bool has_mm() const;
+    virtual bool has_cma() const;
 
     bool is_caps_supported(uint64_t required_flags);
     bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);

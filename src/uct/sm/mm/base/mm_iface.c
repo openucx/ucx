@@ -161,6 +161,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_AM_BCOPY            |
                                           UCT_IFACE_FLAG_PENDING             |
                                           UCT_IFACE_FLAG_CB_SYNC             |
+                                          UCT_IFACE_FLAG_EP_CHECK            |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP     |
                                           UCT_IFACE_FLAG_EVENT_RECV_SIG      |
@@ -394,6 +395,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_pending_purge         = uct_mm_ep_pending_purge,
     .ep_flush                 = uct_mm_ep_flush,
     .ep_fence                 = uct_sm_ep_fence,
+    .ep_check                 = uct_mm_ep_check,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_mm_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_mm_ep_t),
     .iface_flush              = uct_mm_iface_flush,
@@ -545,6 +547,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     uct_mm_fifo_element_t* fifo_elem_p;
     ucs_status_t status;
     unsigned i;
+    char proc[32];
 
     UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_mm_iface_ops, md,
                               worker, params, tl_config);
@@ -609,12 +612,21 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     uct_mm_iface_set_fifo_ptrs(self->recv_fifo_mem.address,
                                &self->recv_fifo_ctl, &self->recv_fifo_elems);
-    self->recv_fifo_ctl->head = 0;
-    self->recv_fifo_ctl->tail = 0;
-    self->read_index          = 0;
-    self->read_index_elem     = UCT_MM_IFACE_GET_FIFO_ELEM(self,
-                                                           self->recv_fifo_elems,
-                                                           self->read_index);
+    self->recv_fifo_ctl->head      = 0;
+    self->recv_fifo_ctl->tail      = 0;
+    self->recv_fifo_ctl->owner.pid = getpid();
+    self->read_index               = 0;
+    self->read_index_elem          = UCT_MM_IFACE_GET_FIFO_ELEM(self,
+                                                                self->recv_fifo_elems,
+                                                                self->read_index);
+    uct_sm_ep_get_process_proc_dir(proc, sizeof(proc),
+                                   self->recv_fifo_ctl->owner.pid);
+    status = ucs_sys_get_file_time(proc, UCS_SYS_FILE_TIME_CTIME,
+                                   &self->recv_fifo_ctl->owner.starttime);
+    if (status != UCS_OK) {
+        ucs_error("mm_iface failed to get process starttime");
+        return status;
+    }
 
     /* create a unix file descriptor to receive event notifications */
     status = uct_mm_iface_create_signal_fd(self);

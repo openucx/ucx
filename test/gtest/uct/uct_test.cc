@@ -586,6 +586,16 @@ bool uct_test::has_ib() const {
     return (has_rc_or_dc() || has_ud());
 }
 
+bool uct_test::has_mm() const {
+    return (has_transport("posix") ||
+            has_transport("sysv") ||
+            has_transport("xpmem"));
+}
+
+bool uct_test::has_cma() const {
+    return has_transport("cma");
+}
+
 void uct_test::stats_activate()
 {
     ucs_stats_cleanup();
