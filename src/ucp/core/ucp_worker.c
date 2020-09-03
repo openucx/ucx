@@ -2486,9 +2486,6 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
         wireup_ep = ucp_wireup_ep(uct_ep);
         ucs_assert(wireup_ep != NULL);
 
-        is_owner = wireup_ep->super.is_owner;
-        uct_ep   = ucp_wireup_ep_extract_next_ep(uct_ep);
-
         if (wireup_ep->aux_ep != NULL) {
             /* discard the WIREUP EP's auxiliary EP */
             ucp_worker_discard_uct_ep(worker, wireup_ep->aux_ep,
@@ -2497,11 +2494,17 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
             ucp_wireup_ep_disown(&wireup_ep->super.super, wireup_ep->aux_ep);
         }
 
+        is_owner = wireup_ep->super.is_owner;
+        uct_ep   = ucp_wireup_ep_extract_next_ep(uct_ep);
+
         if (purge_cb != NULL) {
-            /* purge the next UCT EP first to pass WIREUP MSGs to the user
-             * purge callback, otherwise, they will be release when purging
-             * the WIREUP EP */
-            uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
+            if (is_owner /* purge from the next UCT EP, if the WIREUP EP is
+                          * an owner for it */) {
+                /* purge the next UCT EP first to pass WIREUP MSGs to the user
+                 * purge callback, otherwise, they will be release when purging
+                 * the WIREUP EP */
+                uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
+            }
             uct_ep_pending_purge(&wireup_ep->super.super, purge_cb, purge_arg);
         }
 
