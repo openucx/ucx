@@ -81,8 +81,8 @@ protected:
 
             if (ep_pending_purge_func == ep_pending_purge_func_iter) {
                 /* expected purging count is the number of pending
-                * reqyests in the UCT EP, in the WIREUP EP (if used)
-                * and in the AUX EP (if used) */
+                 * requests in the UCT EP, in the WIREUP EP (if used)
+                 * and in the AUX EP (if used) */
                 expected_pending_purge_reqs_count +=
                     m_pending_purge_reqs_count;
                 
