@@ -133,7 +133,6 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
 out:
     ucs_free((void*)req->send.buffer);
-    ucs_free(req);
     return UCS_OK;
 }
 

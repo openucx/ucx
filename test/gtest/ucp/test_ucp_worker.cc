@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_request.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
 }
@@ -30,6 +31,7 @@ protected:
         m_destroyed_ep_count   = 0;
         m_flush_ep_count       = 0;
         m_pending_add_ep_count = 0;
+        m_fake_ep.flags        = UCP_EP_FLAG_REMOTE_CONNECTED;
 
         m_flush_comps.clear();
         m_pending_reqs.clear();
@@ -37,11 +39,22 @@ protected:
 
     void add_pending_reqs(uct_ep_h uct_ep,
                           uct_pending_callback_t func,
-                          std::vector<uct_pending_req_t> &pending_reqs,
+                          std::vector<ucp_request_t> &pending_reqs,
                           unsigned base = 0) {
         for (unsigned i = 0; i < m_pending_purge_reqs_count; i++) {
-            pending_reqs[base + i].func = func;
-            uct_ep_pending_add(uct_ep, &pending_reqs[base + i], 0);
+            ucp_request_t *req = &pending_reqs[base + i];
+
+            if (func == ucp_wireup_msg_progress) {
+                req->send.ep          = &m_fake_ep;
+
+                /* for fast completing the WIREUP MSG, it frees the send
+                 * buffer and returns UCS_OK */
+                req->send.wireup.type = UCP_WIREUP_MSG_REQUEST;
+                ASSERT_TRUE(m_fake_ep.flags & UCP_EP_FLAG_REMOTE_CONNECTED);
+            }
+
+            req->send.uct.func = func;
+            uct_ep_pending_add(uct_ep, &req->send.uct, 0);
         }
     }
 
@@ -80,7 +93,7 @@ protected:
             unsigned expected_pending_purge_reqs_count = 0;
             unsigned added_pending_purge_reqs_count    = 0;
 
-            if (ep_pending_purge_func == ep_pending_purge_func_iter) {
+            if (ep_pending_purge_func == ep_pending_purge_func_iter_reqs) {
                 /* expected purging count is the number of pending
                  * requests in the WIREUP EP (if used) and in the
                  * WIREUP AUX EP (if used) or UCT EP (if no WIREUP EP
@@ -94,7 +107,7 @@ protected:
                 }
             }
 
-            std::vector<uct_pending_req_t>
+            std::vector<ucp_request_t>
                 pending_reqs(expected_pending_purge_reqs_count);
 
             if (i < wireup_ep_count) {
@@ -237,39 +250,57 @@ protected:
                                    void *arg) {
         unsigned *count = (unsigned*)arg;
         (*count)++;
+
+        if (self->func == ucp_wireup_ep_progress_pending) {
+            /* need to complete WIREUP MSG to release allocated
+             * proxy request */
+            ucp_request_t *req  = ucs_container_of(self,
+                                                   ucp_request_t,
+                                                   send.uct);
+            /* TODO: replace by `ucp_request_send()` when
+             * `ucp/core/ucp_request.inl` file could be compiled
+             * by C++ compiler */
+            ucs_status_t status = req->send.uct.func(&req->send.uct);
+            EXPECT_EQ(UCS_OK, status);
+        }
     }
 
     static ucs_status_t
-    ep_pending_add_and_inc_count(uct_ep_h ep, uct_pending_req_t *req,
-                                 unsigned flags) {
-        std::map<uct_ep_h, unsigned>::iterator it =
-            m_pending_reqs_count.find(ep);
-        if (it == m_pending_reqs_count.end()) {
-            m_pending_reqs_count.insert(std::make_pair(ep, 1));
+    ep_pending_add_save_req(uct_ep_h ep, uct_pending_req_t *req,
+                            unsigned flags) {
+        std::map<uct_ep_h,
+                 std::vector<uct_pending_req_t*> >::iterator it =
+            m_pending_reqs_map.find(ep);
+        if (it == m_pending_reqs_map.end()) {
+            std::vector<uct_pending_req_t*> vec;
+            vec.push_back(req);
+            m_pending_reqs_map.insert(std::make_pair(ep, vec));
         } else {
-            unsigned *count = &it->second;
-            (*count)++;
+            std::vector<uct_pending_req_t*> *req_vec = &it->second;
+            req_vec->push_back(req);
         }
         return UCS_OK;
     }
 
     static void
-    ep_pending_purge_func_iter(uct_ep_h ep,
+    ep_pending_purge_func_iter_reqs(uct_ep_h ep,
                                uct_pending_purge_callback_t cb,
                                void *arg) {
-        uct_pending_req_t req = {};
+        uct_pending_req_t *req;
         for (unsigned i = 0; i < m_pending_purge_reqs_count; i++) {
-            std::map<uct_ep_h, unsigned>::iterator it =
-                m_pending_reqs_count.find(ep);
-            ASSERT_NE(it, m_pending_reqs_count.end());
+            std::map<uct_ep_h,
+                     std::vector<uct_pending_req_t*> >::iterator it =
+                m_pending_reqs_map.find(ep);
+            ASSERT_NE(it, m_pending_reqs_map.end());
 
-            unsigned *count = &it->second;
-            if (*count == 0) {
+            std::vector<uct_pending_req_t*> *req_vec = &it->second;
+            if (req_vec->size() == 0) {
                 break;
             }
 
-            (*count)--;
-            cb(&req, arg);
+            req = req_vec->back();
+            req_vec->pop_back();
+            cb(req, arg);
         }
     }
 
@@ -278,22 +309,28 @@ protected:
     static       unsigned m_destroyed_ep_count;
     static       unsigned m_flush_ep_count;
     static       unsigned m_pending_add_ep_count;
+    static       ucp_ep_t m_fake_ep;
     static const unsigned m_pending_purge_reqs_count;
 
-    static std::vector<uct_completion_t*> m_flush_comps;
+    static std::vector<uct_completion_t*>  m_flush_comps;
     static std::vector<uct_pending_req_t*> m_pending_reqs;
-    static std::map<uct_ep_h, unsigned> m_pending_reqs_count;
+    static std::map<uct_ep_h,
+                    std::vector<uct_pending_req_t*> >
+                                           m_pending_reqs_map;
 };
 
 unsigned test_ucp_worker_discard::m_created_ep_count               = 0;
 unsigned test_ucp_worker_discard::m_destroyed_ep_count             = 0;
 unsigned test_ucp_worker_discard::m_flush_ep_count                 = 0;
 unsigned test_ucp_worker_discard::m_pending_add_ep_count           = 0;
+ucp_ep_t test_ucp_worker_discard::m_fake_ep                        = {};
 const unsigned test_ucp_worker_discard::m_pending_purge_reqs_count = 10;
 
-std::vector<uct_completion_t*> test_ucp_worker_discard::m_flush_comps;
+std::vector<uct_completion_t*>  test_ucp_worker_discard::m_flush_comps;
 std::vector<uct_pending_req_t*> test_ucp_worker_discard::m_pending_reqs;
-std::map<uct_ep_h, unsigned> test_ucp_worker_discard::m_pending_reqs_count;
+std::map<uct_ep_h,
+         std::vector<uct_pending_req_t*> >
+                                test_ucp_worker_discard::m_pending_reqs_map;
 
 
 UCS_TEST_P(test_ucp_worker_discard, flush_ok) {
@@ -313,14 +350,14 @@ UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_ok) {
 
 UCS_TEST_P(test_ucp_worker_discard, flush_ok_pending_purge) {
     test_worker_discard((void*)ucs_empty_function_return_success /* ep_flush */,
-                        (void*)ep_pending_add_and_inc_count      /* ep_pending_add */,
-                        (void*)ep_pending_purge_func_iter        /* ep_pending_purge */);
+                        (void*)ep_pending_add_save_req           /* ep_pending_add */,
+                        (void*)ep_pending_purge_func_iter_reqs   /* ep_pending_purge */);
 }
 
 UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_ok_pending_purge) {
     test_worker_discard((void*)ucs_empty_function_return_success /* ep_flush */,
-                        (void*)ep_pending_add_and_inc_count      /* ep_pending_add */,
-                        (void*)ep_pending_purge_func_iter        /* ep_pending_purge */,
+                        (void*)ep_pending_add_save_req           /* ep_pending_add */,
+                        (void*)ep_pending_purge_func_iter_reqs   /* ep_pending_purge */,
                         8                                        /* UCT EP count */,
                         6                                        /* WIREUP EP count */,
                         3                                        /* WIREUP AUX EP count */);
