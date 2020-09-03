@@ -18,6 +18,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/config/types.h>
+#include <ucs/config/parser.h>
 
 #include <errno.h>
 #include <sys/socket.h>
@@ -182,6 +183,16 @@ int ucs_get_first_cpu();
  * @note All bits of the returned number have the same randomness.
  */
 uint64_t ucs_generate_uuid(uint64_t seed);
+
+
+/**
+ * Returns a value one greater than the maximum file descriptor
+ * number that can be opened by this process. Attempts to exceed
+ * this limit yield the error EMFILE.
+ *
+ * @return The maximal number of files that could be opened simultaneously.
+ */
+int ucs_sys_max_open_files();
 
 
 /**

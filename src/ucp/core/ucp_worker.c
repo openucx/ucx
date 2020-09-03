@@ -1110,7 +1110,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         /* Cache tl_bitmap on the context, so the next workers would not need
          * to select best ifaces. */
         context->tl_bitmap = tl_bitmap;
-        ucs_debug("selected tl bitmap: 0x%lx (%d tls)",
+        ucs_debug("selected tl bitmap: 0x%"PRIx64" (%d tls)",
                   tl_bitmap, ucs_popcount(tl_bitmap));
     }
 
@@ -1125,7 +1125,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         }
     }
 
-    ucs_debug("selected scalable tl bitmap: 0x%lx (%d tls)",
+    ucs_debug("selected scalable tl bitmap: 0x%"PRIx64" (%d tls)",
               worker->scalable_tl_bitmap,
               ucs_popcount(worker->scalable_tl_bitmap));
 
@@ -1387,6 +1387,16 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
         status = uct_cm_open(cmpt, worker->uct, cm_config, &worker->cms[i].cm);
         if (status != UCS_OK) {
             ucs_error("failed to open CM on component %s with status %s",
+                      context->tl_cmpts[cmpt_index].attr.name,
+                      ucs_status_string(status));
+            goto err_free_cms;
+        }
+
+        worker->cms[i].attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
+        status                         = uct_cm_query(worker->cms[i].cm,
+                                                      &worker->cms[i].attr);
+        if (status != UCS_OK) {
+            ucs_error("failed to query CM on component %s with status %s",
                       context->tl_cmpts[cmpt_index].attr.name,
                       ucs_status_string(status));
             goto err_free_cms;

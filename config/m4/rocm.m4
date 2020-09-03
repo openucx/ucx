@@ -41,7 +41,7 @@ AC_DEFUN([ROCM_BUILD_FLAGS],
 AC_DEFUN([HIP_BUILD_FLAGS],
     $4="-D__HIP_PLATFORM_HCC__ -I$1/include/hip -I$1/include"
     $3="-L$1/hip/lib -L$1/lib"
-    $2="-lhip_hcc"
+    $2="-lamdhip64"
 )
 
 #
@@ -91,7 +91,8 @@ AS_IF([test "x$with_rocm" != "xno"],
           [AC_CHECK_LIB([hsa-runtime64], [hsa_init], [rocm_happy=yes], [rocm_happy=no])])
 
     AS_IF([test "x$rocm_happy" = "xyes"],
-          [AC_SUBST([ROCM_CPPFLAGS])
+          [AC_DEFINE([HAVE_ROCM], 1, [Enable ROCM support])
+           AC_SUBST([ROCM_CPPFLAGS])
            AC_SUBST([ROCM_LDFLAGS])
            AC_SUBST([ROCM_LIBS])
            AC_SUBST([ROCM_ROOT])],
@@ -111,7 +112,7 @@ AS_IF([test "x$with_rocm" != "xno"],
     AS_IF([test "x$hip_happy" = xyes],
           [AC_CHECK_HEADERS([hip_runtime.h], [hip_happy=yes], [hip_happy=no])])
     AS_IF([test "x$hip_happy" = xyes],
-          [AC_CHECK_LIB([hip_hcc], [hipFree], [hip_happy=yes], [hip_happy=no])])
+          [AC_CHECK_LIB([amdhip64], [hipFree], [hip_happy=yes], [hip_happy=no])])
     AS_IF([test "x$hip_happy" = xyes], [HIP_CXXFLAGS="--std=gnu++11"], [])
 
     CPPFLAGS="$SAVE_CPPFLAGS"
@@ -119,7 +120,8 @@ AS_IF([test "x$with_rocm" != "xno"],
     LIBS="$SAVE_LIBS"
 
     AS_IF([test "x$hip_happy" = "xyes"],
-          [AC_SUBST([HIP_CPPFLAGS])
+          [AC_DEFINE([HAVE_HIP], 1, [Enable HIP support])
+           AC_SUBST([HIP_CPPFLAGS])
            AC_SUBST([HIP_CXXFLAGS])
            AC_SUBST([HIP_LDFLAGS])
            AC_SUBST([HIP_LIBS])],

@@ -539,8 +539,9 @@ UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), BUFFER_LENGTH, 1);
     if (is_loopback() && (GetParam().variant & TEST_TAG)) {
         /* expect the endpoint to be connected to itself */
-        ucp_ep_h ep = sender().ep();
-        EXPECT_EQ((uintptr_t)ep, ucp_ep_dest_ep_ptr(ep));
+        ucp_ep_h ep         = sender().ep();
+        ucp_worker_h worker = sender().worker();
+        EXPECT_EQ(ep, ucp_worker_get_ep_by_id(worker, ucp_ep_remote_id(ep)));
     }
     flush_worker(sender());
 }
@@ -1466,3 +1467,33 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, connect, is_self()) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcv, "rc_v")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcx, "rc_x")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, ib, "ib")
+
+class test_ucp_wireup_keepalive : public test_ucp_wireup {
+public:
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
+                     const std::string& test_case_name, const std::string& tls)
+    {
+        return enum_test_params_features(ctx_params, name, test_case_name, tls,
+                                         UCP_FEATURE_RMA | UCP_FEATURE_TAG);
+    }
+
+    void init() {
+        test_ucp_wireup::init();
+
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+};
+
+/* test if EP has non-empty keepalive lanes mask */
+UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
+    if (!ep_iface_has_caps(sender(), "", UCT_IFACE_FLAG_EP_CHECK)) {
+        UCS_TEST_SKIP_R("Unsupported");
+    }
+
+    ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep());
+    EXPECT_NE(0, ep_config->key.ep_check_map);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)

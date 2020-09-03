@@ -39,8 +39,24 @@ ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
+    ucs_assert(!(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED));
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
     return uct_ep_connect_to_ep(wireup_ep->super.uct_ep, dev_addr, ep_addr);
+}
+
+void ucp_wireup_ep_replay_pending_requests(ucp_ep_h ucp_ep,
+                                           ucs_queue_head_t *tmp_pending_queue)
+{
+    uct_pending_req_t *uct_req;
+    ucp_request_t *req;
+
+    /* Replay pending requests */
+    ucs_queue_for_each_extract(uct_req, tmp_pending_queue, priv, 1) {
+        req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+        ucs_assert(req->send.ep == ucp_ep);
+        ucp_request_send(req, 0);
+        --ucp_ep->worker->flush_ops_count;
+    }
 }
 
 /*
@@ -53,7 +69,6 @@ static unsigned ucp_wireup_ep_progress(void *arg)
     ucp_ep_h ucp_ep = wireup_ep->super.ucp_ep;
     ucs_queue_head_t tmp_pending_queue;
     uct_pending_req_t *uct_req;
-    ucp_request_t *req;
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
 
@@ -92,12 +107,7 @@ static unsigned ucp_wireup_ep_progress(void *arg)
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 
     /* Replay pending requests */
-    ucs_queue_for_each_extract(uct_req, &tmp_pending_queue, priv, 1) {
-        req = ucs_container_of(uct_req, ucp_request_t, send.uct);
-        ucs_assert(req->send.ep == ucp_ep);
-        ucp_request_send(req, 0);
-        --ucp_ep->worker->flush_ops_count;
-    }
+    ucp_wireup_ep_replay_pending_requests(ucp_ep, &tmp_pending_queue);
 
     return 0;
 
@@ -378,6 +388,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->pending_count      = 0;
     self->flags              = 0;
     self->progress_id        = UCS_CALLBACKQ_ID_NULL;
+    self->cm_idx             = UCP_NULL_RESOURCE;
     ucs_queue_head_init(&self->pending_q);
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
@@ -410,6 +421,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     }
 
     if (self->tmp_ep != NULL) {
+        ucs_assert(!(self->tmp_ep->flags & UCP_EP_FLAG_USED));
         ucp_ep_disconnected(self->tmp_ep, 1);
     }
 
@@ -557,7 +569,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
     /* pack client data */
     ucs_assert((int)ucp_ep_config(ucp_ep)->key.err_mode <= UINT8_MAX);
     sa_data->err_mode  = ucp_ep_config(ucp_ep)->key.err_mode;
-    sa_data->ep_ptr    = (uintptr_t)ucp_ep;
+    sa_data->ep_id     = ucp_ep_local_id(ucp_ep);
     sa_data->dev_index = UCP_NULL_RESOURCE; /* Not used */
 
     attrs = ucp_worker_iface_get_attr(worker, sockaddr_rsc);
@@ -685,8 +697,21 @@ uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)
 
     ucs_assert_always(wireup_ep != NULL);
     next_ep = wireup_ep->super.uct_ep;
-    wireup_ep->super.uct_ep = NULL;
+    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, NULL, 0);
     return next_ep;
+}
+
+void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep)
+{
+    uct_ep_h uct_ep;
+
+    ucs_assert(wireup_ep != NULL);
+    uct_ep = ucp_wireup_ep_extract_next_ep(&wireup_ep->super.super);
+    ucs_assert_always(uct_ep != NULL);
+    uct_ep_destroy(uct_ep);
+
+    wireup_ep->flags &= ~UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
+    ucs_assert(wireup_ep->flags == 0);
 }
 
 void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep)

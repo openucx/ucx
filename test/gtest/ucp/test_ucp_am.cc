@@ -298,23 +298,14 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
 
 class test_ucp_am_nbx : public test_ucp_am_base {
 public:
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls)
+    test_ucp_am_nbx()
     {
-        std::vector<ucp_test_param> result;
-
-        generate_test_params_variant(ctx_params, name, test_case_name,
-                                      tls, 0, result);
-        generate_test_params_variant(ctx_params, name, test_case_name,
-                                      tls, UCP_AM_SEND_REPLY, result);
-
-        return result;
+        m_dt          = ucp_dt_make_contig(1);
+        m_am_received = false;
     }
 
-    size_t max_am_hdr() {
+    size_t max_am_hdr()
+    {
         ucp_worker_attr_t attr;
         attr.field_mask = UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER;
 
@@ -322,7 +313,13 @@ public:
         return attr.max_am_header;
     }
 
-    void set_am_data_handler(entity &e, uint16_t am_id, void *arg) {
+    virtual unsigned get_send_flag()
+    {
+        return 0;
+    }
+
+    void set_am_data_handler(entity &e, uint16_t am_id, void *arg)
+    {
         ucp_am_handler_param_t param;
 
         /* Initialize Active Message data handler */
@@ -363,9 +360,9 @@ public:
 
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, this);
 
-        ucp::data_type_desc_t sdt_desc(ucp_dt_make_contig(1), &sbuf[0], size);
+        ucp::data_type_desc_t sdt_desc(m_dt, &sbuf[0], size);
 
-        ucs_status_ptr_t sptr = send_am(sdt_desc, GetParam().variant,
+        ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag(),
                                         hbuf.c_str(), header_size);
 
         wait_for_flag(&m_am_received);
@@ -373,11 +370,12 @@ public:
         EXPECT_TRUE(m_am_received);
     }
 
-    void test_am(size_t size) {
+    void test_am(size_t size)
+    {
         size_t small_hdr_size = 8;
 
-        test_am_send_recv(size, 0);
         test_am_send_recv(size, small_hdr_size);
+        test_am_send_recv(size, 0);
 
         if (max_am_hdr() > small_hdr_size) {
             test_am_send_recv(size, max_am_hdr());
@@ -397,7 +395,7 @@ public:
                                   header_length).find_first_not_of('h'));
         }
 
-        bool has_reply_ep = GetParam().variant == UCP_AM_SEND_REPLY;
+        bool has_reply_ep = get_send_flag();
 
         EXPECT_EQ(has_reply_ep, rx_param->recv_attr &
                                 UCP_AM_RECV_ATTR_FIELD_REPLY_EP);
@@ -418,8 +416,9 @@ public:
         return UCS_OK;
     }
 
-    static const uint16_t TEST_AM_NBX_ID = 0;
-    volatile bool         m_am_received;
+    static const uint16_t           TEST_AM_NBX_ID = 0;
+    ucp_datatype_t                  m_dt;
+    volatile bool                   m_am_received;
 };
 
 UCS_TEST_P(test_ucp_am_nbx, set_invalid_handler)
@@ -481,21 +480,102 @@ UCS_TEST_P(test_ucp_am_nbx, max_am_header)
     EXPECT_LT(max_am_hdr(), min_am_bcopy);
 }
 
-UCS_TEST_P(test_ucp_am_nbx, short_send)
+UCS_TEST_P(test_ucp_am_nbx, zero_send)
+{
+    test_am_send_recv(0, max_am_hdr());
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
+
+
+class test_ucp_am_nbx_dts : public test_ucp_am_nbx {
+public:
+    enum {
+        DT_CONTIG  = UCS_BIT(0),
+        DT_IOV     = UCS_BIT(1),
+        DT_GENERIC = UCS_BIT(2),
+        DT_NUM     = 3,
+        REPLY_FLAG = UCS_BIT(3)
+    };
+
+    std::vector<ucp_test_param>
+    static enum_test_params(const ucp_params_t& ctx_params,
+                            const std::string& name,
+                            const std::string& test_case_name,
+                            const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+        int dt_bit_idx;
+
+        ucs_for_each_bit(dt_bit_idx, UCS_MASK(DT_NUM)) {
+            EXPECT_FALSE(UCS_BIT(dt_bit_idx) & REPLY_FLAG);
+            generate_test_params_variant(ctx_params, name, test_case_name,
+                                         tls, UCS_BIT(dt_bit_idx), result);
+            generate_test_params_variant(ctx_params, name, test_case_name,
+                                         tls, UCS_BIT(dt_bit_idx) | REPLY_FLAG,
+                                         result);
+        }
+
+        return result;
+    }
+
+    void init()
+    {
+        test_ucp_am_nbx::init();
+
+        if (GetParam().variant & DT_CONTIG) {
+            m_dt = ucp_dt_make_contig(1);
+        } else if (GetParam().variant & DT_IOV) {
+            m_dt = ucp_dt_make_iov();
+        } else {
+            EXPECT_TRUE(GetParam().variant & DT_GENERIC);
+            ASSERT_UCS_OK(ucp_dt_create_generic(&ucp::test_dt_copy_ops, NULL,
+                                                &m_dt));
+        }
+    }
+
+    void cleanup()
+    {
+        if (GetParam().variant & DT_GENERIC) {
+            ucp_dt_destroy(m_dt);
+        }
+
+        test_ucp_am_nbx::cleanup();
+    }
+
+    unsigned get_send_flag()
+    {
+        return (GetParam().variant & REPLY_FLAG) ? UCP_AM_SEND_REPLY : 0;
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_dts, short_send)
 {
     test_am(1);
 }
 
-UCS_TEST_P(test_ucp_am_nbx, short_bcopy_send, "ZCOPY_THRESH=-1",
-                                              "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, short_bcopy_send, "ZCOPY_THRESH=-1",
+                                                  "RNDV_THRESH=-1")
 {
     test_am(4096);
 }
 
-UCS_TEST_P(test_ucp_am_nbx, long_bcopy_send, "ZCOPY_THRESH=-1",
-                                             "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am_nbx_dts, long_bcopy_send, "ZCOPY_THRESH=-1",
+                                                 "RNDV_THRESH=-1")
 {
     test_am(65536);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
+UCS_TEST_P(test_ucp_am_nbx_dts, short_zcopy_send, "ZCOPY_THRESH=1",
+                                                  "RNDV_THRESH=-1")
+{
+    test_am(4096);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_dts, long_zcopy_send, "ZCOPY_THRESH=1",
+                                                 "RNDV_THRESH=-1")
+{
+    test_am(65536);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_dts)

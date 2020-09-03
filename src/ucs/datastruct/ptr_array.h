@@ -64,11 +64,12 @@ typedef uint64_t ucs_ptr_array_elem_t;
  * A sparse array of pointers.
  */
 typedef struct ucs_ptr_array {
-    ucs_ptr_array_elem_t     *start;
-    unsigned                 freelist;
-    unsigned                 size;
+    ucs_ptr_array_elem_t     *start;   /* Pointer to the allocated array */
+    unsigned                 freelist; /* Index of first free slot (see above) */
+    unsigned                 size;     /* Number of allocated array slots */
+    unsigned                 count;    /* Actual number of occupied slots */
 #ifdef ENABLE_MEMTRACK
-    char                     name[64];
+    char                     name[64]; /* Name of this pointer array */
 #endif
 } ucs_ptr_array_t;
 
@@ -158,16 +159,30 @@ void *ucs_ptr_array_replace(ucs_ptr_array_t *ptr_array, unsigned element_index,
 
 
 /**
- * Get the current size of the ptr array
+ * Get the current number of elements in the ptr array.
  *
  * @param [in] ptr_array      Pointer to a ptr array.
  *
- * @return Size of the ptr array.
+ * @return Number of elements of the ptr array.
  */
 static UCS_F_ALWAYS_INLINE unsigned
-ucs_ptr_array_get_size(ucs_ptr_array_t *ptr_array)
+ucs_ptr_array_get_elem_count(ucs_ptr_array_t *ptr_array)
 {
-    return ptr_array->size;
+    return ptr_array->count;
+}
+
+
+/**
+ * Check whether the ptr array is empty.
+ *
+ * @param [in] ptr_array      Pointer to a ptr array.
+ *
+ * @return Whether the ptr array is empty.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucs_ptr_array_is_empty(ucs_ptr_array_t *ptr_array)
+{
+    return ptr_array->count == 0;
 }
 
 
@@ -377,16 +392,30 @@ ucs_ptr_array_locked_lookup(ucs_ptr_array_locked_t *locked_ptr_array,
 
 
 /**
- * Get the current size of the locked ptr array
+ * Get the number of elements in the locked ptr array
  *
  * @param [in] locked_ptr_array      Pointer to a locked ptr array.
  *
- * @return Size of the locked ptr array.
+ * @return Number of elements in the locked ptr array.
  */
 static UCS_F_ALWAYS_INLINE unsigned
-ucs_ptr_array_locked_get_size(ucs_ptr_array_locked_t *locked_ptr_array)
+ucs_ptr_array_locked_get_elem_count(ucs_ptr_array_locked_t *locked_ptr_array)
 {
-    return ucs_ptr_array_get_size(&locked_ptr_array->super);
+    return ucs_ptr_array_get_elem_count(&locked_ptr_array->super);
+}
+
+
+/**
+ * Check whether the locked ptr array is empty.
+ *
+ * @param [in] ptr_array      Pointer to a locked ptr array.
+ *
+ * @return Whether the locked ptr array is empty.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucs_ptr_array_locked_is_empty(ucs_ptr_array_locked_t *locked_ptr_array)
+{
+    return ucs_ptr_array_is_empty(&locked_ptr_array->super);
 }
 
 

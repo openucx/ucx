@@ -203,6 +203,7 @@ struct ucp_worker_iface {
  */
 struct ucp_worker_cm {
     uct_cm_h                      cm;            /* UCT CM handle */
+    uct_cm_attr_t                 attr;          /* UCT CM attributes */
     ucp_rsc_index_t               cmpt_idx;      /* Index of corresponding
                                                     component */
 };
