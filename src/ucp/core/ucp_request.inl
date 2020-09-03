@@ -243,7 +243,7 @@ ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status,
         return 0;
     } else if (status != UCS_ERR_NO_RESOURCE) {
         /* Unexpected error */
-        ucp_request_complete_send(req, status);
+        /* request can be completed by user callback, can't be accessed anymore */
         *req_status = status;
         return 1;
     }
@@ -352,6 +352,19 @@ ucp_request_send_state_reset(ucp_request_t *req,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_request_send_state_advance_comp(ucp_request_t *req, ucs_status_t status)
+{
+    ucs_assert(status != UCS_ERR_NO_RESOURCE);
+
+    if (status == UCS_INPROGRESS) {
+        ++req->send.state.uct_comp.count;
+    } else if (UCS_STATUS_IS_ERR(status) &&
+               (req->send.state.uct_comp.count == 0)) {
+        req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
+    }
+}
+
 /**
  * Advance state of send request after UCT operation. This function applies
  * @a new_dt_state to @a req request according to @a proto protocol. Also, UCT
@@ -370,27 +383,16 @@ ucp_request_send_state_advance(ucp_request_t *req,
                                const ucp_dt_state_t *new_dt_state,
                                unsigned proto, ucs_status_t status)
 {
-    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        /* Don't advance after failed operation in order to continue on next try
-         * from last valid point.
-         */
+    if (status == UCS_ERR_NO_RESOURCE) {
+        /* Don't advance in order to continue
+         * on next try from last valid point. */
         return;
     }
 
     switch (proto) {
-    case UCP_REQUEST_SEND_PROTO_RMA:
-        if (status == UCS_INPROGRESS) {
-            ++req->send.state.uct_comp.count;
-        }
-        break;
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-        /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
-        if (status == UCS_INPROGRESS) {
-            ++req->send.state.uct_comp.count;
-        }
-        /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
         ucs_assert(new_dt_state != NULL);
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
@@ -400,6 +402,19 @@ ucp_request_send_state_advance(ucp_request_t *req,
             /* cppcheck-suppress nullPointer */
             req->send.state.dt        = *new_dt_state;
         }
+
+        if (UCS_STATUS_IS_ERR(status) && (status != UCS_ERR_NO_RESOURCE)) {
+            /* fast-forward multi-fragment protocol */
+            req->send.state.dt.offset = req->send.length;
+        }
+
+        if (proto != UCP_REQUEST_SEND_PROTO_BCOPY_AM) {
+            ucp_request_send_state_advance_comp(req, status);
+        }
+
+        break;
+    case UCP_REQUEST_SEND_PROTO_RMA:
+        ucp_request_send_state_advance_comp(req, status);
         break;
     default:
         ucs_fatal("unknown protocol");

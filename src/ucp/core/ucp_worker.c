@@ -423,6 +423,42 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
     }
 }
 
+static uct_iface_t failed_iface = {
+    .ops.ep_put_short        = (uct_ep_put_short_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout,
+    .ops.ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_get_short        = (uct_ep_get_short_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout,
+    .ops.ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+    .ops.ep_pending_purge    = (uct_ep_pending_purge_func_t)ucs_empty_function_return_success,
+    .ops.ep_flush            = (uct_ep_flush_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_fence            = (uct_ep_fence_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucs_empty_function_return_ep_timeout,
+    .ops.ep_destroy          = (uct_ep_destroy_func_t)ucs_empty_function,
+    .ops.ep_get_address      = (uct_ep_get_address_func_t)ucs_empty_function_return_ep_timeout
+};
+
+static uct_ep_t faled_lane = {
+    .iface = &failed_iface
+};
+
 static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 {
     ucp_worker_err_handle_arg_t *err_handle_arg = arg;
@@ -432,7 +468,6 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     ucs_status_t status                         = err_handle_arg->status;
     ucp_lane_index_t failed_lane                = err_handle_arg->failed_lane;
     ucp_lane_index_t lane;
-    ucp_ep_config_key_t key;
     ucp_request_t *close_req;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -452,59 +487,14 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
         ucs_trace("ep %p: purge pending on uct_ep[%d]=%p", ucp_ep, lane,
                   ucp_ep->uct_eps[lane]);
 
-        if (lane != failed_lane) {
-            ucs_trace("ep %p: destroy uct_ep[%d]=%p", ucp_ep, lane,
-                      ucp_ep->uct_eps[lane]);
-            ucp_worker_discard_uct_ep(ucp_ep->worker, ucp_ep->uct_eps[lane],
-                                      UCT_FLUSH_FLAG_CANCEL,
-                                      ucp_ep_err_pending_purge,
-                                      UCS_STATUS_PTR(status));
-            ucp_ep->uct_eps[lane] = NULL;
-        } else {
-            uct_ep_pending_purge(ucp_ep->uct_eps[lane], ucp_ep_err_pending_purge,
-                                 UCS_STATUS_PTR(status));
-        }
+        ucp_worker_discard_uct_ep(ucp_ep->worker, ucp_ep->uct_eps[lane],
+                                  UCT_FLUSH_FLAG_CANCEL,
+                                  ucp_ep_err_pending_purge,
+                                  UCS_STATUS_PTR(status));
+        ucp_ep->uct_eps[lane] = &faled_lane;
     }
 
     ucp_stream_ep_cleanup(ucp_ep);
-
-    /* Move failed lane to index 0 */
-    if ((failed_lane != 0) && (failed_lane != UCP_NULL_LANE)) {
-        ucp_ep->uct_eps[0] = ucp_ep->uct_eps[failed_lane];
-        ucp_ep->uct_eps[failed_lane] = NULL;
-    }
-
-    /* NOTE: if failed ep is wireup auxiliary/sockaddr then we need to replace
-     *       the lane with failed ep and destroy wireup ep
-     */
-    if (ucp_ep->uct_eps[0] != uct_ep) {
-        ucs_assert(ucp_wireup_ep_is_owner(ucp_ep->uct_eps[0], uct_ep));
-        ucp_wireup_ep_disown(ucp_ep->uct_eps[0], uct_ep);
-        ucs_trace("ep %p: destroy failed wireup ep %p", ucp_ep, ucp_ep->uct_eps[0]);
-        uct_ep_destroy(ucp_ep->uct_eps[0]);
-        ucp_ep->uct_eps[0] = uct_ep;
-    }
-
-    /* Redirect all lanes to failed one */
-    key                    = ucp_ep_config(ucp_ep)->key;
-    key.am_lane            = 0;
-    key.wireup_lane        = 0;
-    key.tag_lane           = 0;
-    key.rma_lanes[0]       = 0;
-    key.rkey_ptr_lane      = UCP_NULL_LANE;
-    key.rma_bw_lanes[0]    = 0;
-    key.amo_lanes[0]       = 0;
-    key.lanes[0].rsc_index = UCP_NULL_RESOURCE;
-    key.num_lanes          = 1;
-    key.status             = status;
-
-    status = ucp_worker_get_ep_config(worker, &key, 0, &ucp_ep->cfg_index);
-    if (status != UCS_OK) {
-        ucs_fatal("ep %p: could not change configuration to error state: %s",
-                  ucp_ep, ucs_status_string(status));
-    }
-
-    ucp_ep->am_lane = 0;
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
@@ -515,7 +505,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
             close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
             ucp_ep_local_disconnect_progress(close_req);
         } else {
-            ucp_ep_invoke_err_cb(ucp_ep, key.status);
+            ucp_ep_invoke_err_cb(ucp_ep, status);
         }
     } else {
         ucs_debug("ep %p: destroy internal endpoint due to peer failure", ucp_ep);

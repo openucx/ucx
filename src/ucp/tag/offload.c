@@ -513,26 +513,37 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
                                     req->send.msg_proto.tag.tag,
                                     imm_data, iov, iovcnt, 0,
                                     &req->send.state.uct_comp);
-    if (status == UCS_OK) {
-        complete(req, UCS_OK);
-    } else if (status == UCS_INPROGRESS) {
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucp_request_send_state_advance(req, &dt_state,
                                        UCP_REQUEST_SEND_PROTO_ZCOPY_AM, status);
+        return status;
     }
 
-    return UCS_STATUS_IS_ERR(status) ? status : UCS_OK;
+    if (status == UCS_INPROGRESS) {
+        ucp_request_send_state_advance(req, &dt_state,
+                                       UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                       UCS_INPROGRESS);
+        return UCS_OK;
+    }
+
+    ucs_assert(status == UCS_OK);
+    complete(req, UCS_OK);
+    return UCS_OK;
 }
 
 static ucs_status_t ucp_tag_offload_eager_bcopy(uct_pending_req_t *self)
 {
     ucs_status_t status = ucp_do_tag_offload_bcopy(self, 0ul,
                                                    ucp_tag_offload_pack_eager);
+    ucp_request_t *req;
 
-    if (status == UCS_OK) {
-        ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_send_generic_dt_finish(req);
-        ucp_request_complete_send(req, UCS_OK);
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        return UCS_ERR_NO_RESOURCE;
     }
+
+    req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_send_generic_dt_finish(req);
+    ucp_request_complete_send(req, status);
     return status;
 }
 

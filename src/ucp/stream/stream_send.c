@@ -225,15 +225,17 @@ static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)
 
 static ucs_status_t ucp_stream_bcopy_single(uct_pending_req_t *self)
 {
-    ucs_status_t status;
+    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_STREAM_DATA,
+                                                 ucp_stream_pack_am_single_dt);
+    ucp_request_t *req;
 
-    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_STREAM_DATA,
-                                    ucp_stream_pack_am_single_dt);
-    if (status == UCS_OK) {
-        ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_send_generic_dt_finish(req);
-        ucp_request_complete_send(req, UCS_OK);
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        return UCS_ERR_NO_RESOURCE;
     }
+
+    req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_send_generic_dt_finish(req);
+    ucp_request_complete_send(req, status);
     return status;
 }
 
@@ -274,13 +276,19 @@ static ucs_status_t ucp_stream_bcopy_multi(uct_pending_req_t *self)
                                                 UCP_AM_ID_STREAM_DATA,
                                                 ucp_stream_pack_am_first_dt,
                                                 ucp_stream_pack_am_middle_dt, 0);
-    if (status == UCS_OK) {
-        ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_send_generic_dt_finish(req);
-        ucp_request_complete_send(req, UCS_OK);
-    } else if (status == UCP_STATUS_PENDING_SWITCH) {
-        status = UCS_OK;
+    ucp_request_t *req;
+
+    if ((status == UCS_INPROGRESS) || (status == UCS_ERR_NO_RESOURCE)) {
+        return status;
     }
+
+    if (ucs_unlikely(status == UCP_STATUS_PENDING_SWITCH)) {
+        return UCS_OK;
+    }
+
+    req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_send_generic_dt_finish(req);
+    ucp_request_complete_send(req, status);
     return status;
 }
 

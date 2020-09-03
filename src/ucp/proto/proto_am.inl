@@ -277,14 +277,23 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     status = ucp_am_zcopy_common(req, hdr, hdr_size, user_hdr_desc, user_hdr_size,
                                  iov, max_iov, req->send.length + user_hdr_size,
                                  am_id, &state);
-    if (status == UCS_OK) {
-        complete(req, UCS_OK);
-    } else {
+    if (status == UCS_INPROGRESS) {
         ucp_request_send_state_advance(req, &state,
                                        UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
-                                       status);
+                                       UCS_INPROGRESS);
+        return UCS_OK;
     }
-    return UCS_STATUS_IS_ERR(status) ? status : UCS_OK;
+
+    if (status == UCS_OK) {
+        complete(req, UCS_OK);
+        return UCS_OK;
+    }
+
+    ucs_assert(UCS_STATUS_IS_ERR(status));
+    ucp_request_send_state_advance(req, &state,
+                                   UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                   status);
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE
