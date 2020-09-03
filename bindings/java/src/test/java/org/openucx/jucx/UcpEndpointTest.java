@@ -187,6 +187,7 @@ public class UcpEndpointTest extends UcxTest {
 
     @Test
     public void testRecvAfterSend() {
+        long sendTag = 4L;
         // Crerate 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature().requestTagFeature()
             .setMtWorkersShared(true);
@@ -204,7 +205,7 @@ public class UcpEndpointTest extends UcxTest {
         ByteBuffer src1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
         ByteBuffer dst1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);
 
-        ep.sendTaggedNonBlocking(src1, 0, null);
+        ep.sendTaggedNonBlocking(src1, sendTag, null);
 
         Thread progressThread = new Thread() {
             @Override
@@ -223,24 +224,22 @@ public class UcpEndpointTest extends UcxTest {
             Thread.sleep(5);
         } catch (InterruptedException ignored) { }
 
-        AtomicBoolean success = new AtomicBoolean(false);
-
-        worker2.recvTaggedNonBlocking(dst1, 0, -1, new UcxCallback() {
+        UcpRequest recv = worker2.recvTaggedNonBlocking(dst1, 0, 0, new UcxCallback() {
             @Override
             public void onSuccess(UcpRequest request) {
                 assertEquals(UcpMemoryTest.MEM_SIZE, request.getRecvSize());
-                success.set(true);
             }
         });
 
         try {
             int count = 0;
-            while ((++count < 100) && !success.get()) {
+            while ((++count < 100) && !recv.isCompleted()) {
                 Thread.sleep(50);
             }
         } catch (InterruptedException ignored) { }
 
-        assertTrue(success.get());
+        assertTrue(recv.isCompleted());
+        assertEquals(sendTag, recv.getSenderTag());
         UcpRequest closeRequest = ep.closeNonBlockingForce();
 
         while (!closeRequest.isCompleted()) {
