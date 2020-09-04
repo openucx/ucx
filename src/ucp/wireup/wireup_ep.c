@@ -164,7 +164,6 @@ ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
          * pending request was completed on the UCT EP or the WIREUP AUX EP */
         if (wireup_ep != NULL) {
             ucs_atomic_sub32(&wireup_ep->pending_count, 1);
-            ucs_free(req);
         }
         ucs_free(proxy_req);
     }
@@ -258,7 +257,6 @@ ucp_wireup_ep_pending_purge_cb(uct_pending_req_t *self, void *arg)
             /* decrement the pending count, if it is not a request release
              * callback */
             ucs_atomic_sub32(&wireup_ep->pending_count, 1);
-            
         }
     }
 }

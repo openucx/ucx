@@ -39,12 +39,20 @@ protected:
 
     void add_pending_reqs(uct_ep_h uct_ep,
                           uct_pending_callback_t func,
-                          std::vector<ucp_request_t> &pending_reqs,
+                          std::vector<ucp_request_t*> &pending_reqs,
                           unsigned base = 0) {
         for (unsigned i = 0; i < m_pending_purge_reqs_count; i++) {
-            ucp_request_t *req = &pending_reqs[base + i];
+            /* use `ucs_calloc()` here, since the memory could be released
+             * in the `ucp_wireup_msg_progress()` function by `ucs_free()` */
+            ucp_request_t *req = static_cast<ucp_request_t*>(
+                                     ucs_calloc(1, sizeof(*req),
+                                                "ucp_request"));
+            ASSERT_TRUE(req != NULL);
+
+            pending_reqs[base + i] = req;
 
             if (func == ucp_wireup_msg_progress) {
+                
                 req->send.ep          = &m_fake_ep;
 
                 /* for fast completing the WIREUP MSG, it frees the send
@@ -107,7 +115,7 @@ protected:
                 }
             }
 
-            std::vector<ucp_request_t>
+            std::vector<ucp_request_t*>
                 pending_reqs(expected_pending_purge_reqs_count);
 
             if (i < wireup_ep_count) {
@@ -251,17 +259,24 @@ protected:
         unsigned *count = (unsigned*)arg;
         (*count)++;
 
+        ucp_request_t *req = ucs_container_of(self,
+                                              ucp_request_t,
+                                              send.uct);
+
         if (self->func == ucp_wireup_ep_progress_pending) {
             /* need to complete WIREUP MSG to release allocated
              * proxy request */
-            ucp_request_t *req  = ucs_container_of(self,
-                                                   ucp_request_t,
-                                                   send.uct);
             /* TODO: replace by `ucp_request_send()` when
              * `ucp/core/ucp_request.inl` file could be compiled
              * by C++ compiler */
             ucs_status_t status = req->send.uct.func(&req->send.uct);
             EXPECT_EQ(UCS_OK, status);
+            /* no need to release the memory allocated for the request.
+             * it will be freed in the `ucp_wireup_msg_send()` function,
+             * since it expects that the request was allocated in the
+             * `ucp_wireup_msg_send()` function */
+        } else {
+            ucs_free(req);
         }
     }
 
