@@ -1055,15 +1055,8 @@ ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
        is not updated for the error cqe and all outstanding wqes*/
     rc_iface->tx.cq_available += ep->tx.wq.bb_max -
                                  uct_rc_txqp_available(&ep->super.txqp);
-    return ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super,
-                                        status);
-}
-
-ucs_status_t uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
-                                       ucs_status_t status)
-{
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t), ep,
-                             &iface->super.super, status);
+    return uct_iface_handle_ep_err(&ib_iface->super.super,
+                                   &ep->super.super.super, status);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);

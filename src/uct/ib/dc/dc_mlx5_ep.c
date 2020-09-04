@@ -1332,8 +1332,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(ep_status));
     } else {
-        status = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
-                                              ep_status);
+        status = uct_iface_handle_ep_err(tl_iface, &ep->super.super, ep_status);
         if (status != UCS_OK) {
             uct_ib_mlx5_completion_with_err(ib_iface, arg,
                                             &iface->tx.dcis[dci].txwq,
