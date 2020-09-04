@@ -25,6 +25,9 @@ public:
     }
 
 protected:
+    typedef std::map<uct_ep_h,
+                     std::vector<uct_pending_req_t*> > ep_pending_reqs_map;
+
     void init() {
         ucp_test::init();
         m_created_ep_count     = 0;
@@ -283,9 +286,7 @@ protected:
     static ucs_status_t
     ep_pending_add_save_req(uct_ep_h ep, uct_pending_req_t *req,
                             unsigned flags) {
-        std::map<uct_ep_h,
-                 std::vector<uct_pending_req_t*> >::iterator it =
-            m_pending_reqs_map.find(ep);
+        ep_pending_reqs_map::iterator it = m_pending_reqs_map.find(ep);
         if (it == m_pending_reqs_map.end()) {
             std::vector<uct_pending_req_t*> vec;
             vec.push_back(req);
@@ -303,9 +304,7 @@ protected:
                                void *arg) {
         uct_pending_req_t *req;
         for (unsigned i = 0; i < m_pending_purge_reqs_count; i++) {
-            std::map<uct_ep_h,
-                     std::vector<uct_pending_req_t*> >::iterator it =
-                m_pending_reqs_map.find(ep);
+            ep_pending_reqs_map::iterator it = m_pending_reqs_map.find(ep);
             ASSERT_NE(it, m_pending_reqs_map.end());
 
             std::vector<uct_pending_req_t*> *req_vec = &it->second;
@@ -329,9 +328,7 @@ protected:
 
     static std::vector<uct_completion_t*>  m_flush_comps;
     static std::vector<uct_pending_req_t*> m_pending_reqs;
-    static std::map<uct_ep_h,
-                    std::vector<uct_pending_req_t*> >
-                                           m_pending_reqs_map;
+    static ep_pending_reqs_map             m_pending_reqs_map;
 };
 
 unsigned test_ucp_worker_discard::m_created_ep_count               = 0;
@@ -341,11 +338,9 @@ unsigned test_ucp_worker_discard::m_pending_add_ep_count           = 0;
 ucp_ep_t test_ucp_worker_discard::m_fake_ep                        = {};
 const unsigned test_ucp_worker_discard::m_pending_purge_reqs_count = 10;
 
-std::vector<uct_completion_t*>  test_ucp_worker_discard::m_flush_comps;
-std::vector<uct_pending_req_t*> test_ucp_worker_discard::m_pending_reqs;
-std::map<uct_ep_h,
-         std::vector<uct_pending_req_t*> >
-                                test_ucp_worker_discard::m_pending_reqs_map;
+std::vector<uct_completion_t*>               test_ucp_worker_discard::m_flush_comps;
+std::vector<uct_pending_req_t*>              test_ucp_worker_discard::m_pending_reqs;
+test_ucp_worker_discard::ep_pending_reqs_map test_ucp_worker_discard::m_pending_reqs_map;
 
 
 UCS_TEST_P(test_ucp_worker_discard, flush_ok) {
