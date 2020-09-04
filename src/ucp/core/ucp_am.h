@@ -8,9 +8,9 @@
 #ifndef UCP_AM_H_
 #define UCP_AM_H_
 
-#include "ucp_ep.h"
 
 #include <ucs/datastruct/array.h>
+#include <ucp/rndv/rndv.h>
 
 
 enum {
@@ -63,7 +63,7 @@ typedef struct {
 typedef struct {
     uint64_t                 msg_id;     /* method to match parts of the same AM */
     size_t                   offset;     /* offset in the entire AM buffer */
-    uint64_t                 ep_id;     /* ep which can be used for reply */
+    uint64_t                 ep_id;      /* ep which can be used for reply */
 } UCS_S_PACKED ucp_am_mid_hdr_t;
 
 
@@ -71,6 +71,16 @@ typedef struct {
     ucs_list_link_t          list;        /* entry into list of unfinished AM's */
     size_t                   remaining;   /* how many bytes left to receive */
 } ucp_am_first_desc_t;
+
+
+typedef struct {
+    ucp_rndv_rts_hdr_t       super;
+    ucp_am_hdr_t             am;
+    /*
+     * 1. packed rkeys follows
+     * 2. user header follows, if am->header_length is not 0
+     */
+} UCS_S_PACKED ucp_am_rndv_rts_hdr_t;
 
 
 ucs_status_t ucp_am_init(ucp_worker_h worker);
@@ -83,6 +93,8 @@ void ucp_am_ep_cleanup(ucp_ep_h ep);
 
 size_t ucp_am_max_header_size(ucp_worker_h worker);
 
+ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
+                                     unsigned tl_flags);
 
 UCS_ARRAY_DECLARE_TYPE(ucp_am_cbs, unsigned, ucp_am_entry_t)
 

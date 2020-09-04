@@ -10,7 +10,6 @@
 #include <ucp/api/ucp.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
-#include <ucp/core/ucp_worker.h>
 #include <uct/api/uct.h>
 #include <ucs/arch/bitops.h>
 

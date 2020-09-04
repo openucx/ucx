@@ -225,7 +225,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
                               size_t length, unsigned recv_flags)
 {
-    ucs_status_t status = UCS_OK;
     size_t offset;
     ucp_offload_last_ssend_hdr_t *priv;
 
@@ -240,10 +239,6 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
                                       priv->ssend_ack.sender_tag, recv_flags);
     }
 
-    if (ucs_unlikely(req->status != UCS_OK)) {
-       return req->status;
-    }
-
     /* There is no correct offset in middle headers with tag offload flow.
      * All fragments are always in order - can calculate offset by
      * subtraction of already received data.
@@ -251,14 +246,19 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
      * until last fragment arrives, so it is initialized to SIZE_MAX. */
     offset = SIZE_MAX - req->recv.tag.remaining;
 
+    if (ucs_unlikely(req->status != UCS_OK)) {
+        goto out;
+    }
+
     if (ucs_unlikely(req->recv.length < (length + offset))) {
-        /* We have to release non-contig buffer only in case of 
+        /* We have to release non-contig buffer only in case of
          * this is not the first segment and the datatype is
          * non-contig */
         if ((offset != 0) && !UCP_DT_IS_CONTIG(req->recv.datatype)) {
             ucp_tag_recv_request_release_non_contig_buffer(req);
         }
-        return ucp_request_recv_msg_truncated(req, length, offset);
+        req->status = ucp_request_recv_msg_truncated(req, length, offset);
+        goto out;
     }
 
     if (UCP_DT_IS_CONTIG(req->recv.datatype)) {
@@ -272,7 +272,8 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
             req->recv.tag.non_contig_buf = ucs_malloc(req->recv.length,
                                                       "tag gen buffer");
             if (ucs_unlikely(req->recv.tag.non_contig_buf == NULL)) {
-               return UCS_ERR_NO_MEMORY;
+               req->status = UCS_ERR_NO_MEMORY;
+               goto out;
             }
         }
 
@@ -282,20 +283,30 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
                                   data, length);
     }
 
-    if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_LAST) {
-        /* Need to update recv info length. In tag offload protocol we do not
-         * know the total message length until the last fragment arrives. */
-        req->recv.tag.info.length = offset + length;
+    req->status = UCS_OK;
 
-        if (!UCP_DT_IS_CONTIG(req->recv.datatype)) {
-            status = ucp_request_recv_data_unpack(req, req->recv.tag.non_contig_buf,
-                                                  req->recv.tag.info.length,
-                                                  0, 1);
-            ucp_tag_recv_request_release_non_contig_buffer(req);
-        }
+out:
+    req->recv.tag.remaining -= length;
+
+    if (!(recv_flags & UCP_RECV_DESC_FLAG_EAGER_LAST)) {
+        return UCS_INPROGRESS;
     }
 
-    return status;
+    /* Need to update recv info length. In tag offload protocol we do not
+     * know the total message length until the last fragment arrives. */
+    req->recv.tag.info.length = offset + length;
+
+    if (!UCP_DT_IS_CONTIG(req->recv.datatype) && (req->status == UCS_OK)) {
+        req->status = ucp_request_recv_data_unpack(req,
+                                                   req->recv.tag.non_contig_buf,
+                                                   req->recv.tag.info.length,
+                                                   0, 1);
+
+        ucp_tag_recv_request_release_non_contig_buffer(req);
+    }
+
+    ucp_request_complete_tag_recv(req, req->status);
+    return req->status;
 }
 
 /*
@@ -307,40 +318,11 @@ ucp_tag_request_process_recv_data(ucp_request_t *req, const void *data,
                                   size_t length, size_t offset, int dereg,
                                   unsigned recv_flags)
 {
-    ucs_status_t status;
-    int last;
-
     if (recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
-        req->status = ucp_request_recv_offload_data(req, data, length,
-                                                    recv_flags);
-
-        last = recv_flags & UCP_RECV_DESC_FLAG_EAGER_LAST;
-    } else {
-        last = req->recv.tag.remaining == length;
-
-        /* process data only if the request is not in error state */
-        if (ucs_likely(req->status == UCS_OK)) {
-            req->status = ucp_request_recv_data_unpack(req, data, length,
-                                                       offset, last);
-        }
-        ucs_assertv(req->recv.tag.remaining >= length,
-                    "req->recv.tag.remaining=%zu length=%zu",
-                    req->recv.tag.remaining, length);
+        return ucp_request_recv_offload_data(req, data, length, recv_flags);
     }
 
-    req->recv.tag.remaining -= length;
-
-    if (last) {
-        status = req->status;
-        if (dereg) {
-            ucp_request_recv_buffer_dereg(req);
-        }
-        ucp_request_complete_tag_recv(req, status);
-        ucs_assert(status != UCS_INPROGRESS);
-        return status;
-    } else {
-        return UCS_INPROGRESS;
-    }
+    return ucp_request_process_recv_data(req, data, length, offset, dereg, 0);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

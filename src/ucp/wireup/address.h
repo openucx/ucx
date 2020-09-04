@@ -11,6 +11,7 @@
 
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
+#include <ucp/core/ucp_worker.h>
 #include <ucs/sys/math.h>
 
 

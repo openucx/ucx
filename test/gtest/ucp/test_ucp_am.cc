@@ -257,7 +257,7 @@ void test_ucp_am::do_set_am_handler_realloc_test()
     do_send_process_data_test(0, UCP_SEND_ID + 1, 0);
 }
 
-UCS_TEST_P(test_ucp_am, send_process_am)
+UCS_TEST_P(test_ucp_am, send_process_am, "RNDV_THRESH=-1")
 {
     set_handlers(UCP_SEND_ID);
     do_send_process_data_test(0, UCP_SEND_ID, 0);
@@ -266,13 +266,13 @@ UCS_TEST_P(test_ucp_am, send_process_am)
     do_send_process_data_test(0, UCP_SEND_ID, UCP_AM_SEND_REPLY);
 }
 
-UCS_TEST_P(test_ucp_am, send_process_am_release)
+UCS_TEST_P(test_ucp_am, send_process_am_release, "RNDV_THRESH=-1")
 {
     set_handlers(UCP_SEND_ID);
     do_send_process_data_test(UCP_RELEASE, 0, 0);
 }
 
-UCS_TEST_P(test_ucp_am, send_process_iov_am)
+UCS_TEST_P(test_ucp_am, send_process_iov_am, "RNDV_THRESH=-1")
 {
     ucs::detail::message_stream ms("INFO");
 
@@ -288,7 +288,7 @@ UCS_TEST_P(test_ucp_am, send_process_iov_am)
     }
 }
 
-UCS_TEST_P(test_ucp_am, set_am_handler_realloc)
+UCS_TEST_P(test_ucp_am, set_am_handler_realloc, "RNDV_THRESH=-1")
 {
     do_set_am_handler_realloc_test();
 }
@@ -382,10 +382,12 @@ public:
         }
     }
 
-    void am_data_handler(const void *header, size_t header_length, void *data,
-                         size_t length, const ucp_am_recv_param_t *rx_param)
+    virtual ucs_status_t am_data_handler(const void *header,
+                                         size_t header_length,
+                                         void *data, size_t length,
+                                         const ucp_am_recv_param_t *rx_param)
     {
-        ASSERT_FALSE(m_am_received);
+        EXPECT_FALSE(m_am_received);
         EXPECT_EQ(std::string::npos,
                   std::string((const char*)data, length).find_first_not_of('d'));
 
@@ -404,6 +406,8 @@ public:
         EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
 
         m_am_received = true;
+
+        return UCS_OK;
     }
 
     static ucs_status_t am_data_cb(void *arg, const void *header,
@@ -412,8 +416,7 @@ public:
                                    const ucp_am_recv_param_t *param)
     {
         test_ucp_am_nbx *self = reinterpret_cast<test_ucp_am_nbx*>(arg);
-        self->am_data_handler(header, header_length, data, length, param);
-        return UCS_OK;
+        return self->am_data_handler(header, header_length, data, length, param);
     }
 
     static const uint16_t           TEST_AM_NBX_ID = 0;
@@ -579,3 +582,74 @@ UCS_TEST_P(test_ucp_am_nbx_dts, long_zcopy_send, "ZCOPY_THRESH=1",
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_dts)
+
+
+class test_ucp_am_nbx_rndv: public test_ucp_am_nbx {
+public:
+    test_ucp_am_nbx_rndv()
+    {
+        m_rx_dt = ucp_dt_make_contig(1);
+        modify_config("RNDV_THRESH", "128");
+    }
+
+    ucs_status_t am_data_handler(const void *header, size_t header_length,
+                                 void *data, size_t length,
+                                 const ucp_am_recv_param_t *rx_param)
+    {
+        EXPECT_FALSE(m_am_received);
+        EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
+
+        m_rx_buf.resize(length, 'u');
+
+        m_rx_dt_desc.make(m_rx_dt, &m_rx_buf[0], length);
+
+        ucp_request_param_t params;
+        params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                              UCP_OP_ATTR_FIELD_USER_DATA |
+                              UCP_OP_ATTR_FIELD_DATATYPE  |
+                              UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+        params.datatype     = m_rx_dt_desc.dt();
+        params.cb.recv_am   = am_data_recv_cb;
+        params.user_data    = this;
+        ucs_status_ptr_t sp = ucp_am_recv_data_nbx(receiver().worker(),
+                                                   data, m_rx_dt_desc.buf(),
+                                                   m_rx_dt_desc.count(),
+                                                   &params);
+        EXPECT_TRUE(UCS_PTR_IS_PTR(sp)) << "sp is: " << sp;
+        ucp_request_release(sp);
+
+        return UCS_INPROGRESS;
+    }
+
+    static void am_data_recv_cb(void *request, ucs_status_t status,
+                                size_t length, void *user_data)
+    {
+        test_ucp_am_nbx_rndv *self = reinterpret_cast<test_ucp_am_nbx_rndv*>
+                                                                    (user_data);
+        ASSERT_FALSE(self->m_am_received);
+        self->m_am_received = true;
+        EXPECT_UCS_OK(status);
+        EXPECT_EQ(self->m_rx_buf, std::vector<char>(length, 'd'));
+    }
+
+    ucp_datatype_t               m_rx_dt;
+    ucp::data_type_desc_t        m_rx_dt_desc;
+    std::vector<char>            m_rx_buf;
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
+{
+    test_am_send_recv(65536);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_get, "RNDV_SCHEME=get_zcopy")
+{
+    test_am_send_recv(65536);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_put, "RNDV_SCHEME=put_zcopy")
+{
+    test_am_send_recv(65536);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv)
