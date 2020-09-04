@@ -2455,8 +2455,9 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
          * the callback to not invoke it several times */
         if (status_add == UCS_ERR_BUSY) {
             uct_worker_progress_register_safe(worker->uct,
-                                              ucp_worker_discard_uct_ep_destroy_progress,
-                                              req, UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+                                              ucp_worker_discard_uct_ep_progress,
+                                              req, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                              &cb_id);
         }
 
         return UCS_OK;
@@ -2489,12 +2490,11 @@ ucp_worker_discard_wireup_ep(ucp_worker_h worker,
     int is_owner;
 
     ucs_assert(wireup_ep != NULL);
+    ucs_assert(purge_cb != NULL);
 
-    if (purge_cb != NULL) {
-        ucp_wireup_ep_pending_purge_common(wireup_ep,
-                                           purge_cb, purge_arg,
-                                           purge_cb, purge_arg);
-    }
+    ucp_wireup_ep_pending_purge_common(wireup_ep,
+                                       purge_cb, purge_arg,
+                                       purge_cb, purge_arg);
 
     if (wireup_ep->aux_ep != NULL) {
         /* make sure that there is no WIREUP MSGs anymore */
