@@ -84,9 +84,19 @@ void test_uct_peer_failure::purge_cb(uct_pending_req_t *self, void *arg)
 ucs_status_t test_uct_peer_failure::err_cb(void *arg, uct_ep_h ep,
                                            ucs_status_t status)
 {
-    EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
-    reinterpret_cast<test_uct_peer_failure*>(arg)->m_err_count++;
-    return UCS_OK;
+    test_uct_peer_failure *self = reinterpret_cast<test_uct_peer_failure*>(arg);
+
+    self->m_err_count++;
+
+    switch (status) {
+    case UCS_ERR_ENDPOINT_TIMEOUT:
+    case UCS_ERR_CANCELED: /* goes from ib flushed QP */
+        return UCS_OK;
+    default:
+        EXPECT_TRUE(false) << "unexpected error status: "
+            << ucs_status_string(status);
+        return status;
+    }
 }
 
 void test_uct_peer_failure::kill_receiver()
@@ -236,42 +246,14 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
         flush();
     }
 
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, NULL, 0, NULL, 1);
-
-    /* Check that all ep operations return pre-defined error code */
-    EXPECT_EQ(uct_ep_am_short(ep0(), 0, 0, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_am_bcopy(ep0(), 0, NULL, NULL, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_am_zcopy(ep0(), 0, NULL, 0, iov, iovcnt, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_bcopy(ep0(), NULL, NULL, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_put_zcopy(ep0(), iov, iovcnt, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_get_bcopy(ep0(), NULL, NULL, 0, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_get_zcopy(ep0(), iov, iovcnt, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_post(ep0(), UCT_ATOMIC_OP_ADD, 0, 0, 0), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic64_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic32_fetch(ep0(), UCT_ATOMIC_OP_ADD, 0, NULL, 0, 0, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic_cswap64(ep0(), 0, 0, 0, 0, NULL, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_atomic_cswap32(ep0(), 0, 0, 0, 0, NULL, NULL),
-              UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_flush(ep0(), 0, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_get_address(ep0(), NULL), UCS_ERR_ENDPOINT_TIMEOUT);
-    EXPECT_EQ(uct_ep_pending_add(ep0(), NULL, 0), UCS_ERR_BUSY);
-    EXPECT_EQ(uct_ep_connect_to_ep(ep0(), NULL, NULL), UCS_ERR_ENDPOINT_TIMEOUT);
-
     EXPECT_GT(m_err_count, 0ul);
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
                      !check_caps(m_required_caps))
 {
+    ucs_status_t status;
+
     set_am_handlers();
 
     send_recv_am(0);
@@ -283,7 +265,6 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
 
     {
         scoped_log_handler slh(wrap_errors_logger);
-        ucs_status_t status;
 
         fill_resources(false, loop_end_limit);
         kill_receiver();
@@ -308,7 +289,9 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
         flush();
     }
 
-    EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, uct_ep_am_short(ep0(), 0, 0, NULL, 0));
+    EXPECT_GE(m_err_count, 0ul);
+
+    /* any new op is not determined */
 
     uct_ep_pending_purge(ep0(), purge_cb, NULL);
     EXPECT_EQ(num_pend_sends, m_req_purge_count);
@@ -335,13 +318,11 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send,
     }
 
     /* test flushing one operations */
-    send_recv_am(0, UCS_ERR_ENDPOINT_TIMEOUT);
     send_recv_am(1, UCS_OK);
     flush();
 
     /* test flushing many operations */
     for (size_t i = 0; i < (m_tx_window * 10 / ucs::test_time_multiplier()); ++i) {
-        send_recv_am(0, UCS_ERR_ENDPOINT_TIMEOUT);
         send_recv_am(1, UCS_OK);
     }
     flush();
@@ -356,14 +337,13 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send_after,
     {
         scoped_log_handler slh(wrap_errors_logger);
         kill_receiver();
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; (i < 100) && (m_err_count == 0); ++i) {
             send_am(0);
         }
         flush();
     }
 
-    send_recv_am(0, UCS_ERR_ENDPOINT_TIMEOUT);
-
+    wait_for_value(&m_err_count, size_t(1), true);
     m_am_count = 0;
     send_am(1);
     ucs_debug("flushing");
@@ -489,17 +469,16 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
         flush(timeout);
 
         /* if EPs are not failed yet, these ops should trigger that */
-        for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
+        for (size_t idx = 0; (idx < m_nreceivers - 1) &&
+                             (m_err_count == 0); ++idx) {
             for (size_t i = 0; i < m_tx_window; ++i) {
-                send_am(idx);
+                if (UCS_STATUS_IS_ERR(send_am(idx))) {
+                    break;
+                }
             }
         }
 
         flush(timeout);
-    }
-
-    for (size_t idx = 0; idx < m_nreceivers - 1; ++idx) {
-        send_recv_am(idx, UCS_ERR_ENDPOINT_TIMEOUT);
     }
 
     m_am_count = 0;
