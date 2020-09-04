@@ -107,7 +107,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
 
     if (ucs_unlikely(imm)) {
         hdr.req.ep_id       = imm;
-        hdr.req.reqptr      = 0;   /* unused */
+        hdr.req.req_id      = UCP_REQUEST_ID_INVALID;  /* unused */
         hdr.super.super.tag = stag;
 
         /* Sync send - need to send a reply */
@@ -198,7 +198,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         dummy_rts              = ucs_alloca(dummy_rts_size);
         dummy_rts->tag.tag     = stag;
         dummy_rts->sreq.ep_id  = rndv_hdr->ep_id;
-        dummy_rts->sreq.reqptr = rndv_hdr->reqptr;
+        dummy_rts->sreq.req_id = rndv_hdr->req_id;
         dummy_rts->address     = remote_addr;
         dummy_rts->size        = length;
         dummy_rts->flags       = UCP_RNDV_RTS_FLAG_TAG;
@@ -591,7 +591,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
 
     ucp_tag_offload_unexp_rndv_hdr_t rndv_hdr = {
         .ep_id    = ucp_send_request_get_ep_remote_id(req),
-        .reqptr   = (uintptr_t)req,
+        .req_id   = ucp_send_request_get_id(req),
         .md_index = md_index
     };
 

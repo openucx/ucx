@@ -301,7 +301,13 @@ static ucs_config_field_t ucp_config_table[] = {
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
 
-  {NULL}
+  {"PROTO_INDIRECT_ID", "auto",
+   "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
+   "A value of 'auto' means to enable only if error handling is enabled on the\n"
+   "endpoint.",
+   ucs_offsetof(ucp_config_t, ctx.proto_indirect_id), UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
+   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 
