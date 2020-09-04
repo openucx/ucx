@@ -505,8 +505,8 @@ ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
     ep->txcnt.ci = ep->txcnt.pi;
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, ep->txcnt.pi, 0);
 
-    return iface->super.ops->set_ep_failed(&iface->super, &ep->super.super.super,
-                                           status);
+    return uct_iface_handle_ep_err(&iface->super.super.super,
+                                   &ep->super.super.super, status);
 }
 
 ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)

@@ -254,8 +254,9 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
 
     uct_ud_ep_purge(ep, UCS_ERR_ENDPOINT_TIMEOUT);
 
-    status = iface->super.ops->set_ep_failed(&iface->super, &ep->super.super,
-                                             UCS_ERR_ENDPOINT_TIMEOUT);
+    status = uct_iface_handle_ep_err(&iface->super.super.super,
+                                     &ep->super.super,
+                                     UCS_ERR_ENDPOINT_TIMEOUT);
     if (status != UCS_OK) {
         ucs_fatal("UD endpoint %p to "UCT_UD_EP_PEER_NAME_FMT": "
                   "unhandled timeout error",

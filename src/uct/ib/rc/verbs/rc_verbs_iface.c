@@ -66,13 +66,6 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
             ibv_wc_status_str(wc->status), wc->qp_num, wc->wr_id, wc->vendor_err);
 }
 
-static ucs_status_t uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface,
-                                               uct_ep_h ep, ucs_status_t status)
-{
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t), ep,
-                             &iface->super.super, status);
-}
-
 ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
 {
     switch (status)
@@ -477,7 +470,6 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
     .handle_failure           = uct_rc_verbs_handle_failure,
-    .set_ep_failed            = uct_rc_verbs_ep_set_failed,
     },
     .init_rx                  = uct_rc_iface_verbs_init_rx,
     .cleanup_rx               = uct_rc_iface_verbs_cleanup_rx,

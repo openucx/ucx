@@ -206,7 +206,7 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     /* Create a copy of RC txwq for completion error reporting, since the QP
-     * would be released by set_ep_failed()*/
+     * may be released by error handler */
     txwq_copy = ep->tx.wq;
     txwq_size = UCS_PTR_BYTE_DIFF(ep->tx.wq.qstart, ep->tx.wq.qend);
     txwq_copy.qstart = ucs_malloc(txwq_size, "rc_txwq_copy");
@@ -823,7 +823,6 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .arm_cq                   = uct_rc_mlx5_iface_common_arm_cq,
     .event_cq                 = uct_rc_mlx5_iface_common_event_cq,
     .handle_failure           = uct_rc_mlx5_iface_handle_failure,
-    .set_ep_failed            = uct_rc_mlx5_ep_set_failed,
     },
     .init_rx                  = uct_rc_mlx5_iface_init_rx,
     .cleanup_rx               = uct_rc_mlx5_iface_cleanup_rx,

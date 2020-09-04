@@ -8,6 +8,7 @@
 #endif
 
 #include "tcp.h"
+#include "tcp/tcp.h"
 
 #include <ucs/async/async.h>
 
@@ -365,9 +366,7 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
 
 static unsigned uct_tcp_ep_failed_progress(void *arg)
 {
-    uct_tcp_ep_t *ep       = (uct_tcp_ep_t*)arg;
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
+    uct_tcp_ep_t *ep = (uct_tcp_ep_t*)arg;
 
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_FAILED);
     /* Reset FAILED flag to not remove callback in the EP destructor */
@@ -375,9 +374,8 @@ static unsigned uct_tcp_ep_failed_progress(void *arg)
 
     if (ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) {
         uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
-        uct_set_ep_failed(&UCS_CLASS_NAME(uct_tcp_ep_t),
-                          &ep->super.super, &iface->super.super,
-                          UCS_ERR_ENDPOINT_TIMEOUT);
+        uct_iface_handle_ep_err(ep->super.super.iface, &ep->super.super,
+                                UCS_ERR_ENDPOINT_TIMEOUT);
     } else {
         uct_tcp_ep_destroy_internal(&ep->super.super);
     }

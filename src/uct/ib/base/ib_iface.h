@@ -230,7 +230,6 @@ struct uct_ib_iface_ops {
     uct_ib_iface_arm_cq_func_t         arm_cq;
     uct_ib_iface_event_cq_func_t       event_cq;
     uct_ib_iface_handle_failure_func_t handle_failure;
-    uct_ib_iface_set_ep_failed_func_t  set_ep_failed;
 };
 
 
