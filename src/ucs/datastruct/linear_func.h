@@ -169,4 +169,20 @@ ucs_linear_func_add_value_at(ucs_linear_func_t *func,
     func->c += ucs_linear_func_apply(baseline_func, baseline_x);
 }
 
+
+/*
+ * Check if two linear functions are equal.
+ *
+ * @param [in] func1    First function to compare.
+ * @param [in] func2    Second function to compare.
+ * @param [in] epsilon  Threshold to consider two floating-point values as equal.
+ */
+static inline int
+ucs_linear_func_is_equal(ucs_linear_func_t func1, ucs_linear_func_t func2,
+                         double epsilon)
+{
+    return (fabs(func1.m - func2.m) < epsilon) &&
+           (fabs(func1.c - func2.c) < epsilon);
+}
+
 #endif

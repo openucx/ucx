@@ -33,10 +33,12 @@ typedef struct {
  * Protocol selection per a particular buffer type and operation
  */
 typedef struct {
-    ucp_proto_threshold_elem_t  *thresholds; /* Array of which protocol to use
-                                                for different message sizes */
-    void                        *priv_buf;   /* Private configuration area for
-                                                the selected protocols */
+    const ucp_proto_threshold_elem_t *thresholds; /* Array of which protocol to use
+                                                     for different message sizes */
+    const ucp_proto_perf_range_t     *perf_ranges;/* Estimated performance for
+                                                     the selected protocols */
+    void                             *priv_buf;   /* Private configuration area
+                                                     for the selected protocols */
 } ucp_proto_select_elem_t;
 
 
@@ -49,12 +51,12 @@ KHASH_TYPE(ucp_proto_select_hash, khint64_t, ucp_proto_select_elem_t)
  */
 typedef struct {
     /* Lookup from protocol selection key to thresholds array */
-    khash_t(ucp_proto_select_hash) hash;
+    khash_t(ucp_proto_select_hash)    hash;
 
     /* cache the last used protocol, for fast lookup */
     struct {
-        uint64_t                   key;
-        ucp_proto_select_elem_t    *value;
+        uint64_t                      key;
+        const ucp_proto_select_elem_t *value;
     } cache;
 } ucp_proto_select_t;
 
