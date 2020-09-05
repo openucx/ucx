@@ -25,6 +25,7 @@ typedef struct {
     double                  latency;       /* protocol added latency */
     double                  overhead;      /* protocol overhead */
     size_t                  cfg_thresh;    /* user-configured threshold */
+    unsigned                cfg_priority;  /* user configuration priority */
     size_t                  fragsz_offset; /* offset of maximal fragment
                                               size in uct_iface_attr_t */
     size_t                  hdr_size;      /* header size on first lane */

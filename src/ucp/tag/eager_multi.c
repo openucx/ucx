@@ -38,6 +38,7 @@ ucp_proto_eager_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
+        .super.cfg_priority  = 20,
         .super.flags         = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .super.fragsz_offset = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
@@ -63,6 +64,7 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
+        .super.cfg_priority  = 30,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .super.fragsz_offset = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),

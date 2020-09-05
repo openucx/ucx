@@ -179,13 +179,13 @@ ucp_proto_thresholds_select_next(ucp_proto_id_mask_t proto_mask,
                                  ucs_array_t(ucp_proto_thresh) *thresh_list,
                                  size_t msg_length, size_t *max_length_p)
 {
+    ucp_proto_id_mask_t valid_proto_mask, disabled_proto_mask;
     ucs_linear_func_t proto_perf[UCP_PROTO_MAX_COUNT];
-    ucp_proto_id_mask_t valid_proto_mask;  /* Valid protocols in the range */
-    ucp_proto_id_mask_t forced_proto_mask; /* Protocols forced by user */
     const ucp_proto_caps_t *caps;
+    unsigned max_cfg_priority;
     ucp_proto_id_t proto_id;
-    ucs_status_t status;
     size_t max_length;
+    ucs_status_t status;
     unsigned i;
 
     /*
@@ -193,16 +193,17 @@ ucp_proto_thresholds_select_next(ucp_proto_id_mask_t proto_mask,
      * Start with endpoint at SIZE_MAX, and narrow it down whenever we encounter
      * a protocol with different configuration.
      */
-    valid_proto_mask  = 0;
-    forced_proto_mask = 0;
-    max_length        = SIZE_MAX;
+    valid_proto_mask    = 0;
+    disabled_proto_mask = 0;
+    max_cfg_priority    = 0;
+    max_length          = SIZE_MAX;
     ucs_for_each_bit(proto_id, proto_mask) {
         caps = &proto_caps[proto_id];
 
-        /* Check if the protocol supports message length 'msg_length' */
         if (msg_length < caps->min_length) {
             ucs_trace("skipping proto %d with min_length %zu for msg_length %zu",
                       proto_id, caps->min_length, msg_length);
+            max_length = ucs_min(max_length, caps->min_length - 1);
             continue;
         }
 
@@ -218,18 +219,21 @@ ucp_proto_thresholds_select_next(ucp_proto_id_mask_t proto_mask,
             }
         }
 
+        if (!(valid_proto_mask & UCS_BIT(proto_id))) {
+            continue;
+        }
+
         /* Apply user threshold configuration */
         if (caps->cfg_thresh != UCS_MEMUNITS_AUTO) {
             if (caps->cfg_thresh == UCS_MEMUNITS_INF) {
-                /* 'inf' - protocol is disabled */
-                valid_proto_mask  &= ~UCS_BIT(proto_id);
-            } else if (caps->cfg_thresh <= msg_length) {
-                /* The protocol is force-activated on 'msg_length' and above */
-                forced_proto_mask |= UCS_BIT(proto_id);
+                disabled_proto_mask |= UCS_BIT(proto_id);
+            } else if (msg_length < caps->cfg_thresh) {
+                /* The protocol is lowest priority up to 'cfg_thresh' - 1 */
+                disabled_proto_mask |= UCS_BIT(proto_id);
+                max_length           = ucs_min(max_length, caps->cfg_thresh - 1);
             } else {
-                /* The protocol is completely disabled up to 'cfg_thresh' - 1 */
-                max_length         = ucs_min(max_length, caps->cfg_thresh - 1);
-                valid_proto_mask  &= ~UCS_BIT(proto_id);
+                /* The protocol is force-activated on 'msg_length' and above */
+                max_cfg_priority     = ucs_max(max_cfg_priority, caps->cfg_priority);
             }
         }
     }
@@ -239,11 +243,30 @@ ucp_proto_thresholds_select_next(ucp_proto_id_mask_t proto_mask,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    /* If we have forced protocols by user-configured threshold, use only those */
-    forced_proto_mask &= valid_proto_mask;
-    if (forced_proto_mask != 0) {
-        valid_proto_mask = forced_proto_mask;
+    /* A protocol with configured threshold disables all inferior protocols */
+    ucs_for_each_bit(proto_id, valid_proto_mask) {
+        if (proto_caps[proto_id].cfg_priority >= max_cfg_priority) {
+            continue;
+        }
+
+        disabled_proto_mask |= UCS_BIT(proto_id);
+        ucs_trace("skipping proto %d with priority %u since it's less than %u",
+                  proto_id, proto_caps[proto_id].cfg_priority, max_cfg_priority);
     }
+
+    /* Remove disabled protocols. 'disabled_proto_mask' must be contained in
+     * 'valid_proto_mask'. */
+    ucs_assert(!(disabled_proto_mask & ~valid_proto_mask));
+    if (valid_proto_mask != disabled_proto_mask) {
+        valid_proto_mask &= ~disabled_proto_mask;
+    } else {
+        /* If all protocols were disabled, we couldn't have any configured
+         * protocol (because that protocol would be enabled). In this case we
+         * allow using disabled protocols as well.
+         */
+        ucs_assert(max_cfg_priority == 0);
+    }
+    ucs_assert(valid_proto_mask != 0);
 
     status = ucp_proto_thresholds_select_best(valid_proto_mask, proto_perf,
                                               thresh_list, msg_length,
