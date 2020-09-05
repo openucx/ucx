@@ -469,7 +469,7 @@ void __uct_ib_mlx5_log_rx(const char *file, int line, const char *function,
     char buf[256] = {0};
     size_t length;
 
-    length = ntohl(cqe->byte_cnt);
+    length = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
     if (iface->config.qp_type == IBV_QPT_UD) {
         length -= UCT_IB_GRH_LEN;
         data    = UCS_PTR_BYTE_OFFSET(data, UCT_IB_GRH_LEN);

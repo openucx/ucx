@@ -67,6 +67,9 @@
 #define UCT_IB_MLX5_ATOMIC_MODE         3
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA UCS_BIT(28) /* GRH/IP in the receive buffer */
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE  UCS_BIT(29) /* GRH/IP in the CQE */
+#define UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK 0x0000FFFF  /* Byte count mask for multi-packet RQs */
+#define UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG UCS_BIT(30) /* MP last packet indication */
+#define UCT_IB_MLX5_MP_RQ_FILLER_FLAG   UCS_BIT(31) /* Filler CQE indicator */
 
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \

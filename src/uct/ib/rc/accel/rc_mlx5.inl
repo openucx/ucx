@@ -220,7 +220,7 @@ uct_rc_mlx5_iface_rx_mp_context_from_ep(uct_rc_mlx5_iface_common_t *iface,
         ep->mp.free = 0;
     }
 
-    if (cqe->byte_cnt & htonl(UCT_RC_MLX5_MP_RQ_LAST_MSG_FIELD)) {
+    if (cqe->byte_cnt & htonl(UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG)) {
         ucs_assert(!ep->mp.free);
         ep->mp.free = 1;
     } else {
@@ -241,7 +241,7 @@ uct_rc_mlx5_iface_rx_mp_context_from_hash(uct_rc_mlx5_iface_common_t *iface,
     void *gid;
     int last;
 
-    last = cqe->byte_cnt & htonl(UCT_RC_MLX5_MP_RQ_LAST_MSG_FIELD);
+    last = cqe->byte_cnt & htonl(UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG);
 
     if (uct_ib_mlx5_cqe_is_grh_present(cqe)) {
         gid            = uct_ib_mlx5_gid_from_cqe(cqe);
@@ -358,7 +358,7 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
         return hdr;
     }
 
-    ucs_assert(byte_len <= UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK);
+    ucs_assert(byte_len <= UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK);
     *flags = 0;
 
     if (ucs_test_all_flags(poll_flags, UCT_RC_MLX5_POLL_FLAG_HAS_EP |
@@ -1386,7 +1386,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     ucs_memory_cpu_load_fence();
     UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
 
-    byte_len = ntohl(cqe->byte_cnt) & UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK;
+    byte_len = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
     count    = 1;
 
     if (!(poll_flags & UCT_RC_MLX5_POLL_FLAG_TM)) {
@@ -1398,7 +1398,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 #if IBV_HW_TM
     ucs_assert(cqe->app == UCT_RC_MLX5_CQE_APP_TAG_MATCHING);
 
-    if (ucs_unlikely(byte_len & UCT_RC_MLX5_MP_RQ_FILLER_CQE)) {
+    if (ucs_unlikely(byte_len & UCT_IB_MLX5_MP_RQ_FILLER_FLAG)) {
         /* TODO: Check if cqe->app_op is valid for filler CQE. Then this check
          * could be done for specific CQE types only. */
         uct_rc_mlx5_iface_handle_filler_cqe(iface, cqe);
