@@ -35,6 +35,8 @@ typedef struct {
 typedef struct {
     ucp_lane_map_t          lane_map;      /* Which lanes are used for sending
                                               data in the protocol */
+    ucp_md_map_t            reg_md_map;    /* Which memory domains are used for
+                                              registration */
     ucp_lane_index_t        lane0;         /* The lane which is used to send the
                                               first fragment, to detect fragment
                                               size and performance ranges */
@@ -43,8 +45,21 @@ typedef struct {
 } ucp_proto_common_perf_params_t;
 
 
-typedef void (*ucp_proto_completete_cb_t)(
-                ucp_request_t *req, ucs_status_t status);
+/* Private data per lane */
+typedef struct {
+    ucp_lane_index_t        lane;       /* Lane index in the endpoint */
+    ucp_rsc_index_t         memh_index; /* Index of UCT memory handle (for zero copy) */
+    ucp_md_index_t          rkey_index; /* Remote key index (for remote access) */
+} ucp_proto_common_lane_priv_t;
+
+
+void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
+                                     ucp_md_map_t md_map, ucp_lane_index_t lane,
+                                     ucp_proto_common_lane_priv_t *lane_priv);
+
+
+void ucp_proto_common_lane_priv_str(const ucp_proto_common_lane_priv_t *lpriv,
+                                    ucs_string_buffer_t *strb);
 
 
 ucp_rsc_index_t
@@ -70,8 +85,8 @@ ucp_proto_common_iface_bandwidth(const ucp_proto_common_init_params_t *params,
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-                            ucp_lane_index_t *lanes, ucp_lane_index_t max_lanes,
-                            ucp_lane_map_t exclude_lane_map);
+                            ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
+                            ucp_lane_index_t *lanes, ucp_md_map_t *reg_md_map_p);
 
 
 void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
