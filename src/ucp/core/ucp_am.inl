@@ -4,7 +4,9 @@
 * See file LICENSE for terms.
 */
 
+#include <ucp/dt/dt_contig.h>
 #include <ucp/core/ucp_request.h>
+
 
 static UCS_F_ALWAYS_INLINE ssize_t
 ucp_am_get_short_max(const ucp_request_t *req,
