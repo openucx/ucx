@@ -25,19 +25,22 @@ public:
     }
 
 protected:
-    typedef std::map<uct_ep_h,
-                     std::vector<uct_pending_req_t*> > ep_pending_reqs_map;
+    struct ep_test_info_t {
+        std::vector<uct_pending_req_t*>    pending_reqs;
+        unsigned                           flush_count;
+        unsigned                           pending_add_count;
+    };
+    typedef std::map<uct_ep_h, ep_test_info_t> ep_test_info_map_t;
 
     void init() {
         ucp_test::init();
-        m_created_ep_count     = 0;
-        m_destroyed_ep_count   = 0;
-        m_flush_ep_count       = 0;
-        m_pending_add_ep_count = 0;
-        m_fake_ep.flags        = UCP_EP_FLAG_REMOTE_CONNECTED;
+        m_created_ep_count   = 0;
+        m_destroyed_ep_count = 0;
+        m_fake_ep.flags      = UCP_EP_FLAG_REMOTE_CONNECTED;
 
         m_flush_comps.clear();
         m_pending_reqs.clear();
+        m_ep_test_info_map.clear();
     }
 
     void add_pending_reqs(uct_ep_h uct_ep,
@@ -210,6 +213,23 @@ protected:
         EXPECT_UCS_OK(ucp_request_check_status(flush_req));
         EXPECT_EQ(m_created_ep_count, m_destroyed_ep_count);
         EXPECT_EQ(m_created_ep_count, total_ep_count);
+
+        for (unsigned i = 0; i < m_created_ep_count; i++) {
+            ep_test_info_t *test_info = ep_test_info_get(&eps[i]);
+
+            /* check EP flush counters */
+            if (ep_flush_func == ep_flush_func_return_3_no_resource_then_ok) {
+                EXPECT_EQ(4, test_info->flush_count);
+            } else if (ep_flush_func == ep_flush_func_return_in_progress) {
+                EXPECT_EQ(1, test_info->flush_count);
+            }
+
+            /* check EP pending add counters */
+            if (ep_pending_add_func == ep_pending_add_func_return_ok_then_busy) {
+                EXPECT_EQ(3, test_info->pending_add_count);
+            }
+        }
+
         EXPECT_TRUE(m_flush_comps.empty());
         EXPECT_TRUE(m_pending_reqs.empty());
 
@@ -227,18 +247,50 @@ protected:
         m_destroyed_ep_count++;
     }
 
+    static ep_test_info_t* ep_test_info_get(uct_ep_h ep) {
+        ep_test_info_t *test_info_p;
+        ep_test_info_map_t::iterator it = m_ep_test_info_map.find(ep);
+
+        if (it == m_ep_test_info_map.end()) {
+            ep_test_info_t test_info = {};
+
+            m_ep_test_info_map.insert(std::make_pair(ep, test_info));
+            test_info_p = &m_ep_test_info_map.find(ep)->second;
+        } else {
+            test_info_p = &it->second;
+        }
+
+        return test_info_p;
+    }
+
+    static unsigned
+    ep_test_info_flush_inc(uct_ep_h ep) {
+        ep_test_info_t *test_info = ep_test_info_get(ep);
+        test_info->flush_count++;
+        return test_info->flush_count;
+    }
+
+    static unsigned
+    ep_test_info_pending_add_inc(uct_ep_h ep) {
+        ep_test_info_t *test_info = ep_test_info_get(ep);
+        test_info->pending_add_count++;
+        return test_info->pending_add_count;
+    }
+
     static ucs_status_t
     ep_flush_func_return_3_no_resource_then_ok(uct_ep_h ep, unsigned flags,
                                                uct_completion_t *comp) {
-        EXPECT_LT(m_flush_ep_count, 4 * m_created_ep_count);
-        return (++m_flush_ep_count < 3 * m_created_ep_count) ?
+        unsigned flush_ep_count = ep_test_info_flush_inc(ep);
+        EXPECT_LE(flush_ep_count, 4);
+        return (flush_ep_count < 4) ?
                UCS_ERR_NO_RESOURCE : UCS_OK;
     }
 
     static ucs_status_t
     ep_flush_func_return_in_progress(uct_ep_h ep, unsigned flags,
                                      uct_completion_t *comp) {
-        EXPECT_LT(m_flush_ep_count, m_created_ep_count);
+        unsigned flush_ep_count = ep_test_info_flush_inc(ep);
+        EXPECT_LE(flush_ep_count, m_created_ep_count);
         m_flush_comps.push_back(comp);
         return UCS_INPROGRESS;
     }
@@ -246,9 +298,10 @@ protected:
     static ucs_status_t
     ep_pending_add_func_return_ok_then_busy(uct_ep_h ep, uct_pending_req_t *req,
                                             unsigned flags) {
-        EXPECT_LT(m_pending_add_ep_count, 3 * m_created_ep_count);
+        unsigned pending_add_ep_count = ep_test_info_pending_add_inc(ep);
+        EXPECT_LE(pending_add_ep_count, m_created_ep_count);
 
-        if (++m_pending_add_ep_count < m_created_ep_count) {
+        if (pending_add_ep_count < m_created_ep_count) {
             m_pending_reqs.push_back(req);
             return UCS_OK;
         }
@@ -286,28 +339,20 @@ protected:
     static ucs_status_t
     ep_pending_add_save_req(uct_ep_h ep, uct_pending_req_t *req,
                             unsigned flags) {
-        ep_pending_reqs_map::iterator it = m_pending_reqs_map.find(ep);
-        if (it == m_pending_reqs_map.end()) {
-            std::vector<uct_pending_req_t*> vec;
-            vec.push_back(req);
-            m_pending_reqs_map.insert(std::make_pair(ep, vec));
-        } else {
-            std::vector<uct_pending_req_t*> *req_vec = &it->second;
-            req_vec->push_back(req);
-        }
+        ep_test_info_t *test_info = ep_test_info_get(ep);
+        test_info->pending_reqs.push_back(req);
         return UCS_OK;
     }
 
     static void
     ep_pending_purge_func_iter_reqs(uct_ep_h ep,
-                               uct_pending_purge_callback_t cb,
-                               void *arg) {
+                                    uct_pending_purge_callback_t cb,
+                                    void *arg) {
+        ep_test_info_t *test_info = ep_test_info_get(ep);
         uct_pending_req_t *req;
-        for (unsigned i = 0; i < m_pending_purge_reqs_count; i++) {
-            ep_pending_reqs_map::iterator it = m_pending_reqs_map.find(ep);
-            ASSERT_NE(it, m_pending_reqs_map.end());
 
-            std::vector<uct_pending_req_t*> *req_vec = &it->second;
+        for (unsigned i = 0; i < m_pending_purge_reqs_count; i++) {
+            std::vector<uct_pending_req_t*> *req_vec = &test_info->pending_reqs;
             if (req_vec->size() == 0) {
                 break;
             }
@@ -321,26 +366,22 @@ protected:
 protected:
     static       unsigned m_created_ep_count;
     static       unsigned m_destroyed_ep_count;
-    static       unsigned m_flush_ep_count;
-    static       unsigned m_pending_add_ep_count;
     static       ucp_ep_t m_fake_ep;
     static const unsigned m_pending_purge_reqs_count;
 
     static std::vector<uct_completion_t*>  m_flush_comps;
     static std::vector<uct_pending_req_t*> m_pending_reqs;
-    static ep_pending_reqs_map             m_pending_reqs_map;
+    static ep_test_info_map_t              m_ep_test_info_map;
 };
 
 unsigned test_ucp_worker_discard::m_created_ep_count               = 0;
 unsigned test_ucp_worker_discard::m_destroyed_ep_count             = 0;
-unsigned test_ucp_worker_discard::m_flush_ep_count                 = 0;
-unsigned test_ucp_worker_discard::m_pending_add_ep_count           = 0;
 ucp_ep_t test_ucp_worker_discard::m_fake_ep                        = {};
 const unsigned test_ucp_worker_discard::m_pending_purge_reqs_count = 10;
 
-std::vector<uct_completion_t*>               test_ucp_worker_discard::m_flush_comps;
-std::vector<uct_pending_req_t*>              test_ucp_worker_discard::m_pending_reqs;
-test_ucp_worker_discard::ep_pending_reqs_map test_ucp_worker_discard::m_pending_reqs_map;
+std::vector<uct_completion_t*>              test_ucp_worker_discard::m_flush_comps;
+std::vector<uct_pending_req_t*>             test_ucp_worker_discard::m_pending_reqs;
+test_ucp_worker_discard::ep_test_info_map_t test_ucp_worker_discard::m_ep_test_info_map;
 
 
 UCS_TEST_P(test_ucp_worker_discard, flush_ok) {
