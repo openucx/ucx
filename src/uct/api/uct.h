@@ -1204,8 +1204,9 @@ struct uct_listener_params {
     uint64_t                                field_mask;
 
     /**
-     * Backlog of incoming connection requests.
-     * If not specified, SOMAXCONN, as defined in <sys/socket.h>, will be used.
+     * Backlog of incoming connection requests. If specified, must be a positive value.
+     * If not specified, each CM component will use its maximal allowed value,
+     * based on the system's setting.
      */
     int                                     backlog;
 
