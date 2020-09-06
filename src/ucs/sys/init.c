@@ -19,6 +19,7 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo.h>
+#include <ucs/sys/math.h>
 
 
 /* run-time CPU detection */
@@ -92,6 +93,7 @@ static void UCS_F_CTOR ucs_init()
     ucs_profile_global_init();
     ucs_async_global_init();
     ucs_topo_init();
+    ucs_rand_seed_init();
     ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),
               ucs_debug_get_lib_base_addr());
     ucs_debug("cmd line: %s", ucs_get_process_cmdline());

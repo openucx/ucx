@@ -8,7 +8,6 @@
 #include <ifaddrs.h>
 
 extern "C" {
-#include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_worker.inl>
 #if HAVE_IB
 #include <uct/ib/ud/base/ud_iface.h>

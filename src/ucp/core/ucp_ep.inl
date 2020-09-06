@@ -15,6 +15,7 @@
 
 #include <ucp/wireup/wireup.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/datastruct/ptr_map.inl>
 
 
 static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
@@ -68,8 +69,7 @@ static inline ucp_rsc_index_t ucp_ep_get_rsc_index(ucp_ep_h ep, ucp_lane_index_t
     return ucp_ep_config(ep)->key.lanes[lane].rsc_index;
 }
 
-static inline ucp_rsc_index_t ucp_ep_get_path_index(ucp_ep_h ep,
-                                                    ucp_lane_index_t lane)
+static inline uint8_t ucp_ep_get_path_index(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     return ucp_ep_config(ep)->key.lanes[lane].path_index;
 }
@@ -156,14 +156,21 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
     return &ucp_ep_ext_gen(ep)->flush_state;
 }
 
-static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
+static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_remote_id(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT
-    if (!(ep->flags & UCP_EP_FLAG_DEST_EP)) {
-        return 0; /* Let remote side assert if it gets NULL pointer */
+    if (!(ep->flags & UCP_EP_FLAG_REMOTE_ID)) {
+        /* Let remote side assert if it gets invalid key */
+        return UCP_EP_ID_INVALID;
     }
 #endif
-    return ucp_ep_ext_gen(ep)->dest_ep_ptr;
+    return ucp_ep_ext_gen(ep)->ids->remote;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_local_id(ucp_ep_h ep)
+{
+    ucs_assert(ucp_ep_ext_gen(ep)->ids->local != UCP_EP_ID_INVALID);
+    return ucp_ep_ext_gen(ep)->ids->local;
 }
 
 /*
@@ -171,27 +178,28 @@ static UCS_F_ALWAYS_INLINE uintptr_t ucp_ep_dest_ep_ptr(ucp_ep_h ep)
  * reply from remote side could be used.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_ep_resolve_dest_ep_ptr(ucp_ep_h ep, ucp_lane_index_t lane)
+ucp_ep_resolve_remote_id(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    if (ep->flags & UCP_EP_FLAG_DEST_EP) {
+    if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
         return UCS_OK;
     }
 
     return ucp_wireup_connect_remote(ep, lane);
 }
 
-static inline void ucp_ep_update_dest_ep_ptr(ucp_ep_h ep, uintptr_t ep_ptr)
+static inline void ucp_ep_update_remote_id(ucp_ep_h ep,
+                                           ucs_ptr_map_key_t remote_id)
 {
-    if (ep->flags & UCP_EP_FLAG_DEST_EP) {
-        ucs_assertv(ep_ptr == ucp_ep_ext_gen(ep)->dest_ep_ptr,
-                    "ep=%p ep_ptr=0x%lx ep->dest_ep_ptr=0x%lx",
-                    ep, ep_ptr, ucp_ep_ext_gen(ep)->dest_ep_ptr);
+    if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
+        ucs_assertv(remote_id == ucp_ep_ext_gen(ep)->ids->remote,
+                    "ep=%p rkey=0x%" PRIxPTR " ep->remote_id=0x%" PRIxPTR,
+                    ep, remote_id, ucp_ep_ext_gen(ep)->ids->remote);
     }
 
-    ucs_assert(ep_ptr != 0);
-    ucs_trace("ep %p: set dest_ep_ptr to 0x%lx", ep, ep_ptr);
-    ep->flags                      |= UCP_EP_FLAG_DEST_EP;
-    ucp_ep_ext_gen(ep)->dest_ep_ptr = ep_ptr;
+    ucs_assert(remote_id != UCP_EP_ID_INVALID);
+    ucs_trace("ep %p: set remote_id to 0x%" PRIxPTR, ep, remote_id);
+    ep->flags                      |= UCP_EP_FLAG_REMOTE_ID;
+    ucp_ep_ext_gen(ep)->ids->remote = remote_id;
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
@@ -263,6 +271,12 @@ ucp_ep_config_connect_p2p(ucp_worker_h worker,
     return ucp_ep_config_key_has_cm_lane(ep_config_key) ?
            ucp_worker_is_tl_p2p(worker, rsc_index) :
            !ucp_worker_is_tl_2iface(worker, rsc_index);
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)
+{
+    UCS_STATIC_ASSERT(sizeof(ep->flags) <= sizeof(int));
+    return ep->flags & UCP_EP_FLAG_INDIRECT_ID;
 }
 
 #endif

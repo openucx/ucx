@@ -878,6 +878,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             break;
         case 'i':
             test_opts->iter_count = strtol(optarg, NULL, 0);
+            if (test_opts->iter_count == 0) {
+                test_opts->iter_count = std::numeric_limits<long int>::max();
+            }
             break;
         case 'w':
             test_opts->window_size = atoi(optarg);

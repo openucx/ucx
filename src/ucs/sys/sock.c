@@ -28,6 +28,8 @@
 
 #define UCS_NETIF_BOND_AD_NUM_PORTS_FMT  "/sys/class/net/%s/bonding/ad_num_ports"
 #define UCS_SOCKET_MAX_CONN_PATH         "/proc/sys/net/core/somaxconn"
+/* The port space of IPv6 is shared with IPv4 */
+#define UCX_PROCESS_IP_PORT_RANGE        "/proc/sys/net/ipv4/ip_local_port_range"
 
 
 typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
@@ -36,6 +38,17 @@ typedef ssize_t (*ucs_socket_io_func_t)(int fd, void *data,
 typedef ssize_t (*ucs_socket_iov_func_t)(int fd, const struct msghdr *msg,
                                          int flags);
 
+
+static void ucs_socket_print_error_info(int sys_errno)
+{
+    if (sys_errno == EMFILE) {
+        ucs_error("the maximal number of files that could be opened "
+                  "simultaneously was reached, try to increase the limit "
+                  "by setting the max open files limit (ulimit -n) to "
+                  "a greater value (current: %d)",
+                  ucs_sys_max_open_files());
+    }
+}
 
 void ucs_close_fd(int *fd_p)
 {
@@ -124,6 +137,7 @@ ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)
     int fd = socket(domain, type, 0);
     if (fd < 0) {
         ucs_error("socket create failed: %m");
+        ucs_socket_print_error_info(errno);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -275,6 +289,9 @@ ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_
 
         ucs_error("accept() failed (client addr %s): %m",
                   ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+
+        ucs_socket_print_error_info(errno);
+
         return status;
     }
 
@@ -347,12 +364,14 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 }
 
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int *listen_fd)
+                                    int backlog, int silent_err_in_use,
+                                    int allow_addr_inuse, int *listen_fd)
 {
+    int so_reuse_optval = 1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_log_level_t bind_log_level;
     ucs_status_t status;
-    int ret, fd = -1;
-    uint16_t port;
+    int ret, fd;
 
     /* Create the server socket for accepting incoming connections */
     status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, &fd);
@@ -366,20 +385,24 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
         goto err_close_socket;
     }
 
-    status = ucs_sockaddr_get_port(saddr, &port);
-    if (status != UCS_OK) {
-        goto err_close_socket;
+    if (allow_addr_inuse) {
+        status = ucs_socket_setopt(fd, SOL_SOCKET, SO_REUSEADDR,
+                                   &so_reuse_optval, sizeof(so_reuse_optval));
+        if (status != UCS_OK) {
+            goto err_close_socket;
+        }
     }
 
-    do {
-        ret = bind(fd, saddr, socklen);
-    } while (!port && (ret < 0) && (errno == EADDRINUSE));
-
+    ret = bind(fd, saddr, socklen);
     if (ret < 0) {
-        ucs_error("bind(fd=%d addr=%s) failed: %m",
-                  fd, ucs_sockaddr_str((struct sockaddr *)saddr,
-                                       ip_port_str, sizeof(ip_port_str)));
+        if ((errno == EADDRINUSE) && silent_err_in_use) {
+            bind_log_level = UCS_LOG_LEVEL_DEBUG;
+        } else {
+            bind_log_level = UCS_LOG_LEVEL_ERROR;
+        }
         status = (errno == EADDRINUSE) ? UCS_ERR_BUSY : UCS_ERR_IO_ERROR;
+        ucs_log(bind_log_level, "bind(fd=%d addr=%s) failed: %m",
+                fd, ucs_sockaddr_str(saddr, ip_port_str, sizeof(ip_port_str)));
         goto err_close_socket;
     }
 
@@ -807,4 +830,30 @@ const char *ucs_sockaddr_address_family_str(sa_family_t af)
     default:
         return "not IPv4 or IPv6";
     }
+}
+
+ucs_status_t ucs_sockaddr_get_ip_local_port_range(ucs_range_spec_t *port_range)
+{
+    char ip_local_port_range[32];
+    char *endptr;
+    ssize_t nread;
+
+    nread = ucs_read_file_str(ip_local_port_range, sizeof(ip_local_port_range),
+                              1, UCX_PROCESS_IP_PORT_RANGE);
+    if (nread < 0) {
+        ucs_diag("failed to read " UCX_PROCESS_IP_PORT_RANGE);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    port_range->first = strtol(ip_local_port_range, &endptr, 10);
+    if ((port_range->first <= 0) || (*endptr == '\0')) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    port_range->last = strtol(endptr, &endptr, 10);
+    if (port_range->last <= 0) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
 }

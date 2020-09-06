@@ -23,6 +23,9 @@
 #include <ucp/wireup/wireup.h>
 
 
+#define UCP_REQUEST_ID_INVALID      0
+
+
 #define ucp_trace_req(_sreq, _message, ...) \
     ucs_trace_req("req %p: " _message, (_sreq), ## __VA_ARGS__)
 
@@ -118,21 +121,24 @@ struct ucp_request {
                 ucp_wireup_msg_t  wireup;
 
                 struct {
-                    ucp_lane_index_t     am_bw_index; /* AM BW lane index */
-                    uint64_t             message_id;  /* used to identify matching parts
-                                                         of a large message */
-                    uintptr_t            rreq_ptr;    /* receive request ptr on the
-                                                         recv side (used in AM rndv) */
+                    ucp_lane_index_t       am_bw_index; /* AM BW lane index */
+                    uint64_t               message_id;  /* used to identify matching parts
+                                                           of a large message */
+                    ucs_ptr_map_key_t      rreq_id;     /* receive request ID on the
+                                                           recv side (used in AM rndv) */
                     union {
                         struct {
-                            ucp_tag_t    tag;
+                            ucp_tag_t      tag;
                         } tag;
 
                         struct {
-                            void         *header;
-                            uint32_t     header_length;
-                            uint16_t     am_id;
-                            unsigned     flags;
+                            void           *header;
+                            ucp_mem_desc_t *reg_desc; /* pointer to pre-registered buffer,
+                                                         used for sending header with
+                                                         zcopy protocol */
+                            uint32_t       header_length;
+                            uint16_t       am_id;
+                            uint16_t       flags;
                         } am;
                     };
                 } msg_proto;
@@ -143,12 +149,16 @@ struct ucp_request {
                 } rma;
 
                 struct {
-                    uintptr_t     remote_request; /* pointer to the send request on receiver side */
-                    ucp_request_t *sreq;       /* original send request of frag put */
-                    uint8_t       am_id;
-                    ucs_status_t  status;
-                    ucp_tag_t     sender_tag;  /* Sender tag, which is sent back in sync ack */
-                    ucp_request_callback_t comp_cb; /* Called to complete the request */
+                    ucs_ptr_map_key_t      remote_req_id; /* send request ID on
+                                                             receiver side */
+                    ucp_request_t          *sreq;      /* original send request
+                                                          of frag put */
+                    uint8_t                am_id;
+                    ucs_status_t           status;
+                    ucp_tag_t              sender_tag; /* Sender tag, which is
+                                                          sent back in sync ack */
+                    ucp_request_callback_t comp_cb;    /* Called to complete the
+                                                          request */
                 } proto;
 
                 struct {
@@ -158,7 +168,7 @@ struct ucp_request {
 
                 struct {
                     uint64_t             remote_address;  /* address of the sender's data buffer */
-                    uintptr_t            remote_request;  /* pointer to the sender's request */
+                    ucs_ptr_map_key_t    remote_req_id;   /* the sender's request ID */
                     ucp_request_t        *rreq;           /* receive request on the recv side */
                     ucp_rkey_h           rkey;            /* key for remote send buffer */
                     ucp_lane_map_t       lanes_map_avail; /* used lanes map */
@@ -169,7 +179,7 @@ struct ucp_request {
 
                 struct {
                     uint64_t             remote_address; /* address of the receiver's data buffer */
-                    uintptr_t            remote_request; /* pointer to the receiver's receive request */
+                    ucs_ptr_map_key_t    rreq_remote_id; /* receiver's receive request ID */
                     ucp_request_t        *sreq;          /* send request on the send side */
                     ucp_rkey_h           rkey;           /* key for remote receive buffer */
                     uct_rkey_t           uct_rkey;       /* UCT remote key */
@@ -177,13 +187,13 @@ struct ucp_request {
 
                 struct {
                     ucs_queue_elem_t     queue_elem;
-                    uintptr_t            remote_request; /* pointer to the sender's request */
+                    ucs_ptr_map_key_t    req_id;         /* sender's request ID */
                     ucp_request_t        *rreq;          /* receive request on the recv side */
                     ucp_rkey_h           rkey;           /* key for remote send buffer */
                 } rkey_ptr;
 
                 struct {
-                    uintptr_t         remote_request; /* pointer to the send request on receiver side */
+                    ucs_ptr_map_key_t req_id;         /* the send request ID on receiver side */
                     ucp_request_t     *rreq;          /* pointer to the receive request */
                     size_t            length;         /* the length of the data that should be fetched
                                                        * from sender side */
@@ -223,12 +233,12 @@ struct ucp_request {
                 } tag_offload;
 
                 struct {
-                    uintptr_t              req;  /* Remote get request pointer */
+                    ucs_ptr_map_key_t req_id;   /* Remote get request ID */
                 } get_reply;
 
                 struct {
-                    uintptr_t              req;  /* Remote atomic request pointer */
-                    ucp_atomic_reply_t     data; /* Atomic reply data */
+                    ucs_ptr_map_key_t   req_id; /* Remote atomic request ID */
+                    ucp_atomic_reply_t  data;   /* Atomic reply data */
                 } atomic_reply;
             };
 
@@ -374,7 +384,8 @@ void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,
-                                    size_t dt_count,
+                                    size_t dt_count, size_t priv_iov_count,
+                                    size_t length,
                                     const ucp_ep_msg_config_t* msg_config,
                                     const ucp_request_send_proto_t *proto);
 

@@ -26,6 +26,7 @@
 #include <sys/shm.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <net/if.h>
 #include <dirent.h>
 #include <sched.h>
@@ -283,15 +284,44 @@ int ucs_get_first_cpu()
 uint64_t ucs_generate_uuid(uint64_t seed)
 {
     struct timeval tv;
+    uint64_t high;
+    uint64_t low;
+    uint64_t boot_id = 0;
+    ucs_status_t status;
+
+    status = ucs_sys_get_boot_id(&high, &low);
+    if (status == UCS_OK) {
+        boot_id = high ^ low;
+    } else {
+        ucs_error("failed to get boot id");
+    }
 
     gettimeofday(&tv, NULL);
     return seed +
            ucs_get_prime(0) * ucs_get_tid() +
            ucs_get_prime(1) * ucs_get_time() +
-           ucs_get_prime(2) * ucs_get_mac_address() +
+           ucs_get_prime(2) * boot_id +
            ucs_get_prime(3) * tv.tv_sec +
            ucs_get_prime(4) * tv.tv_usec +
            __sumup_host_name(5);
+}
+
+int ucs_sys_max_open_files()
+{
+    static int file_limit = 0;
+    struct rlimit rlim;
+    int ret;
+
+    if (file_limit == 0) {
+        ret = getrlimit(RLIMIT_NOFILE, &rlim);
+        if (ret == 0) {
+            file_limit = (int)rlim.rlim_cur;
+        } else {
+            file_limit = 1024;
+        }
+    }
+
+    return file_limit;
 }
 
 ucs_status_t

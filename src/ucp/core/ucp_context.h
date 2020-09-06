@@ -100,8 +100,12 @@ typedef struct ucp_context_config {
     int                                    unified_mode;
     /** Enable cm wireup-and-close protocol for client-server connections */
     ucs_ternary_value_t                    sockaddr_cm_enable;
+    /** Maximal number of pending connection requests for a listener */
+    size_t                                 listener_backlog;
     /** Enable new protocol selection logic */
     int                                    proto_enable;
+    /** Enable indirect IDs to object pointers in wire protocols */
+    ucs_on_off_auto_value_t                proto_indirect_id;
 } ucp_context_config_t;
 
 

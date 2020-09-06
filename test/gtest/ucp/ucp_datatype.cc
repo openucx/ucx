@@ -18,8 +18,6 @@ data_type_desc_t &
 data_type_desc_t::make(ucp_datatype_t datatype, const void *buf, size_t length,
                        size_t iov_cnt)
 {
-    EXPECT_FALSE(is_valid());
-
     if (m_length == 0) {
         m_length = length;
     }

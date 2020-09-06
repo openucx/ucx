@@ -15,12 +15,17 @@
 #include <ucp/wireup/ep_match.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/queue.h>
-#include <ucs/stats/stats.h>
+#include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/debug/assert.h>
+#include <ucs/stats/stats.h>
 
 
 #define UCP_MAX_IOV                16UL
+
+
+/* Used as invalidated value */
+#define UCP_EP_ID_INVALID          UINTPTR_MAX
 
 
 /* Endpoint flags type */
@@ -46,7 +51,7 @@ enum {
     UCP_EP_FLAG_USED                   = UCS_BIT(4), /* EP is in use by the user */
     UCP_EP_FLAG_STREAM_HAS_DATA        = UCS_BIT(5), /* EP has data in the ext.stream.match_q */
     UCP_EP_FLAG_ON_MATCH_CTX           = UCS_BIT(6), /* EP is on match queue */
-    UCP_EP_FLAG_DEST_EP                = UCS_BIT(7), /* dest_ep_ptr is valid */
+    UCP_EP_FLAG_REMOTE_ID              = UCS_BIT(7), /* remote ID is valid */
     UCP_EP_FLAG_LISTENER               = UCS_BIT(8), /* EP holds pointer to a listener
                                                         (on server side due to receiving partial
                                                         worker address from the client) */
@@ -55,6 +60,11 @@ enum {
     UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
                                                         close_req is valid */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
+    UCP_EP_FLAG_TEMPORARY              = UCS_BIT(13),/* the temporary EP which holds
+                                                        temporary wireup configuration */
+    UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
+                                                        indirect endpoint id instead of pointer,
+                                                        can be replaced with looking at local ID */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
@@ -154,6 +164,9 @@ struct ucp_ep_config_key {
      * reachable_md_map */
     ucp_rsc_index_t          *dst_md_cmpts;
 
+    /* Bitmap of lanes to ep_check keepalive operations. */
+    ucp_lane_map_t           ep_check_map;
+
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
     ucs_status_t             status;
@@ -182,6 +195,7 @@ typedef struct ucp_ep_msg_config {
         ssize_t            max_short;
         size_t             max_bcopy;
         size_t             max_zcopy;
+        size_t             max_hdr;
         size_t             max_iov;
 
         /* zero-copy threshold for operations which do not have to wait for remote side */
@@ -368,11 +382,22 @@ typedef struct {
 } ucp_ep_close_proto_req_t;
 
 
+/**
+ * Local and remote EP IDs
+ */
+typedef struct {
+    ucs_ptr_map_key_t             local;         /* Local EP ID */
+    ucs_ptr_map_key_t             remote;        /* Remote EP ID */
+} ucp_ep_ids_t;
+
+
 /*
  * Endpoint extension for generic non fast-path data
  */
 typedef struct {
-    uintptr_t                     dest_ep_ptr;   /* Remote EP pointer */
+    ucp_ep_ids_t                  *ids;          /* Local and remote IDS, TODO:
+                                                    remove indirect pointer after
+                                                    stride allocator improvement */
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
@@ -424,7 +449,7 @@ enum {
 
 
 struct ucp_wireup_sockaddr_data {
-    uintptr_t                 ep_ptr;        /**< Endpoint pointer */
+    uint64_t                  ep_id;         /**< Endpoint ID */
     uint8_t                   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
@@ -444,6 +469,7 @@ typedef struct ucp_conn_request {
         uct_iface_h             iface;
     } uct;
     uct_conn_request_h          uct_req;
+    ucp_rsc_index_t             cm_idx;
     char                        dev_name[UCT_DEVICE_NAME_MAX];
     uct_device_addr_t           *remote_dev_addr;
     struct sockaddr_storage     client_address;
@@ -463,6 +489,8 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
 
 ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
                                 const char *message, ucp_ep_h *ep_p);
+
+void ucp_ep_destroy_base(ucp_ep_h ep);
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
                                   const char *peer_name, const char *message,
@@ -512,6 +540,10 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                 const ucp_ep_config_key_t *key);
 
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
+
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane, int compare_types);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);

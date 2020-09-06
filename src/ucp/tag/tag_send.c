@@ -86,7 +86,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                   !(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL));
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
-                                    dt_count, msg_config, proto);
+                                    dt_count, 0, req->send.length, msg_config,
+                                    proto);
     if (ucs_unlikely(status != UCS_OK)) {
         if (status == UCS_ERR_NO_PROGRESS) {
             /* RMA/AM rendezvous */
@@ -313,7 +314,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
         goto out;
     }
 
-    status = ucp_ep_resolve_dest_ep_ptr(ep, ucp_ep_config(ep)->tag.lane);
+    status = ucp_ep_resolve_remote_id(ep, ucp_ep_config(ep)->tag.lane);
     if (status != UCS_OK) {
         ret = UCS_STATUS_PTR(status);
         goto out;

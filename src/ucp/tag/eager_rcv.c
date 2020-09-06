@@ -260,15 +260,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
 
     ucs_queue_for_each_safe(sreq, iter, queue, send.tag_offload.queue) {
         if ((sreq->send.tag_offload.ssend_tag == rep_hdr->sender_tag) &&
-            ((uintptr_t)sreq->send.ep == rep_hdr->ep_ptr)) {
+            (ucp_ep_local_id(sreq->send.ep) == rep_hdr->ep_id)) {
             ucp_tag_eager_sync_completion(sreq, UCP_REQUEST_FLAG_REMOTE_COMPLETED,
                                           UCS_OK);
             ucs_queue_del_iter(queue, iter);
             return UCS_OK;
         }
     }
-    ucs_error("unexpected sync ack received: tag %"PRIx64" ep_ptr 0x%lx",
-              rep_hdr->sender_tag, rep_hdr->ep_ptr);
+
+    ucs_error("unexpected sync ack received: tag %"PRIx64" ep_id 0x%"PRIx64,
+              rep_hdr->sender_tag, rep_hdr->ep_id);
     return UCS_OK;
 }
 
@@ -276,10 +277,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
                  (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
+    ucp_worker_h    worker   = arg;
     ucp_reply_hdr_t *rep_hdr = data;
-    ucp_request_t *req;
+    ucp_request_t   *req     = ucp_worker_extract_request_by_id(worker,
+                                                                rep_hdr->req_id);
 
-    req = (ucp_request_t*)rep_hdr->reqptr;
     ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_REMOTE_COMPLETED, UCS_OK);
     return UCS_OK;
 }
@@ -342,7 +344,7 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
         priv_len                     = sizeof(*l_priv);
         tag_priv                     = l_priv;
         l_priv->ssend_ack.sender_tag = stag;
-        l_priv->ssend_ack.ep_ptr     = imm;
+        l_priv->ssend_ack.ep_id      = imm;
         m_priv                       = &l_priv->super;
         flags                       |= UCP_RECV_DESC_FLAG_EAGER_SYNC |
                                        UCP_RECV_DESC_FLAG_EAGER_LAST;
@@ -419,8 +421,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     priv_len              = sizeof(*priv);
     priv                  = ucp_tag_eager_offload_priv(tl_flags, data, length,
                                                        ucp_eager_sync_hdr_t);
-    priv->req.reqptr      = 0ul;
-    priv->req.ep_ptr      = imm;
+    priv->req.req_id      = UCP_REQUEST_ID_INVALID;
+    priv->req.ep_id       = imm;
     priv->super.super.tag = stag;
     return ucp_eager_tagged_handler(worker, priv, length + priv_len,
                                     tl_flags, flags, priv_len, priv_len);
@@ -457,30 +459,30 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         header_len = sizeof(*eager_mid_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_ONLY:
-        ucs_assert(eagers_hdr->req.ep_ptr != 0);
-        snprintf(buffer, max, "EGRS tag %"PRIx64" ep_ptr 0x%lx request 0x%lx",
-                 eagers_hdr->super.super.tag, eagers_hdr->req.ep_ptr,
-                 eagers_hdr->req.reqptr);
+        ucs_assert(eagers_hdr->req.ep_id != UCP_EP_ID_INVALID);
+        snprintf(buffer, max, "EGRS tag %"PRIx64" ep_id 0x%"PRIx64" req_id 0x%"PRIx64,
+                 eagers_hdr->super.super.tag, eagers_hdr->req.ep_id,
+                 eagers_hdr->req.req_id);
         header_len = sizeof(*eagers_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_FIRST:
         snprintf(buffer, max, "EGRS_F tag %"PRIx64" msgid %"PRIx64" len %zu "
-                 "ep_ptr 0x%lx request 0x%lx",
+                 "ep_id 0x%"PRIx64" req_id 0x%"PRIx64,
                  eagers_first_hdr->super.super.super.tag,
                  eagers_first_hdr->super.msg_id,
                  eagers_first_hdr->super.total_len,
-                 eagers_first_hdr->req.ep_ptr,
-                 eagers_first_hdr->req.reqptr);
+                 eagers_first_hdr->req.ep_id,
+                 eagers_first_hdr->req.req_id);
         header_len = sizeof(*eagers_first_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_ACK:
-        snprintf(buffer, max, "EGRS_A request 0x%"PRIx64" status '%s'",
-                 rep_hdr->reqptr, ucs_status_string(rep_hdr->status));
+        snprintf(buffer, max, "EGRS_A req_id %"PRIx64" status '%s'",
+                 rep_hdr->req_id, ucs_status_string(rep_hdr->status));
         header_len = sizeof(*rep_hdr);
         break;
     case UCP_AM_ID_OFFLOAD_SYNC_ACK:
-        snprintf(buffer, max, "EGRS_A_O tag %"PRIx64" ep_ptr 0x%"PRIxPTR,
-                 off_rep_hdr->sender_tag, off_rep_hdr->ep_ptr);
+        snprintf(buffer, max, "EGRS_A_O tag %"PRIx64" ep_id 0x%"PRIx64,
+                 off_rep_hdr->sender_tag, off_rep_hdr->ep_id);
         header_len = sizeof(*rep_hdr);
         break;
     default:

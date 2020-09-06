@@ -535,6 +535,33 @@ ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
     return uct_rc_ep_fence(tl_ep, &ep->tx.wq.fi, 1);
 }
 
+ucs_status_t
+uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    /* use this variable as dummy buffer to suppress compiler warning */ 
+    uint64_t dummy = 0;
+
+    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
+
+    /* if some operations are in progress, no need to send an additional
+     * message */
+    if (uct_rc_txqp_available(&ep->super.txqp) != ep->tx.wq.bb_max) {
+        return UCS_OK;
+    }
+
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
+                                 &ep->super.txqp, &ep->tx.wq,
+                                 MLX5_OPCODE_RDMA_WRITE, &dummy, 0,
+                                 0, 0, 0,
+                                 0, 0,
+                                 NULL, NULL, 0, 0,
+                                 INT_MAX);
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                   uct_completion_t *comp)
 {
