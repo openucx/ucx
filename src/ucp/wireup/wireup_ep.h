@@ -104,13 +104,6 @@ void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self);
 
-void
-ucp_wireup_ep_pending_purge_common(ucp_wireup_ep_t *wireup_ep,
-                                   uct_pending_purge_callback_t wireup_msg_cb,
-                                   void *wireup_msg_arg,
-                                   uct_pending_purge_callback_t user_msg_cb,
-                                   void *user_msg_arg);
-
 void ucp_wireup_ep_replay_pending_requests(ucp_ep_h ucp_ep,
                                            ucs_queue_head_t *tmp_pending_queue);
 

@@ -22,18 +22,6 @@
 #include <ucp/core/ucp_request.inl>
 
 
-typedef struct ucp_wireup_ep_pending_purge_arg {
-    ucp_wireup_ep_t              *wireup_ep;         /* WIREUP EP that owns the UCT
-                                                      * pending request for the WIREUP
-                                                      * MSG */
-    uct_pending_purge_callback_t wireup_msg_cb;      /* UCT pending purge cakkback that
-                                                      * will handle WIREUP MSG pending
-                                                      * request */
-    void                         *wireup_msg_arg;    /* UCT pending purge callback
-                                                      * argument */
-} ucp_wireup_ep_pending_purge_arg_t;
-
-
 UCS_CLASS_DECLARE(ucp_wireup_ep_t, ucp_ep_h);
 
 
@@ -160,11 +148,7 @@ ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
 
     status = req->func(req);
     if (status == UCS_OK) {
-        /* WIREUP EP pointer could be NULL in case of it was discarded, but this
-         * pending request was completed on the UCT EP or the WIREUP AUX EP */
-        if (wireup_ep != NULL) {
-            ucs_atomic_sub32(&wireup_ep->pending_count, 1);
-        }
+        ucs_atomic_sub32(&wireup_ep->pending_count, 1);
         ucs_free(proxy_req);
     }
     return status;
@@ -235,78 +219,30 @@ out:
 }
 
 static void
-ucp_wireup_ep_pending_purge_cb(uct_pending_req_t *self, void *arg)
+ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
+                            void *arg)
 {
-    ucp_wireup_ep_pending_purge_arg_t *purge_arg =
-        (ucp_wireup_ep_pending_purge_arg_t*)arg;
-    ucp_wireup_ep_t *wireup_ep                   = purge_arg->wireup_ep;
-    uct_ep_h uct_ep                              =
-        ucp_wireup_ep_get_msg_ep(wireup_ep);
-    ucp_request_t *wireup_proxy_req              =
-        ucs_container_of(self, ucp_request_t, send.uct);
-
-    /* do purging on AUX EP or on UCT EP if WIREUP is an owner of it */
-    if ((uct_ep == wireup_ep->aux_ep) || wireup_ep->super.is_owner) {
-        /* need to NULL the WIREUP EP in the WIREUP MSG proxy pending request
-         * to avoid dereferencing it when progressing prnding requests, since
-         * it will be destroyed */
-        wireup_proxy_req->send.proxy.wireup_ep = NULL;
-
-        purge_arg->wireup_msg_cb(self, purge_arg->wireup_msg_arg);
-        if (purge_arg->wireup_msg_cb != ucp_wireup_ep_pending_req_release) {
-            /* decrement the pending count, if it is not a request release
-             * callback */
-            ucs_atomic_sub32(&wireup_ep->pending_count, 1);
-        }
-    }
-}
-
-void
-ucp_wireup_ep_pending_purge_common(ucp_wireup_ep_t *wireup_ep,
-                                   uct_pending_purge_callback_t wireup_msg_cb,
-                                   void *wireup_msg_arg,
-                                   uct_pending_purge_callback_t user_msg_cb,
-                                   void *user_msg_arg)
-{
-    ucp_wireup_ep_pending_purge_arg_t purge_arg;
-    ucp_worker_h worker;
+    ucp_wireup_ep_t   *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_worker_h      worker;
     uct_pending_req_t *req;
-    ucp_request_t *ucp_req;
-    uct_ep_h uct_ep;
+    ucp_request_t     *ucp_req;
 
     worker = wireup_ep->super.ucp_ep->worker;
-
-    if (wireup_ep->pending_count > 0) {
-        uct_ep = ucp_wireup_ep_get_msg_ep(wireup_ep);
-
-        purge_arg.wireup_ep      = wireup_ep;
-        purge_arg.wireup_msg_cb  = wireup_msg_cb;
-        purge_arg.wireup_msg_arg = wireup_msg_arg;
-
-        uct_ep_pending_purge(uct_ep,
-                             ucp_wireup_ep_pending_purge_cb,
-                             &purge_arg);
-    }
-
-    ucs_assert(wireup_ep->pending_count == 0);
 
     ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
         ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
         UCS_ASYNC_BLOCK(&worker->async);
         --worker->flush_ops_count;
         UCS_ASYNC_UNBLOCK(&worker->async);
-        user_msg_cb(&ucp_req->send.uct, user_msg_arg);
+        cb(&ucp_req->send.uct, arg);
     }
-}
 
-static void
-ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
-                            void *arg)
-{
-    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
-    ucp_wireup_ep_pending_purge_common(wireup_ep,
-                                       ucp_wireup_ep_pending_req_release, NULL,
-                                       cb, arg);
+    if (wireup_ep->pending_count > 0) {
+        uct_ep_pending_purge(ucp_wireup_ep_get_msg_ep(wireup_ep),
+                             ucp_wireup_ep_pending_req_release, arg);
+    }
+
+    ucs_assert(wireup_ep->pending_count == 0);
 }
 
 static ssize_t ucp_wireup_ep_am_bcopy(uct_ep_h uct_ep, uint8_t id,

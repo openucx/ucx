@@ -55,16 +55,10 @@ protected:
                                                 "ucp_request"));
             ASSERT_TRUE(req != NULL);
 
-            pending_reqs[base + i] = req;
+            pending_reqs.push_back(req);
 
-            if (func == ucp_wireup_msg_progress) {
-                
-                req->send.ep          = &m_fake_ep;
-
-                /* for fast completing the WIREUP MSG, it frees the send
-                 * buffer and returns UCS_OK */
-                req->send.wireup.type = UCP_WIREUP_MSG_REQUEST;
-                ASSERT_TRUE(m_fake_ep.flags & UCP_EP_FLAG_REMOTE_CONNECTED);
+            if (func == ucp_wireup_msg_progress) {               
+                req->send.ep = &m_fake_ep;
             }
 
             req->send.uct.func = func;
@@ -104,25 +98,7 @@ protected:
             eps[i].iface = &iface;
             m_created_ep_count++;
 
-            unsigned expected_pending_purge_reqs_count = 0;
-            unsigned added_pending_purge_reqs_count    = 0;
-
-            if (ep_pending_purge_func == ep_pending_purge_func_iter_reqs) {
-                /* expected purging count is the number of pending
-                 * requests in the WIREUP EP (if used) and in the
-                 * WIREUP AUX EP (if used) or UCT EP (if no WIREUP EP
-                 * or no WIREUP AUX EP) */
-                expected_pending_purge_reqs_count +=
-                    m_pending_purge_reqs_count;
-                
-                if (i < wireup_ep_count) {
-                    expected_pending_purge_reqs_count +=
-                        m_pending_purge_reqs_count;
-                }
-            }
-
-            std::vector<ucp_request_t*>
-                pending_reqs(expected_pending_purge_reqs_count);
+            std::vector<ucp_request_t*> pending_reqs;
 
             if (i < wireup_ep_count) {
                 status = ucp_wireup_ep_create(&ucp_ep, &discard_ep);
@@ -144,15 +120,13 @@ protected:
                     m_created_ep_count++;
                 }
 
-                if (expected_pending_purge_reqs_count > 0) {
+                if (ep_pending_purge_func == ep_pending_purge_func_iter_reqs) {
                     /* add WIREUP MSGs to the WIREUP EP (it will be added to
                      * UCT EP or WIREUP AUX EP) */
                     add_pending_reqs(discard_ep,
                                      (uct_pending_callback_t)
                                      ucp_wireup_msg_progress,
                                      pending_reqs);
-                    added_pending_purge_reqs_count +=
-                        m_pending_purge_reqs_count;
                 }
             } else {
                 discard_ep = &eps[i];
@@ -161,26 +135,25 @@ protected:
             EXPECT_LE(m_created_ep_count, total_ep_count);
 
 
-            if (expected_pending_purge_reqs_count > 0) {
+            if (ep_pending_purge_func == ep_pending_purge_func_iter_reqs) {
                 /* add user's pending requests */
                 add_pending_reqs(discard_ep,
                                  (uct_pending_callback_t)
                                  ucs_empty_function,
-                                 pending_reqs,
-                                 added_pending_purge_reqs_count);
-                added_pending_purge_reqs_count +=
-                    m_pending_purge_reqs_count;
+                                 pending_reqs);
             }
-
-            EXPECT_EQ(expected_pending_purge_reqs_count,
-                      added_pending_purge_reqs_count);
 
             unsigned purged_reqs_count = 0;
             ucp_worker_discard_uct_ep(sender().worker(), discard_ep,
                                       UCT_FLUSH_FLAG_LOCAL,
                                       ep_pending_purge_count_reqs_cb,
                                       &purged_reqs_count);
-            EXPECT_EQ(expected_pending_purge_reqs_count, purged_reqs_count);
+
+            if (ep_pending_purge_func == ep_pending_purge_func_iter_reqs) {
+                EXPECT_EQ(m_pending_purge_reqs_count, purged_reqs_count);
+            } else {
+                EXPECT_EQ(0u, purged_reqs_count);
+            }
         }
 
         void *flush_req = sender().flush_worker_nb(0);
@@ -319,21 +292,8 @@ protected:
                                               ucp_request_t,
                                               send.uct);
 
-        if (self->func == ucp_wireup_ep_progress_pending) {
-            /* need to complete WIREUP MSG to release allocated
-             * proxy request */
-            /* TODO: replace by `ucp_request_send()` when
-             * `ucp/core/ucp_request.inl` file could be compiled
-             * by C++ compiler */
-            ucs_status_t status = req->send.uct.func(&req->send.uct);
-            EXPECT_EQ(UCS_OK, status);
-            /* no need to release the memory allocated for the request.
-             * it will be freed in the `ucp_wireup_msg_send()` function,
-             * since it expects that the request was allocated in the
-             * `ucp_wireup_msg_send()` function */
-        } else {
-            ucs_free(req);
-        }
+        ASSERT_TRUE(self->func != ucp_wireup_ep_progress_pending);
+        ucs_free(req);
     }
 
     static ucs_status_t
