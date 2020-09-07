@@ -294,7 +294,8 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
 {
     ucs_rcache_region_trace(rcache, region, "destroy");
 
-    ucs_assert(region->refcount == 0);
+    ucs_assertv(region->refcount == 0, "region 0x%lx..0x%lx of %s",
+                region->super.start, region->super.end, rcache->name);
     ucs_assert(!(region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE));
 
     if (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) {
@@ -316,7 +317,7 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
                                                   ucs_rcache_region_t *region,
                                                   unsigned flags)
 {
-    ucs_rcache_region_trace(rcache, region, "flags 0x%x", flags);
+    ucs_rcache_region_trace(rcache, region, "put region, flags 0x%x", flags);
 
     ucs_assert(region->refcount > 0);
     if (ucs_likely(ucs_atomic_fsub32(&region->refcount, 1) != 1)) {
