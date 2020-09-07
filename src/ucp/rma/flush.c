@@ -378,12 +378,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_ep_flush_nbx, (ep, param),
     return request;
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_worker_flush_ops_count_check(ucp_worker_h worker)
-{
-    return !worker->flush_ops_count;
-}
-
 static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
 {
     ucp_rsc_index_t iface_id;
@@ -446,7 +440,7 @@ static unsigned ucp_worker_flush_progress(void *arg)
     ucs_status_t status;
     ucp_ep_h ep;
 
-    if (ucp_worker_flush_ops_count_check(worker)) {
+    if (!worker->flush_ops_count) {
         status = ucp_worker_flush_check(worker);
         if ((status == UCS_OK) || (&next_ep->ep_list == &worker->all_eps)) {
             /* If all ifaces are flushed, or we finished going over all
@@ -498,10 +492,10 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
     ucs_status_t status;
     ucp_request_t *req;
 
-    if (ucp_worker_flush_ops_count_check(worker)) {
+    if (!worker->flush_ops_count) {
         status = ucp_worker_flush_check(worker);
         if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
-            /* UCS_OK could be returned here */
+            /* UCS_OK is returned here as well */
             return UCS_STATUS_PTR(status);
         }
     }
