@@ -1957,15 +1957,15 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         UCS_CPU_ZERO(&worker->cpu_mask);
     }
 
-    /* Open all resources as interfaces on this worker */
-    status = ucp_worker_add_resource_ifaces(worker);
-    if (status != UCS_OK) {
-        goto err_wakeup_cleanup;
-    }
-
     /* Initialize connection matching structure */
     ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
                         &ucp_ep_match_ops);
+
+    /* Open all resources as interfaces on this worker */
+    status = ucp_worker_add_resource_ifaces(worker);
+    if (status != UCS_OK) {
+        goto err_conn_match_cleanup;
+    }
 
     /* Open all resources as connection managers on this worker */
     status = ucp_worker_add_resource_cms(worker);
@@ -2016,11 +2016,10 @@ err_destroy_memtype_eps:
     ucp_worker_destroy_mem_type_endpoints(worker);
 err_close_cms:
     ucp_worker_close_cms(worker);
-err_conn_match_cleanup:
-    ucs_conn_match_cleanup(&worker->conn_match_ctx);
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
-err_wakeup_cleanup:
+err_conn_match_cleanup:
+    ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_wakeup_cleanup(worker);
 err_destroy_uct_worker:
     uct_worker_destroy(worker->uct);
@@ -2074,8 +2073,8 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_destroy_mpools(worker);
     ucp_worker_destroy_mem_type_endpoints(worker);
     ucp_worker_close_cms(worker);
-    ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_close_ifaces(worker);
+    ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
     ucs_async_context_cleanup(&worker->async);
