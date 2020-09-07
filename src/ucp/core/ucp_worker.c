@@ -1891,8 +1891,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
-    ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
-                        &ucp_ep_match_ops);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
@@ -1965,6 +1963,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         goto err_wakeup_cleanup;
     }
 
+    /* Initialize connection matching structure */
+    ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
+                        &ucp_ep_match_ops);
+
     /* Open all resources as connection managers on this worker */
     status = ucp_worker_add_resource_cms(worker);
     if (status != UCS_OK) {
@@ -2014,6 +2016,8 @@ err_destroy_memtype_eps:
     ucp_worker_destroy_mem_type_endpoints(worker);
 err_close_cms:
     ucp_worker_close_cms(worker);
+err_conn_match_cleanup:
+    ucs_conn_match_cleanup(&worker->conn_match_ctx);
 err_close_ifaces:
     ucp_worker_close_ifaces(worker);
 err_wakeup_cleanup:
@@ -2031,7 +2035,6 @@ err_destroy_ptr_map:
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
-    ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucs_free(worker);
     return status;
 }
@@ -2071,6 +2074,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_destroy_mpools(worker);
     ucp_worker_destroy_mem_type_endpoints(worker);
     ucp_worker_close_cms(worker);
+    ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucp_worker_close_ifaces(worker);
     ucp_worker_wakeup_cleanup(worker);
     uct_worker_destroy(worker->uct);
@@ -2081,7 +2085,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     ucp_worker_destroy_ep_configs(worker);
-    ucs_conn_match_cleanup(&worker->conn_match_ctx);
     ucs_free(worker);
 }
 
