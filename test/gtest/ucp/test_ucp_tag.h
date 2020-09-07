@@ -52,58 +52,68 @@ protected:
 
     static request* request_alloc();
 
-    static void request_release(struct request *req);
-
-    static void request_free(struct request *req);
+    static void request_free(request *req);
 
     static void send_callback(void *request, ucs_status_t status);
 
+    static void send_callback(void *request, ucs_status_t status,
+                              void *user_data);
+
     static void recv_callback(void *request, ucs_status_t status,
-                                  ucp_tag_recv_info_t *info);
+                              ucp_tag_recv_info_t *info);
+
+    static void recv_callback(void *request, ucs_status_t status,
+                              const ucp_tag_recv_info_t *info, void *user_data);
 
     request* send(entity &sender, send_type_t type, const void *buffer,
                   size_t count, ucp_datatype_t datatype, ucp_tag_t tag,
-                  int ep_index = 0);
+                  void *user_data = NULL, int ep_index = 0);
 
     request* send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                     ucp_tag_t tag, int ep_index = 0);
+                     ucp_tag_t tag, void *user_data = NULL, int ep_index = 0);
 
     request* send_nbr(const void *buffer, size_t count, ucp_datatype_t datatype,
-                      ucp_tag_t tag, int ep_index = 0);
+                      ucp_tag_t tag, void *user_data = NULL, int ep_index = 0);
 
     void send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
-                ucp_tag_t tag, int buf_index = 0);
+                ucp_tag_t tag, void *user_data = NULL, int buf_index = 0);
 
     request* send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                          ucp_tag_t tag, int buf_index = 0);
+                          ucp_tag_t tag, void *user_data = NULL, int buf_index = 0);
 
     request* recv(entity &receiver, recv_type_t type, void *buffer,
                   size_t count, ucp_datatype_t dt, ucp_tag_t tag,
                   ucp_tag_t tag_mask, ucp_tag_recv_info_t *info,
-                  int buf_index = 0);
+                  void *user_data = NULL, int buf_index = 0);
 
     request* recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                     ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index = 0);
+                     ucp_tag_t tag, ucp_tag_t tag_mask, void *user_data = NULL,
+                     int buf_index = 0);
 
     request* recv_req_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                         ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index = 0);
+                         ucp_tag_t tag, ucp_tag_t tag_mask, void *user_data = NULL,
+                         int buf_index = 0);
 
     request* recv_cb_nb(void *buffer, size_t count, ucp_datatype_t dt,
-                        ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index = 0);
+                        ucp_tag_t tag, ucp_tag_t tag_mask, void *user_data = NULL,
+                        int buf_index = 0);
 
     ucs_status_t recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
                         ucp_tag_t tag, ucp_tag_t tag_mask,
-                        ucp_tag_recv_info_t *info, int buf_index = 0);
+                        ucp_tag_recv_info_t *info, void *user_data = NULL,
+                        int buf_index = 0);
 
     ucs_status_t recv_req_b(void *buffer, size_t count, ucp_datatype_t datatype,
                             ucp_tag_t tag, ucp_tag_t tag_mask,
-                            ucp_tag_recv_info_t *info, int buf_index = 0);
+                            ucp_tag_recv_info_t *info, void *user_data = NULL,
+                            int buf_index = 0);
 
     ucs_status_t recv_cb_b(void *buffer, size_t count, ucp_datatype_t datatype,
                            ucp_tag_t tag, ucp_tag_t tag_mask,
-                           ucp_tag_recv_info_t *info, int buf_index = 0);
+                           ucp_tag_recv_info_t *info, void *user_data = NULL,
+                           int buf_index = 0);
 
-    void wait(request *req, int buf_index = 0);
+    void wait(void *ucx_req, void *user_data = NULL, int buf_index = 0);
 
     void wait_and_validate(request *req);
 
