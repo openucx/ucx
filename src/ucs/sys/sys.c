@@ -881,7 +881,11 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
 
     /* Attach segment */
     if (*address_p) {
+#ifdef SHM_REMAP
         ptr = shmat(*shmid, *address_p, SHM_REMAP);
+#else
+        return UCS_ERR_INVALID_PARAM;
+#endif
     } else {
         ptr = shmat(*shmid, NULL, 0);
     }
