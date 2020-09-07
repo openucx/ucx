@@ -177,6 +177,8 @@ static inline void set_jucx_request_completed(JNIEnv *env, jobject jucx_request,
 {
     env->SetObjectField(jucx_request, native_id_field, NULL);
     if (ctx != NULL) {
+        /* sender_tag and length are initialized to 0,
+         * so try to avoid the overhead of setting them again */
         if (ctx->sender_tag != 0) {
             env->SetLongField(jucx_request, sender_tag_field, ctx->sender_tag);
         }
