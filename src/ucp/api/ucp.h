@@ -490,9 +490,9 @@ enum ucp_send_am_flags {
                                               for AM sends. */
     UCP_AM_SEND_GET_REPLY  = UCS_BIT(3)  /**< Tells @ref ucp_am_send_nbx to send
                                               request for data. In this case reply
-                                              buffer must be specified in
-                                              @ref ucp_request_param_t passed to
-                                              @ref ucp_am_send_nbx. Also,
+                                              buffer and reply count must be
+                                              specified in @ref ucp_request_param_t
+                                              passed to @ref ucp_am_send_nbx. Also,
                                               like UCP_AM_SEND_REPLY, this flag
                                               ensures that relevant reply endpoint
                                               to be passed to the data callback on
