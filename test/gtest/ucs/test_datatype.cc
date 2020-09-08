@@ -991,11 +991,8 @@ UCS_TEST_F(test_datatype, dynamic_array_int_append) {
 
 UCS_TEST_F(test_datatype, fixed_array) {
     const size_t num_elems = 100;
-    int buffer[num_elems];
+    UCS_ARRAY_DEFINE_ONSTACK(test_array, test_1int, num_elems);
     ucs_status_t status;
-
-    ucs_array_t(test_1int) test_array = \
-            UCS_ARRAY_FIXED_INITIALIZER(buffer, num_elems);
 
     /* check initial capacity */
     size_t initial_capacity = ucs_array_capacity(&test_array);

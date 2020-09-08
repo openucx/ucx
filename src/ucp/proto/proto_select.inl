@@ -64,7 +64,7 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
                         const ucp_proto_select_param_t *select_param,
                         size_t msg_length)
 {
-    ucp_proto_select_elem_t *select_elem;
+    const ucp_proto_select_elem_t *select_elem;
     ucp_proto_select_key_t key;
     khiter_t khiter;
 
