@@ -269,6 +269,7 @@ struct ucp_request {
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
+            unsigned              prev_flags;
 
             union {
                 struct {

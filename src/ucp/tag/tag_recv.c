@@ -63,6 +63,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
             ucp_tag_eager_sync_send_ack(worker, rdesc + 1, rdesc->flags);
         }
 
+        req->recv.prev_flags          = req->flags;
         req->flags                    = UCP_REQUEST_FLAG_RECV | req_flags;
         hdr_len                       = rdesc->payload_offset;
         recv_len                      = rdesc->length - hdr_len;
