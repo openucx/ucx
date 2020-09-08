@@ -393,7 +393,7 @@ unsigned UcxConnection::_num_instances = 0;
 
 UcxConnection::UcxConnection(UcxContext &context, uint32_t conn_id) :
     _context(context), _conn_id(conn_id), _remote_conn_id(0),
-    _close_request(NULL)
+    _ep(NULL), _close_request(NULL)
 {
     ++_num_instances;
     struct sockaddr_in in_addr = {0};
@@ -581,6 +581,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 
     ucs_status_t status = ucp_ep_create(_context.worker(), &ep_params, &_ep);
     if (status != UCS_OK) {
+        assert(_ep == NULL);
         UCX_LOG << "ucp_ep_create() failed: " << ucs_status_string(status);
         return false;
     }
