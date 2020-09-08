@@ -25,8 +25,6 @@
 #define UCT_IB_ADDRESS_INVALID_PKEY        0
 #define UCT_IB_ADDRESS_DEFAULT_PKEY        0xffff
 
-#define UCT_IB_MLX5_CQE_VENDOR_SYND_PSN    0x99
-
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
 typedef struct uct_ib_iface_ops      uct_ib_iface_ops_t;

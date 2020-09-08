@@ -122,10 +122,9 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
 
     for (i = 0; i < num_wcs; i++) {
         desc = (uct_ib_iface_recv_desc_t *)(uintptr_t)wc[i].wr_id;
-        hdr = (uct_rc_hdr_t *)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+        hdr  = (uct_rc_hdr_t *)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
         if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
-            if (wc[i].status == IBV_WC_REM_ABORT_ERR &&
-                wc[i].vendor_err == UCT_IB_MLX5_CQE_VENDOR_SYND_PSN) {
+            if (wc[i].status == IBV_WC_REM_ABORT_ERR) {
                 continue;
             }
             UCT_IB_IFACE_VERBS_COMPLETION_ERR("receive", &iface->super.super, i, wc);
