@@ -390,7 +390,7 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     const ucp_request_send_proto_t *proto);
 
 /* Fast-forward to data end */
-void ucp_request_complete_one(ucp_request_t *req, ucs_status_t status);
+void ucp_request_handle_send_error(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
                                             size_t offset);

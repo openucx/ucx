@@ -405,11 +405,17 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
     return UCS_ERR_NO_PROGRESS;
 }
 
-void ucp_request_complete_one(ucp_request_t *req, ucs_status_t status)
+void ucp_request_handle_send_error(ucp_request_t *req, ucs_status_t status)
 {
     if (req->send.state.uct_comp.func) {
+        /* fast-forward the sending state to complete the operation when last
+         * network completion callback is called
+         */
         req->send.state.dt.offset = req->send.length;
-        if (--req->send.state.uct_comp.count == 0) {
+        if (req->send.state.uct_comp.count == 0) {
+            /* if nothing is in-flight, call completion callback to ensure
+             * cleanup of zero-copy resources
+             */
             req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
         }
     } else {
