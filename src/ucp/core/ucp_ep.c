@@ -730,7 +730,7 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
     ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t  status    = UCS_PTR_STATUS(arg);
 
-    ucp_request_send_state_ff(req, status);
+    ucp_request_complete_one(req, status);
 }
 
 static void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
