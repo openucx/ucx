@@ -641,7 +641,7 @@ static void ucp_rndv_req_init_get_zcopy_lane_map(ucp_request_t *rndv_req)
     }
 
     if (ucs_popcount(lane_map) > 1) {
-        /* remove lanes if bandwidth is too less compare to best lane */
+        /* remove lanes if bandwidth is too low comparing to the best lane */
         ucs_for_each_bit(lane_idx, lane_map) {
             ucs_assert(lane_idx < UCP_MAX_LANES);
             lane       = ep_config->tag.rndv.get_zcopy_lanes[lane_idx];
