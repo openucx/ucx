@@ -378,9 +378,10 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
                                                        params->fragsz_offset) -
                        params->hdr_size;
 
-    caps->cfg_thresh = params->cfg_thresh;
-    caps->min_length = 0;
-    caps->num_ranges = 0;
+    caps->cfg_thresh   = params->cfg_thresh;
+    caps->cfg_priority = params->cfg_priority;
+    caps->min_length   = 0;
+    caps->num_ranges   = 0;
 
     op_attr_mask = ucp_proto_select_op_attr_from_flags(
                             params->super.select_param->op_flags);
