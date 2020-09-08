@@ -324,6 +324,7 @@ static void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
 
     rndv_req->send.lane                 = ucp_ep_get_am_lane(rndv_req->send.ep);
     rndv_req->send.uct.func             = ucp_proto_progress_am_single;
+    rndv_req->send.state.uct_comp.func  = NULL; /* for ucp_request_send_state_ff() */
     rndv_req->send.proto.am_id          = UCP_AM_ID_RNDV_ATS;
     rndv_req->send.proto.status         = status;
     rndv_req->send.proto.remote_request = remote_request;
