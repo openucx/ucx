@@ -2440,30 +2440,34 @@ ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self,
 static ucs_status_t
 ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
+    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
+    uct_ep_h uct_ep          = req->send.discard_uct_ep.uct_ep;
+    ucp_worker_h worker      = req->send.discard_uct_ep.ucp_worker;
     ucs_status_t status;
 
-    do {
-        status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
-                              &req->send.state.uct_comp);
-        if (status == UCS_ERR_NO_RESOURCE) {
-            status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);
-            ucs_assert((status == UCS_OK) || (status == UCS_ERR_BUSY));
-        } else if (status == UCS_INPROGRESS) {
-            /* need to remove from the pending queue */
-            status = UCS_OK;
-        } else {
-            /* make sure that uct_ep_flush() does not return UCS_ERR_BUSY to
-             * prevent the endless loop in this case */
-            ucs_assert(status != UCS_ERR_BUSY);
-            /* UCS_OK is handled here as well */
-            ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp,
-                                                 status);
+    status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
+                          &req->send.state.uct_comp);
+    if (status == UCS_ERR_NO_RESOURCE) {
+        status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);
+        ucs_assert((status == UCS_ERR_BUSY) || (status == UCS_OK));
+        if (status == UCS_ERR_BUSY) {
+            uct_worker_progress_register_safe(worker->uct,
+                                              ucp_worker_discard_uct_ep_progress,
+                                              req, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                              &cb_id);
         }
-    } while (status == UCS_ERR_BUSY);
+    } else if (status != UCS_INPROGRESS) {
+        /* UCS_OK is handled here as well */
+        ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp, status);
+        return status;
+    }
 
-    return status;
+    /* the request was added to the UCT pending queue or to the UCT worker
+     * progress, need to return UCS_OK in order to remove the callback from
+     * the previous place (either UCT pending queue or UCT worker progress)
+     * to not invoke it several times */
+    return UCS_OK;
 }
 
 static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
