@@ -2454,7 +2454,7 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
             /* need to remove from the pending queue */
             status = UCS_OK;
         } else {
-            /* make sure that uct_ep_flush() doenst return UCS_ERR_BUSY to not
+            /* make sure that uct_ep_flush() does not return UCS_ERR_BUSY to
              * prevent the endless loop in this case */
             ucs_assert(status != UCS_ERR_BUSY);
             /* UCS_OK is handled here as well */
