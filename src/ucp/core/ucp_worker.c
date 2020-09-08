@@ -2520,7 +2520,6 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
 {
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_request_t *req;
-    khiter_t UCS_V_UNUSED iter;
     int ret;
 
     ucs_assert(uct_ep != NULL);
@@ -2544,9 +2543,8 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
     }
 
     ++worker->flush_ops_count;
-    iter = kh_put(ucp_worker_discard_uct_ep_hash,
-                  &worker->discard_uct_ep_hash,
-                  uct_ep, &ret);
+    kh_put(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
+           uct_ep, &ret);
     if (ret == UCS_KH_PUT_FAILED) {
         ucs_fatal("failed to put %p UCT EP into the %p worker hash",
                   uct_ep, worker);

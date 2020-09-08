@@ -29,6 +29,12 @@ protected:
         std::vector<uct_pending_req_t*>    pending_reqs;
         unsigned                           flush_count;
         unsigned                           pending_add_count;
+
+        ep_test_info_t() {
+            pending_reqs.clear();
+            flush_count       = 0;
+            pending_add_count = 0;
+        }
     };
     typedef std::map<uct_ep_h, ep_test_info_t> ep_test_info_map_t;
 
@@ -188,18 +194,18 @@ protected:
         EXPECT_EQ(m_created_ep_count, total_ep_count);
 
         for (unsigned i = 0; i < m_created_ep_count; i++) {
-            ep_test_info_t *test_info = ep_test_info_get(&eps[i]);
+            ep_test_info_t &test_info = ep_test_info_get(&eps[i]);
 
             /* check EP flush counters */
             if (ep_flush_func == ep_flush_func_return_3_no_resource_then_ok) {
-                EXPECT_EQ(4, test_info->flush_count);
+                EXPECT_EQ(4, test_info.flush_count);
             } else if (ep_flush_func == ep_flush_func_return_in_progress) {
-                EXPECT_EQ(1, test_info->flush_count);
+                EXPECT_EQ(1, test_info.flush_count);
             }
 
             /* check EP pending add counters */
             if (ep_pending_add_func == ep_pending_add_func_return_ok_then_busy) {
-                EXPECT_EQ(3, test_info->pending_add_count);
+                EXPECT_EQ(3, test_info.pending_add_count);
             }
         }
 
@@ -220,34 +226,31 @@ protected:
         m_destroyed_ep_count++;
     }
 
-    static ep_test_info_t* ep_test_info_get(uct_ep_h ep) {
-        ep_test_info_t *test_info_p;
+    static ep_test_info_t& ep_test_info_get(uct_ep_h ep) {
         ep_test_info_map_t::iterator it = m_ep_test_info_map.find(ep);
 
         if (it == m_ep_test_info_map.end()) {
-            ep_test_info_t test_info = {};
+            ep_test_info_t test_info;
 
             m_ep_test_info_map.insert(std::make_pair(ep, test_info));
-            test_info_p = &m_ep_test_info_map.find(ep)->second;
-        } else {
-            test_info_p = &it->second;
+            it = m_ep_test_info_map.find(ep);
         }
 
-        return test_info_p;
+        return it->second;
     }
 
     static unsigned
     ep_test_info_flush_inc(uct_ep_h ep) {
-        ep_test_info_t *test_info = ep_test_info_get(ep);
-        test_info->flush_count++;
-        return test_info->flush_count;
+        ep_test_info_t &test_info = ep_test_info_get(ep);
+        test_info.flush_count++;
+        return test_info.flush_count;
     }
 
     static unsigned
     ep_test_info_pending_add_inc(uct_ep_h ep) {
-        ep_test_info_t *test_info = ep_test_info_get(ep);
-        test_info->pending_add_count++;
-        return test_info->pending_add_count;
+        ep_test_info_t &test_info = ep_test_info_get(ep);
+        test_info.pending_add_count++;
+        return test_info.pending_add_count;
     }
 
     static ucs_status_t
@@ -299,8 +302,8 @@ protected:
     static ucs_status_t
     ep_pending_add_save_req(uct_ep_h ep, uct_pending_req_t *req,
                             unsigned flags) {
-        ep_test_info_t *test_info = ep_test_info_get(ep);
-        test_info->pending_reqs.push_back(req);
+        ep_test_info_t &test_info = ep_test_info_get(ep);
+        test_info.pending_reqs.push_back(req);
         return UCS_OK;
     }
 
@@ -308,17 +311,17 @@ protected:
     ep_pending_purge_func_iter_reqs(uct_ep_h ep,
                                     uct_pending_purge_callback_t cb,
                                     void *arg) {
-        ep_test_info_t *test_info = ep_test_info_get(ep);
+        ep_test_info_t &test_info = ep_test_info_get(ep);
         uct_pending_req_t *req;
 
         for (unsigned i = 0; i < m_pending_purge_reqs_count; i++) {
-            std::vector<uct_pending_req_t*> *req_vec = &test_info->pending_reqs;
-            if (req_vec->size() == 0) {
+            std::vector<uct_pending_req_t*> &req_vec = test_info.pending_reqs;
+            if (req_vec.size() == 0) {
                 break;
             }
 
-            req = req_vec->back();
-            req_vec->pop_back();
+            req = req_vec.back();
+            req_vec.pop_back();
             cb(req, arg);
         }
     }

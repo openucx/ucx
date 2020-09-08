@@ -141,8 +141,8 @@ static uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
 
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
 {
-    ucp_request_t *proxy_req   = ucs_container_of(self, ucp_request_t, send.uct);
-    uct_pending_req_t *req     = proxy_req->send.proxy.req;
+    ucp_request_t *proxy_req = ucs_container_of(self, ucp_request_t, send.uct);
+    uct_pending_req_t *req = proxy_req->send.proxy.req;
     ucp_wireup_ep_t *wireup_ep = proxy_req->send.proxy.wireup_ep;
     ucs_status_t status;
 
