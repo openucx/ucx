@@ -25,7 +25,7 @@ typedef struct ucp_proto_send_multi {
  * One lane configuration for multi-lane protocol
  */
 typedef struct {
-    ucp_lane_index_t               lane;       /* Lane to use */
+    ucp_proto_common_lane_priv_t   super;
     size_t                         max_frag;   /* Max frag size on this lane */
     double                         weight;     /* Relative weight for this lane */
 } ucp_proto_multi_lane_priv_t;
