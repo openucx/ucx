@@ -30,10 +30,7 @@ protected:
         unsigned                           flush_count;
         unsigned                           pending_add_count;
 
-        ep_test_info_t() {
-            pending_reqs.clear();
-            flush_count       = 0;
-            pending_add_count = 0;
+        ep_test_info_t() : flush_count(0), pending_add_count(0) {
         }
     };
     typedef std::map<uct_ep_h, ep_test_info_t> ep_test_info_map_t;
@@ -242,15 +239,13 @@ protected:
     static unsigned
     ep_test_info_flush_inc(uct_ep_h ep) {
         ep_test_info_t &test_info = ep_test_info_get(ep);
-        test_info.flush_count++;
-        return test_info.flush_count;
+        return ++test_info.flush_count;
     }
 
     static unsigned
     ep_test_info_pending_add_inc(uct_ep_h ep) {
         ep_test_info_t &test_info = ep_test_info_get(ep);
-        test_info.pending_add_count++;
-        return test_info.pending_add_count;
+        return ++test_info.pending_add_count;
     }
 
     static ucs_status_t
