@@ -118,9 +118,10 @@ void uct_p2p_mix_test::random_op(const mapped_buffer &sendbuf,
     ucs_status_t status;
     int op;
 
-    op         = ucs::rand() % m_avail_send_funcs.size();
-    comp.count = 1;
-    comp.func  = completion_callback;
+    op          = ucs::rand() % m_avail_send_funcs.size();
+    comp.count  = 1;
+    comp.status = UCS_OK;
+    comp.func   = completion_callback;
 
     for (;;) {
         status = (this->*m_avail_send_funcs[op])(sendbuf, recvbuf, &comp);
