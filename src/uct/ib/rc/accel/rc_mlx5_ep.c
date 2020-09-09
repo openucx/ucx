@@ -1020,6 +1020,7 @@ ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
     if (cqe != NULL) {
         uct_rc_mlx5_common_update_tx_res(&iface->super, &ep->tx.wq,
                                          &ep->super.txqp, htons(cqe->wqe_counter));
+        iface_res_released = 1;
     }
 
     /* if we released iface resources, shcedule arbiter dispatch to progress
