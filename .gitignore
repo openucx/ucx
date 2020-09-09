@@ -85,3 +85,7 @@ GTAGS
 *.swp
 compile_commands.json
 docs/_build
+docs/doxygen/header.tex
+release/
+test/apps/iodemo/io_demo
+test/apps/profiling/ucx_profiling
