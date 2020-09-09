@@ -694,6 +694,7 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
     send_am_and_flush(m_e1, wnd);
 
     m_e2->destroy_ep(0);
+    short_progress_loop(100);
     ASSERT_TRUE(ucs_arbiter_is_empty(&rc_iface(m_e2)->tx.arbiter));
 }
 

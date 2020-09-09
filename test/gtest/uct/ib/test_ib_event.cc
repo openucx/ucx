@@ -115,16 +115,24 @@ public:
         return ret;
     }
 
-    static unsigned last_wqe_check_cb(void *arg) {
-        volatile bool *got_event = (volatile bool *)arg;
-        *got_event = true;
-        return 1;
+    struct event_ctx {
+        uct_ib_async_event_wait_t super;
+        volatile bool got;
+    };
+
+    static void last_wqe_check_cb(uct_ib_async_event_wait_t *arg) {
+        event_ctx *event = ucs_derived_of(arg, event_ctx);
+        event->got = true;
     }
 
     int wait_for_last_wqe_event_cb(entity &e, bool before) {
-        volatile bool got_event = false;
         uint32_t qp_num = get_qp_num(e);
         ucs_status_t status;
+        event_ctx event;
+
+        event.got       = false;
+        event.super.cb  = last_wqe_check_cb;
+        event.super.cbq = &e.worker()->progress_q;
 
         if (before) {
             trigger_last_wqe_event(e);
@@ -133,8 +141,7 @@ public:
 
         status = uct_ib_device_async_event_wait(
                 &ucs_derived_of(e.md(), uct_ib_md_t)->dev,
-                IBV_EVENT_QP_LAST_WQE_REACHED, qp_num,
-                last_wqe_check_cb, (void *)&got_event);
+                IBV_EVENT_QP_LAST_WQE_REACHED, qp_num, &event.super);
         ASSERT_UCS_OK_OR_INPROGRESS(status);
         if (status == UCS_OK) {
             return 1;
@@ -146,11 +153,16 @@ public:
 
         ucs_time_t deadline = ucs_get_time() +
                               ucs_time_from_sec(ucs::test_time_multiplier() * 10);
-        while (!got_event && ucs_get_time() < deadline) {
+        while (!event.got && ucs_get_time() < deadline) {
             progress();
         }
 
-        return got_event;
+        status = uct_ib_device_async_event_wait(
+                &ucs_derived_of(e.md(), uct_ib_md_t)->dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, qp_num, NULL);
+        EXPECT_EQ(UCS_ERR_BUSY, status);
+
+        return event.got;
     }
 };
 

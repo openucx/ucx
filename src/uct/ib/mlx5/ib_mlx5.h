@@ -517,7 +517,8 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
 
-void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq);
+void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
+                                 uct_ib_mlx5_mmio_reg_t *reg);
 
 /**
  * Reset txwq contents and posting indices.

@@ -195,6 +195,16 @@ static void uct_ib_device_get_locality(const char *dev_name,
     *numa_node = (status == UCS_OK) ? n : -1;
 }
 
+static unsigned
+uct_ib_device_async_event_proxy(void *arg)
+{
+    uct_ib_async_event_wait_t *wait = arg;
+
+    wait->cb_id = UCS_CALLBACKQ_ID_NULL;
+    wait->cb(wait);
+    return 1;
+}
+
 static void
 uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
                                    const uct_ib_async_event_t *event)
@@ -206,10 +216,10 @@ uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
     iter = kh_get(uct_ib_async_event, &dev->async_events_hash, *event);
     if (iter != kh_end(&dev->async_events_hash)) {
         entry = &kh_value(&dev->async_events_hash, iter);
-        if (entry->cb != NULL) {
-            ucs_callbackq_add_safe(entry->cbq, entry->cb, entry->arg,
-                                   UCS_CALLBACKQ_FLAG_ONESHOT);
-            entry->cb   = NULL;
+        if (entry->wait != NULL) {
+            entry->wait->cb_id = ucs_callbackq_add_safe(entry->wait->cbq,
+                    uct_ib_device_async_event_proxy, entry->wait,
+                    UCS_CALLBACKQ_FLAG_ONESHOT);
         } else {
             entry->flag = 1;
         }
@@ -220,8 +230,7 @@ uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
 ucs_status_t
 uct_ib_device_async_event_register(uct_ib_device_t *dev,
                                    enum ibv_event_type event_type,
-                                   uint32_t resource_id,
-                                   ucs_callbackq_t *cbq)
+                                   uint32_t resource_id)
 {
     uct_ib_async_event_val_t *entry;
     uct_ib_async_event_t event;
@@ -241,8 +250,7 @@ uct_ib_device_async_event_register(uct_ib_device_t *dev,
 
     ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
     entry       = &kh_value(&dev->async_events_hash, iter);
-    entry->cbq  = cbq;
-    entry->cb   = NULL;
+    entry->wait = NULL;
     entry->flag = 0;
     status      = UCS_OK;
 
@@ -255,7 +263,7 @@ ucs_status_t
 uct_ib_device_async_event_wait(uct_ib_device_t *dev,
                                enum ibv_event_type event_type,
                                uint32_t resource_id,
-                               ucs_callback_t cb, void *arg)
+                               uct_ib_async_event_wait_t *wait)
 {
     uct_ib_async_event_val_t *entry;
     uct_ib_async_event_t event;
@@ -271,13 +279,16 @@ uct_ib_device_async_event_wait(uct_ib_device_t *dev,
     entry = &kh_value(&dev->async_events_hash, iter);
 
     if (entry->flag) {
-        status     = UCS_OK;
-    } else if (entry->cb != NULL) {
-        status     = UCS_ERR_BUSY;
+        status          = UCS_OK;
+    } else if (entry->wait != NULL) {
+        if (wait == NULL) {
+            entry->wait = NULL;
+        }
+        status          = UCS_ERR_BUSY;
     } else {
-        status     = UCS_INPROGRESS;
-        entry->cb  = cb;
-        entry->arg = arg;
+        wait->cb_id     = UCS_CALLBACKQ_ID_NULL;
+        status          = UCS_INPROGRESS;
+        entry->wait     = wait;
     }
 
     ucs_spin_unlock(&dev->async_event_lock);
@@ -288,6 +299,7 @@ void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
                                           enum ibv_event_type event_type,
                                           uint32_t resource_id)
 {
+    uct_ib_async_event_val_t *entry;
     uct_ib_async_event_t event;
     khiter_t iter;
 
@@ -297,9 +309,14 @@ void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
     ucs_spin_lock(&dev->async_event_lock);
     iter = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
     ucs_assert(iter != kh_end(&dev->async_events_hash));
+    entry = &kh_value(&dev->async_events_hash, iter);
+    if (entry->wait && entry->wait->cb_id != UCS_CALLBACKQ_ID_NULL) {
+        ucs_callbackq_remove_safe(entry->wait->cbq, entry->wait->cb_id);
+    }
     kh_del(uct_ib_async_event, &dev->async_events_hash, iter);
     ucs_spin_unlock(&dev->async_event_lock);
 }
+
 static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
                                        void *arg)
 {

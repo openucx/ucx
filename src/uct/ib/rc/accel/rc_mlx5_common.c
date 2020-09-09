@@ -416,7 +416,8 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
     }
 
     uct_ib_mlx5_destroy_qp(md, &iface->tm.cmd_wq.super.super);
-    uct_ib_mlx5_txwq_cleanup(&iface->tm.cmd_wq.super);
+    uct_ib_mlx5_qp_mmio_cleanup(&iface->tm.cmd_wq.super.super,
+                                iface->tm.cmd_wq.super.reg);
     ucs_free(iface->tm.list);
     ucs_free(iface->tm.cmd_wq.ops);
     uct_rc_mlx5_tag_cleanup(iface);
@@ -1086,6 +1087,15 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 #if !HAVE_DECL_MLX5DV_INIT_OBJ
     iface->cq[UCT_IB_DIR_TX].cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_TX]);
     iface->cq[UCT_IB_DIR_RX].cq_ci = uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_RX]);
+#endif
+}
+
+void uct_rc_mlx5_iface_common_check_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
+                                           uct_ib_iface_t *ib_iface)
+{
+#if !HAVE_DECL_MLX5DV_INIT_OBJ
+    ucs_assert(iface->cq[UCT_IB_DIR_TX].cq_ci == uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_TX]));
+    ucs_assert(iface->cq[UCT_IB_DIR_RX].cq_ci == uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_RX]));
 #endif
 }
 
