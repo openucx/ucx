@@ -647,27 +647,6 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     }
 }
 
-void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq,
-                                   struct ibv_srq *verbs_srq)
-{
-    uct_ib_mlx5dv_srq_t srq_info = {};
-    uct_ib_mlx5dv_t obj = {};
-    ucs_status_t status;
-
-    if (srq->type != UCT_IB_MLX5_OBJ_TYPE_VERBS) {
-        return;
-    }
-
-    /* check if mlx5 driver didn't modified SRQ */
-    obj.dv.srq.in = verbs_srq;
-    obj.dv.srq.out = &srq_info.dv;
-
-    status = uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_SRQ);
-    ucs_assert_always(status == UCS_OK);
-    ucs_assertv_always(srq->tail == srq_info.dv.tail, "srq->tail=%d srq_info.tail=%d",
-                       srq->tail, srq_info.dv.tail);
-}
-
 ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md,
                                          uct_ib_mlx5_qp_t *qp,
                                          enum ibv_qp_state state)

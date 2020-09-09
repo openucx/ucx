@@ -188,6 +188,7 @@ typedef struct uct_rc_iface_ops {
                                        uct_rc_hdr_t *hdr, unsigned length,
                                        uint32_t imm_data, uint16_t lid,
                                        unsigned flags);
+    void                 (*cleanup_ep)(uct_ep_t *ep);
 } uct_rc_iface_ops_t;
 
 
@@ -265,6 +266,7 @@ struct uct_rc_iface {
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;
+    ucs_list_link_t          ep_gc_list;
 
     /* Progress function (either regular or TM aware) */
     ucs_callback_t           progress;

@@ -131,8 +131,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     ucs_debug("destroy rc ep %p", self);
 
-    ucs_list_del(&self->list);
-    uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(iface, &self->txqp);
 }

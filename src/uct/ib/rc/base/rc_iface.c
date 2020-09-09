@@ -355,6 +355,10 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
     ucs_assert(iface->config.fc_enabled);
 
     if (fc_hdr & UCT_RC_EP_FC_FLAG_GRANT) {
+        if (ep == NULL) {
+            return UCS_OK;
+        }
+
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_GRANT, 1);
 
         /* Got either grant flag or special FC grant message */
@@ -378,6 +382,10 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
             UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
             return UCS_OK;
         }
+    }
+
+    if (ep == NULL) {
+        fc_hdr = 0;
     }
 
     if (fc_hdr & UCT_RC_EP_FC_FLAG_SOFT_REQ) {
@@ -570,6 +578,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
+    ucs_list_head_init(&self->ep_gc_list);
 
     /* Check FC parameters correctness */
     if ((config->fc.hard_thresh <= 0) || (config->fc.hard_thresh >= 1)) {
@@ -678,7 +687,13 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 {
     uct_rc_iface_ops_t *ops = ucs_derived_of(self->super.ops, uct_rc_iface_ops_t);
+    uct_rc_ep_t *ep;
     unsigned i;
+
+    while (!ucs_list_is_empty(&self->ep_gc_list)) {
+        ep = ucs_list_extract_head(&self->ep_gc_list, uct_rc_ep_t, list);
+        ops->cleanup_ep(&ep->super.super);
+    }
 
     /* Release table. TODO release on-demand when removing ep. */
     for (i = 0; i < UCT_RC_QP_TABLE_SIZE; ++i) {

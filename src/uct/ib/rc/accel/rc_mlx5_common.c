@@ -1089,6 +1089,15 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 #endif
 }
 
+void uct_rc_mlx5_iface_common_check_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
+                                           uct_ib_iface_t *ib_iface)
+{
+#if !HAVE_DECL_MLX5DV_INIT_OBJ
+    ucs_assert(iface->cq[UCT_IB_DIR_TX].cq_ci == uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_TX]));
+    ucs_assert(iface->cq[UCT_IB_DIR_RX].cq_ci == uct_ib_mlx5_get_cq_ci(ib_iface->cq[UCT_IB_DIR_RX]));
+#endif
+}
+
 int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn)
 {

@@ -56,7 +56,7 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         return;
     }
 
-    uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0, ep->txcnt.ci);
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, 0, ep->txcnt.ci);
 
     if (ep->super.txqp.flags & UCT_RC_TXQP_FLAG_ERR) {
         return;

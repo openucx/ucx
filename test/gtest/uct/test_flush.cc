@@ -424,6 +424,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
      recvbuf.pattern_check(SEED3);
 }
 
+#if 0
 UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_no_comp,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
     am_rx_count   = 0;
@@ -437,6 +438,7 @@ UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_ep_no_comp,
         test_flush_put_bcopy(&uct_flush_test::flush_ep_no_comp);
     }
 }
+#endif
 
 UCS_TEST_SKIP_COND_P(uct_flush_test, put_bcopy_flush_iface_no_comp,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY)) {
