@@ -110,10 +110,6 @@ KHASH_IMPL(ucp_worker_discard_uct_ep_hash, uct_ep_h, char, 0,
            ucp_worker_discard_uct_ep_hash_key, kh_int64_hash_equal);
 
 
-/* Forward declaration to use in the dicarding of UCT EP pending callback */
-static unsigned ucp_worker_discard_uct_ep_progress(void *arg);
-
-
 static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker,
                                              ucp_worker_event_fd_op_t op,
                                              int event_fd)
@@ -2440,42 +2436,49 @@ ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self,
 static ucs_status_t
 ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
 {
-    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
     uct_ep_h uct_ep          = req->send.discard_uct_ep.uct_ep;
-    ucp_worker_h worker      = req->send.discard_uct_ep.ucp_worker;
     ucs_status_t status;
 
     status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
                           &req->send.state.uct_comp);
+    if (status == UCS_INPROGRESS) {
+        return UCS_OK;
+    }
+
+    /* UCS_OK is handled here as well */
+    if (status != UCS_ERR_NO_RESOURCE) {
+        ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp,
+                                             status);
+    }
+    return status;
+}
+
+static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
+{
+    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_request_t *req       = (ucp_request_t*)arg;
+    uct_ep_h uct_ep          = req->send.discard_uct_ep.uct_ep;
+    ucp_worker_h worker      = req->send.discard_uct_ep.ucp_worker;
+    ucs_status_t status;
+
+    status = ucp_worker_discard_uct_ep_pending_cb(&req->send.uct);
     if (status == UCS_ERR_NO_RESOURCE) {
         status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);
         ucs_assert((status == UCS_ERR_BUSY) || (status == UCS_OK));
         if (status == UCS_ERR_BUSY) {
+            /* adding to the pending queue failed, schedule the UCT EP discard
+             * operation on UCT worker progress again */
             uct_worker_progress_register_safe(worker->uct,
                                               ucp_worker_discard_uct_ep_progress,
                                               req, UCS_CALLBACKQ_FLAG_ONESHOT,
                                               &cb_id);
         }
-    } else if (status != UCS_INPROGRESS) {
-        /* UCS_OK is handled here as well */
-        ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp, status);
-        return status;
+
+        return 0;
     }
 
-    /* the request was added to the UCT pending queue or to the UCT worker
-     * progress, need to return UCS_OK in order to remove the callback from
-     * the previous place (either UCT pending queue or UCT worker progress)
-     * to not invoke it several times */
-    return UCS_OK;
-}
-
-static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
-{
-    ucp_request_t *req  = (ucp_request_t*)arg;
-    ucs_status_t status = ucp_worker_discard_uct_ep_pending_cb(&req->send.uct);
-
-    return !UCS_STATUS_IS_ERR(status);
+    return 1;
 }
 
 static uct_ep_h
@@ -2489,12 +2492,10 @@ ucp_worker_discard_wireup_ep(ucp_worker_h worker,
     int is_owner;
 
     ucs_assert(wireup_ep != NULL);
-    ucs_assert(purge_cb != NULL);
-
-    uct_ep_pending_purge(&wireup_ep->super.super, purge_cb, purge_arg);
 
     if (wireup_ep->aux_ep != NULL) {
-        /* make sure that there is no WIREUP MSGs anymore */
+        /* make sure that there are no WIREUP MSGs anymore that are scheduled
+         * on AUX EP, i.e. the purge callback hasn't be invoked here */
         uct_ep_pending_purge(wireup_ep->aux_ep,
                              (uct_pending_purge_callback_t)
                              ucs_empty_function_do_assert,
@@ -2530,6 +2531,9 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
     int ret;
 
     ucs_assert(uct_ep != NULL);
+    ucs_assert(purge_cb != NULL);
+
+    uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
 
     if (ucp_wireup_ep_test(uct_ep)) {
         uct_ep = ucp_worker_discard_wireup_ep(worker, ucp_wireup_ep(uct_ep),
@@ -2538,8 +2542,6 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
         if (uct_ep == NULL) {
             return;
         }
-    } else if (purge_cb != NULL) {
-        uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
     }
 
     req = ucp_request_get(worker);

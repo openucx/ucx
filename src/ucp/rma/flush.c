@@ -440,8 +440,8 @@ static unsigned ucp_worker_flush_progress(void *arg)
     ucs_status_t status;
     ucp_ep_h ep;
 
-    if (!worker->flush_ops_count) /* all scheduled operations on worker
-                                   * were completed */ {
+    if (worker->flush_ops_count == 0) {
+        /* all scheduled progress operations on worker were completed */
         status = ucp_worker_flush_check(worker);
         if ((status == UCS_OK) || (&next_ep->ep_list == &worker->all_eps)) {
             /* If all ifaces are flushed, or we finished going over all

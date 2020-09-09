@@ -202,7 +202,8 @@ protected:
 
             /* check EP pending add counters */
             if (ep_pending_add_func == ep_pending_add_func_return_ok_then_busy) {
-                EXPECT_EQ(3, test_info.pending_add_count);
+                /* pending_add has to be called only once per EP */
+                EXPECT_EQ(1, test_info.pending_add_count);
             }
         }
 
