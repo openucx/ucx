@@ -618,20 +618,21 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
              * status */
             ucp_rndv_get_zcopy_next_lane(rndv_req);
             return UCS_INPROGRESS;
-        } else {
-            if (status == UCS_ERR_NO_RESOURCE) {
-                if (lane != rndv_req->send.pending_lane) {
-                    /* switch to new pending lane */
-                    pending_add_res = ucp_request_pending_add(rndv_req, &status, 0);
-                    if (!pending_add_res) {
-                        /* failed to switch req to pending queue, try again */
-                        continue;
-                    }
-                    ucs_assert(status == UCS_INPROGRESS);
-                    return UCS_OK;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            if (lane != rndv_req->send.pending_lane) {
+                /* switch to new pending lane */
+                pending_add_res = ucp_request_pending_add(rndv_req, &status, 0);
+                if (!pending_add_res) {
+                    /* failed to switch req to pending queue, try again */
+                    continue;
                 }
+                ucs_assert(status == UCS_INPROGRESS);
+                return UCS_OK;
             }
-            return status;
+            return UCS_ERR_NO_RESOURCE;
+        } else {
+            ucp_request_handle_send_error(rndv_req, status);
+            return UCS_OK;
         }
     }
 }

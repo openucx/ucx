@@ -596,6 +596,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         self->tx.reads_available = config->tx.max_get_bytes;
     }
 
+    self->tx.arb_cbq_id = UCS_CALLBACKQ_ID_NULL;
+
     uct_ib_fence_info_init(&self->tx.fi);
     uct_rc_iface_set_path_mtu(self, config);
     memset(self->eps, 0, sizeof(self->eps));
@@ -710,6 +712,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 {
     uct_rc_iface_ops_t *ops = ucs_derived_of(self->super.ops, uct_rc_iface_ops_t);
     unsigned i;
+
+    uct_worker_progress_unregister_safe(&self->super.super.worker->super,
+                                        &self->tx.arb_cbq_id);
 
     /* Release table. TODO release on-demand when removing ep. */
     for (i = 0; i < UCT_RC_QP_TABLE_SIZE; ++i) {

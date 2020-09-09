@@ -997,18 +997,40 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_ib_mlx5_destroy_qp(&self->tx.wq.super);
 }
 
+static unsigned uct_rc_mlx5_iface_arbiter_dispatch(void *arg)
+{
+    uct_rc_mlx5_iface_common_t *iface = arg;
+
+    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending,
+                         NULL);
+    iface->super.tx.arb_cbq_id = UCS_CALLBACKQ_ID_NULL;
+    return 0;
+}
+
 ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
                                            struct mlx5_cqe64 *cqe,
                                            ucs_status_t status)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                        uct_rc_mlx5_iface_common_t);
+    int iface_res_released;
 
-    uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
+    iface_res_released = uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
 
     if (cqe != NULL) {
         uct_rc_mlx5_common_update_tx_res(&iface->super, &ep->tx.wq,
                                          &ep->super.txqp, htons(cqe->wqe_counter));
+    }
+
+    /* if we released iface resources, shcedule arbiter dispatch to progress
+     * pending operations (otherwise, we will not dispatch the pending queue
+     * if we don't get any send completions)
+     */
+    if (iface_res_released) {
+        uct_worker_progress_register_safe(&iface->super.super.super.worker->super,
+                                          uct_rc_mlx5_iface_arbiter_dispatch,
+                                          iface, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                          &iface->super.tx.arb_cbq_id);
     }
 
     return iface->super.super.ops->set_ep_failed(&iface->super.super,
