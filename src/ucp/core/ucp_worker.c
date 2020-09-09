@@ -2044,16 +2044,16 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_trace_func("worker=%p", worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
+    ucp_worker_destroy_eps(worker);
+    ucp_worker_remove_am_handlers(worker);
+    ucp_am_cleanup(worker);
+    ucp_worker_close_cms(worker);
+
     if (worker->flush_ops_count != 0) {
         ucs_warn("not all pending operations (%u) were flushed on worker %p "
                  "that is being destroyed",
                  worker->flush_ops_count, worker);
     }
-
-    ucp_worker_destroy_eps(worker);
-    ucp_worker_remove_am_handlers(worker);
-    ucp_am_cleanup(worker);
-    ucp_worker_close_cms(worker);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucp_worker_destroy_ep_configs(worker);
