@@ -242,6 +242,21 @@ public:
                     (status == UCS_ERR_NO_RESOURCE));
     }
 
+    void flush_cancel(entity *e, int ep_idx = 0)
+    {
+        ucs_time_t deadline = ucs::get_deadline();
+        ucs_status_t status;
+        do {
+            status = uct_ep_flush(e->ep(ep_idx), UCT_FLUSH_FLAG_CANCEL, NULL);
+            if (status == UCS_OK) {
+                break;
+            }
+
+            progress();
+        } while (((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) &&
+                 (ucs_get_time() < deadline));
+    }
+
     static size_t empty_pack_cb(void *dest, void *arg) {
         return 0ul;
     }
@@ -535,6 +550,39 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, ordering_comp_cb,
 
     flush();
     EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+}
+
+// Check that if iface resources released during ep destroy, pending requests on
+// another ep, created on the same iface, are dispatched.
+UCS_TEST_SKIP_COND_P(test_rc_get_limit, pending_destroy,
+                     !check_caps(UCT_IFACE_FLAG_GET_ZCOPY |
+                                 UCT_IFACE_FLAG_GET_BCOPY | UCT_IFACE_FLAG_PENDING))
+{
+    mapped_buffer sendbuf(1024, 0ul, *m_e1);
+    mapped_buffer recvbuf(1024, 0ul, *m_e2);
+
+    m_e1->connect(1, *m_e2, 0);
+
+    // Exhaust iface resources on m_e1 iface by sending ops on ep0
+    post_max_reads(m_e1, sendbuf, recvbuf);
+
+    // Add pending request to ep1
+    pending_send_request_t pend_req;
+    pend_req.uct.func = pending_cb;
+    pend_req.cb_count = 0;
+    EXPECT_EQ(UCS_OK, uct_ep_pending_add(m_e1->ep(1), &pend_req.uct, 0));
+
+    // Cancel all ops on ep0
+    flush_cancel(m_e1);
+    EXPECT_EQ(m_num_get_bytes, reads_available(m_e1));
+
+    // Make sure pending request on ep1 is dispatched
+    wait_for_flag(&pend_req.cb_count);
+    EXPECT_EQ(1, pend_req.cb_count);
+
+    uct_ep_pending_purge(m_e1->ep(1), NULL, NULL);
+
+    flush();
 }
 
 UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_get_limit)

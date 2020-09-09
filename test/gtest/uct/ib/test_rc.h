@@ -55,19 +55,20 @@ public:
         return UCS_OK;
     }
 
+    static ucs_status_t pending_cb(uct_pending_req_t *self)
+    {
+        pending_send_request_t *req = ucs_container_of(self, pending_send_request_t,
+                                                       uct);
+        ++req->cb_count;
+        return UCS_OK;
+    }
+
 protected:
     entity *m_e1, *m_e2;
-
 };
 
 class test_rc_flow_control : public test_rc {
 public:
-    typedef struct pending_send_request {
-        uct_pending_req_t uct;
-        int               cb_count;
-        int               purge_count;
-    } pending_send_request_t;
-
     void init();
     void cleanup();
 
@@ -122,14 +123,6 @@ public:
                                                        pending_send_request_t,
                                                        uct);
         ++req->purge_count;
-    }
-
-    static ucs_status_t pending_cb(uct_pending_req_t *self) {
-        pending_send_request_t *req = ucs_container_of(self,
-                                                       pending_send_request_t,
-                                                       uct);
-        ++req->cb_count;
-        return UCS_OK;
     }
 
     void validate_grant(entity *e);
