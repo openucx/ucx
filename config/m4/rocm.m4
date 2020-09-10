@@ -108,7 +108,8 @@ AS_IF([test "x$with_rocm" != "xno"],
     LDFLAGS="$HIP_LDFLAGS $LDFLAGS"
     LIBS="$HIP_LIBS $LIBS"
 
-    hip_happy=yes
+    hip_happy=no
+    AC_CHECK_LIB([hip_hcc], [hipFree], [AC_MSG_WARN([Please install ROCm-3.7.0 or above])], [hip_happy=yes])
     AS_IF([test "x$hip_happy" = xyes],
           [AC_CHECK_HEADERS([hip_runtime.h], [hip_happy=yes], [hip_happy=no])])
     AS_IF([test "x$hip_happy" = xyes],
