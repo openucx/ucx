@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.9.0-rc4 (September 2, 2020)
+## 1.9.0-rc5 (September 10, 2020)
 ### Features:
 #### UCX Core
 - Added a new class of communication APIs '*_nbx' that enable API extendability while
@@ -32,6 +32,7 @@
 - Improved performance in ptr_array flow
 - Improved performance in UCT/SM progress engine flow
 - Improved I/O demo code
+- Improved rendezvous protocol for CUDA
 - Updated examples code
 
 #### UCX Java (API Preview)
