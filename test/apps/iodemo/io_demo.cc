@@ -528,22 +528,30 @@ public:
 
     UcxConnection* connect(const char* server) {
         struct sockaddr_in connect_addr;
-        char str[64];
-        const char* server_addr;
+        std::string server_addr;
         int port_num;
 
         memset(&connect_addr, 0, sizeof(connect_addr));
         connect_addr.sin_family = AF_INET;
-        if (strchr(server, ':') == NULL) {
-            port_num = opts().port_num;
+
+        const char *port_separator = strchr(server, ':');
+        if (port_separator == NULL) {
+            /* take port number from -p argument */
+            port_num    = opts().port_num;
             server_addr = server;
         } else {
-            strcpy(str, server);
-            server_addr = strtok(str, ":");
-            port_num    = atoi(strtok(NULL, ":"));
+            /* take port number from the server parameter */
+            server_addr = std::string(server)
+                            .substr(0, port_separator - server);
+            port_num    = atoi(port_separator + 1);
         }
+
         connect_addr.sin_port = htons(port_num);
-        inet_pton(AF_INET, server_addr, &connect_addr.sin_addr);
+        int ret = inet_pton(AF_INET, server_addr.c_str(), &connect_addr.sin_addr);
+        if (ret != 1) {
+            LOG << "invalid address " << server_addr;
+            return NULL;
+        }
 
         return UcxContext::connect((const struct sockaddr*)&connect_addr,
                                    sizeof(connect_addr));
