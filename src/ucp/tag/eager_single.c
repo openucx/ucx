@@ -25,6 +25,7 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
         .super.latency       = -150e-9, /* no extra memory access to fetch data */
         .super.overhead      = 0,
         .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
+        .super.cfg_priority  = 0,
         .super.fragsz_offset = ucs_offsetof(uct_iface_attr_t, cap.am.max_short),
         .super.hdr_size      = sizeof(ucp_tag_hdr_t),
         .super.flags         = 0,
@@ -59,6 +60,7 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
         .super.latency       = 0,
         .super.overhead      = 5e-9,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
+        .super.cfg_priority  = 20,
         .super.flags         = 0,
         .super.fragsz_offset = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.hdr_size      = sizeof(ucp_tag_hdr_t),
@@ -90,6 +92,7 @@ ucp_proto_eager_zcopy_single_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.latency       = 0,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
+        .super.cfg_priority  = 30,
         .super.overhead      = 0,
         .super.fragsz_offset = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
         .super.hdr_size      = sizeof(ucp_tag_hdr_t),

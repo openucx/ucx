@@ -255,6 +255,11 @@ UCS_TEST_F(test_math, linear_func) {
                                                             &x_intersect);
     ASSERT_EQ(UCS_ERR_INVALID_PARAM, status) << x_intersect;
 
+    /* Compare */
+    EXPECT_FALSE(ucs_linear_func_is_equal(tmp_func1, tmp_func2, 1e-20));
+    EXPECT_TRUE (ucs_linear_func_is_equal(tmp_func1, tmp_func1, 1e-20));
+    EXPECT_TRUE (ucs_linear_func_is_equal(tmp_func2, tmp_func2, 1e-20));
+
     /* Compose */
     ucs_linear_func_t compose_func = ucs_linear_func_compose(func[0], func[1]);
     double y_compose               = ucs_linear_func_apply(compose_func, x);

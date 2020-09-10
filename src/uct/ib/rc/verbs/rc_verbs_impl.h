@@ -107,6 +107,7 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
 {
+    uct_ib_iface_recv_desc_t *desc;
     uct_rc_hdr_t *hdr;
     unsigned i;
     ucs_status_t status;
@@ -119,7 +120,17 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
         goto out;
     }
 
-    UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, hdr, wc, num_wcs) {
+    for (i = 0; i < num_wcs; i++) {
+        desc = (uct_ib_iface_recv_desc_t *)(uintptr_t)wc[i].wr_id;
+        hdr  = (uct_rc_hdr_t *)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc);
+        if (ucs_unlikely(wc[i].status != IBV_WC_SUCCESS)) {
+            if (wc[i].status == IBV_WC_REM_ABORT_ERR) {
+                continue;
+            }
+            UCT_IB_IFACE_VERBS_COMPLETION_ERR("receive", &iface->super.super, i, wc);
+        }
+        VALGRIND_MAKE_MEM_DEFINED(hdr, wc[i].byte_len);
+
         uct_ib_log_recv_completion(&iface->super.super, &wc[i], hdr, wc[i].byte_len,
                                    uct_rc_ep_packet_dump);
         uct_rc_verbs_iface_handle_am(&iface->super, hdr, wc[i].wr_id, wc[i].qp_num,

@@ -45,6 +45,8 @@ typedef struct {
 
 UCS_ARRAY_DEFINE_INLINE(ucp_proto_thresh, unsigned,
                         ucp_proto_threshold_tmp_elem_t);
+UCS_ARRAY_DEFINE_INLINE(ucp_proto_perf, unsigned, ucp_proto_perf_range_t);
+
 
 const ucp_proto_threshold_elem_t*
 ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
@@ -82,6 +84,35 @@ ucp_proto_thresholds_append(ucs_array_t(ucp_proto_thresh) *thresh_list,
     thresh_elem             = ucs_array_last(thresh_list);
     thresh_elem->max_length = max_length;
     thresh_elem->proto_id   = proto_id;
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_proto_perf_append(ucs_array_t(ucp_proto_perf) *perf_list, size_t max_length,
+                      ucs_linear_func_t perf)
+{
+    ucp_proto_perf_range_t *perf_elem;
+    ucs_status_t status;
+
+    if (!ucs_array_is_empty(perf_list)) {
+        perf_elem = ucs_array_last(perf_list);
+        ucs_assert(max_length > perf_elem->max_length);
+        if (ucs_linear_func_is_equal(perf_elem->perf, perf, 1e-15)) {
+            perf_elem->max_length = max_length;
+            return UCS_OK;
+        }
+    }
+
+    status = ucs_array_append(ucp_proto_perf, perf_list);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    perf_elem             = ucs_array_last(perf_list);
+    perf_elem->max_length = max_length;
+    perf_elem->perf       = perf;
+
     return UCS_OK;
 }
 
@@ -89,7 +120,9 @@ static ucs_status_t
 ucp_proto_thresholds_select_best(ucp_proto_id_mask_t proto_mask,
                                  const ucs_linear_func_t *proto_perf,
                                  ucs_array_t(ucp_proto_thresh) *thresh_list,
-                                 size_t start, size_t end)
+                                 ucs_array_t(ucp_proto_perf) *perf_list,
+                                 size_t start, size_t end,
+                                 const char *title)
 {
     struct {
         ucp_proto_id_t proto_id;
@@ -100,7 +133,7 @@ ucp_proto_thresholds_select_best(ucp_proto_id_mask_t proto_mask,
     size_t midpoint;
     char buf[64];
 
-    ucs_trace("candidate protocols for [%s]:",
+    ucs_trace("candidate protocols for %s %s:", title,
               ucs_memunits_range_str(start, end, buf, sizeof(buf)));
     ucs_for_each_bit(curr.proto_id, proto_mask) {
         ucs_trace("%24s %.0f+%.3f*X nsec",
@@ -164,6 +197,12 @@ ucp_proto_thresholds_select_best(ucp_proto_id_mask_t proto_mask,
             return status;
         }
 
+        status = ucp_proto_perf_append(perf_list, midpoint,
+                                       proto_perf[best.proto_id]);
+        if (status != UCS_OK) {
+            return status;
+        }
+
         start = midpoint + 1;
     } while (midpoint < end);
 
@@ -177,15 +216,17 @@ static ucs_status_t
 ucp_proto_thresholds_select_next(ucp_proto_id_mask_t proto_mask,
                                  const ucp_proto_caps_t *proto_caps,
                                  ucs_array_t(ucp_proto_thresh) *thresh_list,
-                                 size_t msg_length, size_t *max_length_p)
+                                 ucs_array_t(ucp_proto_perf) *perf_list,
+                                 size_t msg_length, size_t *max_length_p,
+                                 const char *title)
 {
+    ucp_proto_id_mask_t valid_proto_mask, disabled_proto_mask;
     ucs_linear_func_t proto_perf[UCP_PROTO_MAX_COUNT];
-    ucp_proto_id_mask_t valid_proto_mask;  /* Valid protocols in the range */
-    ucp_proto_id_mask_t forced_proto_mask; /* Protocols forced by user */
     const ucp_proto_caps_t *caps;
+    unsigned max_cfg_priority;
     ucp_proto_id_t proto_id;
-    ucs_status_t status;
     size_t max_length;
+    ucs_status_t status;
     unsigned i;
 
     /*
@@ -193,16 +234,17 @@ ucp_proto_thresholds_select_next(ucp_proto_id_mask_t proto_mask,
      * Start with endpoint at SIZE_MAX, and narrow it down whenever we encounter
      * a protocol with different configuration.
      */
-    valid_proto_mask  = 0;
-    forced_proto_mask = 0;
-    max_length        = SIZE_MAX;
+    valid_proto_mask    = 0;
+    disabled_proto_mask = 0;
+    max_cfg_priority    = 0;
+    max_length          = SIZE_MAX;
     ucs_for_each_bit(proto_id, proto_mask) {
         caps = &proto_caps[proto_id];
 
-        /* Check if the protocol supports message length 'msg_length' */
         if (msg_length < caps->min_length) {
             ucs_trace("skipping proto %d with min_length %zu for msg_length %zu",
                       proto_id, caps->min_length, msg_length);
+            max_length = ucs_min(max_length, caps->min_length - 1);
             continue;
         }
 
@@ -218,18 +260,21 @@ ucp_proto_thresholds_select_next(ucp_proto_id_mask_t proto_mask,
             }
         }
 
+        if (!(valid_proto_mask & UCS_BIT(proto_id))) {
+            continue;
+        }
+
         /* Apply user threshold configuration */
         if (caps->cfg_thresh != UCS_MEMUNITS_AUTO) {
             if (caps->cfg_thresh == UCS_MEMUNITS_INF) {
-                /* 'inf' - protocol is disabled */
-                valid_proto_mask  &= ~UCS_BIT(proto_id);
-            } else if (caps->cfg_thresh <= msg_length) {
-                /* The protocol is force-activated on 'msg_length' and above */
-                forced_proto_mask |= UCS_BIT(proto_id);
+                disabled_proto_mask |= UCS_BIT(proto_id);
+            } else if (msg_length < caps->cfg_thresh) {
+                /* The protocol is lowest priority up to 'cfg_thresh' - 1 */
+                disabled_proto_mask |= UCS_BIT(proto_id);
+                max_length           = ucs_min(max_length, caps->cfg_thresh - 1);
             } else {
-                /* The protocol is completely disabled up to 'cfg_thresh' - 1 */
-                max_length         = ucs_min(max_length, caps->cfg_thresh - 1);
-                valid_proto_mask  &= ~UCS_BIT(proto_id);
+                /* The protocol is force-activated on 'msg_length' and above */
+                max_cfg_priority     = ucs_max(max_cfg_priority, caps->cfg_priority);
             }
         }
     }
@@ -239,15 +284,34 @@ ucp_proto_thresholds_select_next(ucp_proto_id_mask_t proto_mask,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    /* If we have forced protocols by user-configured threshold, use only those */
-    forced_proto_mask &= valid_proto_mask;
-    if (forced_proto_mask != 0) {
-        valid_proto_mask = forced_proto_mask;
+    /* A protocol with configured threshold disables all inferior protocols */
+    ucs_for_each_bit(proto_id, valid_proto_mask) {
+        if (proto_caps[proto_id].cfg_priority >= max_cfg_priority) {
+            continue;
+        }
+
+        disabled_proto_mask |= UCS_BIT(proto_id);
+        ucs_trace("skipping proto %d with priority %u since it's less than %u",
+                  proto_id, proto_caps[proto_id].cfg_priority, max_cfg_priority);
     }
 
+    /* Remove disabled protocols. 'disabled_proto_mask' must be contained in
+     * 'valid_proto_mask'. */
+    ucs_assert(!(disabled_proto_mask & ~valid_proto_mask));
+    if (valid_proto_mask != disabled_proto_mask) {
+        valid_proto_mask &= ~disabled_proto_mask;
+    } else {
+        /* If all protocols were disabled, we couldn't have any configured
+         * protocol (because that protocol would be enabled). In this case we
+         * allow using disabled protocols as well.
+         */
+        ucs_assert(max_cfg_priority == 0);
+    }
+    ucs_assert(valid_proto_mask != 0);
+
     status = ucp_proto_thresholds_select_best(valid_proto_mask, proto_perf,
-                                              thresh_list, msg_length,
-                                              max_length);
+                                              thresh_list, perf_list, msg_length,
+                                              max_length, title);
     if (status != UCS_OK) {
         return status;
     }
@@ -261,12 +325,16 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t ep_cfg_index,
                                 ucp_worker_cfg_index_t rkey_cfg_index,
                                 const ucp_proto_select_param_t *select_param,
-                                ucp_proto_select_init_protocols_t *proto_init)
+                                ucp_proto_select_init_protocols_t *proto_init,
+                                const char *title)
 {
     ucp_proto_init_params_t init_params;
+    ucp_proto_caps_t *proto_caps;
     ucs_string_buffer_t strb;
     size_t priv_size, offset;
     ucp_proto_id_t proto_id;
+    char min_length_str[64];
+    char thresh_str[64];
     ucs_status_t status;
     void *tmp;
 
@@ -301,16 +369,32 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
 
     offset = 0;
     for (proto_id = 0; proto_id < ucp_protocols_count; ++proto_id) {
+        proto_caps            = &proto_init->caps[proto_id];
         init_params.priv      = UCS_PTR_BYTE_OFFSET(proto_init->priv_buf,
                                                           offset);
         init_params.priv_size  = &priv_size;
-        init_params.caps       = &proto_init->caps[proto_id];
+        init_params.caps       = proto_caps;
         init_params.proto_name = ucp_proto_id_field(proto_id, name);
 
         status = ucp_proto_id_call(proto_id, init, &init_params);
         if (status != UCS_OK) {
+            ucs_trace("protocol %s on %s failed to initialize: %s",
+                      ucp_proto_id_field(proto_id, name), title,
+                      ucs_status_string(status));
             continue;
         }
+
+        ucs_trace("protocol %s on %s has %u ranges, min_length %s, cfg_thresh %s",
+                  ucp_proto_id_field(proto_id, name), title, proto_caps->num_ranges,
+                  ucs_memunits_to_str(proto_caps->min_length, min_length_str,
+                                      sizeof(min_length_str)),
+                  ucs_memunits_to_str(proto_caps->cfg_thresh, thresh_str,
+                                      sizeof(thresh_str)));
+
+        /* A successful protocol initialization must return non-empty
+         * performance range */
+        ucs_assert(proto_caps->min_length < SIZE_MAX);
+        ucs_assert(proto_caps->num_ranges > 0);
 
         proto_init->mask                  |= UCS_BIT(proto_id);
         proto_init->priv_offsets[proto_id] = offset;
@@ -351,19 +435,23 @@ err:
 static ucs_status_t
 ucp_proto_select_elem_init_thresh(ucp_proto_select_elem_t *select_elem,
                                   const ucp_proto_select_init_protocols_t *proto_init,
+                                  ucp_worker_cfg_index_t ep_cfg_index,
+                                  ucp_worker_cfg_index_t rkey_cfg_index,
                                   const char *select_param_str)
 {
-
-    ucp_proto_threshold_tmp_elem_t thresh_buffer[UCP_PROTO_MAX_COUNT];
-    ucs_array_t(ucp_proto_thresh) tmp_thresh_list =
-              UCS_ARRAY_FIXED_INITIALIZER(thresh_buffer, UCP_PROTO_MAX_COUNT);
-    ucp_proto_threshold_tmp_elem_t *tmp_elem;
-    ucp_proto_threshold_elem_t *thresh_elem;
-    ucp_proto_config_t *proto_config;
+    UCS_ARRAY_DEFINE_ONSTACK(tmp_thresh_list, ucp_proto_thresh,
+                             UCP_PROTO_MAX_COUNT);
+    UCS_ARRAY_DEFINE_ONSTACK(tmp_perf_list, ucp_proto_perf,
+                             UCP_PROTO_MAX_PERF_RANGES);
+    ucp_proto_perf_range_t *perf_ranges, *tmp_perf_elem;
+    ucp_proto_threshold_tmp_elem_t *tmp_thresh_elem;
+    ucp_proto_threshold_elem_t *thresholds;
     size_t msg_length, max_length;
+    ucp_proto_config_t *proto_config;
     ucp_proto_id_t proto_id;
     ucs_status_t status;
     size_t priv_offset;
+    unsigned i;
 
     /*
      * Select a protocol for every message size interval, until we cover all
@@ -377,47 +465,79 @@ ucp_proto_select_elem_init_thresh(ucp_proto_select_elem_t *select_elem,
          */
         status = ucp_proto_thresholds_select_next(proto_init->mask,
                                                   proto_init->caps,
-                                                  &tmp_thresh_list, msg_length,
-                                                  &max_length);
+                                                  &tmp_thresh_list,
+                                                  &tmp_perf_list,
+                                                  msg_length, &max_length,
+                                                  select_param_str);
         if (status != UCS_OK) {
             if (status == UCS_ERR_UNSUPPORTED) {
                 ucs_warn("no protocol for %s msg_length %zu", select_param_str,
                          msg_length);
             }
-            return status;
+            goto err;
         }
 
         msg_length = max_length + 1;
     } while (max_length < SIZE_MAX);
 
-    ucs_assert_always(!ucs_array_is_empty(&tmp_thresh_list));
-
     /* Set pointer to priv buffer (to release it during cleanup) */
     select_elem->priv_buf   = proto_init->priv_buf;
 
+    ucs_assert_always(!ucs_array_is_empty(&tmp_thresh_list));
+    ucs_assert_always(ucs_array_last(&tmp_thresh_list)->max_length ==
+                      SIZE_MAX);
+
     /* Allocate thresholds array */
-    select_elem->thresholds = ucs_calloc(ucs_array_length(&tmp_thresh_list),
-                                         sizeof(*select_elem->thresholds),
-                                         "ucp_proto_thresholds");
-    if (select_elem->thresholds == NULL) {
-        return UCS_ERR_NO_MEMORY;
+    thresholds = ucs_calloc(ucs_array_length(&tmp_thresh_list),
+                            sizeof(*select_elem->thresholds),
+                            "ucp_proto_thresholds");
+    if (thresholds == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
+    select_elem->thresholds = thresholds;
+
     /* Copy the temporary thresholds list to an array inside select_elem */
-    thresh_elem = select_elem->thresholds;
-    ucs_array_for_each(tmp_elem, &tmp_thresh_list) {
-        proto_id                    = tmp_elem->proto_id;
-        priv_offset                 = proto_init->priv_offsets[proto_id];
-        thresh_elem->max_msg_length = tmp_elem->max_length;
-        proto_config                = &thresh_elem->proto_config;
-        proto_config->select_param  = *proto_init->select_param;
-        proto_config->proto         = ucp_protocols[proto_id];
-        proto_config->priv          = UCS_PTR_BYTE_OFFSET(select_elem->priv_buf,
-                                                          priv_offset);
-        ++thresh_elem;
+    i = 0;
+    ucs_array_for_each(tmp_thresh_elem, &tmp_thresh_list) {
+        proto_id                     = tmp_thresh_elem->proto_id;
+        priv_offset                  = proto_init->priv_offsets[proto_id];
+        thresholds[i].max_msg_length = tmp_thresh_elem->max_length;
+
+        proto_config                 = &thresholds[i].proto_config;
+        proto_config->select_param   = *proto_init->select_param;
+        proto_config->proto          = ucp_protocols[proto_id];
+        proto_config->priv           = UCS_PTR_BYTE_OFFSET(select_elem->priv_buf,
+                                                           priv_offset);
+        ++i;
+    }
+
+    ucs_assert_always(!ucs_array_is_empty(&tmp_perf_list));
+    ucs_assert_always(ucs_array_last(&tmp_perf_list)->max_length == SIZE_MAX);
+
+    /* Allocate performance functions array */
+    perf_ranges = ucs_calloc(ucs_array_length(&tmp_perf_list),
+                             sizeof(*select_elem->perf_ranges), "ucp_proto_perf");
+    if (perf_ranges == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_thresholds;
+    }
+
+    select_elem->perf_ranges = perf_ranges;
+
+    /* Copy the performance elements */
+    i = 0;
+    ucs_array_for_each(tmp_perf_elem, &tmp_perf_list) {
+        perf_ranges[i++] = *tmp_perf_elem;
     }
 
     return UCS_OK;
+
+err_free_thresholds:
+    ucs_free((void*)select_elem->thresholds);
+err:
+    return status;
 }
 
 static ucs_status_t
@@ -443,12 +563,14 @@ ucp_proto_select_elem_init(ucp_worker_h worker,
     }
 
     status = ucp_proto_select_init_protocols(worker, ep_cfg_index, rkey_cfg_index,
-                                             select_param, proto_init);
+                                             select_param, proto_init,
+                                             ucs_string_buffer_cstr(&strb));
     if (status != UCS_OK) {
         goto out_free_proto_init;
     }
 
     status = ucp_proto_select_elem_init_thresh(select_elem, proto_init,
+                                               ep_cfg_index, rkey_cfg_index,
                                                ucs_string_buffer_cstr(&strb));
     if (status != UCS_OK) {
         goto err_cleanup_protocols;
@@ -469,7 +591,8 @@ out_free_strb:
 static void
 ucp_proto_select_elem_cleanup(ucp_proto_select_elem_t *select_elem)
 {
-    ucs_free(select_elem->thresholds);
+    ucs_free((void*)select_elem->perf_ranges);
+    ucs_free((void*)select_elem->thresholds);
     ucs_free(select_elem->priv_buf);
 }
 
@@ -531,6 +654,18 @@ void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select)
     kh_destroy_inplace(ucp_proto_select_hash, &proto_select->hash);
 }
 
+static void ucp_proto_select_perf_str(const ucs_linear_func_t *perf,
+                                      char *time_str, size_t time_str_max,
+                                      char *bw_str, size_t bw_str_max)
+{
+    /* Estimated time */
+    snprintf(time_str, time_str_max, "%5.0f + %.3f * N",
+             perf->c * 1e9, perf->m * 1e9);
+
+    /* Estimated bandwidth (MiB/s) */
+    snprintf(bw_str, bw_str_max, "%7.2f", 1.0 / (perf->m * UCS_MBYTE));
+}
+
 static void
 ucp_proto_select_dump_all(ucp_worker_h worker,
                           ucp_worker_cfg_index_t ep_cfg_index,
@@ -541,13 +676,14 @@ ucp_proto_select_dump_all(ucp_worker_h worker,
     static const char *proto_info_fmt =
                                 "#     %-18s %-12s %-20s %-18s %-12s %s\n";
     ucp_proto_select_init_protocols_t *proto_init;
+    ucs_string_buffer_t select_strb;
     ucs_string_buffer_t config_strb;
     size_t range_start, range_end;
     const ucp_proto_caps_t *caps;
     ucp_proto_id_t proto_id;
     ucs_status_t status;
     char range_str[64];
-    char perf_str[64];
+    char time_str[64];
     char thresh_str[64];
     char bw_str[64];
     unsigned i;
@@ -560,8 +696,11 @@ ucp_proto_select_dump_all(ucp_worker_h worker,
         return;
     }
 
+    ucp_proto_select_param_str(select_param, &select_strb);
+
     status = ucp_proto_select_init_protocols(worker, ep_cfg_index, rkey_cfg_index,
-                                             select_param, proto_init);
+                                             select_param, proto_init,
+                                             ucs_string_buffer_cstr(&select_strb));
     if (status != UCS_OK) {
         fprintf(stream, "<%s>\n", ucs_status_string(status));
         goto out_free;
@@ -589,18 +728,13 @@ ucp_proto_select_dump_all(ucp_worker_h worker,
             ucs_memunits_range_str(range_start, range_end, range_str,
                                    sizeof(range_str));
 
-            /* String for estimated performance */
-            snprintf(perf_str, sizeof(perf_str), "%5.0f + %.3f * N",
-                     caps->ranges[i].perf.c * 1e9,
-                     caps->ranges[i].perf.m * 1e9);
-
-            /* String for bandwidth */
-            snprintf(bw_str, sizeof(bw_str), "%7.2f",
-                     1.0 / (caps->ranges[i].perf.m * UCS_MBYTE));
+            ucp_proto_select_perf_str(&caps->ranges[i].perf,
+                                      time_str, sizeof(time_str),
+                                      bw_str, sizeof(bw_str));
 
             fprintf(stream, proto_info_fmt,
                     (i == 0) ? ucp_proto_id_field(proto_id, name) : "",
-                    range_str, perf_str, bw_str,
+                    range_str, time_str, bw_str,
                     (i == 0) ? thresh_str : "",
                     (i == 0) ? ucs_string_buffer_cstr(&config_strb) : "");
 
@@ -613,6 +747,7 @@ ucp_proto_select_dump_all(ucp_worker_h worker,
 
     ucs_free(proto_init->priv_buf);
 out_free:
+    ucs_string_buffer_cleanup(&select_strb);
     ucs_free(proto_init);
 }
 
@@ -624,7 +759,7 @@ ucp_proto_select_dump_thresholds(const ucp_proto_select_elem_t *select_elem,
     const ucp_proto_threshold_elem_t *thresh_elem;
     ucs_string_buffer_t strb;
     size_t range_start, range_end;
-    char str[128];
+    char range_str[128];
 
     range_start = 0;
     thresh_elem = select_elem->thresholds;
@@ -636,7 +771,8 @@ ucp_proto_select_dump_thresholds(const ucp_proto_select_elem_t *select_elem,
         range_end = thresh_elem->max_msg_length;
 
         fprintf(stream, proto_info_fmt,
-                ucs_memunits_range_str(range_start, range_end, str, sizeof(str)),
+                ucs_memunits_range_str(range_start, range_end, range_str,
+                                       sizeof(range_str)),
                 thresh_elem->proto_config.proto->name,
                 ucs_string_buffer_cstr(&strb));
 
@@ -644,6 +780,37 @@ ucp_proto_select_dump_thresholds(const ucp_proto_select_elem_t *select_elem,
 
         range_start = range_end + 1;
         ++thresh_elem;
+    } while (range_end != SIZE_MAX);
+}
+
+static void
+ucp_proto_select_dump_perf(const ucp_proto_select_elem_t *select_elem,
+                           FILE *stream)
+{
+    static const char *proto_info_fmt = "#     %-16s %-20s %s\n";
+    const ucp_proto_perf_range_t *perf_elem;
+    size_t range_start, range_end;
+    char range_str[128];
+    char time_str[64];
+    char bw_str[64];
+
+    range_start = 0;
+    perf_elem   = select_elem->perf_ranges;
+    fprintf(stream, proto_info_fmt, "SIZE", "TIME (nsec)", "BANDWIDTH (MiB/s)");
+    do {
+        range_end = perf_elem->max_length;
+
+        ucp_proto_select_perf_str(&perf_elem->perf,
+                                  time_str, sizeof(time_str),
+                                  bw_str, sizeof(bw_str));
+
+        fprintf(stream, proto_info_fmt,
+                ucs_memunits_range_str(range_start, range_end, range_str,
+                                       sizeof(range_str)),
+                time_str, bw_str);
+
+        range_start = range_end + 1;
+        ++perf_elem;
     } while (range_end != SIZE_MAX);
 }
 
@@ -671,11 +838,13 @@ ucp_proto_select_elem_dump(ucp_worker_h worker,
 
     fprintf(stream, "#\n");
     fprintf(stream, "#   Selected protocols:\n");
-
     ucp_proto_select_dump_thresholds(select_elem, stream);
 
     fprintf(stream, "#\n");
+    fprintf(stream, "#   Performance estimation:\n");
+    ucp_proto_select_dump_perf(select_elem, stream);
 
+    fprintf(stream, "#\n");
     fprintf(stream, "#   Candidates:\n");
     ucp_proto_select_dump_all(worker, ep_cfg_index, rkey_cfg_index,
                               select_param, stream);

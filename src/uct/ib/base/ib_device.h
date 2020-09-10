@@ -13,6 +13,7 @@
 #include <uct/base/uct_iface.h>
 #include <ucs/stats/stats.h>
 #include <ucs/debug/assert.h>
+#include <ucs/datastruct/callbackq.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/sock.h>
@@ -155,6 +156,35 @@ typedef struct uct_ib_device_spec {
 
 KHASH_TYPE(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*);
 
+
+/**
+ * IB async event descriptor.
+ */
+typedef struct uct_ib_async_event {
+    enum ibv_event_type event_type;             /* Event type */
+    union {
+        uint8_t         port_num;               /* Port number */
+        uint32_t        qp_num;                 /* QP number */
+        uint32_t        dct_num;                /* DCT number */
+        void            *cookie;                /* Pointer to resource */
+        uint32_t        resource_id;            /* Opaque resource ID */
+    };
+} uct_ib_async_event_t;
+
+
+/**
+ * IB async event state.
+ */
+typedef struct {
+    unsigned            flag;                   /* Event happened */
+    ucs_callback_t      cb;                     /* To be called upon event */
+    ucs_callbackq_t     *cbq;                   /* Async queue for callback */
+    void                *arg;                   /* User data */
+} uct_ib_async_event_val_t;
+
+KHASH_TYPE(uct_ib_async_event, uct_ib_async_event_t, uct_ib_async_event_val_t);
+
+
 /**
  * IB device (corresponds to HCA)
  */
@@ -181,6 +211,9 @@ typedef struct uct_ib_device {
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
+    /* Async event subscribers */
+    ucs_spinlock_t              async_event_lock;
+    khash_t(uct_ib_async_event) async_events_hash;
 } uct_ib_device_t;
 
 
@@ -201,16 +234,6 @@ typedef struct {
     uct_ib_roce_version_info_t roce_info;    /* For a RoCE port */
 } uct_ib_device_gid_info_t;
 
-
-typedef struct {
-    enum ibv_event_type event_type;
-    union {
-        uint8_t         port_num;
-        uint32_t        qp_num;
-        uint32_t        dct_num;
-        void            *cookie;
-    };
-} uct_ib_async_event_t;
 
 
 extern const double uct_ib_qp_rnr_time_ms[];
@@ -364,6 +387,22 @@ ucs_status_t uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *d
 int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
                                       const union ibv_gid *gid,
                                       uint8_t gid_index);
+
+ucs_status_t
+uct_ib_device_async_event_register(uct_ib_device_t *dev,
+                                   enum ibv_event_type event_type,
+                                   uint32_t resource_id,
+                                   ucs_callbackq_t *cbq);
+
+ucs_status_t
+uct_ib_device_async_event_wait(uct_ib_device_t *dev,
+                               enum ibv_event_type event_type,
+                               uint32_t resource_id,
+                               ucs_callback_t cb, void *arg);
+
+void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
+                                          enum ibv_event_type event_type,
+                                          uint32_t resource_id);
 
 int uct_ib_get_cqe_size(int cqe_size_min);
 

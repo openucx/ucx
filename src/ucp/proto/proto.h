@@ -93,9 +93,10 @@ typedef struct {
  * UCP protocol capabilities (per operation parameters)
  */
 typedef struct {
-    size_t                  cfg_thresh; /* Configured protocol threshold */
-    size_t                  min_length; /* Minimal message size */
-    unsigned                num_ranges; /* Number of entries in 'ranges' */
+    size_t                  cfg_thresh;   /* Configured protocol threshold */
+    unsigned                cfg_priority; /* Priority of configuration */
+    size_t                  min_length;   /* Minimal message size */
+    unsigned                num_ranges;   /* Number of entries in 'ranges' */
 
     /* Performance estimation function for different message sizes */
     ucp_proto_perf_range_t  ranges[UCP_PROTO_MAX_PERF_RANGES];

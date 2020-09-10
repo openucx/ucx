@@ -19,6 +19,7 @@ static JavaVM *jvm_global;
 static jclass jucx_request_cls;
 static jfieldID native_id_field;
 static jfieldID recv_size_field;
+static jfieldID sender_tag_field;
 static jmethodID on_success;
 static jmethodID jucx_request_constructor;
 static jclass ucp_rkey_cls;
@@ -40,6 +41,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     jclass jucx_callback_cls = env->FindClass("org/openucx/jucx/UcxCallback");
     native_id_field = env->GetFieldID(jucx_request_cls, "nativeId", "Ljava/lang/Long;");
     recv_size_field = env->GetFieldID(jucx_request_cls, "recvSize", "J");
+    sender_tag_field = env->GetFieldID(jucx_request_cls, "senderTag", "J");
     on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
                                   "(Lorg/openucx/jucx/ucp/UcpRequest;)V");
     jucx_request_constructor = env->GetMethodID(jucx_request_cls, "<init>", "(J)V");
@@ -152,6 +154,7 @@ static inline void jucx_context_reset(struct jucx_context* ctx)
     ctx->status = UCS_INPROGRESS;
     ctx->length = 0;
     ctx->iovec = NULL;
+    ctx->sender_tag = 0;
 }
 
 void jucx_request_init(void *request)
@@ -173,10 +176,20 @@ static inline void set_jucx_request_completed(JNIEnv *env, jobject jucx_request,
                                               struct jucx_context *ctx)
 {
     env->SetObjectField(jucx_request, native_id_field, NULL);
-    if ((ctx != NULL) && (ctx->length > 0)) {
-        env->SetLongField(jucx_request, recv_size_field, ctx->length);
-    } else if ((ctx != NULL) && (ctx->iovec != NULL)) {
-        ucs_free(ctx->iovec);
+    if (ctx != NULL) {
+        /* sender_tag and length are initialized to 0,
+         * so try to avoid the overhead of setting them again */
+        if (ctx->sender_tag != 0) {
+            env->SetLongField(jucx_request, sender_tag_field, ctx->sender_tag);
+        }
+
+        if (ctx->length > 0) {
+            env->SetLongField(jucx_request, recv_size_field, ctx->length);
+        }
+
+        if (ctx->iovec != NULL) {
+            ucs_free(ctx->iovec);
+        }
     }
 }
 
@@ -242,6 +255,7 @@ void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info
 {
     struct jucx_context *ctx = (struct jucx_context *)request;
     ctx->length = info->length;
+    ctx->sender_tag = info->sender_tag;
     jucx_request_callback(request, status);
 }
 

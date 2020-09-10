@@ -167,24 +167,26 @@ UCS_TEST_F(test_datatype, hlist_basic) {
 }
 
 UCS_TEST_F(test_datatype, hlist_for_each_extract_if) {
-    elem_t elem1, elem2, elem3;
+    const size_t n_elems = 3;
+    std::vector<elem_t*> v_elems;
     ucs_hlist_head_t head;
     std::vector<int> v;
     elem_t *elem;
 
-    elem1.i = 1;
-    elem2.i = 2;
-    elem3.i = 3;
+    for (size_t i = 0; i < n_elems; ++i) {
+        v_elems.push_back(new elem_t);
+        v_elems[i]->i = i;
+    }
 
     /* initialize list, should be empty */
     ucs_hlist_head_init(&head);
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
 
     /* add one element to head */
-    ucs_hlist_add_head(&head, &elem1.hlist);
+    ucs_hlist_add_head(&head, &v_elems[0]->hlist);
     EXPECT_FALSE(ucs_hlist_is_empty(&head));
 
-    EXPECT_EQ(&elem1, ucs_hlist_head_elem(&head, elem_t, hlist));
+    EXPECT_EQ(v_elems[0], ucs_hlist_head_elem(&head, elem_t, hlist));
 
     /* test iteration over single-element list, don't remove */
     ucs_hlist_for_each_extract_if(elem, &head, hlist, false) {
@@ -199,7 +201,7 @@ UCS_TEST_F(test_datatype, hlist_for_each_extract_if) {
     }
     ASSERT_TRUE(ucs_hlist_is_empty(&head));
     ASSERT_EQ(1ul, v.size());
-    EXPECT_EQ(1, v[0]);
+    EXPECT_EQ(0, v[0]);
     v.clear();
 
     /* when list is empty, extract_head should return NULL */
@@ -219,25 +221,41 @@ UCS_TEST_F(test_datatype, hlist_for_each_extract_if) {
     ASSERT_EQ(0ul, v.size());
 
     /* add 3 elements */
-    ucs_hlist_add_tail(&head, &elem2.hlist);
-    ucs_hlist_add_head(&head, &elem1.hlist);
-    ucs_hlist_add_tail(&head, &elem3.hlist);
+    ucs_hlist_add_tail(&head, &v_elems[1]->hlist);
+    ucs_hlist_add_head(&head, &v_elems[0]->hlist);
+    ucs_hlist_add_tail(&head, &v_elems[2]->hlist);
 
     /* iterate and extract 2 elements */
     v.clear();
-    ucs_hlist_for_each_extract_if(elem, &head, hlist, elem->i < 3) {
+    ucs_hlist_for_each_extract_if(elem, &head, hlist, elem->i < 2) {
         v.push_back(elem->i);
     }
     ASSERT_EQ(2ul, v.size());
-    EXPECT_EQ(1, v[0]);
-    EXPECT_EQ(2, v[1]);
+    EXPECT_EQ(0, v[0]);
+    EXPECT_EQ(1, v[1]);
     /* iterate and extract last element */
     ucs_hlist_for_each_extract_if(elem, &head, hlist, elem->i < 100) {
         v.push_back(elem->i);
     }
-    EXPECT_EQ(3, v[2]);
+    EXPECT_EQ(2, v[2]);
 
     EXPECT_TRUE(ucs_hlist_is_empty(&head));
+
+    /* add 3 elements */
+    for (size_t i = 0; i < n_elems; ++i) {
+        ucs_hlist_add_tail(&head, &v_elems[i]->hlist);
+    }
+
+    /* iterate and delete all the extracted elements */
+    ucs_hlist_for_each_extract_if(elem, &head, hlist, true) {
+        EXPECT_EQ(v_elems[0], elem);
+        memset(elem, 0xff, sizeof(*elem));
+        delete elem;
+        v_elems.erase(v_elems.begin());
+    }
+
+    EXPECT_TRUE(ucs_hlist_is_empty(&head));
+    EXPECT_TRUE(v_elems.empty());
 }
 
 UCS_TEST_F(test_datatype, queue) {
@@ -991,11 +1009,8 @@ UCS_TEST_F(test_datatype, dynamic_array_int_append) {
 
 UCS_TEST_F(test_datatype, fixed_array) {
     const size_t num_elems = 100;
-    int buffer[num_elems];
+    UCS_ARRAY_DEFINE_ONSTACK(test_array, test_1int, num_elems);
     ucs_status_t status;
-
-    ucs_array_t(test_1int) test_array = \
-            UCS_ARRAY_FIXED_INITIALIZER(buffer, num_elems);
 
     /* check initial capacity */
     size_t initial_capacity = ucs_array_capacity(&test_array);

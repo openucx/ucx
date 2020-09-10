@@ -55,7 +55,9 @@ static void uct_rc_mlx5_devx_iface_event_handler(int fd, int events, void *arg)
 
     ret = mlx5dv_devx_get_event(iface->event_channel, &devx_event, sizeof(devx_event));
     if (ret < 0) {
-        ucs_warn("mlx5dv_devx_get_event() failed: %m");
+        if (errno != EAGAIN) {
+            ucs_warn("mlx5dv_devx_get_event() failed: %m");
+        }
         return;
     }
 

@@ -59,6 +59,7 @@ struct jucx_context {
     ucs_recursive_spinlock_t lock;
     size_t length;
     ucp_dt_iov_t* iovec;
+    ucp_tag_t sender_tag;
 };
 
 void jucx_request_init(void *request);

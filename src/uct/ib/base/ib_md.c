@@ -79,7 +79,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Initialize a fork-safe IB library with ibv_fork_init().",
      ucs_offsetof(uct_ib_md_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
 
-    {"ASYNC_EVENTS", "n",
+    {"ASYNC_EVENTS", "y",
      "Enable listening for async events on the device",
      ucs_offsetof(uct_ib_md_config_t, async_events), UCS_CONFIG_TYPE_BOOL},
 
