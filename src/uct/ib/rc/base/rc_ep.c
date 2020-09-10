@@ -118,6 +118,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
     ucs_arbiter_group_init(&self->arb_group);
 
     ucs_list_add_head(&iface->ep_list, &self->list);
+    ucs_debug("created rc ep %p", self);
+
     return UCS_OK;
 
 err_txqp_cleanup:
