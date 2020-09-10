@@ -109,6 +109,10 @@ static UCS_F_ALWAYS_INLINE void uct_ud_ep_ca_ack(uct_ud_ep_t *ep)
     ep->tx.max_psn = ep->tx.acked_psn + ep->ca.cwnd;
 }
 
+static void uct_ud_ep_reset_max_psn(uct_ud_ep_t *ep)
+{
+    ep->tx.max_psn = ep->tx.psn + ep->ca.cwnd;
+}
 
 static void uct_ud_ep_reset(uct_ud_ep_t *ep)
 {
@@ -116,9 +120,9 @@ static void uct_ud_ep_reset(uct_ud_ep_t *ep)
     ep->ca.cwnd        = UCT_UD_CA_MIN_WINDOW;
     ep->ca.wmax        = ucs_derived_of(ep->super.super.iface,
                                         uct_ud_iface_t)->config.max_window;
-    ep->tx.max_psn     = ep->tx.psn + ep->ca.cwnd;
     ep->tx.acked_psn   = UCT_UD_INITIAL_PSN - 1;
     ep->tx.pending.ops = UCT_UD_EP_OP_NONE;
+    uct_ud_ep_reset_max_psn(ep);
     ucs_queue_head_init(&ep->tx.window);
 
     ep->resend.pos       = ucs_queue_iter_begin(&ep->tx.window);
@@ -221,7 +225,10 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
 
 static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
 {
-    uct_ud_ep_tx_stop(ep);
+    /* reset the maximal TX psn value to the default, since we should be able
+     * to do TX operation after purging of the EP and uct_ep_flush(LOCAL)
+     * operation has to return UCS_OK */
+    uct_ud_ep_reset_max_psn(ep);
     uct_ud_ep_purge_outstanding(ep);
     ep->tx.acked_psn = (uct_ud_psn_t)(ep->tx.psn - 1);
     uct_ud_ep_window_release(ep, status, 0);
