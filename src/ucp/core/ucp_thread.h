@@ -52,15 +52,10 @@ typedef struct ucp_mt_lock {
     } while (0)
 #define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)                                  \
     do { \
-        ucs_status_t _status; \
-        \
         if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) { \
             pthread_mutex_destroy(&((_lock_ptr)->lock.mt_mutex)); \
         } else { \
-            _status = ucs_recursive_spinlock_destroy(&((_lock_ptr)->lock.mt_spinlock)); \
-            if (_status != UCS_OK) { \
-                ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", _status); \
-            } \
+            ucs_recursive_spinlock_destroy(&((_lock_ptr)->lock.mt_spinlock)); \
         } \
     } while (0)
 #define UCP_THREAD_CS_ENTER(_lock_ptr)                                  \

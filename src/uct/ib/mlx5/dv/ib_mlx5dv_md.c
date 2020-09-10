@@ -771,14 +771,10 @@ err:
 void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
-    ucs_status_t status;
 
     uct_ib_mlx5_md_buf_free(md, md->zero_buf, &md->zero_mem);
     ucs_mpool_cleanup(&md->dbrec_pool, 1);
-    status = ucs_recursive_spinlock_destroy(&md->dbrec_lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
-    }
+    ucs_recursive_spinlock_destroy(&md->dbrec_lock);
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {

@@ -56,15 +56,8 @@ void ucs_topo_init()
 
 void ucs_topo_cleanup()
 {
-    ucs_status_t status;
-
     kh_destroy_inplace(bus_to_sys_dev, &ucs_topo_ctx.bus_to_sys_dev_hash);
-
-    status = ucs_spinlock_destroy(&ucs_topo_ctx.lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_recursive_spinlock_destroy() failed: %s",
-                 ucs_status_string(status));
-    }
+    ucs_spinlock_destroy(&ucs_topo_ctx.lock);
 }
 
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
