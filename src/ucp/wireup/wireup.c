@@ -295,11 +295,13 @@ ucp_wireup_find_remote_p2p_addr(ucp_ep_h ep, ucp_lane_index_t remote_lane,
 ucs_status_t
 ucp_wireup_connect_local(ucp_ep_h ep,
                          const ucp_unpacked_address_t *remote_address,
-                         const ucp_lane_index_t *lanes2remote)
+                         const ucp_lane_index_t *lanes2remote,
+                         int *num_eps_connected_p)
 {
     ucp_lane_index_t lane, remote_lane;
     const uct_device_addr_t *dev_addr;
     const uct_ep_addr_t *ep_addr;
+    int num_eps_connected = 0;
     ucs_status_t status;
 
     ucs_trace("ep %p: connect local transports", ep);
@@ -316,16 +318,22 @@ ucp_wireup_connect_local(ucp_ep_h ep,
         if (status != UCS_OK) {
             ucs_error("ep %p: no remote ep address for lane[%d]->remote_lane[%d]",
                       ep, lane, remote_lane);
-           return status;
+            goto out;
         }
 
         status = uct_ep_connect_to_ep(ep->uct_eps[lane], dev_addr, ep_addr);
         if (status != UCS_OK) {
-            return status;
+            goto out;
         }
+
+        num_eps_connected++;
     }
 
-    return UCS_OK;
+    status = UCS_OK;
+
+out:
+    *num_eps_connected_p = num_eps_connected;
+    return status;
 }
 
 void ucp_wireup_remote_connected(ucp_ep_h ep)
@@ -418,6 +426,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     uint64_t tl_bitmap     = 0;
     int send_reply         = 0;
     unsigned ep_init_flags = 0;
+    int num_eps_connected  = 0;
     ucp_rsc_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
@@ -507,7 +516,8 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     /* Connect p2p addresses to remote endpoint */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
-        status = ucp_wireup_connect_local(ep, remote_address, lanes2remote);
+        status = ucp_wireup_connect_local(ep, remote_address, lanes2remote,
+                                          &num_eps_connected);
         if (status != UCS_OK) {
             return;
         }
@@ -574,6 +584,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                          const ucp_unpacked_address_t *remote_address)
 {
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
+    int num_eps_connected  = 0;
     ucs_status_t status;
     ucp_ep_h ep;
     int ack;
@@ -600,7 +611,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
          * **receiver** ep lane should be connected to a given ep address. So we
          * don't pass 'lanes2remote' mapping, and use local lanes directly.
          */
-        status = ucp_wireup_connect_local(ep, remote_address, NULL);
+        status = ucp_wireup_connect_local(ep, remote_address, NULL, &num_eps_connected);
         if (status != UCS_OK) {
             return;
         }
