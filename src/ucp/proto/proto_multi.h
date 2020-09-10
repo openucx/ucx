@@ -10,6 +10,8 @@
 #include "proto.h"
 #include "proto_common.h"
 
+#include <ucp/dt/datatype_iter.h>
+
 
 /**
  * UCP base protocol definition for multi-fragment protocols
@@ -53,6 +55,21 @@ typedef struct {
         ucp_lane_type_t            lane_type;    /* Required lane type */
     } first, middle;
 } ucp_proto_multi_init_params_t;
+
+
+/**
+ * Context for ucp_proto_multi_data_pack()
+ */
+typedef struct {
+    ucp_request_t                  *req;
+    size_t                         max_payload;
+    ucp_datatype_iter_t            *next_iter;
+} ucp_proto_multi_pack_ctx_t;
+
+
+typedef ucs_status_t (*ucp_proto_send_multi_cb_t)(
+                ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+                ucp_datatype_iter_t *next_iter);
 
 
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params);

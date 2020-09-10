@@ -18,6 +18,10 @@ using namespace ucs; /* For vector<char> serialization */
 
 class test_ucp_tag_match : public test_ucp_tag {
 public:
+    enum {
+        ENABLE_PROTO = UCS_BIT(2)
+    };
+
     test_ucp_tag_match() {
         // TODO: test offload and offload MP as different variants
         enable_tag_mp_offload();
@@ -29,10 +33,12 @@ public:
 
     virtual void init()
     {
-        modify_config("TM_THRESH",  "1");
-
+        modify_config("TM_THRESH", "1");
+        if (GetParam().variant & ENABLE_PROTO) {
+            modify_config("PROTO_ENABLE", "y");
+            modify_config("MAX_EAGER_LANES", "2");
+        }
         test_ucp_tag::init();
-        ucp_test_param param = GetParam();
     }
 
     static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
@@ -41,10 +47,15 @@ public:
                                                         const std::string& tls)
     {
         std::vector<ucp_test_param> result;
+        UCS_STATIC_ASSERT(!(ENABLE_PROTO & RECV_REQ_INTERNAL));
+        UCS_STATIC_ASSERT(!(ENABLE_PROTO & RECV_REQ_EXTERNAL));
+
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                      RECV_REQ_INTERNAL, result);
         generate_test_params_variant(ctx_params, name, test_case_name, tls,
                                      RECV_REQ_EXTERNAL, result);
+        generate_test_params_variant(ctx_params, name, test_case_name, tls,
+                                     RECV_REQ_INTERNAL | ENABLE_PROTO, result);
         return result;
     }
 

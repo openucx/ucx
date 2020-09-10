@@ -39,7 +39,8 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_single_init(&params);
+    ucp_proto_single_init(&params);
+    return UCS_ERR_UNSUPPORTED; /* TODO enable when progress is implemented */
 }
 
 static ucp_proto_t ucp_eager_short_proto = {
@@ -72,7 +73,8 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_single_init(&params);
+    ucp_proto_single_init(&params);
+    return UCS_ERR_UNSUPPORTED; /* TODO enable when progress is implemented */
 }
 
 static ucp_proto_t ucp_eager_bcopy_single_proto = {
@@ -105,7 +107,8 @@ ucp_proto_eager_zcopy_single_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_single_init(&params);
+    ucp_proto_single_init(&params);
+    return UCS_ERR_UNSUPPORTED; /* TODO enable when progress is implemented */
 }
 
 static ucp_proto_t ucp_eager_zcopy_single_proto = {

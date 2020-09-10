@@ -8,6 +8,7 @@
 #define UCP_PROTO_COMMON_H_
 
 #include "proto.h"
+#include "proto_select.h"
 
 
 typedef enum {
@@ -54,6 +55,9 @@ typedef struct {
 } ucp_proto_common_lane_priv_t;
 
 
+typedef void (*ucp_proto_complete_cb_t)(ucp_request_t *req, ucs_status_t status);
+
+
 void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
                                      ucp_md_map_t md_map, ucp_lane_index_t lane,
                                      ucp_proto_common_lane_priv_t *lane_priv);
@@ -92,5 +96,11 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
 
 void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
                                 const ucp_proto_common_perf_params_t *perf_params);
+
+void ucp_proto_request_select_error(ucp_request_t *req,
+                                    ucp_proto_select_t *proto_select,
+                                    ucp_worker_cfg_index_t rkey_cfg_index,
+                                    const ucp_proto_select_param_t *sel_param,
+                                    size_t msg_length);
 
 #endif

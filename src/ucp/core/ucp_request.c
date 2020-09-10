@@ -436,5 +436,3 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
 
     return UCS_ERR_MESSAGE_TRUNCATED;
 }
-
-

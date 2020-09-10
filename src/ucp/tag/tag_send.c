@@ -16,6 +16,7 @@
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_am.inl>
+#include <ucp/proto/proto_common.inl>
 #include <ucs/datastruct/mpool.inl>
 #include <string.h>
 
@@ -232,12 +233,14 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  ucp_tag_t tag, const ucp_request_param_t *param)
 {
+    size_t contig_length = 0;
     ucs_status_t status;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
     uintptr_t datatype;
     ucs_memory_type_t memory_type;
     uint32_t attr_mask;
+    ucp_worker_h worker;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
@@ -252,12 +255,14 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
     if (ucs_likely(attr_mask == 0)) {
         status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer, count, tag);
         ucp_request_send_check_status(status, ret, goto out);
-        datatype = ucp_dt_make_contig(1);
+        datatype      = ucp_dt_make_contig(1);
+        contig_length = count;
     } else if (attr_mask == UCP_OP_ATTR_FIELD_DATATYPE) {
         datatype = param->datatype;
         if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
-            status = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer,
-                                      ucp_contig_dt_length(datatype, count), tag);
+            contig_length = ucp_contig_dt_length(datatype, count);
+            status        = UCS_PROFILE_CALL(ucp_tag_send_inline, ep, buffer,
+                                             contig_length, tag);
             ucp_request_send_check_status(status, ret, goto out);
         }
     } else {
@@ -269,14 +274,25 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         goto out;
     }
 
+    worker      = ep->worker;
     memory_type = ucp_request_param_mem_type(param);
-    req         = ucp_request_get_param(ep->worker, param,
+    req         = ucp_request_get_param(worker, param,
                                         {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                                         goto out;});
+                                        goto out;});
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, memory_type, count, tag, 0);
-    ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
-                           param, ucp_ep_config(ep)->tag.proto);
+    if (worker->context->config.ext.proto_enable) {
+        req->send.msg_proto.tag.tag = tag;
+
+        ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
+                                        UCP_WORKER_CFG_INDEX_NULL, req,
+                                        UCP_OP_ID_TAG_SEND, buffer, count,
+                                        datatype, contig_length, param);
+    } else {
+        ucp_tag_send_req_init(req, ep, buffer, datatype, memory_type, count,
+                              tag, 0);
+        ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
+                               param, ucp_ep_config(ep)->tag.proto);
+    }
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;

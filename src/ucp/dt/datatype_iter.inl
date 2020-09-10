@@ -267,10 +267,12 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
  */
 static UCS_F_ALWAYS_INLINE
 void ucp_datatype_iter_copy_from_next(ucp_datatype_iter_t *dt_iter,
-                                      const ucp_datatype_iter_t *next_iter)
+                                      const ucp_datatype_iter_t *next_iter,
+                                      unsigned dt_mask)
 {
     dt_iter->offset = next_iter->offset;
-    if (dt_iter->dt_class == UCP_DATATYPE_IOV) {
+    if ((dt_mask & UCS_BIT(UCP_DATATYPE_IOV)) &&
+        (dt_iter->dt_class == UCP_DATATYPE_IOV)) {
         dt_iter->type.iov.iov_index  = next_iter->type.iov.iov_index;
         dt_iter->type.iov.iov_offset = next_iter->type.iov.iov_offset;
     }

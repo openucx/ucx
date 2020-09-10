@@ -100,7 +100,7 @@ protected:
                 ucp_datatype_iter_next_unpack(&dt_iter, NULL, unpack_size,
                                               &next_iter, packed_ptr);
             }
-            ucp_datatype_iter_copy_from_next(&dt_iter, &next_iter);
+            ucp_datatype_iter_copy_from_next(&dt_iter, &next_iter, UINT_MAX);
             offset += seg_size;
         }
 
