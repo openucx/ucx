@@ -515,7 +515,7 @@ ucp_cm_remote_data_check(const uct_cm_remote_data_t *remote_data)
     }
 
     ucs_error("incompatible client server connection establishment protocol "
-              "(field_mask %zu)", remote_data->field_mask);
+              "(field_mask %"PRIu64")", remote_data->field_mask);
     return UCS_ERR_UNSUPPORTED;
 }
 
