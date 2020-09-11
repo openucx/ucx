@@ -118,10 +118,9 @@ struct ucp_request {
             ucp_send_nbx_callback_t cb;         /* Completion callback */
 
             union {
-                ucp_wireup_msg_t  wireup;
+                ucp_wireup_msg_t  wireup;       /* tmp MSG storage without address */
 
                 struct {
-                    ucp_lane_index_t       am_bw_index; /* AM BW lane index */
                     uint64_t               message_id;  /* used to identify matching parts
                                                            of a large message */
                     ucs_ptr_map_key_t      rreq_id;     /* receive request ID on the
@@ -171,10 +170,9 @@ struct ucp_request {
                     ucs_ptr_map_key_t    remote_req_id;   /* the sender's request ID */
                     ucp_request_t        *rreq;           /* receive request on the recv side */
                     ucp_rkey_h           rkey;            /* key for remote send buffer */
+                    uint8_t              rkey_index[UCP_MAX_LANES];
                     ucp_lane_map_t       lanes_map_avail; /* used lanes map */
                     ucp_lane_map_t       lanes_map_all;   /* actual lanes map */
-                    uint8_t              lanes_count;     /* actual lanes count */
-                    uint8_t              rkey_index[UCP_MAX_LANES];
                 } rndv_get;
 
                 struct {

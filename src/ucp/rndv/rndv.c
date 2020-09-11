@@ -450,7 +450,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
         return UCS_OK;
     }
 
-    ucs_assert_always(rndv_req->send.rndv_get.lanes_count > 0);
+    ucs_assert_always(rndv_req->send.rndv_get.lanes_map_all > 0);
 
     if (!rndv_req->send.mdesc) {
         status = ucp_send_request_add_reg_lane(rndv_req, lane);
@@ -471,7 +471,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
         length = ucp_mtu - remaining;
     } else {
         chunk = ucs_align_up((size_t)(rndv_req->send.length /
-                                      rndv_req->send.rndv_get.lanes_count
+                                      ucs_popcount(rndv_req->send.rndv_get.lanes_map_all)
                                       * config->rndv.scale[lane]),
                              align);
         length = ucs_min(chunk, rndv_req->send.length - offset);
@@ -630,7 +630,6 @@ static void ucp_rndv_req_init_get_zcopy_lane_map(ucp_request_t *rndv_req)
 
     rndv_req->send.rndv_get.lanes_map_all   = lane_map;
     rndv_req->send.rndv_get.lanes_map_avail = lane_map;
-    rndv_req->send.rndv_get.lanes_count     = ucs_popcount(lane_map);
 }
 
 static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
@@ -820,7 +819,6 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, ucs_ptr_map_key_t rreq_id,
     freq->send.rndv_get.rreq            = sreq;
     freq->send.rndv_get.lanes_map_all   = lanes_map;
     freq->send.rndv_get.lanes_map_avail = lanes_map;
-    freq->send.rndv_get.lanes_count     = ucs_popcount(lanes_map);
 
     for (i = 0; i < UCP_MAX_LANES; i++) {
         freq->send.rndv_get.rkey_index[i] = rkey_index ? rkey_index[i]
@@ -1693,13 +1691,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
             ep_config->am.max_zcopy) {
             sreq->send.uct.func = ucp_rndv_progress_am_zcopy_single;
         } else {
-            sreq->send.uct.func              = ucp_rndv_progress_am_zcopy_multi;
-            sreq->send.msg_proto.am_bw_index = 1;
+            sreq->send.uct.func = ucp_rndv_progress_am_zcopy_multi;
         }
     } else {
         ucp_request_send_state_reset(sreq, NULL, UCP_REQUEST_SEND_PROTO_BCOPY_AM);
-        sreq->send.uct.func              = ucp_rndv_progress_am_bcopy;
-        sreq->send.msg_proto.am_bw_index = 1;
+        sreq->send.uct.func = ucp_rndv_progress_am_bcopy;
     }
 
 out_send:

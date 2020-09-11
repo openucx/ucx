@@ -62,9 +62,14 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     uct_ep_h uct_ep;
     int pending_add_res;
 
-    req->send.lane = (!enable_am_bw || (state.offset == 0)) ? /* first part of message must be sent */
-                     ucp_ep_get_am_lane(ep) :                 /* via AM lane */
-                     ucp_send_request_get_am_bw_lane(req);
+    if (!enable_am_bw || (state.offset == 0)) {
+        /* first part of message must be sent via AM lane,
+         * otherwise req->send.lane is am bw lane */
+        req->send.lane = ucp_ep_get_am_lane(ep);
+    }
+
+    ucs_assert(req->send.lane != UCP_NULL_LANE);;
+
     uct_ep         = ep->uct_eps[req->send.lane];
 
     for (;;) {
@@ -329,7 +334,6 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     int pending_add_res;
 
     if (enable_am_bw && (req->send.state.dt.offset != 0)) {
-        req->send.lane = ucp_send_request_get_am_bw_lane(req);
         ucp_send_request_add_reg_lane(req, req->send.lane);
     } else {
         req->send.lane = ucp_ep_get_am_lane(ep);
