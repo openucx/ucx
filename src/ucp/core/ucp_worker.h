@@ -270,6 +270,12 @@ typedef struct ucp_worker {
 
     unsigned                         rkey_config_count;   /* Current number of rkey configurations */
     ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
+
+    struct {
+        uct_worker_cb_id_t           cb_id;               /* Keepalive callback id */
+        ucs_time_t                   last_round;          /* Last round timespamp */
+        ucs_list_link_t              *iter;               /* Last EP processed keepalive */
+    } keepalive;
 } ucp_worker_t;
 
 
@@ -316,6 +322,11 @@ int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
 ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
                                       uct_ep_h uct_ep, ucp_lane_index_t lane,
                                       ucs_status_t status);
+
+void ucp_worker_keepalive_add_ep(ucp_ep_h );
+
+/* EP should be removed from worker all_eps prior to call this function */
+void ucp_worker_keepalive_remove_ep(ucp_ep_h ep);
 
 /* must be called with async lock held */
 void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,

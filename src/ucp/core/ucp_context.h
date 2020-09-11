@@ -104,6 +104,11 @@ typedef struct ucp_context_config {
     size_t                                 listener_backlog;
     /** Enable new protocol selection logic */
     int                                    proto_enable;
+    /** Time period between keepalive rounds (0 - disabled) */
+    ucs_time_t                             keepalive_timeout;
+    /** Maximal number of endpoints to check on every keepalive round
+     * (0 - disabled, inf - check all endpoints on every round) */
+    unsigned                               keepalive_num_eps;
     /** Enable indirect IDs to object pointers in wire protocols */
     ucs_on_off_auto_value_t                proto_indirect_id;
 } ucp_context_config_t;
