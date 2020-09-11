@@ -449,7 +449,7 @@ enum {
 
 
 struct ucp_wireup_sockaddr_data {
-    uint64_t                  ep_id ;        /**< Endpoint ID */
+    uint64_t                  ep_id;         /**< Endpoint ID */
     uint8_t                   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
@@ -557,6 +557,8 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            double bandwidth);
 
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
+
+void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker);
 
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 

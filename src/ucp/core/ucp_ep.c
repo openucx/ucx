@@ -179,7 +179,8 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
 
     if ((worker->context->config.ext.proto_indirect_id == UCS_CONFIG_ON) ||
         ((worker->context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
-         (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE))) {
+         (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
+         !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE))) {
         ep->flags |= UCP_EP_FLAG_INDIRECT_ID;
     }
 
@@ -190,7 +191,10 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_destroy_ep_base;
     }
 
-    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
+        ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    }
+
     *ep_p = ep;
 
     return UCS_OK;
@@ -298,7 +302,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_unpacked_address_t local_address;
-    unsigned i, mem_type;
+    ucs_memory_type_t mem_type;
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
@@ -343,12 +347,20 @@ err_free_address_list:
 err_free_address_buffer:
     ucs_free(address_buffer);
 err_cleanup_eps:
-    for (i = 0; i < UCS_MEMORY_TYPE_LAST; i++) {
-        if (worker->mem_type_ep[i]) {
-           ucp_ep_destroy_internal(worker->mem_type_ep[i]);
+    ucp_worker_destroy_mem_type_endpoints(worker);
+    return status;
+}
+
+void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker)
+{
+    ucs_memory_type_t mem_type;
+
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+        if (worker->mem_type_ep[mem_type] != NULL) {
+           ucp_ep_destroy_internal(worker->mem_type_ep[mem_type]);
+           worker->mem_type_ep[mem_type] = NULL;
         }
     }
-    return status;
 }
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
