@@ -52,10 +52,11 @@ uct_p2p_test::uct_p2p_test(size_t rx_headroom,
     m_err_handler(err_handler),
     m_completion_count(0)
 {
-    m_null_completion      = false;
-    m_completion.self      = this;
-    m_completion.uct.func  = completion_cb;
-    m_completion.uct.count = 0;
+    m_null_completion       = false;
+    m_completion.self       = this;
+    m_completion.uct.func   = completion_cb;
+    m_completion.uct.count  = 0;
+    m_completion.uct.status = UCS_OK;
 }
 
 void uct_p2p_test::init() {

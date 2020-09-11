@@ -37,9 +37,10 @@ public:
     {
         ucs_assert_always(m_max_outstanding > 0);
 
-        m_completion.count = 1;
-        m_completion.func  = NULL;
-        m_last_recvd_sn    = 0;
+        m_completion.count  = 1;
+        m_completion.status = UCS_OK;
+        m_completion.func   = NULL;
+        m_last_recvd_sn     = 0;
 
         ucs_status_t status;
         uct_iface_attr_t attr;

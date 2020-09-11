@@ -167,9 +167,10 @@ void uct_amo_test::worker::run() {
         ucs_status_t status;
         completion *comp;
 
-        comp           = get_completion(i);
-        comp->result   = 0;
-        comp->uct.func = NULL;
+        comp             = get_completion(i);
+        comp->result     = 0;
+        comp->uct.func   = NULL;
+        comp->uct.status = UCS_OK;
         status = (test->*m_send)(m_entity.ep(0), *this, m_recvbuf,
                                  &comp->result, comp);
         while (status == UCS_ERR_NO_RESOURCE) {

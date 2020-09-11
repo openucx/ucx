@@ -1357,7 +1357,7 @@ typedef struct uct_rkey_bundle {
  * @brief Completion handle.
  *
  * This structure should be allocated by the user and can be passed to communication
- * primitives. User has to initializes both fields of the structure.
+ * primitives. The user must initialize all fields of the structure.
  *  If the operation returns UCS_INPROGRESS, this structure will be in use by the
  * transport until the operation completes. When the operation completes, "count"
  * field is decremented by 1, and whenever it reaches 0 - the callback is called.
@@ -1367,10 +1367,15 @@ typedef struct uct_rkey_bundle {
  *    without the need to wait for completion.
  *  - If the number of operations is smaller than the initial value of the counter,
  *    the callback will not be called at all, so it may be left undefined.
+ *  - status field is required to track the first time the error occurred, and
+ *    report it via a callback when count reaches 0.
  */
 struct uct_completion {
     uct_completion_callback_t func;    /**< User callback function */
     int                       count;   /**< Completion counter */
+    ucs_status_t              status;  /**< Completion status, this field must
+                                            be initialized with UCS_OK before
+                                            first operation is started. */
 };
 
 

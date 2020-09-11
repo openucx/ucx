@@ -297,8 +297,8 @@ ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
     ucp_dt_generic_t *dt_gen;
     void             *state_gen;
 
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.uct_comp.count,
-                                sizeof(req->send.state.uct_comp.count));
+    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.uct_comp,
+                                sizeof(req->send.state.uct_comp));
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.dt.offset,
                                 sizeof(req->send.state.dt.offset));
 
@@ -336,11 +336,12 @@ ucp_request_send_state_reset(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-        req->send.state.uct_comp.func       = comp_cb;
-        req->send.state.uct_comp.count      = 0;
+        req->send.state.uct_comp.func   = comp_cb;
+        req->send.state.uct_comp.count  = 0;
+        req->send.state.uct_comp.status = UCS_OK;
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
-        req->send.state.dt.offset           = 0;
+        req->send.state.dt.offset       = 0;
         break;
     default:
         ucs_fatal("unknown protocol");

@@ -155,8 +155,9 @@ public:
         ucs_status_t        status;
         int                 is_time_out;
 
-        comp.count = 2;
-        comp.func  = NULL;
+        comp.count  = 2;
+        comp.status = UCS_OK;
+        comp.func   = NULL;
         do {
             progress();
             status = uct_ep_flush(m_sender->ep(index), 0, &comp);
