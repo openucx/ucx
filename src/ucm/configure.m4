@@ -6,8 +6,19 @@
 
 AS_CASE([$host_os],
     [linux*], [
-        AC_SUBST([UCM_MODULE_LDFLAGS],
-                 ["-Xlinker -z -Xlinker interpose -Xlinker --no-as-needed"])
+        SAVE_LDFLAGS="$LDFLAGS"
+
+        LDFLAGS="$LDFLAGS -Xlinker -z -Xlinker interpose -Xlinker --no-as-needed"
+
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdio.h>]])],[
+            AC_SUBST([UCM_MODULE_LDFLAGS],
+                     ["-Xlinker -z -Xlinker interpose -Xlinker --no-as-needed"])
+
+        ],[
+            AC_MSG_ERROR([Required -Xlinker option does not work])
+        ])
+
+        LDFLAGS="$SAVE_LDFLAGS"
     ],
     [AC_MSG_ERROR([UCM_MODULE_LDFLAGS=PORT ME])]
 )
