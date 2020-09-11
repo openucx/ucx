@@ -1933,17 +1933,16 @@ int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
     return -1;
 }
 
-static void ucp_ep_config_cm_lane_info_str(ucp_worker_h worker,
-                                           const ucp_ep_config_key_t *key,
-                                           ucp_lane_index_t lane,
-                                           char *buf, size_t max)
+void ucp_ep_config_cm_lane_info_str(ucp_worker_h worker,
+                                    const ucp_ep_config_key_t *key,
+                                    ucp_lane_index_t lane,
+                                    ucp_rsc_index_t cm_index,
+                                    char *buf, size_t max)
 {
-    ucp_context_h context        = worker->context;
-    ucp_rsc_index_t cmpt_index   = worker->cms[lane].cmpt_idx;
-    const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
-
-    ucs_snprintf_zero(buf, max, "lane[%d]: %2d:%s cm",
-                      lane, cmpt_index, tl_cmpt->attr.name);
+    ucs_snprintf_zero(buf, max, "lane[%d]: cm %s", lane,
+                      (cm_index != UCP_NULL_RESOURCE) ?
+                      ucp_context_cm_name(worker->context, cm_index) :
+                      "<unknown>");
 }
 
 void ucp_ep_config_lane_info_str(ucp_worker_h worker,
@@ -1963,11 +1962,6 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
     char *p, *endp;
     char *desc_str;
     int prio;
-
-    if (lane == key->cm_lane) {
-        ucp_ep_config_cm_lane_info_str(worker, key, lane, buf, max);
-        return;
-    }
 
     p          = buf;
     endp       = buf + max;

@@ -917,6 +917,7 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
                                     const ucp_ep_config_key_t *key,
                                     const char *title,
                                     const unsigned *addr_indices,
+                                    ucp_rsc_index_t cm_index,
                                     ucs_log_level_t log_level)
 {
     char lane_info[128] = {0};
@@ -940,9 +941,14 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
             key->reachable_md_map);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
-        ucp_ep_config_lane_info_str(worker, key, addr_indices, lane,
-                                    UCP_NULL_RESOURCE, lane_info,
-                                    sizeof(lane_info));
+        if (lane == key->cm_lane) {
+            ucp_ep_config_cm_lane_info_str(worker, key, lane, cm_index,
+                                           lane_info, sizeof(lane_info));
+        } else {
+            ucp_ep_config_lane_info_str(worker, key, addr_indices, lane,
+                                        UCP_NULL_RESOURCE, lane_info,
+                                        sizeof(lane_info));
+        }
         ucs_log(log_level, "%s: %s", title, lane_info);
     }
 }
@@ -1026,8 +1032,9 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices)
 {
-    ucp_worker_h worker = ep->worker;
-    uint64_t tl_bitmap  = local_tl_bitmap & worker->context->tl_bitmap;
+    ucp_worker_h worker    = ep->worker;
+    uint64_t tl_bitmap     = local_tl_bitmap & worker->context->tl_bitmap;
+    ucp_rsc_index_t cm_idx = UCP_NULL_RESOURCE;
     ucp_ep_config_key_t key;
     ucp_worker_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
@@ -1064,6 +1071,11 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         return UCS_OK; /* No change */
     }
 
+    cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    if (cm_wireup_ep != NULL) {
+        cm_idx = cm_wireup_ep->cm_idx;
+    }
+
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
         !ucp_ep_is_sockaddr_stub(ep)) {
         /*
@@ -1079,18 +1091,18 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         ucs_debug("cannot reconfigure ep %p from [%d] to [%d]", ep, ep->cfg_index,
                   new_cfg_index);
         ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, "old",
-                                NULL, UCS_LOG_LEVEL_ERROR);
-        ucp_wireup_print_config(worker, &key, "new", NULL, UCS_LOG_LEVEL_ERROR);
+                                NULL, cm_idx, UCS_LOG_LEVEL_ERROR);
+        ucp_wireup_print_config(worker, &key, "new", NULL,
+                                cm_idx, UCS_LOG_LEVEL_ERROR);
         ucs_fatal("endpoint reconfiguration not supported yet");
     }
 
-    cm_wireup_ep  = ucp_ep_get_cm_wireup_ep(ep);
     ep->cfg_index = new_cfg_index;
     ep->am_lane   = key.am_lane;
 
     snprintf(str, sizeof(str), "ep %p", ep);
     ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, str,
-                            addr_indices, UCS_LOG_LEVEL_DEBUG);
+                            addr_indices, cm_idx, UCS_LOG_LEVEL_DEBUG);
 
     /* establish connections on all underlying endpoints */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {

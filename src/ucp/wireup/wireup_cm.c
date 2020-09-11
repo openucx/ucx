@@ -41,16 +41,6 @@ int ucp_ep_init_flags_has_cm(unsigned ep_init_flags)
                                UCP_EP_INIT_CM_WIREUP_SERVER));
 }
 
-static const char* ucp_context_cm_name(ucp_context_h context,
-                                       ucp_rsc_index_t cm_idx, char *name,
-                                       size_t max_length)
-{
-    ucp_rsc_index_t cmpt_index = context->config.cm_cmpt_idxs[cm_idx];
-
-    ucs_snprintf_safe(name, max_length, "%s", context->tl_cmpts[cmpt_index].attr.name);
-    return name;
-}
-
 /*
  * The main thread progress part of attempting connecting the client to the server
  * through the next available cm.
@@ -62,8 +52,6 @@ static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
     ucp_context_h context = worker->context;
     ucp_wireup_ep_t *cm_wireup_ep;
     ucs_status_t status;
-    char prev_cm_name[UCT_TL_NAME_MAX];
-    char next_cm_name[UCT_TL_NAME_MAX];
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -72,16 +60,13 @@ static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
     ucp_wireup_ep_destroy_next_ep(cm_wireup_ep);
 
     ucs_debug("client switching from %s to %s in attempt to connect to the server",
-              ucp_context_cm_name(context, cm_wireup_ep->cm_idx - 1,
-                                  prev_cm_name, UCT_TL_NAME_MAX),
-              ucp_context_cm_name(context, cm_wireup_ep->cm_idx,
-                                  next_cm_name, UCT_TL_NAME_MAX));
+              ucp_context_cm_name(context, cm_wireup_ep->cm_idx - 1),
+              ucp_context_cm_name(context, cm_wireup_ep->cm_idx));
 
     status = ucp_ep_client_cm_create_uct_ep(ucp_ep);
     if (status != UCS_OK) {
         ucs_error("failed to create a uct sockaddr endpoint on %s cm %p",
-                  ucp_context_cm_name(context, cm_wireup_ep->cm_idx, next_cm_name,
-                                      UCT_TL_NAME_MAX),
+                  ucp_context_cm_name(context, cm_wireup_ep->cm_idx),
                   worker->cms[cm_wireup_ep->cm_idx].cm);
 
         ucp_worker_set_ep_failed(worker, ucp_ep, &cm_wireup_ep->super.super,
@@ -98,13 +83,11 @@ static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
     ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     ucp_rsc_index_t next_cm_idx   = cm_wireup_ep->cm_idx + 1;
     uct_worker_cb_id_t prog_id    = UCS_CALLBACKQ_ID_NULL;
-    char cm_name[UCT_TL_NAME_MAX];
 
     if (next_cm_idx >= ucp_worker_num_cm_cmpts(worker)) {
-        ucs_debug("reached the end of the cms priority list, no cms left to check "
-                  "(sockaddr_cm=%s, cm_idx=%d).",
-                  ucp_context_cm_name(worker->context, cm_wireup_ep->cm_idx,
-                                      cm_name, UCT_TL_NAME_MAX),
+        ucs_debug("reached the end of the cms priority list, no cms left to"
+                  " check (sockaddr_cm=%s, cm_idx=%d).",
+                  ucp_context_cm_name(worker->context, cm_wireup_ep->cm_idx),
                   cm_wireup_ep->cm_idx);
         return 0;
     }
@@ -301,7 +284,6 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     ucs_status_t status;
     const char *dev_name;
     ucs_queue_head_t tmp_pending_queue;
-    char cm_name[UCT_TL_NAME_MAX];
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -379,8 +361,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
     ucs_debug("client ep %p created on device %s idx %d, tl_bitmap 0x%"PRIx64
               "on cm %s", ep, dev_name, dev_index, tl_bitmap,
-              ucp_context_cm_name(worker->context, cm_wireup_ep->cm_idx,
-                                  cm_name, UCT_TL_NAME_MAX));
+              ucp_context_cm_name(worker->context, cm_wireup_ep->cm_idx));
     /* Pass real ep (not cm_wireup_ep->tmp_ep), because only its pointer and
      * err_mode is taken from the config. */
     ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
@@ -544,7 +525,6 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
     ucp_cm_client_connect_progress_arg_t *progress_arg;
     const uct_cm_remote_data_t *remote_data;
-    char cm_name[UCT_TL_NAME_MAX];
     ucs_status_t status;
 
     ucs_assert_always(ucs_test_all_flags(connect_args->field_mask,
@@ -569,8 +549,7 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
         ucs_debug("failed status on client connect callback: %s "
                   "(sockaddr_cm=%s, cms_used_idx=%d)", ucs_status_string(status),
                   ucp_context_cm_name(worker->context,
-                                      ucp_ep_get_cm_wireup_ep(ucp_ep)->cm_idx,
-                                      cm_name, UCT_TL_NAME_MAX),
+                                      ucp_ep_get_cm_wireup_ep(ucp_ep)->cm_idx),
                   ucp_ep_get_cm_wireup_ep(ucp_ep)->cm_idx);
         goto err_out;
     }
@@ -893,7 +872,6 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     const uct_cm_remote_data_t *remote_data;
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
-    char cm_name[UCT_TL_NAME_MAX];
 
     ucs_assert_always(ucs_test_all_flags(conn_req_args->field_mask,
                                          (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
@@ -918,7 +896,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
 
     ucs_debug("server received a connection request on the %s "
               "sockaddr transport (worker=%p cm=%p worker_cms_index=%d)",
-              ucp_context_cm_name(worker->context, cm_idx, cm_name, UCT_TL_NAME_MAX),
+              ucp_context_cm_name(worker->context, cm_idx),
               worker, listener->cm, cm_idx);
 
     ucp_conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sa_data) +
@@ -1150,7 +1128,6 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
     uct_ep_params_t uct_ep_params;
     ucp_wireup_ep_t *cm_wireup_ep;
-    char cm_name[UCT_TL_NAME_MAX];
     uct_ep_h uct_ep;
     ucs_status_t status;
 
@@ -1172,7 +1149,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     /* create a server side CM endpoint */
     ucs_trace("server ep %p: uct_ep[%d], worker %p, cm_idx=%d, cm=%s",
               ep, lane, worker, cm_idx,
-              ucp_context_cm_name(worker->context, cm_idx, cm_name, UCT_TL_NAME_MAX));
+              ucp_context_cm_name(worker->context, cm_idx));
     uct_ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                        |
                                UCT_EP_PARAM_FIELD_CONN_REQUEST              |
                                UCT_EP_PARAM_FIELD_USER_DATA                 |

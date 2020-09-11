@@ -481,4 +481,6 @@ uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
 uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
                                        ucp_rsc_index_t dev_idx);
 
+const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
+
 #endif
