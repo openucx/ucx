@@ -4,24 +4,29 @@
 # See file LICENSE for terms.
 #
 
-AS_CASE([$host_os],
-    [linux*], [
-        SAVE_LDFLAGS="$LDFLAGS"
 
-        LDFLAGS="$LDFLAGS -Xlinker -z -Xlinker interpose -Xlinker --no-as-needed"
+SAVE_LDFLAGS="$LDFLAGS"
 
-        AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdio.h>]])],[
-            AC_SUBST([UCM_MODULE_LDFLAGS],
-                     ["-Xlinker -z -Xlinker interpose -Xlinker --no-as-needed"])
+#
+# Linux
+#
+UCM_MODULE_LDFLAGS_TEST="-Xlinker -z -Xlinker interpose -Xlinker --no-as-needed"
+LDFLAGS="$SAVE_LDFLAGS $UCM_MODULE_LDFLAGS_TEST"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([])],[
+    AC_SUBST([UCM_MODULE_LDFLAGS],[$UCM_MODULE_LDFLAGS_TEST])
+    ucm_ldflags_happy=yes
+],[
+    ucm_ldflags_happy=no
+])
 
-        ],[
-            AC_MSG_ERROR([Required -Xlinker option does not work])
-        ])
+#
+# ERROR
+#
+AS_IF([test "x$ucm_ldflags_happy" = "xno"],[
+    AC_MSG_ERROR([UCM linker flags are not supported])
+],[])
 
-        LDFLAGS="$SAVE_LDFLAGS"
-    ],
-    [AC_MSG_ERROR([UCM_MODULE_LDFLAGS=PORT ME])]
-)
+LDFLAGS="$SAVE_LDFLAGS"
 
 ucm_modules=""
 m4_include([src/ucm/cuda/configure.m4])
