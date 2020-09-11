@@ -66,6 +66,8 @@ UCS_CLASS_DECLARE(uct_scopy_iface_t, uct_scopy_iface_ops_t*, uct_md_h, uct_worke
 
 unsigned uct_scopy_iface_progress(uct_iface_h tl_iface);
 
+ucs_status_t uct_scopy_iface_event_arm(uct_iface_h tl_iface, unsigned events);
+
 ucs_status_t uct_scopy_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                    uct_completion_t *comp);
 

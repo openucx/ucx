@@ -293,7 +293,7 @@ protected:
         }
 
         void signal();
-        bool wait_for_event(entity &e, int timeout);
+        bool wait_for_event(entity &e, double timeout_sec);
 
     private:
         struct pollfd    wakeup_fd;

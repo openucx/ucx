@@ -1438,7 +1438,7 @@ void uct_test::async_event_ctx::signal() {
     ucs_async_pipe_push(&aux_pipe);
 }
 
-bool uct_test::async_event_ctx::wait_for_event(entity &e, int timeout) {
+bool uct_test::async_event_ctx::wait_for_event(entity &e, double timeout_sec) {
     if (wakeup_fd.fd == -1) {
         /* create wakeup */
         if (e.iface_attr().cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
@@ -1454,11 +1454,12 @@ bool uct_test::async_event_ctx::wait_for_event(entity &e, int timeout) {
         }
     }
 
-    int ret = poll(&wakeup_fd, 1, timeout);
+    int timeout_ms = static_cast<int>((timeout_sec * UCS_MSEC_PER_SEC) *
+                                      ucs::test_time_multiplier());
+    int ret        = poll(&wakeup_fd, 1, timeout_ms);
     EXPECT_TRUE((ret == 0) || (ret == 1));
     if (ret > 0) {
-        if (e.iface_attr().cap.event_flags &
-            UCT_IFACE_FLAG_EVENT_ASYNC_CB) {
+        if (e.iface_attr().cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB) {
             ucs_async_pipe_drain(&aux_pipe);
         }
         return true;

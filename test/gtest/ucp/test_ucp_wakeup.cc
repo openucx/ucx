@@ -114,9 +114,11 @@ UCS_TEST_P(test_ucp_wakeup, efd)
  * this causes the hang due to lack of the progress during
  * TCP CM message exchange (TCP doesn't have an async progress
  * for such events)
+ * In addition, we should disable rendezvous protocol to not require UCP
+ * progress on receiver side.
  * TODO: add async progress for TCP connections */
-UCS_TEST_SKIP_COND_P(test_ucp_wakeup, tx_wait,
-                     has_transport("tcp"), "ZCOPY_THRESH=10000")
+UCS_TEST_SKIP_COND_P(test_ucp_wakeup, tx_wait, has_transport("tcp"),
+                     "ZCOPY_THRESH=10000", "RNDV_THRESH=-1")
 {
     const ucp_datatype_t DATATYPE = ucp_dt_make_contig(1);
     const size_t COUNT            = 20000;
@@ -134,10 +136,10 @@ UCS_TEST_SKIP_COND_P(test_ucp_wakeup, tx_wait,
 
     if (UCS_PTR_IS_PTR(sreq)) {
         /* wait for send completion */
-        do {
+        while (!ucp_request_is_completed(sreq)) {
             ucp_worker_wait(sender().worker());
             while (progress());
-        } while (!ucp_request_is_completed(sreq));
+        }
         ucp_request_release(sreq);
     } else {
         ASSERT_UCS_OK(UCS_PTR_STATUS(sreq));
