@@ -32,9 +32,11 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
     uint64_t mem_types;
     int i;
 
-    for (i = 0; ep_config->key.rma_bw_lanes[i] != UCP_NULL_LANE; i++) {
+    for (i = 0;
+         (i < UCP_MAX_LANES) &&
+         (ep_config->key.rma_bw_lanes[i] != UCP_NULL_LANE); i++) {
         md_index = ep_config->md_index[ep_config->key.rma_bw_lanes[i]];
-        if(context->tl_mds[md_index].attr.cap.access_mem_type == UCS_MEMORY_TYPE_HOST) {
+        if (context->tl_mds[md_index].attr.cap.access_mem_type == UCS_MEMORY_TYPE_HOST) {
             found = 1;
             break;
         }
