@@ -136,6 +136,8 @@ void test_ucp_peer_failure::err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) 
     ++self->m_err_count;
 }
 
+/* stable pair: sender = ep(0), receiver: entity(size - 1)
+ * failing pair: sender = ep(1), receiver: entity(size - 2)*/
 ucp_ep_h test_ucp_peer_failure::stable_sender() {
     return sender().ep(0, STABLE_EP_INDEX);
 }
@@ -145,11 +147,11 @@ ucp_ep_h test_ucp_peer_failure::failing_sender() {
 }
 
 ucp_test::entity& test_ucp_peer_failure::stable_receiver() {
-    return m_entities.at(m_entities.size() - 2);
+    return m_entities.at(m_entities.size() - 1 - STABLE_EP_INDEX);
 }
 
 ucp_test::entity& test_ucp_peer_failure::failing_receiver() {
-    return m_entities.at(m_entities.size() - 1);
+    return m_entities.at(m_entities.size() - 1 - FAILING_EP_INDEX);
 }
 
 void *test_ucp_peer_failure::send_nb(ucp_ep_h ep, ucp_rkey_h rkey) {
@@ -474,3 +476,81 @@ UCS_TEST_SKIP_COND_P(test_ucp_peer_failure, disable_sync_send,
         EXPECT_EQ(UCS_ERR_UNSUPPORTED, UCS_PTR_STATUS(req));
     }
 }
+
+class test_ucp_peer_failure_keepalive : public test_ucp_peer_failure
+{
+public:
+    test_ucp_peer_failure_keepalive() {
+        m_sbuf.resize(1 * UCS_MBYTE);
+        m_rbuf.resize(1 * UCS_MBYTE);
+    }
+
+    void init() {
+        test_ucp_peer_failure::init();
+        create_entity();
+        sender().connect(&stable_receiver(), get_ep_params(), STABLE_EP_INDEX);
+        sender().connect(&failing_receiver(), get_ep_params(), FAILING_EP_INDEX);
+        stable_receiver().connect(&sender(), get_ep_params());
+        failing_receiver().connect(&sender(), get_ep_params());
+    }
+
+    static std::vector<ucp_test_param>
+    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
+                     const std::string& test_case_name, const std::string& tls)
+    {
+        ucp_params_t params = ucp_test::get_ctx_params();
+        std::vector<ucp_test_param> result;
+
+        params.field_mask |= UCP_PARAM_FIELD_FEATURES;
+        params.features    = UCP_FEATURE_TAG;
+        generate_test_params_variant(params, name, test_case_name + "/tag", tls,
+                                     TEST_TAG, result);
+        return result;
+    }
+};
+
+UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
+           "KEEPALIVE_TIMEOUT=0.3", "KEEPALIVE_NUM_EPS=inf") {
+    /* TODO: wireup is not tested yet */
+
+    scoped_log_handler err_handler(wrap_errors_logger);
+    scoped_log_handler warn_handler(hide_warns_logger);
+
+    smoke_test(true); /* allow wireup to complete */
+    smoke_test(false);
+
+    if (ucp_ep_config(stable_sender())->key.ep_check_map == 0) {
+        UCS_TEST_SKIP_R("Unsupported");
+    }
+
+    /* ensure both pair have ep_check map */
+    ASSERT_NE(0, ucp_ep_config(failing_sender())->key.ep_check_map);
+
+    /* aux (ud) transport doesn't support keepalive feature and
+     * we are assuming that wireup/connect procedure is done */
+
+    EXPECT_EQ(0, m_err_count); /* ensure no errors are detected */
+
+    /* flush all outstanding ops to allow keepalive to run */
+    flush_worker(sender());
+
+    /* kill EPs */
+    failing_receiver().close_all_eps(*this, 0, UCP_EP_CLOSE_MODE_FORCE);
+    wait_for_flag(&m_err_count);
+
+    /* dump warnings */
+    int warn_count = m_warnings.size();
+    for (int i = 0; i < warn_count; ++i) {
+        UCS_TEST_MESSAGE << "< " << m_warnings[i] << " >";
+    }
+
+    EXPECT_NE(0, m_err_count);
+
+    /* check if stable receiver is still works */
+    m_err_count = 0;
+    smoke_test(true);
+
+    EXPECT_EQ(0, m_err_count); /* ensure no errors are detected */
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_keepalive)

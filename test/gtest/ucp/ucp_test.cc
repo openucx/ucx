@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_worker.inl>
+#include <ucp/core/ucp_ep.inl>
 #if HAVE_IB
 #include <uct/ib/ud/base/ud_iface.h>
 #endif
@@ -847,6 +848,24 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     } while (status == UCS_INPROGRESS);
     EXPECT_EQ(UCS_OK, status);
     ucp_request_release(req);
+}
+
+bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
+{
+    ucp_ep_h ep         = this->ep();
+    ucp_worker_h worker = this->worker();
+    ucp_lane_index_t lane;
+    uct_iface_attr_t *iface_attr;
+
+    for (lane = 0; lane < ucp_ep_config(ep)->key.num_lanes; lane++) {
+        iface_attr = ucp_worker_iface_get_attr(worker,
+                                               ucp_ep_config(ep)->key.lanes[lane].rsc_index);
+        if (ucs_test_all_flags(iface_attr->cap.flags, caps)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool ucp_test_base::is_request_completed(void *request) {

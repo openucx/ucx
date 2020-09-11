@@ -301,6 +301,15 @@ static ucs_config_field_t ucp_config_table[] = {
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
 
+  {"KEEPALIVE_TIMEOUT", "0us",
+   "Time period between keepalive rounds (0 - disabled).",
+   ucs_offsetof(ucp_config_t, ctx.keepalive_timeout), UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"KEEPALIVE_NUM_EPS", "0",
+   "Maximal number of endpoints to check on every keepalive round\n"
+   "(0 - disabled, inf - check all endpoints on every round)",
+   ucs_offsetof(ucp_config_t, ctx.keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
+
   {"PROTO_INDIRECT_ID", "auto",
    "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
    "A value of 'auto' means to enable only if error handling is enabled on the\n"

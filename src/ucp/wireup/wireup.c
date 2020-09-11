@@ -1118,6 +1118,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
     }
 
+    ucp_worker_keepalive_add_ep(ep);
     return UCS_OK;
 }
 

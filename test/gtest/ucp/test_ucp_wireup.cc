@@ -1478,6 +1478,17 @@ public:
                                          UCP_FEATURE_RMA | UCP_FEATURE_TAG);
     }
 
+    ucp_ep_params_t get_ep_params() {
+        ucp_ep_params_t params;
+        memset(&params, 0, sizeof(params));
+        params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                 UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        params.err_handler.cb  = NULL;
+        params.err_handler.arg = reinterpret_cast<void*>(this);
+        return params;
+    }
+
     void init() {
         test_ucp_wireup::init();
 
@@ -1488,7 +1499,7 @@ public:
 
 /* test if EP has non-empty keepalive lanes mask */
 UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
-    if (!ep_iface_has_caps(sender(), "", UCT_IFACE_FLAG_EP_CHECK)) {
+    if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_EP_CHECK)) {
         UCS_TEST_SKIP_R("Unsupported");
     }
 

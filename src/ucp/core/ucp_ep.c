@@ -211,6 +211,7 @@ void ucp_ep_delete(ucp_ep_h ep)
 
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
+    ucp_worker_keepalive_remove_ep(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucs_assert(ucp_ep_ext_gen(ep)->ids->local != UCP_EP_ID_INVALID);
     status = ucs_ptr_map_del(&ep->worker->ptr_map, ucp_ep_local_id(ep));
@@ -2254,4 +2255,23 @@ int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
 {
     return (config->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
            (config->key.cm_lane  != UCP_NULL_LANE);
+}
+
+unsigned ucp_ep_do_keepalive(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane;
+
+    if (!ucp_ep_keepalive_is_enabled(ep)) {
+        return 0;
+    }
+
+    /* TODO: add error handling: in future uct_ep_check may check peer
+     * immediately */
+    ucs_for_each_bit(lane, ucp_ep_config(ep)->key.ep_check_map) {
+        ucs_assert(lane < UCP_MAX_LANES);
+        /* coverity[overrun-local] */
+        uct_ep_check(ep->uct_eps[lane], 0, NULL);
+    }
+
+    return 1;
 }

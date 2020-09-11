@@ -580,4 +580,14 @@ void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status);
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 
+/**
+ * @brief Do keepalive operation.
+ *
+ * @param [in] ep           Endpoint object to operate keepalive.
+ *
+ * @return otherwise        1 - if keepalive operation is done, 0 - keepalive
+ *                          operation is not supported or not done
+ */
+unsigned ucp_ep_do_keepalive(ucp_ep_h ep);
+
 #endif
