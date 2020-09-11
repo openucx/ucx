@@ -299,7 +299,7 @@ void ucm_prevent_dl_unload()
      * NODELETE flag to the dynamic link map.
      */
     (void)dlerror();
-    dl = dlopen(info.dli_fname, RTLD_LOCAL|RTLD_LAZY|RTLD_NODELETE);
+    dl = dlopen(info.dli_fname, RTLD_LOCAL|RTLD_NOW|RTLD_NODELETE);
     if (dl == NULL) {
         ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
         return;
