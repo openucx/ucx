@@ -152,7 +152,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
     ucs_assert(header_length >= sizeof(ucp_rndv_rts_hdr_t));
 
     if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->recv.mem_type)) {
-        ucp_rndv_matched(req->recv.worker, req, header);
+        ucp_rndv_matched(req->recv.worker, req, header, 0);
     } else {
         /* SW rendezvous request is stored in the user buffer (temporarily)
            when matched. If user buffer allocated on GPU memory, need to "pack"
@@ -160,7 +160,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
         header_host_copy = ucs_alloca(header_length);
         ucp_mem_type_pack(req->recv.worker, header_host_copy, header,
                           header_length, req->recv.mem_type);
-        ucp_rndv_matched(req->recv.worker, req, header_host_copy);
+        ucp_rndv_matched(req->recv.worker, req, header_host_copy, 0);
     }
 
     ucp_tag_offload_release_buf(req, 0);

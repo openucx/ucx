@@ -234,6 +234,9 @@ typedef struct ucp_worker {
     khash_t(ucp_worker_rndv_req_ptrs) rndv_req_ptrs;
     uint64_t                          rndv_req_id;
 
+    uint64_t                      rndv_rts_send_seq;
+    uint64_t                      rndv_rts_recv_seq;
+
     ucp_ep_match_ctx_t            ep_match_ctx;  /* Endpoint-to-endpoint matching context */
     ucp_worker_iface_t            **ifaces;      /* Array of pointers to interfaces,
                                                     one for each resource */
@@ -373,6 +376,13 @@ static UCS_F_ALWAYS_INLINE int
 ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
 {
     return !!ucp_worker_num_cm_cmpts(worker);
+}
+
+static inline ucp_tag_rndv_debug_entry_t*
+ucp_worker_rndv_debug_entry(ucp_worker_h worker, uint64_t req_id)
+{
+    size_t elem_index = req_id % worker->tm.rndv_debug.queue_length;
+    return &worker->tm.rndv_debug.queue[elem_index];
 }
 
 #endif

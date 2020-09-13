@@ -136,6 +136,7 @@ struct ucp_request {
                         ucp_tag_t        tag;
                         uintptr_t        rreq_ptr;    /* receive request ptr on the
                                                          recv side (used in AM rndv) */
+                        uint64_t         rts_send_seq; /* sequence number of actual rts send */
                     } tag;
 
                     struct {
@@ -270,6 +271,7 @@ struct ucp_request {
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
             unsigned              prev_flags;
+            uint64_t              req_id;
 
             union {
                 struct {
@@ -344,6 +346,7 @@ struct ucp_recv_desc {
     uint32_t                length;         /* Received length */
     uint32_t                payload_offset; /* Offset from end of the descriptor
                                              * to AM data */
+    uint64_t                rndv_rts_seq;   /* RNDV: rts sequence number */
     uint16_t                flags;          /* Flags */
     int16_t                 priv_length;    /* Number of bytes consumed from
                                                headroom private space, except the
