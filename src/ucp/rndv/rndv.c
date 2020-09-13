@@ -24,12 +24,26 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
                                             ucs_memory_type_t mem_type,
                                             int is_get_zcopy_failed)
 {
+    const ucp_ep_config_t *ep_config = ucp_ep_config(rndv_req->send.ep);
+    ucp_context_h context            = rndv_req->send.ep->worker->context;
+    int found                        = 0;
     ucp_md_index_t md_index;
     uct_md_attr_t *md_attr;
     uint64_t mem_types;
+    int i;
 
-    /* no bw lanes */
-    if (!ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map) {
+    for (i = 0;
+         (i < UCP_MAX_LANES) &&
+         (ep_config->key.rma_bw_lanes[i] != UCP_NULL_LANE); i++) {
+        md_index = ep_config->md_index[ep_config->key.rma_bw_lanes[i]];
+        if (context->tl_mds[md_index].attr.cap.access_mem_type == UCS_MEMORY_TYPE_HOST) {
+            found = 1;
+            break;
+        }
+    }
+
+    /* no host bw lanes for pipeline staging */
+    if (!found) {
         return 0;
     }
 
@@ -46,9 +60,8 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
         mem_types |= UCS_BIT(ucp_rkey_packed_mem_type(rndv_rts_hdr + 1));
     }
 
-    ucs_for_each_bit(md_index,
-                     ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map) {
-        md_attr = &rndv_req->send.ep->worker->context->tl_mds[md_index].attr;
+    ucs_for_each_bit(md_index, ep_config->key.rma_bw_md_map) {
+        md_attr = &context->tl_mds[md_index].attr;
         if (ucs_test_all_flags(md_attr->cap.reg_mem_types, mem_types)) {
             return 0;
         }
