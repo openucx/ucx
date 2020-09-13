@@ -427,14 +427,109 @@ make_scripts()
 			    kill_iodemo
 			}
 
+
+
 			# kill existing processes and trap signals
 			trap signal_handler INT TERM
-			kill_iodemo
 
 			# Use same work dir as launch script
 			cd $PWD
 
+			num_servers_per_host=${num_servers}
+			num_clients_per_host=${num_clients}
+			iodemo_exe=${iodemo_exe}
+
 			# UCX inherited environment variables
+			EOF
+
+		cat >>${command_file} <<-'EOF'
+			parse_args() {
+				while [[ $# -gt 0 ]]
+				do
+					key="$1"
+					case $key in
+					-tag|--tag)
+						tag="$2"
+						shift
+						;;
+					-start)
+						oper="start"
+						;;
+					-stop)
+						oper="stop"
+						;;
+					-status)
+						oper="status"
+						;;
+					--show-tags)
+						echo "Showing tags"
+						echo ==== Servers:
+						for ((i=0;i<${num_servers_per_host[${host}]};++i))
+						do
+							echo server_${i}
+						done 
+						echo ==== Clients:
+						for ((i=0;i<${num_clients_per_host[${host}]};++i))
+						do
+							echo client_${i}
+						done
+						echo
+						exit 0
+						;;
+					*)
+						error "Invalid parameter '${key}'"
+						;;
+					esac
+					shift
+				done
+
+
+
+				case $oper in
+				start)
+					func="${oper}_${tag}"
+					if [ -n "${func}" ]; then
+						if type $func &>/dev/null; then
+							echo Starting $tag
+						else
+							echo No method defined to start $tag
+							exit 1
+						fi
+					fi
+					eval "${func}"
+					exit 0
+				;;
+				stop)
+					if [ -z "$tag" ]; then
+						echo Error: specify -tag param
+						exit 1
+					fi
+					for pid in $(pgrep -f $iodemo_exe)
+					do
+						if xargs --null --max-args=1 echo < /proc/$pid/environ |grep -q IODEMO_ROLE=$tag; then
+								echo Stopping $iodemo_exe with role=$tag pid=$pid
+								kill -9 $pid
+						fi
+					done
+					exit 0
+				;;
+				status)
+					if [ -z "$tag" ]; then
+						echo Error: specify -tag param
+						exit 1
+					fi
+					for pid in $(pgrep -f $iodemo_exe)
+					do
+						if xargs --null --max-args=1 echo < /proc/$pid/environ |grep -q IODEMO_ROLE=$tag; then
+								echo Found $iodemo_exe with role=$tag pid=$pid
+						fi
+					done
+					exit 0
+				;;
+				*)
+				;;
+				esac
+			}
 			EOF
 
 		# Add all relevant env vars which start with UCX_ to the command file
@@ -452,21 +547,18 @@ make_scripts()
 		do
 			port_num=$((base_port_num + i))
 			log_file=$(printf "iodemo_%s_server_%02d.log" ${host} $i)
+			cmd_prefix+=" env IODEMO_ROLE=server_${i} "
 			echo ${log_file}
 			cat >>${command_file} <<-EOF
+			function start_server_${i}() {
 				${cmd_prefix} \\
 				    ${iodemo_exe} \\
 				        ${iodemo_server_args} -p ${port_num} \\
 				        ${log_redirect} ${log_file} &
+			}
 				EOF
 		done
 
-		# Add short sleep to let servers start running
-		cat >>${command_file} <<-EOF
-
-			# Wait for servers to start
-			sleep ${client_wait_time}
-			EOF
 
 		# Add client commands
 		cat >>${command_file} <<-EOF
@@ -478,12 +570,38 @@ make_scripts()
 		for ((i=0;i<num_clients_per_host[${host}];++i))
 		do
 			log_file=$(printf "iodemo_%s_client_%02d.log" ${host} $i)
+			cmd_prefix+=" env IODEMO_ROLE=client_${i} "
 			echo ${log_file}
 			cat >>${command_file} <<-EOF
+			function start_client_${i}() {
 				${cmd_prefix} \\
 				    ${iodemo_exe} \\
 				        ${iodemo_client_args} ${client_connect_list} \\
 				        ${log_redirect} ${log_file} &
+			}
+				EOF
+		done
+
+		cat >>${command_file} <<-EOF
+		main() {
+		EOF
+		for ((i=0;i<${num_servers_per_host[${host}]};++i))
+		do
+			cat >>${command_file} <<-EOF
+			start_server_${i}
+				EOF
+		done
+
+		# Add short sleep to let servers start running
+		cat >>${command_file} <<-EOF
+			# Wait for servers to start
+			sleep ${client_wait_time}
+		EOF
+
+		for ((i=0;i<num_clients_per_host[${host}];++i))
+		do
+			cat >>${command_file} <<-EOF
+			start_client_${i}
 				EOF
 		done
 
@@ -493,6 +611,12 @@ make_scripts()
 			# Wait for background processes
 			wait ${wait_redirect}
 			echo "Test finished"
+		}
+			EOF
+		cat >>${command_file} <<-'EOF'
+		parse_args "$@"
+		kill_iodemo
+		main
 			EOF
 		chmod a+x ${command_file}
 	done
