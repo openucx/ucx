@@ -1798,7 +1798,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     /* Initialize tag matching */
-    status = ucp_tag_match_init(&worker->tm);
+    status = ucp_tag_match_init(context, &worker->tm);
     if (status != UCS_OK) {
         goto err_wakeup_cleanup;
     }

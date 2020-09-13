@@ -139,6 +139,7 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
                                                     req->send.length);
     req->send.lane         = ucp_ep_config(ep)->tag.lane;
     req->send.pending_lane = UCP_NULL_LANE;
+    req->send.rndv_req_id  = 0;
 }
 
 //static UCS_F_ALWAYS_INLINE int

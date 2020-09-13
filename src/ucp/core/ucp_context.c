@@ -283,6 +283,9 @@ static ucs_config_field_t ucp_config_table[] = {
    "Try to push rndv to pending queue first",
    ucs_offsetof(ucp_config_t, ctx.rdnv_defer_sched), UCS_CONFIG_TYPE_BOOL},
 
+  {"RNDV_DEBUG_QUEUE", "0", "Rendezvous receive debug queue length",
+   ucs_offsetof(ucp_config_t, ctx.rndv_debug_queue), UCS_CONFIG_TYPE_UINT},
+
   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)

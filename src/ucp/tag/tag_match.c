@@ -12,7 +12,7 @@
 #include <ucp/tag/offload.h>
 
 
-ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
+ucs_status_t ucp_tag_match_init(ucp_context_h context, ucp_tag_match_t *tm)
 {
     size_t hash_size, bucket;
 
@@ -43,6 +43,16 @@ ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
         ucs_list_head_init(&tm->unexpected.hash[bucket]);
     }
 
+    tm->rndv_debug.queue_length = context->config.ext.rndv_debug_queue;
+    tm->rndv_debug.queue        = ucs_calloc(tm->rndv_debug.queue_length,
+                                             sizeof(*tm->rndv_debug.queue),
+                                            "ucp_rndv_debug_queue");
+    if (tm->rndv_debug.queue == NULL) {
+        ucs_free(tm->unexpected.hash);
+        ucs_free(tm->expected.hash);
+        return UCS_ERR_NO_MEMORY;
+    }
+
     kh_init_inplace(ucp_tag_frag_hash, &tm->frag_hash);
     ucs_queue_head_init(&tm->offload.sync_reqs);
     kh_init_inplace(ucp_tag_offload_hash, &tm->offload.tag_hash);
@@ -56,6 +66,7 @@ void ucp_tag_match_cleanup(ucp_tag_match_t *tm)
 {
     kh_destroy_inplace(ucp_tag_offload_hash, &tm->offload.tag_hash);
     kh_destroy_inplace(ucp_tag_frag_hash, &tm->frag_hash);
+    ucs_free(tm->rndv_debug.queue);
     ucs_free(tm->unexpected.hash);
     ucs_free(tm->expected.hash);
 }

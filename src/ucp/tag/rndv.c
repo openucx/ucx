@@ -713,6 +713,29 @@ ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req)
     rndv_req->send.rndv_get.lanes_count     = ucs_popcount(lane_map);
 }
 
+static void ucp_rndv_req_add_debug_entry(ucp_request_t *rndv_req,
+                                         const ucp_rndv_rts_hdr_t *rndv_rts_hdr)
+{
+    ucp_worker_h worker = rndv_req->send.ep->worker;
+    ucp_tag_rndv_debug_entry_t *entry;
+    size_t elem_index;
+
+    /* set request id */
+    rndv_req->send.rndv_req_id = worker->rndv_req_id;
+    worker->rndv_req_id++;
+
+    elem_index            = rndv_req->send.rndv_req_id %
+                            worker->tm.rndv_debug.queue_length;
+    entry                 = &worker->tm.rndv_debug.queue[elem_index];
+    entry->id             = rndv_req->send.rndv_req_id;
+    entry->ep             = rndv_req->send.ep;
+    entry->send_tag       = rndv_rts_hdr->super.tag;
+    entry->recv_tag       = rndv_req->send.rndv_get.rreq->recv.tag.tag;
+    entry->remote_address = rndv_req->send.rndv_get.remote_address;
+    entry->local_address  = rndv_req->send.buffer;
+    entry->size           = rndv_req->send.length;
+    entry->req            = rndv_req;
+}
 
 static void ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req, ucp_request_t *rreq,
                                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr)
@@ -744,6 +767,10 @@ static void ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req, ucp_request_t *rr
     ucp_request_send_state_reset(rndv_req, ucp_rndv_get_completion,
                                  UCP_REQUEST_SEND_PROTO_RNDV_GET);
     ucp_rndv_req_init_zcopy_lane_map(rndv_req);
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+        ucp_rndv_req_add_debug_entry(rndv_req, rndv_rts_hdr);
+    }
 
     if (worker->context->config.ext.rdnv_defer_sched) {
         rndv_req->send.lane         = ucp_rndv_get_zcopy_get_lane(rndv_req, &uct_rkey);

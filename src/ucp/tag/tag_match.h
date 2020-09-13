@@ -55,6 +55,18 @@ KHASH_INIT(ucp_tag_frag_hash, uint64_t, ucp_tag_frag_match_t, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
 
 
+typedef struct ucp_tag_rndv_debug_entry {
+    uint64_t          id;
+    ucp_ep_h          ep;
+    ucp_tag_t         send_tag;
+    ucp_tag_t         recv_tag;
+    uintptr_t         remote_address;
+    void              *local_address;
+    size_t            size;
+    ucp_request_t     *req;
+} ucp_tag_rndv_debug_entry_t;
+
+
 /**
  * Tag-matching context
  */
@@ -98,10 +110,15 @@ typedef struct ucp_tag_match {
                                                    'thresh' configuration. */
     } offload;
 
+    struct {
+        size_t                      queue_length;
+        ucp_tag_rndv_debug_entry_t  *queue;
+    } rndv_debug;
+
 } ucp_tag_match_t;
 
 
-ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm);
+ucs_status_t ucp_tag_match_init(ucp_context_h context, ucp_tag_match_t *tm);
 
 void ucp_tag_match_cleanup(ucp_tag_match_t *tm);
 
