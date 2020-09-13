@@ -40,7 +40,7 @@ iodemo_commands_mtr-vdi-326.sh
 ## Check what tags are provided by script for start/stop/status operations
 
 ``` bash
-%./iodemo_commands_mtr-vdi-326.sh --show-tags
+%./iodemo_commands_mtr-vdi-326.sh -show-tags
 Showing tags
 ==== Servers:
 server_0

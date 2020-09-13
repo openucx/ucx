@@ -448,7 +448,7 @@ make_scripts()
 				do
 					key="$1"
 					case $key in
-					-tag|--tag)
+					-tag)
 						tag="$2"
 						shift
 						;;
@@ -461,8 +461,8 @@ make_scripts()
 					-status)
 						oper="status"
 						;;
-					--show-tags)
-						echo "Showing tags"
+					-show-tags)
+						echo "Available tags"
 						echo ==== Servers:
 						for ((i=0;i<${num_servers_per_host[${host}]};++i))
 						do
