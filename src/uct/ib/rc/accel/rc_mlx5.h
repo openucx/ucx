@@ -20,7 +20,9 @@
     UCT_RC_CHECK_CQE_RET(&(_iface)->super, &(_ep)->super, \
                          UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
     UCT_RC_CHECK_TXQP_RET(&(_iface)->super, &(_ep)->super, \
-                          UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
+                          UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
+    UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super, \
+                                   UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
 
 /**

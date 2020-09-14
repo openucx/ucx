@@ -224,15 +224,19 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     ucs_trace_poll("dc iface %p tx_cqe: dci[%d] qpn 0x%x txqp %p hw_ci %d",
                    iface, dci, qp_num, txqp, hw_ci);
 
+    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
+
     uct_rc_txqp_available_set(txqp, uct_ib_mlx5_txwq_update_bb(txwq, hw_ci));
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 
+    uct_rc_iface_update_reads(&iface->super.super);
+
+    /**
+     * Note: DCI is released after handling completion callbacks,
+     *       to avoid OOO sends when this is the only missing resource.
+     */
     uct_dc_mlx5_iface_dci_put(iface, dci);
-    /* process pending elements prior to CQ entries to
-     * avoid out-of-order transmission in completion
-     * callbacks */
     uct_dc_mlx5_iface_progress_pending(iface);
-    uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
     return 1;
 }
 
@@ -380,7 +384,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
     return UCS_OK;
 
 err:
-    uct_rc_txqp_cleanup(&dci->txqp);
+    uct_rc_txqp_cleanup(&iface->super.super, &dci->txqp);
 err_qp:
     ibv_destroy_qp(dci->txwq.super.verbs.qp);
     return status;
@@ -774,7 +778,7 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
 {
     int i;
     for (i = 0; i < max; i++) {
-        uct_rc_txqp_cleanup(&iface->tx.dcis[i].txqp);
+        uct_rc_txqp_cleanup(&iface->super.super, &iface->tx.dcis[i].txqp);
         ucs_assert(iface->tx.dcis[i].txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
         uct_ib_destroy_qp(iface->tx.dcis[i].txwq.super.verbs.qp);
     }

@@ -87,13 +87,9 @@ protected:
     static void uct_comp_cb(uct_completion_t *uct_comp, ucs_status_t status)
     {
         struct dcs_comp *comp = (struct dcs_comp *)uct_comp;
-        uct_dc_mlx5_ep_t *ep;
 
         EXPECT_UCS_OK(status);
 
-        ep = dc_ep(comp->e, 0);
-        /* dci must be released before completion cb is called */
-        EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
         comp->e->destroy_eps();
     }
 
