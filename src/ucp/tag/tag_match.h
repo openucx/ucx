@@ -60,6 +60,7 @@ typedef struct ucp_tag_rndv_debug_entry {
     const char        *status;
     uint64_t          id;
     uint64_t          rts_seq;
+    unsigned          pending_count;
     ucp_ep_h          ep;
     ucp_tag_t         send_tag;
     ucp_tag_t         recv_tag;

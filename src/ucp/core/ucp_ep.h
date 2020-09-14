@@ -324,6 +324,8 @@ typedef struct ucp_ep {
     char                          peer_name[UCP_WORKER_NAME_MAX];
 #endif
 
+    uint64_t                      last_rts_req_id;
+
     UCS_STATS_NODE_DECLARE(stats)
 
 } ucp_ep_t;

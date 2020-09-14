@@ -230,10 +230,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
         if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
             ucp_worker_rndv_debug_entry(worker, sreq->send.rndv_req_id)->rts_seq =
                     sreq->send.msg_proto.tag.rts_send_seq;
+
         }
+
+        ucs_assert_always(sreq->send.rndv_req_id > ep->last_rts_req_id);
+        ep->last_rts_req_id = sreq->send.rndv_req_id;
         sreq->flags |= UCP_REQUEST_FLAG_RNDV_RTS_SENT;
         return status;
     } else if (status == UCS_ERR_NO_RESOURCE) {
+        if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+            ++ucp_worker_rndv_debug_entry(worker, sreq->send.rndv_req_id)->pending_count;
+        }
         return UCS_ERR_NO_RESOURCE;
     } else {
         ucs_assert(UCS_STATUS_IS_ERR(status));
@@ -1284,6 +1291,22 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
     uint64_t seq;
 
     seq = worker->rndv_rts_recv_seq++;
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+        ucp_tag_rndv_debug_entry_t *entry;
+
+        uint64_t req_id = worker->rndv_req_id++;
+
+        entry                 = ucp_worker_rndv_debug_entry(worker, req_id);
+        entry->type           = "rts_recv";
+        entry->rts_seq        = seq;
+        entry->send_tag       = rndv_rts_hdr->super.tag;
+        entry->ep             = ucp_worker_get_ep_by_ptr(worker,
+                                                         rndv_rts_hdr->sreq.ep_ptr);
+        entry->remote_reqptr  = rndv_rts_hdr->sreq.reqptr;
+        entry->remote_address = rndv_rts_hdr->address;
+        entry->size           = rndv_rts_hdr->size;
+    }
 
     if (rndv_rts_hdr->status == UCS_ERR_CANCELED) {
         ucp_rndv_unexp_cancel(worker, rndv_rts_hdr, seq);
