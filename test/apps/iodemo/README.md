@@ -7,15 +7,15 @@
 The run_io_demo.sh will generate launch script with name ```iodemo_commands_$(hostname).sh```
 
 ``` bash
-%./run_io_demo.sh --dry-run -i eth0 -H $(hostname),$(hostname) --num-clients 5 \
-	--num-servers 5 --tasks-per-node 10 --duration $((10*60)) $PWD/tester
+%./run_io_demo.sh --dry-run -i eth0 -H node1,node2 --num-clients 5 \
+	--num-servers 5 --tasks-per-node 10 --duration $((10*60)) --log-dir $PWD/logs $PWD/io_demo
 Launch configuration:
-               host_list : 'mtr-vdi-326,mtr-vdi-326'
+               host_list : 'node1,node2'
           tasks_per_node : '10'
                   map_by : 'node'
              num_clients : '5'
              num_servers : '5'
-              iodemo_exe : '/labhome/miked/workspace/git/forks/ucx/test/apps/iodemo/tester'
+              iodemo_exe : '/labhome/miked/workspace/git/forks/ucx/test/apps/iodemo/io_demo'
       iodemo_client_args : ''
                   net_if : 'eth0'
            base_port_num : '20000'
@@ -23,24 +23,15 @@ Launch configuration:
         client_wait_time : '2'
                 launcher : 'pdsh -b -w'
                  dry_run : '1'
-iodemo_mtr-vdi-326_server_00.log
-iodemo_mtr-vdi-326_server_01.log
-iodemo_mtr-vdi-326_client_00.log
-iodemo_mtr-vdi-326_client_01.log
-iodemo_mtr-vdi-326_server_00.log
-iodemo_mtr-vdi-326_server_01.log
-iodemo_mtr-vdi-326_client_00.log
-iodemo_mtr-vdi-326_client_01.log
-
-% ls -1 iodemo_commands_mtr-vdi-326.sh
-iodemo_commands_mtr-vdi-326.sh
+                   node1 : /labhome/miked/workspace/git/forks/ucx/test/apps/iodemo/iodemo_commands_node1.sh
+                   node2 : /labhome/miked/workspace/git/forks/ucx/test/apps/iodemo/iodemo_commands_node2.sh
 
 ```
 
 ## Check what tags are provided by script for start/stop/status operations
 
 ``` bash
-%./iodemo_commands_mtr-vdi-326.sh -show-tags
+%./iodemo_commands_node1.sh -show-tags
 Showing tags
 ==== Servers:
 server_0
@@ -61,15 +52,15 @@ client_4
 
 
 ``` bash
-%./iodemo_commands_mtr-vdi-326.sh -tag server_0 -status
-%./iodemo_commands_mtr-vdi-326.sh -tag server_0 -stop
-%./iodemo_commands_mtr-vdi-326.sh -tag server_0 -start
+%./iodemo_commands_node1.sh -tag server_0 -status
+%./iodemo_commands_node1.sh -tag server_0 -stop
+%./iodemo_commands_node1.sh -tag server_0 -start
 
 ```
 
 ## Running all processes
 
 ``` bash
-%./iodemo_commands_mtr-vdi-326.sh
+%./iodemo_commands_node1.sh
 ```
 
