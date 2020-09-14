@@ -93,6 +93,7 @@ init_config()
 	client_wait_time=2
 	launcher="pdsh -b -w"
 	dry_run=0
+	log_dir=$PWD
 
 	# command line args will override slurm env vars
 	check_slurm_env
@@ -108,7 +109,7 @@ show_config()
 			iodemo_exe iodemo_client_args \
 			net_if base_port_num \
 			duration client_wait_time \
-			launcher dry_run
+			launcher dry_run log_dir
 	do
 		show_var ${key}
 	done
@@ -142,6 +143,7 @@ usage()
 	echo "                                The syntax of launcher command should be:"
 	echo "                                <command> host1,host2,... <exe> <args>"
 	echo "  --dry-run                   Do not launch the application, just generate run scripts"
+	echo "  --log-dir </path>           Path to log directory, default: $PWD"
 	echo
 }
 
@@ -165,6 +167,10 @@ parse_args()
 			;;
 		-i|--netif)
 			net_if="$2"
+			shift
+			;;
+		--log-dir)
+			log_dir="$2"
 			shift
 			;;
 		-d|--duration)
@@ -427,6 +433,21 @@ make_scripts()
 			    kill_iodemo
 			}
 
+			usage()
+			{
+				echo
+				echo "Usage: $command_file [options] "
+				echo
+				echo "Where options are:"
+
+				echo "  -h                                  Show this message"
+				echo "  -show-tags                          Show available tags"
+				echo "  -tag <tag>  -<start|stop|status>    start/stop/status iodemo role for selected tag"
+				echo
+				echo Default: Run all tags when run with no options
+				echo
+			}
+
 
 
 			# kill existing processes and trap signals
@@ -476,8 +497,14 @@ make_scripts()
 						echo
 						exit 0
 						;;
+					-h|--help)
+						usage
+						exit 0
+						;;
 					*)
-						error "Invalid parameter '${key}'"
+						echo "Invalid parameter '${key}'"
+						usage
+						exit 1
 						;;
 					esac
 					shift
@@ -539,6 +566,9 @@ make_scripts()
 		# Add servers commands
 		cat >>${command_file} <<-EOF
 
+			# create log_dir if needed
+			[ ! -d "$log_dir" ] && mkdir -p $log_dir
+
 			# Server commands
 			EOF
 
@@ -546,7 +576,7 @@ make_scripts()
 		for ((i=0;i<${num_servers_per_host[${host}]};++i))
 		do
 			port_num=$((base_port_num + i))
-			log_file=$(printf "iodemo_%s_server_%02d.log" ${host} $i)
+			log_file=${log_dir}/$(printf "iodemo_%s_server_%02d.log" ${host} $i)
 			cmd_prefix+=" env IODEMO_ROLE=server_${i} "
 			echo ${log_file}
 			cat >>${command_file} <<-EOF
@@ -569,7 +599,7 @@ make_scripts()
 		cmd_prefix="stdbuf -e0 -o0 timeout -s 9 ${duration}s"
 		for ((i=0;i<num_clients_per_host[${host}];++i))
 		do
-			log_file=$(printf "iodemo_%s_client_%02d.log" ${host} $i)
+			log_file=${log_dir}/$(printf "iodemo_%s_client_%02d.log" ${host} $i)
 			cmd_prefix+=" env IODEMO_ROLE=client_${i} "
 			echo ${log_file}
 			cat >>${command_file} <<-EOF
