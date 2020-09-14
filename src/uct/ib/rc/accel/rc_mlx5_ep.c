@@ -105,7 +105,7 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     UCT_RC_MLX5_CHECK_AM_SHORT(id, length, 0);
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
 
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
