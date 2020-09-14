@@ -124,7 +124,8 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
         removed = ucp_tag_exp_remove(&worker->tm, req);
         /* If tag posted to the transport need to wait its completion */
         if (removed && !(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
-            ucp_request_complete_tag_recv(req, UCS_ERR_CANCELED);
+            ucp_request_complete_tag_recv(worker, req, UCS_ERR_CANCELED,
+                                          "user_cancel");
         }
 
         UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);

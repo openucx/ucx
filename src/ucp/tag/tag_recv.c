@@ -20,12 +20,21 @@
 
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_recv_request_completed(ucp_request_t *req, ucs_status_t status,
-                               ucp_tag_recv_info_t *info, const char *function)
+ucp_tag_recv_request_completed(ucp_worker_h worker, ucp_request_t *req,
+                               ucs_status_t status, ucp_tag_recv_info_t *info,
+                               const char *function)
 {
     ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
                   function, req, req + 1, info->sender_tag, info->length,
                   ucs_status_string(status));
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+        ucp_tag_rndv_debug_entry_t *entry =
+                ucp_worker_rndv_debug_entry(worker, req->recv.req_id);
+        entry->send_tag   = info->sender_tag;
+        entry->status     = "recv_completed1";
+        entry->recvd_size = info->length;
+    }
 
     req->status = status;
     if ((req->flags |= UCP_REQUEST_FLAG_COMPLETED) & UCP_REQUEST_FLAG_RELEASED) {
@@ -111,7 +120,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         if (req_flags & UCP_REQUEST_FLAG_CALLBACK) {
             cb(req + 1, status, &req->recv.tag.info);
         }
-        ucp_tag_recv_request_completed(req, status, &req->recv.tag.info,
+        ucp_tag_recv_request_completed(worker, req, status, &req->recv.tag.info,
                                        debug_name);
         return;
     }

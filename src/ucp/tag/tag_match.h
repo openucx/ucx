@@ -57,6 +57,7 @@ KHASH_INIT(ucp_tag_frag_hash, uint64_t, ucp_tag_frag_match_t, 1,
 
 typedef struct ucp_tag_rndv_debug_entry {
     const char        *type;
+    const char        *status;
     uint64_t          id;
     uint64_t          rts_seq;
     ucp_ep_h          ep;
@@ -66,6 +67,7 @@ typedef struct ucp_tag_rndv_debug_entry {
     uintptr_t         remote_reqptr;
     void              *local_address;
     size_t            size;
+    size_t            recvd_size;
     ucp_request_t     *rndv_get_req;
     ucp_request_t     *send_req;
     ucp_request_t     *recv_req;

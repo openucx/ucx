@@ -55,7 +55,7 @@ ucp_eager_offload_handler(void *arg, void *data, size_t length,
         ucp_eager_expected_handler(worker, req, data, length, recv_tag, flags);
         req->recv.tag.info.length = length;
         status = ucp_request_recv_data_unpack(req, data, length, 0, 1);
-        ucp_request_complete_tag_recv(req, status);
+        ucp_request_complete_tag_recv(worker, req, status, "exp_offload");
         status = UCS_OK;
     } else {
         status = ucp_recv_desc_init(worker, data, length, sizeof(ucp_tag_t),
@@ -107,7 +107,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
             status = ucp_request_recv_data_unpack(req,
                                                   UCS_PTR_BYTE_OFFSET(data, hdr_len),
                                                   recv_len, 0, 1);
-            ucp_request_complete_tag_recv(req, status);
+            ucp_request_complete_tag_recv(worker, req, status, "eager_only");
         } else {
             eagerf_hdr                = data;
             req->recv.tag.info.length =

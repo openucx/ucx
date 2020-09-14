@@ -127,7 +127,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
     UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED);
 out:
     --req->recv.tag.wiface->post_count;
-    ucp_request_complete_tag_recv(req, status);
+    ucp_request_complete_tag_recv(req->recv.worker, req, status, "offload");
 }
 
 /* RNDV request matched by the transport. Need to proceed with SW based RNDV */
@@ -145,7 +145,8 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
     --req->recv.tag.wiface->post_count;
     if (ucs_unlikely(status != UCS_OK)) {
         ucp_tag_offload_release_buf(req, 1);
-        ucp_request_complete_tag_recv(req, status);
+        ucp_request_complete_tag_recv(req->recv.worker, req, status,
+                                      "offload_rndv");
         return;
     }
 

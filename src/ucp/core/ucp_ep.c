@@ -838,7 +838,8 @@ static void ucp_ep_cleanup_unexp(ucp_ep_h ep)
             rreq = matchq->exp_req;
             if (rreq->recv.tag.ep_ptr == (uintptr_t)ep) {
                 ucs_debug("completing req %p", rreq);
-                ucp_request_complete_tag_recv(rreq, UCS_ERR_CANCELED);
+                ucp_request_complete_tag_recv(ep->worker, rreq, UCS_ERR_CANCELED,
+                                              "rndv_cancel");
                 kh_del(ucp_tag_frag_hash, &tm->frag_hash, iter);
             }
         } else {
