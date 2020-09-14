@@ -222,7 +222,7 @@ parse_args()
 
 check_params()
 {
-	if [ -z ${iodemo_exe} ]
+	if [ ! -x "${iodemo_exe}" ]
 	then
 		error "missing executable from command line"
 	fi
@@ -572,12 +572,11 @@ make_scripts()
 			# Server commands
 			EOF
 
-		cmd_prefix="stdbuf -e0 -o0 timeout -s 9 $((duration + client_wait_time))s"
 		for ((i=0;i<${num_servers_per_host[${host}]};++i))
 		do
 			port_num=$((base_port_num + i))
 			log_file=${log_dir}/$(printf "iodemo_%s_server_%02d.log" ${host} $i)
-			cmd_prefix+=" env IODEMO_ROLE=server_${i} "
+			cmd_prefix="stdbuf -e0 -o0 timeout -s 9 $((duration + client_wait_time))s  env IODEMO_ROLE=server_${i} "
 			echo ${log_file}
 			cat >>${command_file} <<-EOF
 			function start_server_${i}() {
@@ -596,11 +595,10 @@ make_scripts()
 			# Client commands
 			EOF
 
-		cmd_prefix="stdbuf -e0 -o0 timeout -s 9 ${duration}s"
 		for ((i=0;i<num_clients_per_host[${host}];++i))
 		do
 			log_file=${log_dir}/$(printf "iodemo_%s_client_%02d.log" ${host} $i)
-			cmd_prefix+=" env IODEMO_ROLE=client_${i} "
+			cmd_prefix="stdbuf -e0 -o0 timeout -s 9 ${duration}s env IODEMO_ROLE=client_${i} "
 			echo ${log_file}
 			cat >>${command_file} <<-EOF
 			function start_client_${i}() {
