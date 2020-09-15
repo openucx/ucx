@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.9.0-rc5 (September 10, 2020)
+## 1.9.0-rc6 (September 15, 2020)
 ### Features:
 #### UCX Core
 - Added a new class of communication APIs '*_nbx' that enable API extendability while
@@ -23,6 +23,7 @@
 - Added new TCP connection manager
 - Added support for UCT/IB PKey with partial membership in IB transports
 - Added support for RoCE LAG
+- Added support for ROCm 3.7 and above
 - Added flow control for RDMA read operations
 - Improved endpoint flush implementation for UCT/IB
 - Improved UD timer to avoid interrupting the main thread when not in use
@@ -56,6 +57,8 @@
 - Fixes in memcpy selection for AMD
 - Fixed in UCT/UD endpoint flush functionality
 - Fixes in XPMEM detection
+- Fixes in rendezvous staging protocol
+- Fixes in ROCEv1 mlx5 UDP source port configuration
 - Multiple fixes in RPM spec file
 - Multiple fixes in UCP documentation
 - Multiple fixes in socket connection manager
