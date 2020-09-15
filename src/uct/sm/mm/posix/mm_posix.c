@@ -411,7 +411,8 @@ uct_posix_segment_open(uct_mm_md_t *md, uct_mm_seg_id_t *seg_id_p, int *fd_p)
 
 static ucs_status_t
 uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
-                    unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
+                    ucs_memory_type_t mem_type, unsigned flags,
+                    const char *alloc_name, uct_mem_h *memh_p)
 {
     uct_mm_md_t                     *md = ucs_derived_of(tl_md, uct_mm_md_t);
     uct_posix_md_config_t *posix_config = ucs_derived_of(md->config,
@@ -422,6 +423,10 @@ uct_posix_mem_alloc(uct_md_h tl_md, size_t *length_p, void **address_p,
     int mmap_flags;
     void *address;
     int fd;
+
+    if (mem_type != UCS_MEMORY_TYPE_HOST) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     status = uct_mm_seg_new(*address_p, *length_p, &seg);
     if (status != UCS_OK) {

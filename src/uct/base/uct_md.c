@@ -368,17 +368,64 @@ static ucs_status_t uct_mem_check_flags(unsigned flags)
     return UCS_OK;
 }
 
-ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              unsigned flags, const char *alloc_name, uct_mem_h *memh_p)
+ucs_status_t uct_mem_alloc_check_params(size_t length,
+                                        const uct_alloc_method_t *methods,
+                                        unsigned num_methods,
+                                        const uct_mem_alloc_params_t *params)
 {
+    const uct_alloc_method_t *method;
     ucs_status_t status;
 
-    status = uct_mem_check_flags(flags);
-    if (status != UCS_OK) {
-        return status;
+    if (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) {
+        status = uct_mem_check_flags(params->flags);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        /* assuming flags are valid */
+        if (params->flags & UCT_MD_MEM_FLAG_FIXED) {
+            if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS)) {
+                ucs_debug("UCT_MD_MEM_FLAG_FIXED requires setting of"
+                          " UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS field");
+                return UCS_ERR_INVALID_PARAM;
+            }
+
+            if ((params->address == NULL) ||
+                ((uintptr_t)params->address % ucs_get_page_size())) {
+                ucs_debug("UCT_MD_MEM_FLAG_FIXED requires valid page size aligned address");
+                return UCS_ERR_INVALID_PARAM;
+            }
+	    }
     }
 
-    return md->ops->mem_alloc(md, length_p, address_p, flags, alloc_name, memh_p);
+    if (length == 0) {
+        ucs_debug("the length value for allocating memory is set to zero: %s",
+                  ucs_status_string(UCS_ERR_INVALID_PARAM));
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    for (method = methods;
+         method < methods + num_methods; ++method) {
+        if (*method == UCT_ALLOC_METHOD_MD) {
+            if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MDS) ||
+                (params->mds.count < 1)) {
+                ucs_debug("methods include UCT_ALLOC_METHOD but params->mds"
+                          " not populated correctly: %s",
+                          ucs_status_string(UCS_ERR_INVALID_PARAM));
+                return UCS_ERR_INVALID_PARAM;
+            }
+        }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
+                              ucs_memory_type_t mem_type, unsigned flags,
+                              const char *alloc_name, uct_mem_h *memh_p)
+{
+    return md->ops->mem_alloc(md, length_p, address_p, mem_type, flags,
+                              alloc_name, memh_p);
 }
 
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)

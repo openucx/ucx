@@ -145,32 +145,47 @@ void test_md::free_memory(void *address, ucs_memory_type_t mem_type)
 UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
                      !check_caps(UCT_MD_FLAG_ALLOC |
                                  UCT_MD_FLAG_RKEY_PTR)) {
+    uct_md_h md_ref           = md();
+    uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
     size_t size;
     void *rkey_buffer;
     ucs_status_t status;
     unsigned *rva, *lva;
-    uct_mem_h memh;
+    uct_allocated_memory_t mem;
     uct_rkey_bundle_t rkey_bundle;
     unsigned i;
+    uct_mem_alloc_params_t params;
+
+    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.flags           = UCT_MD_MEM_ACCESS_ALL;
+    params.name            = "test";
+    params.mem_type        = UCS_MEMORY_TYPE_HOST;
+    params.mds.mds         = &md_ref;
+    params.mds.count       = 1;
 
     // alloc (should work with both sysv and xpmem
-    size = sizeof(unsigned) * UCS_MBYTE;
-    rva  = NULL;
-    status = uct_md_mem_alloc(md(), &size, (void **)&rva,
-                              UCT_MD_MEM_ACCESS_ALL,
-                              "test", &memh);
+    size             = sizeof(unsigned) * UCS_MBYTE;
+    rva              = NULL;
+    params.address   = (void *)rva;
+    status = uct_mem_alloc(size, &method, 1, &params, &mem);
     ASSERT_UCS_OK(status);
-    EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, size);
+    EXPECT_LE(sizeof(unsigned) * UCS_MBYTE, mem.length);
+    size   = mem.length;
+    rva    = (unsigned *)mem.address;
 
     // pack
     rkey_buffer = malloc(md_attr().rkey_packed_size);
     if (rkey_buffer == NULL) {
         // make coverity happy
-        uct_md_mem_free(md(), memh);
+        uct_mem_free(&mem);
         GTEST_FAIL();
     }
 
-    status = uct_md_mkey_pack(md(), memh, rkey_buffer);
+    status = uct_md_mkey_pack(md(), mem.memh, rkey_buffer);
 
     // unpack
     status = uct_rkey_unpack(GetParam().component, rkey_buffer, &rkey_bundle);
@@ -206,16 +221,30 @@ UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
                      << ucs_status_string(status);
 
     free(rkey_buffer);
-    uct_md_mem_free(md(), memh);
+    uct_mem_free(&mem);
     uct_rkey_release(GetParam().component, &rkey_bundle);
 }
 
 UCS_TEST_SKIP_COND_P(test_md, alloc,
                      !check_caps(UCT_MD_FLAG_ALLOC)) {
+    uct_md_h md_ref           = md();
+    uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
     size_t size, orig_size;
     ucs_status_t status;
     void *address;
-    uct_mem_h memh;
+    uct_allocated_memory_t mem;
+    uct_mem_alloc_params_t params;
+
+    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.flags           = UCT_MD_MEM_ACCESS_ALL;
+    params.name            = "test";
+    params.mem_type        = UCS_MEMORY_TYPE_HOST;
+    params.mds.mds         = &md_ref;
+    params.mds.count       = 1;
 
     for (unsigned i = 0; i < 300; ++i) {
         size = orig_size = ucs::rand() % 65536;
@@ -223,18 +252,20 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
             continue;
         }
 
-        address = NULL;
-        status = uct_md_mem_alloc(md(), &size, &address,
-                                  UCT_MD_MEM_ACCESS_ALL, "test", &memh);
-        EXPECT_GT(size, 0ul);
+        address        = NULL;
+        params.address = address;
+        status = uct_mem_alloc(size, &method, 1, &params, &mem);
+        EXPECT_GT(mem.length, 0ul);
+        address = mem.address;
+        size    = mem.length;
 
         ASSERT_UCS_OK(status);
         EXPECT_GE(size, orig_size);
         EXPECT_TRUE(address != NULL);
-        EXPECT_TRUE(memh != UCT_MEM_HANDLE_NULL);
+        EXPECT_TRUE(mem.memh != UCT_MEM_HANDLE_NULL);
 
         memset(address, 0xBB, size);
-        uct_md_mem_free(md(), memh);
+        uct_mem_free(&mem);
     }
 }
 
@@ -381,29 +412,43 @@ UCS_TEST_SKIP_COND_P(test_md, reg_advise,
 UCS_TEST_SKIP_COND_P(test_md, alloc_advise,
                      !check_caps(UCT_MD_FLAG_ALLOC |
                                  UCT_MD_FLAG_ADVISE)) {
+    uct_md_h md_ref           = md();
+    uct_alloc_method_t method = UCT_ALLOC_METHOD_MD;
+    void *address             = NULL;
     size_t size, orig_size;
     ucs_status_t status;
-    void *address;
-    uct_mem_h memh;
+    uct_allocated_memory_t mem;
+    uct_mem_alloc_params_t params;
 
-    orig_size = size = 128 * UCS_MBYTE;
-    address   = NULL;
+    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.flags           = UCT_MD_MEM_FLAG_NONBLOCK | UCT_MD_MEM_ACCESS_ALL;
+    params.name            = "test";
+    params.mem_type        = UCS_MEMORY_TYPE_HOST;
+    params.address         = address;
+    params.mds.mds         = &md_ref;
+    params.mds.count       = 1;
 
-    status = uct_md_mem_alloc(md(), &size, &address,
-                              UCT_MD_MEM_FLAG_NONBLOCK|
-                              UCT_MD_MEM_ACCESS_ALL,
-                              "test", &memh);
+    size          = 128 * UCS_MBYTE;
+    orig_size     = size;
+
+    status  = uct_mem_alloc(size, &method, 1, &params, &mem);
+    address = mem.address;
+    size    = mem.length;
     ASSERT_UCS_OK(status);
     EXPECT_GE(size, orig_size);
     EXPECT_TRUE(address != NULL);
-    EXPECT_TRUE(memh != UCT_MEM_HANDLE_NULL);
+    EXPECT_TRUE(mem.memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_advise(md(), memh, (char *)address + 7,
+    status = uct_md_mem_advise(md(), mem.memh, (char *)address + 7,
                                32 * UCS_KBYTE, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
     memset(address, 0xBB, size);
-    uct_md_mem_free(md(), memh);
+    uct_mem_free(&mem);
 }
 
 /*
