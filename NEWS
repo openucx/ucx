@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.9.0-rc6 (September 14, 2020)
+## 1.9.0-rc6 (September 15, 2020)
 ### Features:
 #### UCX Core
 - Added a new class of communication APIs '*_nbx' that enable API extendability while
@@ -58,7 +58,7 @@
 - Fixed in UCT/UD endpoint flush functionality
 - Fixes in XPMEM detection
 - Fixes in rendezvous staging protocol
-- Fixes in ROCE mlx5 UD port configuration
+- Fixes in ROCEv1 mlx5 UDP source port configuration
 - Multiple fixes in RPM spec file
 - Multiple fixes in UCP documentation
 - Multiple fixes in socket connection manager
