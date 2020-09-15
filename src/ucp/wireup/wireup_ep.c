@@ -44,6 +44,119 @@ ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
     return uct_ep_connect_to_ep(wireup_ep->super.uct_ep, dev_addr, ep_addr);
 }
 
+static void
+ucp_wireup_tmp_ep_destroy_complete_cb(void *request, ucs_status_t status,
+                                      void *user_data)
+{
+    ucp_wireup_ep_t *wireup_ep = (ucp_wireup_ep_t*)user_data;
+
+    /* check for NULL pointer to workaround Coverity warning (it wrongly
+     * assumes that this callback could be called upon GET/PUT operation) */
+    ucs_assertv_always(wireup_ep != NULL,
+                       "req=%p: user_data passed to the TMP EP destroy cb "
+                       "mustn't be NULL", (ucp_request_t*)request - 1);
+
+    wireup_ep->flags &= ~UCP_WIREUP_EP_FLAG_DESTROY_TMP_EP;
+    ucs_assert(wireup_ep->tmp_ep == NULL);
+    ucp_request_release(request);
+}
+
+static unsigned ucp_wireup_tmp_ep_disconnect_progress(void *arg)
+{
+    ucp_request_t *req         = (ucp_request_t*)arg;
+    ucp_ep_h tmp_ep            = req->send.ep;
+    ucp_worker_h worker        = tmp_ep->worker;
+    ucs_async_context_t *async = &worker->async;
+
+    UCS_ASYNC_BLOCK(async);
+    ucp_ep_disconnected(tmp_ep, 1);
+    --worker->flush_ops_count;
+    ucp_request_complete_send(req, req->status);
+    UCS_ASYNC_UNBLOCK(async);
+
+    return 1;
+}
+
+static void ucp_wireup_tmp_ep_flushed_cb(ucp_request_t *req)
+{
+    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_ep_h tmp_ep          = req->send.ep;
+
+    /* schedule the destorying of TMP EP lanes to the main thread to
+     * not destroy UCT EP from the UCT EP flush callback, since
+     * UCT EP maybe touched during the progress after calling UCT
+     * flush completion callback */
+    uct_worker_progress_register_safe(tmp_ep->worker->uct,
+                                      ucp_wireup_tmp_ep_disconnect_progress,
+                                      req, UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+}
+
+/* the following values could be returned from the function:
+ * - true:  destroying of the TMP EP was completed inplace, if the complete_cb
+ *          was specified, it wouldn't be called
+ * - false: destroying of the TMP EP is in progress now, if the complete_cb
+ *          was specified, it would be called upon completion the destroying
+ *          of the TMP EP */
+int ucp_wireup_tmp_ep_destroy(ucp_ep_h ep, ucp_wireup_ep_t *wireup_ep,
+                              unsigned ep_flush_flags,
+                              ucp_send_nbx_callback_t complete_cb)
+{
+    ucp_ep_h tmp_ep           = wireup_ep->tmp_ep;
+    ucp_worker_h worker       = tmp_ep->worker;
+    ucp_request_param_t param = ucp_request_null_param;
+    ucp_lane_index_t lane, found_lane;
+    uct_ep_h uct_ep;
+    void *req;
+
+    ucs_assert(tmp_ep != ep);
+
+    /* to prevent flush+destroy UCT EPs that are used by the main EP,
+     * they have to be removed from the TMP EP lanes and their WIREUP
+     * EPs have to be destroyed */
+    for (lane = 0; lane < ucp_ep_num_lanes(tmp_ep); ++lane) {
+        if (tmp_ep->uct_eps[lane] != NULL) {
+            found_lane =
+                ucp_wireup_ep_configs_can_reuse_lane(&ucp_ep_config(tmp_ep)->key,
+                                                     &ucp_ep_config(ep)->key,
+                                                     lane);
+            if (found_lane != UCP_NULL_LANE) {
+                uct_ep = tmp_ep->uct_eps[lane];
+                ucs_assert(ucp_wireup_ep_test(uct_ep) &&
+                           !ucp_wireup_ep(uct_ep)->super.is_owner);
+
+                ucs_debug("ep %p: destroy uct_ep[%d]=%p", ep, lane, uct_ep);
+                uct_ep_destroy(uct_ep);
+                tmp_ep->uct_eps[lane] = NULL;
+            }
+        }
+    }
+
+    if (complete_cb != NULL) {
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA;
+        param.cb.send       = complete_cb;
+        param.user_data     = wireup_ep;
+    }
+
+    wireup_ep->tmp_ep = NULL;
+
+    req = ucp_ep_flush_internal(tmp_ep, ep_flush_flags, 0, &param, NULL,
+                                ucp_wireup_tmp_ep_flushed_cb,
+                                "tmp_ep_flushed_cb");
+    if (req != NULL) {
+        if (!UCS_PTR_IS_ERR(req)) {
+            ++worker->flush_ops_count;
+            return 0;
+        }
+
+        ucs_error("ucp_ep_flush_internal() completed with error: %s",
+                  ucs_status_string(UCS_PTR_STATUS(req)));
+    }
+
+    ucp_ep_disconnected(tmp_ep, 1);
+    return 1;
+}
+
 void ucp_wireup_ep_replay_pending_requests(ucp_ep_h ucp_ep,
                                            ucs_queue_head_t *tmp_pending_queue)
 {
@@ -66,9 +179,10 @@ void ucp_wireup_ep_replay_pending_requests(ucp_ep_h ucp_ep,
 static unsigned ucp_wireup_ep_progress(void *arg)
 {
     ucp_wireup_ep_t *wireup_ep = arg;
-    ucp_ep_h ucp_ep = wireup_ep->super.ucp_ep;
+    ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
     ucs_queue_head_t tmp_pending_queue;
     uct_pending_req_t *uct_req;
+    int ret;
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
 
@@ -87,6 +201,18 @@ static unsigned ucp_wireup_ep_progress(void *arg)
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         ucs_trace("ep %p: not switching wireup_ep %p to ready state because of error",
                   ucp_ep, wireup_ep);
+        goto out_unblock;
+    }
+
+    if (wireup_ep->tmp_ep != NULL) {
+        ret = ucp_wireup_tmp_ep_destroy(ucp_ep, wireup_ep, UCT_FLUSH_FLAG_LOCAL,
+                                        ucp_wireup_tmp_ep_destroy_complete_cb);
+        if (!ret) {
+            wireup_ep->flags |= UCP_WIREUP_EP_FLAG_DESTROY_TMP_EP;
+            goto out_unblock;
+        }
+    } else if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_DESTROY_TMP_EP) {
+        /* destroying of TMP EP is in progress, return from the function */
         goto out_unblock;
     }
 
@@ -381,6 +507,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
 {
     ucp_ep_h ucp_ep     = self->super.ucp_ep;
     ucp_worker_h worker = ucp_ep->worker;
+    int UCS_V_UNUSED ret;
 
     ucs_assert(ucs_queue_is_empty(&self->pending_q));
     ucs_assert(self->pending_count == 0);
@@ -397,12 +524,16 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
         uct_ep_destroy(self->sockaddr_ep);
     }
 
+    UCS_ASYNC_BLOCK(&worker->async);
     if (self->tmp_ep != NULL) {
         ucs_assert(!(self->tmp_ep->flags & UCP_EP_FLAG_USED));
-        ucp_ep_disconnected(self->tmp_ep, 1);
+        /* TODO: replace by ucp_worker_discard_uct_ep() with FLUSH_CANCEL flag,
+         * since the TMP EP will never exist after completing the destroying
+         * of the TMP EP */
+        ret = ucp_wireup_tmp_ep_destroy(ucp_ep, self, UCT_FLUSH_FLAG_CANCEL, NULL);
+        ucs_assert(ret == 1);
     }
 
-    UCS_ASYNC_BLOCK(&worker->async);
     --worker->flush_ops_count;
     UCS_ASYNC_UNBLOCK(&worker->async);
 }

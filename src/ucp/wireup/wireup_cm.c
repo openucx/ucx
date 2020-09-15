@@ -219,6 +219,11 @@ static void uct_wireup_cm_tmp_ep_cleanup(ucp_ep_h tmp_ep, ucs_queue_head_t *queu
             continue;
         }
 
+        /* to prevent flush+destroy UCT EPs that are used by the main EP,
+         * they have to be removed from the TMP EP lanes and their WIREUP
+         * EPs have to be destroyed */
+        
+
         /* transfer the pending queues content from the previous tmp_ep to
          * a temporary queue */
         uct_ep_pending_purge(tmp_ep->uct_eps[lane_idx],
