@@ -2845,8 +2845,6 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *       not relevant for this operation, because it is just a reply to Active
  *       Message data request.
  *
- * @param [in]  ep            Target UCP endpoint, provided in
- *                            @ref ucp_am_recv_callback_t routine.
  * @param [in]  data_desc     Data descriptor, provided in
                               @ref ucp_am_recv_callback_t routine.
  * @param [in]  buffer        Pointer to the data to be sent to the target node.
@@ -2863,8 +2861,8 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *                                the application is responsible for releasing
  *                                the handle using @ref ucp_request_free routine.
  */
-ucs_status_ptr_t ucp_am_send_reply_nbx(ucp_ep_h ep, void *data_desc,
-                                       const void *buffer, size_t count,
+ucs_status_ptr_t ucp_am_send_reply_nbx(void *data_desc, const void *buffer,
+                                       size_t count,
                                        const ucp_request_param_t *param);
 
 

@@ -87,8 +87,7 @@ static struct {
     int          is_fetch;
     void         *desc;
     void         *recv_buf;
-    ucp_ep_h     reply_ep;
-} am_data_desc = {0, 0, 0, NULL, NULL, NULL};
+} am_data_desc = {0, 0, 0, NULL, NULL};
 
 
 /**
@@ -382,13 +381,6 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
         am_data_desc.desc    = data;
         return UCS_INPROGRESS;
     } else if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_SEND_REPLY) {
-        if (!(param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP)) {
-            fprintf(stderr, "reply ep is not provided with data fetch request");
-            am_data_desc.reply_ep = NULL;
-        } else {
-            am_data_desc.reply_ep = param->reply_ep;
-        }
-
         am_data_desc.is_fetch = 1;
         am_data_desc.desc     = data;
         return UCS_INPROGRESS;
@@ -399,7 +391,6 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
      */
     am_data_desc.is_rndv  = 0;
     am_data_desc.is_fetch = 0;
-    am_data_desc.reply_ep = NULL;
     memcpy(am_data_desc.recv_buf, data, length);
 
 out:
@@ -506,10 +497,8 @@ static int send_recv_am_fetch(ucp_worker_h ucp_worker, ucp_ep_h ep,
 
         /* Client sends a message to the server buffer using the AM reply API */
         params.cb.send = send_cb,
-        request        = ucp_am_send_reply_nbx(am_data_desc.reply_ep,
-                                               am_data_desc.desc,
-                                               test_message, TEST_STRING_LEN,
-                                               &params);
+        request        = ucp_am_send_reply_nbx(am_data_desc.desc, test_message,
+                                               TEST_STRING_LEN, &params);
     }
 
     return request_finalize(ucp_worker, request, &ctx, is_server, recv_message,
