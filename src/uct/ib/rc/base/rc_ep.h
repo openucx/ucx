@@ -171,6 +171,9 @@ enum {
         UCT_RC_UPDATE_FC_WND(_iface, &(_ep)->fc) \
     }
 
+enum {
+    UCT_RC_TXQP_FLAG_ERR        = UCS_BIT(0),
+};
 
 /* this is a common type for all rc and dc transports */
 struct uct_rc_txqp {
@@ -186,6 +189,7 @@ struct uct_rc_txqp {
      * exact value on each signaled completion */
     uint16_t            unsignaled_store_count;
     int16_t             available;
+    uint8_t             flags;
     UCS_STATS_NODE_DECLARE(stats)
 };
 

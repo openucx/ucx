@@ -54,6 +54,7 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
     txqp->unsignaled_store = 0;
     txqp->unsignaled_store_count = 0;
     txqp->available  = 0;
+    txqp->flags = 0;
     ucs_queue_head_init(&txqp->outstanding);
 
     return UCS_STATS_NODE_ALLOC(&txqp->stats, &uct_rc_txqp_stats_class,

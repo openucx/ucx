@@ -214,8 +214,18 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         return;
     }
 
+    uct_rc_mlx5_common_update_tx_res(iface, &ep->tx.wq, &ep->super.txqp,
+                                     ntohs(cqe->wqe_counter));
+    ep->super.fc.fc_wnd++;
+
     if (uct_rc_mlx5_ep_handle_failure(ep, status) == UCS_OK) {
         log_lvl = ib_iface->super.config.failure_level;
+    }
+
+    if (ep->super.txqp.flags & UCT_RC_TXQP_FLAG_ERR) {
+        return;
+    } else {
+        ep->super.txqp.flags |= UCT_RC_TXQP_FLAG_ERR;
     }
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
