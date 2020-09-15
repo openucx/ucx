@@ -30,14 +30,53 @@ ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
     return rsc_index;
 }
 
-ucp_rsc_index_t
+void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
+                                     ucp_md_map_t md_map, ucp_lane_index_t lane,
+                                     ucp_proto_common_lane_priv_t *lane_priv)
+{
+    const ucp_rkey_config_key_t *rkey_config_key = params->super.rkey_config_key;
+    ucp_md_index_t md_index, dst_md_index;
+
+    md_index     = ucp_proto_common_get_md_index(&params->super, lane);
+    dst_md_index = params->super.ep_config_key->lanes[lane].dst_md_index;
+
+    lane_priv->lane = lane;
+
+    /* Local key index */
+    if (md_map & UCS_BIT(md_index)) {
+        lane_priv->memh_index = ucs_bitmap2idx(md_map, md_index);
+    } else {
+        lane_priv->memh_index = UCP_NULL_RESOURCE;
+    }
+
+    /* Remote key index */
+    if ((rkey_config_key != NULL) &&
+        (rkey_config_key->md_map & UCS_BIT(dst_md_index))) {
+        lane_priv->rkey_index = ucs_bitmap2idx(rkey_config_key->md_map,
+                                               dst_md_index);
+    } else {
+        lane_priv->rkey_index = UCP_NULL_RESOURCE;
+    }
+}
+
+void ucp_proto_common_lane_priv_str(const ucp_proto_common_lane_priv_t *lpriv,
+                                    ucs_string_buffer_t *strb)
+{
+    ucs_string_buffer_appendf(strb, "ln:%d", lpriv->lane);
+    if (lpriv->memh_index != UCP_NULL_RESOURCE) {
+        ucs_string_buffer_appendf(strb, "/mh:%d", lpriv->memh_index);
+    }
+    if (lpriv->rkey_index != UCP_NULL_RESOURCE) {
+        ucs_string_buffer_appendf(strb, "/rk:%d", lpriv->rkey_index);
+    }
+}
+
+ucp_md_index_t
 ucp_proto_common_get_md_index(const ucp_proto_init_params_t *params,
                               ucp_lane_index_t lane)
 {
-    ucp_context_h     context = params->worker->context;
     ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
-
-    return context->tl_rscs[rsc_index].md_index;
+    return params->worker->context->tl_rscs[rsc_index].md_index;
 }
 
 const uct_iface_attr_t *
@@ -65,8 +104,8 @@ ucp_proto_common_iface_bandwidth(const ucp_proto_common_init_params_t *params,
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-                            ucp_lane_index_t *lanes, ucp_lane_index_t max_lanes,
-                            ucp_lane_map_t exclude_lane_map)
+                            ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
+                            ucp_lane_index_t *lanes, ucp_md_map_t *reg_md_map_p)
 {
     ucp_context_h context                        = params->super.worker->context;
     const ucp_ep_config_key_t *ep_config_key     = params->super.ep_config_key;
@@ -104,10 +143,14 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
         return 0;
     }
 
-    lane_map = UCS_MASK(ucs_min(max_lanes, ep_config_key->num_lanes)) &
-               ~exclude_lane_map;
-    num_lanes = 0;
+    lane_map      = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
+    *reg_md_map_p = 0;
+    num_lanes     = 0;
     ucs_for_each_bit(lane, lane_map) {
+        if (num_lanes >= max_lanes) {
+            break;
+        }
+
         /* Check if lane type matches */
         ucs_assert(lane < UCP_MAX_LANES);
         if (!(ep_config_key->lanes[lane].lane_types & UCS_BIT(lane_type))) {
@@ -116,15 +159,15 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
             continue;
         }
 
+        rsc_index = ep_config_key->lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
         /* Check iface capabilities */
         iface_attr = ucp_proto_common_get_iface_attr(&params->super, lane);
         if (!ucs_test_all_flags(iface_attr->cap.flags, tl_cap_flags)) {
             ucs_trace("lane[%d]: no cap 0x%"PRIx64, lane, tl_cap_flags);
-            continue;
-        }
-
-        rsc_index = ep_config_key->lanes[lane].rsc_index;
-        if (rsc_index == UCP_NULL_RESOURCE) {
             continue;
         }
 
@@ -142,6 +185,8 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                               ucs_memory_type_names[select_param->mem_type]);
                     continue;
                 }
+
+                *reg_md_map_p |= UCS_BIT(md_index);
             } else {
                 /* Memory domain which does not require a registration for zero
                  * copy operation must be able to access the relevant memory type
@@ -306,7 +351,6 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
     ucs_linear_func_t uct_time;
     ucp_lane_index_t lane;
     uint32_t op_attr_mask;
-    ucp_md_map_t md_map;
     size_t frag_size;
 
     /* TODO
@@ -317,7 +361,6 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
     bandwidth = 0;
     overhead  = 0;
     latency   = params->latency;
-    md_map    = 0;
 
     /* Collect latency, overhead, bandwidth from all lanes */
     ucs_for_each_bit(lane, perf_params->lane_map) {
@@ -326,7 +369,6 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
         latency    = ucs_max(ucp_tl_iface_latency(context, &iface_attr->latency),
                              latency);
         bandwidth += ucp_proto_common_iface_bandwidth(params, iface_attr);
-        md_map    |= UCS_BIT(ucp_proto_common_get_md_index(&params->super, lane));
     }
 
     /* Take fragment size from first lane */
@@ -336,9 +378,10 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
                                                        params->fragsz_offset) -
                        params->hdr_size;
 
-    caps->cfg_thresh = params->cfg_thresh;
-    caps->min_length = 0;
-    caps->num_ranges = 0;
+    caps->cfg_thresh   = params->cfg_thresh;
+    caps->cfg_priority = params->cfg_priority;
+    caps->min_length   = 0;
+    caps->num_ranges   = 0;
 
     op_attr_mask = ucp_proto_select_op_attr_from_flags(
                             params->super.select_param->op_flags);
@@ -356,5 +399,5 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
                                       frag_size, overhead);
     }
 
-    ucp_proto_common_add_overheads(params, overhead, md_map);
+    ucp_proto_common_add_overheads(params, overhead, perf_params->reg_md_map);
 }

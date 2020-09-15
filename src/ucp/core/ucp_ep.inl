@@ -15,6 +15,7 @@
 
 #include <ucp/wireup/wireup.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/datastruct/ptr_map.inl>
 
 
 static inline ucp_ep_config_t *ucp_ep_config(ucp_ep_h ep)
@@ -272,4 +273,16 @@ ucp_ep_config_connect_p2p(ucp_worker_h worker,
            !ucp_worker_is_tl_2iface(worker, rsc_index);
 }
 
+static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)
+{
+    UCS_STATIC_ASSERT(sizeof(ep->flags) <= sizeof(int));
+    return ep->flags & UCP_EP_FLAG_INDIRECT_ID;
+}
+
+static UCS_F_ALWAYS_INLINE int ucp_ep_keepalive_is_enabled(ucp_ep_h ep)
+{
+    return (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+           (ucp_ep_config(ep)->key.ep_check_map != 0) &&
+           !(ep->flags & UCP_EP_FLAG_FAILED);
+}
 #endif

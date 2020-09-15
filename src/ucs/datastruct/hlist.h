@@ -277,8 +277,9 @@ ucs_hlist_extract_head(ucs_hlist_head_t *head)
  */
 #define ucs_hlist_for_each_extract_if(_elem, _head, _member, _cond) \
     for (_elem = ucs_hlist_head_elem(_head, typeof(*(_elem)), _member); \
-         _elem != UCS_PTR_BYTE_OFFSET(NULL, -ucs_offsetof(typeof(*(_elem)), _member)) && (_cond); \
-         ucs_hlist_extract_head(_head), \
+         (_elem != UCS_PTR_BYTE_OFFSET(NULL, -ucs_offsetof(typeof(*(_elem)), \
+                                                           _member))) && \
+         (_cond) && ucs_hlist_extract_head(_head); \
          _elem = ucs_hlist_head_elem(_head, typeof(*(_elem)), _member))
 
 

@@ -342,11 +342,11 @@ void ucp_request_init_multi_proto(ucp_request_t *req,
 
 ucs_status_t
 ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
-                       size_t zcopy_thresh, size_t zcopy_max, size_t dt_count,
-                       const ucp_ep_msg_config_t* msg_config,
+                       size_t zcopy_thresh, size_t zcopy_max,
+                       size_t dt_count, size_t priv_iov_count,
+                       size_t length, const ucp_ep_msg_config_t* msg_config,
                        const ucp_request_send_proto_t *proto)
 {
-    size_t       length = req->send.length;
     ucs_status_t status;
     int          multi;
 
@@ -379,11 +379,11 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         if (ucs_unlikely(length > msg_config->max_zcopy - proto->only_hdr_size)) {
             multi = 1;
         } else if (ucs_unlikely(UCP_DT_IS_IOV(req->send.datatype))) {
-            if (dt_count <= msg_config->max_iov) {
+            if (dt_count <= (msg_config->max_iov - priv_iov_count)) {
                 multi = 0;
             } else {
                 multi = ucp_dt_iov_count_nonempty(req->send.buffer, dt_count) >
-                        msg_config->max_iov;
+                        (msg_config->max_iov - priv_iov_count);
             }
         } else {
             multi = 0;

@@ -239,7 +239,7 @@ ucs_status_t uct_listener_backlog_adjust(const uct_listener_params_t *params,
     }
 
     if (*backlog <= 0) {
-        ucs_error("the backlog value cannot be zero or negative");
+        ucs_error("backlog (%d) must be a whole positive number", *backlog);
         return UCS_ERR_INVALID_PARAM;
     }
 

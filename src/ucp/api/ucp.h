@@ -3907,7 +3907,9 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
  *          @a param->reply_buffer for fetch operations), until the operation
  *          completes.
  * @note    Only ucp_dt_make_config(4) and ucp_dt_make_contig(8) are supported
- *          in @a param->datatype, see @ref ucp_dt_make_contig.
+ *          in @a param->datatype, see @ref ucp_dt_make_contig. Also, currently
+ *          atomic operations can handle one element only. Thus, @a count
+ *          argument must be set to 1.
  * @note    This routine ignores @a param.reply_count and
  *          @a param.reply_datatype parameters, because @a param.reply_buffer
  *          is supposed to be the same type and count as @a buffer.

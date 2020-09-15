@@ -143,8 +143,9 @@ public:
         modify_config("RC_TX_QUEUE_LEN", "32");
         modify_config("RC_TM_ENABLE", "y", true);
 
-        m_comp.count = 300000; // some big value to avoid func invocation
-        m_comp.func  = NULL;
+        m_comp.func   = NULL;
+        m_comp.count  = 300000; // some big value to avoid func invocation
+        m_comp.status = UCS_OK;
     }
 
     void init() {

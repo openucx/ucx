@@ -63,7 +63,8 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
     getreqh->address    = req->send.rma.remote_addr;
     getreqh->length     = req->send.length;
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
-    getreqh->req.reqptr = (uintptr_t)req;
+    getreqh->req.req_id = ucp_send_request_get_id(req);
+
     ucs_assert(getreqh->req.ep_id != UCP_EP_ID_INVALID);
 
     return sizeof(*getreqh);
@@ -171,9 +172,10 @@ static size_t ucp_rma_sw_pack_get_reply(void *dest, void *arg)
     ucp_request_t *req    = arg;
     size_t length;
 
-    length   = ucs_min(req->send.length,
-                       ucp_ep_config(req->send.ep)->am.max_bcopy - sizeof(*hdr));
-    hdr->req = req->send.get_reply.req;
+    length      = ucs_min(req->send.length,
+                          ucp_ep_config(req->send.ep)->am.max_bcopy -
+                          sizeof(*hdr));
+    hdr->req_id = req->send.get_reply.req_id;
     memcpy(hdr + 1, req->send.buffer, length);
 
     return sizeof(*hdr) + length;
@@ -221,11 +223,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
         return UCS_OK;
     }
 
-    req->send.ep            = ep;
-    req->send.buffer        = (void*)getreqh->address;
-    req->send.length        = getreqh->length;
-    req->send.get_reply.req = getreqh->req.reqptr;
-    req->send.uct.func      = ucp_progress_get_reply;
+    req->send.ep               = ep;
+    req->send.buffer           = (void*)getreqh->address;
+    req->send.length           = getreqh->length;
+    req->send.get_reply.req_id = getreqh->req.req_id;
+    req->send.uct.func         = ucp_progress_get_reply;
 
     ucp_request_send(req, 0);
     return UCS_OK;
@@ -234,15 +236,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
 UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
+    ucp_worker_h worker        = arg;
     ucp_rma_rep_hdr_t *getreph = data;
     size_t frag_length         = length - sizeof(*getreph);
-    ucp_request_t *req         = (ucp_request_t*)getreph->req;
+    ucp_request_t *req         = ucp_worker_get_request_by_id(worker,
+                                                              getreph->req_id);
     ucp_ep_h ep                = req->send.ep;
 
     memcpy(req->send.buffer, getreph + 1, frag_length);
 
     /* complete get request on last fragment of the reply */
     if (ucp_rma_request_advance(req, frag_length, UCS_OK) == UCS_OK) {
+        ucp_worker_del_request_id(worker, getreph->req_id);
         ucp_ep_rma_remote_request_completed(ep);
     }
 
@@ -270,12 +275,12 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     case UCP_AM_ID_GET_REQ:
         geth = data;
         snprintf(buffer, max, "GET_REQ [addr 0x%"PRIx64" len %"PRIu64
-                 " reqptr 0x%"PRIxPTR" ep_id 0x%"PRIx64"]", geth->address,
-                 geth->length, geth->req.reqptr, geth->req.ep_id);
+                 " req_id 0x%"PRIx64" ep_id 0x%"PRIx64"]", geth->address,
+                 geth->length, geth->req.req_id, geth->req.ep_id);
         return;
     case UCP_AM_ID_GET_REP:
         reph = data;
-        snprintf(buffer, max, "GET_REP [reqptr 0x%"PRIxPTR"]", reph->req);
+        snprintf(buffer, max, "GET_REP [req_id 0x%"PRIx64"]", reph->req_id);
         header_len = sizeof(*reph);
         break;
     case UCP_AM_ID_CMPL:

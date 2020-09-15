@@ -176,8 +176,9 @@ public:
                                  UCT_CB_FLAG_ASYNC);
 
         uct_completion_t zcomp;
-        zcomp.count = 2;
-        zcomp.func  = NULL;
+        zcomp.count  = 2;
+        zcomp.status = UCS_OK;
+        zcomp.func   = NULL;
 
         ucs_status_t status;
         UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
@@ -263,8 +264,9 @@ public:
     void flush_ep_nb() {
         uct_completion_t comp;
         ucs_status_t status;
-        comp.count = 2;
-        comp.func  = NULL;
+        comp.count  = 2;
+        comp.status = UCS_OK;
+        comp.func   = NULL;
         do {
             progress();
             status = uct_ep_flush(sender().ep(0), m_flush_flags, &comp);
@@ -345,11 +347,12 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
      std::vector<test_req_t> reqs;
      reqs.resize(10);
      for (std::vector<test_req_t>::iterator it = reqs.begin(); it != reqs.end();) {
-         it->sendbuf    = &sendbuf;
-         it->test       = this;
-         it->uct.func   = am_progress;
-         it->comp.count = 2;
-         it->comp.func  = NULL;
+         it->sendbuf     = &sendbuf;
+         it->test        = this;
+         it->uct.func    = am_progress;
+         it->comp.count  = 2;
+         it->comp.func   = NULL;
+         it->comp.status = UCS_OK;
          status = uct_ep_pending_add(sender().ep(0), &it->uct, 0);
          if (UCS_ERR_BUSY == status) {
              /* User advised to retry the send. It means no requests added
@@ -366,8 +369,9 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
 
      /* Try to start a flush */
      test_req_t flush_req;
-     flush_req.comp.count = 2;
-     flush_req.comp.func  = NULL;
+     flush_req.comp.count  = 2;
+     flush_req.comp.status = UCS_OK;
+     flush_req.comp.func   = NULL;
 
      for (;;) {
          status = uct_ep_flush(sender().ep(0), m_flush_flags, &flush_req.comp);

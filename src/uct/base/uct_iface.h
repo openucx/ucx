@@ -658,15 +658,21 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
  * Invoke send completion.
  *
  * @param comp   Completion to invoke.
- * @param data   Optional completion data (operation reply).
+ * @param status Status of completed operation.
  */
 static UCS_F_ALWAYS_INLINE
 void uct_invoke_completion(uct_completion_t *comp, ucs_status_t status)
 {
     ucs_trace_func("comp=%p, count=%d, status=%d", comp, comp->count, status);
     ucs_assertv(comp->count > 0, "comp=%p count=%d", comp, comp->count);
+
+    /* store first failure status */
+    if (ucs_unlikely(status != UCS_OK) && (comp->status == UCS_OK)) {
+        comp->status = status;
+    }
+
     if (--comp->count == 0) {
-        comp->func(comp, status);
+        comp->func(comp, comp->status);
     }
 }
 

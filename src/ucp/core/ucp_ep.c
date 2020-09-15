@@ -177,15 +177,24 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err;
     }
 
+    if ((worker->context->config.ext.proto_indirect_id == UCS_CONFIG_ON) ||
+        ((worker->context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
+         (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
+         !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE))) {
+        ep->flags |= UCP_EP_FLAG_INDIRECT_ID;
+    }
+
     status = ucs_ptr_map_put(&worker->ptr_map, ep,
-                             !!(ep_init_flags &
-                                UCP_EP_INIT_ERR_MODE_PEER_FAILURE),
+                             !!(ep->flags & UCP_EP_FLAG_INDIRECT_ID),
                              &ucp_ep_ext_gen(ep)->ids->local);
     if (status != UCS_OK) {
         goto err_destroy_ep_base;
     }
 
-    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
+        ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    }
+
     *ep_p = ep;
 
     return UCS_OK;
@@ -202,6 +211,7 @@ void ucp_ep_delete(ucp_ep_h ep)
 
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
+    ucp_worker_keepalive_remove_ep(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucs_assert(ucp_ep_ext_gen(ep)->ids->local != UCP_EP_ID_INVALID);
     status = ucs_ptr_map_del(&ep->worker->ptr_map, ucp_ep_local_id(ep));
@@ -293,7 +303,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_unpacked_address_t local_address;
-    unsigned i, mem_type;
+    ucs_memory_type_t mem_type;
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
@@ -338,12 +348,20 @@ err_free_address_list:
 err_free_address_buffer:
     ucs_free(address_buffer);
 err_cleanup_eps:
-    for (i = 0; i < UCS_MEMORY_TYPE_LAST; i++) {
-        if (worker->mem_type_ep[i]) {
-           ucp_ep_destroy_internal(worker->mem_type_ep[i]);
+    ucp_worker_destroy_mem_type_endpoints(worker);
+    return status;
+}
+
+void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker)
+{
+    ucs_memory_type_t mem_type;
+
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+        if (worker->mem_type_ep[mem_type] != NULL) {
+           ucp_ep_destroy_internal(worker->mem_type_ep[mem_type]);
+           worker->mem_type_ep[mem_type] = NULL;
         }
     }
-    return status;
 }
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
@@ -1339,9 +1357,10 @@ static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_sho
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                                      ucp_ep_msg_config_t *config, size_t max_short,
                                      size_t max_bcopy, size_t max_zcopy,
-                                     size_t max_iov, uint64_t short_flag,
-                                     uint64_t bcopy_flag, uint64_t zcopy_flag,
-                                     unsigned hdr_len, size_t adjust_min_val)
+                                     size_t max_iov, size_t max_hdr,
+                                     uint64_t short_flag, uint64_t bcopy_flag,
+                                     uint64_t zcopy_flag, unsigned hdr_len,
+                                     size_t adjust_min_val)
 {
     ucp_context_t *context = worker->context;
     const uct_md_attr_t *md_attr;
@@ -1372,6 +1391,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     }
 
     config->max_zcopy = max_zcopy;
+    config->max_hdr   = max_hdr;
     config->max_iov   = ucs_min(UCP_MAX_IOV, max_iov);
 
     if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
@@ -1624,7 +1644,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.tag.eager.max_short,
                                      iface_attr->cap.tag.eager.max_bcopy,
                                      iface_attr->cap.tag.eager.max_zcopy,
-                                     iface_attr->cap.tag.eager.max_iov,
+                                     iface_attr->cap.tag.eager.max_iov, 0,
                                      UCT_IFACE_FLAG_TAG_EAGER_SHORT,
                                      UCT_IFACE_FLAG_TAG_EAGER_BCOPY,
                                      UCT_IFACE_FLAG_TAG_EAGER_ZCOPY, 0,
@@ -1676,6 +1696,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.am.max_bcopy,
                                      iface_attr->cap.am.max_zcopy,
                                      iface_attr->cap.am.max_iov,
+                                     iface_attr->cap.am.max_hdr,
                                      UCT_IFACE_FLAG_AM_SHORT,
                                      UCT_IFACE_FLAG_AM_BCOPY,
                                      UCT_IFACE_FLAG_AM_ZCOPY,
@@ -2234,4 +2255,23 @@ int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
 {
     return (config->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
            (config->key.cm_lane  != UCP_NULL_LANE);
+}
+
+unsigned ucp_ep_do_keepalive(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane;
+
+    if (!ucp_ep_keepalive_is_enabled(ep)) {
+        return 0;
+    }
+
+    /* TODO: add error handling: in future uct_ep_check may check peer
+     * immediately */
+    ucs_for_each_bit(lane, ucp_ep_config(ep)->key.ep_check_map) {
+        ucs_assert(lane < UCP_MAX_LANES);
+        /* coverity[overrun-local] */
+        uct_ep_check(ep->uct_eps[lane], 0, NULL);
+    }
+
+    return 1;
 }

@@ -23,7 +23,7 @@ enum {
  */
 typedef struct {
     uint64_t       ep_id;        /* Endpoint ID */
-    uintptr_t      reqptr;       /* Request pointer */
+    uint64_t       req_id;       /* Request ID */
     uint8_t        md_index;     /* md index */
 } UCS_S_PACKED ucp_tag_offload_unexp_rndv_hdr_t;
 

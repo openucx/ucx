@@ -1204,8 +1204,9 @@ struct uct_listener_params {
     uint64_t                                field_mask;
 
     /**
-     * Backlog of incoming connection requests.
-     * If not specified, SOMAXCONN, as defined in <sys/socket.h>, will be used.
+     * Backlog of incoming connection requests. If specified, must be a positive value.
+     * If not specified, each CM component will use its maximal allowed value,
+     * based on the system's setting.
      */
     int                                     backlog;
 
@@ -1236,6 +1237,7 @@ struct uct_md_attr {
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
+        uint64_t             alloc_mem_types;  /**< Bitmap of memory types that Memory Domain can allocate memory on */
         ucs_memory_type_t    access_mem_type; /**< Memory type that Memory Domain can access */
     } cap;
 
@@ -1356,7 +1358,7 @@ typedef struct uct_rkey_bundle {
  * @brief Completion handle.
  *
  * This structure should be allocated by the user and can be passed to communication
- * primitives. User has to initializes both fields of the structure.
+ * primitives. The user must initialize all fields of the structure.
  *  If the operation returns UCS_INPROGRESS, this structure will be in use by the
  * transport until the operation completes. When the operation completes, "count"
  * field is decremented by 1, and whenever it reaches 0 - the callback is called.
@@ -1366,10 +1368,15 @@ typedef struct uct_rkey_bundle {
  *    without the need to wait for completion.
  *  - If the number of operations is smaller than the initial value of the counter,
  *    the callback will not be called at all, so it may be left undefined.
+ *  - status field is required to track the first time the error occurred, and
+ *    report it via a callback when count reaches 0.
  */
 struct uct_completion {
     uct_completion_callback_t func;    /**< User callback function */
     int                       count;   /**< Completion counter */
+    ucs_status_t              status;  /**< Completion status, this field must
+                                            be initialized with UCS_OK before
+                                            first operation is started. */
 };
 
 
@@ -2065,33 +2072,89 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr);
 
 /**
  * @ingroup UCT_MD
- * @brief Allocate memory for zero-copy sends and remote access.
+ * @brief UCT allocation parameters specification field mask
  *
- * Allocate memory on the memory domain. In order to use this function, MD
- * must support @ref UCT_MD_FLAG_ALLOC flag.
- *
- * @param [in]     md          Memory domain to allocate memory on.
- * @param [in,out] length_p    Points to the size of memory to allocate. Upon successful
- *                             return, filled with the actual size that was allocated,
- *                             which may be larger than the one requested. Must be >0.
- * @param [in,out] address_p   The address
- * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
- * @param [in]     name        Name of the allocated region, used to track memory
- *                             usage for debugging and profiling.
- * @param [out]    memh_p      Filled with handle for allocated region.
+ * The enumeration allows specifying which fields in @ref uct_mem_alloc_params_t
+ * are present.
  */
-ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
-                              unsigned flags, const char *name, uct_mem_h *memh_p);
+typedef enum {
+    /** Enables @ref uct_mem_alloc_params_t::flags */
+    UCT_MEM_ALLOC_PARAM_FIELD_FLAGS          = UCS_BIT(0),
+
+    /** Enables @ref uct_mem_alloc_params_t::address */
+    UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS        = UCS_BIT(1),
+
+    /** Enables @ref uct_mem_alloc_params_t::mem_type */
+    UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE       = UCS_BIT(2),
+
+    /** Enables @ref uct_mem_alloc_params_t::mds */
+    UCT_MEM_ALLOC_PARAM_FIELD_MDS            = UCS_BIT(3),
+
+    /** Enables @ref uct_mem_alloc_params_t::name */
+    UCT_MEM_ALLOC_PARAM_FIELD_NAME           = UCS_BIT(4)
+} uct_mem_alloc_params_field_t;
 
 
 /**
  * @ingroup UCT_MD
- * @brief Release memory allocated by @ref uct_md_mem_alloc.
- *
- * @param [in]     md          Memory domain memory was allocated on.
- * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc.
+ * @brief Parameters for allocating memory using @ref uct_mem_alloc
  */
-ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_mem_alloc_params_field_t. Fields not specified in this mask will
+     * be ignored.
+     */
+    uint64_t                     field_mask;
+
+    /**
+     * Memory allocation flags, see @ref uct_md_mem_flags
+     * If UCT_MEM_ALLOC_PARAM_FIELD_FLAGS is not specified in field_mask, then
+     * (UCT_MD_MEM_ACCESS_LOCAL_READ | UCT_MD_MEM_ACCESS_LOCAL_WRITE) is used by
+     * default.
+     */
+    unsigned                     flags;
+
+    /**
+     * If @a address is NULL, the underlying allocation routine will
+     * choose the address at which to create the mapping. If @a address
+     * is non-NULL and UCT_MD_MEM_FLAG_FIXED is not set, the address
+     * will be interpreted as a hint as to where to establish the mapping. If
+     * @a address is non-NULL and UCT_MD_MEM_FLAG_FIXED is set, then the
+     * specified address is interpreted as a requirement. In this case, if the
+     * mapping to the exact address cannot be made, the allocation request
+     * fails.
+     */
+    void                         *address;
+
+    /**
+     * Type of memory to be allocated.
+     */
+    ucs_memory_type_t            mem_type;
+
+    struct {
+        /**
+         * Array of memory domains to attempt to allocate
+         * the memory with, for MD allocation method.
+         */
+        const uct_md_h           *mds;
+
+        /**
+         *  Length of 'mds' array. May be empty, in such case
+         *  'mds' may be NULL, and MD allocation method will
+         *  be skipped.
+         */
+        unsigned                 count;
+    } mds;
+
+    /**
+     * Name of the allocated region, used to track memory
+     * usage for debugging and profiling.
+     * If UCT_MEM_ALLOC_PARAM_FIELD_NAME is not specified in field_mask, then
+     * "anonymous-uct_mem_alloc" is used by default.
+     */
+    const char                   *name;
+} uct_mem_alloc_params_t;
 
 
 /**
@@ -2104,7 +2167,7 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
  * ignored.
  *
  * @param [in]     md          Memory domain memory was allocated or registered on.
- * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc
+ * @param [in]     memh        Memory handle, as returned from @ref uct_mem_alloc
  * @param [in]     addr        Memory base address. Memory range must belong to the
  *                             @a memh
  * @param [in]     length      Length of memory to advise. Must be >0.
@@ -2164,39 +2227,29 @@ ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr,
  * @ingroup UCT_MD
  * @brief Allocate memory for zero-copy communications and remote access.
  *
- * Allocate potentially registered memory. Every one of the provided allocation
- * methods will be used, in turn, to perform the allocation, until one succeeds.
- * Whenever the MD method is encountered, every one of the provided MDs will be
- * used, in turn, to allocate the memory, until one succeeds, or they are
- * exhausted. In this case the next allocation method from the initial list will
- * be attempted.
+ * Allocate potentially registered memory.
  *
- * @param [in]     addr        If @a addr is NULL, the underlying allocation routine
- *                             will choose the address at which to create the mapping.
- *                             If @a addr is non-NULL but UCT_MD_MEM_FLAG_FIXED is
- *                             not set, the address will be interpreted as a hint
- *                             as to where to establish the mapping. If @a addr is
- *                             non-NULL and UCT_MD_MEM_FLAG_FIXED is set, then
- *                             the specified address is interpreted as a requirement.
- *                             In this case, if the mapping to the exact address
- *                             cannot be made, the allocation request fails.
- * @param [in]     min_length  Minimal size to allocate. The actual size may be
- *                             larger, for example because of alignment restrictions.
- * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
+ * @param [in]     length      The minimal size to allocate. The actual size may
+ *                             be larger, for example because of alignment
+ *                             restrictions. Must be >0.
  * @param [in]     methods     Array of memory allocation methods to attempt.
+ *                             Each of the provided allocation methods will be
+ *                             tried in array order, to perform the allocation,
+ *                             until one succeeds. Whenever the MD method is
+ *                             encountered, each of the provided MDs will be
+ *                             tried in array order, to allocate the memory,
+ *                             until one succeeds, or they are exhausted. In
+ *                             this case the next allocation method from the
+ *                             initial list will be attempted.
  * @param [in]     num_methods Length of 'methods' array.
- * @param [in]     mds         Array of memory domains to attempt to allocate
- *                             the memory with, for MD allocation method.
- * @param [in]     num_mds     Length of 'mds' array. May be empty, in such case
- *                             'mds' may be NULL, and MD allocation method will
- *                             be skipped.
- * @param [in]     name        Name of the allocation. Used for memory statistics.
+ * @param [in]     params      Memory allocation characteristics, see
+ *                             @ref uct_mem_alloc_params_t.
  * @param [out]    mem         In case of success, filled with information about
- *                              the allocated memory. @ref uct_allocated_memory_t.
+ *                             the allocated memory. @ref uct_allocated_memory_t
  */
-ucs_status_t uct_mem_alloc(void *addr, size_t min_length, unsigned flags,
-                           uct_alloc_method_t *methods, unsigned num_methods,
-                           uct_md_h *mds, unsigned num_mds, const char *name,
+ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
+                           unsigned num_methods,
+                           const uct_mem_alloc_params_t *params,
                            uct_allocated_memory_t *mem);
 
 

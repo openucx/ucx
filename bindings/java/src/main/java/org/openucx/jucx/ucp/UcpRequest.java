@@ -19,6 +19,8 @@ public class UcpRequest extends UcxNativeStruct implements Closeable {
 
     private long recvSize;
 
+    private long senderTag;
+
     private UcpRequest(long nativeId) {
         setNativeId(nativeId);
     }
@@ -34,6 +36,13 @@ public class UcpRequest extends UcxNativeStruct implements Closeable {
      */
     public long getRecvSize() {
         return recvSize;
+    }
+
+    /**
+     * Sender tag, valid only for tag receive requests.
+     */
+    public long getSenderTag() {
+        return senderTag;
     }
 
     /**

@@ -62,13 +62,13 @@ typedef struct {
 
 
 typedef struct {
-    uintptr_t                 req;
+    uint64_t                  req_id;
 } UCS_S_PACKED ucp_rma_rep_hdr_t;
 
 
 typedef struct {
     uint64_t                  address;
-    ucp_request_hdr_t         req; /* NULL if no reply */
+    ucp_request_hdr_t         req; /* invalid req_id if no reply */
     uint8_t                   length;
     uint8_t                   opcode;
 } UCS_S_PACKED ucp_atomic_req_hdr_t;

@@ -62,6 +62,9 @@ enum {
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_TEMPORARY              = UCS_BIT(13),/* the temporary EP which holds
                                                         temporary wireup configuration */
+    UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
+                                                        indirect endpoint id instead of pointer,
+                                                        can be replaced with looking at local ID */
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
@@ -192,6 +195,7 @@ typedef struct ucp_ep_msg_config {
         ssize_t            max_short;
         size_t             max_bcopy;
         size_t             max_zcopy;
+        size_t             max_hdr;
         size_t             max_iov;
 
         /* zero-copy threshold for operations which do not have to wait for remote side */
@@ -445,7 +449,7 @@ enum {
 
 
 struct ucp_wireup_sockaddr_data {
-    uint64_t                  ep_id ;        /**< Endpoint ID */
+    uint64_t                  ep_id;         /**< Endpoint ID */
     uint8_t                   err_mode;      /**< Error handling mode */
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
@@ -554,6 +558,8 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
 
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
 
+void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker);
+
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
 uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep);
@@ -573,5 +579,15 @@ int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
 void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status);
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
+
+/**
+ * @brief Do keepalive operation.
+ *
+ * @param [in] ep           Endpoint object to operate keepalive.
+ *
+ * @return otherwise        1 - if keepalive operation is done, 0 - keepalive
+ *                          operation is not supported or not done
+ */
+unsigned ucp_ep_do_keepalive(ucp_ep_h ep);
 
 #endif

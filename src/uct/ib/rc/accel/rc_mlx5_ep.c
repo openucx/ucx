@@ -543,14 +543,8 @@ uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     uint64_t dummy = 0;
 
     UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
-
-    /* if some operations are in progress, no need to send an additional
-     * message */
-    if (uct_rc_txqp_available(&ep->super.txqp) != ep->tx.wq.bb_max) {
-        return UCS_OK;
-    }
-
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
+
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
                                  MLX5_OPCODE_RDMA_WRITE, &dummy, 0,
@@ -558,7 +552,6 @@ uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
                                  0, 0,
                                  NULL, NULL, 0, 0,
                                  INT_MAX);
-
     return UCS_OK;
 }
 
@@ -936,6 +929,15 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         }
     }
 
+    status = uct_ib_device_async_event_register(
+            &md->super.dev,
+            IBV_EVENT_QP_LAST_WQE_REACHED,
+            self->tx.wq.super.qp_num,
+            &iface->super.super.super.worker->super.progress_q);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     uct_rc_iface_add_qp(&iface->super, &self->super, self->tx.wq.super.qp_num);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
@@ -946,7 +948,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         uct_ib_exp_qp_fill_attr(&iface->super.super, &attr.super);
         status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, &attr);
         if (status != UCS_OK) {
-            goto err;
+            goto err_unreg;
         }
 
         uct_rc_iface_add_qp(&iface->super, &self->super, self->tm_qp.qp_num);
@@ -956,6 +958,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     self->mp.free      = 1;
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     return UCS_OK;
+
+err_unreg:
+    uct_ib_device_async_event_unregister(&md->super.dev,
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         self->tx.wq.super.qp_num);
+    uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
 
 err:
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
@@ -1031,6 +1039,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     uct_ib_mlx5_verbs_srq_cleanup(&iface->rx.srq, iface->rx.srq.verbs.srq);
 
+    uct_ib_device_async_event_unregister(&md->super.dev,
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         self->tx.wq.super.qp_num);
     uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
 }

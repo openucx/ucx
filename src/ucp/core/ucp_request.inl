@@ -11,10 +11,12 @@
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
 
+
 #include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/datastruct/ptr_map.inl>
 #include <ucp/dt/dt.inl>
 #include <inttypes.h>
 
@@ -295,8 +297,8 @@ ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
     ucp_dt_generic_t *dt_gen;
     void             *state_gen;
 
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.uct_comp.count,
-                                sizeof(req->send.state.uct_comp.count));
+    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.uct_comp,
+                                sizeof(req->send.state.uct_comp));
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.dt.offset,
                                 sizeof(req->send.state.dt.offset));
 
@@ -334,11 +336,12 @@ ucp_request_send_state_reset(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-        req->send.state.uct_comp.func       = comp_cb;
-        req->send.state.uct_comp.count      = 0;
+        req->send.state.uct_comp.func   = comp_cb;
+        req->send.state.uct_comp.count  = 0;
+        req->send.state.uct_comp.status = UCS_OK;
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
-        req->send.state.dt.offset           = 0;
+        req->send.state.dt.offset       = 0;
         break;
     default:
         ucs_fatal("unknown protocol");
@@ -677,6 +680,13 @@ ucp_request_param_mem_type(const ucp_request_param_t *param)
 {
     return (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
            param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
+ucp_send_request_get_id(ucp_request_t *req)
+{
+    return ucp_worker_get_request_id(req->send.ep->worker, req,
+                                     ucp_ep_use_indirect_id(req->send.ep));
 }
 
 #endif

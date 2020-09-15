@@ -64,9 +64,12 @@ debian/rules
 debian/ucx.postinst
 ucx.spec
 ucx.pc
-doc/doxygen-doc
-doc/uml/uct.pdf
-doc/doxygen/header.tex
+docs/_build
+docs/doxygen-doc
+docs/doxygen/header.tex
+docs/uml/ucp.pdf
+docs/uml/uct.pdf
+docs/uml/uml.tag
 test-driver
 src/ucp/api/ucp_version.h
 src/ucp/core/ucp_version.c
@@ -84,4 +87,3 @@ GTAGS
 /modules
 *.swp
 compile_commands.json
-docs/_build

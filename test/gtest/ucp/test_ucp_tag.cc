@@ -63,17 +63,7 @@ void test_ucp_tag::request_init(void *request)
     req->info.sender_tag = 0;
 }
 
-void test_ucp_tag::request_release(struct request *req)
-{
-    if (req->external) {
-        free(req->req_mem);
-    } else {
-        req->completed = false;
-        ucp_request_release(req);
-    }
-}
-
-void test_ucp_tag::request_free(struct request *req)
+void test_ucp_tag::request_free(request *req)
 {
     if (req->external) {
         free(req->req_mem);
@@ -93,46 +83,63 @@ test_ucp_tag::request* test_ucp_tag::request_alloc()
     return req;
 }
 
-void test_ucp_tag::send_callback(void *request, ucs_status_t status)
+void test_ucp_tag::send_callback(void *request, ucs_status_t status,
+                                 void *user_data)
 {
-    struct request *req = (struct request *)request;
+    struct request *req = (struct request *)(user_data ?: request);
     ucs_assert(req->completed == false);
     req->status    = status;
     req->completed = true;
 }
 
-void test_ucp_tag::recv_callback(void *request, ucs_status_t status,
-                                 ucp_tag_recv_info_t *info)
+/* TODO: deprecated, remove after complete migration to new API */
+void test_ucp_tag::send_callback(void *request, ucs_status_t status)
 {
-    struct request *req = (struct request *)request;
+    send_callback(request, status, NULL);
+}
+
+void test_ucp_tag::recv_callback(void *request, ucs_status_t status,
+                                 const ucp_tag_recv_info_t *info,
+                                 void *user_data)
+{
+    struct request *req = (struct request *)(user_data ?: request);
     ucs_assert(req->completed == false);
     req->status    = status;
     req->completed = true;
     if (status == UCS_OK) {
-        req->info      = *info;
+        req->info  = *info;
     }
 }
 
-void test_ucp_tag::wait(request *req, int buf_index)
+/* TODO: deprecated, remove after complete migration to new API */
+void test_ucp_tag::recv_callback(void *request, ucs_status_t status,
+                                 ucp_tag_recv_info_t *info)
 {
+    recv_callback(request, status, info, NULL);
+}
+
+void test_ucp_tag::wait(void *ucx_req, void *user_data, int buf_index)
+{
+    request *req     = (request*)(user_data ?: ucx_req);
     int worker_index = get_worker_index(buf_index);
 
     if (is_external_request()) {
         ucp_tag_recv_info_t tag_info;
-        ucs_status_t        status = ucp_request_test(req, &tag_info);
+        ucs_status_t        status = ucp_request_test(ucx_req, &tag_info);
 
         while (status == UCS_INPROGRESS) {
             progress(worker_index);
-            status = ucp_request_test(req, &tag_info);
+            status = ucp_request_test(ucx_req, &tag_info);
         }
         if (req->external) {
-            recv_callback(req, status, &tag_info);
+            recv_callback(ucx_req, status, &tag_info, user_data);
         }
     } else {
+        /* TODO: wait using request status only */
         while (!req->completed) {
             progress(worker_index);
             if ((req->external) &&
-                (ucp_request_check_status(req) == UCS_OK)) {
+                (ucp_request_check_status(ucx_req) == UCS_OK)) {
                 return;
             }
         }
@@ -148,7 +155,7 @@ void test_ucp_tag::wait_and_validate(request *req)
     wait(req);
     EXPECT_TRUE(req->completed);
     EXPECT_EQ(UCS_OK, req->status);
-    request_release(req);
+    request_free(req);
 }
 
 void test_ucp_tag::wait_for_unexpected_msg(ucp_worker_h worker, double sec)
@@ -185,20 +192,30 @@ int test_ucp_tag::get_worker_index(int buf_index)
 test_ucp_tag::request *
 test_ucp_tag::send(entity &sender, send_type_t type, const void *buffer,
                    size_t count, ucp_datatype_t datatype, ucp_tag_t tag,
-                   int buf_index)
+                   void *user_data, int buf_index)
 {
     int worker_index = get_worker_index(buf_index);
     request *req;
-    ucs_status_t status;
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype     = datatype;
 
     switch (type) {
     case SEND_B:
+        param.op_attr_mask |= UCP_OP_ATTR_FLAG_FAST_CMPL;
+        /* fallthrough */
     case SEND_NB:
-        req = (request*)ucp_tag_send_nb(sender.ep(worker_index), buffer, count,
-                                        datatype, tag, send_callback);
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA;
+        param.cb.send       = send_callback;
+        param.user_data     = user_data;
+        req                 = (request*)ucp_tag_send_nbx(sender.ep(worker_index),
+                                                         buffer, count,
+                                                         tag, &param);
         if ((req != NULL) && (type == SEND_B)) {
-            wait(req, get_worker_index(buf_index));
-            request_release(req);
+            wait(req, user_data, get_worker_index(buf_index));
+            request_free(req);
             return NULL;
         }
 
@@ -207,18 +224,26 @@ test_ucp_tag::send(entity &sender, send_type_t type, const void *buffer,
         }
         break;
     case SEND_NBR:
-        req = request_alloc();
-        status = ucp_tag_send_nbr(sender.ep(worker_index), buffer, count,
-                                  datatype, tag, req);
-        ASSERT_UCS_OK_OR_INPROGRESS(status);
-        if (status == UCS_OK) {
-            request_free(req);
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_REQUEST;
+        param.request       = request_alloc();
+        req                 = (request*)ucp_tag_send_nbx(sender.ep(worker_index),
+                                                         buffer, count, tag,
+                                                         &param);
+        if (req == NULL) {
+            request_free((request*)param.request);
             return (request*)UCS_STATUS_PTR(UCS_OK);
         }
+
+        if (user_data) {
+            ((request*)user_data)->external = true;
+        }
+
         break;
     case SEND_SYNC_NB:
-        return (request*)ucp_tag_send_sync_nb(sender.ep(worker_index), buffer,
-                                              count, datatype, tag, send_callback);
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK;
+        param.cb.send       = send_callback;
+        return (request*)ucp_tag_send_sync_nbx(sender.ep(worker_index), buffer,
+                                               count, tag, &param);
     default:
         return NULL;
     }
@@ -228,87 +253,108 @@ test_ucp_tag::send(entity &sender, send_type_t type, const void *buffer,
 
 test_ucp_tag::request *
 test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                      ucp_tag_t tag, int buf_index)
+                      ucp_tag_t tag, void *user_data, int buf_index)
 {
-    return send(sender(), SEND_NB, buffer, count, datatype, tag, buf_index);
+    return send(sender(), SEND_NB, buffer, count, datatype, tag, user_data,
+                buf_index);
 }
 
 test_ucp_tag::request *
 test_ucp_tag::send_nbr(const void *buffer, size_t count,
                        ucp_datatype_t datatype,
-                       ucp_tag_t tag, int buf_index)
+                       ucp_tag_t tag, void *user_data, int buf_index)
 {
-    return send(sender(), SEND_NBR, buffer, count, datatype, tag, buf_index);
+    return send(sender(), SEND_NBR, buffer, count, datatype, tag, user_data,
+                buf_index);
 }
 
 
 void test_ucp_tag::send_b(const void *buffer, size_t count, ucp_datatype_t datatype,
-                          ucp_tag_t tag, int buf_index)
+                          ucp_tag_t tag, void *user_data, int buf_index)
 {
-    send(sender(), SEND_B, buffer, count, datatype, tag, buf_index);
+    send(sender(), SEND_B, buffer, count, datatype, tag, user_data, buf_index);
 }
 
 test_ucp_tag::request *
 test_ucp_tag::send_sync_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                           ucp_tag_t tag, int buf_index)
+                           ucp_tag_t tag, void *user_data, int buf_index)
 {
-    return send(sender(), SEND_SYNC_NB, buffer, count, datatype, tag, buf_index);
+    return send(sender(), SEND_SYNC_NB, buffer, count, datatype, tag, user_data,
+                buf_index);
 }
 
 test_ucp_tag::request*
 test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
                    size_t count, ucp_datatype_t datatype,
                    ucp_tag_t tag, ucp_tag_t tag_mask,
-                   ucp_tag_recv_info_t *info, int buf_index)
+                   ucp_tag_recv_info_t *info, void *user_data, int buf_index)
 {
     int worker_index = get_worker_index(buf_index);
     request *req;
     ucs_status_t status;
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    param.datatype     = datatype;
 
     switch (type) {
     case RECV_B:
     case RECV_NB:
-        req = (request*)ucp_tag_recv_nb(receiver.worker(worker_index), buffer, count,
-                                        datatype, tag, tag_mask, recv_callback);
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA;
+        param.cb.recv       = recv_callback;
+        param.user_data     = user_data;
+        req                 = (request*)ucp_tag_recv_nbx(receiver.worker(worker_index),
+                                                         buffer, count, tag, tag_mask,
+                                                         &param);
         if (type == RECV_NB) {
             if (UCS_PTR_IS_ERR(req)) {
                 ASSERT_UCS_OK(UCS_PTR_STATUS(req));
             } else if (req == NULL) {
-                UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
+                UCS_TEST_ABORT("ucp_tag_recv_nbx returned NULL");
             }
         } else {
             if (UCS_PTR_IS_ERR(req)) {
                 return req;
             } else if (req == NULL) {
-                UCS_TEST_ABORT("ucp_tag_recv_nb returned NULL");
+                UCS_TEST_ABORT("ucp_tag_recv_nbx returned NULL");
             } else {
-                wait(req, worker_index);
+                wait(req, user_data, worker_index);
                 status = req->status;
                 *info  = req->info;
-                request_release(req);
+                request_free(req);
                 return (request*)UCS_STATUS_PTR(status);
             }
         }
         break;
     case RECV_BR:
     case RECV_NBR:
-        req = request_alloc();
-        status = ucp_tag_recv_nbr(receiver.worker(worker_index), buffer,
-                                  count, datatype, tag, tag_mask, req);
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_REQUEST;
+        param.request       = request_alloc();
+        req                 = (request*)ucp_tag_recv_nbx(receiver.worker(worker_index),
+                                                         buffer, count, tag, tag_mask,
+                                                         &param);
         if (type == RECV_NBR) {
-            if (UCS_STATUS_IS_ERR(status)) {
-                UCS_TEST_ABORT("ucp_tag_recv_nb returned status " <<
-                               ucs_status_string(status));
+            if (UCS_PTR_IS_ERR(req)) {
+                UCS_TEST_ABORT("ucp_tag_recv_nbx returned status " <<
+                               ucs_status_string(UCS_PTR_STATUS(req)));
             }
         } else {
-            if (!UCS_STATUS_IS_ERR(status)) {
-                wait(req, worker_index);
+            if (!UCS_PTR_IS_ERR(req)) {
+                wait(req, NULL, worker_index);
                 status = req->status;
                 *info  = req->info;
-                request_release(req);
+                request_free(req);
                 return (request*)UCS_STATUS_PTR(status);
             }
         }
+
+        /* TODO: make refactoring of tests to add native user data processing */
+        if (user_data) {
+            ((request*)user_data)->external = true;
+        }
+
         break;
     default:
         return NULL;
@@ -319,21 +365,22 @@ test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
 
 test_ucp_tag::request*
 test_ucp_tag::recv_nb(void *buffer, size_t count, ucp_datatype_t datatype,
-                      ucp_tag_t tag, ucp_tag_t tag_mask, int buf_index)
+                      ucp_tag_t tag, ucp_tag_t tag_mask, void *user_data,
+                      int buf_index)
 {
     recv_type_t type = is_external_request() ? RECV_NBR : RECV_NB;
     return recv(receiver(), type, buffer, count, datatype,
-                tag, tag_mask, NULL, buf_index);
+                tag, tag_mask, NULL, user_data, buf_index);
 }
 
 ucs_status_t
 test_ucp_tag::recv_b(void *buffer, size_t count, ucp_datatype_t datatype,
                      ucp_tag_t tag, ucp_tag_t tag_mask,
-                     ucp_tag_recv_info_t *info, int buf_index)
+                     ucp_tag_recv_info_t *info, void *user_data, int buf_index)
 {
     recv_type_t type = is_external_request() ? RECV_BR : RECV_B;
     request* req = recv(receiver(), type, buffer, count, datatype,
-                        tag, tag_mask, info, buf_index);
+                        tag, tag_mask, info, user_data, buf_index);
     return UCS_PTR_STATUS(req);
 }
 

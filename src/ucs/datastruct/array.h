@@ -28,6 +28,8 @@ BEGIN_C_DECLS
         _index_type       length; \
         _index_type       capacity; \
     } ucs_array_t(_name); \
+    \
+    typedef _value_type UCS_ARRAY_IDENTIFIER(_name, _value_type_t);
 
 
 /**
@@ -73,6 +75,47 @@ BEGIN_C_DECLS
 #define UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity) \
     { (_buffer), 0, \
       ((_capacity) & UCS_ARRAY_CAP_MASK) | UCS_ARRAY_CAP_FLAG_FIXED }
+
+
+/**
+ * Helper macro to allocate fixed-size array on stack and check for max alloca
+ * size.
+ *
+ * @param _name      Array name to take value type from.
+ * @param _capacity  Array capacity to allocate, must be compile-time constant.
+ *
+ * @return Pointer to allocated memory on stack
+ */
+#define UCS_ARRAY_ALLOC_ONSTACK(_name, _capacity) \
+    ({ \
+        typedef UCS_ARRAY_IDENTIFIER(_name, _value_type_t) value_t; \
+        UCS_STATIC_ASSERT((_capacity) * sizeof(value_t) <= UCS_ALLOCA_MAX_SIZE); \
+        (value_t*)alloca((_capacity) * sizeof(value_t)); \
+    })
+
+
+/**
+ * Define a fixed-size array backed by a buffer allocated on the stack.
+ *
+ * @param _var       Array variable
+ * @param _name      Array name, as used in @ref UCS_ARRAY_DECLARE_TYPE
+ * @param _capacity  Array capacity
+ *
+ * Example:
+ *
+ * @code{.c}
+ * UCS_ARRAY_DEFINE_INLINE(int_array, unsigned, int)
+ *
+ * void my_func()
+ * {
+ *     UCS_ARRAY_DEFINE_ONSTACK(my_array, int_array, 20);
+ * }
+ * @endcode
+ */
+#define UCS_ARRAY_DEFINE_ONSTACK(_var, _name, _capacity) \
+    ucs_array_t(_name) _var = \
+        UCS_ARRAY_FIXED_INITIALIZER(UCS_ARRAY_ALLOC_ONSTACK(_name, _capacity), \
+                                    (_capacity))
 
 
 /**

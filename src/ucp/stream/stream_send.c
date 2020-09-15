@@ -64,7 +64,8 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
     ssize_t max_short   = ucp_proto_get_short_max(req, msg_config);
 
     ucs_status_t status = ucp_request_send_start(req, max_short, zcopy_thresh,
-                                                 SIZE_MAX, count, msg_config,
+                                                 SIZE_MAX, count, 0,
+                                                 req->send.length, msg_config,
                                                  proto);
     if (status != UCS_OK) {
         return UCS_STATUS_PTR(status);
@@ -290,7 +291,8 @@ static ucs_status_t ucp_stream_eager_zcopy_single(uct_pending_req_t *self)
 
     hdr.ep_id = ucp_send_request_get_ep_remote_id(req);
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_STREAM_DATA, &hdr,
-                                  sizeof(hdr), ucp_proto_am_zcopy_req_complete);
+                                  sizeof(hdr), NULL, 0ul,
+                                  ucp_proto_am_zcopy_req_complete);
 }
 
 static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
@@ -303,7 +305,7 @@ static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
                                  UCP_AM_ID_STREAM_DATA,
                                  UCP_AM_ID_STREAM_DATA,
                                  &hdr, sizeof(hdr), &hdr, sizeof(hdr),
-                                 ucp_proto_am_zcopy_req_complete, 0);
+                                 NULL, 0ul, ucp_proto_am_zcopy_req_complete, 0);
 }
 
 const ucp_request_send_proto_t ucp_stream_am_proto = {

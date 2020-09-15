@@ -11,6 +11,7 @@
 #include <common/test.h>
 
 extern "C" {
+#include <uct/ib/base/ib_device.h>
 #if HAVE_MLX5_HW
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/rc/accel/rc_mlx5.h>
@@ -22,24 +23,34 @@ extern "C" {
 
 class uct_p2p_test_event : public uct_p2p_test {
 private:
-    void rc_mlx5_ep_to_err(entity &e, uint32_t *qp_num_p) {
+    uint32_t rc_mlx5_qp_num(entity &e) {
+#if HAVE_MLX5_HW
+        uct_rc_mlx5_ep_t *ep = (uct_rc_mlx5_ep_t *)e.ep(0);
+        return ep->tx.wq.super.qp_num;
+#else
+        ucs_fatal("no mlx5 compile time support");
+        return 0;
+#endif
+    }
+
+    uint32_t rc_verbs_qp_num(entity &e) {
+        uct_rc_verbs_ep_t *ep = (uct_rc_verbs_ep_t *)e.ep(0);
+        return ep->qp->qp_num;
+    }
+
+    void rc_mlx5_ep_to_err(entity &e) {
 #if HAVE_MLX5_HW
         uct_ib_mlx5_md_t *md = (uct_ib_mlx5_md_t *)e.md();
         uct_rc_mlx5_ep_t *ep = (uct_rc_mlx5_ep_t *)e.ep(0);
         uct_ib_mlx5_qp_t *qp = &ep->tx.wq.super;
 
         uct_ib_mlx5_modify_qp_state(md, qp, IBV_QPS_ERR);
-
-        *qp_num_p = qp->qp_num;
 #endif
     }
 
-    void rc_verbs_ep_to_err(entity &e, uint32_t *qp_num_p) {
+    void rc_verbs_ep_to_err(entity &e) {
         uct_rc_verbs_ep_t *ep = (uct_rc_verbs_ep_t *)e.ep(0);
-
         uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
-
-        *qp_num_p = ep->qp->qp_num;
     }
 
 public:
@@ -65,37 +76,88 @@ public:
             : UCS_LOG_FUNC_RC_STOP;
     }
 
-    int wait_for_last_wqe_event(entity &e) {
+    void trigger_last_wqe_event(entity &e) {
         const resource *r = dynamic_cast<const resource*>(GetParam());
-        flushed_qp_num = -1;
-        uint32_t qp_num = 0;
 
         if (r->tl_name == "rc_mlx5") {
-            rc_mlx5_ep_to_err(e, &qp_num);
+            rc_mlx5_ep_to_err(e);
         } else {
-            rc_verbs_ep_to_err(e, &qp_num);
+            rc_verbs_ep_to_err(e);
         }
+    }
 
+    uint32_t get_qp_num(entity &e) {
+        const resource *r = dynamic_cast<const resource*>(GetParam());
+
+        if (r->tl_name == "rc_mlx5") {
+            return rc_mlx5_qp_num(e);
+        } else {
+            return rc_verbs_qp_num(e);
+        }
+    }
+
+    int wait_for_last_wqe_event_by_log(entity &e) {
+        uint32_t qp_num = get_qp_num(e);
+        flushed_qp_num = -1;
+        int ret = 0;
+
+        trigger_last_wqe_event(e);
         ucs_time_t deadline = ucs_get_time() +
                               ucs_time_from_sec(ucs::test_time_multiplier());
         while (ucs_get_time() < deadline) {
             if (flushed_qp_num == qp_num) {
-                return 1;
+                ret = 1;
+                break;
             }
             usleep(1000);
         }
 
-        return 0;
+        return ret;
+    }
+
+    static unsigned last_wqe_check_cb(void *arg) {
+        volatile bool *got_event = (volatile bool *)arg;
+        *got_event = true;
+        return 1;
+    }
+
+    int wait_for_last_wqe_event_cb(entity &e, bool before) {
+        volatile bool got_event = false;
+        uint32_t qp_num = get_qp_num(e);
+        ucs_status_t status;
+
+        if (before) {
+            trigger_last_wqe_event(e);
+            usleep(1000);
+        }
+
+        status = uct_ib_device_async_event_wait(
+                &ucs_derived_of(e.md(), uct_ib_md_t)->dev,
+                IBV_EVENT_QP_LAST_WQE_REACHED, qp_num,
+                last_wqe_check_cb, (void *)&got_event);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        if (status == UCS_OK) {
+            return 1;
+        }
+
+        if (!before) {
+            trigger_last_wqe_event(e);
+        }
+
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(ucs::test_time_multiplier());
+        while (!got_event && ucs_get_time() < deadline) {
+            progress();
+        }
+
+        return got_event;
     }
 };
 
-UCS_TEST_P(uct_p2p_test_event, last_wqe, "ASYNC_EVENTS=y")
+UCS_TEST_P(uct_p2p_test_event, last_wqe)
 {
     const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
     ucs_assert_always(r != NULL);
-
-    mapped_buffer sendbuf(0, 0, sender());
-    mapped_buffer recvbuf(0, 0, receiver());
 
     ucs_log_push_handler(last_wqe_check_log);
     orig_log_level = ucs_global_opts.log_component.log_level;
@@ -109,9 +171,31 @@ UCS_TEST_P(uct_p2p_test_event, last_wqe, "ASYNC_EVENTS=y")
         ucs_log_pop_handler();
     } UCS_TEST_SCOPE_EXIT_END
 
-    ASSERT_TRUE(wait_for_last_wqe_event(sender()));
+    ASSERT_TRUE(wait_for_last_wqe_event_by_log(sender()));
     if (!r->loopback) {
-        ASSERT_TRUE(wait_for_last_wqe_event(receiver()));
+        ASSERT_TRUE(wait_for_last_wqe_event_by_log(receiver()));
+    }
+}
+
+UCS_TEST_P(uct_p2p_test_event, last_wqe_cb_after_subscribe)
+{
+    const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
+    ucs_assert_always(r != NULL);
+
+    ASSERT_TRUE(wait_for_last_wqe_event_cb(sender(), false));
+    if (!r->loopback) {
+        ASSERT_TRUE(wait_for_last_wqe_event_cb(receiver(), false));
+    }
+}
+
+UCS_TEST_P(uct_p2p_test_event, last_wqe_cb_before_subscribe)
+{
+    const p2p_resource *r = dynamic_cast<const p2p_resource*>(GetParam());
+    ucs_assert_always(r != NULL);
+
+    ASSERT_TRUE(wait_for_last_wqe_event_cb(sender(), true));
+    if (!r->loopback) {
+        ASSERT_TRUE(wait_for_last_wqe_event_cb(receiver(), true));
     }
 }
 

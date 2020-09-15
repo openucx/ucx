@@ -133,6 +133,8 @@ public:
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
 
+        bool has_lane_with_caps(uint64_t caps) const;
+
     protected:
         ucs::handle<ucp_context_h>      m_ucph;
         worker_vec_t                    m_workers;

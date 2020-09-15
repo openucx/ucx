@@ -118,6 +118,27 @@ static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
     return 1;
 }
 
+static ucp_rsc_index_t
+ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context, uint64_t tl_bitmap)
+{   
+    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t dev_index;
+
+    ucs_assert(tl_bitmap != 0);
+
+    rsc_index = ucs_ffs64_safe(tl_bitmap);
+    dev_index = context->tl_rscs[rsc_index].dev_index;
+
+    /* check that all TL resources in the TL bitmap have the same dev_index */
+#ifdef ENABLE_ASSERT
+    ucs_for_each_bit(rsc_index, tl_bitmap) {
+        ucs_assert(dev_index == context->tl_rscs[rsc_index].dev_index);
+    }
+#endif
+
+    return dev_index;
+}
+
 static ucs_status_t
 ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
                                     ucp_ep_config_key_t *key)
@@ -422,7 +443,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_unpacked_address_t addr;
     uint64_t tl_bitmap;
     ucp_rsc_index_t dev_index;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t UCS_V_UNUSED rsc_index;
     unsigned addr_idx;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
@@ -455,19 +476,11 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     /* Get tl bitmap from tmp_ep, because it contains initial configuration. */
     tl_bitmap = ucp_ep_get_tl_bitmap(wireup_ep->tmp_ep);
-    ucs_assert(tl_bitmap != 0);
-    rsc_index = ucs_ffs64(tl_bitmap);
-    dev_index = context->tl_rscs[rsc_index].dev_index;
+    dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, tl_bitmap);
 
     /* Restore initial configuration from tmp_ep created for packing local
      * addresses. */
     ucp_cm_client_restore_ep(wireup_ep, ucp_ep);
-
-#ifdef ENABLE_ASSERT
-    ucs_for_each_bit(rsc_index, tl_bitmap) {
-        ucs_assert(dev_index == context->tl_rscs[rsc_index].dev_index);
-    }
-#endif
 
     tl_bitmap = ucp_context_dev_idx_tl_bitmap(context, dev_index);
     status    = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
@@ -515,7 +528,7 @@ ucp_cm_remote_data_check(const uct_cm_remote_data_t *remote_data)
     }
 
     ucs_error("incompatible client server connection establishment protocol "
-              "(field_mask %zu)", remote_data->field_mask);
+              "(field_mask %"PRIu64")", remote_data->field_mask);
     return UCS_ERR_UNSUPPORTED;
 }
 
@@ -1038,7 +1051,6 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
     uint64_t tl_bitmap;
     void* ucp_addr;
     size_t ucp_addr_size;
-    ucp_rsc_index_t rsc_index;
     ucp_rsc_index_t dev_index;
     ucs_status_t status;
 
@@ -1065,9 +1077,7 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
         goto free_addr;
     }
 
-    rsc_index = ucs_ffs64_safe(tl_bitmap);
-    ucs_assert(rsc_index != UCP_NULL_RESOURCE);
-    dev_index = worker->context->tl_rscs[rsc_index].dev_index;
+    dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, tl_bitmap);
     ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
 
 free_addr:

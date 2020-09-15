@@ -9,6 +9,8 @@
 
 #include "ptr_map.h"
 
+#include <ucs/debug/log.h>
+
 BEGIN_C_DECLS
 
 
@@ -42,6 +44,12 @@ static inline ucs_status_t ucs_ptr_map_init(ucs_ptr_map_t *map)
  */
 static inline void ucs_ptr_map_destroy(ucs_ptr_map_t *map)
 {
+    size_t size = kh_size(&map->hash);
+
+    if (size != 0) {
+        ucs_warn("ptr map %p contains %zd elements on destroy", map, size);
+    }
+
     kh_destroy_inplace(ucs_ptr_map_impl, &map->hash);
 }
 
@@ -110,6 +118,33 @@ ucs_ptr_map_get(const ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
 }
 
 /**
+ * Extract a pointer value from the map by its key.
+ *
+ * @param [in]  map     Container to get the pointer value from.
+ * @param [in]  key     Key to look up in the container.
+ * @return object pointer on success, otherwise NULL.
+ */
+static UCS_F_ALWAYS_INLINE void*
+ucs_ptr_map_extract(ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
+{
+    khiter_t iter;
+    void *value;
+
+    if (ucs_likely(!(key & UCS_PTR_MAP_KEY_INDIRECT_FLAG))) {
+        return (void*)key;
+    }
+
+    iter = kh_get(ucs_ptr_map_impl, &map->hash, key);
+    if (ucs_unlikely(iter == kh_end(&map->hash))) {
+        return NULL;
+    }
+
+    value = kh_value(&map->hash, iter);
+    kh_del(ucs_ptr_map_impl, &map->hash, iter);
+    return value;
+}
+
+/**
  * Remove object pointer from the map by key.
  *
  * @param [in]  map     Container.
@@ -121,19 +156,8 @@ ucs_ptr_map_get(const ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucs_ptr_map_del(ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
 {
-    khiter_t iter;
-
-    if (ucs_likely(!(key & UCS_PTR_MAP_KEY_INDIRECT_FLAG))) {
-        return UCS_OK;
-    }
-
-    iter = kh_get(ucs_ptr_map_impl, &map->hash, key);
-    if (ucs_unlikely(iter == kh_end(&map->hash))) {
-        return UCS_ERR_NO_ELEM;
-    }
-
-    kh_del(ucs_ptr_map_impl, &map->hash, iter);
-    return UCS_OK;
+    return ucs_likely(ucs_ptr_map_extract(map, key) != NULL) ?
+           UCS_OK : UCS_ERR_NO_ELEM;
 }
 
 END_C_DECLS
