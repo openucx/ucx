@@ -181,13 +181,6 @@ struct uct_rc_txqp {
     /* RC_UNSIGNALED_INF value forces signaled in moderation logic when
      * CQ credits are close to zero (less tx_moderation value) */
     uint16_t            unsignaled;
-    /* Saved unsignaled value before it was set to inf to have possibility
-     * to return correct amount of CQ credits on TX completion */
-    uint16_t            unsignaled_store;
-    /* If unsignaled was stored several times to aggregative value, let's return
-     * credits only when this counter == 0 because it's impossible to return
-     * exact value on each signaled completion */
-    uint16_t            unsignaled_store_count;
     int16_t             available;
     uint8_t             flags;
     UCS_STATS_NODE_DECLARE(stats)

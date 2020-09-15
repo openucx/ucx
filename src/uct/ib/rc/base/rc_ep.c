@@ -51,10 +51,8 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
 {
     txqp->unsignaled = 0;
-    txqp->unsignaled_store = 0;
-    txqp->unsignaled_store_count = 0;
     txqp->available  = 0;
-    txqp->flags = 0;
+    txqp->flags      = 0;
     ucs_queue_head_init(&txqp->outstanding);
 
     return UCS_STATS_NODE_ALLOC(&txqp->stats, &uct_rc_txqp_stats_class,
@@ -460,23 +458,13 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
 
 ucs_status_t uct_rc_ep_check_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
 {
-    uct_rc_txqp_t *txqp;
-
     if (!uct_rc_iface_have_tx_cqe_avail(iface)) {
         UCS_STATS_UPDATE_COUNTER(iface->stats, UCT_RC_IFACE_STAT_NO_CQE, 1);
         UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
         return UCS_ERR_NO_RESOURCE;
     }
 
-    txqp = &ep->txqp;
-    /* if unsignaled == RC_UNSIGNALED_INF this value was already saved and \
-       next operation will be defenitly signaled */
-    if (txqp->unsignaled != RC_UNSIGNALED_INF) {
-        txqp->unsignaled_store_count++;
-        txqp->unsignaled_store += txqp->unsignaled;
-        txqp->unsignaled        = RC_UNSIGNALED_INF;
-    }
-
+    ep->txqp.unsignaled = RC_UNSIGNALED_INF;
     return UCS_OK;
 }
 

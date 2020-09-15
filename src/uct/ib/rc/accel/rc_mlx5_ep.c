@@ -1047,12 +1047,13 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
                                            ucs_status_t status)
 {
-    uct_ib_iface_t *ib_iface = ucs_derived_of(ep->super.super.super.iface,
-                                              uct_ib_iface_t);
+    uct_rc_iface_t *rc_iface = ucs_derived_of(ep->super.super.super.iface,
+                                              uct_rc_iface_t);
 
     uct_rc_txqp_purge_outstanding(rc_iface, &ep->super.txqp, status, 0);
-    return ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super,
-                                        status);
+    return rc_iface->super.ops->set_ep_failed(&rc_iface->super,
+                                              &ep->super.super.super,
+                                              status);
 }
 
 ucs_status_t uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,

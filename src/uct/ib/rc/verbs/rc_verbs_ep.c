@@ -47,7 +47,7 @@ uct_rc_verbs_ep_post_send(uct_rc_verbs_iface_t* iface, uct_rc_verbs_ep_t* ep,
     }
 
     wr->send_flags = send_flags;
-    wr->wr_id      = uct_rc_txqp_unsignaled(&ep->super.txqp);
+    wr->wr_id      = ep->txcnt.pi + 1;
 
     uct_ib_log_post_send(&iface->super.super, ep->qp, wr, max_log_sge,
                          (wr->opcode == IBV_WR_SEND) ? uct_rc_ep_packet_dump : NULL);

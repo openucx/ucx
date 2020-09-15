@@ -60,6 +60,16 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         log_lvl = iface->super.super.config.failure_level;
     }
 
+    if (ep->super.txqp.flags & UCT_RC_TXQP_FLAG_ERR) {
+        return;
+    } else {
+        ep->super.txqp.flags |= UCT_RC_TXQP_FLAG_ERR;
+    }
+
+    if (wc->status == IBV_WC_WR_FLUSH_ERR) {
+        return;
+    }
+
     ucs_log(log_lvl,
             "send completion with error: %s qpn 0x%x wrid 0x%lx vendor_err 0x%x",
             ibv_wc_status_str(wc->status), wc->qp_num, wc->wr_id, wc->vendor_err);
@@ -81,6 +91,8 @@ ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
     case IBV_WC_RETRY_EXC_ERR:
     case IBV_WC_RNR_RETRY_EXC_ERR:
         return UCS_ERR_ENDPOINT_TIMEOUT;
+    case IBV_WC_WR_FLUSH_ERR:
+        return UCS_ERR_CANCELED;
     default:
         return UCS_ERR_IO_ERROR;
     }
@@ -99,6 +111,15 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     UCT_RC_VERBS_IFACE_FOREACH_TXWQE(&iface->super, i, wc, num_wcs) {
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
+
+        count = wc[i].wr_id - ep->txcnt.ci;
+        ucs_trace_poll("rc_verbs iface %p tx_wc wrid 0x%lx ep %p qpn 0x%x count %d",
+                       iface, wc[i].wr_id, ep, wc[i].qp_num, count);
+        ep->txcnt.ci += count;
+
+        uct_rc_txqp_available_add(&ep->super.txqp, count);
+        iface->super.tx.cq_available += count;
+
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
             status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
@@ -106,16 +127,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
             continue;
         }
 
-        count = uct_rc_verbs_txcq_get_comp_count(&wc[i], &ep->super.txqp);
-        ucs_trace_poll("rc_verbs iface %p tx_wc wrid 0x%lx ep %p qpn 0x%x count %d",
-                       iface, wc[i].wr_id, ep, wc[i].qp_num, count);
-        ep->txcnt.ci += count;
-
         uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci);
-
-        uct_rc_txqp_available_add(&ep->super.txqp, count);
-        iface->super.tx.cq_available += count;
-
         uct_rc_iface_update_reads(&iface->super);
 
         ucs_arbiter_group_schedule(&iface->super.tx.arbiter,

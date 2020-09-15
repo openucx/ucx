@@ -47,29 +47,6 @@ static inline unsigned uct_rc_verbs_iface_post_recv_common(uct_rc_verbs_iface_t 
     return uct_rc_verbs_iface_post_recv_always(iface, count);
 }
 
-
-/* TODO: think of a better name */
-static inline int
-uct_rc_verbs_txcq_get_comp_count(struct ibv_wc *wc, uct_rc_txqp_t *txqp)
-{
-    uint16_t count = 1;
-
-    if (ucs_likely(wc->wr_id != RC_UNSIGNALED_INF)) {
-        return wc->wr_id + 1;
-    }
-
-    ucs_assert(txqp->unsignaled_store != RC_UNSIGNALED_INF);
-    ucs_assert(txqp->unsignaled_store_count != 0);
-
-    txqp->unsignaled_store_count--;
-    if (txqp->unsignaled_store_count == 0) {
-        count += txqp->unsignaled_store;
-        txqp->unsignaled_store = 0;
-    }
-
-    return count;
-}
-
 static UCS_F_ALWAYS_INLINE void
 uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
                              uint64_t wr_id, uint32_t qp_num, uint32_t length,
