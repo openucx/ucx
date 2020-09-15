@@ -906,13 +906,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     req->recv.mem_type = UCS_MEMORY_TYPE_HOST;
     req->recv.am.desc  = (ucp_recv_desc_t*)rts - 1;
 
-    if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
-        req->recv.am.cb = param->cb.recv_am;
-        req->user_data  = param->user_data;
-        req->flags     |= UCP_REQUEST_FLAG_CALLBACK;
-    } else {
-        req->recv.am.cb = NULL;
-    }
+    ucp_request_set_callback_param(param, recv_am, req, recv.am);
 
     ucs_assertv(req->recv.length >= rts->super.size,
                 "rx buffer too small %zu, need %zu",
@@ -1261,7 +1255,7 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     status          = am_cb->cb(am_cb->context, hdr, rts->am.header_length,
                                 desc + 1, rts->super.size, &param);
     if (status != UCS_INPROGRESS) {
-        /* Check that recv was not called and if not, send
+        /* TODO: Check that recv was not called and if not, send
          * reject to the peer. */
         return UCS_OK;
     }

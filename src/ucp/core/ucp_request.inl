@@ -122,13 +122,17 @@
     return UCS_STATUS_PTR(_status);
 
 
-#define ucp_request_set_send_callback_param(_param, _req, _cb) \
+#define ucp_request_set_callback_param(_param, _param_cb, _req, _req_cb) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
-        ucp_request_set_callback(_req, _cb.cb, (_param)->cb.send, \
+        ucp_request_set_callback(_req, _req_cb.cb, (_param)->cb._param_cb, \
                                  ((_param)->op_attr_mask & \
                                   UCP_OP_ATTR_FIELD_USER_DATA) ? \
                                  (_param)->user_data : NULL); \
     }
+
+
+#define ucp_request_set_send_callback_param(_param, _req, _cb) \
+    ucp_request_set_callback_param(_param, send, _req, _cb)
 
 
 #define ucp_request_send_check_status(_status, _ret, _done) \
@@ -640,7 +644,7 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_process_recv_data(ucp_request_t *req, const void *data,
-                              size_t length, size_t offset, int dereg,
+                              size_t length, size_t offset, int is_zcopy,
                               int is_am)
 {
     ucs_status_t status;
@@ -664,7 +668,7 @@ ucp_request_process_recv_data(ucp_request_t *req, const void *data,
     }
 
     status = req->status;
-    if (dereg) {
+    if (is_zcopy) {
         ucp_request_recv_buffer_dereg(req);
     }
 
@@ -673,7 +677,9 @@ ucp_request_process_recv_data(ucp_request_t *req, const void *data,
     } else {
         ucp_request_complete_tag_recv(req, status);
     }
+
     ucs_assert(status != UCS_INPROGRESS);
+
     return status;
 }
 
@@ -753,7 +759,6 @@ ucp_request_param_rndv_thresh(ucp_request_t *req,
         *rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv.rma_thresh.remote;
         *rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv.am_thresh.remote;
     }
-
 }
 
 #endif

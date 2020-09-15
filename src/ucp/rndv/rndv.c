@@ -338,15 +338,21 @@ static void ucp_rndv_send_frag_atp(ucp_request_t *fsreq,
     ucp_request_send(fsreq, 0);
 }
 
-static void ucp_rndv_zcopy_recv_req_complete(ucp_request_t *req,
-                                             ucs_status_t status)
+static UCS_F_ALWAYS_INLINE void
+ucp_rndv_recv_req_complete(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_request_recv_buffer_dereg(req);
     if (req->flags & UCP_REQUEST_FLAG_RECV_AM) {
         ucp_request_complete_am_recv(req, status);
     } else {
         ucp_request_complete_tag_recv(req, status);
     }
+}
+
+static void ucp_rndv_zcopy_recv_req_complete(ucp_request_t *req,
+                                             ucs_status_t status)
+{
+    ucp_request_recv_buffer_dereg(req);
+    ucp_rndv_recv_req_complete(req, status);
 }
 
 static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req,
@@ -1002,7 +1008,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
 
 static UCS_F_ALWAYS_INLINE int
 ucp_rndv_is_rkey_ptr(const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
-                     const void *rkey_buf, ucp_ep_h ep,
+                     const void *rkey_buffer, ucp_ep_h ep,
                      ucs_memory_type_t recv_mem_type, ucp_rndv_mode_t rndv_mode)
 {
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -1010,7 +1016,7 @@ ucp_rndv_is_rkey_ptr(const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
     return /* must have remote address */
            (rndv_rts_hdr->address != 0) &&
            /* remote key must be on a memory domain for which we support rkey_ptr */
-           (ucp_rkey_packed_md_map(rkey_buf) &
+           (ucp_rkey_packed_md_map(rkey_buffer) &
             ep_config->rndv.rkey_ptr_dst_mds) &&
            /* rendezvous mode must not be forced to put/get */
            (rndv_mode == UCP_RNDV_MODE_AUTO) &&
@@ -1039,11 +1045,7 @@ static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
                                               seg_size, offset, last);
     if (ucs_unlikely(status != UCS_OK) || last) {
         ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);
-        if (rreq->flags & UCP_REQUEST_FLAG_RECV_AM) {
-            ucp_request_complete_am_recv(rreq, status);
-        } else {
-            ucp_request_complete_tag_recv(rreq, status);
-        }
+        ucp_rndv_recv_req_complete(rreq, status);
         ucp_rkey_destroy(rndv_req->send.rkey_ptr.rkey);
         ucp_rndv_req_send_ats(rndv_req, rreq,
                               rndv_req->send.rkey_ptr.req_id, status);
