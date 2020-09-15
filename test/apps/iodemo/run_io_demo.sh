@@ -93,7 +93,7 @@ init_config()
 	client_wait_time=2
 	launcher="pdsh -b -w"
 	dry_run=0
-	log_dir=$PWD
+	log_dir="$PWD"
 
 	# command line args will override slurm env vars
 	check_slurm_env
@@ -143,7 +143,7 @@ usage()
 	echo "                                The syntax of launcher command should be:"
 	echo "                                <command> host1,host2,... <exe> <args>"
 	echo "  --dry-run                   Do not launch the application, just generate run scripts"
-	echo "  --log-dir </path>           Path to log directory, default: $PWD"
+	echo "  --log-dir <path>            Path to log directory"$(show_default_value log_dir)
 	echo
 }
 
@@ -222,9 +222,12 @@ parse_args()
 
 check_params()
 {
-	if [ ! -x "${iodemo_exe}" ]
+	if [ -z "${iodemo_exe}" ]
 	then
 		error "missing executable from command line"
+	elif [ ! -x "${iodemo_exe}" ]
+	then
+		error "'${iodemo_exe}' is not executable"
 	fi
 }
 
@@ -273,7 +276,7 @@ collect_ip_addrs()
 	do
 		host=$(echo ${host_ip} | cut -d: -f1)
 		addr=$(echo ${host_ip} | cut -d: -f2)
-		if [ -n ${host} ] && [ -n ${addr} ]
+		if [ -n "${host}" ] && [ -n "${addr}" ]
 		then
 			ip_address_per_host[${host}]=${addr}
 		fi
@@ -396,11 +399,11 @@ make_scripts()
 	if is_verbose
 	then
 		show_var client_connect_list
-		sh_args="-x"
+		set_verbose="set -x"
 		wait_redirect=""
 		log_redirect="|& tee "
 	else
-		sh_args=""
+		set_verbose=""
 		wait_redirect=">& /dev/null"
 		log_redirect=">& "
 	fi
@@ -414,18 +417,31 @@ make_scripts()
 
 		# Add file header and startup
 		cat >${command_file} <<-EOF
-			#!/bin/sh ${sh_args}
+			#!/bin/sh
 			#
 			# Launch script for io_demo on ${host} with ${num_servers_per_host[${host}]} servers and ${num_clients_per_host[${host}]} clients
 			#
 
-			kill_iodemo() {
-			    # kill process by exact name to avoid killing launch scirpts
+			list_pids() {
 			    # lt- prefix is in case iodemo is wrapped by libtool
 			    for pattern in ${exe_basename} lt-${exe_basename}
 			    do
-			        pkill --exact -u ${USER} -9 \${pattern}
+			        pgrep --exact -u ${USER} \${pattern}
 			    done
+			}
+
+			list_pids_with_role() {
+			    # list all process ids with role \$1
+			    for pid in \$(list_pids)
+			    do
+			        grep -qP "IODEMO_ROLE=\$1\x00" /proc/\${pid}/environ \\
+			            && echo \${pid}
+			    done
+			}
+
+			kill_iodemo() {
+			    pids="\$(list_pids)"
+			    [ -n "\${pids}" ] && kill -9 \${pids}
 			}
 
 			signal_handler() {
@@ -435,217 +451,204 @@ make_scripts()
 
 			usage()
 			{
-				echo
-				echo "Usage: $command_file [options] "
-				echo
-				echo "Where options are:"
-
-				echo "  -h                                  Show this message"
-				echo "  -show-tags                          Show available tags"
-				echo "  -tag <tag>  -<start|stop|status>    start/stop/status iodemo role for selected tag"
-				echo
-				echo Default: Run all tags when run with no options
-				echo
+			    echo
+			    echo "Usage: ${command_file} [options] "
+			    echo
+			    echo "Where options are:"
+			    echo "  -h                 Show this help message"
+			    echo "  -list-tags         List available tags and exit"
+			    echo "  -start <tag>       Start iodemo for given tag"
+			    echo "  -stop <tag>        Stop iodemo for given tag"
+			    echo "  -status <tag>      Show status of iodemo for given tag"
+			    echo
+			    echo "If no options are given, run all commands and wait for completion"
+			    echo
 			}
 
-
-
-			# kill existing processes and trap signals
-			trap signal_handler INT TERM
-
-			# Use same work dir as launch script
-			cd $PWD
-
-			num_servers_per_host=${num_servers}
-			num_clients_per_host=${num_clients}
-			iodemo_exe=${iodemo_exe}
-
-			# UCX inherited environment variables
-			EOF
-
-		cat >>${command_file} <<-'EOF'
 			parse_args() {
-				while [[ $# -gt 0 ]]
-				do
-					key="$1"
-					case $key in
-					-tag)
-						tag="$2"
-						shift
-						;;
-					-start)
-						oper="start"
-						;;
-					-stop)
-						oper="stop"
-						;;
-					-status)
-						oper="status"
-						;;
-					-show-tags)
-						echo "Available tags"
-						echo ==== Servers:
-						for ((i=0;i<${num_servers_per_host[${host}]};++i))
-						do
-							echo server_${i}
-						done 
-						echo ==== Clients:
-						for ((i=0;i<${num_clients_per_host[${host}]};++i))
-						do
-							echo client_${i}
-						done
-						echo
-						exit 0
-						;;
-					-h|--help)
-						usage
-						exit 0
-						;;
-					*)
-						echo "Invalid parameter '${key}'"
-						usage
-						exit 1
-						;;
-					esac
-					shift
-				done
+			    action=""
+			    tag=""
+			    while [[ \$# -gt 0 ]]
+			    do
+			        key="\$1"
+			        case \${key} in
+			        -start)
+			            action="start"
+			            tag="\$2"
+			            shift
+			            ;;
+			        -stop)
+			            action="stop"
+			            tag="\$2"
+			            shift
+			            ;;
+			        -status)
+			            action="status"
+			            tag="\$2"
+			            shift
+			            ;;
+			        -list-tags)
+			            for ((i=0;i<${num_servers_per_host[${host}]};++i))
+			            do
+			                echo "server_\${i}"
+			            done
+			            for ((i=0;i<${num_clients_per_host[${host}]};++i))
+			            do
+			                echo "client_\${i}"
+			            done
+			            exit 0
+			            ;;
+			        -h|--help)
+			            usage
+			            exit 0
+			            ;;
+			        *)
+			            echo "Invalid parameter '\${key}'"
+			            usage
+			            exit 1
+			            ;;
+			        esac
+			        shift
+			    done
 
-
-
-				case $oper in
-				start)
-					func="${oper}_${tag}"
-					if [ -n "${func}" ]; then
-						if type $func &>/dev/null; then
-							echo Starting $tag
-						else
-							echo No method defined to start $tag
-							exit 1
-						fi
-					fi
-					eval "${func}"
-					exit 0
-				;;
-				stop)
-					if [ -z "$tag" ]; then
-						echo Error: specify -tag param
-						exit 1
-					fi
-					for pid in $(pgrep -f $iodemo_exe)
-					do
-						if xargs --null --max-args=1 echo < /proc/$pid/environ |grep -q IODEMO_ROLE=$tag; then
-								echo Stopping $iodemo_exe with role=$tag pid=$pid
-								kill -9 $pid
-						fi
-					done
-					exit 0
-				;;
-				status)
-					if [ -z "$tag" ]; then
-						echo Error: specify -tag param
-						exit 1
-					fi
-					for pid in $(pgrep -f $iodemo_exe)
-					do
-						if xargs --null --max-args=1 echo < /proc/$pid/environ |grep -q IODEMO_ROLE=$tag; then
-								echo Found $iodemo_exe with role=$tag pid=$pid
-						fi
-					done
-					exit 0
-				;;
-				*)
-				;;
-				esac
+			    if [ -n "\${action}" ] && [ -z "\${tag}" ]
+			    then
+			        echo "Error: missing -tag parameter for action '\${action}'"
+			        usage
+			        exit 1
+			    fi
 			}
+
 			EOF
 
 		# Add all relevant env vars which start with UCX_ to the command file
-		env | grep -P '^UCX_.*=|^PATH=|^LD_LIBRARY_PATH=' | \
-			xargs -L 1 echo export >>${command_file}
-
-		# Add servers commands
 		cat >>${command_file} <<-EOF
+			set_env_vars() {
+			EOF
+		env | grep -P '^UCX_.*=|^PATH=|^LD_LIBRARY_PATH=' | \
+			xargs -L 1 echo "     export" >>${command_file}
+		cat >>${command_file} <<-EOF
+			    cd $PWD
+			}
 
-			# create log_dir if needed
-			[ ! -d "$log_dir" ] && mkdir -p $log_dir
-
-			# Server commands
 			EOF
 
+		# Add servers start functions
+		cmd_prefix="stdbuf -e0 -o0 timeout -s 9 $((duration + client_wait_time))s"
 		for ((i=0;i<${num_servers_per_host[${host}]};++i))
 		do
 			port_num=$((base_port_num + i))
 			log_file=${log_dir}/$(printf "iodemo_%s_server_%02d.log" ${host} $i)
-			cmd_prefix="stdbuf -e0 -o0 timeout -s 9 $((duration + client_wait_time))s  env IODEMO_ROLE=server_${i} "
 			echo ${log_file}
 			cat >>${command_file} <<-EOF
-			function start_server_${i}() {
-				${cmd_prefix} \\
-				    ${iodemo_exe} \\
-				        ${iodemo_server_args} -p ${port_num} \\
-				        ${log_redirect} ${log_file} &
-			}
+				function start_server_${i}() {
+				    mkdir -p ${log_dir}
+				    env IODEMO_ROLE=server_${i} ${cmd_prefix} \\
+				        ${iodemo_exe} \\
+				            ${iodemo_server_args} -p ${port_num} \\
+				            ${log_redirect} ${log_file} &
+				}
+
 				EOF
 		done
 
-
-		# Add client commands
-		cat >>${command_file} <<-EOF
-
-			# Client commands
-			EOF
-
+		# Add client start functions
+		cmd_prefix="stdbuf -e0 -o0 timeout -s 9 ${duration}s"
 		for ((i=0;i<num_clients_per_host[${host}];++i))
 		do
 			log_file=${log_dir}/$(printf "iodemo_%s_client_%02d.log" ${host} $i)
-			cmd_prefix="stdbuf -e0 -o0 timeout -s 9 ${duration}s env IODEMO_ROLE=client_${i} "
 			echo ${log_file}
 			cat >>${command_file} <<-EOF
-			function start_client_${i}() {
-				${cmd_prefix} \\
-				    ${iodemo_exe} \\
-				        ${iodemo_client_args} ${client_connect_list} \\
-				        ${log_redirect} ${log_file} &
-			}
+				function start_client_${i}() {
+				    mkdir -p ${log_dir}
+				    env IODEMO_ROLE=client_${i} ${cmd_prefix} \\
+				        ${iodemo_exe} \\
+				            ${iodemo_client_args} ${client_connect_list} \\
+				            ${log_redirect} ${log_file} &
+				}
+
 				EOF
 		done
 
+		# 'run_all' will start all servers, then clients, then wait for finish
 		cat >>${command_file} <<-EOF
-		main() {
-		EOF
+			run_all() {
+			    ${set_verbose}
+
+			    # kill existing processes and trap signals
+			    kill_iodemo
+			    trap signal_handler INT TERM
+
+			    set_env_vars
+
+			    echo "Starting servers"
+				EOF
+
 		for ((i=0;i<${num_servers_per_host[${host}]};++i))
 		do
-			cat >>${command_file} <<-EOF
-			start_server_${i}
-				EOF
+			echo "    start_server_${i}" >>${command_file}
 		done
 
-		# Add short sleep to let servers start running
 		cat >>${command_file} <<-EOF
-			# Wait for servers to start
-			sleep ${client_wait_time}
-		EOF
 
-		for ((i=0;i<num_clients_per_host[${host}];++i))
+			    # Wait for servers to start
+			    sleep ${client_wait_time}
+
+			    echo "Starting clients"
+				EOF
+
+		for ((i=0;i<${num_clients_per_host[${host}]};++i))
 		do
-			cat >>${command_file} <<-EOF
-			start_client_${i}
-				EOF
+			echo "    start_client_${i}" >>${command_file}
 		done
 
-		# Add wait commands
 		cat >>${command_file} <<-EOF
 
-			# Wait for background processes
-			wait ${wait_redirect}
-			echo "Test finished"
-		}
+			    # Wait for background processes
+			    wait ${wait_redirect}
+			    echo "Test finished"
+			}
+
 			EOF
-		cat >>${command_file} <<-'EOF'
-		parse_args "$@"
-		kill_iodemo
-		main
+
+		cat >>${command_file} <<-EOF
+			parse_args "\$@"
+
+			case \${action} in
+			"")
+			    run_all
+			    ;;
+			start)
+			    func="start_\${tag}"
+			    if ! type \${func} &>/dev/null
+			    then
+			        echo "No method defined to start '\${tag}'"
+			        exit 1
+			    fi
+			    echo "Starting '\${tag}'"
+			    ${set_verbose}
+			    set_env_vars
+			    eval "\${func}"
+			    ;;
+			stop)
+			    for pid in \$(list_pids_with_role \${tag})
+			    do
+			        echo "Stopping process \${pid}"
+			        kill -9 \${pid}
+			    done
+			    ;;
+			status)
+			    pids="\$(list_pids_with_role \${tag})"
+			    if [ -n "\${pids}" ]
+			    then
+			        ps -fp \${pids}
+			    else
+			        echo "No processes found with tag \${tag}"
+			    fi
+			    ;;
+			esac
 			EOF
+
 		chmod a+x ${command_file}
 	done
 }
