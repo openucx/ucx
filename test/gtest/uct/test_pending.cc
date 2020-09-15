@@ -644,8 +644,8 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, send_ooo_with_comp,
     uint64_t send_data = 0xFAFAul;
     send_ams_and_add_pending(&send_data, AM_HDR);
 
-    wait_for_flag(&n_pending);
-    EXPECT_TRUE(n_pending);
+    wait_for_flag(&pend_received);
+    EXPECT_TRUE(pend_received);
 
     flush();
 }
