@@ -502,7 +502,7 @@ typedef struct {
         _req = ucs_container_of(_priv, uct_pending_req_t, priv); \
         ucs_queue_pull_non_empty(_queue); \
         _status = _req->func(_req); \
-        if (_status != UCS_OK) { \
+        if ((_status == UCS_ERR_NO_RESOURCE) || (_status == UCS_INPROGRESS)) { \
             ucs_queue_push_head(_queue, &_base_priv->queue_elem); \
         } \
     }
