@@ -25,4 +25,15 @@ hsa_status_t ucm_override_hsa_amd_memory_pool_free(void* ptr);
 hsa_status_t ucm_orig_hsa_amd_memory_pool_free(void* ptr);
 hsa_status_t ucm_hsa_amd_memory_pool_free(void* ptr);
 
+/* hsa_amd_memory_pool_get_info */
+hsa_status_t ucm_override_hsa_amd_memory_pool_get_info(
+    hsa_amd_memory_pool_t memory_pool,
+    hsa_amd_memory_pool_info_t attribute, void* value);
+hsa_status_t ucm_orig_hsa_amd_memory_pool_get_info(
+    hsa_amd_memory_pool_t memory_pool,
+    hsa_amd_memory_pool_info_t attribute, void* value);
+hsa_status_t ucm_hsa_amd_memory_pool_get_info(
+    hsa_amd_memory_pool_t memory_pool,
+    hsa_amd_memory_pool_info_t attribute, void* value);
+
 #endif

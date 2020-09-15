@@ -27,10 +27,14 @@ UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t,
                               size_t, uint32_t, void**)
 UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_free, hsa_status_t,
                               HSA_STATUS_ERROR, void*)
+UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_get_info, hsa_status_t,
+                              HSA_STATUS_ERROR, hsa_amd_memory_pool_t,
+                              hsa_amd_memory_pool_info_t, void*)
 
 #if ENABLE_SYMBOL_OVERRIDE
 UCM_OVERRIDE_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t)
 UCM_OVERRIDE_FUNC(hsa_amd_memory_pool_free, hsa_status_t)
+UCM_OVERRIDE_FUNC(hsa_amd_memory_pool_get_info, hsa_status_t)
 #endif
 
 static UCS_F_ALWAYS_INLINE void
@@ -117,7 +121,7 @@ hsa_status_t ucm_hsa_amd_memory_pool_allocate(
     uint32_t pool_flags    = 0;
     hsa_status_t status;
 
-    status = hsa_amd_memory_pool_get_info(memory_pool,
+    status = ucm_orig_hsa_amd_memory_pool_get_info(memory_pool,
                                           HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS,
                                           &pool_flags);
     if (status == HSA_STATUS_SUCCESS &&
@@ -142,6 +146,8 @@ static ucm_reloc_patch_t patches[] = {
      ucm_override_hsa_amd_memory_pool_allocate},
     {UCS_PP_MAKE_STRING(hsa_amd_memory_pool_free),
      ucm_override_hsa_amd_memory_pool_free},
+    {UCS_PP_MAKE_STRING(hsa_amd_memory_pool_get_info),
+     ucm_override_hsa_amd_memory_pool_get_info},
     {NULL, NULL}
 };
 
