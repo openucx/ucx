@@ -468,11 +468,13 @@ AC_LANG_POP
 # PGI specific switches
 #
 # --diag_suppress 181  - Suppress incorrect printf format for PGI18 compiler. TODO: remove it after compiler fix
+# --diag_suppress 381  - Suppress extra ";" ignored
 # --diag_suppress 1215 - Suppress deprecated API warning for PGI18 compiler
 # --diag_suppress 1901 - Use of a const variable in a constant expression is nonstandard in C
 # --diag_suppress 1902 - Use of a const variable in a constant expression is nonstandard in C (same as 1901)
 ADD_COMPILER_FLAGS_IF_SUPPORTED([[--display_error_number],
                                  [--diag_suppress 181],
+                                 [--diag_suppress 381],
                                  [--diag_suppress 1215],
                                  [--diag_suppress 1901],
                                  [--diag_suppress 1902]],

@@ -308,7 +308,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
     void *address_buffer;
     size_t address_length;
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    ucs_memory_type_for_each(mem_type) {
         if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
             !context->mem_type_access_tls[mem_type]) {
             continue;
@@ -356,7 +356,7 @@ void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker)
 {
     ucs_memory_type_t mem_type;
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+    ucs_memory_type_for_each(mem_type) {
         if (worker->mem_type_ep[mem_type] != NULL) {
            ucp_ep_destroy_internal(worker->mem_type_ep[mem_type]);
            worker->mem_type_ep[mem_type] = NULL;
@@ -662,7 +662,8 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     conn_sn = ucp_ep_match_get_sn(worker, remote_address.uuid);
     ep      = ucp_ep_match_retrieve(worker, remote_address.uuid,
                                     conn_sn ^
-                                    (remote_address.uuid == worker->uuid), 0);
+                                    (remote_address.uuid == worker->uuid),
+                                    UCS_CONN_MATCH_QUEUE_UNEXP);
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
         if (status != UCS_OK) {
@@ -701,7 +702,8 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
         ucp_ep_flush_state_reset(ep);
     } else {
-        ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn, 1);
+        ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
+                            UCS_CONN_MATCH_QUEUE_EXP);
     }
 
     /* if needed, send initial wireup message */
@@ -1415,7 +1417,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
                                        config->zcopy_thresh[0]);
     }
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    ucs_memory_type_for_each(mem_type) {
         if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
         } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
@@ -1478,8 +1480,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         config->tag.eager.sync_zcopy_thresh[it]  = SIZE_MAX;
     }
 
-    UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_HOST == 0);
-    for (mem_type = UCS_MEMORY_TYPE_HOST; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    ucs_memory_type_for_each(mem_type) {
         config->am.mem_type_zcopy_thresh[mem_type]        = SIZE_MAX;
         config->tag.eager.mem_type_zcopy_thresh[mem_type] = SIZE_MAX;
     }
@@ -1533,7 +1534,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     get_zcopy_lane_count = 0;
     put_zcopy_lane_count = 0;
 
-    for (i = 0; i < UCS_MEMORY_TYPE_LAST; i++) {
+    ucs_memory_type_for_each(i) {
         rndv_max_bw[i] = 0;
     }
 

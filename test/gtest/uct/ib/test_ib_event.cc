@@ -98,9 +98,9 @@ public:
 
     int wait_for_last_wqe_event_by_log(entity &e) {
         uint32_t qp_num = get_qp_num(e);
-        flushed_qp_num = -1;
-        int ret = 0;
+        int ret         = 0;
 
+        flushed_qp_num = UINT_MAX;
         trigger_last_wqe_event(e);
         ucs_time_t deadline = ucs_get_time() +
                               ucs_time_from_sec(ucs::test_time_multiplier());

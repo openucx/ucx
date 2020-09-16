@@ -1029,7 +1029,8 @@ static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
     new_offset = offset + seg_size;
     last       = new_offset == rndv_req->send.length;
     status     = ucp_request_recv_data_unpack(rreq,
-                                              rndv_req->send.buffer + offset,
+                                              UCS_PTR_BYTE_OFFSET(rndv_req->send.buffer,
+                                                                  offset),
                                               seg_size, offset, last);
     if (ucs_unlikely(status != UCS_OK) || last) {
         ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);

@@ -442,7 +442,8 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     } else {
         ep = ucp_ep_match_retrieve(worker, remote_uuid,
                                    msg->conn_sn ^
-                                   (remote_uuid == worker->uuid), 1);
+                                   (remote_uuid == worker->uuid),
+                                   UCS_CONN_MATCH_QUEUE_EXP);
         if (ep == NULL) {
             /* Create a new endpoint if does not exist */
             status = ucp_worker_create_ep(worker, ep_init_flags,
@@ -454,7 +455,8 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
             /* add internal endpoint to hash */
             ep->conn_sn = msg->conn_sn;
-            ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn, 0);
+            ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
+                                UCS_CONN_MATCH_QUEUE_UNEXP);
         } else {
             ucp_ep_flush_state_reset(ep);
         }

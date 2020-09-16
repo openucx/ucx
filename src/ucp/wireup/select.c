@@ -538,7 +538,8 @@ out_add_lane:
     lane_desc->proxy_lane   = proxy_lane;
     lane_desc->dst_md_index = dst_md_index;
     lane_desc->lane_types   = UCS_BIT(lane_type);
-    for (lane_type_iter = 0; lane_type_iter < UCP_LANE_TYPE_LAST;
+    for (lane_type_iter = UCP_LANE_TYPE_FIRST;
+         lane_type_iter < UCP_LANE_TYPE_LAST;
          ++lane_type_iter) {
         lane_desc->score[lane_type_iter] = 0.0;
     }
