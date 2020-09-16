@@ -88,6 +88,7 @@ void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucs_assert(req->send.state.uct_comp.count == 0);
     ucp_request_send_buffer_dereg(req); /* TODO register+lane change */
+    ucp_send_request_update_data(req, "sent_zcopy");
     ucp_request_complete_send(req, status);
 }
 

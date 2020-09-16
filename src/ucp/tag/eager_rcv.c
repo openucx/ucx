@@ -71,6 +71,21 @@ ucp_eager_offload_handler(void *arg, void *data, size_t length,
     return status;
 }
 
+static void ucp_recv_request_update_data(ucp_request_t *req, const char *status,
+                                         void *data, size_t length)
+{
+    ucp_worker_h worker = req->recv.worker;
+    ucp_tag_rndv_debug_entry_t *entry;
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length == 0)) {
+        return;
+    }
+
+    entry         = ucp_worker_rndv_debug_entry(worker, req->recv.req_id);
+    entry->status = status;
+    memcpy(entry->ndata, data, ucs_min(UCP_TAG_MAX_DATA, length));
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags,
                          uint16_t flags, uint16_t hdr_len, uint16_t priv_length)
@@ -97,6 +112,9 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
     req = ucp_tag_exp_search(&worker->tm, recv_tag);
     if (req != NULL) {
         ucp_eager_expected_handler(worker, req, data, recv_len, recv_tag, flags);
+
+        ucp_recv_request_update_data(req, "eager_recv",
+                                     UCS_PTR_BYTE_OFFSET(data, hdr_len), recv_len);
 
         if (flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) {
             ucp_tag_eager_sync_send_ack(worker, data, flags);

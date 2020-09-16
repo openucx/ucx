@@ -113,6 +113,8 @@ ucp_request_complete_tag_recv(ucp_worker_h worker, ucp_request_t *req,
          entry->send_tag   = req->recv.tag.info.sender_tag;
          entry->status     = state;
          entry->recvd_size = req->recv.tag.info.length;
+         memcpy(entry->udata, req->recv.buffer,
+                ucs_min(UCP_TAG_MAX_DATA, req->recv.tag.info.length));
      }
 
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);

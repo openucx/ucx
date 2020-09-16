@@ -189,6 +189,7 @@ protected:
         for (size_t i = 0; i < _data_buffers.size(); ++i) {
             std::string &data_buffer = _data_buffers[i];
             data_buffer.resize(opts().max_data_size + ALIGNMENT);
+            std::fill(data_buffer.begin(), data_buffer.end(), 'A');
             uintptr_t ptr = (uintptr_t)&data_buffer[0];
             _padding = ((ptr + ALIGNMENT - 1) & ~(ALIGNMENT - 1)) - ptr;
         }

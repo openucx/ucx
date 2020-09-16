@@ -32,8 +32,10 @@ ucp_tag_recv_request_completed(ucp_worker_h worker, ucp_request_t *req,
         ucp_tag_rndv_debug_entry_t *entry =
                 ucp_worker_rndv_debug_entry(worker, req->recv.req_id);
         entry->send_tag   = info->sender_tag;
-        entry->status     = "recv_completed1";
+        entry->status     = "recv_completed_unexp";
         entry->recvd_size = info->length;
+        memcpy(entry->udata, req->recv.buffer,
+               ucs_min(UCP_TAG_MAX_DATA, info->length));
     }
 
     req->status = status;

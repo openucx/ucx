@@ -62,6 +62,7 @@ static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
                  sreq, sreq->send.rndv_req_id, worker);
     }
 
+    ucp_send_request_update_data(sreq, "rndv_done");
     ucp_request_complete_send(sreq, status);
 }
 
@@ -117,30 +118,13 @@ ucp_rndv_get_req_add_debug_entry(ucp_request_t *rndv_req,
     entry->send_req       = NULL;
 }
 
-/* add debug entry for rndv send flow */
-static void
-ucp_rndv_send_add_debug_entry(ucp_request_t *req)
-{
-    ucp_tag_rndv_debug_entry_t *entry;
-
-    entry                 = ucp_rndv_add_debug_entry_common(req);
-    entry->type           = "rndv_send";
-    entry->rts_seq        = 0;
-    entry->send_tag       = req->send.msg_proto.tag.tag;
-    entry->recv_tag       = 0;
-    entry->remote_address = 0;
-    entry->remote_reqptr  = 0;
-    entry->rndv_get_req   = NULL;
-    entry->recv_req       = NULL;
-    entry->send_req       = req;
-}
-
 /* to be used from debugger */
 void ucp_rndv_print_debug_data(ucp_worker_h worker, const char *filename,
                                ucp_tag_t send_tag)
 {
     ucp_tag_rndv_debug_entry_t *entry;
     size_t i, count;
+    uint64_t ndata, udata;
     FILE *file;
 
     if (filename == NULL) {
@@ -159,13 +143,18 @@ void ucp_rndv_print_debug_data(ucp_worker_h worker, const char *filename,
         if ((send_tag != 0) && (send_tag != entry->send_tag)) {
             continue;
         }
+        memcpy(&udata, entry->udata, sizeof(udata));
+        memcpy(&ndata, entry->ndata, sizeof(ndata));
         fprintf(file,
-                "%s id %lu rts_seq %lu stag 0x%lx rtag 0x%lx rva 0x%lx rmreq 0x%lx "
-                "lva %p sz %zu greq %p rreq %p sreq %p\n",
-                entry->type, entry->id, entry->rts_seq, entry->send_tag,
-                entry->recv_tag, entry->remote_address, entry->remote_reqptr,
-                entry->local_address, entry->size, entry->rndv_get_req,
-                entry->recv_req, entry->send_req);
+                "id %lu %s st '%s' rts_seq %lu pend %u stag 0x%lx rtag 0x%lx rva 0x%lx "
+                "rmreq %lu lva %p sz %zu rxsz %zu greq %p sreq %p rreq %p "
+                "udata 0x%"PRIx64" ndata 0x%"PRIx64"\n",
+                entry->id, entry->type, entry->status, entry->rts_seq,
+                entry->pending_count, entry->send_tag, entry->recv_tag,
+                entry->remote_address, entry->remote_reqptr,
+                entry->local_address, entry->size, entry->recvd_size,
+                entry->rndv_get_req, entry->send_req, entry->recv_req,
+                udata, ndata);
     }
 
     if (filename != NULL) {
@@ -377,11 +366,6 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
     sreq->flags |= UCP_REQUEST_FLAG_SEND_RNDV;
-
-    sreq->send.rndv_req_id = worker->rndv_req_id++;
-    if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
-        ucp_rndv_send_add_debug_entry(sreq);
-    }
 
     status = ucp_ep_resolve_dest_ep_ptr(ep, sreq->send.lane);
     if (status != UCS_OK) {

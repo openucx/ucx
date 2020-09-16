@@ -53,12 +53,13 @@ typedef union {
 
 KHASH_INIT(ucp_tag_frag_hash, uint64_t, ucp_tag_frag_match_t, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
+#define UCP_TAG_MAX_DATA 8
 
 
 typedef struct ucp_tag_rndv_debug_entry {
+    uint64_t          id;
     const char        *type;
     const char        *status;
-    uint64_t          id;
     uint64_t          rts_seq;
     unsigned          pending_count;
     ucp_ep_h          ep;
@@ -72,6 +73,8 @@ typedef struct ucp_tag_rndv_debug_entry {
     ucp_request_t     *rndv_get_req;
     ucp_request_t     *send_req;
     ucp_request_t     *recv_req;
+    uint8_t           udata[UCP_TAG_MAX_DATA];
+    uint8_t           ndata[UCP_TAG_MAX_DATA]; /* data for the network */
 } ucp_tag_rndv_debug_entry_t;
 
 
