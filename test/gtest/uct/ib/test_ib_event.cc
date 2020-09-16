@@ -145,7 +145,7 @@ public:
         }
 
         ucs_time_t deadline = ucs_get_time() +
-                              ucs_time_from_sec(ucs::test_time_multiplier());
+                              ucs_time_from_sec(ucs::test_time_multiplier() * 10);
         while (!got_event && ucs_get_time() < deadline) {
             progress();
         }
