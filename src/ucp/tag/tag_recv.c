@@ -21,8 +21,8 @@
 
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_recv_request_completed(ucp_worker_h worker, ucp_request_t *req,
-                               ucs_status_t status, ucp_tag_recv_info_t *info,
-                               const char *function)
+                               void *buffer, ucs_status_t status,
+                               ucp_tag_recv_info_t *info, const char *function)
 {
     ucs_trace_req("%s returning completed request %p (%p) stag 0x%"PRIx64" len %zu, %s",
                   function, req, req + 1, info->sender_tag, info->length,
@@ -122,8 +122,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         if (req_flags & UCP_REQUEST_FLAG_CALLBACK) {
             cb(req + 1, status, &req->recv.tag.info);
         }
-        ucp_tag_recv_request_completed(worker, req, status, &req->recv.tag.info,
-                                       debug_name);
+        ucp_tag_recv_request_completed(worker, req, buffer, status,
+                                       &req->recv.tag.info, debug_name);
         return;
     }
 
