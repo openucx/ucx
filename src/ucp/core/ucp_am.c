@@ -269,7 +269,7 @@ ucp_am_zcopy_pack_user_header(ucp_request_t *req)
     /* avoid copying user header again if previous send attempt returned
      * UCS_ERR_NO_RESOURCES
      */
-    if (req->send.msg_proto.am.reg_desc != NULL) {
+    if (req->flags & UCP_REQUEST_FLAG_AM_HDR_PACKED) {
         return UCS_OK;
     }
 
@@ -280,6 +280,7 @@ ucp_am_zcopy_pack_user_header(ucp_request_t *req)
 
     ucp_am_pack_user_header(reg_desc + 1, req);
     req->send.msg_proto.am.reg_desc = reg_desc;
+    req->flags                     |= UCP_REQUEST_FLAG_AM_HDR_PACKED;
 
     return UCS_OK;
 }
@@ -514,7 +515,8 @@ static UCS_F_ALWAYS_INLINE void ucp_am_zcopy_complete_common(ucp_request_t *req)
 {
     ucs_assert(req->send.state.uct_comp.count == 0);
 
-    if (req->send.msg_proto.am.reg_desc != NULL) {
+    if (req->flags & UCP_REQUEST_FLAG_AM_HDR_PACKED) {
+        ucs_assert(req->send.msg_proto.am.header_length > 0);
         ucs_mpool_put_inline(req->send.msg_proto.am.reg_desc);
     }
 
@@ -632,7 +634,6 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.msg_proto.am.flags         = flags;
     req->send.msg_proto.am.header        = (void*)header;
     req->send.msg_proto.am.header_length = header_length;
-    req->send.msg_proto.am.reg_desc      = NULL;
     req->send.buffer                     = (void*)buffer;
     req->send.datatype                   = datatype;
     req->send.mem_type                   = UCS_MEMORY_TYPE_HOST;

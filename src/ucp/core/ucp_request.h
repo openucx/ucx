@@ -48,9 +48,10 @@ enum {
     UCP_REQUEST_FLAG_SEND_AM              = UCS_BIT(13),
     UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
     UCP_REQUEST_FLAG_RNDV_FRAG            = UCS_BIT(15),
+    UCP_REQUEST_FLAG_AM_HDR_PACKED        = UCS_BIT(16),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(16),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17)
+    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(17),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(18)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
@@ -132,10 +133,14 @@ struct ucp_request {
                         } tag;
 
                         struct {
-                            void           *header;
-                            ucp_mem_desc_t *reg_desc; /* pointer to pre-registered buffer,
-                                                         used for sending header with
-                                                         zcopy protocol */
+                            union {
+                                /* Can be union, because once header is packed to
+                                 * reg_desc, it is not accessed anymore. */
+                                void           *header;
+                                ucp_mem_desc_t *reg_desc; /* pointer to pre-registered buffer,
+                                                             used for sending header with
+                                                             zcopy protocol */
+                            };
                             uint32_t       header_length;
                             uint16_t       am_id;
                             uint16_t       flags;
