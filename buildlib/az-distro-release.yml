@@ -11,7 +11,7 @@ jobs:
     - name: MOFED
       value: mofed5.0-1.0.0.0
 
-    timeoutInMinutes: 90
+    timeoutInMinutes: 180
 
     strategy:
       matrix:
