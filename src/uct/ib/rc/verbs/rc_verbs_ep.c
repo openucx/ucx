@@ -425,8 +425,6 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         uct_ep_pending_purge(&ep->super.super.super, NULL, 0);
-        uct_rc_verbs_ep_handle_failure(ep, UCS_ERR_CANCELED);
-        return UCS_OK;
     }
 
     status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, flags);
@@ -439,6 +437,10 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    if (ucs_unlikely((flags & UCT_FLUSH_FLAG_CANCEL))) {
+        uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
     }
 
     return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
@@ -493,17 +495,6 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, flags, INT_MAX);
     return UCS_OK;
-}
-
-ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
-                                            ucs_status_t status)
-{
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                           uct_rc_iface_t);
-
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, 0, ep->txcnt.ci);
-    return iface->super.ops->set_ep_failed(&iface->super, &ep->super.super.super,
-                                           status);
 }
 
 ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
