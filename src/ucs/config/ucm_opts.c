@@ -27,6 +27,13 @@ static const char *ucm_mmap_hook_modes[] = {
     [UCM_MMAP_HOOK_LAST]   = NULL
 };
 
+static const char *ucm_module_unload_prevent_modes[] = {
+    [UCM_UNLOAD_PREVENT_MODE_LAZY] = "lazy",
+    [UCM_UNLOAD_PREVENT_MODE_NOW]  = "now",
+    [UCM_UNLOAD_PREVENT_MODE_NONE] = "none",
+    [UCM_UNLOAD_PREVENT_MODE_LAST] = NULL
+};
+
 static ucs_config_field_t ucm_global_config_table[] = {
   {"LOG_LEVEL", "warn",
    "Logging level for memory events", ucs_offsetof(ucm_global_config_t, log_level),
@@ -79,6 +86,13 @@ static ucs_config_field_t ucm_global_config_table[] = {
    "Process RPATH section of caller module during dynamic libraries opening.",
    ucs_offsetof(ucm_global_config_t, dlopen_process_rpath),
    UCS_CONFIG_TYPE_BOOL},
+
+  {"MODULE_UNLOAD_PREVENT_MODE", "lazy",
+   "Module unload prevention mode\n"
+   " lazy - use RTLD_LAZY flag to add reference to module.\n"
+   " now  - use RTLD_NOW flag to add reference to module.\n"
+   " none - don't prevent module unload, use it for debug purposes only."
+   ,ucs_offsetof(ucm_global_config_t, module_unload_prevent_mode), UCS_CONFIG_TYPE_ENUM(ucm_module_unload_prevent_modes)},
 
   {NULL}
 };
