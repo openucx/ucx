@@ -1794,3 +1794,9 @@ uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
 
     return tl_bitmap;
 }
+
+const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx)
+{
+    ucs_assert(cm_idx != UCP_NULL_RESOURCE);
+    return context->tl_cmpts[context->config.cm_cmpt_idxs[cm_idx]].attr.name;
+}
