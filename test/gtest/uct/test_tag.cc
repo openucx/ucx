@@ -82,6 +82,16 @@ public:
 
             sender->connect(0, *receiver, 0);
         }
+
+        m_disable_rndv = false;
+    }
+
+    bool m_disable_rndv;
+
+    void cleanup() {
+        m_disable_rndv = true;
+        flush();
+        uct_test::cleanup();
     }
 
     void init_send_ctx(send_ctx &s,mapped_buffer *b, uct_tag_t t, uint64_t i,
@@ -414,6 +424,12 @@ public:
                                    uint64_t remote_addr, size_t length,
                                    const void *rkey_buf)
     {
+        test_tag *self = reinterpret_cast<test_tag*>(arg);
+
+        if (self->m_disable_rndv) {
+            return UCS_OK;
+        }
+
         rndv_hdr *rhdr  = const_cast<rndv_hdr*>(static_cast<const rndv_hdr*>(header));
         recv_ctx *r_ctx = reinterpret_cast<recv_ctx*>(rhdr->priv[0]);
         send_ctx *s_ctx = reinterpret_cast<send_ctx*>(rhdr->priv[1]);
@@ -427,7 +443,6 @@ public:
         EXPECT_EQ(remote_addr, s_ctx->sw_rndv ? 0ul :
                   reinterpret_cast<uint64_t>(s_ctx->mbuf->ptr()));
 
-        test_tag *self = reinterpret_cast<test_tag*>(arg);
         return self->unexpected_handler(r_ctx, const_cast<void*>(header), flags);
     }
 
@@ -950,6 +965,11 @@ public:
     typedef void (test_tag_mp_xrq::*send_func)(mapped_buffer*);
 
     virtual void init();
+    virtual void cleanup() {
+        flush();
+        uct_test::cleanup();
+    }
+
     test_tag_mp_xrq();
     uct_rc_mlx5_iface_common_t* rc_mlx5_iface(entity &e);
     void send_eager_bcopy(mapped_buffer *buf);

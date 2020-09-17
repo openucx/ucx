@@ -219,7 +219,7 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                      ntohs(cqe->wqe_counter));
     ep->super.fc.fc_wnd++;
 
-    if (uct_rc_mlx5_ep_handle_failure(ep, status) == UCS_OK) {
+    if (uct_rc_mlx5_ep_handle_failure(ep, status, ntohs(cqe->wqe_counter)) == UCS_OK) {
         log_lvl = ib_iface->super.config.failure_level;
     }
 

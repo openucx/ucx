@@ -601,6 +601,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nonexistent) {
     skip_loopback();
     sender().connect(&receiver(), get_ep_params());
     disconnect(sender());
+    flush_worker(sender());
     receiver().destroy_worker();
     sender().destroy_worker();
 }

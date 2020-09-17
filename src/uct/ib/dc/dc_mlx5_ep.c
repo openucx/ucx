@@ -572,9 +572,6 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
             /* No dci -> no WQEs -> HW is clean, nothing to cancel */
             return UCS_OK;
         }
-
-        uct_dc_mlx5_ep_handle_failure(ep, NULL, UCS_ERR_CANCELED);
-        return UCS_OK;
     }
 
     if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
@@ -957,13 +954,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);
 
-    /* we can handle it but well behaving app should not do this */
-    ucs_debug("ep (%p) is destroyed with %d outstanding ops",
-              self, (int16_t)iface->super.super.config.tx_qp_len -
-              uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
-    uct_rc_txqp_purge_outstanding(&iface->super.super,
-                                  &iface->tx.dcis[self->dci].txqp,
-                                  UCS_ERR_CANCELED, 1);
+    ucs_assert(ucs_queue_is_empty(&iface->tx.dcis[self->dci].txqp.outstanding));
     iface->tx.dcis[self->dci].ep = NULL;
 }
 
@@ -1298,6 +1289,7 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
                                    ucs_status_t ep_status)
 {
+    struct mlx5_cqe64  *cqe    = arg;
     uct_iface_h tl_iface       = ep->super.super.iface;
     uint8_t dci                = ep->dci;
     uct_ib_iface_t *ib_iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
@@ -1309,7 +1301,8 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
-    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, 0);
+    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, 0,
+                                  ntohs(cqe->wqe_counter));
 
     /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
        is not updated for the error cqe and all outstanding wqes*/

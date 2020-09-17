@@ -687,7 +687,7 @@ UCS_TEST_P(test_rc_flow_control, pending_only_fc)
     int wnd = 2;
 
     disable_entity(m_e2);
-    set_fc_attributes(m_e1, true, wnd, wnd, 1);
+    set_fc_attributes(m_e1, true, wnd + 1, wnd, 1);
 
     send_am_and_flush(m_e1, wnd);
 
