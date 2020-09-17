@@ -412,9 +412,10 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
     } else if (req->send.state.uct_comp.func) {
-        req->send.state.dt.offset = req->send.length;
+        req->send.state.dt.offset      = req->send.length;
         req->send.state.uct_comp.count = 0;
-        req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
+        uct_completion_update_status(&req->send.state.uct_comp, status);
+        req->send.state.uct_comp.func(&req->send.state.uct_comp);
     } else {
         ucp_request_complete_send(req, status);
     }

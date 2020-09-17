@@ -97,7 +97,7 @@ static void uct_ugni_put_flush_group(uct_ugni_flush_group_t *group)
     ucs_mpool_put(group);
 }
 
-static void uct_ugni_flush_cb(uct_completion_t *self, ucs_status_t status)
+static void uct_ugni_flush_cb(uct_completion_t *self)
 {
     uct_ugni_flush_group_t *group = ucs_container_of(self, uct_ugni_flush_group_t, flush_comp);
 

@@ -67,7 +67,7 @@ private:
     void test_xfer_print(O& os, send_func_t send, size_t length,
                          unsigned flags, ucs_memory_type_t mem_type);
 
-    static void completion_cb(uct_completion_t *self, ucs_status_t status);
+    static void completion_cb(uct_completion_t *self);
 
     static ucs_log_func_rc_t
     log_handler(const char *file, unsigned line, const char *function,

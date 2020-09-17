@@ -451,11 +451,11 @@ public:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    static void send_completion(uct_completion_t *self, ucs_status_t status)
+    static void send_completion(uct_completion_t *self)
     {
         send_ctx *user_ctx = ucs_container_of(self, send_ctx, uct_comp);
         user_ctx->comp     = true;
-        user_ctx->status   = status;
+        user_ctx->status   = self->status;
     }
 
 

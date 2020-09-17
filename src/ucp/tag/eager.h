@@ -69,12 +69,12 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
 void ucp_tag_eager_sync_completion(ucp_request_t *req, uint32_t flag,
                                    ucs_status_t status);
 
-void ucp_tag_eager_zcopy_completion(uct_completion_t *self, ucs_status_t status);
+void ucp_tag_eager_zcopy_completion(uct_completion_t *self);
 
 void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 
 void ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 
-void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self, ucs_status_t status);
+void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self);
 
 #endif

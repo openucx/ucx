@@ -172,10 +172,10 @@ public:
         return UCS_OK;
     }
 
-    static void completion_cb(uct_completion_t *self, ucs_status_t c_status) {
+    static void completion_cb(uct_completion_t *self) {
         am_completion_t *comp = ucs_container_of(self, am_completion_t, uct);
 
-        EXPECT_UCS_OK(c_status);
+        EXPECT_UCS_OK(self->status);
 
         ucs_status_t status = uct_ep_am_short(comp->ep, AM_ID, COMP_HDR,
                                               NULL, 0);

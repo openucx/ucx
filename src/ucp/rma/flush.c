@@ -229,10 +229,11 @@ static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
     }
 }
 
-void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status)
+void ucp_ep_flush_completion(uct_completion_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+    ucp_request_t *req  = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
+    ucs_status_t status = self->status;
 
     ucs_trace_req("flush completion req=%p status=%d", req, status);
 
@@ -271,8 +272,10 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
 
     ucs_assert(req->send.state.uct_comp.count >= num_comps);
     req->send.state.uct_comp.count -= num_comps;
+    uct_completion_update_status(&req->send.state.uct_comp, status);
+
     if (req->send.state.uct_comp.count == 0) {
-        req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
+        req->send.state.uct_comp.func(&req->send.state.uct_comp);
     }
 }
 

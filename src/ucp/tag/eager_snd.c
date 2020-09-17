@@ -258,11 +258,12 @@ ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
                                   status);
 }
 
-void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self,
-                                         ucs_status_t status)
+void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
-                                          send.state.uct_comp);
+    ucp_request_t *req  = ucs_container_of(self, ucp_request_t,
+                                           send.state.uct_comp);
+    ucs_status_t status = self->status;
+
     if (req->send.state.dt.offset == req->send.length) {
         ucp_tag_eager_sync_zcopy_req_complete(req, status);
     } else if (status != UCS_OK) {

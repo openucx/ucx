@@ -2558,8 +2558,7 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
 }
 
 static void
-ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self,
-                                     ucs_status_t status)
+ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 {
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_request_t *req       = ucs_container_of(self, ucp_request_t,
@@ -2567,7 +2566,7 @@ ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self,
     ucp_worker_h worker      = req->send.discard_uct_ep.ucp_worker;
 
     ucp_trace_req(req, "discard_uct_ep flush completion status %s",
-                  ucs_status_string(status));
+                  ucs_status_string(self->status));
 
     /* don't destroy UCT EP from the flush completion callback, schedule
      * a progress callback on the main thread to destroy UCT EP */
@@ -2592,8 +2591,8 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
     }
 
     /* UCS_OK is handled here as well */
-    ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp,
-                                         status);
+    uct_completion_update_status(&req->send.state.uct_comp, status);
+    ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp);
     return UCS_OK;
 }
 

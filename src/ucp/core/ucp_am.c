@@ -524,15 +524,15 @@ static void ucp_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
     ucp_request_complete_send(req, status);
 }
 
-void ucp_am_zcopy_completion(uct_completion_t *self, ucs_status_t status)
+void ucp_am_zcopy_completion(uct_completion_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
-                                          send.state.uct_comp);
+    ucp_request_t *req  = ucs_container_of(self, ucp_request_t,
+                                           send.state.uct_comp);
 
     if (req->send.state.dt.offset == req->send.length) {
-        ucp_am_zcopy_req_complete(req, status);
-    } else if (status != UCS_OK) {
-        ucs_assert(status != UCS_INPROGRESS);
+        ucp_am_zcopy_req_complete(req, self->status);
+    } else if (self->status != UCS_OK) {
+        ucs_assert(self->status != UCS_INPROGRESS);
 
         /* Avoid double release of resources */
         req->send.state.uct_comp.func = NULL;

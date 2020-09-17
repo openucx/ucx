@@ -666,13 +666,9 @@ void uct_invoke_completion(uct_completion_t *comp, ucs_status_t status)
     ucs_trace_func("comp=%p, count=%d, status=%d", comp, comp->count, status);
     ucs_assertv(comp->count > 0, "comp=%p count=%d", comp, comp->count);
 
-    /* store first failure status */
-    if (ucs_unlikely(status != UCS_OK) && (comp->status == UCS_OK)) {
-        comp->status = status;
-    }
-
+    uct_completion_update_status(comp, status);
     if (--comp->count == 0) {
-        comp->func(comp, comp->status);
+        comp->func(comp);
     }
 }
 
