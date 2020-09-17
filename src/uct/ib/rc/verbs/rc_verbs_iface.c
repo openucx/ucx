@@ -56,8 +56,23 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         return;
     }
 
-    if (uct_rc_verbs_ep_handle_failure(ep, status) == UCS_OK) {
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, 0, ep->txcnt.ci);
+
+    if (ep->super.txqp.flags & UCT_RC_TXQP_FLAG_ERR) {
+        return;
+    } else {
+        ep->super.txqp.flags |= UCT_RC_TXQP_FLAG_ERR;
+    }
+
+    status = iface->super.ops->set_ep_failed(&iface->super, &ep->super.super.super,
+                                             status);
+
+    if (status == UCS_OK) {
         log_lvl = iface->super.super.config.failure_level;
+    }
+
+    if (wc->status == IBV_WC_WR_FLUSH_ERR) {
+        return;
     }
 
     ucs_log(log_lvl,
