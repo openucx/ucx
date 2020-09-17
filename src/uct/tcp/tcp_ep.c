@@ -571,6 +571,37 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep, ucs_status_t status
     }
 }
 
+static inline ucs_status_t uct_tcp_ep_handle_send_err(uct_tcp_ep_t *ep,
+                                                      ucs_status_t status)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+
+    ucs_assert(status != UCS_ERR_NO_PROGRESS);
+
+    status = uct_tcp_ep_handle_io_err(ep, "send", status);
+    if (status == UCS_ERR_CANCELED) {
+        /* If no data were read to the allocated buffer,
+         * we can safely reset it for futher re-use and to
+         * avoid overwriting this buffer, because `rx::length == 0` */
+        if (ep->tx.length == 0) {
+            uct_tcp_ep_ctx_reset(&ep->tx);
+        }
+    } else {
+        uct_tcp_ep_handle_disconnected(ep, status);
+        if (iface->super.err_handler != NULL) {
+            /* Translate the error to EP timeout error, since user expects that
+             * status returned from UCT error callback is the same as it is
+             * returned from the UCT EP send operation (or from UCT competion
+             * callback)
+             * TODO: revise this behavior */
+            return UCS_ERR_ENDPOINT_TIMEOUT;
+        }
+    }
+
+    return status;
+}
+
 static inline ssize_t uct_tcp_ep_send(uct_tcp_ep_t *ep)
 {
     size_t sent_length;
@@ -584,7 +615,7 @@ static inline ssize_t uct_tcp_ep_send(uct_tcp_ep_t *ep)
                                 &sent_length);
     if (ucs_unlikely((status != UCS_OK) &&
                      (status != UCS_ERR_NO_PROGRESS))) {
-        return status;
+        return uct_tcp_ep_handle_send_err(ep, status);
     }
 
     uct_tcp_ep_tx_completed(ep, sent_length);
@@ -610,6 +641,7 @@ static inline ssize_t uct_tcp_ep_sendv(uct_tcp_ep_t *ep)
             return 0;
         }
 
+        status = uct_tcp_ep_handle_send_err(ep, status);
         uct_tcp_ep_zcopy_completed(ep, ctx->comp, status);
         return status;
     }
@@ -746,24 +778,6 @@ static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,
     }
 }
 
-static inline void uct_tcp_ep_handle_send_err(uct_tcp_ep_t *ep,
-                                              ucs_status_t status)
-{
-    ucs_assert(status != UCS_ERR_NO_PROGRESS);
-
-    status = uct_tcp_ep_handle_io_err(ep, "send", status);
-    if (status == UCS_ERR_CANCELED) {
-        /* If no data were read to the allocated buffer,
-         * we can safely reset it for futher re-use and to
-         * avoid overwriting this buffer, because `rx::length == 0` */
-        if (ep->tx.length == 0) {
-            uct_tcp_ep_ctx_reset(&ep->tx);
-        }
-    } else {
-        uct_tcp_ep_handle_disconnected(ep, status);
-    }
-}
-
 static inline unsigned uct_tcp_ep_recv(uct_tcp_ep_t *ep, size_t recv_length)
 {
     uct_tcp_iface_t UCS_V_UNUSED *iface = ucs_derived_of(ep->super.super.iface,
@@ -813,7 +827,6 @@ static unsigned uct_tcp_ep_progress_data_tx(uct_tcp_ep_t *ep)
         offset = (!(ep->flags & UCT_TCP_EP_FLAG_ZCOPY_TX) ?
                   uct_tcp_ep_send(ep) : uct_tcp_ep_sendv(ep));
         if (ucs_unlikely(offset < 0)) {
-            uct_tcp_ep_handle_send_err(ep, (ucs_status_t)offset);
             return 1;
         }
 
@@ -1172,7 +1185,6 @@ uct_tcp_ep_am_send(uct_tcp_ep_t *ep, const uct_tcp_am_hdr_t *hdr)
 
     offset = uct_tcp_ep_send(ep);
     if (ucs_unlikely(offset < 0)) {
-        uct_tcp_ep_handle_send_err(ep, (ucs_status_t)offset);
         return (ucs_status_t)offset;
     }
 
@@ -1220,8 +1232,7 @@ uct_tcp_ep_am_sendv(uct_tcp_ep_t *ep, int short_sendv, uct_tcp_am_hdr_t *hdr,
 
     status = ucs_socket_sendv_nb(ep->fd, iov, iov_cnt, &sent_length);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
-        uct_tcp_ep_handle_send_err(ep, status);
-        return status;
+        return uct_tcp_ep_handle_send_err(ep, status);
     }
 
     uct_tcp_ep_tx_completed(ep, sent_length);
