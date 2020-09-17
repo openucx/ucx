@@ -84,6 +84,9 @@ ucp_request_put(ucp_request_t *req)
 {
     ucs_trace_req("put request %p", req);
     UCS_PROFILE_REQUEST_FREE(req);
+    req->send.cb        = NULL;
+    req->recv.tag.cb    = NULL;
+    req->recv.stream.cb = NULL;
     ucs_mpool_put_inline(req);
 }
 

@@ -702,6 +702,7 @@ bool UcxConnection::process_request(const char *what,
         ucx_request *r = reinterpret_cast<ucx_request*>(ptr_status);
         if (r->completed) {
             // already completed by callback
+            assert(ucp_request_is_completed(r));
             status = r->status;
             (*callback)(status);
             UcxContext::request_release(r);
