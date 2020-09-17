@@ -555,18 +555,21 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                   uct_completion_t *comp)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
     ucs_status_t status;
     uint16_t sn;
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         uct_ep_pending_purge(&ep->super.super.super, NULL, 0);
-        uct_rc_mlx5_ep_handle_failure(ep, UCS_ERR_CANCELED, ep->tx.wq.sw_pi);
-        return UCS_OK;
     }
 
     status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max, flags);
     if (status != UCS_INPROGRESS) {
         return status;
+    }
+
+    if (ucs_unlikely((flags & UCT_FLUSH_FLAG_CANCEL))) {
+        (void)uct_ib_mlx5_modify_qp_state(md, &ep->tx.wq.super, IBV_QPS_ERR);
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
@@ -1024,18 +1027,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     (void)uct_ib_mlx5_modify_qp_state(md, &self->tx.wq.super, IBV_QPS_ERR);
     uct_rc_ep_cleanup_qp(&iface->super, &self->super, &ep_cleanup_ctx->super,
                          self->tx.wq.super.qp_num);
-}
-
-ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
-                                           ucs_status_t status, uint16_t sn)
-{
-    uct_rc_iface_t *rc_iface = ucs_derived_of(ep->super.super.super.iface,
-                                              uct_rc_iface_t);
-
-    uct_rc_txqp_purge_outstanding(rc_iface, &ep->super.txqp, status, 0, sn);
-    return rc_iface->super.ops->set_ep_failed(&rc_iface->super,
-                                              &ep->super.super.super,
-                                              status);
 }
 
 ucs_status_t uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,

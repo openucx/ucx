@@ -197,16 +197,25 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                                        qp_num),
                                                 uct_rc_mlx5_ep_t);
     ucs_log_level_t    log_lvl = UCS_LOG_LEVEL_FATAL;
+    uint16_t           sn      = ntohs(cqe->wqe_counter);
 
     if (!ep) {
         return;
     }
 
-    uct_rc_mlx5_common_update_tx_res(iface, &ep->tx.wq, &ep->super.txqp,
-                                     ntohs(cqe->wqe_counter));
+    uct_rc_mlx5_common_update_tx_res(iface, &ep->tx.wq, &ep->super.txqp, sn);
     ep->super.fc.fc_wnd++;
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, 0, sn);
 
-    if (uct_rc_mlx5_ep_handle_failure(ep, status, ntohs(cqe->wqe_counter)) == UCS_OK) {
+    if (ep->super.txqp.flags & UCT_RC_TXQP_FLAG_ERR) {
+        return;
+    } else {
+        ep->super.txqp.flags |= UCT_RC_TXQP_FLAG_ERR;
+    }
+
+    status = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super,
+                                          status);
+    if (status == UCS_OK) {
         log_lvl = ib_iface->super.config.failure_level;
     }
 
