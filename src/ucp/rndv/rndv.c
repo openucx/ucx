@@ -1273,11 +1273,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
 
     if (rts_hdr->flags & UCP_RNDV_RTS_FLAG_TAG) {
         return ucp_tag_rndv_process_rts(worker, rts_hdr, length, tl_flags);
+    } else {
+        ucs_assert(rts_hdr->flags & UCP_RNDV_RTS_FLAG_AM);
+        return ucp_am_rndv_process_rts(arg, data, length, tl_flags);
     }
-
-    ucs_assert(rts_hdr->flags & UCP_RNDV_RTS_FLAG_AM);
-
-    return ucp_am_rndv_process_rts(arg, data, length, tl_flags);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
@@ -1785,38 +1784,42 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     const ucp_reply_hdr_t *rep_hdr         = data;
     ucp_tag_rndv_rts_hdr_t *tag_rts;
     ucp_am_rndv_rts_hdr_t *am_rts;
+    ucs_string_buffer_t rts_info;
     void *rkey_buf;
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
         ucs_assert(rndv_rts_hdr->sreq.ep_id != UCP_EP_ID_INVALID);
 
+        ucs_string_buffer_init(&rts_info);
+
         if (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_AM) {
             am_rts   = ucs_derived_of(rndv_rts_hdr, ucp_am_rndv_rts_hdr_t);
             rkey_buf = am_rts + 1;
-
-            snprintf(buffer, max, "AM RNDV_RTS am_id %u ep_id 0x%"PRIx64""
-                    " sreq_id 0x%"PRIx64" address 0x%"PRIx64" size %zu",
-                    am_rts->am.am_id, am_rts->super.sreq.ep_id,
-                    am_rts->super.sreq.req_id, am_rts->super.address,
-                    am_rts->super.size);
-
+            ucs_string_buffer_appendf(&rts_info, "AM am_id %u",
+                                      am_rts->am.am_id);
         } else {
             ucs_assert(rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_TAG);
 
             tag_rts  = ucs_derived_of(rndv_rts_hdr, ucp_tag_rndv_rts_hdr_t);
             rkey_buf = tag_rts + 1;
 
-            snprintf(buffer, max, "RNDV_RTS tag %"PRIx64" ep_id 0x%"PRIx64""
-                    " sreq_id 0x%"PRIx64" address 0x%"PRIx64" size %zu",
-                    tag_rts->tag.tag, tag_rts->super.sreq.ep_id,
-                    tag_rts->super.sreq.req_id, tag_rts->super.address,
-                    tag_rts->super.size);
+            ucs_string_buffer_appendf(&rts_info, "TAG tag %"PRIx64"",
+                                      tag_rts->tag.tag);
         }
+
+        snprintf(buffer, max, "RNDV_RTS %s ep_id 0x%"PRIx64" sreq_id"
+                 " 0x%"PRIx64" address 0x%"PRIx64" size %zu",
+                 ucs_string_buffer_cstr(&rts_info), rndv_rts_hdr->sreq.ep_id,
+                 rndv_rts_hdr->sreq.req_id, rndv_rts_hdr->address,
+                 rndv_rts_hdr->size);
+
         if (rndv_rts_hdr->address) {
             ucp_rndv_dump_rkey(rkey_buf, buffer + strlen(buffer),
                                max - strlen(buffer));
         }
+
+        ucs_string_buffer_cleanup(&rts_info);
         break;
     case UCP_AM_ID_RNDV_ATS:
         snprintf(buffer, max, "RNDV_ATS sreq_id 0x%"PRIx64" status '%s'",
