@@ -1,4 +1,4 @@
-#!/bin/bash -leE
+#!/bin/bash -leEx
 
 # avoid Azure error: TERM environment variable not set
 export TERM=xterm
@@ -14,6 +14,8 @@ source "${workspace}/az-helpers.sh"
 server_ip=${server_ip:=""}
 duration=${duration:=2}
 iface=${iface:="bond0"}
+
+set -x
 
 export UCX_MAX_EAGER_LANES=2
 export UCX_TLS=rc
@@ -34,15 +36,20 @@ if [ "x$server_ip" = "x" ]; then
 
     server_cmd="${workspace}/../test/apps/iodemo/io_demo"
     if ! "${server_cmd}" |& add_timestamp &>server.log & then
+        cat server.log
         error "Failed to run server command ${server_cmd}"
     fi
 
     # wait for io_demo to start
+    echo "Waiting for server to start.."
     sleep 5
 
     server_pid=$(pgrep -u "$USER" -f 'apps/iodemo')
+    echo "Server pid is '${server_pid}'"
+
     num_pids=$(echo "${server_pid}" | wc -w)
     if [ ${num_pids} -ne 1 ]; then
+        cat server.log
         ps -f -U "$USER"  # show all runing processes
         error "Expected 1 running server, found ${num_pids}"
     fi
