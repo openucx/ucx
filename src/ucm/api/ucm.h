@@ -68,6 +68,18 @@ typedef enum ucm_mmap_hook_mode {
     UCM_MMAP_HOOK_LAST
 } ucm_mmap_hook_mode_t;
 
+
+/**
+ * @brief UCM module unload prevent mode
+ */
+typedef enum ucm_module_unload_prevent_mode {
+    UCM_UNLOAD_PREVENT_MODE_LAZY,
+    UCM_UNLOAD_PREVENT_MODE_NOW,
+    UCM_UNLOAD_PREVENT_MODE_NONE,
+    UCM_UNLOAD_PREVENT_MODE_LAST
+} ucm_module_unload_prevent_mode_t;
+
+
 /**
  * @brief Memory event parameters and result.
  */
@@ -195,6 +207,7 @@ typedef struct ucm_global_config {
     int                  enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
     size_t               alloc_alignment;             /* Alignment for memory allocations */
     int                  dlopen_process_rpath;        /* Process RPATH section in dlopen hook */
+    int                  module_unload_prevent_mode;  /* Module unload prevention mode */
 } ucm_global_config_t;
 
 
