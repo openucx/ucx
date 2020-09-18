@@ -406,7 +406,7 @@ UcxConnection::UcxConnection(UcxContext &context, uint32_t conn_id) :
 UcxConnection::~UcxConnection()
 {
     // if _ep is NULL, connection was closed and removed by error handler
-    if (_ep) {
+    if (_ep != NULL) {
         disconnect(UCP_EP_CLOSE_MODE_FORCE);
     }
 
@@ -478,7 +478,7 @@ bool UcxConnection::send_data(const void *buffer, size_t length, uint32_t sn,
 bool UcxConnection::recv_data(void *buffer, size_t length, uint32_t sn,
                               UcxCallback* callback)
 {
-    if (!_ep) {
+    if (_ep == NULL) {
         return false;
     }
 
@@ -629,7 +629,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 bool UcxConnection::send_common(const void *buffer, size_t length, ucp_tag_t tag,
                                 UcxCallback* callback)
 {
-    if (!_ep) {
+    if (_ep == NULL) {
         return false;
     }
 
@@ -670,7 +670,7 @@ void UcxConnection::disconnect(enum ucp_ep_close_mode mode)
 void UcxConnection::ep_close(enum ucp_ep_close_mode mode)
 {
     static const char *mode_str[] = {"force", "flush"};
-    if (!_ep) {
+    if (_ep == NULL) {
         /* already closed */
         return;
     }
