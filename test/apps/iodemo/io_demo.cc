@@ -61,7 +61,7 @@ typedef struct {
 template<class T>
 class MemoryPool {
 public:
-    MemoryPool(size_t buffer_size = 0) :
+    MemoryPool(size_t buffer_size) :
         _num_allocated(0), _buffer_size(buffer_size) {
     }
 
@@ -386,7 +386,8 @@ public:
             LOG << "Invalid opcode: " << hdr->op;
         }
     }
-protected:
+
+private:
     MemoryPool<IoWriteResponseCallback> _callback_pool;    
 };
 
@@ -778,7 +779,6 @@ private:
     std::map<status_t, std::string>    _status_str;
     double                             _start_time;
     unsigned                           _retry;
-protected:    
     MemoryPool<IoReadResponseCallback> _callback_pool;
 };
 
