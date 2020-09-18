@@ -56,6 +56,12 @@ static inline int uct_mem_get_mmap_flags(unsigned uct_mmap_flags)
     return mm_flags;
 }
 
+static inline void *uct_mem_alloc_params_get_address(const uct_mem_alloc_params_t *params)
+{
+    return (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS) ?
+            params->address : NULL;
+}
+
 ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                            unsigned num_methods,
                            const uct_mem_alloc_params_t *params,
@@ -86,8 +92,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
     }
 
     /* set defaults in case some param fields are not set */
-    address      = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS) ?
-                   params->address : NULL;
+    address      = uct_mem_alloc_params_get_address(params);
     flags        = (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) ?
                    params->flags : (UCT_MD_MEM_ACCESS_LOCAL_READ |
                                     UCT_MD_MEM_ACCESS_LOCAL_WRITE);
@@ -104,7 +109,9 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
         case UCT_ALLOC_METHOD_MD:
             /* Allocate with one of the specified memory domains */
             for (md_index = 0; md_index < params->mds.count; ++md_index) {
-                md = params->mds.mds[md_index];
+                alloc_length = length;
+                address      = uct_mem_alloc_params_get_address(params);
+                md           = params->mds.mds[md_index];
                 status = uct_md_query(md, &md_attr);
                 if (status != UCS_OK) {
                     ucs_error("Failed to query MD");
@@ -215,8 +222,9 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 break;
             }
 
+            address = uct_mem_alloc_params_get_address(params);
             ret = ucs_posix_memalign(&address, UCS_SYS_CACHE_LINE_SIZE,
-                                     alloc_length UCS_MEMTRACK_VAL);
+                                     length UCS_MEMTRACK_VAL);
             if (ret == 0) {
                 goto allocated_without_md;
             }
@@ -231,6 +239,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
 
             /* Request memory from operating system using mmap() */
 
+            alloc_length = length;
+            address      = uct_mem_alloc_params_get_address(params);
             status = ucs_mmap_alloc(&alloc_length, &address,
                                     uct_mem_get_mmap_flags(flags)
                                     UCS_MEMTRACK_VAL);
@@ -249,8 +259,9 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
 
 #ifdef SHM_HUGETLB
             /* Allocate huge pages */
-            address = (flags & UCT_MD_MEM_FLAG_FIXED) ?
-                      params->address : NULL;
+            alloc_length = length;
+            address      = (flags & UCT_MD_MEM_FLAG_FIXED) ?
+                           params->address : NULL;
             status = ucs_sysv_alloc(&alloc_length, length * 2, &address,
                                     SHM_HUGETLB, alloc_name, &shmid);
             if (status == UCS_OK) {
