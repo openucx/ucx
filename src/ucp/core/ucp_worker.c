@@ -2654,6 +2654,7 @@ ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
     req->send.uct.func                      = ucp_worker_discard_uct_ep_pending_cb;
     req->send.state.uct_comp.func           = ucp_worker_discard_uct_ep_flush_comp;
     req->send.state.uct_comp.count          = 1;
+    req->send.state.uct_comp.status         = UCS_OK;
     req->send.discard_uct_ep.ucp_worker     = worker;
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
