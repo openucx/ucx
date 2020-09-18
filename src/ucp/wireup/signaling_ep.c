@@ -11,6 +11,7 @@
 #include "wireup.h"
 
 #include <ucp/core/ucp_proxy_ep.h>
+#include <ucp/core/ucp_worker.h>
 
 
 /* Context for packing short data into bcopy */

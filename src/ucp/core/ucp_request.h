@@ -21,6 +21,8 @@
 #include <ucp/dt/dt.h>
 #include <ucp/rma/rma.h>
 #include <ucp/wireup/wireup.h>
+#include <ucp/core/ucp_am.h>
+#include <ucp/core/ucp_worker.h>
 
 
 #define UCP_REQUEST_ID_INVALID      0
@@ -48,9 +50,10 @@ enum {
     UCP_REQUEST_FLAG_SEND_AM              = UCS_BIT(13),
     UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
     UCP_REQUEST_FLAG_RNDV_FRAG            = UCS_BIT(15),
+    UCP_REQUEST_FLAG_RECV_AM              = UCS_BIT(16),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(16),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(17)
+    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(17),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(18)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
@@ -312,6 +315,11 @@ struct ucp_request {
                     size_t                         offset; /* Receive data offset */
                     size_t                         length; /* Completion info to fill */
                 } stream;
+
+                 struct {
+                    ucp_am_recv_data_nbx_callback_t cb;    /* Completion callback */
+                    ucp_recv_desc_t                 *desc; /* RTS desc */
+                } am;
             };
         } recv;
 

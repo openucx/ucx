@@ -122,13 +122,17 @@
     return UCS_STATUS_PTR(_status);
 
 
-#define ucp_request_set_send_callback_param(_param, _req, _cb) \
+#define ucp_request_set_callback_param(_param, _param_cb, _req, _req_cb) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
-        ucp_request_set_callback(_req, _cb.cb, (_param)->cb.send, \
+        ucp_request_set_callback(_req, _req_cb.cb, (_param)->cb._param_cb, \
                                  ((_param)->op_attr_mask & \
                                   UCP_OP_ATTR_FIELD_USER_DATA) ? \
                                  (_param)->user_data : NULL); \
     }
+
+
+#define ucp_request_set_send_callback_param(_param, _req, _cb) \
+    ucp_request_set_callback_param(_param, send, _req, _cb)
 
 
 #define ucp_request_send_check_status(_status, _ret, _done) \
@@ -626,6 +630,60 @@ ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
+{
+    ucs_trace_req("completing AM receive request %p (%p) "UCP_REQUEST_FLAGS_FMT
+                  " length %zu, %s",
+                  req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
+                  req->recv.length, ucs_status_string(status));
+    UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
+    ucp_recv_desc_release(req->recv.am.desc);
+    ucp_request_complete(req, recv.am.cb, status, req->recv.length,
+                         req->user_data);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_process_recv_data(ucp_request_t *req, const void *data,
+                              size_t length, size_t offset, int is_zcopy,
+                              int is_am)
+{
+    ucs_status_t status;
+    int last;
+
+    last = req->recv.tag.remaining == length;
+
+    /* process data only if the request is not in error state */
+    if (ucs_likely(req->status == UCS_OK)) {
+        req->status = ucp_request_recv_data_unpack(req, data, length,
+                                                   offset, last);
+    }
+    ucs_assertv(req->recv.tag.remaining >= length,
+                "req->recv.tag.remaining=%zu length=%zu",
+                req->recv.tag.remaining, length);
+
+    req->recv.tag.remaining -= length;
+
+    if (!last) {
+        return UCS_INPROGRESS;
+    }
+
+    status = req->status;
+    if (is_zcopy) {
+        ucp_request_recv_buffer_dereg(req);
+    }
+
+    if (is_am) {
+        ucp_request_complete_am_recv(req, status);
+    } else {
+        ucp_request_complete_tag_recv(req, status);
+    }
+
+    ucs_assert(status != UCS_INPROGRESS);
+
+    return status;
+}
+
 static UCS_F_ALWAYS_INLINE ucp_lane_index_t
 ucp_send_request_get_am_bw_lane(ucp_request_t *req)
 {
@@ -687,6 +745,21 @@ ucp_send_request_get_id(ucp_request_t *req)
 {
     return ucp_worker_get_request_id(req->send.ep->worker, req,
                                      ucp_ep_use_indirect_id(req->send.ep));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_param_rndv_thresh(ucp_request_t *req,
+                              const ucp_request_param_t *param,
+                              size_t *rndv_rma_thresh, size_t *rndv_am_thresh)
+{
+    if ((param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
+        *rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv.rma_thresh.local;
+        *rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv.am_thresh.local;
+    } else {
+        *rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv.rma_thresh.remote;
+        *rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv.am_thresh.remote;
+    }
 }
 
 #endif
