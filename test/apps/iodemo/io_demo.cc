@@ -38,7 +38,7 @@ static const char *io_op_names[] = {
 
 /* test options */
 typedef struct {
-    std::vector<const char*> server_addrs;
+    std::vector<const char*> servers;
     int                      port_num;
     long                     client_retries;
     double                   client_timeout;
@@ -538,12 +538,32 @@ public:
         return (_status == OK);
     }
 
-    UcxConnection* connect(const char* server_addr) {
+    UcxConnection* connect(const char* server) {
         struct sockaddr_in connect_addr;
+        std::string server_addr;
+        int port_num;
+
         memset(&connect_addr, 0, sizeof(connect_addr));
         connect_addr.sin_family = AF_INET;
-        connect_addr.sin_port   = htons(opts().port_num);
-        inet_pton(AF_INET, server_addr, &connect_addr.sin_addr);
+
+        const char *port_separator = strchr(server, ':');
+        if (port_separator == NULL) {
+            /* take port number from -p argument */
+            port_num    = opts().port_num;
+            server_addr = server;
+        } else {
+            /* take port number from the server parameter */
+            server_addr = std::string(server)
+                            .substr(0, port_separator - server);
+            port_num    = atoi(port_separator + 1);
+        }
+
+        connect_addr.sin_port = htons(port_num);
+        int ret = inet_pton(AF_INET, server_addr.c_str(), &connect_addr.sin_addr);
+        if (ret != 1) {
+            LOG << "invalid address " << server_addr;
+            return NULL;
+        }
 
         return UcxContext::connect((const struct sockaddr*)&connect_addr,
                                    sizeof(connect_addr));
@@ -565,12 +585,12 @@ public:
 
     bool run() {
         std::vector<UcxConnection*> conn;
-        conn.resize(opts().server_addrs.size());
+        conn.resize(opts().servers.size());
         for (size_t i = 0; i < conn.size(); i++) {
-            conn[i] = connect(opts().server_addrs[i]);
+            conn[i] = connect(opts().servers[i]);
             if (!conn[i]) {
                 LOG << "Connect to server ["
-                    << opts().server_addrs[i]
+                    << opts().servers[i]
                     << "] Failed!";
                 for (size_t j = 0; j < i; j++) {
                     delete conn[j];
@@ -939,6 +959,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
+            std::cout << "       or io_demo [options] [server_address0:port0] [server_address1:port1]..." << std::endl;
             std::cout << "" << std::endl;
             std::cout << "Supported options are:" << std::endl;
             std::cout << "  -p <port>                  TCP port number to use" << std::endl;
@@ -965,7 +986,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     }
 
     while (optind < argc) {
-        test_opts->server_addrs.push_back(argv[optind++]);
+        test_opts->servers.push_back(argv[optind++]);
     }
 
     if (test_opts->operations.size() == 0) {
@@ -1023,7 +1044,7 @@ int main(int argc, char **argv)
         return ret;
     }
 
-    if (test_opts.server_addrs.empty()) {
+    if (test_opts.servers.empty()) {
         return do_server(test_opts);
     } else {
         return do_client(test_opts);
