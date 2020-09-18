@@ -67,7 +67,28 @@ jobs:
 
       - bash: |
           set -eEx
+          # set UCX environment variables
+          export UCX_SOCKADDR_CM_ENABLE=y
+          # TODO get hostname of 'ucx-roce-client' SSH service endpoint, and run on it
+          $(workspace)/../test/apps/iodemo/run_io_demo.sh \
+              -H swx-rdmz-ucx-roce-01,swx-rdmz-ucx-roce-02 \
+              --tasks-per-node 1 \
+              --duration 60 \
+              -v \
+              --num-clients 1 \
+              --num-servers 1 \
+              --map-by slot \
+              $(workspace)/../test/apps/iodemo/io_demo \
+                  -d 512:524288 \
+                  -o read,write \
+                  -i 0 \
+                  -w 16 \
+                  -t 10
+        displayName: Launch with run_io_demo.sh
+        timeoutInMinutes: 2
 
+      - bash: |
+          set -eEx
           source ./buildlib/az-helpers.sh
           ./buildlib/az-network-corrupter.sh \
             initial_delay=$(initial_delay) \
@@ -94,26 +115,29 @@ jobs:
       - task: SSH@0
         inputs:
           sshEndpoint: ucx-roce-client
-          runOptions: script
-          scriptPath: $(Build.Repository.LocalPath)/buildlib/az-io_demo.sh
-          args: "server_ip=$(server_ip) workspace=$(workspace) duration=${{ parameters.test_duration }}"
+          runOptions: inline
+          inline: |
+            set -eEx
+            $(workspace)/az-io_demo.sh \
+                workspace=$(workspace) \
+                server_ip=$(server_ip)
+                duration=${{ parameters.test_duration }}
+          failOnStdErr: false
         displayName: Test
         timeoutInMinutes: ${{ parameters.test_duration }}
 
       - bash: |
           set -eEx
+          cd $(workspace)
           pid=$(server_pid)
-          cd "$WORKSPACE"
-
           echo "Stopping the server, PID=${pid}"
           if ! kill ${pid}; then
-            cat server.log
             echo "##vso[task.logissue type=error]Can't stop server: process doesn't exist"
             echo "##vso[task.complete result=Failed;]"
           else
-            cat server.log
             echo "Server stopped successfully"
           fi
+          cat $(workspace)/server.log
         displayName: Kill the server
         condition: always()
         timeoutInMinutes: 5
@@ -121,14 +145,21 @@ jobs:
       - bash: |
           set -eEx
           pid=$(corrupter_pid)
-
           echo "Stopping corrupter, PID=${pid}"
           if ! kill ${pid}; then
             echo "##vso[task.logissue type=warning]Can't stop corrupter: process doesn't exist"
+            echo "##vso[task.complete result=Failed;]"
+          else
+            echo "Corrupter stopped successfully"
           fi
           cat corrupter.log
-
-          ./buildlib/az-network-corrupter.sh reset=yes
         displayName: Kill corrupter
         condition: always()
         timeoutInMinutes: 10
+
+      - bash: |
+          set -eEx
+          ./buildlib/az-network-corrupter.sh reset=yes
+        displayName: Restore port state
+        condition: always()
+        timeoutInMinutes: 1
