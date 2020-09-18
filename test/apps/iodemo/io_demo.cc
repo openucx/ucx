@@ -20,6 +20,7 @@
 #include <map>
 #include <algorithm>
 #include <limits>
+#include <malloc.h>
 
 #define ALIGNMENT       4096
 
@@ -85,7 +86,7 @@ public:
         T * item;
         
         if (_freelist.empty()) {
-            item = new T(_buffer_size, this);
+            item = new T(_buffer_size, *this);
             _num_allocated++;
         } else {
             item = _freelist.back();
@@ -164,22 +165,160 @@ protected:
         XFER_TYPE_RECV
     } xfer_type_t;
 
+    class Buffer {
+    public:
+        Buffer(size_t size, MemoryPool<Buffer>& pool) :
+            _capacity(size), _buffer(memalign(ALIGNMENT, size)), _size(0),
+            _pool(pool) {
+            if (_buffer == NULL) {
+                throw std::bad_alloc();
+            }
+        }
+
+        ~Buffer() {
+            free(_buffer);
+        }
+
+        void release() {
+            _pool.put(this);
+        }
+
+        inline void *buffer(size_t offset = 0) const {
+            return (uint8_t*)_buffer + offset;
+        }
+
+        inline void resize(size_t size) {
+            assert(size <= _capacity);
+            _size = size;
+        }
+
+        inline size_t size() const {
+            return _size;
+        }
+
+    public:
+        const size_t         _capacity;
+
+    private:
+        void*               _buffer;
+        size_t              _size;
+        MemoryPool<Buffer>& _pool;
+    };
+
+    class BufferIov {
+    public:
+        BufferIov(size_t size, MemoryPool<BufferIov>& pool) : _pool(pool) {
+            _iov.reserve(size);
+        }
+
+        size_t size() const {
+            return _iov.size();
+        }
+
+        void init(size_t data_size, MemoryPool<Buffer> &chunk_pool, uint32_t sn,
+                  bool fill) {
+            assert(_iov.empty());
+
+            Buffer *chunk = chunk_pool.get();
+            _iov.resize(get_chunk_cnt(data_size, chunk->_capacity));
+
+            size_t remaining = init_chunk(0, chunk, data_size);
+            for (size_t i = 1; i < _iov.size(); ++i) {
+                remaining = init_chunk(i, chunk_pool.get(), remaining);
+            }
+
+            assert(remaining == 0);
+
+            if (fill) {
+                fill_data(sn);
+            }
+        }
+
+        inline Buffer& operator[](size_t i) const {
+            return *_iov[i];
+        }
+
+        void release() {
+            while (!_iov.empty()) {
+                _iov.back()->release();
+                _iov.pop_back();
+            }
+
+            _pool.put(this);
+        }
+
+        uint16_t chksum() const {
+            return chk_hdr()->chk_sum;
+        };
+
+        uint32_t sn() const {
+            return tr_hdr()->sn;
+        }
+
+        inline uint16_t calc_chksum() const {
+            uint16_t chk_sum = ucs_crc16(tr_hdr(), (uintptr_t)tr_hdr() -
+                                                   (uintptr_t)_iov[0]->buffer());
+
+            for (size_t i = 1; i < _iov.size(); ++i) {
+                chk_sum ^= ucs_crc16(_iov[i]->buffer(), _iov[i]->size());
+            }
+
+            return chk_sum;
+        }
+
+    private:
+        size_t init_chunk(size_t i, Buffer *chunk, size_t remaining) {
+            _iov[i] = chunk;
+            _iov[i]->resize(std::min(_iov[i]->_capacity, remaining));
+            return remaining - _iov[i]->size();
+        }
+
+        void fill_data(uint32_t sn) {
+            for (size_t i = 0; i < _iov.size(); ++i) {
+                uint8_t *buffer = reinterpret_cast<uint8_t*>(_iov[i]->buffer());
+                for (size_t j = 0; j < _iov[i]->size(); ++j) {
+                    buffer[j] = IoDemoRandom::rand<uint8_t>();
+                }
+            }
+
+            tr_hdr()->sn       = sn;
+            chk_hdr()->chk_sum = calc_chksum();
+        }
+
+        chk_hdr_t* chk_hdr() const {
+            assert(_iov.size() > 0);
+            assert(_iov[0]->size() >= (sizeof(chk_hdr_t) + sizeof(tr_hdr_t)));
+            return reinterpret_cast<chk_hdr_t*>(_iov[0]->buffer());
+        }
+
+        tr_hdr_t* tr_hdr() const {
+            return reinterpret_cast<tr_hdr_t*>(chk_hdr() + 1);
+        }
+
+    private:
+        std::vector<Buffer*>   _iov;
+        MemoryPool<BufferIov>& _pool;
+    };
+
     /* Asynchronous IO message */
     class IoMessage : public UcxCallback {
     public:
-        IoMessage(size_t io_msg_size, MemoryPool<IoMessage>* pool) {
-            _buffer      = malloc(io_msg_size);
-            _pool        = pool;
-            _io_msg_size = std::max(io_msg_size, sizeof(iomsg_t));
+        IoMessage(size_t io_msg_size, MemoryPool<IoMessage>& pool) :
+            _buffer(malloc(io_msg_size)), _pool(pool),
+            _io_msg_size(std::max(io_msg_size, sizeof(iomsg_t))) {
+
+            if (_buffer == NULL) {
+                throw std::bad_alloc();
+            }
         }
 
         void init(io_op_t op, uint32_t sn, size_t data_size, bool validate) {
             iomsg_t *m = reinterpret_cast<iomsg_t *>(_buffer);
 
             assert(sizeof(*m) <= _io_msg_size);
-            m->tr.sn       = sn;
-            m->op          = op;
-            m->data_size   = data_size;
+            m->tr.sn     = sn;
+            m->op        = op;
+            m->data_size = data_size;
             if (validate) {
                 m->hdr.chk_sum = ucs_crc16(&m->tr, sizeof(*m) - sizeof(m->hdr));
             } else {
@@ -192,7 +331,7 @@ protected:
         }
 
         virtual void operator()(ucs_status_t status) {
-            _pool->put(this);
+            _pool.put(this);
         }
 
         void *buffer() const {
@@ -205,35 +344,49 @@ protected:
 
     private:
         void*                  _buffer;
-        MemoryPool<IoMessage>* _pool;
+        MemoryPool<IoMessage>& _pool;
         size_t                 _io_msg_size;
+    };
+
+    class SendCompleteCallback : public UcxCallback {
+    public:
+        SendCompleteCallback(size_t buffer_size,
+                             MemoryPool<SendCompleteCallback>& pool) :
+            _counter(0), _iov(NULL), _pool(pool) {
+        }
+
+        void init(BufferIov* iov) {
+            _iov     = iov;
+            _counter = iov->size();
+            assert(_counter > 0);
+        }
+
+        virtual void operator()(ucs_status_t status) {
+            if (--_counter > 0) {
+                return;
+            }
+
+            _iov->release();
+            _pool.put(this);
+        }
+
+    private:
+        size_t                            _counter;
+        BufferIov*                        _iov;
+        MemoryPool<SendCompleteCallback>& _pool;
     };
 
     P2pDemoCommon(const options_t& test_opts) :
         UcxContext(test_opts.iomsg_size),
         _test_opts(test_opts), _io_msg_pool(test_opts.iomsg_size),
-        _cur_buffer_idx(0), _padding(0) {
-
-        _data_buffers.resize(opts().num_buffers);
-        for (size_t i = 0; i < _data_buffers.size(); ++i) {
-            std::string &data_buffer = _data_buffers[i];
-            data_buffer.resize(opts().max_data_size + ALIGNMENT);
-            uintptr_t ptr = (uintptr_t)&data_buffer[0];
-            _padding = ((ptr + ALIGNMENT - 1) & ~(ALIGNMENT - 1)) - ptr;
-        }
+        _send_callback_pool(0),
+        _data_buffers_pool(get_chunk_cnt(test_opts.max_data_size,
+                                         test_opts.chunk_size)),
+        _data_chunks_pool(test_opts.chunk_size) {
     }
 
     const options_t& opts() const {
         return _test_opts;
-    }
-
-    inline void *buffer(size_t offset = 0) {
-        return &_data_buffers[_cur_buffer_idx][_padding + offset];
-    }
-
-    inline void next_buffer() {
-        _cur_buffer_idx = (_cur_buffer_idx + 1) % _data_buffers.size();
-        assert(_cur_buffer_idx < opts().num_buffers);
     }
 
     inline size_t get_data_size() {
@@ -262,94 +415,57 @@ protected:
         return send_io_message(conn, m);
     }
 
-    void send_recv_data_as_chunks(UcxConnection* conn, size_t data_size, uint32_t sn,
-                                  xfer_type_t send_recv_data,
-                                  UcxCallback* callback = EmptyCallback::get()) {
-        size_t remaining = data_size;
-        while (remaining > 0) {
-            size_t xfer_size = std::min(opts().chunk_size, remaining);
+    void send_recv_data(UcxConnection* conn, const BufferIov &iov, uint32_t sn,
+                        xfer_type_t send_recv_data,
+                        UcxCallback* callback = EmptyCallback::get()) {
+        for (size_t i = 0; i < iov.size(); ++i) {
             if (send_recv_data == XFER_TYPE_SEND) {
-                conn->send_data(buffer(data_size - remaining), xfer_size, sn, callback);
+                conn->send_data(iov[i].buffer(), iov[i].size(), sn, callback);
             } else {
-                conn->recv_data(buffer(data_size - remaining), xfer_size, sn, callback);
+                conn->recv_data(iov[i].buffer(), iov[i].size(), sn, callback);
             }
-            remaining -= xfer_size;
         }
     }
 
-    void send_data_as_chunks(UcxConnection* conn, size_t data_size, uint32_t sn,
-                             UcxCallback* callback = EmptyCallback::get()) {
-        send_recv_data_as_chunks(conn, data_size, sn, XFER_TYPE_SEND, callback);
+    void send_data(UcxConnection* conn, const BufferIov &iov, uint32_t sn,
+                   UcxCallback* callback = EmptyCallback::get()) {
+        send_recv_data(conn, iov, sn, XFER_TYPE_SEND, callback);
     }
 
-    void recv_data_as_chunks(UcxConnection* conn, size_t data_size, uint32_t sn,
-                             UcxCallback* callback = EmptyCallback::get()) {
-        send_recv_data_as_chunks(conn, data_size, sn, XFER_TYPE_RECV, callback);
+    void recv_data(UcxConnection* conn, const BufferIov &iov, uint32_t sn,
+                   UcxCallback* callback = EmptyCallback::get()) {
+        send_recv_data(conn, iov, sn, XFER_TYPE_RECV, callback);
     }
 
     static uint32_t get_chunk_cnt(size_t data_size, size_t chunk_size) {
         return (data_size + chunk_size - 1) / chunk_size;
     }
 
-    void send_data(UcxConnection* conn, size_t data_size, uint32_t sn,
-                   UcxCallback* callback = EmptyCallback::get()) {
-        init_send_buffer(sn, data_size);
-        send_data_as_chunks(conn, data_size, sn, callback);
-    }
-
-    void recv_data(UcxConnection* conn, size_t data_size, uint32_t sn,
-                   UcxCallback* callback = EmptyCallback::get()) {
-        recv_data_as_chunks(conn, data_size, sn, callback);
-    }
-
-protected:
-    static bool validate(uint32_t sn,      uint32_t peer_sn,
-                         uint16_t chk_sum, uint16_t peer_chk_sum) {
+    static bool validate(uint32_t sn, const BufferIov &iov) {
         bool pass = true;
 
-        if (sn != peer_sn) {
+        if (sn != iov.sn()) {
             pass = false;
-            LOG << "detected transaction mismatch " << sn << " != "
-                << peer_sn;
+            LOG << "detected transaction mismatch " << sn << " != " << iov.sn();
         }
 
-        if (chk_sum != peer_chk_sum) {
+        /* recalc check sum of all fragments and compare to stored value */
+        uint16_t recalc_chksum = iov.calc_chksum();
+        if (iov.chksum() != recalc_chksum) {
             pass = false;
-            LOG << "detected data corruption " << chk_sum << " != "
-                << peer_chk_sum;
+            LOG << "detected data corruption " << iov.sn() << " != "
+                << recalc_chksum;
         }
 
         return pass;
     }
 
-private:
-    inline void init_send_buffer(uint32_t sn, size_t data_size) {
-        if (!opts().validate) {
-            return;
-        }
-
-        assert(data_size >= (sizeof(chk_hdr_t) + sizeof(tr_hdr_t)));
-        chk_hdr_t *dhdr  = reinterpret_cast<chk_hdr_t*>(buffer());
-        tr_hdr_t *thdr   = reinterpret_cast<tr_hdr_t*>(dhdr + 1);
-        uint8_t *payload = reinterpret_cast<uint8_t*>(thdr + 1);
-
-        thdr->sn = sn;
-
-        for (size_t i = 0; i < data_size; ++i) {
-            payload[i] = IoDemoRandom::rand<uint8_t>();
-        }
-
-        dhdr->chk_sum = ucs_crc16(thdr, data_size - sizeof(*dhdr));
-    }
-
 protected:
-    const options_t          _test_opts;
-    MemoryPool<IoMessage>    _io_msg_pool;
-
-private:
-    std::vector<std::string> _data_buffers;
-    size_t                   _cur_buffer_idx;
-    size_t                   _padding;
+    const options_t                  _test_opts;
+    MemoryPool<IoMessage>            _io_msg_pool;
+    MemoryPool<SendCompleteCallback> _send_callback_pool;
+    MemoryPool<BufferIov>            _data_buffers_pool;
+    MemoryPool<Buffer>               _data_chunks_pool;
 };
 
 class DemoServer : public P2pDemoCommon {
@@ -358,49 +474,44 @@ public:
     class IoWriteResponseCallback : public UcxCallback {
     public:
         IoWriteResponseCallback(size_t buffer_size,
-            MemoryPool<IoWriteResponseCallback>* pool) :
-            _server(NULL), _conn(NULL), _sn(0), _buffer(NULL), _data_size(0),
-            _chunk_cnt(0), _pool(pool) {
+            MemoryPool<IoWriteResponseCallback>& pool) :
+            _server(NULL), _conn(NULL), _sn(0), _iov(NULL), _pool(pool) {
         }
 
         void init(DemoServer *server, UcxConnection* conn, uint32_t sn,
-                  void* buffer, size_t data_size, uint32_t chunk_cnt = 1) {
-             _server    = server;
-             _conn      = conn;
-             _sn        = sn;
-             _buffer    = buffer;
-             _data_size = data_size;
-             _chunk_cnt = chunk_cnt;
+                  BufferIov *iov) {
+            _server    = server;
+            _conn      = conn;
+            _sn        = sn;
+            _iov       = iov;
+            _chunk_cnt = iov->size();
         }
 
         virtual void operator()(ucs_status_t status) {
             if (--_chunk_cnt > 0) {
                 return;
             }
+
             if (status == UCS_OK) {
                 if (_server->opts().validate) {
-                    chk_hdr_t *chdr = reinterpret_cast<chk_hdr_t*>(_buffer);
-                    tr_hdr_t *thdr  = reinterpret_cast<tr_hdr_t*>(chdr + 1);
-
-                    if (!P2pDemoCommon::validate(_sn, thdr->sn, chdr->chk_sum,
-                                                 ucs_crc16(thdr, _data_size -
-                                                                 sizeof(*chdr)))) {
+                    if (!validate(_sn, *_iov)) {
                         abort();
                     }
                 }
                 _server->send_io_message(_conn, IO_WRITE_COMP, _sn, 0);
             }
-            _pool->put(this);
+
+            _iov->release();
+            _pool.put(this);
         }
 
     private:
         DemoServer*                          _server;
         UcxConnection*                       _conn;
-        uint32_t                             _sn;
-        void*                                _buffer;
-        size_t                               _data_size;
         uint32_t                             _chunk_cnt;
-        MemoryPool<IoWriteResponseCallback>* _pool;
+        uint32_t                             _sn;
+        BufferIov*                           _iov;
+        MemoryPool<IoWriteResponseCallback>& _pool;
     };
 
     DemoServer(const options_t& test_opts) :
@@ -429,9 +540,20 @@ public:
         VERBOSE_LOG << "sending IO read data";
         assert(opts().max_data_size >= msg->data_size);
 
-        send_data(conn, msg->data_size, msg->tr.sn);
-        send_io_message(conn, IO_READ_COMP, msg->tr.sn, 0);
-        next_buffer();
+        BufferIov *iov           = _data_buffers_pool.get();
+        SendCompleteCallback *cb = _send_callback_pool.get();
+
+        iov->init(msg->data_size, _data_chunks_pool, msg->tr.sn,
+                  opts().validate);
+        cb->init(iov);
+
+        send_data(conn, *iov, msg->tr.sn, cb);
+
+        // send response as data
+        VERBOSE_LOG << "sending IO read response";
+        IoMessage *response = _io_msg_pool.get();
+        response->init(IO_READ_COMP, msg->tr.sn, 0, opts().validate);
+        send_io_message(conn, response);
     }
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_t *msg) {
@@ -439,12 +561,13 @@ public:
         assert(opts().max_data_size >= msg->data_size);
         assert(msg->data_size != 0);
 
+        BufferIov *iov             = _data_buffers_pool.get();
         IoWriteResponseCallback *w = _callback_pool.get();
-        w->init(this, conn, msg->tr.sn, buffer(), msg->data_size,
-                get_chunk_cnt(msg->data_size, opts().chunk_size));
-        recv_data(conn, msg->data_size, msg->tr.sn, w);
 
-        next_buffer();
+        iov->init(msg->data_size, _data_chunks_pool, msg->tr.sn, false);
+        w->init(this, conn, msg->tr.sn, iov);
+
+        recv_data(conn, *iov, msg->tr.sn, w);
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
@@ -479,23 +602,21 @@ public:
     class IoReadResponseCallback : public UcxCallback {
     public:
         IoReadResponseCallback(size_t buffer_size,
-            MemoryPool<IoReadResponseCallback>* pool) :
-            _counter(0), _io_counter(0), _chunk_cnt(0), _sn(0) {
-            _buffer      = malloc(buffer_size);
-            _data_buffer = NULL;
-            _pool        = pool;
-            _validate    = false;
+            MemoryPool<IoReadResponseCallback>& pool) :
+            _counter(0), _io_counter(0), _sn(0), _validate(false), _iov(NULL),
+            _buffer(malloc(buffer_size)), _pool(pool) {
+
+            if (_buffer == NULL) {
+                throw std::bad_alloc();
+            }
         }
 
-        void init(long *counter, uint32_t sn, bool validate, void *data_buffer,
-                  size_t data_size, size_t chunk_cnt = 1) {
-            _counter     = 0;
+        void init(long *counter, uint32_t sn, bool validate, BufferIov *iov) {
+            _counter     = iov->size() + 1; /* wait data and response completion */;
             _io_counter  = counter;
             _sn          = sn;
-            _chunk_cnt   = chunk_cnt;
             _validate    = validate;
-            _data_buffer = data_buffer;
-            _data_size   = data_size;
+            _iov         = iov;
         }
 
         ~IoReadResponseCallback() {
@@ -503,24 +624,19 @@ public:
         }
 
         virtual void operator()(ucs_status_t status) {
-            /* wait data and response completion */
-            if (++_counter < (1 + _chunk_cnt)) {
+            if (--_counter > 0) {
                 return;
             }
 
             ++(*_io_counter);
             if (_validate && (status == UCS_OK)) {
-                chk_hdr_t *dhdr = reinterpret_cast<chk_hdr_t*>(_data_buffer);
-                tr_hdr_t *thdr  = reinterpret_cast<tr_hdr_t*>(dhdr + 1);
-
-                if (!P2pDemoCommon::validate(_sn, thdr->sn, dhdr->chk_sum,
-                                             ucs_crc16(thdr, _data_size -
-                                                             sizeof(*dhdr)))) {
+                if (!validate(_sn, *_iov)) {
                     abort();
                 }
             }
 
-            _pool->put(this);
+            _iov->release();
+            _pool.put(this);
         }
 
         void* buffer() {
@@ -530,19 +646,17 @@ public:
     private:
         long                                _counter;
         long*                               _io_counter;
-        uint32_t                            _chunk_cnt;
         uint32_t                            _sn;
         bool                                _validate;
-        void*                               _data_buffer;
-        size_t                              _data_size;
+        BufferIov*                          _iov;
         void*                               _buffer;
-        MemoryPool<IoReadResponseCallback>* _pool;
+        MemoryPool<IoReadResponseCallback>& _pool;
     };
 
     DemoClient(const options_t& test_opts) :
         P2pDemoCommon(test_opts),
         _num_sent(0), _num_completed(0), _status(OK), _start_time(get_time()),
-        _retry(0), _callback_pool(opts().iomsg_size)
+        _retry(0), _read_callback_pool(opts().iomsg_size)
     {
         _status_str[OK]                    = "ok";
         _status_str[ERROR]                 = "error";
@@ -567,12 +681,15 @@ public:
         }
 
         ++_num_sent;
-        IoReadResponseCallback *r = _callback_pool.get();
-        r->init(&_num_completed, sn, opts().validate, buffer(), data_size,
-                P2pDemoCommon::get_chunk_cnt(data_size, opts().chunk_size));
-        recv_data(conn, data_size, sn, r);
+
+        BufferIov *iov            = _data_buffers_pool.get();
+        IoReadResponseCallback *r = _read_callback_pool.get();
+
+        iov->init(data_size, _data_chunks_pool, sn, false);
+        r->init(&_num_completed, sn, opts().validate, iov);
+
+        recv_data(conn, *iov, sn, r);
         conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
-        next_buffer();
 
         return data_size;
     }
@@ -585,11 +702,16 @@ public:
         }
 
         ++_num_sent;
-        VERBOSE_LOG << "sending data " << buffer() << " size "
-                    << data_size << " sn " << sn;
-        send_data(conn, data_size, sn);
-        next_buffer();
 
+        BufferIov *iov           = _data_buffers_pool.get();
+        SendCompleteCallback *cb = _send_callback_pool.get();
+
+        iov->init(data_size, _data_chunks_pool, sn, opts().validate);
+        cb->init(iov);
+
+        VERBOSE_LOG << "sending data " << iov << " size "
+                    << data_size << " sn " << sn;
+        send_data(conn, *iov, sn, cb);
         return data_size;
     }
 
@@ -889,7 +1011,7 @@ private:
     std::map<status_t, std::string>    _status_str;
     double                             _start_time;
     unsigned                           _retry;
-    MemoryPool<IoReadResponseCallback> _callback_pool;
+    MemoryPool<IoReadResponseCallback> _read_callback_pool;
 };
 
 static int set_data_size(char *str, options_t *test_opts)
