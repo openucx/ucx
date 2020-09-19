@@ -72,6 +72,10 @@ MAKE="make"
 MAKEP="make -j${parallel_jobs}"
 export AUTOMAKE_JOBS=$parallel_jobs
 
+#
+# Override maven repository path, to cache the downloaded packages accross tests
+#
+export maven_repo=${WORKSPACE}/.deps
 
 #
 # Set up parallel test execution - "worker" and "nworkers" should be set by jenkins
