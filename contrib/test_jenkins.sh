@@ -597,25 +597,6 @@ build_gcc_latest() {
 }
 
 #
-# Install and check experimental headers
-#
-build_experimental_api() {
-	# Experimental header file should not be installed by regular build
-	echo "==== Install WITHOUT experimental API ===="
-	../contrib/configure-release --prefix=$ucx_inst
-	make_clean
-	$MAKEP install
-	! test -e $ucx_inst/include/ucp/api/ucpx.h
-
-	# Experimental header file should be installed by --enable-experimental-api
-	echo "==== Install WITH experimental API ===="
-	../contrib/configure-release --prefix=$ucx_inst --enable-experimental-api
-	make_clean
-	$MAKEP install
-	test -e $ucx_inst/include/ucp/api/ucpx.h
-}
-
-#
 # Builds jucx
 #
 build_jucx() {
@@ -1648,7 +1629,6 @@ run_tests() {
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
 	do_distributed_task 1 4 build_gcc_latest
-	do_distributed_task 2 4 build_experimental_api
 	do_distributed_task 0 4 build_jucx
 
 	# all are running mpi tests
