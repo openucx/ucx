@@ -606,11 +606,35 @@ err:
     return status;
 }
 
+static int uct_rc_verbs_ep_clean_filter(const ucs_callbackq_elem_t *elem,
+                                        void *arg)
+{
+    return (elem->cb == (void *)UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t)) &&
+           (elem->arg == arg);
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
     uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
+
+    uct_ib_device_async_event_unregister(&md->dev,
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         self->qp->qp_num);
+    ucs_callbackq_remove_if(&iface->super.super.super.worker->super.progress_q,
+                            uct_rc_verbs_ep_clean_filter, self);
+    ucs_list_del(&self->super.list);
+    uct_ib_destroy_qp(self->qp);
+}
+
+void uct_rc_verbs_ep_destroy(uct_ep_h tl_ep)
+{
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
+                                                 uct_rc_verbs_iface_t);
+    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
+    ucs_status_t status;
 
     /* NOTE: usually, ci == pi here, but if user calls
      *       flush(UCT_FLUSH_FLAG_CANCEL) then ep_destroy without next progress,
@@ -618,14 +642,24 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
      *       the EP will not be found (base class destructor deletes itself from
      *       iface->eps). So, lets return credits here since handle_failure
      *       ignores not found EP. */
-    ucs_assert(self->txcnt.pi >= self->txcnt.ci);
-    iface->super.tx.cq_available += self->txcnt.pi - self->txcnt.ci;
+    ucs_assert(ep->txcnt.pi >= ep->txcnt.ci);
+    iface->super.tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
     ucs_assert(iface->super.tx.cq_available < iface->super.config.tx_ops_count);
-    uct_ib_device_async_event_unregister(&md->dev,
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         self->qp->qp_num);
-    uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
-    uct_ib_destroy_qp(self->qp);
+
+    ucs_list_del(&ep->super.list);
+
+    uct_rc_iface_remove_qp(&iface->super, ep->qp->qp_num);
+    uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
+    status = uct_ib_device_async_event_wait(
+            &md->dev, IBV_EVENT_QP_LAST_WQE_REACHED, ep->qp->qp_num,
+            (ucs_callback_t)UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t), ep);
+    if (status == UCS_INPROGRESS) {
+        ucs_list_add_head(&iface->super.ep_gc_list, &ep->super.list);
+        return;
+    }
+
+    ucs_assert(status == UCS_OK);
+    UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t)(tl_ep);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);

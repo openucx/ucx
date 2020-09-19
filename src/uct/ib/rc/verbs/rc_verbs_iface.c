@@ -467,7 +467,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .ep_flush                 = uct_rc_verbs_ep_flush,
     .ep_fence                 = uct_rc_verbs_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_verbs_ep_t),
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
+    .ep_destroy               = uct_rc_verbs_ep_destroy,
     .ep_get_address           = uct_rc_verbs_ep_get_address,
     .ep_connect_to_ep         = uct_rc_verbs_ep_connect_to_ep,
     .iface_flush              = uct_rc_iface_flush,
@@ -492,7 +492,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .init_rx                  = uct_rc_iface_verbs_init_rx,
     .cleanup_rx               = uct_rc_iface_verbs_cleanup_rx,
     .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl,
-    .fc_handler               = uct_rc_iface_fc_handler
+    .fc_handler               = uct_rc_iface_fc_handler,
+    .cleanup_ep               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_verbs_ep_t),
 };
 
 static ucs_status_t
