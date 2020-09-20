@@ -671,6 +671,7 @@ public:
         }
 
         for (size_t i = 0; i < conn.size(); i++) {
+            LOG << "Disconnecting from server " << i;
             delete conn[i];
         }
         return (_status == OK) || (_status == RUNTIME_EXCEEDED);
@@ -1041,6 +1042,8 @@ int main(int argc, char **argv)
 {
     options_t test_opts;
     int ret;
+
+    LOG << "Starting io_demo pid " << getpid();
 
     ret = parse_args(argc, argv, &test_opts);
     if (ret < 0) {

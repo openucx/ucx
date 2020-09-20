@@ -400,11 +400,13 @@ UcxConnection::UcxConnection(UcxContext &context, uint32_t conn_id) :
     in_addr.sin_family = AF_INET;
     set_log_prefix((const struct sockaddr*)&in_addr, sizeof(in_addr));
     ucs_list_head_init(&_all_requests);
-    UCX_CONN_LOG << "created new connection, total: " << _num_instances;
+    UCX_CONN_LOG << "created new connection " << this << " total: " << _num_instances;
 }
 
 UcxConnection::~UcxConnection()
 {
+    UCX_CONN_LOG << "destroying, ep is " << _ep;
+
     // if _ep is NULL, connection was closed and removed by error handler
     if (_ep != NULL) {
         disconnect(UCP_EP_CLOSE_MODE_FORCE);
@@ -654,8 +656,8 @@ void UcxConnection::handle_connection_error(ucs_status_t status)
 {
     UCX_CONN_LOG << "detected error: " << ucs_status_string(status);
 
-    if (_remote_conn_id) {
-        disconnect(UCP_EP_CLOSE_MODE_FORCE);
+    if (_remote_conn_id != 0) {
+        /* the upper layer should close the connection */
         _context.handle_connection_error(this);
     }
 }
@@ -716,5 +718,3 @@ bool UcxConnection::process_request(const char *what,
         }
     }
 }
-
-
