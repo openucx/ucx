@@ -534,7 +534,7 @@ void UcxConnection::common_request_callback(void *request, ucs_status_t status)
 
     assert(!r->completed);
     if (r->callback) {
-        // already processed by send function
+        // already processed by send/recv function
         (*r->callback)(status);
         r->conn->request_completed(r);
         UcxContext::request_release(r);
