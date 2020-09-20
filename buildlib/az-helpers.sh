@@ -25,6 +25,7 @@ function azure_set_variable() {
     test "x$RUNNING_IN_AZURE" = "xno" && return
     name=$1
     value=$2
+    set +x
     echo "##vso[task.setvariable variable=${name}]${value}"
 }
 
@@ -32,6 +33,7 @@ function azure_set_variable() {
 function azure_log_issue() {
     test "x$RUNNING_IN_AZURE" = "xno" && return
     msg=$1
+    set +x
     echo "##vso[task.logissue type=error]${msg}"
     echo "##vso[task.complete result=Failed;]"
 }
@@ -45,6 +47,7 @@ function get_ip() {
 
 # Prepend each line with a timestamp
 function add_timestamp() {
+    set +x
     while IFS= read -r line; do
         echo "$(date -u +"%Y-%m-%dT%T.%NZ") $line"
     done
