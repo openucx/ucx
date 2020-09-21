@@ -8,7 +8,8 @@
 
 
 class test_zcopy_comp : public uct_test {
-    void init() {
+protected:
+    virtual void init() {
         uct_test::init();
 
         m_sender = create_entity(0);

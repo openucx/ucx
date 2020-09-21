@@ -306,13 +306,13 @@ void ucp_test::set_ucp_config(ucp_config_t *config,
 }
 
 void ucp_test::modify_config(const std::string& name, const std::string& value,
-                             bool optional)
+                             modify_config_mode_t mode)
 {
     ucs_status_t status;
 
     status = ucp_config_modify(m_ucp_config, name.c_str(), value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
-        test_base::modify_config(name, value, optional);
+        test_base::modify_config(name, value, mode);
     } else if (status != UCS_OK) {
         UCS_TEST_ABORT("Couldn't modify ucp config parameter: " <<
                         name.c_str() << " to " << value.c_str() << ": " <<

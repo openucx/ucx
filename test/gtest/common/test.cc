@@ -59,8 +59,8 @@ unsigned test_base::num_threads() const {
 void test_base::set_config(const std::string& config_str)
 {
     std::string::size_type pos = config_str.find("=");
+    modify_config_mode_t mode;
     std::string name, value;
-    bool optional;
 
     if (pos == std::string::npos) {
         name  = config_str;
@@ -70,13 +70,36 @@ void test_base::set_config(const std::string& config_str)
         value = config_str.substr(pos + 1);
     }
 
-    optional = false;
-    if ((name.length() > 0) && name.at(name.length() - 1) == '?') {
-        name = name.substr(0, name.length() - 1);
-        optional = true;
+    mode = FAIL_IF_NOT_EXIST;
+
+    /*
+     * What happens if NAME is not a valid configuration key?
+     * - "NAME=VALUE"   : fail the test
+     * - "NAME?=VALUE"  : set UCX_NAME environment variable
+     * - "NAME~=VALUE"  : skip the test
+     */
+    if (name.length() > 0) {
+        char modifier = name.at(name.length() - 1);
+        bool valid_modifier;
+        switch (modifier) {
+        case '?':
+            mode           = SETENV_IF_NOT_EXIST;
+            valid_modifier = true;
+            break;
+        case '~':
+            mode           = SKIP_IF_NOT_EXIST;
+            valid_modifier = true;
+            break;
+        default:
+            valid_modifier = false;
+            break;
+        }
+        if (valid_modifier) {
+            name = name.substr(0, name.length() - 1);
+        }
     }
 
-    modify_config(name, value, optional);
+    modify_config(name, value, mode);
 }
 
 void test_base::get_config(const std::string& name, std::string& value, size_t max)
@@ -95,16 +118,28 @@ void test_base::get_config(const std::string& name, std::string& value, size_t m
 }
 
 void test_base::modify_config(const std::string& name, const std::string& value,
-                              bool optional)
+                              modify_config_mode_t mode)
 {
     ucs_status_t status = ucs_global_opts_set_value(name.c_str(), value.c_str());
-    if ((status == UCS_ERR_NO_ELEM) && optional) {
-        m_env_stack.push_back(new scoped_setenv(("UCX_" + name).c_str(),
-                                                value.c_str()));
-    } else if (status != UCS_OK) {
-        GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
-                     << value << ", error message: "
-                     << ucs_status_string(status) << "(" << status << ")";
+    if (status == UCS_ERR_NO_ELEM) {
+        switch (mode) {
+        case FAIL_IF_NOT_EXIST:
+            GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
+                         << value << ", error message: "
+                         << ucs_status_string(status) << "(" << status << ")";
+            break;
+        case SETENV_IF_NOT_EXIST:
+            m_env_stack.push_back(new scoped_setenv(("UCX_" + name).c_str(),
+                                                    value.c_str()));
+            break;
+        case SKIP_IF_NOT_EXIST:
+            UCS_TEST_SKIP_R(name + " is not a valid configuration");
+            break;
+        case IGNORE_IF_NOT_EXIST:
+            break;
+        }
+    } else {
+        ASSERT_UCS_OK(status);
     }
 }
 

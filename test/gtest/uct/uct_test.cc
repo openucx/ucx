@@ -499,13 +499,13 @@ bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
 
 /* modify the config of all the matching environment parameters */
 void uct_test::modify_config(const std::string& name, const std::string& value,
-                             bool optional) {
+                             modify_config_mode_t mode) {
     ucs_status_t status = UCS_OK;
 
     if (m_cm_config != NULL) {
         status = uct_config_modify(m_cm_config, name.c_str(), value.c_str());
         if (status == UCS_OK) {
-            optional = true;
+            mode = IGNORE_IF_NOT_EXIST;
         } else if (status != UCS_ERR_NO_ELEM) {
             UCS_TEST_ABORT("Couldn't modify cm config parameter: " << name.c_str() <<
                            " to " << value.c_str() << ": " << ucs_status_string(status));
@@ -515,7 +515,7 @@ void uct_test::modify_config(const std::string& name, const std::string& value,
     if (m_iface_config != NULL) {
         status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
         if (status == UCS_OK) {
-            optional = true;
+            mode = IGNORE_IF_NOT_EXIST;
         } else if (status != UCS_ERR_NO_ELEM) {
             UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
                            " to " << value.c_str() << ": " << ucs_status_string(status));
@@ -524,10 +524,10 @@ void uct_test::modify_config(const std::string& name, const std::string& value,
 
     status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
     if (status == UCS_OK) {
-        optional = true;
+        mode = IGNORE_IF_NOT_EXIST;
     }
     if ((status == UCS_OK) || (status == UCS_ERR_NO_ELEM)) {
-        test_base::modify_config(name, value, optional);
+        test_base::modify_config(name, value, mode);
     } else if (status != UCS_OK) {
         UCS_TEST_ABORT("Couldn't modify md config parameter: " << name.c_str() <<
                        " to " << value.c_str() << ": " << ucs_status_string(status));

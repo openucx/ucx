@@ -141,7 +141,7 @@ public:
                       ucs::to_string(m_max_get_zcopy).c_str());
 
         modify_config("RC_TX_QUEUE_LEN", "32");
-        modify_config("RC_TM_ENABLE", "y", true);
+        modify_config("RC_TM_ENABLE", "y", SETENV_IF_NOT_EXIST);
 
         m_comp.count = 300000; // some big value to avoid func invocation
         m_comp.func  = NULL;

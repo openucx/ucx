@@ -1108,7 +1108,7 @@ public:
          * for the connect() to fail when connecting to a non-existing ip.
          * A transport for which this value is not configurable, like rdmacm,
          * will have no effect. */
-        modify_config("SYN_CNT", "1", true);
+        modify_config("SYN_CNT", "1", SETENV_IF_NOT_EXIST);
 
         test_uct_cm_sockaddr::init();
     }
