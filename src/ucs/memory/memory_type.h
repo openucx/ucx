@@ -23,6 +23,13 @@ BEGIN_C_DECLS
 
 
 /**
+ * Enumerate all memory types
+ */
+#define ucs_memory_type_for_each(_x) \
+    for ((_x) = UCS_MEMORY_TYPE_HOST; (_x) < UCS_MEMORY_TYPE_LAST; (_x)++)
+
+
+/**
  * @ingroup UCS_RESOURCE
  * @brief Memory types
  *

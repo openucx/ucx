@@ -68,9 +68,11 @@ ucp_ep_match_conn_sn_t ucp_ep_match_get_sn(ucp_worker_h worker,
 }
 
 void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
-                         ucp_ep_match_conn_sn_t conn_sn, int is_exp)
+                         ucp_ep_match_conn_sn_t conn_sn,
+                         ucs_conn_match_queue_type_t conn_queue_type)
 {
-    ucs_assert(!is_exp || !(ep->flags & UCP_EP_FLAG_REMOTE_ID));
+    ucs_assert((conn_queue_type == UCS_CONN_MATCH_QUEUE_UNEXP) ||
+               !(ep->flags & UCP_EP_FLAG_REMOTE_ID));
     /* NOTE: protect union */
     ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
                               UCP_EP_FLAG_FLUSH_STATE_VALID |
@@ -80,20 +82,25 @@ void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
 
     ucs_conn_match_insert(&worker->conn_match_ctx, &dest_uuid,
                           (ucs_conn_sn_t)conn_sn,
-                          &ucp_ep_ext_gen(ep)->ep_match.conn_match, is_exp);
+                          &ucp_ep_ext_gen(ep)->ep_match.conn_match,
+                          conn_queue_type);
 }
 
 ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
-                               ucp_ep_match_conn_sn_t conn_sn, int is_exp)
+                               ucp_ep_match_conn_sn_t conn_sn,
+                               ucs_conn_match_queue_type_t conn_queue_type)
 {
-    ucp_ep_flags_t UCS_V_UNUSED exp_ep_flags = UCP_EP_FLAG_ON_MATCH_CTX |
-                                              (is_exp ?
-                                               0 : UCP_EP_FLAG_REMOTE_ID);
+    ucp_ep_flags_t UCS_V_UNUSED exp_ep_flags = UCP_EP_FLAG_ON_MATCH_CTX;
     ucs_conn_match_elem_t *conn_match;
     ucp_ep_h ep;
 
+    if (conn_queue_type == UCS_CONN_MATCH_QUEUE_UNEXP) {
+        exp_ep_flags |= UCP_EP_FLAG_REMOTE_ID;
+    }
+
     conn_match = ucs_conn_match_get_elem(&worker->conn_match_ctx, &dest_uuid,
-                                         (ucs_conn_sn_t)conn_sn, is_exp, 1);
+                                         (ucs_conn_sn_t)conn_sn,
+                                         conn_queue_type, 1);
     if (conn_match == NULL) {
         return NULL;
     }
@@ -116,7 +123,9 @@ void ucp_ep_match_remove_ep(ucp_worker_h worker, ucp_ep_h ep)
 
     ucs_conn_match_remove_elem(&worker->conn_match_ctx,
                                &ucp_ep_ext_gen(ep)->ep_match.conn_match,
-                               !(ep->flags & UCP_EP_FLAG_REMOTE_ID));
+                               (ep->flags & UCP_EP_FLAG_REMOTE_ID) ?
+                               UCS_CONN_MATCH_QUEUE_UNEXP :
+                               UCS_CONN_MATCH_QUEUE_EXP);
 
     ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
 }

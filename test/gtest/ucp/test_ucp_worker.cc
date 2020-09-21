@@ -123,7 +123,7 @@ protected:
                     m_created_ep_count++;
                 }
 
-                if (ep_pending_purge_func == ep_pending_purge_func_iter_reqs) {
+                if (ep_pending_purge_func == (void*)ep_pending_purge_func_iter_reqs) {
                     /* add WIREUP MSGs to the WIREUP EP (it will be added to
                      * UCT EP or WIREUP AUX EP) */
                     add_pending_reqs(discard_ep,
@@ -138,7 +138,7 @@ protected:
             EXPECT_LE(m_created_ep_count, total_ep_count);
 
 
-            if (ep_pending_purge_func == ep_pending_purge_func_iter_reqs) {
+            if (ep_pending_purge_func == (void*)ep_pending_purge_func_iter_reqs) {
                 /* add user's pending requests */
                 add_pending_reqs(discard_ep,
                                  (uct_pending_callback_t)
@@ -152,7 +152,7 @@ protected:
                                       ep_pending_purge_count_reqs_cb,
                                       &purged_reqs_count);
 
-            if (ep_pending_purge_func == ep_pending_purge_func_iter_reqs) {
+            if (ep_pending_purge_func == (void*)ep_pending_purge_func_iter_reqs) {
                 EXPECT_EQ(m_pending_purge_reqs_count, purged_reqs_count);
             } else {
                 EXPECT_EQ(0u, purged_reqs_count);
@@ -194,14 +194,14 @@ protected:
             ep_test_info_t &test_info = ep_test_info_get(&eps[i]);
 
             /* check EP flush counters */
-            if (ep_flush_func == ep_flush_func_return_3_no_resource_then_ok) {
+            if (ep_flush_func == (void*)ep_flush_func_return_3_no_resource_then_ok) {
                 EXPECT_EQ(4, test_info.flush_count);
-            } else if (ep_flush_func == ep_flush_func_return_in_progress) {
+            } else if (ep_flush_func == (void*)ep_flush_func_return_in_progress) {
                 EXPECT_EQ(1, test_info.flush_count);
             }
 
             /* check EP pending add counters */
-            if (ep_pending_add_func == ep_pending_add_func_return_ok_then_busy) {
+            if (ep_pending_add_func == (void*)ep_pending_add_func_return_ok_then_busy) {
                 /* pending_add has to be called only once per EP */
                 EXPECT_EQ(1, test_info.pending_add_count);
             }

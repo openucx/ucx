@@ -55,7 +55,7 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
 
 #define UCS_STATS_UPDATE_COUNTER(_node, _index, _delta) \
     if (((_delta) != 0) && ((_node) != NULL)) { \
-        (_node)->counters[(_index)] += (_delta); \
+        (_node)->counters[(_index)] += (uint64_t)(_delta); \
     }
 
 #define UCS_STATS_SET_COUNTER(_node, _index, _value) \

@@ -61,7 +61,8 @@ static void uct_rc_mlx5_devx_iface_event_handler(int fd, int events, void *arg)
         return;
     }
 
-    event.event_type = devx_event.cookie & UCT_IB_MLX5_DEVX_EVENT_TYPE_MASK;
+    event.event_type = (enum ibv_event_type)(devx_event.cookie &
+                                             UCT_IB_MLX5_DEVX_EVENT_TYPE_MASK);
     switch (event.event_type) {
     case IBV_EVENT_QP_LAST_WQE_REACHED:
         event.qp_num = devx_event.cookie >> UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT;

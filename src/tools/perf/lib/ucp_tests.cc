@@ -340,9 +340,9 @@ public:
             fence();
             *(uint8_t*)buffer = UCP_PERF_LAST_ITER_SN;
             return ucp_put(ep, buffer, sizeof(uint8_t), remote_addr, rkey);
+        } else {
+            return UCS_OK;
         }
-
-        return UCS_OK;
     }
 
     void flush()

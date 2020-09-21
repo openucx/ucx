@@ -1396,7 +1396,7 @@ ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)
 
 ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ctx)
 {
-    ucs_status_t res = 0;
+    ucs_status_t res = UCS_OK;
     DIR *dir;
     struct dirent *entry;
     struct dirent *entry_out;
@@ -1433,7 +1433,7 @@ static ucs_status_t ucs_sys_enum_threads_cb(struct dirent *entry, void *_ctx)
     ucs_sys_enum_threads_t *ctx = (ucs_sys_enum_threads_t*)_ctx;
 
     return strncmp(entry->d_name, ".", 1) ?
-           ctx->cb((pid_t)atoi(entry->d_name), ctx->ctx) : 0;
+           ctx->cb((pid_t)atoi(entry->d_name), ctx->ctx) : UCS_OK;
 }
 
 ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx)
