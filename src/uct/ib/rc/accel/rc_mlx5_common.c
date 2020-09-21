@@ -1089,6 +1089,29 @@ void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 #endif
 }
 
+ucs_status_t
+uct_rc_mlx5_iface_common_arm_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
+                                int solicited_only)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
+                                                       uct_rc_mlx5_iface_common_t);
+#if HAVE_DECL_MLX5DV_INIT_OBJ
+    return uct_ib_mlx5dv_arm_cq(&iface->cq[dir], solicited_only);
+#else
+    uct_ib_mlx5_update_cq_ci(iface->super.super.cq[dir],
+                             iface->cq[dir].cq_ci);
+    return uct_ib_iface_arm_cq(ib_iface, dir, solicited_only);
+#endif
+}
+
+void uct_rc_mlx5_iface_common_event_cq(uct_ib_iface_t *ib_iface,
+                                       uct_ib_dir_t dir)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ib_iface,
+                                                       uct_rc_mlx5_iface_common_t);
+    iface->cq[dir].cq_sn++;
+}
+
 int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn)
 {
