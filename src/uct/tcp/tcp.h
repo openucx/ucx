@@ -89,7 +89,9 @@ enum {
      * for received PUT operations on a given EP. */
     UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK = UCS_BIT(5),
     /* EP is on connection matching context. */
-    UCT_TCP_EP_FLAG_ON_MATCH_CTX       = UCS_BIT(6)
+    UCT_TCP_EP_FLAG_ON_MATCH_CTX       = UCS_BIT(6),
+    /* EP failed and a callback for handling error is scheduled. */
+    UCT_TCP_EP_FLAG_FAILED             = UCS_BIT(7)
 };
 
 
