@@ -109,17 +109,19 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         count = uct_rc_verbs_txcq_get_comp_count(&wc[i], &ep->super.txqp);
         ucs_trace_poll("rc_verbs iface %p tx_wc wrid 0x%lx ep %p qpn 0x%x count %d",
                        iface, wc[i].wr_id, ep, wc[i].qp_num, count);
-        uct_rc_verbs_txqp_completed(&ep->super.txqp, &ep->txcnt, count);
+        ep->txcnt.ci += count;
+
+        uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci);
+
+        uct_rc_txqp_available_add(&ep->super.txqp, count);
         iface->super.tx.cq_available += count;
 
-       /* process pending elements prior to CQ entries to avoid out-of-order
-        * transmission in completion callbacks */
+        uct_rc_iface_update_reads(&iface->super);
+
         ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
                                    &ep->super.arb_group);
         ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1,
                              uct_rc_ep_process_pending, NULL);
-
-        uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci);
     }
 
     return num_wcs;

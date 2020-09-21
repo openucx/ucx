@@ -60,9 +60,9 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                                 stats_parent, "-0x%x", qp_num);
 }
 
-void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp)
+void uct_rc_txqp_cleanup(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp)
 {
-    uct_rc_txqp_purge_outstanding(txqp, UCS_ERR_CANCELED, 1);
+    uct_rc_txqp_purge_outstanding(iface, txqp, UCS_ERR_CANCELED, 1);
     UCS_STATS_NODE_FREE(txqp->stats);
 }
 
@@ -121,18 +121,21 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
     return UCS_OK;
 
 err_txqp_cleanup:
-    uct_rc_txqp_cleanup(&self->txqp);
+    uct_rc_txqp_cleanup(iface, &self->txqp);
     return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 {
+    uct_rc_iface_t *iface = ucs_derived_of(self->super.super.iface,
+                                           uct_rc_iface_t);
+
     ucs_debug("destroy rc ep %p", self);
 
     ucs_list_del(&self->list);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
-    uct_rc_txqp_cleanup(&self->txqp);
+    uct_rc_txqp_cleanup(iface, &self->txqp);
 }
 
 UCS_CLASS_DEFINE(uct_rc_ep_t, uct_base_ep_t)
@@ -214,16 +217,18 @@ uct_rc_op_release_get_bcopy(uct_rc_iface_send_op_t *op)
     uct_rc_iface_t          *iface = ucs_container_of(ucs_mpool_obj_owner(desc),
                                                       uct_rc_iface_t, tx.mp);
 
-    iface->tx.reads_available += op->length;
+    iface->tx.reads_completed += op->length;
 }
 
 static UCS_F_ALWAYS_INLINE void
 uct_rc_op_release_get_zcopy(uct_rc_iface_send_op_t *op)
 {
-    op->iface->tx.reads_available += op->length;
+    op->iface->tx.reads_completed += op->length;
+
     if (RUNNING_ON_VALGRIND) {
         uct_rc_ep_send_op_completed_iov(op);
     }
+
     op->flags &= ~UCT_RC_IFACE_SEND_OP_FLAG_IOV;
 }
 
@@ -386,8 +391,8 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
     return status;
 }
 
-void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
-                                   int is_log)
+void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
+                                   ucs_status_t status, int is_log)
 {
     uct_rc_iface_send_op_t *op;
     uct_rc_iface_send_desc_t *desc;
@@ -413,8 +418,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
             if ((op->handler == uct_rc_ep_get_bcopy_handler) ||
                 (op->handler == uct_rc_ep_get_bcopy_handler_no_completion)) {
                 uct_rc_op_release_get_bcopy(op);
+                uct_rc_iface_update_reads(iface);
             } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
                 uct_rc_op_release_get_zcopy(op);
+                uct_rc_iface_update_reads(iface);
             }
         }
         op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |

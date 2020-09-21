@@ -22,13 +22,6 @@ uct_rc_verbs_txqp_posted(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt,
     uct_rc_txqp_posted(txqp, iface, 1, signaled);
 }
 
-static inline void
-uct_rc_verbs_txqp_completed(uct_rc_txqp_t *txqp, uct_rc_verbs_txcnt_t *txcnt, uint16_t count)
-{
-    txcnt->ci += count;
-    uct_rc_txqp_available_add(txqp, count);
-}
-
 ucs_status_t uct_rc_verbs_iface_common_prepost_recvs(uct_rc_verbs_iface_t *iface,
                                                      unsigned max);
 
