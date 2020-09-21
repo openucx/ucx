@@ -91,8 +91,8 @@ echo "==== Running on $(hostname), worker $worker / $nworkers ===="
 # cleanup ucx
 #
 make_clean() {
-        rm -rf ${ucx_inst}
-        $MAKEP ${1:-clean}
+	rm -rf ${ucx_inst}
+	$MAKEP ${1:-clean}
 }
 
 #
@@ -1224,7 +1224,7 @@ test_ucp_dlopen() {
 	../contrib/configure-release --prefix=$ucx_inst
 	make_clean
 	$MAKEP
-        $MAKEP install
+	$MAKEP install
 
 	# Make sure UCP library, when opened with dlopen(), loads CMA module
 	LIB_CMA=`find ${ucx_inst} -name libuct_cma.so.0`
@@ -1303,7 +1303,7 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
 	if [ -z "$iface" ]
-        then
+	then
 		echo "Failed to find active ib devices." >> jucx_tests.tap
 		return
 	elif module_load dev/jdk && module_load dev/mvn
@@ -1312,38 +1312,41 @@ test_jucx() {
 		export JUCX_TEST_PORT=$jucx_port
 		export UCX_MEM_EVENTS=no
 		$MAKE -C bindings/java/src/main/native test
-	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
+		ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
 		if [ -n "$ifaces" ]
 		then
-                        $MAKE -C bindings/java/src/main/native package
+			$MAKE -C bindings/java/src/main/native package
 		fi
 		for iface in $ifaces
 		do
 			if [ -n "$iface" ]
-                	then
-                   		server_ip=$(get_ifaddr ${iface})
-                	fi
+			then
+				server_ip=$(get_ifaddr ${iface})
+			fi
 
-                	if [ -z "$server_ip" ]
-                	then
-		   	   	echo "Interface $iface has no IPv4"
-                   	   	continue
-                        fi
-                        echo "Running standalone benchamrk on $iface"
+			if [ -z "$server_ip" ]
+			then
+				echo "Interface $iface has no IPv4"
+				continue
+			fi
 
-                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
-                                -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			         -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
-				 org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
-				 s=$server_ip p=$JUCX_TEST_PORT &
-                        java_pid=$!
-			 sleep 10
-                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
-				 -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			         -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*"  \
-				 org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
-				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
-			 wait $java_pid
+			echo "Running standalone benchamrk on $iface"
+
+			java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
+			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
+			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
+			  org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
+			     s=$server_ip p=$JUCX_TEST_PORT &
+			     java_pid=$!
+
+			sleep 10
+
+			java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
+			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
+			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*"  \
+			  org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
+			     s=$server_ip p=$JUCX_TEST_PORT t=10000000
+			wait $java_pid
 		done
 
 		unset JUCX_TEST_PORT
