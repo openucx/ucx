@@ -306,18 +306,13 @@ ucs_ptr_array_locked_init(ucs_ptr_array_locked_t *locked_ptr_array,
 
 void ucs_ptr_array_locked_cleanup(ucs_ptr_array_locked_t *locked_ptr_array)
 {
-    ucs_status_t status;
-
     ucs_recursive_spin_lock(&locked_ptr_array->lock);
     /* Call unlocked function */
     ucs_ptr_array_cleanup(&locked_ptr_array->super);
     ucs_recursive_spin_unlock(&locked_ptr_array->lock);
 
     /* Destroy spinlock */
-    status = ucs_recursive_spinlock_destroy(&locked_ptr_array->lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_recursive_spinlock_destroy() - failed (%d)", status);
-    }
+    ucs_recursive_spinlock_destroy(&locked_ptr_array->lock);
 }
 
 unsigned ucs_ptr_array_locked_insert(ucs_ptr_array_locked_t *locked_ptr_array,

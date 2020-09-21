@@ -887,7 +887,7 @@ static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache) {
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
                            const char *name, ucs_stats_node_t *stats_parent)
 {
-    ucs_status_t status, spinlock_status;
+    ucs_status_t status;
     size_t mp_obj_size, mp_align;
     int ret;
 
@@ -971,10 +971,7 @@ err_destroy_mp:
 err_cleanup_pgtable:
     ucs_pgtable_cleanup(&self->pgtable);
 err_destroy_inv_q_lock:
-    spinlock_status = ucs_spinlock_destroy(&self->lock);
-    if (spinlock_status != UCS_OK) {
-        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", spinlock_status);
-    }
+    ucs_spinlock_destroy(&self->lock);
 err_destroy_rwlock:
     pthread_rwlock_destroy(&self->pgt_lock);
 err_free_name:
@@ -987,8 +984,6 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 {
-    ucs_status_t status;
-
     ucs_rcache_global_list_remove(self);
     ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
                             self);
@@ -998,10 +993,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 
     ucs_mpool_cleanup(&self->mp, 1);
     ucs_pgtable_cleanup(&self->pgtable);
-    status = ucs_spinlock_destroy(&self->lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
-    }
+    ucs_spinlock_destroy(&self->lock);
     pthread_rwlock_destroy(&self->pgt_lock);
     UCS_STATS_NODE_FREE(self->stats);
     free(self->name);

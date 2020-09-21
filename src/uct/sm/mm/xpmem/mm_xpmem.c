@@ -77,7 +77,6 @@ UCS_STATIC_INIT {
 
 UCS_STATIC_CLEANUP {
     uct_xpmem_remote_mem_t *rmem;
-    ucs_status_t status;
 
     kh_foreach_value(&uct_xpmem_remote_mem_hash, rmem, {
         ucs_warn("remote segment id %lx apid %lx is not released, refcount %d",
@@ -86,11 +85,7 @@ UCS_STATIC_CLEANUP {
     })
     kh_destroy_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
 
-    status = ucs_recursive_spinlock_destroy(&uct_xpmem_remote_mem_lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_recursive_spinlock_destroy() failed: %s",
-                 ucs_status_string(status));
-    }
+    ucs_recursive_spinlock_destroy(&uct_xpmem_remote_mem_lock);
 }
 
 static ucs_status_t uct_xpmem_query()

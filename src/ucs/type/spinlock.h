@@ -68,31 +68,9 @@ ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock, int flags)
     return ucs_spinlock_init(&lock->super, flags);
 }
 
-static inline ucs_status_t ucs_spinlock_destroy(ucs_spinlock_t *lock)
-{
-    int ret;
+void ucs_spinlock_destroy(ucs_spinlock_t *lock);
 
-    ret = pthread_spin_destroy(&lock->lock);
-    if (ret != 0) {
-        if (errno == EBUSY) {
-            return UCS_ERR_BUSY;
-        } else {
-            return UCS_ERR_INVALID_PARAM;
-        }
-    }
-
-    return UCS_OK;
-}
-
-static inline ucs_status_t
-ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock)
-{
-    if (lock->count != 0) {
-        return UCS_ERR_BUSY;
-    }
-
-    return ucs_spinlock_destroy(&lock->super);
-}
+void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock);
 
 static inline int
 ucs_recursive_spin_is_owner(ucs_recursive_spinlock_t *lock, pthread_t self)

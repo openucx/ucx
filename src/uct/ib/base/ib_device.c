@@ -579,8 +579,6 @@ void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
-    ucs_status_t status;
-
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
     if (kh_size(&dev->async_events_hash) != 0) {
@@ -588,18 +586,9 @@ void uct_ib_device_cleanup(uct_ib_device_t *dev)
     }
 
     kh_destroy_inplace(uct_ib_async_event, &dev->async_events_hash);
-
-    status = ucs_spinlock_destroy(&dev->async_event_lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_spinlock_destroy() failed (%d)", status);
-    }
-
+    ucs_spinlock_destroy(&dev->async_event_lock);
     kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
-
-    status = ucs_recursive_spinlock_destroy(&dev->ah_lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
-    }
+    ucs_recursive_spinlock_destroy(&dev->ah_lock);
 
     if (dev->async_events) {
         ucs_async_remove_handler(dev->ibv_context->async_fd, 1);
