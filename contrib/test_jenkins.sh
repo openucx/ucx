@@ -1034,8 +1034,9 @@ run_ucx_perftest() {
 		fi
 	done
 
-	# run cuda tests if cuda module was loaded and GPU is found
-	if [ "X$have_cuda" == "Xyes" ]
+	# run cuda tests if cuda module was loaded and GPU is found, and only in
+	# client/server mode, to reduce testing time
+	if [ "X$have_cuda" == "Xyes" ] && [ $with_mpi -ne 1 ]
 	then
 		tls_list="all "
 		gdr_options="n "
@@ -1067,57 +1068,36 @@ run_ucx_perftest() {
 			do
 				for gdr in $gdr_options
 				do
-					if [ $with_mpi -eq 1 ]
-					then
-						$MPIRUN -np 2 -x UCX_TLS=$tls -x UCX_MEMTYPE_CACHE=$memtype_cache \
-									 -x UCX_IB_GPU_DIRECT_RDMA=$gdr $AFFINITY $ucx_perftest $ucp_test_args
-					else
-						export UCX_TLS=$tls
-						export UCX_MEMTYPE_CACHE=$memtype_cache
-						export UCX_IB_GPU_DIRECT_RDMA=$gdr
-						run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-						unset UCX_TLS
-						unset UCX_MEMTYPE_CACHE
-						unset UCX_IB_GPU_DIRECT_RDMA
-					fi
+					export UCX_TLS=$tls
+					export UCX_MEMTYPE_CACHE=$memtype_cache
+					export UCX_IB_GPU_DIRECT_RDMA=$gdr
+					run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+					unset UCX_TLS
+					unset UCX_MEMTYPE_CACHE
+					unset UCX_IB_GPU_DIRECT_RDMA
 				done
 			done
 		done
 
-		if [ $with_mpi -eq 1 ]
-		then
-			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
-			$MPIRUN -np 2 -x UCX_TLS=self,sm,cuda_ipc,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
-			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
-		else
-			export UCX_TLS=self,shm,cma,cuda_copy
-			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-			unset UCX_TLS
+		export UCX_TLS=self,shm,cma,cuda_copy
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+		unset UCX_TLS
 
-			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-		fi
+		# Run without special UCX_TLS
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 
 		# Specifically test cuda_ipc for large message sizes
-	        cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
+		cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
 		ucp_test_args_large="-b $ucx_inst_ptest/test_types_cuda_ucp \
 			             -b $ucx_inst_ptest/msg_pow2_large -w 1"
-		if [ $with_mpi -eq 1 ]
-		then
-			for ipc_cache in y n
-			do
-				$MPIRUN -np 2 -x UCX_TLS=self,sm,cuda_copy,cuda_ipc \
-					-x UCX_CUDA_IPC_CACHE=$ipc_cache $AFFINITY $ucx_perftest $ucp_test_args_large
-			done
-		else
-			for ipc_cache in y n
-			do
-				export UCX_TLS=self,sm,cuda_copy,cuda_ipc
-				export UCX_CUDA_IPC_CACHE=$ipc_cache
-				run_client_server_app "$ucx_perftest" "$ucp_test_args_large" "$(hostname)" 0 0
-				unset UCX_TLS
-				unset UCX_CUDA_IPC_CACHE
-			done
-		fi
+		for ipc_cache in y n
+		do
+			export UCX_TLS=self,sm,cuda_copy,cuda_ipc
+			export UCX_CUDA_IPC_CACHE=$ipc_cache
+			run_client_server_app "$ucx_perftest" "$ucp_test_args_large" "$(hostname)" 0 0
+			unset UCX_TLS
+			unset UCX_CUDA_IPC_CACHE
+		done
 
 		unset CUDA_VISIBLE_DEVICES
 	fi
