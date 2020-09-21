@@ -177,8 +177,8 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     hsa_status_t status;
     hsa_amd_pointer_info_t info;
 
+    *mem_type_p = UCS_MEMORY_TYPE_HOST;
     if (addr == NULL) {
-        *mem_type_p = UCS_MEMORY_TYPE_HOST;
         return UCS_OK;
     }
 
