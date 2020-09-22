@@ -560,7 +560,6 @@ public:
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_t *msg) {
         VERBOSE_LOG << "receiving IO write data";
-        assert(opts().max_data_size >= msg->data_size);
         assert(msg->data_size != 0);
 
         BufferIov *iov             = _data_buffers_pool.get();
