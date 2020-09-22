@@ -636,6 +636,7 @@ class uct_cancel_test : public uct_test {
         const resource *r = dynamic_cast<const resource*>(GetParam());
 
         if ((r->tl_name != "rc_mlx5") &&
+            (r->tl_name != "dc_mlx5") &&
             (r->tl_name != "rc_verbs")) {
             UCS_TEST_SKIP_R("not supported yet");
         }

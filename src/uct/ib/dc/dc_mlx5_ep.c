@@ -1289,36 +1289,34 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
                                    ucs_status_t ep_status)
 {
-    struct mlx5_cqe64  *cqe    = arg;
+    struct mlx5_cqe64 *cqe     = arg;
     uct_iface_h tl_iface       = ep->super.super.iface;
     uint8_t dci                = ep->dci;
     uct_ib_iface_t *ib_iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci].txqp;
     uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci].txwq;
-    int16_t outstanding;
+    uint16_t           sn      = ntohs(cqe->wqe_counter);
     ucs_status_t status;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
-    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, 0,
-                                  ntohs(cqe->wqe_counter));
-
-    /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
-       is not updated for the error cqe and all outstanding wqes*/
-    outstanding = (int16_t)iface->super.super.config.tx_qp_len -
-                  uct_rc_txqp_available(txqp);
-    iface->super.super.tx.cq_available += outstanding;
-    uct_rc_txqp_available_set(txqp, (int16_t)iface->super.super.config.tx_qp_len);
-
-    /* since we removed all outstanding ops on the dci, it should be released */
+    uct_rc_mlx5_common_update_tx_res(&iface->super.super, txwq, txqp, sn);
+    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, 0, sn);
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     uct_dc_mlx5_iface_dci_put(iface, dci);
-    ucs_assert_always(ep->dci == UCT_DC_MLX5_EP_NO_DCI);
 
-    if (uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
-        /* No need to wait for grant on this ep anymore */
-        uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
+    if (txqp->flags & UCT_RC_TXQP_FLAG_ERR) {
+        goto restart_dci;
+    } else {
+        txqp->flags |= UCT_RC_TXQP_FLAG_ERR;
+    }
+
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        if (uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
+            /* No need to wait for grant on this ep anymore */
+            uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
+        }
     }
 
     if (ep == iface->tx.fc_ep) {
@@ -1344,15 +1342,18 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
                                         ib_iface->super.config.failure_level);
     }
 
-    status = uct_dc_mlx5_iface_reset_dci(iface, &iface->tx.dcis[dci]);
-    if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                  iface, dci, txwq->super.qp_num, ucs_status_string(status));
-    }
+restart_dci:
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        status = uct_dc_mlx5_iface_reset_dci(iface, &iface->tx.dcis[dci]);
+        if (status != UCS_OK) {
+            ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
+                    iface, dci, txwq->super.qp_num, ucs_status_string(status));
+        }
 
-    status = uct_dc_mlx5_iface_dci_connect(iface, &iface->tx.dcis[dci]);
-    if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
-                  iface, dci, txwq->super.qp_num, ucs_status_string(status));
+        status = uct_dc_mlx5_iface_dci_connect(iface, &iface->tx.dcis[dci]);
+        if (status != UCS_OK) {
+            ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
+                    iface, dci, txwq->super.qp_num, ucs_status_string(status));
+        }
     }
 }
