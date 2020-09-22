@@ -1339,7 +1339,6 @@ void ucs_debug_cleanup(int on_error)
     char *sym;
     int signum;
     struct sigaction *hndl;
-    ucs_status_t status;
 
     ucs_debug_initialized = 0;
 
@@ -1353,10 +1352,7 @@ void ucs_debug_cleanup(int on_error)
         kh_destroy_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     }
 
-    status = ucs_recursive_spinlock_destroy(&ucs_kh_lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
-    }
+    ucs_recursive_spinlock_destroy(&ucs_kh_lock);
 }
 
 static inline void ucs_debug_disable_signal_nolock(int signum)

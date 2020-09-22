@@ -22,7 +22,7 @@
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/proto/proto_select.h>
-#include <ucp/proto/rndv.h>
+#include <ucp/rndv/rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
 #include <ucs/datastruct/queue.h>
@@ -68,7 +68,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].rsc_index    = UCP_NULL_RESOURCE;
         key->lanes[i].proxy_lane   = UCP_NULL_LANE;
         key->lanes[i].lane_types   = 0;
-        key->lanes[i].dst_md_index = UCP_MAX_MDS;
+        key->lanes[i].dst_md_index = UCP_NULL_RESOURCE;
     }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_lane      = UCP_NULL_LANE;
@@ -78,6 +78,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->rma_bw_md_map    = 0;
     key->reachable_md_map = 0;
     key->dst_md_cmpts     = NULL;
+    key->ep_check_map     = 0;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     key->status           = UCS_OK;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
@@ -100,14 +101,24 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err;
     }
 
-    ep->cfg_index                   = UCP_WORKER_CFG_INDEX_NULL;
-    ep->worker                      = worker;
-    ep->am_lane                     = UCP_NULL_LANE;
-    ep->flags                       = 0;
-    ep->conn_sn                     = UCP_EP_MATCH_CONN_SN_MAX;
-    ucp_ep_ext_gen(ep)->user_data   = NULL;
-    ucp_ep_ext_gen(ep)->dest_ep_ptr = 0;
-    ucp_ep_ext_gen(ep)->err_cb      = NULL;
+    ep->cfg_index                 = UCP_WORKER_CFG_INDEX_NULL;
+    ep->worker                    = worker;
+    ep->am_lane                   = UCP_NULL_LANE;
+    ep->flags                     = 0;
+    ep->conn_sn                   = UCP_EP_MATCH_CONN_SN_MAX;
+    ucp_ep_ext_gen(ep)->user_data = NULL;
+    ucp_ep_ext_gen(ep)->err_cb    = NULL;
+    ucp_ep_ext_gen(ep)->ids       = ucs_malloc(sizeof(ucp_ep_ids_t),
+                                               "ep_ids");
+    if (ucp_ep_ext_gen(ep)->ids == NULL) {
+        ucs_error("Failed to allocate ep keys");
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_ep;
+    }
+
+    ucp_ep_ext_gen(ep)->ids->local  = UCP_EP_ID_INVALID;
+    ucp_ep_ext_gen(ep)->ids->remote = UCP_EP_ID_INVALID;
+
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
                       sizeof(ucp_ep_ext_gen(ep)->listener));
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
@@ -130,7 +141,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     status = UCS_STATS_NODE_ALLOC(&ep->stats, &ucp_ep_stats_class,
                                   worker->stats, "-%p", ep);
     if (status != UCS_OK) {
-        goto err_free_ep;
+        goto err_free_keys;
     }
 
     ucs_list_head_init(&ucp_ep_ext_gen(ep)->ep_list);
@@ -139,37 +150,77 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
     return UCS_OK;
 
+err_free_keys:
+    ucs_free(ucp_ep_ext_gen(ep)->ids);
 err_free_ep:
     ucs_strided_alloc_put(&worker->ep_alloc, ep);
 err:
     return status;
 }
 
-ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, const char *peer_name,
-                                  const char *message, ucp_ep_h *ep_p)
+void ucp_ep_destroy_base(ucp_ep_h ep)
+{
+    UCS_STATS_NODE_FREE(ep->stats);
+    ucs_free(ucp_ep_ext_gen(ep)->ids);
+    ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
+}
+
+ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
+                                  const char *peer_name, const char *message,
+                                  ucp_ep_h *ep_p)
 {
     ucs_status_t status;
     ucp_ep_h ep;
 
     status = ucp_ep_create_base(worker, peer_name, message, &ep);
     if (status != UCS_OK) {
-        return status;
+        goto err;
     }
 
-    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    if ((worker->context->config.ext.proto_indirect_id == UCS_CONFIG_ON) ||
+        ((worker->context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
+         (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
+         !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE))) {
+        ep->flags |= UCP_EP_FLAG_INDIRECT_ID;
+    }
+
+    status = ucs_ptr_map_put(&worker->ptr_map, ep,
+                             !!(ep->flags & UCP_EP_FLAG_INDIRECT_ID),
+                             &ucp_ep_ext_gen(ep)->ids->local);
+    if (status != UCS_OK) {
+        goto err_destroy_ep_base;
+    }
+
+    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
+        ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    }
 
     *ep_p = ep;
 
     return UCS_OK;
+
+err_destroy_ep_base:
+    ucp_ep_destroy_base(ep);
+err:
+    return status;
 }
 
 void ucp_ep_delete(ucp_ep_h ep)
 {
+    ucs_status_t status;
+
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
-    UCS_STATS_NODE_FREE(ep->stats);
+    ucp_worker_keepalive_remove_ep(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-    ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
+    ucs_assert(ucp_ep_ext_gen(ep)->ids->local != UCP_EP_ID_INVALID);
+    status = ucs_ptr_map_del(&ep->worker->ptr_map, ucp_ep_local_id(ep));
+    if (status != UCS_OK) {
+        ucs_warn("ep %p local id 0x%"PRIxPTR": ucs_ptr_map_del failed with status %s",
+                 ep, ucp_ep_local_id(ep), ucs_status_string(status));
+    }
+
+    ucp_ep_destroy_base(ep);
 }
 
 ucs_status_t
@@ -182,7 +233,8 @@ ucp_ep_create_sockaddr_aux(ucp_worker_h worker, unsigned ep_init_flags,
     ucp_ep_h ep;
 
     /* allocate endpoint */
-    status = ucp_worker_create_ep(worker, remote_address->name, "listener", &ep);
+    status = ucp_worker_create_ep(worker, ep_init_flags, remote_address->name,
+                                  "listener", &ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -228,7 +280,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
 
     if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
         if (ucp_ep_config(ep)->key.err_mode != params->err_mode) {
-            ucs_error("asymmetric endpoint configuration not supported, "
+            ucs_error("asymmetric endpoint configuration is not supported, "
                       "error handling level mismatch");
             return UCS_ERR_UNSUPPORTED;
         }
@@ -251,12 +303,12 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     ucp_unpacked_address_t local_address;
-    unsigned i, mem_type;
+    ucs_memory_type_t mem_type;
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    ucs_memory_type_for_each(mem_type) {
         if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
             !context->mem_type_access_tls[mem_type]) {
             continue;
@@ -296,12 +348,20 @@ err_free_address_list:
 err_free_address_buffer:
     ucs_free(address_buffer);
 err_cleanup_eps:
-    for (i = 0; i < UCS_MEMORY_TYPE_LAST; i++) {
-        if (worker->mem_type_ep[i]) {
-           ucp_ep_destroy_internal(worker->mem_type_ep[i]);
+    ucp_worker_destroy_mem_type_endpoints(worker);
+    return status;
+}
+
+void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker)
+{
+    ucs_memory_type_t mem_type;
+
+    ucs_memory_type_for_each(mem_type) {
+        if (worker->mem_type_ep[mem_type] != NULL) {
+           ucp_ep_destroy_internal(worker->mem_type_ep[mem_type]);
+           worker->mem_type_ep[mem_type] = NULL;
         }
     }
-    return status;
 }
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
@@ -353,7 +413,8 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     ucp_ep_h ep;
 
     /* allocate endpoint */
-    status = ucp_worker_create_ep(worker, remote_address->name, message, &ep);
+    status = ucp_worker_create_ep(worker, ep_init_flags, remote_address->name,
+                                  message, &ep);
     if (status != UCS_OK) {
         goto err;
     }
@@ -384,6 +445,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status;
     ucp_ep_h ep;
+    unsigned ep_init_flags;
 
     if (!(params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR)) {
         ucs_error("destination socket address is missing");
@@ -395,14 +457,15 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
 
     /* allocate endpoint */
     ucs_sockaddr_str(params->sockaddr.addr, peer_name, sizeof(peer_name));
+    ep_init_flags = ucp_ep_init_flags(worker, params);
 
-    status = ucp_worker_create_ep(worker, peer_name, "from api call", &ep);
+    status = ucp_worker_create_ep(worker, ep_init_flags, peer_name,
+                                  "from api call", &ep);
     if (status != UCS_OK) {
         goto err;
     }
 
-    status = ucp_ep_init_create_wireup(ep, ucp_ep_init_flags(worker, params),
-                                       &wireup_ep);
+    status = ucp_ep_init_create_wireup(ep, ep_init_flags, &wireup_ep);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -475,7 +538,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 
         ucs_assert(ucp_ep_config(*ep_p)->key.err_mode == sa_data->err_mode);
         ucp_ep_flush_state_reset(*ep_p);
-        ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
+        ucp_ep_update_remote_id(*ep_p, sa_data->ep_id);
         /* send wireup request message, to connect the client to the server's
            new endpoint */
         ucs_assert(!((*ep_p)->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED));
@@ -491,7 +554,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
             goto non_cm_err_reject;
         }
 
-        ucp_ep_update_dest_ep_ptr(*ep_p, sa_data->ep_ptr);
+        ucp_ep_update_remote_id(*ep_p, sa_data->ep_id);
         /* the server's ep should be aware of the sent address from the client */
         (*ep_p)->flags |= UCP_EP_FLAG_LISTENER;
         /* NOTE: protect union */
@@ -599,7 +662,8 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     conn_sn = ucp_ep_match_get_sn(worker, remote_address.uuid);
     ep      = ucp_ep_match_retrieve(worker, remote_address.uuid,
                                     conn_sn ^
-                                    (remote_address.uuid == worker->uuid), 0);
+                                    (remote_address.uuid == worker->uuid),
+                                    UCS_CONN_MATCH_QUEUE_UNEXP);
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
         if (status != UCS_OK) {
@@ -635,10 +699,11 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     if ((remote_address.uuid == worker->uuid) &&
         !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
-        ucp_ep_update_dest_ep_ptr(ep, (uintptr_t)ep);
+        ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
         ucp_ep_flush_state_reset(ep);
     } else {
-        ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn, 1);
+        ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
+                            UCS_CONN_MATCH_QUEUE_EXP);
     }
 
     /* if needed, send initial wireup message */
@@ -727,7 +792,13 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
 {
     ucs_debug("ep %p: destroy", ep);
     ucp_ep_cleanup_lanes(ep);
-    ucp_ep_delete(ep);
+    if (ep->flags & UCP_EP_FLAG_TEMPORARY) {
+        /* it's failed tmp ep of main ep */
+        ucs_assert(ucp_ep_ext_gen(ep)->ids->local == UCP_EP_ID_INVALID);
+        ucp_ep_destroy_base(ep);
+    } else {
+        ucp_ep_delete(ep);
+    }
 }
 
 void ucp_ep_cleanup_lanes(ucp_ep_h ep)
@@ -775,7 +846,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_worker_err_handle_remove_filter, ep);
 
-    /* remove pending slow-path function it wasn't removed yet */
+    /* remove pending slow-path function if it wasn't removed yet */
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_listener_accept_cb_remove_filter, ep);
 
@@ -963,6 +1034,18 @@ out:
     return;
 }
 
+int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                const ucp_ep_config_key_t *key2,
+                                ucp_lane_index_t lane, int compare_types)
+{
+    return (key1->lanes[lane].rsc_index    == key2->lanes[lane].rsc_index)    &&
+           (key1->lanes[lane].proxy_lane   == key2->lanes[lane].proxy_lane)   &&
+           (key1->lanes[lane].dst_md_index == key2->lanes[lane].dst_md_index) &&
+           (key1->lanes[lane].path_index   == key2->lanes[lane].path_index)   &&
+           ((key1->lanes[lane].lane_types  == key2->lanes[lane].lane_types) ||
+            !compare_types);
+}
+
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2)
 {
@@ -981,6 +1064,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->wireup_lane      != key2->wireup_lane)                              ||
         (key1->cm_lane          != key2->cm_lane)                                  ||
         (key1->rkey_ptr_lane    != key2->rkey_ptr_lane)                            ||
+        (key1->ep_check_map     != key2->ep_check_map)                             ||
         (key1->err_mode         != key2->err_mode)                                 ||
         (key1->status           != key2->status))
     {
@@ -988,11 +1072,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     }
 
     for (lane = 0; lane < key1->num_lanes; ++lane) {
-        if ((key1->lanes[lane].rsc_index != key2->lanes[lane].rsc_index) ||
-            (key1->lanes[lane].proxy_lane != key2->lanes[lane].proxy_lane) ||
-            (key1->lanes[lane].dst_md_index != key2->lanes[lane].dst_md_index) ||
-            (key1->lanes[lane].path_index != key2->lanes[lane].path_index) ||
-            (key1->lanes[lane].lane_types  != key2->lanes[lane].lane_types))
+        if (!ucp_ep_config_lane_is_equal(key1, key2, lane, 1))
         {
             return 0;
         }
@@ -1279,9 +1359,10 @@ static void ucp_ep_config_set_memtype_thresh(ucp_memtype_thresh_t *max_eager_sho
 static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                                      ucp_ep_msg_config_t *config, size_t max_short,
                                      size_t max_bcopy, size_t max_zcopy,
-                                     size_t max_iov, uint64_t short_flag,
-                                     uint64_t bcopy_flag, uint64_t zcopy_flag,
-                                     unsigned hdr_len, size_t adjust_min_val)
+                                     size_t max_iov, size_t max_hdr,
+                                     uint64_t short_flag, uint64_t bcopy_flag,
+                                     uint64_t zcopy_flag, unsigned hdr_len,
+                                     size_t adjust_min_val)
 {
     ucp_context_t *context = worker->context;
     const uct_md_attr_t *md_attr;
@@ -1312,6 +1393,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     }
 
     config->max_zcopy = max_zcopy;
+    config->max_hdr   = max_hdr;
     config->max_iov   = ucs_min(UCP_MAX_IOV, max_iov);
 
     if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
@@ -1335,7 +1417,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
                                        config->zcopy_thresh[0]);
     }
 
-    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    ucs_memory_type_for_each(mem_type) {
         if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
         } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
@@ -1398,8 +1480,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         config->tag.eager.sync_zcopy_thresh[it]  = SIZE_MAX;
     }
 
-    UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_HOST == 0);
-    for (mem_type = UCS_MEMORY_TYPE_HOST; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    ucs_memory_type_for_each(mem_type) {
         config->am.mem_type_zcopy_thresh[mem_type]        = SIZE_MAX;
         config->tag.eager.mem_type_zcopy_thresh[mem_type] = SIZE_MAX;
     }
@@ -1453,7 +1534,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     get_zcopy_lane_count = 0;
     put_zcopy_lane_count = 0;
 
-    for (i = 0; i < UCS_MEMORY_TYPE_LAST; i++) {
+    ucs_memory_type_for_each(i) {
         rndv_max_bw[i] = 0;
     }
 
@@ -1564,7 +1645,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.tag.eager.max_short,
                                      iface_attr->cap.tag.eager.max_bcopy,
                                      iface_attr->cap.tag.eager.max_zcopy,
-                                     iface_attr->cap.tag.eager.max_iov,
+                                     iface_attr->cap.tag.eager.max_iov, 0,
                                      UCT_IFACE_FLAG_TAG_EAGER_SHORT,
                                      UCT_IFACE_FLAG_TAG_EAGER_BCOPY,
                                      UCT_IFACE_FLAG_TAG_EAGER_ZCOPY, 0,
@@ -1616,6 +1697,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.am.max_bcopy,
                                      iface_attr->cap.am.max_zcopy,
                                      iface_attr->cap.am.max_iov,
+                                     iface_attr->cap.am.max_hdr,
                                      UCT_IFACE_FLAG_AM_SHORT,
                                      UCT_IFACE_FLAG_AM_BCOPY,
                                      UCT_IFACE_FLAG_AM_ZCOPY,
@@ -1853,17 +1935,16 @@ int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
     return -1;
 }
 
-static void ucp_ep_config_cm_lane_info_str(ucp_worker_h worker,
-                                           const ucp_ep_config_key_t *key,
-                                           ucp_lane_index_t lane,
-                                           char *buf, size_t max)
+void ucp_ep_config_cm_lane_info_str(ucp_worker_h worker,
+                                    const ucp_ep_config_key_t *key,
+                                    ucp_lane_index_t lane,
+                                    ucp_rsc_index_t cm_index,
+                                    char *buf, size_t max)
 {
-    ucp_context_h context        = worker->context;
-    ucp_rsc_index_t cmpt_index   = worker->cms[lane].cmpt_idx;
-    const ucp_tl_cmpt_t *tl_cmpt = &context->tl_cmpts[cmpt_index];
-
-    ucs_snprintf_zero(buf, max, "lane[%d]: %2d:%s cm",
-                      lane, cmpt_index, tl_cmpt->attr.name);
+    ucs_snprintf_zero(buf, max, "lane[%d]: cm %s", lane,
+                      (cm_index != UCP_NULL_RESOURCE) ?
+                      ucp_context_cm_name(worker->context, cm_index) :
+                      "<unknown>");
 }
 
 void ucp_ep_config_lane_info_str(ucp_worker_h worker,
@@ -1883,11 +1964,6 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
     char *p, *endp;
     char *desc_str;
     int prio;
-
-    if (lane == key->cm_lane) {
-        ucp_ep_config_cm_lane_info_str(worker, key, lane, buf, max);
-        return;
-    }
 
     p          = buf;
     endp       = buf + max;
@@ -2093,7 +2169,7 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
     return zcopy_thresh;
 }
 
-ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
+ucp_wireup_ep_t* ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;
 
@@ -2174,4 +2250,23 @@ int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
 {
     return (config->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
            (config->key.cm_lane  != UCP_NULL_LANE);
+}
+
+unsigned ucp_ep_do_keepalive(ucp_ep_h ep)
+{
+    ucp_lane_index_t lane;
+
+    if (!ucp_ep_keepalive_is_enabled(ep)) {
+        return 0;
+    }
+
+    /* TODO: add error handling: in future uct_ep_check may check peer
+     * immediately */
+    ucs_for_each_bit(lane, ucp_ep_config(ep)->key.ep_check_map) {
+        ucs_assert(lane < UCP_MAX_LANES);
+        /* coverity[overrun-local] */
+        uct_ep_check(ep->uct_eps[lane], 0, NULL);
+    }
+
+    return 1;
 }

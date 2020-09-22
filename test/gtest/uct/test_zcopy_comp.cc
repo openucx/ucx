@@ -53,7 +53,7 @@ UCS_TEST_SKIP_COND_P(test_zcopy_comp, issue1440,
      * Send a mix of small messages to one destination and large messages to
      * another destination. This can trigger overriding RC/DC send completions.
      */
-    uct_completion_t dummy_comp = { NULL, INT_MAX };
+    uct_completion_t dummy_comp = { NULL, INT_MAX, UCS_OK };
     int num_small_sends = 1000000 / ucs::test_time_multiplier();
     int num_large_sends = 1000 / ucs::test_time_multiplier();
     while (num_small_sends || num_large_sends) {

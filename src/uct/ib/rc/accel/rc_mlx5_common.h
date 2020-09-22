@@ -120,17 +120,6 @@ enum {
     UCT_RC_MLX5_OPCODE_TAG_MATCHING          = 0x28,
     UCT_RC_MLX5_CQE_APP_TAG_MATCHING         = 1,
 
-    /* last packet flag for multi-packet RQs */
-    UCT_RC_MLX5_MP_RQ_LAST_MSG_FIELD         = 0x40000000,
-
-    /* byte count mask for multi-packet RQs */
-    UCT_RC_MLX5_MP_RQ_BYTE_CNT_FIELD_MASK    = 0x0000FFFF,
-
-    UCT_RC_MLX5_MP_RQ_NUM_STRIDES_FIELD_MASK = 0x3FFF0000,
-
-    /* filler cqe indicator */
-    UCT_RC_MLX5_MP_RQ_FILLER_CQE             = UCS_BIT(31),
-
     /* tag segment flags */
     UCT_RC_MLX5_SRQ_FLAG_TM_SW_CNT           = (1 << 6),
     UCT_RC_MLX5_SRQ_FLAG_TM_CQE_REQ          = (1 << 7),
@@ -582,8 +571,8 @@ uct_rc_mlx5_ctx_priv(uct_tag_context_t *ctx)
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_handle_rndv_fin(uct_rc_mlx5_iface_common_t *iface, uint32_t app_ctx)
 {
+    void *rndv_comp = NULL;
     int found;
-    void *rndv_comp;
 
     found = ucs_ptr_array_lookup(&iface->tm.rndv_comps, app_ctx, rndv_comp);
     ucs_assert_always(found > 0);

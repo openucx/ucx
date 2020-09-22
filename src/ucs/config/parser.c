@@ -437,6 +437,28 @@ int ucs_config_sprintf_time(char *buf, size_t max,
     return 1;
 }
 
+int ucs_config_sscanf_time_units(const char *buf, void *dest, const void *arg)
+{
+    double value;
+    int ret;
+
+    ret = ucs_config_sscanf_time(buf, &value, arg);
+    if (ret == 0) {
+        return 0;
+    }
+
+    *(ucs_time_t*)dest = ucs_time_from_sec(value);
+    return 1;
+}
+
+int ucs_config_sprintf_time_units(char *buf, size_t max,
+                                  const void *src, const void *arg)
+{
+    double value = ucs_time_to_sec(*(ucs_time_t*)src);
+
+    return ucs_config_sprintf_time(buf, max, &value, arg);
+}
+
 int ucs_config_sscanf_bw(const char *buf, void *dest, const void *arg)
 {
     double *dst     = (double*)dest;

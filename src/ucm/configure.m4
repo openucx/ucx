@@ -4,8 +4,29 @@
 # See file LICENSE for terms.
 #
 
-AC_SUBST([UCM_MODULE_LDFLAGS],
-         ["-Xlinker -z -Xlinker interpose -Xlinker --no-as-needed"])
+
+SAVE_LDFLAGS="$LDFLAGS"
+
+#
+# Linux
+#
+UCM_MODULE_LDFLAGS_TEST="-Xlinker -z -Xlinker interpose -Xlinker --no-as-needed"
+LDFLAGS="$SAVE_LDFLAGS $UCM_MODULE_LDFLAGS_TEST"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([])],[
+    AC_SUBST([UCM_MODULE_LDFLAGS],[$UCM_MODULE_LDFLAGS_TEST])
+    ucm_ldflags_happy=yes
+],[
+    ucm_ldflags_happy=no
+])
+
+#
+# ERROR
+#
+AS_IF([test "x$ucm_ldflags_happy" = "xno"],[
+    AC_MSG_ERROR([UCM linker flags are not supported])
+],[])
+
+LDFLAGS="$SAVE_LDFLAGS"
 
 ucm_modules=""
 m4_include([src/ucm/cuda/configure.m4])

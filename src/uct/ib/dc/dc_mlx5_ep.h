@@ -517,7 +517,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
     uct_ib_mlx5_txwq_t UCS_V_UNUSED *_txwq;
 
 
-#define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
+#define UCT_DC_MLX5_CHECK_DCI_RES(_iface, _ep) \
     { \
         ucs_status_t _status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
         if (ucs_unlikely(_status != UCS_OK)) { \
@@ -528,6 +528,8 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 
 #define UCT_DC_CHECK_RES_PTR(_iface, _ep) \
     { \
+        UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
+                                       UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
         ucs_status_t status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
         if (ucs_unlikely(status != UCS_OK)) { \
             return UCS_STATUS_PTR(status); \
@@ -536,14 +538,16 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 
 
 /**
- * All RMA and AMO operations are not allowed if no RDMA_READ credits.
- * Otherwise operations ordering can be broken (which fence operation
- * relies on).
+ * All operations are not allowed if no RDMA_READ credits. Otherwise operations
+ * ordering can be broken. If some AM sends added to the pending queue after
+ * RDMA_READ operation, it may be stuck there until RDMA_READ credits arrive,
+ * therefore need to block even AM sends, until all resources are available.
  */
-#define UCT_DC_MLX5_CHECK_RMA_RES(_iface, _ep) \
+#define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
     { \
-        UCT_RC_CHECK_NUM_RDMA_READ(&(_iface)->super.super) \
-        UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
+        UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
+                                       UCS_ERR_NO_RESOURCE) \
+        UCT_DC_MLX5_CHECK_DCI_RES(_iface, _ep) \
     }
 
 

@@ -107,7 +107,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which is equivalent to all UCT components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SOCKADDR_TLS_PRIORITY", "rdmacm,sockcm",
+  {"SOCKADDR_TLS_PRIORITY", "rdmacm,tcp,sockcm",
    "Priority of sockaddr transports for client/server connection establishment.\n"
    "The '*' wildcard expands to all the available sockaddr transports.",
    ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
@@ -264,6 +264,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "RNDV fragment size \n",
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"RNDV_PIPELINE_SEND_THRESH", "inf",
+   "RNDV size threshold to enable sender side pipeline for mem type\n",
+   ucs_offsetof(ucp_config_t, ctx.rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
   {"MEMTYPE_CACHE", "y",
    "Enable memory type (cuda/rocm) cache \n",
    ucs_offsetof(ucp_config_t, ctx.enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
@@ -287,11 +291,32 @@ static ucs_config_field_t ucp_config_table[] = {
    "require out of band synchronization before destroying UCP resources.",
    ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
 
+  {"LISTENER_BACKLOG", "auto",
+   "'auto' means that each transport would use its maximal allowed value.\n"
+   "If a value larger than what a transport supports is set, the backlog value\n"
+   "would be cut to that maximal value.",
+   ucs_offsetof(ucp_config_t, ctx.listener_backlog), UCS_CONFIG_TYPE_ULUNITS},
+
   {"PROTO_ENABLE", "n",
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
 
-  {NULL}
+  {"KEEPALIVE_TIMEOUT", "0us",
+   "Time period between keepalive rounds (0 - disabled).",
+   ucs_offsetof(ucp_config_t, ctx.keepalive_timeout), UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"KEEPALIVE_NUM_EPS", "0",
+   "Maximal number of endpoints to check on every keepalive round\n"
+   "(0 - disabled, inf - check all endpoints on every round)",
+   ucs_offsetof(ucp_config_t, ctx.keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
+
+  {"PROTO_INDIRECT_ID", "auto",
+   "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
+   "A value of 'auto' means to enable only if error handling is enabled on the\n"
+   "endpoint.",
+   ucs_offsetof(ucp_config_t, ctx.proto_indirect_id), UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
+   {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 
@@ -1570,9 +1595,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
-    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx tl bitmap 0x%lx",
-              context, context->num_mds, context->num_tls,
-              context->config.features, context->tl_bitmap);
+    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%"PRIx64
+              " tl bitmap 0x%"PRIx64, context, context->num_mds,
+              context->num_tls, context->config.features, context->tl_bitmap);
 
     *context_p = context;
     return UCS_OK;
@@ -1768,4 +1793,10 @@ uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
     }
 
     return tl_bitmap;
+}
+
+const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx)
+{
+    ucs_assert(cm_idx != UCP_NULL_RESOURCE);
+    return context->tl_cmpts[context->config.cm_cmpt_idxs[cm_idx]].attr.name;
 }

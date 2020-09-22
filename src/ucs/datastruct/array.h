@@ -28,6 +28,8 @@ BEGIN_C_DECLS
         _index_type       length; \
         _index_type       capacity; \
     } ucs_array_t(_name); \
+    \
+    typedef _value_type UCS_ARRAY_IDENTIFIER(_name, _value_type_t);
 
 
 /**
@@ -73,6 +75,47 @@ BEGIN_C_DECLS
 #define UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity) \
     { (_buffer), 0, \
       ((_capacity) & UCS_ARRAY_CAP_MASK) | UCS_ARRAY_CAP_FLAG_FIXED }
+
+
+/**
+ * Helper macro to allocate fixed-size array on stack and check for max alloca
+ * size.
+ *
+ * @param _name      Array name to take value type from.
+ * @param _capacity  Array capacity to allocate, must be compile-time constant.
+ *
+ * @return Pointer to allocated memory on stack
+ */
+#define UCS_ARRAY_ALLOC_ONSTACK(_name, _capacity) \
+    ({ \
+        typedef UCS_ARRAY_IDENTIFIER(_name, _value_type_t) value_t; \
+        UCS_STATIC_ASSERT((_capacity) * sizeof(value_t) <= UCS_ALLOCA_MAX_SIZE); \
+        (value_t*)alloca((_capacity) * sizeof(value_t)); \
+    })
+
+
+/**
+ * Define a fixed-size array backed by a buffer allocated on the stack.
+ *
+ * @param _var       Array variable
+ * @param _name      Array name, as used in @ref UCS_ARRAY_DECLARE_TYPE
+ * @param _capacity  Array capacity
+ *
+ * Example:
+ *
+ * @code{.c}
+ * UCS_ARRAY_DEFINE_INLINE(int_array, unsigned, int)
+ *
+ * void my_func()
+ * {
+ *     UCS_ARRAY_DEFINE_ONSTACK(my_array, int_array, 20);
+ * }
+ * @endcode
+ */
+#define UCS_ARRAY_DEFINE_ONSTACK(_var, _name, _capacity) \
+    ucs_array_t(_name) _var = \
+        UCS_ARRAY_FIXED_INITIALIZER(UCS_ARRAY_ALLOC_ONSTACK(_name, _capacity), \
+                                    (_capacity))
 
 
 /**
@@ -130,12 +173,11 @@ BEGIN_C_DECLS
  *
  * @param _name     Array name
  * @param _array    Array to add element to
- * @param _index_p  Filled with the index of the added element
  *
  * @return UCS_OK if added, UCS_ERR_NO_MEMORY if cannot grow the array
  */
-#define ucs_array_append(_name, _array, _index_p) \
-   UCS_ARRAY_IDENTIFIER(_name, _append)(_array, _index_p)
+#define ucs_array_append(_name, _array) \
+   UCS_ARRAY_IDENTIFIER(_name, _append)(_array)
 
 
 /**
@@ -179,6 +221,20 @@ BEGIN_C_DECLS
 
 
 /**
+ * @return Pointer to the first array element
+ */
+#define ucs_array_begin(_array) \
+    ((_array)->buffer)
+
+
+/**
+ * @return Pointer to last array element
+ */
+#define ucs_array_last(_array) \
+    ((_array)->buffer + ucs_array_length(_array) - 1)
+
+
+/**
  * @return Pointer to array end element (first non-valid element)
  */
 #define ucs_array_end(_array) \
@@ -206,6 +262,16 @@ BEGIN_C_DECLS
                     (size_t)ucs_array_capacity(_array)); \
         ucs_array_length(_array) = (_new_length); \
     }
+
+
+/**
+ * Iterate over array elements
+ *
+ * @param _elem    Pointer variable to the current array element
+ * @param _array   Array to iterate over
+ */
+#define ucs_array_for_each(_elem, _array) \
+    for (_elem = ucs_array_begin(_array); _elem < ucs_array_end(_array); ++_elem)
 
 
 /* Internal flag to distinguish between fixed/dynamic array */

@@ -38,15 +38,26 @@ protected:
 
 
 UCS_TEST_P(test_mem, nomd_alloc) {
+    void *address = NULL;
+    size_t length = min_length;
     uct_alloc_method_t methods[2];
     uct_allocated_memory mem;
     ucs_status_t status;
+    uct_mem_alloc_params_t params;
 
     methods[0] = GetParam();
     methods[1] = UCT_ALLOC_METHOD_HEAP;
 
-    status = uct_mem_alloc(NULL, min_length, UCT_MD_MEM_ACCESS_ALL, methods,
-                           2, NULL, 0, "test", &mem);
+    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.flags           = UCT_MD_MEM_ACCESS_ALL;
+    params.name            = "test";
+    params.mem_type        = UCS_MEMORY_TYPE_HOST;
+    params.address         = address;
+
+    status = uct_mem_alloc(length, methods, 2, &params, &mem);
     ASSERT_UCS_OK(status);
 
     check_mem(mem, min_length);
@@ -55,6 +66,8 @@ UCS_TEST_P(test_mem, nomd_alloc) {
 }
 
 UCS_TEST_P(test_mem, md_alloc) {
+    void *address = NULL;
+    size_t length = min_length;
     uct_alloc_method_t methods[3];
     uct_allocated_memory mem;
     std::vector<md_resource> md_resources;
@@ -63,10 +76,21 @@ UCS_TEST_P(test_mem, md_alloc) {
     uct_md_h md;
     uct_md_config_t *md_config;
     int nonblock;
+    uct_mem_alloc_params_t params;
 
     methods[0] = UCT_ALLOC_METHOD_MD;
     methods[1] = GetParam();
     methods[2] = UCT_ALLOC_METHOD_HEAP;
+
+    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS     |
+                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS   |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE  |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MDS       |
+                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.name            = "test";
+    params.mem_type        = UCS_MEMORY_TYPE_HOST;
+    params.address         = address;
+    params.mds.count       = 1;
 
     md_resources = enum_md_resources();
     for (std::vector<md_resource>::iterator iter = md_resources.begin();
@@ -84,9 +108,12 @@ UCS_TEST_P(test_mem, md_alloc) {
 
         for (nonblock = 0; nonblock <= 1; ++nonblock) {
             int flags = nonblock ? UCT_MD_MEM_FLAG_NONBLOCK : 0;
-            flags |= UCT_MD_MEM_ACCESS_ALL;
-            status = uct_mem_alloc(NULL, min_length, flags, methods, 3, &md, 1,
-                                   "test", &mem);
+
+            flags         |= UCT_MD_MEM_ACCESS_ALL;
+            params.flags   = flags;
+            params.mds.mds = &md;
+
+            status = uct_mem_alloc(length, methods, 3, &params, &mem);
             ASSERT_UCS_OK(status);
 
             if (md_attr.cap.flags & UCT_MD_FLAG_ALLOC) {
@@ -115,10 +142,22 @@ UCS_TEST_P(test_mem, md_fixed) {
     const size_t            n_tryes     = 101;
     uct_alloc_method_t      meth;
     void*                   p_addr      = ucs::mmap_fixed_address();
+    size_t                  length      = 1;
     size_t                  n_success;
 
     uct_allocated_memory_t  uct_mem;
     ucs_status_t            status;
+    uct_mem_alloc_params_t  params;
+
+    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS     |
+                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS   |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE  |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MDS       |
+                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.flags           = UCT_MD_MEM_FLAG_FIXED | UCT_MD_MEM_ACCESS_ALL;
+    params.name            = "test";
+    params.mem_type        = UCS_MEMORY_TYPE_HOST;
+    params.mds.count       = 1;
 
     md_resources = enum_md_resources();
     for (std::vector<md_resource>::iterator iter = md_resources.begin();
@@ -139,12 +178,11 @@ UCS_TEST_P(test_mem, md_fixed) {
             n_success = 0;
 
             for (j = 0; j < n_tryes; ++j) {
-                meth = UCT_ALLOC_METHOD_MD;
+                meth                   = UCT_ALLOC_METHOD_MD;
+                params.mds.mds         = &md;
+                params.address         = p_addr;
 
-                status = uct_mem_alloc(p_addr, 1,
-                                       UCT_MD_MEM_FLAG_FIXED|
-                                       UCT_MD_MEM_ACCESS_ALL,
-                                       &meth, 1, &md, 1, "test", &uct_mem);
+                status = uct_mem_alloc(length, &meth, 1, &params, &uct_mem);
                 if (status == UCS_OK) {
                     ++n_success;
                     EXPECT_EQ(meth, uct_mem.method);
@@ -176,19 +214,28 @@ UCS_TEST_P(test_mem, mmap_fixed) {
     const size_t            n_tryes     = 101;
     uct_alloc_method_t      meth;
     void*                   p_addr      = ucs::mmap_fixed_address();
+    size_t                  length      = 1;
     size_t                  n_success;
 
     uct_allocated_memory_t  uct_mem;
     ucs_status_t            status;
+    uct_mem_alloc_params_t  params;
+
+    params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                             UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                             UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                             UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+    params.flags           = UCT_MD_MEM_FLAG_FIXED | UCT_MD_MEM_ACCESS_ALL;
+    params.name            = "test";
+    params.mem_type        = UCS_MEMORY_TYPE_HOST;
 
     n_success = 0;
 
     for (i = 0; i < n_tryes; ++i) {
-        meth = (i % 2) ? UCT_ALLOC_METHOD_MMAP : UCT_ALLOC_METHOD_HUGE;
+        meth                   = (i % 2) ? UCT_ALLOC_METHOD_MMAP : UCT_ALLOC_METHOD_HUGE;
+        params.address         = p_addr;
 
-        status = uct_mem_alloc(p_addr, 1,
-                               UCT_MD_MEM_FLAG_FIXED|UCT_MD_MEM_ACCESS_ALL,
-                               &meth, 1, NULL, 0, "test", &uct_mem);
+        status = uct_mem_alloc(length, &meth, 1, &params, &uct_mem);
         if (status == UCS_OK) {
             ++n_success;
             EXPECT_EQ(meth, uct_mem.method);

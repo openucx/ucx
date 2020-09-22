@@ -87,13 +87,9 @@ protected:
     static void uct_comp_cb(uct_completion_t *uct_comp, ucs_status_t status)
     {
         struct dcs_comp *comp = (struct dcs_comp *)uct_comp;
-        uct_dc_mlx5_ep_t *ep;
 
         EXPECT_UCS_OK(status);
 
-        ep = dc_ep(comp->e, 0);
-        /* dci must be released before completion cb is called */
-        EXPECT_EQ(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
         comp->e->destroy_eps();
     }
 
@@ -278,9 +274,10 @@ UCS_TEST_P(test_dc, dcs_ep_flush_destroy) {
     EXPECT_EQ(1, iface->tx.stack_top);
     EXPECT_EQ(ep, iface->tx.dcis[ep->dci].ep);
 
-    comp.uct_comp.count = 1;
-    comp.uct_comp.func  = uct_comp_cb;
-    comp.e              = m_e1;
+    comp.uct_comp.count  = 1;
+    comp.uct_comp.func   = uct_comp_cb;
+    comp.uct_comp.status = UCS_OK;
+    comp.e               = m_e1;
 
     status = uct_ep_flush(m_e1->ep(0), 0, &comp.uct_comp);
     do {

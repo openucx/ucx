@@ -490,6 +490,24 @@ static void *uct_ud_verbs_ep_get_peer_address(uct_ud_ep_t *ud_ep)
     return &ep->peer_address;
 }
 
+static size_t uct_ud_verbs_get_peer_address_length()
+{
+    return sizeof(uct_ud_verbs_ep_peer_address_t);
+}
+
+static const char*
+uct_ud_verbs_iface_peer_address_str(const uct_ud_iface_t *iface,
+                                    const void *address,
+                                    char *str, size_t max_size)
+{
+    const uct_ud_verbs_ep_peer_address_t *peer_address =
+        (const uct_ud_verbs_ep_peer_address_t*)address;
+
+    ucs_snprintf_zero(str, max_size, "ah=%p dest_qpn=%u",
+                      peer_address->ah, peer_address->dest_qpn);
+    return str;
+}
+
 static ucs_status_t
 uct_ud_verbs_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 {
@@ -543,7 +561,9 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
     .create_qp                = uct_ib_iface_create_qp,
     .unpack_peer_address      = uct_ud_verbs_iface_unpack_peer_address,
-    .ep_get_peer_address      = uct_ud_verbs_ep_get_peer_address
+    .ep_get_peer_address      = uct_ud_verbs_ep_get_peer_address,
+    .get_peer_address_length  = uct_ud_verbs_get_peer_address_length,
+    .peer_address_str         = uct_ud_verbs_iface_peer_address_str
 };
 
 static UCS_F_NOINLINE void
@@ -660,9 +680,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_iface_t)
 {
     ucs_trace_func("");
     uct_ud_iface_remove_async_handlers(&self->super);
-    uct_ud_enter(&self->super);
-    UCT_UD_IFACE_DELETE_EPS(&self->super, uct_ud_verbs_ep_t);
-    uct_ud_leave(&self->super);
 }
 
 UCS_CLASS_DEFINE(uct_ud_verbs_iface_t, uct_ud_iface_t);

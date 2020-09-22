@@ -19,9 +19,16 @@ public class UcpRequest extends UcxNativeStruct implements Closeable {
 
     private long recvSize;
 
+    private long senderTag;
+
     private UcpRequest(long nativeId) {
         setNativeId(nativeId);
     }
+
+    /**
+     * To initialize for failed and immediately completed requests.
+     */
+    private UcpRequest() { }
 
     /**
      * The size of the received data in bytes, valid only for recv requests, e.g.:
@@ -29,6 +36,13 @@ public class UcpRequest extends UcxNativeStruct implements Closeable {
      */
     public long getRecvSize() {
         return recvSize;
+    }
+
+    /**
+     * Sender tag, valid only for tag receive requests.
+     */
+    public long getSenderTag() {
+        return senderTag;
     }
 
     /**

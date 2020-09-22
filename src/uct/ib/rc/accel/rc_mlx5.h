@@ -20,7 +20,9 @@
     UCT_RC_CHECK_CQE_RET(&(_iface)->super, &(_ep)->super, \
                          UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
     UCT_RC_CHECK_TXQP_RET(&(_iface)->super, &(_ep)->super, \
-                          UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
+                          UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
+    UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super, \
+                                   UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE))
 
 
 /**
@@ -108,6 +110,8 @@ ucs_status_t uct_rc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                            uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags);
+
+ucs_status_t uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 

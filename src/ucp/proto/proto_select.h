@@ -33,10 +33,12 @@ typedef struct {
  * Protocol selection per a particular buffer type and operation
  */
 typedef struct {
-    ucp_proto_threshold_elem_t  *thresholds; /* Array of which protocol to use
-                                                for different message sizes */
-    void                        *priv_buf;   /* Private configuration area for
-                                                the selected protocols */
+    const ucp_proto_threshold_elem_t *thresholds; /* Array of which protocol to use
+                                                     for different message sizes */
+    const ucp_proto_perf_range_t     *perf_ranges;/* Estimated performance for
+                                                     the selected protocols */
+    void                             *priv_buf;   /* Private configuration area
+                                                     for the selected protocols */
 } ucp_proto_select_elem_t;
 
 
@@ -49,12 +51,12 @@ KHASH_TYPE(ucp_proto_select_hash, khint64_t, ucp_proto_select_elem_t)
  */
 typedef struct {
     /* Lookup from protocol selection key to thresholds array */
-    khash_t(ucp_proto_select_hash) hash;
+    khash_t(ucp_proto_select_hash)    hash;
 
     /* cache the last used protocol, for fast lookup */
     struct {
-        uint64_t                   key;
-        ucp_proto_select_elem_t    *value;
+        uint64_t                      key;
+        const ucp_proto_select_elem_t *value;
     } cache;
 } ucp_proto_select_t;
 
@@ -69,13 +71,26 @@ void ucp_proto_select_dump(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_in
                            ucp_worker_cfg_index_t rkey_cfg_index,
                            ucp_proto_select_t *proto_select, FILE *stream);
 
-void ucp_proto_select_dump_all(ucp_worker_h worker,
-                               ucp_worker_cfg_index_t ep_cfg_index,
-                               ucp_worker_cfg_index_t rkey_cfg_index,
-                               const ucp_proto_select_param_t *select_param,
-                               FILE *stream);
 
 void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
                                 ucs_string_buffer_t *strb);
+
+
+ucp_proto_select_elem_t *
+ucp_proto_select_lookup_slow(ucp_worker_h worker,
+                             ucp_proto_select_t *proto_select,
+                             ucp_worker_cfg_index_t ep_cfg_index,
+                             ucp_worker_cfg_index_t rkey_cfg_index,
+                             const ucp_proto_select_param_t *select_param);
+
+
+const ucp_proto_threshold_elem_t*
+ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
+                                 size_t msg_length);
+
+
+void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
+                                ucs_string_buffer_t *strb);
+
 
 #endif

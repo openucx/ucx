@@ -8,12 +8,13 @@ if HAVE_JAVA
 jardir         = $(libdir)
 topdir         = $(abs_top_builddir)
 java_build_dir = $(builddir)/build-java
+maven_repo    ?= $(java_build_dir)/.deps
 jarfile        = $(java_build_dir)/jucx-@VERSION@.jar
 javadir        = $(top_srcdir)/bindings/java
 
 MVNCMD = $(MVN) -B -T 1C -f \
          $(topdir)/bindings/java/pom.xml \
-         -Dmaven.repo.local=$(java_build_dir)/.deps \
+         -Dmaven.repo.local=$(maven_repo) \
          -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
 JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConstants.h             \

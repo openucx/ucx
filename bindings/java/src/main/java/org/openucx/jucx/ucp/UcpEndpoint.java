@@ -166,7 +166,6 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      */
     public void getNonBlockingImplicit(long remoteAddress, UcpRemoteKey remoteKey,
                                        long localAddress, long size) {
-
         getNonBlockingImplicitNative(getNativeId(), remoteAddress, remoteKey.getNativeId(),
               localAddress, size);
     }
@@ -193,9 +192,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
 
     public UcpRequest sendTaggedNonBlocking(long localAddress, long size,
                                             long tag, UcxCallback callback) {
-
-        return sendTaggedNonBlockingNative(getNativeId(),
-            localAddress, size, tag, callback);
+        return sendTaggedNonBlockingNative(getNativeId(), localAddress, size, tag, callback);
     }
 
     /**
@@ -204,6 +201,17 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      */
     public UcpRequest sendTaggedNonBlocking(ByteBuffer sendBuffer, UcxCallback callback) {
         return sendTaggedNonBlocking(sendBuffer, 0, callback);
+    }
+
+    /**
+     * Iov version of non blocking send operaation
+     */
+    public UcpRequest sendTaggedNonBlocking(long[] localAddresses, long[] sizes,
+                                            long tag, UcxCallback callback) {
+        UcxParams.checkArraySizes(localAddresses, sizes);
+
+        return sendTaggedIovNonBlockingNative(getNativeId(), localAddresses, sizes,
+            tag, callback);
     }
 
     /**
@@ -217,9 +225,15 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
         return sendStreamNonBlockingNative(getNativeId(), localAddress, size, callback);
     }
 
+    public UcpRequest sendStreamNonBlocking(long[] localAddresses, long[] sizes,
+                                            UcxCallback callback) {
+        UcxParams.checkArraySizes(localAddresses, sizes);
+
+        return sendStreamIovNonBlockingNative(getNativeId(), localAddresses, sizes, callback);
+    }
+
     public UcpRequest sendStreamNonBlocking(ByteBuffer buffer, UcxCallback callback) {
-        return sendStreamNonBlockingNative(getNativeId(), UcxUtils.getAddress(buffer),
-            buffer.remaining(), callback);
+        return sendStreamNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(), callback);
     }
 
     /**
@@ -233,6 +247,14 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     public UcpRequest recvStreamNonBlocking(long localAddress, long size, long flags,
                                             UcxCallback callback) {
         return recvStreamNonBlockingNative(getNativeId(), localAddress, size, flags, callback);
+    }
+
+    public UcpRequest recvStreamNonBlocking(long[] localAddresses, long[] sizes, long flags,
+                                            UcxCallback callback) {
+        UcxParams.checkArraySizes(localAddresses, sizes);
+
+        return recvStreamIovNonBlockingNative(getNativeId(), localAddresses, sizes, flags,
+            callback);
     }
 
     public UcpRequest recvStreamNonBlocking(ByteBuffer buffer, long flags, UcxCallback callback) {
@@ -293,12 +315,27 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
                                                                  long size, long tag,
                                                                  UcxCallback callback);
 
+    private static native UcpRequest sendTaggedIovNonBlockingNative(long enpointId,
+                                                                    long[] localAddresses,
+                                                                    long[] sizes, long tag,
+                                                                    UcxCallback callback);
+
     private static native UcpRequest sendStreamNonBlockingNative(long enpointId, long localAddress,
                                                                  long size, UcxCallback callback);
+
+    private static native UcpRequest sendStreamIovNonBlockingNative(long enpointId,
+                                                                    long[] localAddresses,
+                                                                    long[] sizes,
+                                                                    UcxCallback callback);
 
     private static native UcpRequest recvStreamNonBlockingNative(long enpointId, long localAddress,
                                                                  long size, long flags,
                                                                  UcxCallback callback);
+
+    private static native UcpRequest recvStreamIovNonBlockingNative(long enpointId,
+                                                                    long[] localAddresses,
+                                                                    long[] sizes, long flags,
+                                                                    UcxCallback callback);
 
     private static native UcpRequest flushNonBlockingNative(long enpointId, UcxCallback callback);
 

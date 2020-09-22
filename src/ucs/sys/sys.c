@@ -26,6 +26,7 @@
 #include <sys/shm.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <net/if.h>
 #include <dirent.h>
 #include <sched.h>
@@ -283,15 +284,44 @@ int ucs_get_first_cpu()
 uint64_t ucs_generate_uuid(uint64_t seed)
 {
     struct timeval tv;
+    uint64_t high;
+    uint64_t low;
+    uint64_t boot_id = 0;
+    ucs_status_t status;
+
+    status = ucs_sys_get_boot_id(&high, &low);
+    if (status == UCS_OK) {
+        boot_id = high ^ low;
+    } else {
+        ucs_error("failed to get boot id");
+    }
 
     gettimeofday(&tv, NULL);
     return seed +
            ucs_get_prime(0) * ucs_get_tid() +
            ucs_get_prime(1) * ucs_get_time() +
-           ucs_get_prime(2) * ucs_get_mac_address() +
+           ucs_get_prime(2) * boot_id +
            ucs_get_prime(3) * tv.tv_sec +
            ucs_get_prime(4) * tv.tv_usec +
            __sumup_host_name(5);
+}
+
+int ucs_sys_max_open_files()
+{
+    static int file_limit = 0;
+    struct rlimit rlim;
+    int ret;
+
+    if (file_limit == 0) {
+        ret = getrlimit(RLIMIT_NOFILE, &rlim);
+        if (ret == 0) {
+            file_limit = (int)rlim.rlim_cur;
+        } else {
+            file_limit = 1024;
+        }
+    }
+
+    return file_limit;
 }
 
 ucs_status_t
@@ -466,22 +496,23 @@ size_t ucs_get_page_size()
     return page_size;
 }
 
-void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
-                           size_t *max_page_size_p)
+void ucs_sys_iterate_vm(void *address, size_t size, ucs_sys_vma_cb_t cb,
+                        void *ctx)
 {
-    int found = 0;
+    ucs_sys_vma_info_t info;
     unsigned long start, end;
     unsigned long page_size_kb;
-    size_t page_size;
     char buf[1024];
+    char *p, *save;
     FILE *file;
     int n;
 
     file = fopen(UCS_PROCESS_SMAPS_FILE, "r");
     if (!file) {
-        goto out;
+        return;
     }
 
+    /* coverity[tainted_data_argument] */
     while (fgets(buf, sizeof(buf), file) != NULL) {
         n = sscanf(buf, "%lx-%lx", &start, &end);
         if (n != 2) {
@@ -497,29 +528,69 @@ void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
             continue;
         }
 
+        memset(&info, 0, sizeof(info));
+        info.start = start;
+        info.end   = end;
+
         while (fgets(buf, sizeof(buf), file) != NULL) {
             n = sscanf(buf, "KernelPageSize: %lu kB", &page_size_kb);
-            if (n < 1) {
+            if (n == 1) {
+                info.page_size = page_size_kb * UCS_KBYTE;
                 continue;
             }
 
-            page_size = page_size_kb * UCS_KBYTE;
-            if (found) {
-                *min_page_size_p = ucs_min(*min_page_size_p, page_size);
-                *max_page_size_p = ucs_max(*max_page_size_p, page_size);
-            } else {
-                found            = 1;
-                *min_page_size_p = page_size;
-                *max_page_size_p = page_size;
+            n = 9;
+            if (memcmp(buf, "VmFlags: ", n) == 0) {
+                p = buf + n;
+                while ((p = strtok_r(p, " \n", &save)) != NULL) {
+                    if (strcmp(p, "dc") == 0) {
+                        info.flags |= UCS_SYS_VMA_FLAG_DONTCOPY;
+                    }
+
+                    p = NULL;
+                }
+
+                break;
             }
-            break;
         }
+
+        cb(&info, ctx);
     }
 
     fclose(file);
+}
 
-out:
-    if (!found) {
+typedef struct {
+    int    found;
+    size_t min_page_size;
+    size_t max_page_size;
+} ucs_mem_page_size_info_t;
+
+static void ucs_get_mem_page_size_cb(ucs_sys_vma_info_t *mem_info, void *ctx)
+{
+    ucs_mem_page_size_info_t *info = (ucs_mem_page_size_info_t *)ctx;
+
+    if (info->found) {
+        info->min_page_size = ucs_min(info->min_page_size, mem_info->page_size);
+        info->max_page_size = ucs_max(info->max_page_size, mem_info->page_size);
+    } else {
+        info->found         = 1;
+        info->min_page_size = mem_info->page_size;
+        info->max_page_size = mem_info->page_size;
+    }
+}
+
+void ucs_get_mem_page_size(void *address, size_t size, size_t *min_page_size_p,
+                           size_t *max_page_size_p)
+{
+    ucs_mem_page_size_info_t info = {};
+
+    ucs_sys_iterate_vm(address, size, ucs_get_mem_page_size_cb, &info);
+
+    if (info.found) {
+        *min_page_size_p = info.min_page_size;
+        *max_page_size_p = info.max_page_size;
+    } else {
         *min_page_size_p = *max_page_size_p = ucs_get_page_size();
     }
 }
@@ -810,7 +881,11 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
 
     /* Attach segment */
     if (*address_p) {
+#ifdef SHM_REMAP
         ptr = shmat(*shmid, *address_p, SHM_REMAP);
+#else
+        return UCS_ERR_INVALID_PARAM;
+#endif
     } else {
         ptr = shmat(*shmid, NULL, 0);
     }
@@ -1321,7 +1396,7 @@ ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)
 
 ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ctx)
 {
-    ucs_status_t res = 0;
+    ucs_status_t res = UCS_OK;
     DIR *dir;
     struct dirent *entry;
     struct dirent *entry_out;
@@ -1358,7 +1433,7 @@ static ucs_status_t ucs_sys_enum_threads_cb(struct dirent *entry, void *_ctx)
     ucs_sys_enum_threads_t *ctx = (ucs_sys_enum_threads_t*)_ctx;
 
     return strncmp(entry->d_name, ".", 1) ?
-           ctx->cb((pid_t)atoi(entry->d_name), ctx->ctx) : 0;
+           ctx->cb((pid_t)atoi(entry->d_name), ctx->ctx) : UCS_OK;
 }
 
 ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx)

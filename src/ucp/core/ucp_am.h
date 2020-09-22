@@ -8,33 +8,38 @@
 #ifndef UCP_AM_H_
 #define UCP_AM_H_
 
-#include "ucp_ep.h"
+
+#include <ucs/datastruct/array.h>
+#include <ucp/rndv/rndv.h>
 
 
-#define UCP_AM_CB_BLOCK_SIZE 16
+enum {
+    UCP_AM_CB_PRIV_FIRST_FLAG = UCS_BIT(15),
+
+    /* Indicates that cb was set with ucp_worker_set_am_recv_handler */
+    UCP_AM_CB_PRIV_FLAG_NBX   = UCP_AM_CB_PRIV_FIRST_FLAG
+};
 
 
 /**
  * Data that is stored about each callback registered with a worker
  */
 typedef struct ucp_am_entry {
-    ucp_am_callback_t        cb;       /* user defined callback*/
-    void                     *context; /* user defined callback argument */
-    unsigned                 flags;    /* flags affecting callback behavior */
+    union {
+        ucp_am_callback_t      cb_old;   /* user defined callback, used by legacy API */
+        ucp_am_recv_callback_t cb;       /* user defined callback */
+    };
+    void                       *context;   /* user defined callback argument */
+    unsigned                   flags;      /* flags affecting callback behavior
+                                              (set by the user) */
 } ucp_am_entry_t;
-
-
-typedef struct ucp_am_context {
-    ucp_am_entry_t           *cbs;          /* array of callbacks and their data */
-    size_t                   cbs_array_len; /* len of callbacks array */
-} ucp_am_context_t;
 
 
 typedef union {
     struct {
-        uint16_t             am_id;   /* index into callback array */
-        uint16_t             flags;   /* operation flags */
-        uint32_t             padding;
+        uint16_t             am_id;         /* index into callback array */
+        uint16_t             flags;         /* operation flags */
+        uint32_t             header_length; /* user header length */
     };
 
     uint64_t                 u64;     /* this is used to ensure the size of
@@ -44,7 +49,7 @@ typedef union {
 
 typedef struct {
     ucp_am_hdr_t             super;
-    uintptr_t                ep_ptr; /* ep which can be used for reply */
+    uint64_t                 ep_id; /* ep which can be used for reply */
 } UCS_S_PACKED ucp_am_reply_hdr_t;
 
 
@@ -58,7 +63,7 @@ typedef struct {
 typedef struct {
     uint64_t                 msg_id;     /* method to match parts of the same AM */
     size_t                   offset;     /* offset in the entire AM buffer */
-    uintptr_t                ep_ptr;     /* ep which can be used for reply */
+    uint64_t                 ep_id;      /* ep which can be used for reply */
 } UCS_S_PACKED ucp_am_mid_hdr_t;
 
 
@@ -68,6 +73,16 @@ typedef struct {
 } ucp_am_first_desc_t;
 
 
+typedef struct {
+    ucp_rndv_rts_hdr_t       super;
+    ucp_am_hdr_t             am;
+    /*
+     * 1. packed rkeys follow
+     * 2. user header follows, if am->header_length is not 0
+     */
+} UCS_S_PACKED ucp_am_rndv_rts_hdr_t;
+
+
 ucs_status_t ucp_am_init(ucp_worker_h worker);
 
 void ucp_am_cleanup(ucp_worker_h worker);
@@ -75,5 +90,13 @@ void ucp_am_cleanup(ucp_worker_h worker);
 void ucp_am_ep_init(ucp_ep_h ep);
 
 void ucp_am_ep_cleanup(ucp_ep_h ep);
+
+size_t ucp_am_max_header_size(ucp_worker_h worker);
+
+ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
+                                     unsigned tl_flags);
+
+UCS_ARRAY_DECLARE_TYPE(ucp_am_cbs, unsigned, ucp_am_entry_t)
+
 
 #endif

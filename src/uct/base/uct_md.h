@@ -45,6 +45,7 @@ typedef ucs_status_t (*uct_md_query_func_t)(uct_md_h md,
 typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
                                                 size_t *length_p,
                                                 void **address_p,
+                                                ucs_memory_type_t mem_type,
                                                 unsigned flags,
                                                 const char *alloc_name,
                                                 uct_mem_h *memh_p);
@@ -142,6 +143,39 @@ ucs_status_t
 uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
                                unsigned *num_resources_p);
 
+
+/**
+ * @ingroup UCT_MD
+ * @brief Allocate memory for zero-copy sends and remote access.
+ *
+ * Allocate memory on the memory domain. In order to use this function, MD
+ * must support @ref UCT_MD_FLAG_ALLOC flag.
+ *
+ * @param [in]     md          Memory domain to allocate memory on.
+ * @param [in,out] length_p    Points to the size of memory to allocate. Upon successful
+ *                             return, filled with the actual size that was allocated,
+ *                             which may be larger than the one requested. Must be >0.
+ * @param [in,out] address_p   The address
+ * @param [in]     mem_type    Memory type of the allocation
+ * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
+ * @param [in]     name        Name of the allocated region, used to track memory
+ *                             usage for debugging and profiling.
+ * @param [out]    memh_p      Filled with handle for allocated region.
+ */
+ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
+                              ucs_memory_type_t mem_type, unsigned flags,
+                              const char *alloc_name, uct_mem_h *memh_p);
+
+/**
+ * @ingroup UCT_MD
+ * @brief Release memory allocated by @ref uct_md_mem_alloc.
+ *
+ * @param [in]     md          Memory domain memory was allocated on.
+ * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc.
+ */
+ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
+
+
 /**
  * @brief Dummy function
  * Dummy function to emulate unpacking a remote key buffer to handle.
@@ -150,6 +184,15 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p);
+
+/**
+ * Check allocation parameters and return an appropriate error if parameters
+ * cannot be used for an allocation
+ */
+ucs_status_t uct_mem_alloc_check_params(size_t length,
+                                        const uct_alloc_method_t *methods,
+                                        unsigned num_methods,
+                                        const uct_mem_alloc_params_t *params);
 
 extern ucs_config_field_t uct_md_config_table[];
 

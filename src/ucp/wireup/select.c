@@ -538,7 +538,8 @@ out_add_lane:
     lane_desc->proxy_lane   = proxy_lane;
     lane_desc->dst_md_index = dst_md_index;
     lane_desc->lane_types   = UCS_BIT(lane_type);
-    for (lane_type_iter = 0; lane_type_iter < UCP_LANE_TYPE_LAST;
+    for (lane_type_iter = UCP_LANE_TYPE_FIRST;
+         lane_type_iter < UCP_LANE_TYPE_LAST;
          ++lane_type_iter) {
         lane_desc->score[lane_type_iter] = 0.0;
     }
@@ -776,6 +777,7 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
     criteria->calc_score         = ucp_wireup_aux_score_func;
     criteria->tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX; /* Can use aux transports */
 
+    /* TODO: add evaluation for err handling/keepalive mode */
     ucp_wireup_fill_peer_err_criteria(criteria, ep_init_flags);
 }
 
@@ -824,16 +826,15 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    select_info.priority   = 0;  /**< Currently we have only 1 CM
-                                      implementation */
+    select_info.priority   = 0;  /**< Currently we have only 1 active CM */
     select_info.rsc_index  = UCP_NULL_RESOURCE; /**< RSC doesn't matter for CM */
     select_info.addr_index = 0;  /**< This makes sense only for transport
                                       lanes */
-    select_info.score      = 0.; /**< TODO: when we have > 1 CM implementation */
+    select_info.score      = 0.; /**< TODO: when we have > 1 active CMs */
     select_info.path_index = 0;  /**< Only one lane per CM device */
 
     /* server is not a proxy because it can create all lanes connected */
-    return ucp_wireup_add_lane_desc(&select_info, select_info.rsc_index,
+    return ucp_wireup_add_lane_desc(&select_info, UCP_NULL_RESOURCE,
                                     UCP_LANE_TYPE_CM, 0, select_ctx);
 }
 
@@ -1239,7 +1240,8 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
         md_reg_flag = 0;
-    } else if (ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) {
+    } else if (ucp_ep_get_context_features(ep) &
+               (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
         /* if needed for RNDV, need only access for remote registered memory */
         md_reg_flag = UCT_MD_FLAG_REG;
     } else {
@@ -1503,13 +1505,51 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
 
     /* User should not create endpoints unless requested communication features */
     if (select_ctx->num_lanes == 0) {
-        ucs_error("No transports selected to %s (features: 0x%lx)",
+        ucs_error("No transports selected to %s (features: 0x%"PRIx64")",
                   select_params->address->name,
                   ucp_ep_get_context_features(select_params->ep));
         return UCS_ERR_UNREACHABLE;
     }
 
     return UCS_OK;
+}
+
+static void ucp_wireup_init_keepalive_map(ucp_worker_h worker,
+                                          ucp_ep_config_key_t *key)
+{
+    ucp_context_h context = worker->context;
+    ucp_lane_index_t lane;
+    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t dev_index;
+    uct_iface_attr_t *iface_attr;
+    uint64_t dev_map_used;
+
+    key->ep_check_map = 0;
+    if (key->err_mode == UCP_ERR_HANDLING_MODE_NONE) {
+        return;
+    }
+
+    dev_map_used = 0;
+
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        /* add lanes to ep_check map */
+        rsc_index = key->lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        dev_index = context->tl_rscs[rsc_index].dev_index;
+        ucs_assert(dev_index < (sizeof(dev_map_used) * 8));
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+        if (!(UCS_BIT(dev_index) & dev_map_used) &&
+             /* TODO: convert to assert to make sure iface supports
+              * both err handling & ep_check */
+            (iface_attr->cap.flags & UCT_IFACE_FLAG_EP_CHECK)) {
+            ucs_assert(!(key->ep_check_map & UCS_BIT(lane)));
+            key->ep_check_map |= UCS_BIT(lane);
+            dev_map_used      |= UCS_BIT(dev_index);
+        }
+    }
 }
 
 static UCS_F_NOINLINE void
@@ -1621,6 +1661,8 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     /* use AM lane first for eager AM transport to simplify processing single/middle
      * msg packets */
     key->am_bw_lanes[0] = key->am_lane;
+
+    ucp_wireup_init_keepalive_map(worker, key);
 }
 
 ucs_status_t

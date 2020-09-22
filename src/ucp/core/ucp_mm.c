@@ -130,7 +130,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
 
             ucs_log(level,
                     "failed to register address %p mem_type bit 0x%lx length %zu on "
-                    "md[%d]=%s: %s (md reg_mem_types 0x%lx)",
+                    "md[%d]=%s: %s (md reg_mem_types 0x%"PRIx64")",
                     address, UCS_BIT(mem_type), length, md_index,
                     context->tl_mds[md_index].rsc.md_name,
                     ucs_status_string(status),
@@ -177,6 +177,7 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
 {
     uct_allocated_memory_t mem;
     uct_alloc_method_t method;
+    uct_mem_alloc_params_t params;
     unsigned method_index, md_index, num_mds;
     ucs_status_t status;
     uct_md_h *mds;
@@ -203,8 +204,20 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
             }
         }
 
-        status = uct_mem_alloc(memh->address, length, uct_flags, &method, 1, mds,
-                               num_mds, name, &mem);
+        memset(&params, 0, sizeof(params));
+        params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_MEM_TYPE |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_MDS      |
+                                 UCT_MEM_ALLOC_PARAM_FIELD_NAME;
+        params.flags           = uct_flags;
+        params.name            = name;
+        params.mem_type        = UCS_MEMORY_TYPE_HOST;
+        params.address         = memh->address;
+        params.mds.mds         = mds;
+        params.mds.count       = num_mds;
+
+        status = uct_mem_alloc(length, &method, 1, &params, &mem);
         if (status == UCS_OK) {
             goto allocated;
         }
@@ -295,9 +308,8 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
             goto err_free_memh;
         }
     } else {
-        memh->mem_type     = (memory_type == UCS_MEMORY_TYPE_UNKNOWN) ?
-                             ucp_memory_type_detect(context, address, length) :
-                             memory_type;
+        memh->mem_type     = ucp_get_memory_type(context, address, length,
+                                                 memory_type);
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
@@ -314,7 +326,7 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
         }
     }
 
-    ucs_debug("%s buffer %p length %zu memh %p md_map 0x%lx",
+    ucs_debug("%s buffer %p length %zu memh %p md_map 0x%"PRIx64,
               (memh->alloc_method == UCT_ALLOC_METHOD_LAST) ? "mapped" : "allocated",
               memh->address, memh->length, memh, memh->md_map);
     *memh_p = memh;

@@ -372,7 +372,7 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
 
     if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) {
         /* Rendezvous request arrived, data contains an internal UCX descriptor,
-         * which has to be passed to ucp_am_data_recv_nbx function to confirm
+         * which has to be passed to ucp_am_recv_data_nbx function to confirm
          * data transfer.
          */
         am_data_desc.is_rndv = 1;
@@ -422,13 +422,14 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
              * to confirm data transfer from the sender to the "recv_message"
              * buffer. */
             params.op_attr_mask |= UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
-            params.cb.recv_am    = (ucp_am_data_recv_nbx_callback_t)am_recv_cb,
-            request              = ucp_am_data_recv_nbx(am_data_desc.desc,
+            params.cb.recv_am    = am_recv_cb,
+            request              = ucp_am_recv_data_nbx(ucp_worker,
+                                                        am_data_desc.desc,
                                                         &recv_message,
                                                         TEST_STRING_LEN,
                                                         &params);
         } else {
-            /* Data is arrived eagerly and is ready for use, no need to
+            /* Data has arrived eagerly and is ready for use, no need to
              * initiate receive operation. */
             request = NULL;
         }
@@ -797,9 +798,9 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
 
     if (send_recv_type == CLIENT_SERVER_SEND_RECV_AM) {
         /* Initialize Active Message data handler */
-        param.field_mask = UCP_AM_HANDLER_ATTR_FIELD_ID |
-                           UCP_AM_HANDLER_ATTR_FIELD_CB |
-                           UCP_AM_HANDLER_ATTR_FIELD_ARG;
+        param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                           UCP_AM_HANDLER_PARAM_FIELD_CB |
+                           UCP_AM_HANDLER_PARAM_FIELD_ARG;
         param.id         = TEST_AM_ID;
         param.cb         = ucp_am_data_cb;
         param.arg        = ucp_data_worker; /* not used in our callback */

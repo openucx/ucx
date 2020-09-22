@@ -333,9 +333,9 @@ void test_ucp_tag_xfer::test_xfer_probe(bool send_contig, bool recv_contig,
     wait(rreq);
     if (sreq != NULL) {
         wait(sreq);
-        request_release(sreq);
+        request_free(sreq);
     }
-    request_release(rreq);
+    request_free(rreq);
 
     free(sendbuf);
     free(recvbuf);
@@ -447,12 +447,12 @@ void test_ucp_tag_xfer::test_xfer_generic_err(size_t size, bool expected,
     wait(rreq);
     if (sreq != NULL) {
         wait(sreq);
-        request_release(sreq);
+        request_free(sreq);
     }
 
     /* the generic unpack function is expected to fail */
     EXPECT_EQ(UCS_ERR_NO_MEMORY, rreq->status);
-    request_release(rreq);
+    request_free(rreq);
     EXPECT_EQ(2, ucp::dt_gen_start_count);
     EXPECT_EQ(2, ucp::dt_gen_finish_count);
     ucp_dt_destroy(dt);
@@ -503,7 +503,7 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
     wait(rreq);
     if (sreq != NULL) {
         wait(sreq);
-        request_release(sreq);
+        request_free(sreq);
     }
 
     recvd = rreq->info.length;
@@ -514,7 +514,7 @@ size_t test_ucp_tag_xfer::do_xfer(const void *sendbuf, void *recvbuf,
         EXPECT_EQ(UCS_ERR_MESSAGE_TRUNCATED, rreq->status);
     }
 
-    request_release(rreq);
+    request_free(rreq);
     return recvd;
 }
 

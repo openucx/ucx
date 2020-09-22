@@ -282,9 +282,18 @@ void ucm_strerror(int eno, char *buf, size_t max)
 
 void ucm_prevent_dl_unload()
 {
+    int flags = RTLD_LOCAL | RTLD_NODELETE;
     Dl_info info;
     void *dl;
     int ret;
+
+    if (ucm_global_opts.module_unload_prevent_mode ==
+        UCM_UNLOAD_PREVENT_MODE_NONE) {
+        return;
+    }
+
+    flags |= (ucm_global_opts.module_unload_prevent_mode ==
+              UCM_UNLOAD_PREVENT_MODE_NOW) ? RTLD_NOW : RTLD_LAZY;
 
     /* Get the path to current library by current function pointer */
     (void)dlerror();
@@ -299,7 +308,7 @@ void ucm_prevent_dl_unload()
      * NODELETE flag to the dynamic link map.
      */
     (void)dlerror();
-    dl = dlopen(info.dli_fname, RTLD_LOCAL|RTLD_LAZY|RTLD_NODELETE);
+    dl = dlopen(info.dli_fname, flags);
     if (dl == NULL) {
         ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
         return;

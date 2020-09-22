@@ -18,28 +18,6 @@ extern "C" {
 
 class test_uct_sockaddr : public uct_test {
 public:
-    struct completion : public uct_completion_t {
-        volatile bool m_flag;
-
-        completion() : m_flag(false), m_status(UCS_INPROGRESS) {
-            count = 1;
-            func  = completion_cb;
-        }
-
-        ucs_status_t status() const {
-            return m_status;
-        }
-    private:
-        static void completion_cb(uct_completion_t *self, ucs_status_t status)
-        {
-            completion *c = static_cast<completion*>(self);
-            c->m_status   = status;
-            c->m_flag     = true;
-        }
-
-        ucs_status_t m_status;
-    };
-
     test_uct_sockaddr() : server(NULL), client(NULL), err_count(0),
                           server_recv_req(0), delay_conn_reply(false) {
     }
@@ -234,11 +212,18 @@ UCS_TEST_P(test_uct_sockaddr, connect_client_to_server_with_delay)
         delayed_conn_reqs.pop();
     }
 
-    completion comp;
+    uct_completion_t comp;
+    comp.func   = (uct_completion_callback_t)ucs_empty_function;
+    comp.count  = 1;
+    comp.status = UCS_OK;
+
     ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
     if (status == UCS_INPROGRESS) {
-        wait_for_flag(&comp.m_flag);
-        EXPECT_EQ(UCS_OK, comp.status());
+        do {
+            short_progress_loop();
+            /* coverity[loop_condition] */
+        } while (comp.count != 0);
+        EXPECT_EQ(UCS_OK, comp.status);
     } else {
         EXPECT_EQ(UCS_OK, status);
     }
@@ -351,11 +336,19 @@ UCS_TEST_SKIP_COND_P(test_uct_sockaddr, conn_to_non_exist_server,
         /* client - try to connect to a non-existing port on the server side */
         client->connect(0, *server, 0, m_connect_addr, client_iface_priv_data_cb,
                         NULL, NULL, this);
-        completion comp;
+
+        uct_completion_t comp;
+        comp.func   = (uct_completion_callback_t)ucs_empty_function;
+        comp.count  = 1;
+        comp.status = UCS_OK;
+
         ucs_status_t status = uct_ep_flush(client->ep(0), 0, &comp);
         if (status == UCS_INPROGRESS) {
-            wait_for_flag(&comp.m_flag);
-            EXPECT_EQ(UCS_ERR_UNREACHABLE, comp.status());
+            do {
+                short_progress_loop();
+                /* coverity[loop_condition] */
+            } while (comp.count != 0);
+            EXPECT_EQ(UCS_ERR_UNREACHABLE, comp.status);
         } else {
             EXPECT_EQ(UCS_ERR_UNREACHABLE, status);
         }

@@ -115,6 +115,7 @@ public:
                 uint64_t local_val  = ucs::rand();
                 uint64_t remote_val = ucs::rand();
                 uct_comp.count      = 1;
+                uct_comp.status     = UCS_OK;
 
                 if (m_recvbuf.length() == sizeof(uint32_t)) {
                     *(uint32_t*)m_recvbuf.ptr() = remote_val;

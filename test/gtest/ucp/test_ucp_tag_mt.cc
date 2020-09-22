@@ -72,12 +72,13 @@ UCS_TEST_P(test_ucp_tag_mt, send_recv) {
             worker_index = i;
         }
 
-        send_b(&(send_data[i]), sizeof(send_data[i]), DATATYPE, 0x111337+i, i);
+        send_b(&(send_data[i]), sizeof(send_data[i]), DATATYPE, 0x111337+i,
+               NULL, i);
 
         short_progress_loop(worker_index); /* Receive messages as unexpected */
 
         status = recv_b(&(recv_data[i]), sizeof(recv_data[i]), DATATYPE, 0x1337+i,
-                        0xffff, &(info[i]), i);
+                        0xffff, &(info[i]), NULL, i);
         ASSERT_UCS_OK(status);
 
         EXPECT_EQ(sizeof(send_data[i]),   info[i].length);

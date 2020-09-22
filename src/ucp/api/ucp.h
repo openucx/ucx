@@ -635,7 +635,7 @@ typedef enum {
      * Indicates that the arriving data was sent using rendezvous protocol.
      * In this case @a data parameter of the @ref ucp_am_recv_callback_t points
      * to the internal UCP descriptor, which can be used for obtaining the actual
-     * data by calling @ref ucp_am_data_recv_nbx routine. This flag is mutually
+     * data by calling @ref ucp_am_recv_data_nbx routine. This flag is mutually
      * exclusive with @a UCP_AM_RECV_ATTR_FLAG_DATA.
      */
     UCP_AM_RECV_ATTR_FLAG_RNDV         = UCS_BIT(17)
@@ -649,12 +649,24 @@ typedef enum {
  * The enumeration allows specifying which fields in @ref ucp_am_handler_param_t
  * are present. It is used to enable backward compatibility support.
  */
-typedef enum {
-    UCP_AM_HANDLER_ATTR_FIELD_ID       = UCS_BIT(0), /**< id field */
-    UCP_AM_HANDLER_ATTR_FIELD_FLAGS    = UCS_BIT(1), /**< flags field */
-    UCP_AM_HANDLER_ATTR_FIELD_CB       = UCS_BIT(2), /**< cb field */
-    UCP_AM_HANDLER_ATTR_FIELD_ARG      = UCS_BIT(3)  /**< arg field */
-} ucp_am_handler_attr_field;
+enum ucp_am_handler_param_field {
+    /**
+     * Indicates that @ref ucp_am_handler_param_t.id field is valid.
+     */
+    UCP_AM_HANDLER_PARAM_FIELD_ID      = UCS_BIT(0),
+    /**
+     * Indicates that @ref ucp_am_handler_param_t.flags field is valid.
+     */
+    UCP_AM_HANDLER_PARAM_FIELD_FLAGS   = UCS_BIT(1),
+    /**
+     * Indicates that @ref ucp_am_handler_param_t.cb field is valid.
+     */
+    UCP_AM_HANDLER_PARAM_FIELD_CB      = UCS_BIT(2),
+    /**
+     * Indicates that @ref ucp_am_handler_param_t.arg field is valid.
+     */
+    UCP_AM_HANDLER_PARAM_FIELD_ARG     = UCS_BIT(3)
+};
 
 
 /**
@@ -1309,7 +1321,7 @@ struct ucp_tag_recv_info {
  * @ingroup UCP_CONTEXT
  * @brief Operation parameters passed to @ref ucp_tag_send_nbx,
  *        @ref ucp_tag_send_sync_nbx, @ref ucp_tag_recv_nbx, @ref ucp_put_nbx,
- *        @ref ucp_get_nbx, @ref ucp_am_send_nbx and @ref ucp_am_data_recv_nbx.
+ *        @ref ucp_get_nbx, @ref ucp_am_send_nbx and @ref ucp_am_recv_data_nbx.
  *
  * The structure @ref ucp_request_param_t is used to specify datatype of
  * operation, provide user request in case the external request is used,
@@ -1372,7 +1384,7 @@ typedef struct {
         ucp_send_nbx_callback_t         send;
         ucp_tag_recv_nbx_callback_t     recv;
         ucp_stream_recv_nbx_callback_t  recv_stream;
-        ucp_am_data_recv_nbx_callback_t recv_am;
+        ucp_am_recv_data_nbx_callback_t recv_am;
     }              cb;
 
     /**
@@ -1412,7 +1424,7 @@ typedef struct {
 typedef struct ucp_am_handler_param {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_am_handler_attr_field. Fields not specified in this mask will
+     * @ref ucp_am_handler_param_field. Fields not specified in this mask will
      * be ignored. Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                 field_mask;
@@ -2783,6 +2795,7 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  * @note Currently Active Message API supports communication operations with
  *       host memory only.
  *
+ * @param [in]  worker     Worker that is used for the receive operation.
  * @param [in]  data_desc  Data descriptor, provided in
                            @ref ucp_am_recv_callback_t routine.
  * @param [in]  buffer     Pointer to the buffer to receive the data.
@@ -2798,7 +2811,8 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *                                the application is responsible for releasing
  *                                the handle using @ref ucp_request_free routine.
  */
-ucs_status_ptr_t ucp_am_data_recv_nbx(void *data_desc, void *buffer, size_t count,
+ucs_status_ptr_t ucp_am_recv_data_nbx(ucp_worker_h worker, void *data_desc,
+                                      void *buffer, size_t count,
                                       const ucp_request_param_t *param);
 
 
@@ -3801,7 +3815,9 @@ ucp_atomic_fetch_nb(ucp_ep_h ep, ucp_atomic_fetch_op_t opcode,
  *          @a param->reply_buffer for fetch operations), until the operation
  *          completes.
  * @note    Only ucp_dt_make_config(4) and ucp_dt_make_contig(8) are supported
- *          in @a param->datatype, see @ref ucp_dt_make_contig.
+ *          in @a param->datatype, see @ref ucp_dt_make_contig. Also, currently
+ *          atomic operations can handle one element only. Thus, @a count
+ *          argument must be set to 1.
  *
  * <table>
  * <caption id="atomic_ops">Atomic Operations Semantic</caption>

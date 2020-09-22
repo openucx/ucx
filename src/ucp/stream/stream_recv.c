@@ -306,11 +306,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nbx,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
-    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
-                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
-
-    attr_mask = param->op_attr_mask &
-                (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
+    memory_type = ucp_request_param_mem_type(param);
+    attr_mask   = param->op_attr_mask & (UCP_OP_ATTR_FIELD_DATATYPE |
+                                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
     if (ucs_likely(attr_mask == 0)) {
         datatype  = ucp_dt_make_contig(1);
         dt_length = count; /* use dt_lendth to suppress coverity false positive */
@@ -530,7 +528,7 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_assert(am_length >= sizeof(ucp_stream_am_hdr_t));
 
-    ep     = ucp_worker_get_ep_by_ptr(worker, data->hdr.ep_ptr);
+    ep     = ucp_worker_get_ep_by_id(worker, data->hdr.ep_id);
     ep_ext = ucp_ep_ext_proto(ep);
 
     if (ucs_unlikely(ep->flags & UCP_EP_FLAG_CLOSED)) {
@@ -564,10 +562,10 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     size_t                    hdr_len = sizeof(*hdr);
     char                      *p;
 
-    snprintf(buffer, max, "STREAM ep_ptr 0x%lx", hdr->ep_ptr);
+    snprintf(buffer, max, "STREAM ep_id 0x%"PRIx64, hdr->ep_id);
     p = buffer + strlen(buffer);
 
-    ucs_assert(hdr->ep_ptr != 0);
+    ucs_assert(hdr->ep_id != UCP_EP_ID_INVALID);
     ucp_dump_payload(worker->context, p, buffer + max - p,
                      UCS_PTR_BYTE_OFFSET(data, hdr_len), length - hdr_len);
 }

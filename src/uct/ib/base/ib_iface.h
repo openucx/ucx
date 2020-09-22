@@ -21,7 +21,7 @@
 #define UCT_IB_IFACE_NULL_RES_DOMAIN_KEY   0u
 #define UCT_IB_MAX_ATOMIC_SIZE             sizeof(uint64_t)
 #define UCT_IB_ADDRESS_INVALID_GID_INDEX   UINT8_MAX
-#define UCT_IB_ADDRESS_INVALID_PATH_MTU    0
+#define UCT_IB_ADDRESS_INVALID_PATH_MTU    ((enum ibv_mtu)0)
 #define UCT_IB_ADDRESS_INVALID_PKEY        0
 #define UCT_IB_ADDRESS_DEFAULT_PKEY        0xffff
 

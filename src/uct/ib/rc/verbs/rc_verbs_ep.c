@@ -94,7 +94,7 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
                 "iovcnt %zu, maxcnt (%zu, %zu)",
                 iovcnt, UCT_IB_MAX_IOV, iface->config.max_send_sge);
 
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     sge_cnt = uct_ib_verbs_sge_fill_iov(sge, iov, iovcnt);
     /* cppcheck-suppress syntaxError */
     UCT_SKIP_ZERO_LENGTH(sge_cnt);
@@ -134,7 +134,7 @@ uct_rc_verbs_ep_atomic(uct_rc_verbs_ep_t *ep, int opcode, void *result,
                                                  uct_rc_verbs_iface_t);
     uct_rc_iface_send_desc_t *desc;
 
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super, &iface->short_desc_mp,
                                           desc, iface->super.config.atomic64_handler,
                                           result, comp);
@@ -153,7 +153,7 @@ ucs_status_t uct_rc_verbs_ep_put_short(uct_ep_h tl_ep, const void *buffer,
 
     UCT_CHECK_LENGTH(length, 0, iface->config.max_inline, "put_short");
 
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     uct_rc_verbs_ep_fence_put(iface, ep, &rkey, &remote_addr);
     UCT_RC_VERBS_FILL_INL_PUT_WR(iface, remote_addr, rkey, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, PUT, SHORT, length);
@@ -172,7 +172,7 @@ ssize_t uct_rc_verbs_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     struct ibv_sge sge;
     size_t length;
 
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                        pack_cb, arg, length);
     uct_rc_verbs_ep_fence_put(iface, ep, &rkey, &remote_addr);
@@ -217,7 +217,7 @@ ucs_status_t uct_rc_verbs_ep_get_bcopy(uct_ep_h tl_ep,
     struct ibv_sge sge;
 
     UCT_CHECK_LENGTH(length, 0, iface->super.super.config.seg_size, "get_bcopy");
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                        unpack_cb, comp, arg, length);
 
@@ -353,7 +353,7 @@ ucs_status_t uct_rc_verbs_ep_atomic64_post(uct_ep_h tl_ep, unsigned opcode, uint
     }
 
     /* TODO don't allocate descriptor - have dummy buffer */
-    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->short_desc_mp, desc);
 
     uct_rc_verbs_ep_atomic_post(ep,
@@ -485,7 +485,7 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     /* Do not check FC WND here to avoid head-to-head deadlock.
      * Credits grant should be sent regardless of FC wnd state. */
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_TX_CQ_RES(&iface->super, &ep->super);
 
     fc_wr.opcode  = IBV_WR_SEND;
     fc_wr.next    = NULL;
@@ -504,7 +504,7 @@ ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
     iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
     /* Reset CI to prevent cq_available overrun on ep_destroy */
     ep->txcnt.ci = ep->txcnt.pi;
-    uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, 0);
 
     return iface->super.ops->set_ep_failed(&iface->super, &ep->super.super.super,
                                            status);
@@ -568,7 +568,7 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ep->flush.rkey        = rc_addr->flush_rkey;
 
     if (rc_addr->flags & UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR) {
-        ep->super.atomic_mr_offset = *(uint8_t*)(rc_addr + 1);
+        ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(*(uint8_t*)(rc_addr + 1));
     } else {
         ep->super.atomic_mr_offset = 0;
     }
@@ -579,6 +579,7 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
 UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(params->iface, uct_rc_verbs_iface_t);
+    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
     uct_ib_qp_attr_t attr = {};
     ucs_status_t status;
 
@@ -596,8 +597,16 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err_qp_cleanup;
     }
 
-    uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
+    status = uct_ib_device_async_event_register(
+            &md->dev,
+            IBV_EVENT_QP_LAST_WQE_REACHED,
+            self->qp->qp_num,
+            &iface->super.super.super.worker->super.progress_q);
+    if (status != UCS_OK) {
+        goto err_qp_cleanup;
+    }
 
+    uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);
     uct_rc_verbs_txcnt_init(&self->txcnt);
     uct_ib_fence_info_init(&self->fi);
@@ -614,6 +623,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
+    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
 
     /* NOTE: usually, ci == pi here, but if user calls
      *       flush(UCT_FLUSH_FLAG_CANCEL) then ep_destroy without next progress,
@@ -624,6 +634,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     ucs_assert(self->txcnt.pi >= self->txcnt.ci);
     iface->super.tx.cq_available += self->txcnt.pi - self->txcnt.ci;
     ucs_assert(iface->super.tx.cq_available < iface->super.config.tx_ops_count);
+    uct_ib_device_async_event_unregister(&md->dev,
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         self->qp->qp_num);
     uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
     uct_ib_destroy_qp(self->qp);
 }

@@ -38,8 +38,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     ucp_trace_req(req, "%s buffer %p dt 0x%lx count %zu tag %"PRIx64"/%"PRIx64,
                   debug_name, buffer, datatype, count, tag, tag_mask);
 
-    memory_type = (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
-                  param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
+    memory_type = ucp_request_param_mem_type(param);
 
     /* First, check the fast path case - single fragment
      * in this case avoid initializing most of request fields
@@ -127,7 +126,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
     /* Check rendezvous case */
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV)) {
-        ucp_tag_rndv_matched(worker, req, (void*)(rdesc + 1));
+        ucp_tag_rndv_matched(worker, req, ucp_tag_rndv_rts_from_rdesc(rdesc));
         UCP_WORKER_STAT_RNDV(worker, UNEXP, 1);
         ucp_recv_desc_release(rdesc);
         return req + 1;
@@ -159,7 +158,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
                  (worker, buffer, count, datatype, tag, tag_mask, request),
                  ucp_worker_h worker, void *buffer, size_t count,
-                 uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
+                 ucp_datatype_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
                  void *request)
 {
     ucp_request_param_t param = {
@@ -178,7 +177,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nb,
                  (worker, buffer, count, datatype, tag, tag_mask, cb),
                  ucp_worker_h worker, void *buffer, size_t count,
-                 uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
+                 ucp_datatype_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
                  ucp_tag_recv_callback_t cb)
 {
     ucp_request_param_t param = {
@@ -207,16 +206,14 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nbx,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    datatype = (param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) ?
-               param->datatype : ucp_dt_make_contig(1);
+    datatype = ucp_request_param_datatype(param);
+    req      = ucp_request_get_param(worker, param,
+                                     {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                      goto out;});
 
-    req = ucp_request_get_param(worker, param,
-                                {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                                 goto out;});
-
-    rdesc = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nbx");
-    ret   = ucp_tag_recv_common(worker, buffer, count, datatype, tag, tag_mask, req,
-                                rdesc, param, "recv_nbx");
+    rdesc    = ucp_tag_unexp_search(&worker->tm, tag, tag_mask, 1, "recv_nbx");
+    ret      = ucp_tag_recv_common(worker, buffer, count, datatype, tag,
+                                   tag_mask, req, rdesc, param, "recv_nbx");
 
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
@@ -226,7 +223,7 @@ out:
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
                  (worker, buffer, count, datatype, message, cb),
                  ucp_worker_h worker, void *buffer, size_t count,
-                 uintptr_t datatype, ucp_tag_message_h message,
+                 ucp_datatype_t datatype, ucp_tag_message_h message,
                  ucp_tag_recv_callback_t cb)
 {
     ucp_request_param_t param = {

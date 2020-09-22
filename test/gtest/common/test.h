@@ -13,6 +13,9 @@
 #include <stdint.h>
 #endif
 
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
+
 #include "test_helpers.h"
 
 #include <ucs/debug/log.h>
@@ -193,6 +196,14 @@ public:
     }
 
     ucs::ptr_vector<T> m_entities;
+};
+/* Make sure no MADV_DONTCOPY memory areas left behind when constructed.
+ * Tests which use fork()/system() should inherit from this class as 1st parent,
+ * to make sure its constructor is called before any other parent's.
+ */
+class clear_dontcopy_regions {
+public:
+    clear_dontcopy_regions();
 };
 
 }

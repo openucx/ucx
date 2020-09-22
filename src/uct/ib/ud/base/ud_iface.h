@@ -62,40 +62,6 @@ typedef struct uct_ud_iface_config {
 } uct_ud_iface_config_t;
 
 
-struct uct_ud_iface_peer {
-    uct_ud_iface_peer_t   *next;
-    union ibv_gid          dgid;
-    uint16_t               dlid;
-    uint32_t               dst_qpn;
-    uint8_t                path_index;
-    uint32_t               conn_id_last;
-    ucs_list_link_t        ep_list; /* ep list ordered by connection id */
-};
-
-
-static inline int
-uct_ud_iface_peer_cmp(uct_ud_iface_peer_t *a, uct_ud_iface_peer_t *b)
-{
-    return (int)a->dst_qpn - (int)b->dst_qpn ||
-           memcmp(a->dgid.raw, b->dgid.raw, sizeof(union ibv_gid)) ||
-           ((int)a->dlid - (int)b->dlid) ||
-           ((int)a->path_index - (int)b->path_index);
-}
-
-
-static inline int uct_ud_iface_peer_hash(uct_ud_iface_peer_t *a)
-{
-    return (a->dlid + a->dgid.global.interface_id +
-            a->dgid.global.subnet_prefix + (a->path_index * 137)) %
-           UCT_UD_HASH_SIZE;
-}
-
-
-SGLIB_DEFINE_LIST_PROTOTYPES(uct_ud_iface_peer_t, uct_ud_iface_peer_cmp, next)
-SGLIB_DEFINE_HASHED_CONTAINER_PROTOTYPES(uct_ud_iface_peer_t, UCT_UD_HASH_SIZE,
-                                         uct_ud_iface_peer_hash)
-
-
 #if UCT_UD_EP_DEBUG_HOOKS
 
 typedef ucs_status_t (*uct_ud_iface_hook_t)(uct_ud_iface_t *iface, uct_ud_neth_t *neth);
@@ -146,6 +112,10 @@ typedef struct uct_ud_iface_ops {
                                                      const uct_ud_iface_addr_t *if_addr,
                                                      int path_index, void *address_p);
     void*                     (*ep_get_peer_address)(uct_ud_ep_t *ud_ep);
+    size_t                    (*get_peer_address_length)();
+    const char*               (*peer_address_str)(const uct_ud_iface_t *iface,
+                                                  const void *address,
+                                                  char *str, size_t max_size);
 } uct_ud_iface_ops_t;
 
 
@@ -217,8 +187,9 @@ struct uct_ud_iface {
 
     UCS_STATS_NODE_DECLARE(stats)
 
+    ucs_conn_match_ctx_t  conn_match_ctx;
+
     ucs_ptr_array_t       eps;
-    uct_ud_iface_peer_t  *peers[UCT_UD_HASH_SIZE];
     struct {
         ucs_time_t                tick;
         int                       timer_id;
@@ -243,20 +214,20 @@ UCS_CLASS_DECLARE(uct_ud_iface_t, uct_ud_iface_ops_t*, uct_md_h,
 
 
 struct uct_ud_ctl_hdr {
-    uint8_t                    type;
-    uint8_t                    reserved[3];
+    uint8_t                     type;
+    uint8_t                     reserved[3];
     union {
         struct {
-            uct_ud_ep_addr_t   ep_addr;
-            uint32_t           conn_id;
-            uint8_t            path_index;
+            uct_ud_ep_addr_t    ep_addr;
+            uct_ud_ep_conn_sn_t conn_sn;
+            uint8_t             path_index;
         } conn_req;
         struct {
-            uint32_t           src_ep_id;
+            uint32_t            src_ep_id;
         } conn_rep;
-        uint32_t               data;
+        uint32_t                data;
     };
-    uct_ud_peer_name_t         peer;
+    uct_ud_peer_name_t          peer;
     /* For CREQ packet, IB address follows */
 } UCS_S_PACKED;
 
@@ -307,16 +278,16 @@ The protocol allows connection establishment in environment where UD packets
 can be dropped, duplicated or reordered. The connection is done as 3 way
 handshake:
 
-1: CREQ (src_if_addr, src_ep_addr, conn_id)
+1: CREQ (src_if_addr, src_ep_addr, conn_sn)
 Connection request. It includes source interface address, source ep address
 and connection id.
 
 Connection id is essentially a counter of endpoints that are created by
 ep_create_connected(). The counter is per destination interface. Purpose of
-conn_id is to ensure order between multiple CREQ packets and to handle
+conn_sn is to ensure order between multiple CREQ packets and to handle
 simultanuous connection establishment. The case when both sides call
 ep_create_connected(). The rule is that connected endpoints must have
-same conn_id.
+same conn_sn.
 
 2: CREP (dest_ep_id)
 
@@ -336,69 +307,30 @@ Ack on connection reply. It may be send as part of the data packet.
 Implicit endpoints reuse
 
 Endpoints created upon receive of CREP request can be re-used when
-application calls ep_create_connected().
-
-Data structure
-
-Hash table and double linked sorted list:
-hash(src_if_addr) -> peer ->ep (list sorted in descending order)
-
-List is used to save memory (8 bytes instead of 500-1000 bytes of hashtable)
-In many cases list will provide fast lookup and insertion.
-It is expected that most of connect requests will arrive in order. In
-such case the insertion is O(1) because it is done to the head of the
-list. Lookup is O(number of 'passive' eps) which is expected to be small.
-
-TODO: add and maintain pointer to the list element with conn_id equal to
-conn_last_id. This will allow for O(1) endpoint lookup.
-
-Connection id assignment:
-
-  0 1 ... conn_last_id, +1, +2, ... UCT_UD_EP_CONN_ID_MAX
-
-Ids upto (not including) conn_last_id are already assigned to endpoints.
-Any endpoint with conn_id >= conn_last_id is created on receive of CREQ
-There may be holes because CREQs are not received in order.
-
-Call to ep_create_connected() will try reuse endpoint with
-conn_id = conn_last_id
-
-If there is no such endpoint new endpoint with id conn_last_id
-will be created.
-
-In both cases conn_last_id = conn_last_id + 1
-
-*/
-void uct_ud_iface_cep_init(uct_ud_iface_t *iface);
-
-/* find ep that is connected to (src_if, src_ep),
- * if conn_id == UCT_UD_EP_CONN_ID_MAX then try to
- * reuse ep with conn_id == conn_last_id
- */
-uct_ud_ep_t *uct_ud_iface_cep_lookup(uct_ud_iface_t *iface,
-                                     const uct_ib_address_t *src_ib_addr,
-                                     const uct_ud_iface_addr_t *src_if_addr,
-                                     uint32_t conn_id, int path_index);
-
-/* remove ep */
-void uct_ud_iface_cep_remove(uct_ud_ep_t *ep);
-
-/*
- * rollback last ordered insert (conn_id == UCT_UD_EP_CONN_ID_MAX).
- */
-void uct_ud_iface_cep_rollback(uct_ud_iface_t *iface,
-                               const uct_ib_address_t *src_ib_addr,
-                               const uct_ud_iface_addr_t *src_if_addr,
-                               uct_ud_ep_t *ep);
-
-/* insert new ep that is connected to src_if_addr */
-ucs_status_t uct_ud_iface_cep_insert(uct_ud_iface_t *iface,
-                                     const uct_ib_address_t *src_ib_addr,
-                                     const uct_ud_iface_addr_t *src_if_addr,
-                                     uct_ud_ep_t *ep, uint32_t conn_id,
-                                     int path_index);
+application calls ep_create_connected(). */
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
+
+uct_ud_ep_conn_sn_t
+uct_ud_iface_cep_get_conn_sn(uct_ud_iface_t *iface,
+                             const uct_ib_address_t *ib_addr,
+                             const uct_ud_iface_addr_t *if_addr,
+                             int path_index);
+
+void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
+                                const uct_ib_address_t *ib_addr,
+                                const uct_ud_iface_addr_t *if_addr,
+                                int path_index, uct_ud_ep_conn_sn_t conn_sn,
+                                uct_ud_ep_t *ep);
+
+uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
+                                     const uct_ib_address_t *ib_addr,
+                                     const uct_ud_iface_addr_t *if_addr,
+                                     int path_index,
+                                     uct_ud_ep_conn_sn_t conn_sn,
+                                     int is_private);
+
+void uct_ud_iface_cep_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
 ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
 
@@ -562,6 +494,18 @@ uct_ud_iface_raise_pending_async_ev(uct_ud_iface_t *iface)
 }
 
 
+static UCS_F_ALWAYS_INLINE const void *
+uct_ud_ep_get_peer_address(const ucs_conn_match_elem_t *elem)
+{
+    uct_ud_ep_t *ep            = ucs_container_of(elem, uct_ud_ep_t,
+                                                  conn_match);
+    uct_ib_iface_t *ib_iface   = ucs_derived_of(ep->super.super.iface,
+                                                uct_ib_iface_t);
+    return uct_iface_invoke_ops_func(ib_iface, uct_ud_iface_ops_t,
+                                     ep_get_peer_address, ep);
+}
+
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_ud_iface_unpack_peer_address(uct_ud_iface_t *iface,
                                  const uct_ib_address_t *ib_addr,
@@ -591,19 +535,6 @@ uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
 {
     ucs_queue_push(&iface->tx.outstanding_q, &cdesc->queue);
 }
-
-
-/* Go over all active eps and remove them. Do it this way because class destructors are not
- * virtual
- */
-#define UCT_UD_IFACE_DELETE_EPS(_iface, _ep_type_t) \
-    { \
-        int _i; \
-        _ep_type_t *_ep; \
-        ucs_ptr_array_for_each(_ep, _i, &(_iface)->eps) { \
-            UCS_CLASS_DELETE(_ep_type_t, _ep); \
-        } \
-    }
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

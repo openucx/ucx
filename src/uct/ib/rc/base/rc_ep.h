@@ -92,11 +92,11 @@ enum {
         return _ret; \
     }
 
-#define UCT_RC_CHECK_NUM_RDMA_READ(_iface) \
+#define UCT_RC_CHECK_NUM_RDMA_READ_RET(_iface, _ret) \
     if (ucs_unlikely((_iface)->tx.reads_available <= 0)) { \
         UCS_STATS_UPDATE_COUNTER((_iface)->stats, \
                                  UCT_RC_IFACE_STAT_NO_READS, 1); \
-        return UCS_ERR_NO_RESOURCE; \
+        return _ret; \
     }
 
 #define UCT_RC_RDMA_READ_POSTED(_iface, _length) \
@@ -105,18 +105,19 @@ enum {
         (_iface)->tx.reads_available -= (_length); \
     }
 
-#define UCT_RC_CHECK_RES(_iface, _ep) \
+#define UCT_RC_CHECK_TX_CQ_RES(_iface, _ep) \
     UCT_RC_CHECK_CQE_RET(_iface, _ep, UCS_ERR_NO_RESOURCE) \
     UCT_RC_CHECK_TXQP_RET(_iface, _ep, UCS_ERR_NO_RESOURCE)
 
 /**
- * All RMA and AMO operations are not allowed if no RDMA_READ credits.
- * Otherwise operations ordering can be broken (which fence operation
- * relies on).
+ * All operations are not allowed if no RDMA_READ credits. Otherwise operations
+ * ordering can be broken. If some AM sends added to the pending queue after
+ * RDMA_READ operation, it may be stuck there until RDMA_READ credits arrive,
+ * therefore need to block even AM sends, until all resources are available.
  */
-#define UCT_RC_CHECK_RMA_RES(_iface, _ep) \
-    UCT_RC_CHECK_RES(_iface, _ep) \
-    UCT_RC_CHECK_NUM_RDMA_READ(_iface)
+#define UCT_RC_CHECK_RES(_iface, _ep) \
+    UCT_RC_CHECK_TX_CQ_RES(_iface, _ep) \
+    UCT_RC_CHECK_NUM_RDMA_READ_RET(_iface, UCS_ERR_NO_RESOURCE)
 
 /*
  * check for FC credits and add FC protocol bits (if any)
@@ -247,8 +248,8 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 
-void uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
-                                   int is_log);
+void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
+                                   ucs_status_t status, int is_log);
 
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                              unsigned flags);
@@ -267,7 +268,7 @@ void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 1)(uct_rc_iface_send_op_t *op,
 ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               uint32_t qp_num
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
-void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp);
+void uct_rc_txqp_cleanup(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp);
 
 static inline int16_t uct_rc_txqp_available(uct_rc_txqp_t *txqp)
 {

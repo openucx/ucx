@@ -26,8 +26,8 @@
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
-CUDA_MODULE="dev/cuda10.2"
-GDRCOPY_MODULE="dev/gdrcopy2.0_cuda10.2"
+CUDA_MODULE="dev/cuda11.0"
+GDRCOPY_MODULE="dev/gdrcopy2.0_cuda11.0"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -72,6 +72,10 @@ MAKE="make"
 MAKEP="make -j${parallel_jobs}"
 export AUTOMAKE_JOBS=$parallel_jobs
 
+#
+# Override maven repository path, to cache the downloaded packages accross tests
+#
+export maven_repo=${WORKSPACE}/.deps
 
 #
 # Set up parallel test execution - "worker" and "nworkers" should be set by jenkins
@@ -87,8 +91,8 @@ echo "==== Running on $(hostname), worker $worker / $nworkers ===="
 # cleanup ucx
 #
 make_clean() {
-        rm -rf ${ucx_inst}
-        $MAKEP ${1:-clean}
+	rm -rf ${ucx_inst}
+	$MAKEP ${1:-clean}
 }
 
 #
@@ -597,25 +601,6 @@ build_gcc_latest() {
 }
 
 #
-# Install and check experimental headers
-#
-build_experimental_api() {
-	# Experimental header file should not be installed by regular build
-	echo "==== Install WITHOUT experimental API ===="
-	../contrib/configure-release --prefix=$ucx_inst
-	make_clean
-	$MAKEP install
-	! test -e $ucx_inst/include/ucp/api/ucpx.h
-
-	# Experimental header file should be installed by --enable-experimental-api
-	echo "==== Install WITH experimental API ===="
-	../contrib/configure-release --prefix=$ucx_inst --enable-experimental-api
-	make_clean
-	$MAKEP install
-	test -e $ucx_inst/include/ucp/api/ucpx.h
-}
-
-#
 # Builds jucx
 #
 build_jucx() {
@@ -1034,8 +1019,9 @@ run_ucx_perftest() {
 		fi
 	done
 
-	# run cuda tests if cuda module was loaded and GPU is found
-	if [ "X$have_cuda" == "Xyes" ]
+	# run cuda tests if cuda module was loaded and GPU is found, and only in
+	# client/server mode, to reduce testing time
+	if [ "X$have_cuda" == "Xyes" ] && [ $with_mpi -ne 1 ]
 	then
 		tls_list="all "
 		gdr_options="n "
@@ -1067,57 +1053,36 @@ run_ucx_perftest() {
 			do
 				for gdr in $gdr_options
 				do
-					if [ $with_mpi -eq 1 ]
-					then
-						$MPIRUN -np 2 -x UCX_TLS=$tls -x UCX_MEMTYPE_CACHE=$memtype_cache \
-									 -x UCX_IB_GPU_DIRECT_RDMA=$gdr $AFFINITY $ucx_perftest $ucp_test_args
-					else
-						export UCX_TLS=$tls
-						export UCX_MEMTYPE_CACHE=$memtype_cache
-						export UCX_IB_GPU_DIRECT_RDMA=$gdr
-						run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-						unset UCX_TLS
-						unset UCX_MEMTYPE_CACHE
-						unset UCX_IB_GPU_DIRECT_RDMA
-					fi
+					export UCX_TLS=$tls
+					export UCX_MEMTYPE_CACHE=$memtype_cache
+					export UCX_IB_GPU_DIRECT_RDMA=$gdr
+					run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+					unset UCX_TLS
+					unset UCX_MEMTYPE_CACHE
+					unset UCX_IB_GPU_DIRECT_RDMA
 				done
 			done
 		done
 
-		if [ $with_mpi -eq 1 ]
-		then
-			$MPIRUN -np 2 -x UCX_TLS=self,shm,cma,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
-			$MPIRUN -np 2 -x UCX_TLS=self,sm,cuda_ipc,cuda_copy $AFFINITY $ucx_perftest $ucp_test_args
-			$MPIRUN -np 2 $AFFINITY $ucx_perftest $ucp_test_args
-		else
-			export UCX_TLS=self,shm,cma,cuda_copy
-			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-			unset UCX_TLS
+		export UCX_TLS=self,shm,cma,cuda_copy
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+		unset UCX_TLS
 
-			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-		fi
+		# Run without special UCX_TLS
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 
 		# Specifically test cuda_ipc for large message sizes
-	        cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
+		cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
 		ucp_test_args_large="-b $ucx_inst_ptest/test_types_cuda_ucp \
 			             -b $ucx_inst_ptest/msg_pow2_large -w 1"
-		if [ $with_mpi -eq 1 ]
-		then
-			for ipc_cache in y n
-			do
-				$MPIRUN -np 2 -x UCX_TLS=self,sm,cuda_copy,cuda_ipc \
-					-x UCX_CUDA_IPC_CACHE=$ipc_cache $AFFINITY $ucx_perftest $ucp_test_args_large
-			done
-		else
-			for ipc_cache in y n
-			do
-				export UCX_TLS=self,sm,cuda_copy,cuda_ipc
-				export UCX_CUDA_IPC_CACHE=$ipc_cache
-				run_client_server_app "$ucx_perftest" "$ucp_test_args_large" "$(hostname)" 0 0
-				unset UCX_TLS
-				unset UCX_CUDA_IPC_CACHE
-			done
-		fi
+		for ipc_cache in y n
+		do
+			export UCX_TLS=self,sm,cuda_copy,cuda_ipc
+			export UCX_CUDA_IPC_CACHE=$ipc_cache
+			run_client_server_app "$ucx_perftest" "$ucp_test_args_large" "$(hostname)" 0 0
+			unset UCX_TLS
+			unset UCX_CUDA_IPC_CACHE
+		done
 
 		unset CUDA_VISIBLE_DEVICES
 	fi
@@ -1239,7 +1204,7 @@ test_ucp_dlopen() {
 	../contrib/configure-release --prefix=$ucx_inst
 	make_clean
 	$MAKEP
-        $MAKEP install
+	$MAKEP install
 
 	# Make sure UCP library, when opened with dlopen(), loads CMA module
 	LIB_CMA=`find ${ucx_inst} -name libuct_cma.so.0`
@@ -1265,7 +1230,7 @@ test_memtrack() {
 test_unused_env_var() {
 	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
-	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q "UCX_IB_PORTS"
+	UCX_SOCKADDR_CM_ENABLE=y UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS"
 }
 
 test_env_var_aliases() {
@@ -1318,7 +1283,7 @@ test_jucx() {
 	echo "1..2" > jucx_tests.tap
 	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
 	if [ -z "$iface" ]
-        then
+	then
 		echo "Failed to find active ib devices." >> jucx_tests.tap
 		return
 	elif module_load dev/jdk && module_load dev/mvn
@@ -1327,38 +1292,41 @@ test_jucx() {
 		export JUCX_TEST_PORT=$jucx_port
 		export UCX_MEM_EVENTS=no
 		$MAKE -C bindings/java/src/main/native test
-	        ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
+		ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
 		if [ -n "$ifaces" ]
 		then
-                        $MAKE -C bindings/java/src/main/native package
+			$MAKE -C bindings/java/src/main/native package
 		fi
 		for iface in $ifaces
 		do
 			if [ -n "$iface" ]
-                	then
-                   		server_ip=$(get_ifaddr ${iface})
-                	fi
+			then
+				server_ip=$(get_ifaddr ${iface})
+			fi
 
-                	if [ -z "$server_ip" ]
-                	then
-		   	   	echo "Interface $iface has no IPv4"
-                   	   	continue
-                        fi
-                        echo "Running standalone benchamrk on $iface"
+			if [ -z "$server_ip" ]
+			then
+				echo "Interface $iface has no IPv4"
+				continue
+			fi
 
-                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
-                                -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			         -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
-				 org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
-				 s=$server_ip p=$JUCX_TEST_PORT &
-                        java_pid=$!
-			 sleep 10
-                        java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
-				 -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			         -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*"  \
-				 org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
-				 s=$server_ip p=$JUCX_TEST_PORT t=10000000
-			 wait $java_pid
+			echo "Running standalone benchamrk on $iface"
+
+			java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
+			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
+			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
+			  org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
+			     s=$server_ip p=$JUCX_TEST_PORT &
+			     java_pid=$!
+
+			sleep 10
+
+			java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
+			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
+			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*"  \
+			  org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
+			     s=$server_ip p=$JUCX_TEST_PORT t=10000000
+			wait $java_pid
 		done
 
 		unset JUCX_TEST_PORT
@@ -1631,6 +1599,8 @@ run_tests() {
 	export UCX_ERROR_SIGNALS=SIGILL,SIGSEGV,SIGBUS,SIGFPE,SIGPIPE,SIGABRT
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
+	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 100))"-"$((34000 + EXECUTOR_NUMBER * 100))"
+	export UCX_TCP_CM_ALLOW_ADDR_INUSE=y
 
 	# test cuda build if cuda modules available
 	do_distributed_task 2 4 build_cuda
@@ -1646,7 +1616,6 @@ run_tests() {
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
 	do_distributed_task 1 4 build_gcc_latest
-	do_distributed_task 2 4 build_experimental_api
 	do_distributed_task 0 4 build_jucx
 
 	# all are running mpi tests

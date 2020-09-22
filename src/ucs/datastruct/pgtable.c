@@ -140,7 +140,7 @@ void ucs_pgtable_dump(const ucs_pgtable_t *pgtable, ucs_log_level_t log_level)
 
 static void ucs_pgtable_trace(ucs_pgtable_t *pgtable, const char *message)
 {
-    ucs_pgtable_log(pgtable, UCS_LOG_LEVEL_TRACE_DATA, message);
+    ucs_pgtable_log(pgtable, UCS_LOG_LEVEL_TRACE_FUNC, message);
 }
 
 static void ucs_pgtable_reset(ucs_pgtable_t *pgtable)
@@ -274,7 +274,7 @@ ucs_pgtable_insert_page(ucs_pgtable_t *pgtable, ucs_pgt_addr_t address,
 
     ucs_pgtable_check_page(address, order);
 
-    ucs_trace_data("insert page 0x%lx order %u, for region " UCS_PGT_REGION_FMT,
+    ucs_trace_func("insert page 0x%lx order %u, for region " UCS_PGT_REGION_FMT,
                    address, order, UCS_PGT_REGION_ARG(region));
 
     /* Make root map addresses which include our interval */
@@ -406,7 +406,7 @@ ucs_status_t ucs_pgtable_insert(ucs_pgtable_t *pgtable, ucs_pgt_region_t *region
     ucs_status_t status;
     unsigned order;
 
-    ucs_trace_data("add region " UCS_PGT_REGION_FMT, UCS_PGT_REGION_ARG(region));
+    ucs_trace_func("add region " UCS_PGT_REGION_FMT, UCS_PGT_REGION_ARG(region));
 
     if ((address >= end) || !ucs_pgt_is_addr_aligned(address) ||
         !ucs_pgt_is_addr_aligned(end))
@@ -448,7 +448,7 @@ ucs_status_t ucs_pgtable_remove(ucs_pgtable_t *pgtable, ucs_pgt_region_t *region
     ucs_status_t status;
     unsigned order;
 
-    ucs_trace_data("remove region " UCS_PGT_REGION_FMT, UCS_PGT_REGION_ARG(region));
+    ucs_trace_func("remove region " UCS_PGT_REGION_FMT, UCS_PGT_REGION_ARG(region));
 
     if ((address >= end) || !ucs_pgt_is_addr_aligned(address) ||
         !ucs_pgt_is_addr_aligned(end))

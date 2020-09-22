@@ -10,6 +10,8 @@
 #  include "config.h"
 #endif
 
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
 #include <tools/perf/lib/libperf_int.h>
 
 extern "C" {
@@ -35,9 +37,10 @@ public:
     {
         ucs_assert_always(m_max_outstanding > 0);
 
-        m_completion.count = 1;
-        m_completion.func  = NULL;
-        m_last_recvd_sn    = 0;
+        m_completion.count  = 1;
+        m_completion.status = UCS_OK;
+        m_completion.func   = NULL;
+        m_last_recvd_sn     = 0;
 
         ucs_status_t status;
         uct_iface_attr_t attr;
@@ -503,7 +506,8 @@ public:
                     /* Wait until getting ACK from responder */
                     sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
                     ucs_assertv(UCS_CIRCULAR_COMPARE8(send_sn - 1, >=, sn),
-                                "recv_sn=%d iters=%ld", sn, m_perf.current.iters);
+                                "recv_sn=%d iters=%" PRIu64, sn,
+                                m_perf.current.iters);
 
                     while (UCS_CIRCULAR_COMPARE8(send_sn, >, sn + fc_window)) {
                         progress_responder();

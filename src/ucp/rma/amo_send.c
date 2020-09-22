@@ -115,6 +115,7 @@ ucp_amo_init_fetch(ucp_request_t *req, ucp_ep_h ep, void *buffer,
 {
     ucp_amo_init_common(req, ep, op, remote_addr, rkey, value, op_size);
     req->send.state.uct_comp.count  = 1;
+    req->send.state.uct_comp.status = UCS_OK;
     req->send.state.uct_comp.func   = ucp_amo_completed_single;
     req->send.uct.func              = proto->progress_fetch;
     req->send.buffer                = buffer;
@@ -172,7 +173,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
         value   = *(uint32_t*)buffer;
         op_size = sizeof(uint32_t);
     } else {
-        ucs_error("invalid atomic operation datatype: %zu", param->datatype);
+        ucs_error("invalid atomic operation datatype: 0x%"PRIx64,
+                  param->datatype);
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
 
@@ -182,8 +184,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucs_trace_req("atomic_op_nbx opcode %d buffer %p result %p "
-                  "datatype %zu remote_addr %"PRIx64" rkey %p to %s cb %p",
-                  opcode, buffer,
+                  "datatype 0x%"PRIx64" remote_addr 0x%"PRIx64
+                  " rkey %p to %s cb %p", opcode, buffer,
                   (param->op_attr_mask & UCP_OP_ATTR_FIELD_REPLY_BUFFER) ?
                   param->reply_buffer : NULL, param->datatype,
                   remote_addr, rkey, ucp_ep_peer_name(ep),

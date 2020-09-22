@@ -62,6 +62,8 @@ typedef struct ucp_context_config {
     size_t                                 seg_size;
     /** RNDV pipeline fragment size */
     size_t                                 rndv_frag_size;
+    /** RNDV pipline send threshold */
+    size_t                                 rndv_pipeline_send_thresh;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
     size_t                                 tm_thresh;
@@ -98,8 +100,17 @@ typedef struct ucp_context_config {
     int                                    unified_mode;
     /** Enable cm wireup-and-close protocol for client-server connections */
     ucs_ternary_value_t                    sockaddr_cm_enable;
+    /** Maximal number of pending connection requests for a listener */
+    size_t                                 listener_backlog;
     /** Enable new protocol selection logic */
     int                                    proto_enable;
+    /** Time period between keepalive rounds (0 - disabled) */
+    ucs_time_t                             keepalive_timeout;
+    /** Maximal number of endpoints to check on every keepalive round
+     * (0 - disabled, inf - check all endpoints on every round) */
+    unsigned                               keepalive_num_eps;
+    /** Enable indirect IDs to object pointers in wire protocols */
+    ucs_on_off_auto_value_t                proto_indirect_id;
 } ucp_context_config_t;
 
 
@@ -474,5 +485,7 @@ uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
 
 uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
                                        ucp_rsc_index_t dev_idx);
+
+const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
 
 #endif

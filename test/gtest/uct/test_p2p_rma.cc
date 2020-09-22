@@ -133,7 +133,14 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, get_zcopy,
                     TEST_UCT_FLAG_RECV_ZCOPY);
 }
 
-UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, madvise,
+UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_test)
+
+class test_p2p_rma_madvise : private ucs::clear_dontcopy_regions,
+                             public uct_p2p_rma_test
+{
+};
+
+UCS_TEST_SKIP_COND_P(test_p2p_rma_madvise, madvise,
                      !check_caps(UCT_IFACE_FLAG_GET_ZCOPY))
 {
     mapped_buffer sendbuf(4096, 0, sender());
@@ -152,4 +159,4 @@ UCS_TEST_SKIP_COND_P(uct_p2p_rma_test, madvise,
     flush();
 }
 
-UCT_INSTANTIATE_TEST_CASE(uct_p2p_rma_test)
+UCT_INSTANTIATE_TEST_CASE(test_p2p_rma_madvise)

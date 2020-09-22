@@ -502,7 +502,7 @@ typedef struct {
         _req = ucs_container_of(_priv, uct_pending_req_t, priv); \
         ucs_queue_pull_non_empty(_queue); \
         _status = _req->func(_req); \
-        if (_status != UCS_OK) { \
+        if ((_status == UCS_ERR_NO_RESOURCE) || (_status == UCS_INPROGRESS)) { \
             ucs_queue_push_head(_queue, &_base_priv->queue_elem); \
         } \
     }
@@ -549,6 +549,21 @@ typedef struct {
         ucs_trace_data(_fmt " am_id %d len %zu %s", ## __VA_ARGS__, \
                        _am_id, (size_t)(_length), buf); \
     }
+
+
+/**
+ * Helper macro to invoke the function from iface operations.
+ *
+ * @param _iface    UCT interface.
+ * @param _ops_type Type of iface operations.
+ * @param _func     Function to call.
+ * @param ...       Parameters that is passed to the function.
+ */
+#define uct_iface_invoke_ops_func(_iface, _ops_type, _func, ...) \
+    ({ \
+        _ops_type *__ops = ucs_derived_of((_iface)->ops, _ops_type); \
+        __ops->_func(__VA_ARGS__); \
+    })
 
 
 extern ucs_config_field_t uct_iface_config_table[];
@@ -643,15 +658,21 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
  * Invoke send completion.
  *
  * @param comp   Completion to invoke.
- * @param data   Optional completion data (operation reply).
+ * @param status Status of completed operation.
  */
 static UCS_F_ALWAYS_INLINE
 void uct_invoke_completion(uct_completion_t *comp, ucs_status_t status)
 {
     ucs_trace_func("comp=%p, count=%d, status=%d", comp, comp->count, status);
     ucs_assertv(comp->count > 0, "comp=%p count=%d", comp, comp->count);
+
+    /* store first failure status */
+    if (ucs_unlikely(status != UCS_OK) && (comp->status == UCS_OK)) {
+        comp->status = status;
+    }
+
     if (--comp->count == 0) {
-        comp->func(comp, status);
+        comp->func(comp, comp->status);
     }
 }
 

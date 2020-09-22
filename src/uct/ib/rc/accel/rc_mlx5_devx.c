@@ -55,11 +55,14 @@ static void uct_rc_mlx5_devx_iface_event_handler(int fd, int events, void *arg)
 
     ret = mlx5dv_devx_get_event(iface->event_channel, &devx_event, sizeof(devx_event));
     if (ret < 0) {
-        ucs_warn("mlx5dv_devx_get_event() failed: %m");
+        if (errno != EAGAIN) {
+            ucs_warn("mlx5dv_devx_get_event() failed: %m");
+        }
         return;
     }
 
-    event.event_type = devx_event.cookie & UCT_IB_MLX5_DEVX_EVENT_TYPE_MASK;
+    event.event_type = (enum ibv_event_type)(devx_event.cookie &
+                                             UCT_IB_MLX5_DEVX_EVENT_TYPE_MASK);
     switch (event.event_type) {
     case IBV_EVENT_QP_LAST_WQE_REACHED:
         event.qp_num = devx_event.cookie >> UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT;
@@ -358,12 +361,12 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           mlx5_av.hop_limit);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index,
                           ah_attr->grh.sgid_index);
-        ucs_assert(ah_attr->dlid >= UCT_IB_ROCE_UDP_SRC_PORT_BASE);
-        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
-                          ah_attr->dlid);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio,
                           iface->super.super.config.sl);
         if (uct_ib_iface_is_roce_v2(&iface->super.super, dev)) {
+            ucs_assert(ah_attr->dlid >= UCT_IB_ROCE_UDP_SRC_PORT_BASE);
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
+                              ah_attr->dlid);
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
                               iface->super.super.config.traffic_class >> 2);
         }

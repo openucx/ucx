@@ -15,8 +15,8 @@
  * Header segment for a transaction
  */
 typedef struct {
-    uintptr_t                 ep_ptr;
-    uintptr_t                 reqptr;
+    uint64_t                  ep_id;
+    uint64_t                  req_id;
 } UCS_S_PACKED ucp_request_hdr_t;
 
 
@@ -24,7 +24,7 @@ typedef struct {
  * Header for transaction acknowledgment
  */
 typedef struct {
-    uint64_t                  reqptr;
+    uint64_t                  req_id;
     ucs_status_t              status;
 } UCS_S_PACKED ucp_reply_hdr_t;
 

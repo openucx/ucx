@@ -174,8 +174,10 @@ ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data)
 
         UCM_FIRE_EVENT(events, UCM_EVENT_SHMAT|UCM_EVENT_VM_MAPPED,
                        data, p = shmat(shmid, NULL, 0));
+#ifdef SHM_REMAP
         UCM_FIRE_EVENT(events, UCM_EVENT_SHMAT|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED,
                        data, p = shmat(shmid, p, SHM_REMAP));
+#endif
         shmctl(shmid, IPC_RMID, NULL);
         UCM_FIRE_EVENT(events, UCM_EVENT_SHMDT|UCM_EVENT_VM_UNMAPPED,
                        data, shmdt(p));

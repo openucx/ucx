@@ -52,6 +52,24 @@ KHASH_IMPL(uct_ib_ah, struct ibv_ah_attr, struct ibv_ah*, 1,
            uct_ib_kh_ah_hash_func, uct_ib_kh_ah_hash_equal)
 
 
+static UCS_F_ALWAYS_INLINE
+khint32_t uct_ib_async_event_hash_func(uct_ib_async_event_t event)
+{
+    return kh_int64_hash_func(((uint64_t)event.event_type << 32) |
+                              event.resource_id);
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_ib_async_event_hash_equal(uct_ib_async_event_t event1,
+                              uct_ib_async_event_t event2)
+{
+    return (event1.event_type  == event2.event_type) &&
+           (event1.resource_id == event2.resource_id);
+}
+
+KHASH_IMPL(uct_ib_async_event, uct_ib_async_event_t, uct_ib_async_event_val_t, 1,
+           uct_ib_async_event_hash_func, uct_ib_async_event_hash_equal)
+
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
     .name           = "",
@@ -105,7 +123,25 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
    UCT_IB_DEVICE_FLAG_DC_V2, 50},
   {"ConnectX-6 DX", {0x15b3, 4125},
    UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
-   UCT_IB_DEVICE_FLAG_DC_V2, 50},
+   UCT_IB_DEVICE_FLAG_DC_V2, 60},
+  {"ConnectX-6 DX VF", {0x15b3, 4126},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 60},
+  {"ConnectX-6 LX", {0x15b3, 4127},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 45},
+  {"ConnectX-7", {0x15b3, 4129},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 70},
+  {"BlueField", {0x15b3, 0xa2d2},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 41},
+  {"BlueField VF", {0x15b3, 0xa2d3},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 41},
+  {"BlueField 2", {0x15b3, 0xa2d6},
+   UCT_IB_DEVICE_FLAG_MELLANOX | UCT_IB_DEVICE_FLAG_MLX5_PRM |
+   UCT_IB_DEVICE_FLAG_DC_V2, 61},
   {"Generic HCA", {0, 0}, 0, 0},
   {NULL}
 };
@@ -158,6 +194,111 @@ static void uct_ib_device_get_locality(const char *dev_name,
     *numa_node = (status == UCS_OK) ? n : -1;
 }
 
+static void
+uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
+                                   const uct_ib_async_event_t *event)
+{
+    uct_ib_async_event_val_t *entry;
+    khiter_t iter;
+
+    ucs_spin_lock(&dev->async_event_lock);
+    iter = kh_get(uct_ib_async_event, &dev->async_events_hash, *event);
+    if (iter != kh_end(&dev->async_events_hash)) {
+        entry = &kh_value(&dev->async_events_hash, iter);
+        if (entry->cb != NULL) {
+            ucs_callbackq_add_safe(entry->cbq, entry->cb, entry->arg,
+                                   UCS_CALLBACKQ_FLAG_ONESHOT);
+            entry->cb   = NULL;
+        } else {
+            entry->flag = 1;
+        }
+    }
+    ucs_spin_unlock(&dev->async_event_lock);
+}
+
+ucs_status_t
+uct_ib_device_async_event_register(uct_ib_device_t *dev,
+                                   enum ibv_event_type event_type,
+                                   uint32_t resource_id,
+                                   ucs_callbackq_t *cbq)
+{
+    uct_ib_async_event_val_t *entry;
+    uct_ib_async_event_t event;
+    ucs_status_t status;
+    khiter_t iter;
+    int ret;
+
+    event.event_type  = event_type;
+    event.resource_id = resource_id;
+
+    ucs_spin_lock(&dev->async_event_lock);
+    iter = kh_put(uct_ib_async_event, &dev->async_events_hash, event, &ret);
+    if (ret == UCS_KH_PUT_FAILED) {
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    }
+
+    ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
+    entry       = &kh_value(&dev->async_events_hash, iter);
+    entry->cbq  = cbq;
+    entry->cb   = NULL;
+    entry->flag = 0;
+    status      = UCS_OK;
+
+out:
+    ucs_spin_unlock(&dev->async_event_lock);
+    return status;
+}
+
+ucs_status_t
+uct_ib_device_async_event_wait(uct_ib_device_t *dev,
+                               enum ibv_event_type event_type,
+                               uint32_t resource_id,
+                               ucs_callback_t cb, void *arg)
+{
+    uct_ib_async_event_val_t *entry;
+    uct_ib_async_event_t event;
+    ucs_status_t status;
+    khiter_t iter;
+
+    event.event_type  = event_type;
+    event.resource_id = resource_id;
+
+    ucs_spin_lock(&dev->async_event_lock);
+    iter  = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
+    ucs_assert(iter != kh_end(&dev->async_events_hash));
+    entry = &kh_value(&dev->async_events_hash, iter);
+
+    if (entry->flag) {
+        status     = UCS_OK;
+    } else if (entry->cb != NULL) {
+        status     = UCS_ERR_BUSY;
+    } else {
+        status     = UCS_INPROGRESS;
+        entry->cb  = cb;
+        entry->arg = arg;
+    }
+
+    ucs_spin_unlock(&dev->async_event_lock);
+    return status;
+}
+
+void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
+                                          enum ibv_event_type event_type,
+                                          uint32_t resource_id)
+{
+    uct_ib_async_event_t event;
+    khiter_t iter;
+
+    event.event_type  = event_type;
+    event.resource_id = resource_id;
+
+    ucs_spin_lock(&dev->async_event_lock);
+    iter = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
+    ucs_assert(iter != kh_end(&dev->async_events_hash));
+    kh_del(uct_ib_async_event, &dev->async_events_hash, iter);
+    ucs_spin_unlock(&dev->async_event_lock);
+}
 static void uct_ib_async_event_handler(int fd, int events, void *arg)
 {
     uct_ib_device_t *dev = arg;
@@ -248,6 +389,7 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
     case IBV_EVENT_QP_LAST_WQE_REACHED:
         snprintf(event_info, sizeof(event_info), "SRQ-attached QP 0x%x was flushed",
                  event->qp_num);
+        uct_ib_device_async_event_dispatch(dev, event);
         level = UCS_LOG_LEVEL_DEBUG;
         break;
     case IBV_EVENT_SRQ_ERR:
@@ -414,6 +556,8 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
     ucs_recursive_spinlock_init(&dev->ah_lock, 0);
+    kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
+    ucs_spinlock_init(&dev->async_event_lock, 0);
 
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),
@@ -435,16 +579,16 @@ void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
-    ucs_status_t status;
-
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
 
-    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
-
-    status = ucs_recursive_spinlock_destroy(&dev->ah_lock);
-    if (status != UCS_OK) {
-        ucs_warn("ucs_recursive_spinlock_destroy() failed (%d)", status);
+    if (kh_size(&dev->async_events_hash) != 0) {
+        ucs_warn("async_events_hash not empty");
     }
+
+    kh_destroy_inplace(uct_ib_async_event, &dev->async_events_hash);
+    ucs_spinlock_destroy(&dev->async_event_lock);
+    kh_destroy_inplace(uct_ib_ah, &dev->ah_hash);
+    ucs_recursive_spinlock_destroy(&dev->ah_lock);
 
     if (dev->async_events) {
         ucs_async_remove_handler(dev->ibv_context->async_fd, 1);

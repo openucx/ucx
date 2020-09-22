@@ -418,8 +418,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -m <send mem type>[,<recv mem type>]\n");
     printf("                    memory type of message for sender and receiver (host)\n");
     print_memory_type_usage();
-    printf("     -n <iters>     number of iterations to run (%ld)\n", ctx->params.super.max_iter);
-    printf("     -w <iters>     number of warm-up iterations (%zu)\n",
+    printf("     -n <iters>     number of iterations to run (%"PRIu64")\n", ctx->params.super.max_iter);
+    printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
                                 ctx->params.super.warmup_iter);
     printf("     -c <cpulist>   set affinity to this CPU list (separated by comma) (off)\n");
     printf("     -O <count>     maximal number of uncompleted outstanding sends\n");

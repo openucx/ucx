@@ -106,8 +106,8 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
     }
 
     if (ucs_unlikely(imm)) {
-        hdr.req.ep_ptr      = imm;
-        hdr.req.reqptr      = 0;   /* unused */
+        hdr.req.ep_id       = imm;
+        hdr.req.req_id      = UCP_REQUEST_ID_INVALID;  /* unused */
         hdr.super.super.tag = stag;
 
         /* Sync send - need to send a reply */
@@ -177,7 +177,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
     ucp_worker_t *worker      = iface->worker;
     const void *uct_rkeys[]   = { rkey_buf };
     const ucp_tag_offload_unexp_rndv_hdr_t *rndv_hdr;
-    ucp_rndv_rts_hdr_t *dummy_rts;
+    ucp_tag_rndv_rts_hdr_t *dummy_rts;
     ucp_md_index_t md_index;
     size_t dummy_rts_size;
     size_t rkey_size;
@@ -195,19 +195,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         /* Build the dummy RTS packet, copy meta-data from unexpected rndv header
          * and remote key from rkey_buf.
          */
-        dummy_rts              = ucs_alloca(dummy_rts_size);
-        dummy_rts->tag.tag     = stag;
-        dummy_rts->sreq.ep_ptr = rndv_hdr->ep_ptr;
-        dummy_rts->sreq.reqptr = rndv_hdr->reqptr;
-        dummy_rts->address     = remote_addr;
-        dummy_rts->size        = length;
-        dummy_rts->flags       = UCP_RNDV_RTS_FLAG_TAG;
+        dummy_rts                    = ucs_alloca(dummy_rts_size);
+        dummy_rts->tag.tag           = stag;
+        dummy_rts->super.sreq.ep_id  = rndv_hdr->ep_id;
+        dummy_rts->super.sreq.req_id = rndv_hdr->req_id;
+        dummy_rts->super.address     = remote_addr;
+        dummy_rts->super.size        = length;
+        dummy_rts->super.flags       = UCP_RNDV_RTS_FLAG_TAG;
 
         ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index),
                              UCS_MEMORY_TYPE_HOST, dummy_rts + 1, uct_rkeys);
 
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
-        ucp_tag_rndv_process_rts(worker, dummy_rts, dummy_rts_size, 0);
+        ucp_tag_rndv_process_rts(worker, &dummy_rts->super, dummy_rts_size, 0);
     } else {
         /* Unexpected tag offload rndv request. Sender buffer is either
            non-contig or it's length > rndv.max_zcopy capability of tag lane.
@@ -561,9 +561,7 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     rndv_hdr_len = sizeof(ucp_rndv_rts_hdr_t) + ucp_ep_config(ep)->rndv.rkey_size;
     rndv_rts_hdr = ucs_alloca(rndv_hdr_len);
     packed_len   = ucp_tag_rndv_rts_pack(rndv_rts_hdr, req);
-    ucs_assert((rndv_rts_hdr->address != 0) || !UCP_DT_IS_CONTIG(req->send.datatype) ||
-               !ucp_rndv_is_get_zcopy(req->send.mem_type,
-                                      ep->worker->context->config.ext.rndv_mode));
+
     return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane],
                                    req->send.msg_proto.tag.tag,
                                    rndv_rts_hdr, packed_len, 0);
@@ -591,9 +589,9 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     md_index = ucp_ep_md_index(ep, req->send.lane);
 
     ucp_tag_offload_unexp_rndv_hdr_t rndv_hdr = {
-        .ep_ptr        = ucp_request_get_dest_ep_ptr(req),
-        .reqptr        = (uintptr_t)req,
-        .md_index      = md_index
+        .ep_id    = ucp_send_request_get_ep_remote_id(req),
+        .req_id   = ucp_send_request_get_id(req),
+        .md_index = md_index
     };
 
     dt_state = req->send.state.dt;
@@ -703,7 +701,8 @@ static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
     ucp_worker_t *worker = req->send.ep->worker;
     ucs_status_t status;
 
-    status = ucp_do_tag_offload_bcopy(self, ucp_request_get_dest_ep_ptr(req),
+    status = ucp_do_tag_offload_bcopy(self,
+                                      ucp_send_request_get_ep_remote_id(req),
                                       ucp_tag_offload_pack_eager);
     if (status == UCS_OK) {
         ucp_tag_offload_sync_posted(worker, req);
@@ -720,7 +719,8 @@ static ucs_status_t ucp_tag_offload_eager_sync_zcopy(uct_pending_req_t *self)
     ucp_worker_t *worker = req->send.ep->worker;
     ucs_status_t status;
 
-    status = ucp_do_tag_offload_zcopy(self, ucp_request_get_dest_ep_ptr(req),
+    status = ucp_do_tag_offload_zcopy(self,
+                                      ucp_send_request_get_ep_remote_id(req),
                                       ucp_tag_eager_sync_zcopy_req_complete);
     if (status == UCS_OK) {
         ucp_tag_offload_sync_posted(worker, req);
@@ -728,14 +728,14 @@ static ucs_status_t ucp_tag_offload_eager_sync_zcopy(uct_pending_req_t *self)
     return status;
 }
 
-void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
+void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, ucs_ptr_map_key_t ep_id,
                                    ucp_tag_t stag, uint16_t recv_flags)
 {
     ucp_request_t *req;
 
     ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD);
 
-    req = ucp_proto_ssend_ack_request_alloc(worker, ep_ptr);
+    req = ucp_proto_ssend_ack_request_alloc(worker, ep_id);
     if (req == NULL) {
         ucs_fatal("could not allocate request");
     }
@@ -743,8 +743,8 @@ void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, uintptr_t ep_ptr,
     req->send.proto.am_id      = UCP_AM_ID_OFFLOAD_SYNC_ACK;
     req->send.proto.sender_tag = stag;
 
-    ucs_trace_req("tag_offload send_sync_ack ep 0x%lx tag %"PRIx64"",
-                  ep_ptr, stag);
+    ucs_trace_req("tag_offload send_sync_ack ep_id 0x%lx tag %"PRIx64, ep_id,
+                  stag);
 
     ucp_request_send(req, 0);
 }

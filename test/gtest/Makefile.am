@@ -135,6 +135,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_tag_mem_type.cc \
 	ucp/test_ucp_tag.cc \
 	ucp/test_ucp_context.cc \
+	ucp/test_ucp_worker.cc \
 	ucp/test_ucp_wireup.cc \
 	ucp/test_ucp_wakeup.cc \
 	ucp/test_ucp_fence.cc \
@@ -255,7 +256,6 @@ noinst_HEADERS = \
 	uct/uct_test.h \
 	uct/test_md.h \
 	\
-	ucp/test_ucp_atomic.h \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
 	ucp/ucp_test.h \

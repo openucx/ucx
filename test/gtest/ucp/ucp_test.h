@@ -6,6 +6,7 @@
 #ifndef UCP_TEST_H_
 #define UCP_TEST_H_
 
+#define __STDC_LIMIT_MACROS
 #include <ucp/api/ucp.h>
 #include <ucs/time/time.h>
 #include <common/mem_buffer.h>
@@ -92,7 +93,7 @@ public:
 
         void close_ep_req_free(void *close_req);
 
-        void close_all_eps(const ucp_test &test, int wirker_idx,
+        void close_all_eps(const ucp_test &test, int worker_idx,
                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
 
         void destroy_worker(int worker_index = 0);
@@ -131,6 +132,8 @@ public:
         void cleanup();
 
         static void ep_destructor(ucp_ep_h ep, entity *e);
+
+        bool has_lane_with_caps(uint64_t caps) const;
 
     protected:
         ucs::handle<ucp_context_h>      m_ucph;

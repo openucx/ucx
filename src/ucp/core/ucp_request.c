@@ -223,8 +223,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     int flags;
     int level;
 
-    ucs_trace_func("context=%p md_map=0x%lx buffer=%p length=%zu datatype=0x%lu "
-                   "state=%p", context, md_map, buffer, length, datatype, state);
+    ucs_trace_func("context=%p md_map=0x%"PRIx64" buffer=%p length=%zu "
+                   "datatype=0x%"PRIx64" state=%p", context, md_map, buffer,
+                   length, datatype, state);
 
     status = UCS_OK;
     flags  = UCT_MD_MEM_ACCESS_RMA | uct_flags;
@@ -268,7 +269,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
         break;
     default:
         status = UCS_ERR_INVALID_PARAM;
-        ucs_error("Invalid data type %lx", datatype);
+        ucs_error("Invalid data type 0x%"PRIx64, datatype);
     }
 
 err:
@@ -276,8 +277,9 @@ err:
         level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
                 UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
         ucs_log(level,
-                "failed to register user buffer datatype 0x%lx address %p len %zu:"
-                " %s", datatype, buffer, length, ucs_status_string(status));
+                "failed to register user buffer datatype 0x%"PRIx64
+                " address %p len %zu: %s", datatype, buffer, length,
+                ucs_status_string(status));
     }
     return status;
 }
@@ -286,8 +288,8 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req_d
                       ucp_context_t *context, ucp_datatype_t datatype,
                       ucp_dt_state_t *state, ucp_request_t *req_dbg)
 {
-    ucs_trace_func("context=%p datatype=0x%lu state=%p", context, datatype,
-                   state);
+    ucs_trace_func("context=%p datatype=0x%"PRIx64" state=%p", context,
+                   datatype, state);
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
@@ -340,11 +342,11 @@ void ucp_request_init_multi_proto(ucp_request_t *req,
 
 ucs_status_t
 ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
-                       size_t zcopy_thresh, size_t zcopy_max, size_t dt_count,
-                       const ucp_ep_msg_config_t* msg_config,
+                       size_t zcopy_thresh, size_t zcopy_max,
+                       size_t dt_count, size_t priv_iov_count,
+                       size_t length, const ucp_ep_msg_config_t* msg_config,
                        const ucp_request_send_proto_t *proto)
 {
-    size_t       length = req->send.length;
     ucs_status_t status;
     int          multi;
 
@@ -377,11 +379,11 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         if (ucs_unlikely(length > msg_config->max_zcopy - proto->only_hdr_size)) {
             multi = 1;
         } else if (ucs_unlikely(UCP_DT_IS_IOV(req->send.datatype))) {
-            if (dt_count <= msg_config->max_iov) {
+            if (dt_count <= (msg_config->max_iov - priv_iov_count)) {
                 multi = 0;
             } else {
                 multi = ucp_dt_iov_count_nonempty(req->send.buffer, dt_count) >
-                        msg_config->max_iov;
+                        (msg_config->max_iov - priv_iov_count);
             }
         } else {
             multi = 0;

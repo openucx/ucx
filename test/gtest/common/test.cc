@@ -386,7 +386,21 @@ bool test_base::barrier() {
     } else {
         UCS_TEST_ABORT("pthread_barrier_wait() failed");
     }
+}
 
+static void clear_dontcopy_regions_vma_cb(ucs_sys_vma_info_t *info, void *ctx) {
+    int ret;
+
+    if (info->flags & UCS_SYS_VMA_FLAG_DONTCOPY) {
+        ret = madvise((void*)info->start, info->end - info->start, MADV_DOFORK);
+        EXPECT_EQ(0, ret) << "errno: " << errno
+                          << std::hex << " 0x" << info->start
+                          << "-0x" << info->end;
+    }
+}
+
+clear_dontcopy_regions::clear_dontcopy_regions() {
+    ucs_sys_iterate_vm(NULL, SIZE_MAX, clear_dontcopy_regions_vma_cb, NULL);
 }
 
 }

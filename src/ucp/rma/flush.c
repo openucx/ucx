@@ -129,7 +129,8 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
          *   completion. In this case, the flush state may not even be initialized.
          */
         if ((req->send.flush.uct_flags & UCT_FLUSH_FLAG_CANCEL) ||
-            !ucs_test_all_flags(ep->flags, UCP_EP_FLAG_USED|UCP_EP_FLAG_DEST_EP)) {
+            !ucs_test_all_flags(ep->flags, UCP_EP_FLAG_USED |
+                                           UCP_EP_FLAG_REMOTE_ID)) {
             ucs_trace_req("flush request %p not waiting for remote completions",
                           req);
             req->send.flush.sw_done = 1;
@@ -312,22 +313,23 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
      * flushed. req->send.flush.lanes keeps track of which lanes we still have
      * to start flush on.
      */
-    req->flags                     = req_flags;
-    req->status                    = UCS_OK;
-    req->send.ep                   = ep;
-    req->send.flush.flushed_cb     = flushed_cb;
-    req->send.flush.prog_id        = UCS_CALLBACKQ_ID_NULL;
-    req->send.flush.uct_flags      = uct_flags;
-    req->send.flush.worker_req     = worker_req;
-    req->send.flush.sw_started     = 0;
-    req->send.flush.sw_done        = 0;
-    req->send.flush.num_lanes      = ucp_ep_num_lanes(ep);;
-    req->send.flush.started_lanes  = 0;
+    req->flags                      = req_flags;
+    req->status                     = UCS_OK;
+    req->send.ep                    = ep;
+    req->send.flush.flushed_cb      = flushed_cb;
+    req->send.flush.prog_id         = UCS_CALLBACKQ_ID_NULL;
+    req->send.flush.uct_flags       = uct_flags;
+    req->send.flush.worker_req      = worker_req;
+    req->send.flush.sw_started      = 0;
+    req->send.flush.sw_done         = 0;
+    req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
+    req->send.flush.started_lanes   = 0;
 
-    req->send.lane                 = UCP_NULL_LANE;
-    req->send.uct.func             = ucp_ep_flush_progress_pending;
-    req->send.state.uct_comp.func  = ucp_ep_flush_completion;
-    req->send.state.uct_comp.count = ucp_ep_num_lanes(ep);
+    req->send.lane                  = UCP_NULL_LANE;
+    req->send.uct.func              = ucp_ep_flush_progress_pending;
+    req->send.state.uct_comp.func   = ucp_ep_flush_completion;
+    req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
+    req->send.state.uct_comp.status = UCS_OK;
 
     ucp_request_set_send_callback_param(param, req, send);
     ucp_ep_flush_progress(req);
@@ -382,10 +384,6 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
     ucp_rsc_index_t iface_id;
     ucp_worker_iface_t *wiface;
     ucs_status_t status;
-
-    if (worker->flush_ops_count) {
-        return UCS_INPROGRESS;
-    }
 
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         wiface = worker->ifaces[iface_id];
@@ -443,17 +441,26 @@ static unsigned ucp_worker_flush_progress(void *arg)
     ucs_status_t status;
     ucp_ep_h ep;
 
-    status = ucp_worker_flush_check(worker);
-    if ((status == UCS_OK) || (&next_ep->ep_list == &worker->all_eps)) {
-        /* If all ifaces are flushed, or we finished going over all endpoints,
-         * no need to progress this request actively any more. Just wait until
-         * all associated endpoint flush requests are completed.
-         */
-        ucp_worker_flush_complete_one(req, UCS_OK, 1);
-    } else if (status != UCS_INPROGRESS) {
-        /* Error returned from uct iface flush */
-        ucp_worker_flush_complete_one(req, status, 1);
-    } else if (worker->context->config.ext.flush_worker_eps) {
+    if (worker->flush_ops_count == 0) {
+        /* all scheduled progress operations on worker were completed */
+        status = ucp_worker_flush_check(worker);
+        if ((status == UCS_OK) || (&next_ep->ep_list == &worker->all_eps)) {
+            /* If all ifaces are flushed, or we finished going over all
+             * endpoints, no need to progress this request actively anymore
+             * and we complete the flush operation with UCS_OK status. */
+            ucp_worker_flush_complete_one(req, UCS_OK, 1);
+            goto out;
+        } else if (status != UCS_INPROGRESS) {
+            /* Error returned from uct iface flush, no need to progress
+             * this request actively anymore and we complete the flush
+             * operation with an error status. */
+            ucp_worker_flush_complete_one(req, status, 1);
+            goto out;
+        }
+    }
+
+    if ((worker->context->config.ext.flush_worker_eps) &&
+        (&next_ep->ep_list != &worker->all_eps)) {
         /* Some endpoints are not flushed yet. Take next endpoint from the list
          * and start flush operation on it.
          */
@@ -476,6 +483,7 @@ static unsigned ucp_worker_flush_progress(void *arg)
         }
     }
 
+out:
     return 0;
 }
 
@@ -486,9 +494,12 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
     ucs_status_t status;
     ucp_request_t *req;
 
-    status = ucp_worker_flush_check(worker);
-    if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
-        return UCS_STATUS_PTR(status);
+    if (!worker->flush_ops_count) {
+        status = ucp_worker_flush_check(worker);
+        if ((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE)) {
+            /* UCS_OK is returned here as well */
+            return UCS_STATUS_PTR(status);
+        }
     }
 
     req = ucp_request_get_param(worker, param,

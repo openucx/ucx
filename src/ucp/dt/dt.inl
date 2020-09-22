@@ -11,6 +11,7 @@
 
 #include <ucp/core/ucp_mm.h>
 #include <ucs/profile/profile.h>
+#include <inttypes.h>
 
 
 /**
@@ -107,7 +108,7 @@ ucp_dt_unpack_only(ucp_worker_h worker, void *buffer, size_t count,
         return status;
 
     default:
-        ucs_fatal("unexpected datatype=%lx", datatype);
+        ucs_fatal("unexpected datatype=0x%" PRIx64, datatype);
     }
 
 err_truncated:

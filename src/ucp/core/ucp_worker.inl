@@ -9,6 +9,9 @@
 
 #include "ucp_worker.h"
 
+#include <ucp/core/ucp_request.h>
+#include <ucs/datastruct/ptr_map.inl>
+
 
 static UCS_F_ALWAYS_INLINE khint_t
 ucp_worker_rkey_config_hash_func(ucp_rkey_config_key_t rkey_config_key)
@@ -45,14 +48,59 @@ ucp_worker_get_name(ucp_worker_h worker)
  * @return endpoint by a pointer received from remote side
  */
 static UCS_F_ALWAYS_INLINE ucp_ep_h
-ucp_worker_get_ep_by_ptr(ucp_worker_h worker, uintptr_t ep_ptr)
+ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
 {
-    ucp_ep_h ep = (ucp_ep_h)ep_ptr;
+    ucp_ep_h ep;
 
-    ucs_assert(ep != NULL);
+    ucs_assert(id != UCP_EP_ID_INVALID);
+    ep = (ucp_ep_h)ucs_ptr_map_get(&worker->ptr_map, id);
     ucs_assertv(ep->worker == worker, "worker=%p ep=%p ep->worker=%p", worker,
                 ep, ep->worker);
     return ep;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
+ucp_worker_get_request_id(ucp_worker_h worker, ucp_request_t *req, int indirect)
+{
+    ucs_ptr_map_key_t id;
+    ucs_status_t status;
+
+    status = ucs_ptr_map_put(&worker->ptr_map, req, indirect, &id);
+    if (ucs_unlikely(indirect)) {
+        return (status == UCS_OK) ? id : UCP_REQUEST_ID_INVALID;
+    }
+
+    ucs_assert(status == UCS_OK);
+    return id;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_request_t*
+ucp_worker_get_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
+{
+    ucp_request_t* request;
+
+    request = (ucp_request_t*)ucs_ptr_map_get(&worker->ptr_map, id);
+    ucs_assert(request != NULL);
+    return request;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_worker_del_request_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
+{
+    ucs_status_t status UCS_V_UNUSED;
+
+    status = ucs_ptr_map_del(&worker->ptr_map, id);
+    ucs_assert(status == UCS_OK);
+}
+
+static UCS_F_ALWAYS_INLINE ucp_request_t*
+ucp_worker_extract_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
+{
+    ucp_request_t *request;
+
+    request = (ucp_request_t*)ucs_ptr_map_extract(&worker->ptr_map, id);
+    ucs_assert(request != NULL);
+    return request;
 }
 
 /**

@@ -67,12 +67,12 @@ ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
     if (ret < 0) {
         ucs_assert(ret > UCS_ERR_LAST);
         status = (ucs_status_t)ret;
-        ucs_error("private data pack function failed with error: %s",
+        ucs_debug("private data pack function failed with error: %s",
                   ucs_status_string(status));
         goto out;
     } else if (ret > priv_data_max) {
         status = UCS_ERR_EXCEEDS_LIMIT;
-        ucs_error("private data pack function returned %zd (max: %zu)",
+        ucs_debug("private data pack function returned %zd (max: %zu)",
                   ret, priv_data_max);
         goto out;
     }
@@ -114,7 +114,7 @@ void uct_cm_ep_server_conn_notify_cb(uct_cm_base_ep_t *cep, ucs_status_t status)
 static ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
 {
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_CM)) {
-        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%lx",
+        ucs_error("UCT_EP_PARAM_FIELD_CM is not set. field_mask 0x%"PRIx64,
                   params->field_mask);
         return UCS_ERR_INVALID_PARAM;
     }
@@ -122,7 +122,8 @@ static ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
     if (!(params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS) ||
         !(params->sockaddr_cb_flags & UCT_CB_FLAG_ASYNC)) {
         ucs_error("UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS and UCT_CB_FLAG_ASYNC "
-                  "should be set. field_mask 0x%lx, sockaddr_cb_flags 0x%x",
+                  "should be set. field_mask 0x%"PRIx64
+                  ", sockaddr_cb_flags 0x%x",
                   params->field_mask, params->sockaddr_cb_flags);
         return UCS_ERR_UNSUPPORTED;
     }
@@ -220,6 +221,29 @@ ucs_status_t uct_listener_reject(uct_listener_h listener,
                                  uct_conn_request_h conn_request)
 {
     return listener->cm->ops->listener_reject(listener, conn_request);
+}
+
+ucs_status_t uct_listener_backlog_adjust(const uct_listener_params_t *params,
+                                         int max_value, int *backlog)
+{
+    if (params->field_mask & UCT_LISTENER_PARAM_FIELD_BACKLOG) {
+        if (params->backlog > max_value) {
+            ucs_diag("configure value %d is greater than the max_value %d. "
+                     "using max_value", params->backlog, max_value);
+            *backlog = max_value;
+        } else {
+            *backlog = params->backlog;
+        }
+    } else {
+        *backlog = max_value;
+    }
+
+    if (*backlog <= 0) {
+        ucs_error("backlog (%d) must be a whole positive number", *backlog);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
 }
 
 
