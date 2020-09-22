@@ -398,15 +398,15 @@ public:
     public:
         IoReadResponseCallback(size_t buffer_size,
             MemoryPool<IoReadResponseCallback>* pool) :
-            _counter(0), _io_counter(0), _chunk_cnt(0) {
+            _comp_counter(0), _io_counter(0), _conn_io_counter(0), _chunk_cnt(0) {
             _buffer = malloc(buffer_size);
             _pool   = pool;
         }
         
-        void init(long *counter, long *conn_counter, uint32_t chunk_cnt = 1) {
-            _counter         = 0;
-            _io_counter      = counter;
-            _conn_io_counter = conn_counter;
+        void init(long *io_counter, long *conn_io_counter, uint32_t chunk_cnt = 1) {
+            _comp_counter    = 0;
+            _io_counter      = io_counter;
+            _conn_io_counter = conn_io_counter;
             _chunk_cnt       = chunk_cnt;
         }
 
@@ -416,7 +416,7 @@ public:
 
         virtual void operator()(ucs_status_t status) {
             /* wait data and response completion */
-            if (++_counter < (1 + _chunk_cnt)) {
+            if (++_comp_counter < (1 + _chunk_cnt)) {
                 return;
             }
 
@@ -430,7 +430,7 @@ public:
         }
 
     private:
-        long                                _counter;
+        long                                _comp_counter;
         long*                               _io_counter;
         long*                               _conn_io_counter;
         uint32_t                            _chunk_cnt;
@@ -456,7 +456,7 @@ public:
         CONN_RETRIES_EXCEEDED
     } status_t;
 
-    int get_conn_index(UcxConnection *conn) {
+    int get_conn_index(const UcxConnection *conn) {
         for (int i = 0; i < _conn.size(); i++) {
             if (_conn[i].conn == conn) {
                 return i;
@@ -473,7 +473,7 @@ public:
         }
 
         int index = get_conn_index(conn);
-        _conn[index].num_sent++;
+        ++_conn[index].num_sent;
         ++_num_sent;
         IoReadResponseCallback *r = _callback_pool.get();
         r->init(&_num_completed, &_conn[index].num_completed,
@@ -493,7 +493,7 @@ public:
         }
 
         int index = get_conn_index(conn);
-        _conn[index].num_sent++;
+        ++_conn[index].num_sent;
         ++_num_sent;
         VERBOSE_LOG << "sending data " << buffer() << " size "
                     << data_size << " sn " << sn;
@@ -513,17 +513,15 @@ public:
 
         if (hdr->op == IO_COMP) {
             ++_num_completed;
-            int index = get_conn_index(conn);
-            ++_conn[index].num_completed;
+            ++_conn[get_conn_index(conn)].num_completed;
         }
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
         LOG << "setting error flag on connection " << conn;
-        _num_connected--;        
+        --_num_connected;        
         int index             = get_conn_index(conn);
-        _num_sent             = _num_sent - (_conn[index].num_sent
-                                             - _conn[index].num_completed);
+        _num_sent            -= (_conn[index].num_sent - _conn[index].num_completed);
         _conn[index].conn     = NULL;
         _conn[index].num_sent = _conn[index].num_completed;
         delete conn;
@@ -611,11 +609,8 @@ public:
     }
 
     bool run() {
-        if (_conn.size() == 0) {
-            for (size_t i = 0; i < opts().servers.size(); i++) {
-                conn_info_t conn_info = {0, 0, NULL};
-                _conn.push_back(conn_info);
-            }
+        if (_conn.empty()) {
+            _conn.resize(opts().servers.size());
         }
         for (size_t i = 0; i < _conn.size(); i++) {
             if (_conn[i].conn == NULL) {
