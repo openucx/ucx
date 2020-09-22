@@ -758,7 +758,9 @@ protected:
     void check_skip_test_tl() {
         const resource *r = dynamic_cast<const resource*>(GetParam());
 
-        if ((r->tl_name != "rc_mlx5") && (r->tl_name != "rc_verbs")) {
+        if ((r->tl_name != "rc_mlx5") &&
+            (r->tl_name != "dc_mlx5") &&
+            (r->tl_name != "rc_verbs")) {
             UCS_TEST_SKIP_R("not supported yet");
         }
 

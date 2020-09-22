@@ -52,6 +52,12 @@ uct_rc_mlx5_common_update_tx_res(uct_rc_iface_t *rc_iface, uct_ib_mlx5_txwq_t *t
 
     uct_rc_iface_update_reads(rc_iface);
 
+#if HAVE_TL_DC
+    if (rc_iface->super.config.qp_type == UCT_IB_QPT_DCI) {
+        return;
+    }
+#endif
+
     rc_iface->tx.cq_available += bb_num;
     ucs_assertv(rc_iface->tx.cq_available <= rc_iface->config.tx_cq_len,
                 "cq_available=%d tx_cq_len=%d bb_num=%d txwq=%p txqp=%p",
