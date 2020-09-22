@@ -53,6 +53,7 @@ typedef struct {
     unsigned                 random_seed;
     size_t                   num_buffers;
     bool                     verbose;
+    bool                     print_conn_status;
 } options_t;
 
 #define LOG         UcxLog("[DEMO]", true)
@@ -402,10 +403,11 @@ public:
             _pool   = pool;
         }
         
-        void init(long *counter, uint32_t chunk_cnt = 1) {
-            _counter    = 0;
-            _io_counter = counter;
-            _chunk_cnt  = chunk_cnt;
+        void init(long *counter, long *conn_counter, uint32_t chunk_cnt = 1) {
+            _counter         = 0;
+            _io_counter      = counter;
+            _conn_io_counter = conn_counter;
+            _chunk_cnt       = chunk_cnt;
         }
 
         ~IoReadResponseCallback() {
@@ -419,6 +421,7 @@ public:
             }
 
             ++(*_io_counter);
+            ++(*_conn_io_counter);
             _pool->put(this);
         }
 
@@ -429,6 +432,7 @@ public:
     private:
         long                                _counter;
         long*                               _io_counter;
+        long*                               _conn_io_counter;
         uint32_t                            _chunk_cnt;
         void*                               _buffer;
         MemoryPool<IoReadResponseCallback>* _pool;
@@ -436,7 +440,8 @@ public:
 
     DemoClient(const options_t& test_opts) :
         P2pDemoCommon(test_opts),
-        _num_sent(0), _num_completed(0), _status(OK), _start_time(get_time()),
+        _num_connected(0), _num_sent(0),
+        _num_completed(0), _status(OK), _start_time(get_time()),
         _retry(0), _callback_pool(opts().iomsg_size) {
         _status_str[OK]                    = "ok";
         _status_str[ERROR]                 = "error";
@@ -451,16 +456,28 @@ public:
         CONN_RETRIES_EXCEEDED
     } status_t;
 
+    int get_conn_index(UcxConnection *conn) {
+        for (int i = 0; i < _conn.size(); i++) {
+            if (_conn[i].conn == conn) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     size_t do_io_read(UcxConnection *conn, uint32_t sn) {
         size_t data_size = get_data_size();
 
         if (!send_io_message(conn, IO_READ, sn, data_size)) {
-            return data_size;
+            return 0;
         }
 
+        int index = get_conn_index(conn);
+        _conn[index].num_sent++;
         ++_num_sent;
         IoReadResponseCallback *r = _callback_pool.get();
-        r->init(&_num_completed, get_chunk_cnt(data_size));
+        r->init(&_num_completed, &_conn[index].num_completed,
+                get_chunk_cnt(data_size));
         recv_data(conn, data_size, sn, r);
         conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
         next_buffer();
@@ -472,9 +489,11 @@ public:
         size_t data_size = get_data_size();
 
         if (!send_io_message(conn, IO_WRITE, sn, data_size)) {
-            return data_size;
+            return 0;
         }
 
+        int index = get_conn_index(conn);
+        _conn[index].num_sent++;
         ++_num_sent;
         VERBOSE_LOG << "sending data " << buffer() << " size "
                     << data_size << " sn " << sn;
@@ -494,12 +513,20 @@ public:
 
         if (hdr->op == IO_COMP) {
             ++_num_completed;
+            int index = get_conn_index(conn);
+            ++_conn[index].num_completed;
         }
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
         LOG << "setting error flag on connection " << conn;
-        _status = ERROR;
+        _num_connected--;        
+        int index             = get_conn_index(conn);
+        _num_sent             = _num_sent - (_conn[index].num_sent
+                                             - _conn[index].num_completed);
+        _conn[index].conn     = NULL;
+        _conn[index].num_sent = _conn[index].num_completed;
+        delete conn;
     }
 
     bool wait_for_responses(long max_outstanding) {
@@ -584,30 +611,37 @@ public:
     }
 
     bool run() {
-        std::vector<UcxConnection*> conn;
-        conn.resize(opts().servers.size());
-        for (size_t i = 0; i < conn.size(); i++) {
-            conn[i] = connect(opts().servers[i]);
-            if (!conn[i]) {
-                LOG << "Connect to server ["
-                    << opts().servers[i]
-                    << "] Failed!";
-                for (size_t j = 0; j < i; j++) {
-                    delete conn[j];
-                }
-                return false;
+        if (_conn.size() == 0) {
+            for (size_t i = 0; i < opts().servers.size(); i++) {
+                conn_info_t conn_info = {0, 0, NULL};
+                _conn.push_back(conn_info);
             }
         }
-
+        for (size_t i = 0; i < _conn.size(); i++) {
+            if (_conn[i].conn == NULL) {
+                _conn[i].conn = connect(opts().servers[i]);
+                if (!_conn[i].conn) {
+                    LOG << "Connect to server ["
+                        << opts().servers[i]
+                        << "] Failed!";
+                } else {
+                    _num_connected++;
+                }
+            }
+        }
+        if (_num_connected == 0) {
+            return false;
+        }
         _status = OK;
 
         // TODO reset these values by canceling requests
         _num_sent      = 0;
         _num_completed = 0;
 
-        double prev_time     = get_time();
-        long total_iter      = 0;
-        long total_prev_iter = 0;
+        double prev_time           = get_time();
+        double prev_reconnect_time = get_time();
+        long total_iter            = 0;
+        long total_prev_iter       = 0;
         std::vector<op_info_t> info;
 
         for (int i = 0; i < IO_COMP; ++i) {
@@ -615,22 +649,48 @@ public:
             info.push_back(op_info);
         }
 
-        while ((total_iter < opts().iter_count) && (_status == OK)) {
+        while ((total_iter < opts().iter_count)) {
             VERBOSE_LOG << " <<<< iteration " << total_iter << " >>>>";
 
             if (!wait_for_responses(opts().window_size - 1)) {
                 break;
             }
 
-            size_t conn_num = IoDemoRandom::rand(0, conn.size() - 1);
-            io_op_t op      = get_op();
+            if (_num_connected < _conn.size()) {
+                double curr_time = get_time();
+                if (curr_time >= (prev_reconnect_time + 3.0)) {
+                    prev_reconnect_time = curr_time;
+                    for (size_t i = 0; i < _conn.size(); i++) {
+                        if (_conn[i].conn == NULL) {
+                            _conn[i].conn = connect(opts().servers[i]);
+                            if (_conn[i].conn) {
+                                _num_connected++;
+                            }
+                        }
+                    }
+                }
+            }
+            if (_num_connected == 0) {
+                LOG << "Are servers are disconnected";;
+                _status = ERROR;
+                break;
+            }
+            size_t conn_index;
+            while (1) {
+                conn_index = IoDemoRandom::rand(0, _conn.size() - 1);
+                if (_conn[conn_index].conn != NULL) {
+                    break;
+                }
+            }
+
+            io_op_t op = get_op();
             size_t size;
             switch (op) {
             case IO_READ:
-                size = do_io_read(conn[conn_num], total_iter);
+                size = do_io_read(_conn[conn_index].conn, total_iter);
                 break;
             case IO_WRITE:
-                size = do_io_write(conn[conn_num], total_iter);
+                size = do_io_write(_conn[conn_index].conn, total_iter);
                 break;
             default:
                 abort();
@@ -638,14 +698,12 @@ public:
 
             info[op].total_bytes += size;
             info[op].num_iters++;
-
             if (((total_iter % 10) == 0) && (total_iter > total_prev_iter)) {
                 double curr_time = get_time();
                 if (curr_time >= (prev_time + 1.0)) {
                     if (!wait_for_responses(0)) {
                         break;
                     }
-
                     report_performance(total_iter - total_prev_iter,
                                        curr_time - prev_time, info);
 
@@ -666,12 +724,14 @@ public:
             check_time_limit(curr_time);
         }
 
-        for (size_t i = 0; i < conn.size(); i++) {
-            delete conn[i];
+        for (size_t i = 0; i < _conn.size(); i++) {
+            if (_conn[i].conn != NULL) {
+                delete _conn[i].conn;
+            }
         }
         return (_status == OK) || (_status == RUNTIME_EXCEEDED);
     }
-
+ 
     // returns true if has to stop the connection retries
     bool update_retry() {
         _status = OK;
@@ -766,9 +826,24 @@ private:
             }
             std::cout << std::endl;
         }
+        if (opts().print_conn_status) {
+            std::cout << get_time_str() << " ";
+            std::cout << "io total ";
+            for (int i = 0; i < _conn.size(); i++) {
+                std::cout << _conn[i].num_completed << " ";
+            }
+            std::cout << std::endl;
+        }
     }
 
 private:
+    typedef struct {
+        long           num_sent;
+        long           num_completed;
+        UcxConnection* conn;
+    } conn_info_t; 
+    std::vector<conn_info_t>           _conn;
+    size_t                             _num_connected;
     long                               _num_sent;
     long                               _num_completed;
     status_t                           _status;
@@ -868,8 +943,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->window_size          = 1;
     test_opts->random_seed          = std::time(NULL);
     test_opts->verbose              = false;
+    test_opts->print_conn_status    = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v:x")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -953,6 +1029,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'v':
             test_opts->verbose = true;
             break;
+        case 'x':
+            test_opts->print_conn_status = true;
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -977,6 +1056,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "                             Examples: -l 17.5s; -l 10m; 15.5h" << std::endl;
             std::cout << "  -s <random seed>           Random seed to use for randomizing" << std::endl;
             std::cout << "  -v                         Set verbose mode" << std::endl;
+            std::cout << "  -x                         Print extended status per connection" << std::endl;
             std::cout << "" << std::endl;
             return -1;
         }
