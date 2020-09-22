@@ -51,15 +51,17 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                  const ucp_request_param_t *param,
                  const ucp_request_send_proto_t *proto)
 {
-    ssize_t max_short = ucp_proto_get_short_max(req, msg_config);
+    ssize_t max_short          = ucp_proto_get_short_max(req, msg_config);
+    ucp_ep_config_t *ep_config = ucp_ep_config(req->send.ep);
     ucs_status_t status;
     size_t zcopy_thresh;
     size_t rndv_thresh;
     size_t rndv_rma_thresh;
     size_t rndv_am_thresh;
 
-    ucp_request_param_rndv_thresh(req, param, &rndv_rma_thresh,
-                                  &rndv_am_thresh);
+    ucp_request_param_rndv_thresh(req, param, &ep_config->tag.rndv.rma_thresh,
+                                  &ep_config->tag.rndv.am_thresh,
+                                  &rndv_rma_thresh, &rndv_am_thresh);
 
     rndv_thresh = ucp_tag_get_rndv_threshold(req, dt_count, msg_config->max_iov,
                                              rndv_rma_thresh, rndv_am_thresh);

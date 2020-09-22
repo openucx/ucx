@@ -298,6 +298,14 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
 
 class test_ucp_am_nbx : public test_ucp_am_base {
 public:
+    enum {
+        DT_CONTIG  = UCS_BIT(0),
+        DT_IOV     = UCS_BIT(1),
+        DT_GENERIC = UCS_BIT(2),
+        DT_NUM     = 3,
+        REPLY_FLAG = UCS_BIT(3)
+    };
+
     test_ucp_am_nbx()
     {
         m_dt          = ucp_dt_make_contig(1);
@@ -318,7 +326,31 @@ public:
         return 0;
     }
 
-    void set_am_data_handler(entity &e, uint16_t am_id, void *arg)
+    ucp_datatype_t make_dt(int dt)
+    {
+        if (dt & DT_CONTIG) {
+           return ucp_dt_make_contig(1);
+        } else if (dt & DT_IOV) {
+           return ucp_dt_make_iov();
+        } else {
+            EXPECT_TRUE(dt & DT_GENERIC);
+
+            ucp_datatype_t ucp_dt;
+            ASSERT_UCS_OK(ucp_dt_create_generic(&ucp::test_dt_copy_ops, NULL,
+                                                &ucp_dt));
+            return ucp_dt;
+        }
+    }
+
+    void destroy_dt(ucp_datatype_t dt)
+    {
+        if (UCP_DT_IS_GENERIC(dt)) {
+            ucp_dt_destroy(dt);
+        }
+    }
+
+    void set_am_data_handler(entity &e, uint16_t am_id,
+                             ucp_am_recv_callback_t cb, void *arg)
     {
         ucp_am_handler_param_t param;
 
@@ -327,7 +359,7 @@ public:
                            UCP_AM_HANDLER_PARAM_FIELD_CB |
                            UCP_AM_HANDLER_PARAM_FIELD_ARG;
         param.id         = am_id;
-        param.cb         = am_data_cb;
+        param.cb         = cb;
         param.arg        = arg;
         ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
     }
@@ -358,7 +390,7 @@ public:
         std::string hbuf(header_size, 'h');
         m_am_received = false;
 
-        set_am_data_handler(receiver(), TEST_AM_NBX_ID, this);
+        set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this);
 
         ucp::data_type_desc_t sdt_desc(m_dt, &sbuf[0], size);
 
@@ -493,14 +525,6 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx {
 public:
-    enum {
-        DT_CONTIG  = UCS_BIT(0),
-        DT_IOV     = UCS_BIT(1),
-        DT_GENERIC = UCS_BIT(2),
-        DT_NUM     = 3,
-        REPLY_FLAG = UCS_BIT(3)
-    };
-
     std::vector<ucp_test_param>
     static enum_test_params(const ucp_params_t& ctx_params,
                             const std::string& name,
@@ -526,22 +550,12 @@ public:
     {
         test_ucp_am_nbx::init();
 
-        if (GetParam().variant & DT_CONTIG) {
-            m_dt = ucp_dt_make_contig(1);
-        } else if (GetParam().variant & DT_IOV) {
-            m_dt = ucp_dt_make_iov();
-        } else {
-            EXPECT_TRUE(GetParam().variant & DT_GENERIC);
-            ASSERT_UCS_OK(ucp_dt_create_generic(&ucp::test_dt_copy_ops, NULL,
-                                                &m_dt));
-        }
+        m_dt = make_dt(GetParam().variant);
     }
 
     void cleanup()
     {
-        if (GetParam().variant & DT_GENERIC) {
-            ucp_dt_destroy(m_dt);
-        }
+        destroy_dt(m_dt);
 
         test_ucp_am_nbx::cleanup();
     }
@@ -560,25 +574,25 @@ UCS_TEST_P(test_ucp_am_nbx_dts, short_send)
 UCS_TEST_P(test_ucp_am_nbx_dts, short_bcopy_send, "ZCOPY_THRESH=-1",
                                                   "RNDV_THRESH=-1")
 {
-    test_am(4096);
+    test_am(4 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_dts, long_bcopy_send, "ZCOPY_THRESH=-1",
                                                  "RNDV_THRESH=-1")
 {
-    test_am(65536);
+    test_am(64 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_dts, short_zcopy_send, "ZCOPY_THRESH=1",
                                                   "RNDV_THRESH=-1")
 {
-    test_am(4096);
+    test_am(4 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_dts, long_zcopy_send, "ZCOPY_THRESH=1",
                                                  "RNDV_THRESH=-1")
 {
-    test_am(65536);
+    test_am(64 * UCS_KBYTE);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_dts)
@@ -588,7 +602,8 @@ class test_ucp_am_nbx_rndv: public test_ucp_am_nbx {
 public:
     test_ucp_am_nbx_rndv()
     {
-        m_rx_dt = ucp_dt_make_contig(1);
+        m_rx_dt  = ucp_dt_make_contig(1);
+        m_status = UCS_OK;
         modify_config("RNDV_THRESH", "128");
     }
 
@@ -632,24 +647,160 @@ public:
         EXPECT_EQ(self->m_rx_buf, std::vector<char>(length, 'd'));
     }
 
+    static ucs_status_t am_data_reject_rndv_cb(void *arg, const void *header,
+                                               size_t header_length, void *data,
+                                               size_t length,
+                                               const ucp_am_recv_param_t *param)
+    {
+        test_ucp_am_nbx_rndv *self = reinterpret_cast<test_ucp_am_nbx_rndv*>(arg);
+
+        EXPECT_FALSE(self->m_am_received);
+        self->m_am_received = true;
+
+        return self->m_status;
+    }
+
+    static ucs_status_t am_data_deferred_reject_rndv_cb(void *arg,
+                                                        const void *header,
+                                                        size_t header_length,
+                                                        void *data, size_t length,
+                                                        const ucp_am_recv_param_t *param)
+    {
+        void **data_desc_p = reinterpret_cast<void**>(arg);
+
+        EXPECT_EQ(NULL, *data_desc_p);
+        *data_desc_p = data;
+
+        return UCS_INPROGRESS;
+    }
+
     ucp_datatype_t               m_rx_dt;
+    ucs_status_t                 m_status;
     ucp::data_type_desc_t        m_rx_dt_desc;
     std::vector<char>            m_rx_buf;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
 {
-    test_am_send_recv(65536);
+    test_am_send_recv(64 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_get, "RNDV_SCHEME=get_zcopy")
 {
-    test_am_send_recv(65536);
+    test_am_send_recv(64 * UCS_KBYTE);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_put, "RNDV_SCHEME=put_zcopy")
 {
-    test_am_send_recv(65536);
+    test_am_send_recv(64 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, reject_rndv)
+{
+    skip_loopback();
+
+    set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_reject_rndv_cb,
+                        this);
+
+    std::vector<char> sbuf(10000, 0);
+    ucp_request_param_t param;
+    param.op_attr_mask      = 0ul;
+    ucs_status_t statuses[] = {UCS_OK, UCS_ERR_REJECTED, UCS_ERR_NO_MEMORY};
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+
+    for (int i = 0; i < ucs_static_array_size(statuses); ++i) {
+        m_am_received = false;
+        m_status      = statuses[i];
+
+        ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID,
+                                                NULL, 0ul, sbuf.data(),
+                                                sbuf.size(), &param);
+
+        EXPECT_EQ(m_status, request_wait(sptr));
+        EXPECT_TRUE(m_am_received);
+    }
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, deferred_reject_rndv)
+{
+    skip_loopback();
+
+    void *data_desc = NULL;
+    std::vector<char> sbuf(10000, 0);
+    ucp_request_param_t param;
+
+    param.op_attr_mask = 0ul;
+
+    set_am_data_handler(receiver(), TEST_AM_NBX_ID,
+                        am_data_deferred_reject_rndv_cb, &data_desc);
+
+    ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID,
+                                            NULL, 0ul, sbuf.data(),
+                                            sbuf.size(), &param);
+
+    wait_for_flag(&data_desc);
+    EXPECT_TRUE(data_desc != NULL);
+
+    ucp_am_data_release(receiver().worker(), data_desc);
+    EXPECT_EQ(UCS_OK, request_wait(sptr));
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv)
+
+
+class test_ucp_am_nbx_rndv_dts: public test_ucp_am_nbx_rndv {
+public:
+    void init()
+    {
+        test_ucp_am_nbx::init();
+
+        m_dt    = make_dt(dt_pairs()[GetParam().variant][0]);
+        m_rx_dt = make_dt(dt_pairs()[GetParam().variant][1]);
+    }
+
+    void cleanup()
+    {
+        destroy_dt(m_dt);
+        destroy_dt(m_rx_dt);
+
+        test_ucp_am_nbx::cleanup();
+    }
+
+    std::vector<ucp_test_param>
+    static enum_test_params(const ucp_params_t& ctx_params,
+                            const std::string& name,
+                            const std::string& test_case_name,
+                            const std::string& tls)
+    {
+        std::vector<ucp_test_param> result;
+
+        for (int i = 0; i < dt_pairs().size(); ++i) {
+            generate_test_params_variant(ctx_params, name, test_case_name,
+                                         tls, i, result);
+        }
+
+        return result;
+    }
+
+    static std::vector<std::vector<int> > &dt_pairs()
+    {
+        static std::vector<std::vector<int> > res;
+
+        if (res.empty()) {
+            int dt_arr[] = {DT_CONTIG, DT_IOV, DT_GENERIC};
+            std::vector<int> dts(dt_arr, dt_arr + ucs_static_array_size(dt_arr));
+
+            res = ucs::make_pairs(dts);
+        }
+
+        return res;
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_dts, rndv, "RNDV_THRESH=256")
+{
+    test_am_send_recv(64 * UCS_KBYTE);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv_dts);

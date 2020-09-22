@@ -141,7 +141,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     eagerf_hdr                    = (void*)(rdesc + 1);
     req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
     req->recv.tag.info.length     =
-    req->recv.tag.remaining       = eagerf_hdr->total_len;
+    req->recv.remaining           = eagerf_hdr->total_len;
 
     /* process first fragment */
     UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);

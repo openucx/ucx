@@ -265,9 +265,8 @@ static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
     ucp_request_complete_send(sreq, status);
 }
 
-static void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
-                                  ucs_ptr_map_key_t remote_req_id,
-                                  ucs_status_t status)
+void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
+                           ucs_ptr_map_key_t remote_req_id, ucs_status_t status)
 {
     ucp_trace_req(rndv_req, "send ats remote_req_id 0x%"PRIxPTR, remote_req_id);
     UCS_PROFILE_REQUEST_EVENT(rreq, "send_ats", 0);
@@ -397,8 +396,8 @@ static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req,
 
 static void ucp_rndv_recv_data_init(ucp_request_t *rreq, size_t size)
 {
-    rreq->status             = UCS_OK;
-    rreq->recv.tag.remaining = size;
+    rreq->status         = UCS_OK;
+    rreq->recv.remaining = size;
 }
 
 static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
@@ -745,8 +744,11 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self, status),
         }
     }
 
-    req->recv.tag.remaining -= freq->send.length;
-    if (req->recv.tag.remaining == 0) {
+    ucs_assertv(req->recv.remaining >= freq->send.length,
+                "req->recv.remaining %zu, freq->send.length %zu",
+                req->recv.remaining, freq->send.length);
+    req->recv.remaining -= freq->send.length;
+    if (req->recv.remaining == 0) {
         ucp_request_complete_tag_recv(req, UCS_OK);
         if (!is_put_proto) {
             ucp_worker_del_request_id(worker, rreq_remote_id);

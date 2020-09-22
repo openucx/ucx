@@ -651,18 +651,18 @@ ucp_request_process_recv_data(ucp_request_t *req, const void *data,
     ucs_status_t status;
     int last;
 
-    last = req->recv.tag.remaining == length;
+    last = (req->recv.remaining == length);
 
     /* process data only if the request is not in error state */
     if (ucs_likely(req->status == UCS_OK)) {
         req->status = ucp_request_recv_data_unpack(req, data, length,
                                                    offset, last);
     }
-    ucs_assertv(req->recv.tag.remaining >= length,
-                "req->recv.tag.remaining=%zu length=%zu",
-                req->recv.tag.remaining, length);
+    ucs_assertv(req->recv.remaining >= length,
+                "req->recv.remaining=%zu length=%zu",
+                req->recv.remaining, length);
 
-    req->recv.tag.remaining -= length;
+    req->recv.remaining -= length;
 
     if (!last) {
         return UCS_INPROGRESS;
@@ -750,15 +750,17 @@ ucp_send_request_get_id(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE void
 ucp_request_param_rndv_thresh(ucp_request_t *req,
                               const ucp_request_param_t *param,
+                              ucp_rndv_thresh_t *rma_thresh_config,
+                              ucp_rndv_thresh_t *am_thresh_config,
                               size_t *rndv_rma_thresh, size_t *rndv_am_thresh)
 {
     if ((param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
         ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
-        *rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv.rma_thresh.local;
-        *rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv.am_thresh.local;
+        *rndv_rma_thresh = rma_thresh_config->local;
+        *rndv_am_thresh  = am_thresh_config->local;
     } else {
-        *rndv_rma_thresh = ucp_ep_config(req->send.ep)->tag.rndv.rma_thresh.remote;
-        *rndv_am_thresh  = ucp_ep_config(req->send.ep)->tag.rndv.am_thresh.remote;
+        *rndv_rma_thresh = rma_thresh_config->remote;
+        *rndv_am_thresh  = am_thresh_config->remote;
     }
 }
 
