@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <limits>
 #include <malloc.h>
+#include <dlfcn.h>
 
 #define ALIGNMENT       4096
 
@@ -61,8 +62,9 @@ typedef struct {
     bool                     validate;
 } options_t;
 
-#define LOG         UcxLog("[DEMO]", true)
-#define VERBOSE_LOG UcxLog("[DEMO]", _test_opts.verbose)
+#define LOG_PREFIX  "[DEMO]"
+#define LOG         UcxLog(LOG_PREFIX, true)
+#define VERBOSE_LOG UcxLog(LOG_PREFIX, _test_opts.verbose)
 
 template<class T>
 class MemoryPool {
@@ -806,14 +808,6 @@ public:
         return tv.tv_sec + (tv.tv_usec * 1e-6);
     }
 
-    static std::string get_time_str() {
-        char str[80];
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        snprintf(str, sizeof(str), "[%lu.%06lu]", tv.tv_sec, tv.tv_usec);
-        return str;
-    }
-
     bool run() {
         std::vector<UcxConnection*> conn;
         conn.resize(opts().servers.size());
@@ -969,6 +963,8 @@ private:
         double latency_usec = (elapsed / num_iters) * 1e6;
         bool first_print    = true;
 
+        UcxLog log(LOG_PREFIX, true);
+
         for (unsigned i = 0; i < info.size(); ++i) {
             op_info_t *op_info = &info[i];
 
@@ -977,19 +973,18 @@ private:
             }
 
             if (first_print) {
-                std::cout << get_time_str() << " ";
                 first_print = false;
             } else {
                 // print comma for non-first printouts
-                std::cout << ", ";
+                log << ", ";
             }
 
             double throughput_mbs = op_info->total_bytes /
                                     elapsed / (1024.0 * 1024.0);
 
-            std::cout << op_info->num_iters << " "
-                      << io_op_names[op_info->op] << "s at "
-                      << throughput_mbs << " MB/s";
+            log << op_info->num_iters << " "
+                << io_op_names[op_info->op] << "s at "
+                << throughput_mbs << " MB/s";
 
             // reset for the next round
             op_info->total_bytes = 0;
@@ -998,9 +993,8 @@ private:
 
         if (!first_print) {
             if (opts().window_size == 1) {
-                std::cout << ", average latency: " << latency_usec << " usec";
+                log << ", average latency: " << latency_usec << " usec";
             }
-            std::cout << std::endl;
         }
     }
 
@@ -1274,12 +1268,34 @@ static int do_client(const options_t& test_opts)
             (status == DemoClient::RUNTIME_EXCEEDED)) ? 0 : -1;
 }
 
+static void print_info(int argc, char **argv)
+{
+    // Process ID and hostname
+    char host[64];
+    gethostname(host, sizeof(host));
+    LOG << "Starting io_demo pid " << getpid() << " on " << host;
+
+    // Command line
+    std::stringstream cmdline;
+    for (int i = 0; i < argc; ++i) {
+        cmdline << argv[i] << " ";
+    }
+    LOG << "Command line: " << cmdline.str();
+
+    // UCX library path
+    Dl_info info;
+    int ret = dladdr((void*)ucp_init_version, &info);
+    if (ret) {
+        LOG << "UCX library path: " << info.dli_fname;
+    }
+}
+
 int main(int argc, char **argv)
 {
     options_t test_opts;
     int ret;
 
-    LOG << "Starting io_demo pid " << getpid();
+    print_info(argc, argv);
 
     ret = parse_args(argc, argv, &test_opts);
     if (ret < 0) {
