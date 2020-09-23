@@ -293,7 +293,7 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
         uct_ib_check_gpudirect_driver(md, md_attr, "/dev/kfd",
                                       UCS_MEMORY_TYPE_ROCM);
 
-        if (!(md_attr->cap.reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) &&
+        if (!(md_attr->cap.reg_mem_types & ~UCS_MEMORY_TYPES_CPU_ACCESSIBLE) &&
             (md->config.enable_gpudirect_rdma == UCS_YES)) {
                 ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure"
                           " nv_peer_mem or amdgpu plugin installed correctly.",
