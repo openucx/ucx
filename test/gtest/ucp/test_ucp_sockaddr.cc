@@ -506,6 +506,7 @@ public:
         };
 
         e.close_ep_req_free(req);
+        flush_worker(e);
     }
 
     void concurrent_disconnect(enum ucp_ep_close_mode mode) {

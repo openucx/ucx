@@ -409,6 +409,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     /* When all requests on sender are done we need to prevent LOCAL_FLUSH
      * in test teardown. Receiver is killed and doesn't respond on FC requests
      */
+    flush_worker(sender());
     sender().destroy_worker();
 }
 

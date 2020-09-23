@@ -147,6 +147,10 @@ public class UcpListenerTest  extends UcxTest {
 
         assertEquals(UcpMemoryTest.MEM_SIZE, recv.getRecvSize());
 
+        clientWorker.flush();
+        serverWorker1.flush();
+        serverWorker2.flush();
+
         Collections.addAll(resources, context2, context1, clientWorker, serverWorker1,
             serverWorker2, listener, serverToClient, clientToServer);
         closeResources();

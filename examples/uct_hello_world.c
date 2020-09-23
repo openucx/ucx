@@ -574,6 +574,7 @@ int main(int argc, char **argv)
     uint8_t             id          = 0;
     int                 oob_sock    = -1;  /* OOB connection socket */
     ucs_status_t        status      = UCS_OK; /* status codes for UCS */
+    ucs_status_t        flush_status;
     uct_device_addr_t   *own_dev;
     uct_iface_addr_t    *own_iface;
     uct_ep_h            ep;                   /* Remote endpoint */
@@ -710,6 +711,11 @@ int main(int argc, char **argv)
         } else if (cmd_args.func_am_type == FUNC_AM_ZCOPY) {
             status = do_am_zcopy(&if_info, ep, id, &cmd_args, str);
         }
+
+        do {
+            uct_worker_progress(if_info.worker);
+            flush_status = uct_iface_flush(if_info.iface, 0, NULL);
+        } while (flush_status == UCS_INPROGRESS);
 
         mem_type_free(str);
         CHKERR_JUMP(UCS_OK != status, "send active msg", out_free_ep);
