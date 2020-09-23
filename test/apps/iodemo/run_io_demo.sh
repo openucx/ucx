@@ -405,7 +405,7 @@ make_scripts()
 	else
 		set_verbose=""
 		wait_redirect=">& /dev/null"
-		log_redirect=">& "
+		log_redirect="&>> "
 	fi
 
 	exe_basename=$(basename ${iodemo_exe})
