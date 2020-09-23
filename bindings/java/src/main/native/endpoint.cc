@@ -27,8 +27,8 @@ static void error_handler(void *arg, ucp_ep_h ep, ucs_status_t status)
     jobject jucx_ep_error_hndl = env->GetObjectField(jucx_ep, ep_error_hdnl_field);
     jmethodID on_error = env->GetMethodID(jucx_ep_error_hndl_cls, "onError",
                                           "(Lorg/openucx/jucx/ucp/UcpEndpoint;ILjava/lang/String;)V");
-    env->CallVoidMethod(jucx_ep_error_hndl, on_error, jucx_ep, status,
-                        ucs_status_string(status));
+    jstring error_msg = env->NewStringUTF(ucs_status_string(status));
+    env->CallVoidMethod(jucx_ep_error_hndl, on_error, jucx_ep, status, error_msg);
     env->DeleteWeakGlobalRef(jucx_ep);
 }
 
