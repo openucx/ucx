@@ -26,6 +26,8 @@ public class UcpEndpointTest extends UcxTest {
         UcpEndpoint endpoint = worker.newEndpoint(epParams);
         assertNotNull(endpoint.getNativeId());
 
+        worker.flush();
+
         Collections.addAll(resources, context, worker, endpoint);
         closeResources();
     }
@@ -96,6 +98,9 @@ public class UcpEndpointTest extends UcxTest {
 
         assertTrue(request1.isCompleted() && request2.isCompleted());
 
+        worker1.flush();
+        worker2.flush();
+
         Collections.addAll(resources, context2, context1, worker2, worker1, endpoint, rkey2,
             rkey1);
         closeResources();
@@ -126,6 +131,9 @@ public class UcpEndpointTest extends UcxTest {
         worker1.progressRequest(worker1.flushNonBlocking(null));
 
         assertEquals(UcpMemoryTest.RANDOM_TEXT, dst.asCharBuffer().toString().trim());
+
+        worker1.flush();
+        worker2.flush();
 
         Collections.addAll(resources, context2, context1, worker2, worker1, rkey, ep, memory);
         closeResources();
@@ -180,6 +188,9 @@ public class UcpEndpointTest extends UcxTest {
             worker1.progress();
             worker2.progress();
         }
+
+        worker1.flush();
+        worker2.flush();
 
         Collections.addAll(resources, context2, context1, worker2, worker1, memory2, memory1, ep);
         closeResources();
@@ -258,6 +269,9 @@ public class UcpEndpointTest extends UcxTest {
             progressThread.join();
         } catch (InterruptedException ignored) { }
 
+        worker1.flush();
+        worker2.flush();
+
         Collections.addAll(resources, context1, context2, worker1, worker2);
         closeResources();
     }
@@ -306,6 +320,9 @@ public class UcpEndpointTest extends UcxTest {
         final ByteBuffer recvData = bigRecvBuffer.slice();
         assertEquals("Send buffer not equals to recv buffer", sendData, recvData);
 
+        worker1.flush();
+        worker2.flush();
+
         Collections.addAll(resources, context2, context1, worker2, worker1, ep);
         closeResources();
     }
@@ -351,6 +368,9 @@ public class UcpEndpointTest extends UcxTest {
             worker2.progress();
         }
 
+        worker1.flush();
+        worker2.flush();
+
         Collections.addAll(resources, context2, context1, worker2, worker1, ep);
         closeResources();
     }
@@ -380,6 +400,9 @@ public class UcpEndpointTest extends UcxTest {
         }
 
         assertEquals(UcpMemoryTest.MEM_SIZE / 2, recv.getRecvSize());
+
+        worker1.flush();
+        worker2.flush();
 
         Collections.addAll(resources, context1, context2, worker1, worker2, ep);
         closeResources();
@@ -437,6 +460,9 @@ public class UcpEndpointTest extends UcxTest {
             worker1.progress();
             worker2.progress();
         }
+
+        worker1.flush();
+        worker2.flush();
 
         Collections.addAll(resources, context1, context2, worker1, worker2, clientToServer,
             serverToClient);
@@ -529,6 +555,9 @@ public class UcpEndpointTest extends UcxTest {
         assertEquals(totalSize, recv.getRecvSize());
         ByteBuffer buf = UcxUtils.getByteBufferView(recvAddresses[0], (int)recvSizes[0]);
         assertEquals(1, buf.getInt(0));
+
+        worker1.flush();
+        worker2.flush();
 
         Collections.addAll(resources, context1, context2, worker1, worker2, ep);
         Collections.addAll(resources, sendBuffers);

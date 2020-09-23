@@ -49,6 +49,13 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         return new UcpListener(this, params);
     }
 
+    public void flush() {
+        UcpRequest request = flushNonBlocking(new UcxCallback());
+        while (!request.isCompleted()) {
+            progress();
+        }
+    }
+
     @Override
     public void close() {
         releaseWorkerNative(getNativeId());
