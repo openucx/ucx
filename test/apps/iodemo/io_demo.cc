@@ -155,7 +155,24 @@ public:
         }
     }
 
+    static inline void fill(void *buffer, size_t size) {
+        size_t tail_count = size & sizeof(uint64_t);
+        size_t body_count = (size - tail_count) / sizeof(uint64_t);
+        uint64_t *body    = reinterpret_cast<uint64_t*>(buffer);
+        uint8_t *tail     = reinterpret_cast<uint8_t*>(body + body_count);
+
+        fill(body, body_count);
+        fill(tail, tail_count);
+    }
+
 private:
+    template <typename T>
+    static inline void fill(T *buffer, size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            buffer[i] = rand<T>();
+        }
+    }
+
     static       unsigned     _seed;
     static const unsigned     _A;
     static const unsigned     _C;
@@ -274,18 +291,21 @@ protected:
             _pool.put(this);
         }
 
-        uint16_t chksum() const {
-            return chk_hdr()->chk_sum;
-        };
-
         uint32_t sn() const {
             return tr_hdr()->sn;
         }
 
-        inline uint16_t calc_chksum() const {
-            uint16_t chk_sum = ucs_crc16(tr_hdr(),
-                                         _iov[0]->size() - sizeof(chk_hdr_t));
+        uint16_t chksum() const {
+            return chk_hdr()->chk_sum;
+        };
 
+        inline uint16_t calc_chksum() const {
+            if (_iov.size() == 0) {
+                return 0;
+            }
+
+            uint16_t chk_sum = P2pDemoCommon::calc_chksum(_iov[0]->buffer(),
+                                                          _iov[0]->size());
             for (size_t i = 1; i < _iov.size(); ++i) {
                 chk_sum ^= ucs_crc16(_iov[i]->buffer(), _iov[i]->size());
             }
@@ -302,10 +322,7 @@ protected:
 
         void fill_data(uint32_t sn) {
             for (size_t i = 0; i < _iov.size(); ++i) {
-                uint8_t *buffer = reinterpret_cast<uint8_t*>(_iov[i]->buffer());
-                for (size_t j = 0; j < _iov[i]->size(); ++j) {
-                    buffer[j] = IoDemoRandom::rand<uint8_t>();
-                }
+                IoDemoRandom::fill(_iov[i]->buffer(), _iov[i]->size());
             }
 
             tr_hdr()->sn       = sn;
@@ -346,7 +363,10 @@ protected:
             m->op        = op;
             m->data_size = data_size;
             if (validate) {
-                m->hdr.chk_sum = ucs_crc16(&m->tr, sizeof(*m) - sizeof(m->hdr));
+                void *tail       = reinterpret_cast<void*>(m + 1);
+                size_t tail_size = _io_msg_size - sizeof(*m);
+                IoDemoRandom::fill(tail, tail_size);
+                m->hdr.chk_sum = calc_chksum(_buffer, _io_msg_size);
             } else {
                 m->hdr.chk_sum = 0;
             }
@@ -468,25 +488,35 @@ protected:
         return (data_size + chunk_size - 1) / chunk_size;
     }
 
-    static void validate(uint32_t sn, const BufferIov &iov) {
+    static inline uint16_t calc_chksum(const void *buffer, size_t size) {
+        const chk_hdr_t* chk_hdr = reinterpret_cast<const chk_hdr_t*>(buffer);
+
+        assert(size >= (sizeof(chk_hdr_t) + sizeof(tr_hdr_t)));
+        return ucs_crc16(chk_hdr + 1, size - sizeof(*chk_hdr));
+    }
+
+    static void validate(const BufferIov& iov, uint32_t sn) {
+        assert(iov.size() != 0);
+
         if (sn != iov.sn()) {
             LOG << "ERROR: transaction mismatch " << sn << " != " << iov.sn();
             abort();
         }
 
-        /* recalc check sum of all fragments and compare to stored value */
+        uint16_t iov_chksum    = iov.chksum();
         uint16_t recalc_chksum = iov.calc_chksum();
-        if (iov.chksum() != recalc_chksum) {
-            LOG << "ERROR: data corruption " << iov.chksum() << " != "
+        if (iov_chksum != recalc_chksum) {
+            LOG << "ERROR: data corruption " << iov_chksum << " != "
                 << recalc_chksum;
             abort();
         }
     }
 
-    void validate(const iomsg_t *msg) {
-        if (msg->hdr.chk_sum !=
-            ucs_crc16(&msg->tr, sizeof(*msg) - sizeof(msg->hdr))) {
-            LOG << "ERROR: corrupted io message";
+    static void validate(const void *buffer, size_t size, uint16_t chksum) {
+        uint16_t buf_chksum = calc_chksum(buffer, size);
+
+        if (chksum != buf_chksum) {
+            LOG << "ERROR: buffer data corruption " << chksum << " != " << buf_chksum;
             abort();
         }
     }
@@ -525,7 +555,7 @@ public:
 
             if (status == UCS_OK) {
                 if (_server->opts().validate) {
-                    validate(_sn, *_iov);
+                    validate(*_iov, _sn);
                 }
                 _server->send_io_message(_conn, IO_WRITE_COMP, _sn, 0);
             }
@@ -612,7 +642,7 @@ public:
                     << " conn " << conn;
 
         if (opts().validate) {
-            validate(msg);
+            validate(msg, opts().iomsg_size, msg->hdr.chk_sum);
         }
 
         if (msg->op == IO_READ) {
@@ -677,7 +707,7 @@ public:
             ++(*_io_counter);
             ++(*_server_io_counter);
             if (_validate && (status == UCS_OK)) {
-                validate(_sn, *_iov);
+                validate(*_iov, _sn);
             }
 
             _iov->release();
