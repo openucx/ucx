@@ -815,13 +815,22 @@ private:
             if (opts().window_size == 1) {
                 std::cout << ", average latency: " << latency_usec << " usec";
             }
-            std::cout << std::endl;
-        }
-        if (opts().print_conn_status) {
-            std::cout << get_time_str() << " ";
-            std::cout << "io total ";
-            for (int i = 0; i < _conn.size(); i++) {
-                std::cout << _conn[i].num_completed << " ";
+            if (opts().print_conn_status) {
+                long min = _conn[0].num_completed;
+                long max = _conn[0].num_completed;
+                long avg = 0;
+                for (int i = 0; i < _conn.size(); i++) {
+                    if (_conn[i].num_completed < min) {
+                        min = _conn[i].num_completed;
+                    }
+                    if (_conn[i].num_completed > max) {
+                        max = _conn[i].num_completed;
+                    }
+                    avg += _conn[i].num_completed;
+                }
+                avg /= _conn.size();
+                std::cout << ", " << _conn.size() << " conns";
+                std::cout << " min " << min << " max " << max << " avg " << avg;
             }
             std::cout << std::endl;
         }
