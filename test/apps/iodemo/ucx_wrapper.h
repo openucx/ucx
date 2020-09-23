@@ -131,7 +131,7 @@ private:
 
     void progress_failed_connections();
 
-    wait_status_t wait_completion(ucs_status_ptr_t status_ptr,
+    wait_status_t wait_completion(ucs_status_ptr_t status_ptr, const char *title,
                                   double timeout = 1e6);
 
     void recv_io_message();
