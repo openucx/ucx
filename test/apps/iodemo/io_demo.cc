@@ -1102,6 +1102,15 @@ static int set_time(char *str, double *dest_p)
     return 0;
 }
 
+static void adjust_opts(options_t *test_opts) {
+    if (test_opts->operations.size() == 0) {
+        test_opts->operations.push_back(IO_WRITE);
+    }
+
+    test_opts->chunk_size = std::min(test_opts->chunk_size,
+                                     test_opts->max_data_size);
+}
+
 static int parse_args(int argc, char **argv, options_t *test_opts)
 {
     char *str;
@@ -1242,9 +1251,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         test_opts->servers.push_back(argv[optind++]);
     }
 
-    if (test_opts->operations.size() == 0) {
-        test_opts->operations.push_back(IO_WRITE);
-    }
+    adjust_opts(test_opts);
 
     return 0;
 }
