@@ -63,19 +63,19 @@ nobase_dist_libucs_la_HEADERS = \
 	type/status.h \
 	type/thread_mode.h \
 	type/cpu_set.h \
+	arch/atomic.h \
 	arch/x86_64/global_opts.h \
+	arch/x86_64/atomic.h \
 	arch/aarch64/global_opts.h \
+	arch/generic/atomic.h \
 	arch/ppc64/global_opts.h \
 	arch/global_opts.h
 
 noinst_HEADERS = \
 	arch/aarch64/cpu.h \
-	arch/generic/atomic.h \
 	arch/generic/cpu.h \
 	arch/ppc64/cpu.h \
-	arch/x86_64/atomic.h \
 	arch/x86_64/cpu.h \
-	arch/atomic.h \
 	arch/cpu.h \
 	datastruct/arbiter.h \
 	datastruct/frag_list.h \
