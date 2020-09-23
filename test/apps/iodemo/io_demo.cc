@@ -456,13 +456,8 @@ public:
         CONN_RETRIES_EXCEEDED
     } status_t;
 
-    int get_conn_index(const UcxConnection *conn) {
-        for (int i = 0; i < _conn.size(); i++) {
-            if (_conn[i].conn == conn) {
-                return i;
-            }
-        }
-        return -1;
+    uint32_t get_conn_index(const UcxConnection *conn) {
+        return (conn->id() - 1);
     }
 
     size_t do_io_read(UcxConnection *conn, uint32_t sn) {
@@ -563,7 +558,7 @@ public:
         return (_status == OK);
     }
 
-    UcxConnection* connect(const char* server) {
+    UcxConnection* connect(const char* server, uint32_t conn_id = 0) {
         struct sockaddr_in connect_addr;
         std::string server_addr;
         int port_num;
@@ -591,7 +586,7 @@ public:
         }
 
         return UcxContext::connect((const struct sockaddr*)&connect_addr,
-                                   sizeof(connect_addr));
+                                   sizeof(connect_addr), conn_id);
     }
 
     static double get_time() {
@@ -614,7 +609,7 @@ public:
         }
         for (size_t i = 0; i < _conn.size(); i++) {
             if (_conn[i].conn == NULL) {
-                _conn[i].conn = connect(opts().servers[i]);
+                _conn[i].conn = connect(opts().servers[i], i + 1);
                 if (!_conn[i].conn) {
                     LOG << "Connect to server ["
                         << opts().servers[i]
@@ -657,7 +652,7 @@ public:
                     prev_reconnect_time = curr_time;
                     for (size_t i = 0; i < _conn.size(); i++) {
                         if (_conn[i].conn == NULL) {
-                            _conn[i].conn = connect(opts().servers[i]);
+                            _conn[i].conn = connect(opts().servers[i], i + 1);
                             if (_conn[i].conn) {
                                 _num_connected++;
                             }
