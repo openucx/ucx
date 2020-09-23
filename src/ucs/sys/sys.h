@@ -16,6 +16,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/type/status.h>
 #include <ucs/type/cpu_set.h>
+#include <ucs/time/time_def.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/config/types.h>
 #include <ucs/config/parser.h>
@@ -88,6 +89,14 @@ typedef enum {
 typedef enum {
     UCS_SYS_VMA_FLAG_DONTCOPY = UCS_BIT(0),
 } ucs_sys_vma_info_flags_t;
+
+
+/* file time information */
+typedef enum {
+    UCS_SYS_FILE_TIME_CTIME, /**< create time */
+    UCS_SYS_FILE_TIME_ATIME, /**< access time */
+    UCS_SYS_FILE_TIME_MTIME  /**< modification time */
+} ucs_sys_file_time_t;
 
 
 /* information about virtual memory area */
@@ -586,6 +595,19 @@ ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ct
  *       immediately and this value is returned from ucs_sys_enum_threads.
  */
 ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx);
+
+
+/**
+ * Get file time
+ *
+ * @param [in]  name       File name
+ * @param [in]  type       Type of file time information
+ * @param [out] ctime      File creation time
+ *
+ * @return UCS_OK if file is found and got information.
+ */
+ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
+                                   ucs_time_t *time);
 
 END_C_DECLS
 

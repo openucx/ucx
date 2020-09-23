@@ -44,9 +44,6 @@ typedef ucs_status_t
                           uint64_t remote_addr, uct_rkey_t rkey,
                           uct_scopy_tx_op_t tx_op);
 
-typedef struct uct_scopy_tx_arb_elem {
-} uct_scopy_tx_arb_elem_t;
-
 
 typedef struct uct_scopy_tx {
     ucs_arbiter_elem_t              arb_elem;           /* TX arbiter group element */

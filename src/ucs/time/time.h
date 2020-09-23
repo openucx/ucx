@@ -75,6 +75,16 @@ static inline ucs_time_t ucs_time_from_sec(double sec)
     return (ucs_time_t)(sec * ucs_time_sec_value() + 0.5);
 }
 
+
+/**
+ * Convert POSIX timespec to UCS time units.
+ */
+static inline ucs_time_t ucs_time_from_timespec(struct timespec *ts)
+{
+    return ucs_time_from_sec((double)ts->tv_sec +
+                             (double)ts->tv_nsec / UCS_NSEC_PER_SEC);
+}
+
 /**
  * Convert seconds to UCS time units.
  */

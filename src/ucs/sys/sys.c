@@ -1443,3 +1443,29 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx)
 
     return ucs_sys_readdir(task_dir, &ucs_sys_enum_threads_cb, &param);
 }
+
+ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
+                                   ucs_time_t *filetime)
+{
+    struct stat stat_buf;
+    int res;
+
+    res = stat(name, &stat_buf);
+    if (res != 0) {
+        return UCS_ERR_IO_ERROR; /* failed to get file info */
+    }
+
+    switch (type) {
+    case UCS_SYS_FILE_TIME_CTIME:
+        *filetime = ucs_time_from_timespec(&stat_buf.st_ctim);
+        return UCS_OK;
+    case UCS_SYS_FILE_TIME_ATIME:
+        *filetime = ucs_time_from_timespec(&stat_buf.st_atim);
+        return UCS_OK;
+    case UCS_SYS_FILE_TIME_MTIME:
+        *filetime = ucs_time_from_timespec(&stat_buf.st_mtim);
+        return UCS_OK;
+    default:
+        return UCS_ERR_INVALID_PARAM;
+    }
+}
