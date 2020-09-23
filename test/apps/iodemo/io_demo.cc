@@ -841,8 +841,8 @@ private:
         long           num_sent;
         long           num_completed;
         UcxConnection* conn;
-    } conn_info_t; 
-    std::vector<conn_info_t>           _conn;
+    } server_info_t; 
+    std::vector<server_info_t>         _conn;
     size_t                             _num_connected;
     long                               _num_sent;
     long                               _num_completed;
