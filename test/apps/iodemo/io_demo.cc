@@ -18,6 +18,7 @@
 #include <ctime>
 #include <vector>
 #include <map>
+#include <queue>
 #include <algorithm>
 #include <limits>
 #include <malloc.h>
@@ -57,7 +58,7 @@ typedef struct {
     long                     window_size;
     std::vector<io_op_t>     operations;
     unsigned                 random_seed;
-    size_t                   num_buffers;
+    size_t                   num_offcache_buffers;
     bool                     verbose;
     bool                     validate;
 } options_t;
@@ -66,43 +67,66 @@ typedef struct {
 #define LOG         UcxLog(LOG_PREFIX, true)
 #define VERBOSE_LOG UcxLog(LOG_PREFIX, _test_opts.verbose)
 
-template<class T>
+template<class T, bool use_offcache = false>
 class MemoryPool {
 public:
-    MemoryPool(size_t buffer_size) :
+    MemoryPool(size_t buffer_size, size_t offcache = 0) :
         _num_allocated(0), _buffer_size(buffer_size) {
+
+        for (size_t i = 0; i < offcache; ++i) {
+            _offcache_queue.push(get_free());
+        }
     }
 
     ~MemoryPool() {
-        if (_num_allocated != _freelist.size()) {
-            LOG << "Some items were not freed. Total:" << _num_allocated
-                << ", current:" << _freelist.size() << ".";
+        while (!_offcache_queue.empty()) {
+            _free_stack.push_back(_offcache_queue.front());
+            _offcache_queue.pop();
         }
 
-        for (size_t i = 0; i < _freelist.size(); i++) {
-            delete _freelist[i];
+        if (_num_allocated != _free_stack.size()) {
+            LOG << "Some items were not freed. Total:" << _num_allocated
+                << ", current:" << _free_stack.size() << ".";
+        }
+
+        for (size_t i = 0; i < _free_stack.size(); i++) {
+            delete _free_stack[i];
         }
     }
 
-    T * get() {
-        T * item;
-        
-        if (_freelist.empty()) {
+    inline T* get() {
+        T* item = get_free();
+
+        if (use_offcache && !_offcache_queue.empty()) {
+            _offcache_queue.push(item);
+            item = _offcache_queue.front();
+            _offcache_queue.pop();
+        }
+
+        return item;
+    }
+
+    inline void put(T* item) {
+        _free_stack.push_back(item);
+    }
+
+private:
+    inline T* get_free() {
+        T* item;
+
+        if (_free_stack.empty()) {
             item = new T(_buffer_size, *this);
             _num_allocated++;
         } else {
-            item = _freelist.back();
-            _freelist.pop_back();
+            item = _free_stack.back();
+            _free_stack.pop_back();
         }
         return item;
     }
 
-    void put(T * item) {
-        _freelist.push_back(item);
-    }
-
 private:
-    std::vector<T*> _freelist;
+    std::vector<T*> _free_stack;
+    std::queue<T*>  _offcache_queue;
     uint32_t        _num_allocated;
     size_t          _buffer_size;
 };
@@ -169,7 +193,7 @@ protected:
 
     class Buffer {
     public:
-        Buffer(size_t size, MemoryPool<Buffer>& pool) :
+        Buffer(size_t size, MemoryPool<Buffer, true>& pool) :
             _capacity(size), _buffer(memalign(ALIGNMENT, size)), _size(0),
             _pool(pool) {
             if (_buffer == NULL) {
@@ -202,9 +226,9 @@ protected:
         const size_t         _capacity;
 
     private:
-        void*               _buffer;
-        size_t              _size;
-        MemoryPool<Buffer>& _pool;
+        void*                     _buffer;
+        size_t                    _size;
+        MemoryPool<Buffer, true>& _pool;
     };
 
     class BufferIov {
@@ -217,7 +241,7 @@ protected:
             return _iov.size();
         }
 
-        void init(size_t data_size, MemoryPool<Buffer> &chunk_pool, uint32_t sn,
+        void init(size_t data_size, MemoryPool<Buffer, true> &chunk_pool, uint32_t sn,
                   bool fill) {
             assert(_iov.empty());
 
@@ -380,11 +404,12 @@ protected:
 
     P2pDemoCommon(const options_t& test_opts) :
         UcxContext(test_opts.iomsg_size),
-        _test_opts(test_opts), _io_msg_pool(test_opts.iomsg_size),
+        _test_opts(test_opts),
+        _io_msg_pool(test_opts.iomsg_size),
         _send_callback_pool(0),
         _data_buffers_pool(get_chunk_cnt(test_opts.max_data_size,
                                          test_opts.chunk_size)),
-        _data_chunks_pool(test_opts.chunk_size) {
+        _data_chunks_pool(test_opts.chunk_size, test_opts.num_offcache_buffers) {
     }
 
     const options_t& opts() const {
@@ -467,7 +492,7 @@ protected:
     MemoryPool<IoMessage>            _io_msg_pool;
     MemoryPool<SendCompleteCallback> _send_callback_pool;
     MemoryPool<BufferIov>            _data_buffers_pool;
-    MemoryPool<Buffer>               _data_chunks_pool;
+    MemoryPool<Buffer, true>         _data_chunks_pool;
 };
 
 class DemoServer : public P2pDemoCommon {
@@ -1090,7 +1115,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->min_data_size        = 4096;
     test_opts->max_data_size        = 4096;
     test_opts->chunk_size           = std::numeric_limits<unsigned>::max();
-    test_opts->num_buffers          = 1;
+    test_opts->num_offcache_buffers = 0;
     test_opts->iomsg_size           = 256;
     test_opts->iter_count           = 1000;
     test_opts->window_size          = 1;
@@ -1118,12 +1143,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             }
             break;
         case 'b':
-            test_opts->num_buffers = strtol(optarg, NULL, 0);
-            if (test_opts->num_buffers == 0) {
-                std::cout << "number of buffers ('" << optarg << "')"
-                          << " has to be > 0" << std::endl;
-                return -1;
-            }
+            test_opts->num_offcache_buffers = strtol(optarg, NULL, 0);
             break;
         case 'i':
             test_opts->iter_count = strtol(optarg, NULL, 0);
@@ -1200,7 +1220,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "                                   measurments may be inaccurate" << std::endl;
             std::cout << "  -d <min>:<max>             Range that should be used to get data" << std::endl;
             std::cout << "                             size of IO payload" << std::endl;
-            std::cout << "  -b <number of buffers>     Number of IO buffers to use for communications" << std::endl;
+            std::cout << "  -b <number of buffers>     Number of offcache IO buffers" << std::endl;
             std::cout << "  -i <iterations-count>      Number of iterations to run communication" << std::endl;
             std::cout << "  -w <window-size>           Number of outstanding requests" << std::endl;
             std::cout << "  -k <chunk-size>            Split the data transfer to chunks of this size" << std::endl;
