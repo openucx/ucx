@@ -198,6 +198,9 @@ public class UcpWorkerTest extends UcxTest {
 
         worker1.progressRequest(recv);
 
+        worker1.flush();
+        worker2.flush();
+
         Collections.addAll(resources, context1, context2, worker1, worker2, endpoint);
     }
 }
