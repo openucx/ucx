@@ -717,6 +717,7 @@ public:
         for (size_t i = 0; i < _conn.size(); i++) {
             if (_conn[i].conn != NULL) {
                 delete _conn[i].conn;
+                _conn[i].conn = NULL;
             }
         }
         return (_status == OK) || (_status == RUNTIME_EXCEEDED);
