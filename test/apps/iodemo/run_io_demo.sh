@@ -263,9 +263,11 @@ set_ssh_options()
 
 collect_ip_addrs()
 {
-	# convert the output of 'ip' to 'host:ip' list
-	host_ips=$(eval ${launcher} ${host_list} ip -4 -o address show ${net_if} |
-			   sed -ne 's/^\(\S*\): .* inet \([0-9\.]*\).*$/\1:\2/p')
+	# take first ipv4 address of the specified network interface, and  convert
+	# the output of 'ip' to 'host:ip' list for each host
+	host_ips=$(eval ${launcher} ${host_list} \
+	               "'PATH=\$PATH:/usr/sbin ip -4 -o address show ${net_if} | head -1'" | \
+	           sed -ne 's/^\(\S*\): .* inet \([0-9\.]*\).*$/\1:\2/p')
 	if [ $(echo ${host_ips} | wc -w) -ne $(split_list ${host_list} | wc -w) ]
 	then
 		error "failed to collect host IP addresses for ${net_if}"
