@@ -401,7 +401,7 @@ make_scripts()
 		show_var client_connect_list
 		set_verbose="set -x"
 		wait_redirect=""
-		log_redirect="|& tee "
+		log_redirect="|& tee -a "
 	else
 		set_verbose=""
 		wait_redirect=">& /dev/null"
