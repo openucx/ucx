@@ -99,6 +99,8 @@ typedef struct ucp_context_config {
     ucs_ternary_value_t                    sockaddr_cm_enable;
     /* Try to post rndv to pending first */
     int                                    rdnv_defer_sched;
+    /* Rendezvous debug queue */
+    unsigned                               rndv_debug_queue;
 } ucp_context_config_t;
 
 

@@ -120,11 +120,34 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     return req + 1;
 }
 
+static void ucp_tag_send_add_debug_entry(ucp_request_t *req)
+{
+    ucp_tag_rndv_debug_entry_t *entry = ucp_worker_rndv_debug_entry(req->send.ep->worker,
+                                                                    req->send.rndv_req_id);
+    entry->id             = req->send.rndv_req_id;
+    entry->type           = "tag_send";
+    entry->ep             = req->send.ep;
+    entry->local_address  = req->send.buffer;
+    entry->size           = req->send.length;
+    entry->rts_seq        = 0;
+    entry->send_tag       = req->send.msg_proto.tag.tag;
+    entry->recv_tag       = 0;
+    entry->remote_address = 0;
+    entry->remote_reqptr  = 0;
+    entry->rndv_get_req   = NULL;
+    entry->recv_req       = NULL;
+    entry->send_req       = req;
+    memcpy(entry->udata, req->send.buffer,
+           ucs_min(UCP_TAG_MAX_DATA, req->send.length));
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
                       uintptr_t datatype, size_t count, ucp_tag_t tag,
                       uint32_t flags)
 {
+    ucp_worker_h worker = ep->worker;
+
     req->flags                  = flags | UCP_REQUEST_FLAG_SEND_TAG;
     req->send.ep                = ep;
     req->send.buffer            = (void*)buffer;
@@ -139,6 +162,11 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
                                                     req->send.length);
     req->send.lane         = ucp_ep_config(ep)->tag.lane;
     req->send.pending_lane = UCP_NULL_LANE;
+    req->send.rndv_req_id  = worker->rndv_req_id++;
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+        ucp_tag_send_add_debug_entry(req);
+    }
 }
 
 //static UCS_F_ALWAYS_INLINE int

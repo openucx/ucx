@@ -335,7 +335,8 @@ ucp_tag_request_process_recv_data(ucp_request_t *req, const void *data,
         if (dereg) {
             ucp_request_recv_buffer_dereg(req);
         }
-        ucp_request_complete_tag_recv(req, status);
+        ucp_request_complete_tag_recv(req->recv.worker, req, status,
+                                      "tag_data_last");
         ucs_assert(status != UCS_INPROGRESS);
         return status;
     } else {

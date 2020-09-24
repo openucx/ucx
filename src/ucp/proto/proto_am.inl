@@ -490,4 +490,21 @@ ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, uintptr_t ep_ptr)
     return req;
 }
 
+static inline void
+ucp_send_request_update_data(ucp_request_t *req, const char *status)
+{
+    ucp_worker_h worker = req->send.ep->worker;
+    ucp_tag_rndv_debug_entry_t *entry;
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length == 0)) {
+        return;
+    }
+
+    entry         = ucp_worker_rndv_debug_entry(worker, req->send.rndv_req_id);
+    entry->status = status;
+    memcpy(entry->ndata, req->send.buffer,
+           ucs_min(UCP_TAG_MAX_DATA, req->send.length));
+}
+
+
 #endif

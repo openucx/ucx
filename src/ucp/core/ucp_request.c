@@ -124,7 +124,8 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
         removed = ucp_tag_exp_remove(&worker->tm, req);
         /* If tag posted to the transport need to wait its completion */
         if (removed && !(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
-            ucp_request_complete_tag_recv(req, UCS_ERR_CANCELED);
+            ucp_request_complete_tag_recv(worker, req, UCS_ERR_CANCELED,
+                                          "user_cancel");
         }
 
         UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
@@ -419,7 +420,11 @@ void ucp_request_handle_send_error(ucp_request_t *req, ucs_status_t status)
             req->send.state.uct_comp.func(&req->send.state.uct_comp, status);
         }
     } else {
-        ucp_request_complete_send(req, status);
+        if (req->flags & UCP_REQUEST_FLAG_SEND_RNDV) {
+            ucp_rndv_complete_send(req, UCS_ERR_CANCELED, "rndv_flush");
+       } else {
+            ucp_request_complete_send(req, status);
+        }
     }
 }
 

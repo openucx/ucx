@@ -8,6 +8,7 @@
 #define IODEMO_UCX_WRAPPER_H_
 
 #include <ucp/api/ucp.h>
+#include <ucs/algorithm/crc.h>
 #include <deque>
 #include <exception>
 #include <iostream>
@@ -130,7 +131,7 @@ private:
 
     void progress_failed_connections();
 
-    wait_status_t wait_completion(ucs_status_ptr_t status_ptr,
+    wait_status_t wait_completion(ucs_status_ptr_t status_ptr, const char *title,
                                   double timeout = 1e6);
 
     void recv_io_message();

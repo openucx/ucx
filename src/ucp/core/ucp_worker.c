@@ -1706,6 +1706,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->am_message_id     = ucs_generate_uuid(0);
     worker->rkey_ptr_cb_id    = UCS_CALLBACKQ_ID_NULL;
     worker->rndv_req_id       = 1;
+    worker->rndv_rts_send_seq = 0;
+    worker->rndv_rts_recv_seq = 0;
     ucs_queue_head_init(&worker->rkey_ptr_reqs);
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
@@ -1798,7 +1800,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     /* Initialize tag matching */
-    status = ucp_tag_match_init(&worker->tm);
+    status = ucp_tag_match_init(context, &worker->tm);
     if (status != UCS_OK) {
         goto err_wakeup_cleanup;
     }

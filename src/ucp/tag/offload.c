@@ -127,7 +127,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
     UCP_WORKER_STAT_TAG_OFFLOAD(req->recv.worker, MATCHED);
 out:
     --req->recv.tag.wiface->post_count;
-    ucp_request_complete_tag_recv(req, status);
+    ucp_request_complete_tag_recv(req->recv.worker, req, status, "offload");
 }
 
 /* RNDV request matched by the transport. Need to proceed with SW based RNDV */
@@ -145,14 +145,15 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
     --req->recv.tag.wiface->post_count;
     if (ucs_unlikely(status != UCS_OK)) {
         ucp_tag_offload_release_buf(req, 1);
-        ucp_request_complete_tag_recv(req, status);
+        ucp_request_complete_tag_recv(req->recv.worker, req, status,
+                                      "offload_rndv");
         return;
     }
 
     ucs_assert(header_length >= sizeof(ucp_rndv_rts_hdr_t));
 
     if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->recv.mem_type)) {
-        ucp_rndv_matched(req->recv.worker, req, header);
+        ucp_rndv_matched(req->recv.worker, req, header, 0);
     } else {
         /* SW rendezvous request is stored in the user buffer (temporarily)
            when matched. If user buffer allocated on GPU memory, need to "pack"
@@ -160,7 +161,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
         header_host_copy = ucs_alloca(header_length);
         ucp_mem_type_pack(req->recv.worker, header_host_copy, header,
                           header_length, req->recv.mem_type);
-        ucp_rndv_matched(req->recv.worker, req, header_host_copy);
+        ucp_rndv_matched(req->recv.worker, req, header_host_copy, 0);
     }
 
     ucp_tag_offload_release_buf(req, 0);

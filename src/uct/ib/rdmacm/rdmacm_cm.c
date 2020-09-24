@@ -130,6 +130,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
                                                  uct_device_addr_t **dev_addr_p,
                                                  size_t *dev_addr_len_p)
 {
+    char rdmacm_gid_str[64], qp_attr_gid_str[64];
     struct ibv_port_attr port_attr;
     uct_ib_address_t *dev_addr;
     struct ibv_qp_attr qp_attr;
@@ -156,10 +157,15 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         return UCS_ERR_IO_ERROR;
     }
 
-    if (qp_attr.ah_attr.is_global) {
-        ucs_assert(!memcmp(&cm_id->route.addr.addr.ibaddr.dgid,
-                           &qp_attr.ah_attr.grh.dgid,
-                           sizeof(qp_attr.ah_attr.grh.dgid)));
+    /* Print diagnostic if gid does not match */
+    if (qp_attr.ah_attr.is_global &&
+        (memcmp(&cm_id->route.addr.addr.ibaddr.dgid, &qp_attr.ah_attr.grh.dgid,
+                sizeof(qp_attr.ah_attr.grh.dgid)) != 0)) {
+            ucs_diag("rdma_cm dgid and qp_attr.dgid are different (%s vs. %s)",
+                     inet_ntop(AF_INET6, &cm_id->route.addr.addr.ibaddr.dgid,
+                               rdmacm_gid_str, sizeof(rdmacm_gid_str)),
+                     inet_ntop(AF_INET6, &cm_id->route.addr.addr.ibaddr.dgid,
+                               qp_attr_gid_str, sizeof(qp_attr_gid_str)));
     }
 
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
@@ -176,7 +182,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
                              UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
     }
 
-    addr_length = uct_ib_address_size(&cm_id->route.addr.addr.ibaddr.dgid,
+    addr_length = uct_ib_address_size(&qp_attr.ah_attr.grh.dgid,
                                       address_pack_flags);
     dev_addr    = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
@@ -184,7 +190,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         return UCS_ERR_NO_MEMORY;
     }
 
-    uct_ib_address_pack(&cm_id->route.addr.addr.ibaddr.dgid,
+    uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid,
                         qp_attr.ah_attr.dlid, address_pack_flags, &roce_info,
                         dev_addr);
 

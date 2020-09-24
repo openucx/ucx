@@ -38,7 +38,8 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
     return 1;
 }
 
-static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
+void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status,
+                            const char *debug_status)
 {
     ucp_worker_h worker;
     khiter_t iter;
@@ -62,7 +63,104 @@ static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
                  sreq, sreq->send.rndv_req_id, worker);
     }
 
+    ucp_send_request_update_data(sreq, debug_status);
     ucp_request_complete_send(sreq, status);
+}
+
+/* add debug entry for rndv send flow */
+static ucp_tag_rndv_debug_entry_t*
+ucp_rndv_add_debug_entry_common(ucp_request_t *req)
+{
+    ucp_worker_h worker               = req->send.ep->worker;
+    ucp_tag_rndv_debug_entry_t *entry = ucp_worker_rndv_debug_entry(worker,
+                                                                    req->send.rndv_req_id);
+    entry->id            = req->send.rndv_req_id;
+    entry->ep            = req->send.ep;
+    entry->local_address = req->send.buffer;
+    entry->size          = req->send.length;
+
+    return entry;
+}
+
+/* add debug entry for rndv_get flow */
+static void
+ucp_rndv_get_req_add_debug_entry(ucp_request_t *rndv_req,
+                                 const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
+                                 uint64_t rts_seq)
+{
+    ucp_worker_h worker = rndv_req->send.ep->worker;
+    ucp_request_t *rreq = rndv_req->send.rndv_get.rreq;
+    ucp_tag_rndv_debug_entry_t *entry;
+
+    /* set request id */
+    rndv_req->send.rndv_req_id = worker->rndv_req_id;
+    worker->rndv_req_id++;
+
+    /* add entry for rndv_get request */
+    entry                 = ucp_rndv_add_debug_entry_common(rndv_req);
+    entry->type           = "rndv_get";
+    entry->rts_seq        = rts_seq;
+    entry->send_tag       = rndv_rts_hdr->super.tag;
+    entry->recv_tag       = rreq->recv.tag.tag;
+    entry->remote_address = rndv_req->send.rndv_get.remote_address;
+    entry->remote_reqptr  = rndv_req->send.rndv_get.remote_request;
+    entry->rndv_get_req   = rndv_req;
+    entry->recv_req       = rreq;
+    entry->send_req       = NULL;
+
+    /* add more data in existing receive request entry */
+    entry                 = ucp_worker_rndv_debug_entry(worker, rreq->recv.req_id);
+    entry->ep             = rndv_req->send.ep;
+    entry->rts_seq        = rts_seq;
+    entry->send_tag       = rndv_rts_hdr->super.tag;
+    entry->remote_address = rndv_req->send.rndv_get.remote_address;
+    entry->remote_reqptr  = rndv_req->send.rndv_get.remote_request;
+    entry->rndv_get_req   = rndv_req;
+    entry->send_req       = NULL;
+}
+
+/* to be used from debugger */
+void ucp_rndv_print_debug_data(ucp_worker_h worker, const char *filename,
+                               ucp_tag_t send_tag)
+{
+    ucp_tag_rndv_debug_entry_t *entry;
+    size_t i, count;
+    uint64_t ndata, udata;
+    FILE *file;
+
+    if (filename == NULL) {
+        file = stdout;
+    } else {
+        file = fopen(filename, "w");
+        if (file == NULL) {
+            fprintf(stderr, "cannot open %s: %m\n", filename);
+            return;
+        }
+    }
+
+    count = ucs_min(worker->tm.rndv_debug.queue_length, worker->rndv_req_id);
+    for (i = 0; i < count; ++i) {
+        entry = &worker->tm.rndv_debug.queue[i];
+        if ((send_tag != 0) && (send_tag != entry->send_tag)) {
+            continue;
+        }
+        memcpy(&udata, entry->udata, sizeof(udata));
+        memcpy(&ndata, entry->ndata, sizeof(ndata));
+        fprintf(file,
+                "id %lu %s st '%s' rts_seq %lu pend %u stag 0x%lx rtag 0x%lx rva 0x%lx "
+                "rmreq %lu lva %p sz %zu rxsz %zu greq %p sreq %p rreq %p "
+                "udata 0x%"PRIx64" ndata 0x%"PRIx64"\n",
+                entry->id, entry->type, entry->status, entry->rts_seq,
+                entry->pending_count, entry->send_tag, entry->recv_tag,
+                entry->remote_address, entry->remote_reqptr,
+                entry->local_address, entry->size, entry->recvd_size,
+                entry->rndv_get_req, entry->send_req, entry->recv_req,
+                udata, ndata);
+    }
+
+    if (filename != NULL) {
+        fclose(file);
+    }
 }
 
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
@@ -108,21 +206,35 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
                  uct_pending_req_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_h         ep = sreq->send.ep;
+    ucp_worker_h worker = ep->worker;
     size_t packed_rkey_size;
     ucs_status_t status;
 
     /* send the RTS. the pack_cb will pack all the necessary fields in the RTS */
-    packed_rkey_size = ucp_ep_config(sreq->send.ep)->tag.rndv.rkey_size;
+    packed_rkey_size = ucp_ep_config(ep)->tag.rndv.rkey_size;
     status = ucp_do_am_single(self, UCP_AM_ID_RNDV_RTS, ucp_tag_rndv_rts_pack,
                               sizeof(ucp_rndv_rts_hdr_t) + packed_rkey_size);
     if (status == UCS_OK) {
+        sreq->send.msg_proto.tag.rts_send_seq = worker->rndv_rts_send_seq++;
+        if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+            ucp_worker_rndv_debug_entry(worker, sreq->send.rndv_req_id)->rts_seq =
+                    sreq->send.msg_proto.tag.rts_send_seq;
+
+        }
+
+        ucs_assert_always(sreq->send.rndv_req_id > ep->last_rts_req_id);
+        ep->last_rts_req_id = sreq->send.rndv_req_id;
         sreq->flags |= UCP_REQUEST_FLAG_RNDV_RTS_SENT;
         return status;
     } else if (status == UCS_ERR_NO_RESOURCE) {
+        if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+            ++ucp_worker_rndv_debug_entry(worker, sreq->send.rndv_req_id)->pending_count;
+        }
         return UCS_ERR_NO_RESOURCE;
     } else {
         ucs_assert(UCS_STATUS_IS_ERR(status));
-        ucp_rndv_complete_send(sreq, status);
+        ucp_rndv_complete_send(sreq, status, "rts_cancel");
         return UCS_OK;
     }
 }
@@ -156,7 +268,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_cancel, (self),
     } else if (packed_len == UCS_ERR_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
     } else {
-        ucp_rndv_complete_send(sreq, (ucs_status_t)packed_len);
+        ucp_rndv_complete_send(sreq, (ucs_status_t)packed_len,
+                               "progress_rndv_cancel");
         return UCS_OK;
     }
 }
@@ -272,19 +385,17 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     /* add the rndv send request to a hash on the worker. the key is a unique
      * value on the worker */
     khiter = kh_put(ucp_worker_rndv_req_ptrs, &worker->rndv_req_ptrs,
-                    worker->rndv_req_id, &ret);
+                    sreq->send.rndv_req_id, &ret);
     if (ret < 1 ) {
         ucs_warn("failed to add rndv req id (%zu) to worker %p rndv req ptrs hash",
-                 worker->rndv_req_id, worker);
+                 sreq->send.rndv_req_id, worker);
     }
 
-    sreq->send.rndv_req_id = worker->rndv_req_id;
     kh_value(&worker->rndv_req_ptrs, khiter) = (uintptr_t)sreq;
 
     ucs_debug("added sreq %p to hash with key %zu. worker %p",
               sreq, sreq->send.rndv_req_id, worker);
 
-    worker->rndv_req_id++;
 
     return status;
 }
@@ -292,7 +403,9 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
 void ucp_tag_rndv_cancel(ucp_request_t *sreq)
 {
     if (!(sreq->send.ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-        ucp_rndv_complete_send(sreq, UCS_ERR_CANCELED);
+        if (sreq->flags & UCP_REQUEST_FLAG_RNDV_RTS_SENT) {
+            ucp_rndv_complete_send(sreq, UCS_ERR_CANCELED, "rndv_cancel");
+        }
     } else {
         sreq->send.uct.func = ucp_proto_progress_rndv_cancel;
         if (sreq->flags & UCP_REQUEST_FLAG_RNDV_RTS_SENT) {
@@ -308,7 +421,8 @@ void ucp_ep_complete_rndv_reqs(ucp_ep_h ep)
 
     ucs_list_for_each_safe(sreq, tmp, &worker->rndv_reqs_list, send.list) {
         if (sreq->send.ep == ep) {
-            ucp_rndv_complete_send(sreq, UCS_ERR_CANCELED);
+            ucp_rndv_complete_send(sreq, UCS_ERR_CANCELED,
+                                   "ep_closed_rndv_cancel");
         }
     }
 }
@@ -400,16 +514,19 @@ static void ucp_rndv_send_frag_atp(ucp_request_t *fsreq, uintptr_t remote_reques
     ucp_request_send(fsreq, 0);
 }
 
-static void ucp_rndv_zcopy_recv_req_complete(ucp_request_t *req, ucs_status_t status)
+static void
+ucp_rndv_zcopy_recv_req_complete(ucp_worker_h worker, ucp_request_t *req,
+                                 ucs_status_t status, const char *state)
 {
     ucp_request_recv_buffer_dereg(req);
-    ucp_request_complete_tag_recv(req, status);
+    ucp_request_complete_tag_recv(worker, req, status, state);
 }
 
 static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req,
                                             ucs_status_t status)
 {
     ucp_request_t *rreq = rndv_req->send.rndv_get.rreq;
+    ucp_worker_h worker = rndv_req->send.ep->worker;
 
     ucs_assertv(rndv_req->send.state.dt.offset == rndv_req->send.length,
                 "rndv_req=%p offset=%zu length=%zu", rndv_req,
@@ -418,6 +535,12 @@ static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req,
     ucp_trace_req(rndv_req, "rndv_get completed with status %s",
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(rreq, "complete_rndv_get", 0);
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+         ucp_tag_rndv_debug_entry_t *entry =
+                 ucp_worker_rndv_debug_entry(worker, rndv_req->send.rndv_req_id);
+         entry->status = "rndv_completed";
+    }
 
     ucp_rkey_destroy(rndv_req->send.rndv_get.rkey);
     ucp_request_send_buffer_dereg(rndv_req);
@@ -430,7 +553,7 @@ static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req,
         ucp_request_put(rndv_req);
     }
 
-    ucp_rndv_zcopy_recv_req_complete(rreq, status);
+    ucp_rndv_zcopy_recv_req_complete(worker, rreq, status, "get_zcopy_ok");
 }
 
 static void ucp_rndv_recv_data_init(ucp_request_t *rreq, size_t size)
@@ -713,9 +836,9 @@ ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req)
     rndv_req->send.rndv_get.lanes_count     = ucs_popcount(lane_map);
 }
 
-
 static void ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req, ucp_request_t *rreq,
-                                      const ucp_rndv_rts_hdr_t *rndv_rts_hdr)
+                                      const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
+                                      uint64_t rts_seq)
 {
     ucp_worker_h worker = rndv_req->send.ep->worker;
     ucs_status_t status;
@@ -744,6 +867,10 @@ static void ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req, ucp_request_t *rr
     ucp_request_send_state_reset(rndv_req, ucp_rndv_get_completion,
                                  UCP_REQUEST_SEND_PROTO_RNDV_GET);
     ucp_rndv_req_init_zcopy_lane_map(rndv_req);
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+        ucp_rndv_get_req_add_debug_entry(rndv_req, rndv_rts_hdr, rts_seq);
+    }
 
     if (worker->context->config.ext.rdnv_defer_sched) {
         rndv_req->send.lane         = ucp_rndv_get_zcopy_get_lane(rndv_req, &uct_rkey);
@@ -872,7 +999,7 @@ static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
     ucp_rndv_rkey_ptr_rreq_advance(rreq, seg_size);
     if (ucs_unlikely(status != UCS_OK) ||
         (rreq->recv.state.offset == rndv_req->send.length)) {
-        ucp_request_complete_tag_recv(rreq, status);
+        ucp_request_complete_tag_recv(worker, rreq, status, "rkey_ptr");
         ucp_rkey_destroy(rndv_req->send.rndv_get.rkey);
         ucp_rndv_req_send_ats(rndv_req, rreq,
                               rndv_req->send.rndv_get.remote_request, status);
@@ -931,7 +1058,7 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
                               &rkey->tl_rkey[rkey_index].rkey,
                               rndv_rts_hdr->address, &local_ptr);
     if (status != UCS_OK) {
-        ucp_request_complete_tag_recv(rreq, status);
+        ucp_request_complete_tag_recv(worker, rreq, status, "rkey_ptr");
         ucp_rkey_destroy(rkey);
         ucp_rndv_req_send_ats(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr, status);
         return;
@@ -966,9 +1093,10 @@ ucp_rndv_test_zcopy_scheme_support(size_t length, size_t min_zcopy,
             /* or can the message be split? */ split);
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
+UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr, rts_seq),
                       ucp_worker_h worker, ucp_request_t *rreq,
-                      const ucp_rndv_rts_hdr_t *rndv_rts_hdr)
+                      const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
+                      uint64_t rts_seq)
 {
     ucp_rndv_mode_t rndv_mode;
     ucp_request_t *rndv_req;
@@ -986,7 +1114,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
 
     ep = ucp_worker_get_ep_by_ptr(worker, rndv_rts_hdr->sreq.ep_ptr);
     if (ep == NULL) {
-        ucp_request_complete_tag_recv(rreq, UCS_ERR_CANCELED);
+        ucp_request_complete_tag_recv(worker, rreq, UCS_ERR_CANCELED, "rndv_no_ep");
         goto out;
     }
 
@@ -1015,7 +1143,19 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
                       rndv_rts_hdr->size, rreq->recv.length, rreq);
         ucp_rndv_req_send_ats(rndv_req, rreq, rndv_rts_hdr->sreq.reqptr, UCS_OK);
         ucp_request_recv_generic_dt_finish(rreq);
-        ucp_rndv_zcopy_recv_req_complete(rreq, UCS_ERR_MESSAGE_TRUNCATED);
+
+        if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+            ucp_tag_rndv_debug_entry_t *entry =
+                    ucp_worker_rndv_debug_entry(worker, rreq->recv.req_id);
+            entry->rts_seq        = rts_seq;
+            entry->ep             = ep;
+            entry->remote_reqptr  = rndv_rts_hdr->sreq.reqptr;
+            entry->remote_address = rndv_rts_hdr->address;
+            entry->rndv_get_req   = rndv_req;
+        }
+
+        ucp_rndv_zcopy_recv_req_complete(worker, rreq, UCS_ERR_MESSAGE_TRUNCATED,
+                                         "rndv_truncated");
         goto out;
     }
 
@@ -1037,7 +1177,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_matched, (worker, rreq, rndv_rts_hdr),
                                                ep_config->tag.rndv.max_get_zcopy,
                                                ep_config->tag.rndv.get_zcopy_split)) {
             /* try to fetch the data with a get_zcopy operation */
-            ucp_rndv_req_send_rma_get(rndv_req, rreq, rndv_rts_hdr);
+            ucp_rndv_req_send_rma_get(rndv_req, rreq, rndv_rts_hdr, rts_seq);
             goto out;
         } else if (rndv_mode == UCP_RNDV_MODE_AUTO) {
             /* check if we need pipelined memtype staging */
@@ -1087,12 +1227,28 @@ static void ucp_rndv_send_cancel_ack(ucp_worker_h worker,
 }
 
 static void ucp_rndv_unexp_cancel(ucp_worker_h worker,
-                                  ucp_rndv_rts_hdr_t *rndv_rts_hdr)
+                                  ucp_rndv_rts_hdr_t *rndv_rts_hdr,
+                                  uint64_t rts_seq)
 {
     const ucp_rndv_rts_hdr_t *rdesc_rts_hdr;
-
+    ucp_tag_rndv_debug_entry_t *entry;
     ucp_recv_desc_t *rdesc;
     ucs_list_link_t *list;
+    uint64_t req_id;
+
+    req_id = worker->rndv_req_id++;
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+         entry                 = ucp_worker_rndv_debug_entry(worker, req_id);
+         entry->type           = "rndv_cancel";
+         entry->rts_seq        = rts_seq;
+         entry->send_tag       = rndv_rts_hdr->super.tag;
+         entry->ep             = ucp_worker_get_ep_by_ptr(worker,
+                                                          rndv_rts_hdr->sreq.ep_ptr);
+         entry->remote_reqptr  = rndv_rts_hdr->sreq.reqptr;
+         entry->remote_address = rndv_rts_hdr->address;
+         entry->size           = rndv_rts_hdr->size;
+    }
 
     list = ucp_tag_unexp_get_list_for_tag(&worker->tm, rndv_rts_hdr->super.tag);
     ucs_list_for_each(rdesc, list, tag_list[UCP_RDESC_HASH_LIST]) {
@@ -1121,15 +1277,34 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
     ucp_recv_desc_t *rdesc;
     ucp_request_t *rreq;
     ucs_status_t status;
+    uint64_t seq;
+
+    seq = worker->rndv_rts_recv_seq++;
+
+    if (ucs_unlikely(worker->tm.rndv_debug.queue_length > 0)) {
+        ucp_tag_rndv_debug_entry_t *entry;
+
+        uint64_t req_id = worker->rndv_req_id++;
+
+        entry                 = ucp_worker_rndv_debug_entry(worker, req_id);
+        entry->type           = "rts_recv";
+        entry->rts_seq        = seq;
+        entry->send_tag       = rndv_rts_hdr->super.tag;
+        entry->ep             = ucp_worker_get_ep_by_ptr(worker,
+                                                         rndv_rts_hdr->sreq.ep_ptr);
+        entry->remote_reqptr  = rndv_rts_hdr->sreq.reqptr;
+        entry->remote_address = rndv_rts_hdr->address;
+        entry->size           = rndv_rts_hdr->size;
+    }
 
     if (rndv_rts_hdr->status == UCS_ERR_CANCELED) {
-        ucp_rndv_unexp_cancel(worker, rndv_rts_hdr);
+        ucp_rndv_unexp_cancel(worker, rndv_rts_hdr, seq);
         return UCS_OK;
     }
 
     rreq = ucp_tag_exp_search(&worker->tm, rndv_rts_hdr->super.tag);
     if (rreq != NULL) {
-        ucp_rndv_matched(worker, rreq, rndv_rts_hdr);
+        ucp_rndv_matched(worker, rreq, rndv_rts_hdr, seq);
 
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
@@ -1142,6 +1317,7 @@ ucs_status_t ucp_rndv_process_rts(void *arg, void *data, size_t length,
                                     sizeof(*rndv_rts_hdr),
                                     UCP_RECV_DESC_FLAG_RNDV, 0, &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
+            rdesc->rndv_rts_seq = seq;
             ucp_tag_unexp_recv(&worker->tm, rdesc, rndv_rts_hdr->super.tag);
         }
     }
@@ -1192,7 +1368,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
     if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
         ucp_tag_offload_cancel_rndv(sreq);
     }
-    ucp_rndv_complete_send(sreq, rep_hdr->status);
+    ucp_rndv_complete_send(sreq, rep_hdr->status, "ats_recv");
     return UCS_OK;
 }
 
@@ -1233,7 +1409,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
                                        ucp_rndv_pack_data, 1);
     }
     if (status == UCS_OK) {
-        ucp_rndv_complete_send(sreq, UCS_OK);
+        ucp_rndv_complete_send(sreq, UCS_OK, "rndv_am_bcopy_done");
     } else if (status == UCP_STATUS_PENDING_SWITCH) {
         status = UCS_OK;
     }
@@ -1306,8 +1482,7 @@ static void ucp_rndv_am_zcopy_send_req_complete(ucp_request_t *req,
                                                 ucs_status_t status)
 {
     ucs_assert(req->send.state.uct_comp.count == 0);
-    ucp_request_send_buffer_dereg(req);
-    ucp_request_complete_send(req, status);
+    ucp_rndv_complete_send(req, status, "rndv_zcopy_complete");
 }
 
 static void ucp_rndv_am_zcopy_completion(uct_completion_t *self,
@@ -1387,7 +1562,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_frag_recv_put_completion, (self, status),
     ucp_request_put(freq);
 
     if (req->recv.tag.remaining == 0) {
-        ucp_request_complete_tag_recv(req, UCS_OK);
+        ucp_request_complete_tag_recv(req->send.ep->worker, req, UCS_OK,
+                                      "freq");
     }
 }
 
@@ -1549,10 +1725,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
                  (arg, data, length, flags),
                  void *arg, void *data, size_t length, unsigned flags)
 {
+    ucp_worker_h      worker = arg;
     ucp_reply_hdr_t *rep_hdr = data;
     ucp_request_t *req;
     ucp_request_t *rreq;
-    ucp_worker_h worker;
     ucp_lane_index_t mem_type_rma_lane;
     ucp_mem_desc_t *mdesc;
     ucp_md_index_t md_index;
@@ -1604,7 +1780,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
         ucp_request_send(req, 0);
     } else {
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_atp_recv", 0);
-        ucp_rndv_zcopy_recv_req_complete(req, UCS_OK);
+        ucp_rndv_zcopy_recv_req_complete(worker, req, UCS_OK, "rndv_atp_recv");
     }
 
     return UCS_OK;

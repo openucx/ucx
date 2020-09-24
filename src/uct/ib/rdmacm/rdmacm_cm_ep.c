@@ -75,14 +75,6 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
     }
 }
 
-void uct_rdmacm_cm_ep_set_failed(uct_rdmacm_cm_ep_t *cep,
-                                 uct_cm_remote_data_t *remote_data,
-                                 ucs_status_t status)
-{
-    uct_rdmacm_cm_ep_error_cb(cep, remote_data, status);
-    cep->flags |= UCT_RDMACM_CM_EP_FAILED;
-}
-
 static UCS_F_ALWAYS_INLINE
 uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
 {
@@ -95,6 +87,16 @@ static UCS_F_ALWAYS_INLINE
 ucs_async_context_t *uct_rdmacm_cm_ep_get_async(uct_rdmacm_cm_ep_t *cep)
 {
     return uct_rdmacm_cm_get_async(uct_rdmacm_cm_ep_get_cm(cep));
+}
+
+void uct_rdmacm_cm_ep_set_failed(uct_rdmacm_cm_ep_t *cep,
+                                 uct_cm_remote_data_t *remote_data,
+                                 ucs_status_t status)
+{
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
+    uct_rdmacm_cm_ep_error_cb(cep, remote_data, status);
+    cep->flags |= UCT_RDMACM_CM_EP_FAILED;
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 
 ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
@@ -306,7 +308,6 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     struct rdma_conn_param conn_param;
     ucs_status_t           status;
     char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
-    uct_cm_remote_data_t   remote_data;
 
     cep->flags |= UCT_RDMACM_CM_EP_ON_SERVER;
 
@@ -316,9 +317,8 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
         if (rdma_migrate_id(event->id, cm->ev_ch)) {
             ucs_error("failed to migrate id %p to event_channel %p (cm=%p)",
                       event->id, cm->ev_ch, cm);
-            uct_rdmacm_cm_reject(event->id);
             status = UCS_ERR_IO_ERROR;
-            goto err_server_cb;
+            goto err_reject;
         }
 
         ucs_debug("%s: migrated id %p from event_channel=%p to "
@@ -337,8 +337,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
 
     status = uct_rdmacm_cm_ep_conn_param_init(cep, &conn_param);
     if (status != UCS_OK) {
-        uct_rdmacm_cm_reject(event->id);
-        goto err_server_cb;
+        goto err_reject;
     }
 
     ucs_trace("%s: rdma_accept on cm_id %p",
@@ -349,15 +348,19 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
         ucs_error("rdma_accept(on id=%p) failed: %m", event->id);
         uct_rdmacm_cm_ep_destroy_dummy_cq_qp(cep);
         status = UCS_ERR_IO_ERROR;
-        goto err_server_cb;
+        goto err;
     }
 
     uct_rdmacm_cm_ack_event(event);
     return UCS_OK;
 
-err_server_cb:
-    remote_data.field_mask = 0;
-    uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+err_reject:
+    uct_rdmacm_cm_reject(event->id);
+err:
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
+    cep->status = status;
+    cep->flags |= UCT_RDMACM_CM_EP_FAILED;
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
     uct_rdmacm_cm_destroy_id(event->id);
     uct_rdmacm_cm_ack_event(event);
     return status;

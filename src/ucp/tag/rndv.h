@@ -51,8 +51,12 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
 
 void ucp_tag_rndv_cancel(ucp_request_t *sreq);
 
+void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status,
+                            const char *debug_status);
+
 void ucp_rndv_matched(ucp_worker_h worker, ucp_request_t *req,
-                      const ucp_rndv_rts_hdr_t *rndv_rts_hdr);
+                      const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
+                      uint64_t rts_seq);
 
 ucs_status_t ucp_rndv_progress_rma_get_zcopy(uct_pending_req_t *self);
 

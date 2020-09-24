@@ -133,6 +133,7 @@ static ucs_status_t ucp_tag_eager_contig_short(uct_pending_req_t *self)
         return status;
     }
 
+    ucp_send_request_update_data(req, "sent_short");
     ucp_request_complete_send(req, UCS_OK);
     return UCS_OK;
 }
@@ -144,6 +145,7 @@ static ucs_status_t ucp_tag_eager_bcopy_single(uct_pending_req_t *self)
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_request_send_generic_dt_finish(req);
+        ucp_send_request_update_data(req, "sent_bcopy_s");
         ucp_request_complete_send(req, UCS_OK);
     }
     return status;
@@ -159,6 +161,7 @@ static ucs_status_t ucp_tag_eager_bcopy_multi(uct_pending_req_t *self)
     if (status == UCS_OK) {
         ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
         ucp_request_send_generic_dt_finish(req);
+        ucp_send_request_update_data(req, "sent_bcopy_m");
         ucp_request_complete_send(req, UCS_OK);
     } else if (status == UCP_STATUS_PENDING_SWITCH) {
         status = UCS_OK;

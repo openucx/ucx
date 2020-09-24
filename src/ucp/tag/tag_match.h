@@ -53,6 +53,29 @@ typedef union {
 
 KHASH_INIT(ucp_tag_frag_hash, uint64_t, ucp_tag_frag_match_t, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
+#define UCP_TAG_MAX_DATA 8
+
+
+typedef struct ucp_tag_rndv_debug_entry {
+    uint64_t          id;
+    const char        *type;
+    const char        *status;
+    uint64_t          rts_seq;
+    unsigned          pending_count;
+    ucp_ep_h          ep;
+    ucp_tag_t         send_tag;
+    ucp_tag_t         recv_tag;
+    uintptr_t         remote_address;
+    uintptr_t         remote_reqptr;
+    void              *local_address;
+    size_t            size;
+    size_t            recvd_size;
+    ucp_request_t     *rndv_get_req;
+    ucp_request_t     *send_req;
+    ucp_request_t     *recv_req;
+    uint8_t           udata[UCP_TAG_MAX_DATA];
+    uint8_t           ndata[UCP_TAG_MAX_DATA]; /* data for the network */
+} ucp_tag_rndv_debug_entry_t;
 
 
 /**
@@ -98,10 +121,15 @@ typedef struct ucp_tag_match {
                                                    'thresh' configuration. */
     } offload;
 
+    struct {
+        size_t                      queue_length;
+        ucp_tag_rndv_debug_entry_t  *queue;
+    } rndv_debug;
+
 } ucp_tag_match_t;
 
 
-ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm);
+ucs_status_t ucp_tag_match_init(ucp_context_h context, ucp_tag_match_t *tm);
 
 void ucp_tag_match_cleanup(ucp_tag_match_t *tm);
 
