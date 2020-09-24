@@ -138,6 +138,10 @@ public:
         _counters.push_back(counter);
     }
 
+    void empty_counters() {
+        _counters.clear();
+    }
+
     CounterSet& operator++() {
         for (size_t i = 0; i < _counters.size(); ++i) {
             ++(*_counters[i]);
@@ -425,6 +429,7 @@ public:
             _io_counter      = io_counter;
             _conn_io_counter = conn_io_counter;
             _chunk_cnt       = chunk_cnt;
+            _counters.empty_counters();
             _counters.add_counter(_io_counter);
             _counters.add_counter(_conn_io_counter);            
         }
@@ -487,10 +492,10 @@ public:
         }
 
         int index = get_server_index(conn);
-        ++_server[index].num_sent;
+        ++_server_info[index].num_sent;
         ++_num_sent;
         IoReadResponseCallback *r = _callback_pool.get();
-        r->init(&_num_completed, &_server[index].num_completed,
+        r->init(&_num_completed, &_server_info[index].num_completed,
                 get_chunk_cnt(data_size));
         recv_data(conn, data_size, sn, r);
         conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
@@ -507,7 +512,7 @@ public:
         }
 
         int index = get_server_index(conn);
-        ++_server[index].num_sent;
+        ++_server_info[index].num_sent;
         ++_num_sent;
         VERBOSE_LOG << "sending data " << buffer() << " size "
                     << data_size << " sn " << sn;
@@ -527,21 +532,22 @@ public:
 
         if (hdr->op == IO_COMP) {
             ++_num_completed;
-            ++_server[get_server_index(conn)].num_completed;
+            ++_server_info[get_server_index(conn)].num_completed;
         }
     }
 
     long get_num_imcompleted(int server_index) {
-        return _server[server_index].num_sent - _server[server_index].num_completed;
+        return (_server_info[server_index].num_sent
+                - _server_info[server_index].num_completed);
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
         LOG << "setting error flag on connection " << conn;
         --_num_connected;        
-        int index               = get_server_index(conn);
-        _num_sent              -= get_num_imcompleted(index);
-        _server[index].conn     = NULL;
-        _server[index].num_sent = _server[index].num_completed;
+        int index                    = get_server_index(conn);
+        _num_sent                   -= get_num_imcompleted(index);
+        _server_info[index].conn     = NULL;
+        _server_info[index].num_sent = _server_info[index].num_completed;
         delete conn;
     }
 
@@ -627,13 +633,13 @@ public:
     }
 
     bool run() {
-        if (_server.empty()) {
-            _server.resize(opts().servers.size());
+        if (_server_info.empty()) {
+            _server_info.resize(opts().servers.size());
         }
-        for (size_t i = 0; i < _server.size(); i++) {
-            if (_server[i].conn == NULL) {
-                _server[i].conn = connect(opts().servers[i], i + 1);
-                if (!_server[i].conn) {
+        for (size_t i = 0; i < _server_info.size(); i++) {
+            if (_server_info[i].conn == NULL) {
+                _server_info[i].conn = connect(opts().servers[i], i + 1);
+                if (!_server_info[i].conn) {
                     LOG << "Connect to server ["
                         << opts().servers[i]
                         << "] Failed!";
@@ -669,14 +675,14 @@ public:
                 break;
             }
 
-            if (_num_connected < _server.size()) {
+            if (_num_connected < _server_info.size()) {
                 double curr_time = get_time();
                 if (curr_time >= (prev_reconnect_time + 3.0)) {
                     prev_reconnect_time = curr_time;
-                    for (size_t i = 0; i < _server.size(); i++) {
-                        if (_server[i].conn == NULL) {
-                            _server[i].conn = connect(opts().servers[i], i + 1);
-                            if (_server[i].conn) {
+                    for (size_t i = 0; i < _server_info.size(); i++) {
+                        if (_server_info[i].conn == NULL) {
+                            _server_info[i].conn = connect(opts().servers[i], i + 1);
+                            if (_server_info[i].conn) {
                                 _num_connected++;
                             }
                         }
@@ -690,8 +696,8 @@ public:
             }
             size_t conn_index;
             while (1) {
-                conn_index = IoDemoRandom::rand(0, _server.size() - 1);
-                if (_server[conn_index].conn != NULL) {
+                conn_index = IoDemoRandom::rand(0, _server_info.size() - 1);
+                if (_server_info[conn_index].conn != NULL) {
                     break;
                 }
             }
@@ -700,10 +706,10 @@ public:
             size_t size;
             switch (op) {
             case IO_READ:
-                size = do_io_read(_server[conn_index].conn, total_iter);
+                size = do_io_read(_server_info[conn_index].conn, total_iter);
                 break;
             case IO_WRITE:
-                size = do_io_write(_server[conn_index].conn, total_iter);
+                size = do_io_write(_server_info[conn_index].conn, total_iter);
                 break;
             default:
                 abort();
@@ -737,9 +743,9 @@ public:
             check_time_limit(curr_time);
         }
 
-        for (size_t i = 0; i < _server.size(); i++) {
-            delete _server[i].conn;
-            _server[i].conn = NULL;
+        for (size_t i = 0; i < _server_info.size(); i++) {
+            delete _server_info[i].conn;
+            _server_info[i].conn = NULL;
         }
         return (_status == OK) || (_status == RUNTIME_EXCEEDED);
     }
@@ -837,20 +843,22 @@ private:
                 std::cout << ", average latency: " << latency_usec << " usec";
             }
 
-            long min = _server[0].num_completed;
-            long max = _server[0].num_completed;
+            long min = _server_info[0].num_completed;
+            long max = _server_info[0].num_completed;
             long avg = 0;
-            for (int i = 0; i < _server.size(); i++) {
-                if (_server[i].num_completed < min) {
-                    min = _server[i].num_completed;
+            for (int i = 0; i < _server_info.size(); i++) {
+                if (_server_info[i].num_completed < min) {
+                    min = _server_info[i].num_completed;
                 }
-                if (_server[i].num_completed > max) {
-                    max = _server[i].num_completed;
+                if (_server_info[i].num_completed > max) {
+                    max = _server_info[i].num_completed;
                 }
-                avg += _server[i].num_completed;
+                avg += _server_info[i].num_completed;
+                _server_info[i].num_completed = 0;
+                _server_info[i].num_sent       = 0;
             }
-            avg /= _server.size();
-            std::cout << ", " << _server.size() << " conns";
+            avg /= _server_info.size();
+            std::cout << ", " << _server_info.size() << " conns";
             std::cout << " min " << min << " max " << max << " avg " << avg;
 
             std::cout << std::endl;
@@ -863,7 +871,7 @@ private:
         long           num_completed;
         UcxConnection* conn;
     } server_info_t; 
-    std::vector<server_info_t>         _server;
+    std::vector<server_info_t>         _server_info;
     size_t                             _num_connected;
     long                               _num_sent;
     long                               _num_completed;
