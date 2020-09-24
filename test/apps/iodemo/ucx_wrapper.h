@@ -50,7 +50,7 @@ public:
  */
 class UcxLog {
 public:
-    UcxLog(const char* prefix, bool enable);
+    UcxLog(const char* prefix, bool enable = true);
 
     ~UcxLog();
 
