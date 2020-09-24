@@ -78,7 +78,7 @@ UCS_TEST_P(test_ucp_stream_onesided, recv_not_connected_ep_cleanup) {
     param.flags        = UCP_STREAM_RECV_FLAG_WAITALL;
 
     void *rreq = ucp_stream_recv_nbx(receiver().ep(), &recv_data, 1,
-                                     &length,&param);
+                                     &length, &param);
     EXPECT_TRUE(UCS_PTR_IS_PTR(rreq));
     EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(rreq));
     disconnect(receiver());
