@@ -53,7 +53,6 @@ typedef struct {
     unsigned                 random_seed;
     size_t                   num_buffers;
     bool                     verbose;
-    bool                     print_conn_status;
 } options_t;
 
 #define LOG         UcxLog("[DEMO]", true)
@@ -132,6 +131,24 @@ unsigned IoDemoRandom::_seed    = 0;
 const unsigned IoDemoRandom::_A = 1103515245U;
 const unsigned IoDemoRandom::_C = 12345U;
 const unsigned IoDemoRandom::_M = 0x7fffffffU;
+
+class CounterSet {
+public:
+    void add_counter(long* counter) {
+        _counters.push_back(counter);
+    }
+
+    CounterSet& operator++() {
+        for (size_t i = 0; i < _counters.size(); ++i) {
+            ++(*_counters[i]);
+        }
+        return *this;
+    }
+
+private:
+    std::vector<long*> _counters;
+};
+
 
 class P2pDemoCommon : public UcxContext {
 protected:
@@ -408,6 +425,8 @@ public:
             _io_counter      = io_counter;
             _conn_io_counter = conn_io_counter;
             _chunk_cnt       = chunk_cnt;
+            _counters.add_counter(_io_counter);
+            _counters.add_counter(_conn_io_counter);            
         }
 
         ~IoReadResponseCallback() {
@@ -420,8 +439,7 @@ public:
                 return;
             }
 
-            ++(*_io_counter);
-            ++(*_conn_io_counter);
+            ++_counters;
             _pool->put(this);
         }
 
@@ -433,6 +451,7 @@ public:
         long                                _comp_counter;
         long*                               _io_counter;
         long*                               _conn_io_counter;
+        CounterSet                          _counters;
         uint32_t                            _chunk_cnt;
         void*                               _buffer;
         MemoryPool<IoReadResponseCallback>* _pool;
@@ -456,7 +475,7 @@ public:
         CONN_RETRIES_EXCEEDED
     } status_t;
 
-    uint32_t get_conn_index(const UcxConnection *conn) {
+    uint32_t get_server_index(const UcxConnection *conn) {
         return (conn->id() - 1);
     }
 
@@ -467,11 +486,11 @@ public:
             return 0;
         }
 
-        int index = get_conn_index(conn);
-        ++_conn[index].num_sent;
+        int index = get_server_index(conn);
+        ++_server[index].num_sent;
         ++_num_sent;
         IoReadResponseCallback *r = _callback_pool.get();
-        r->init(&_num_completed, &_conn[index].num_completed,
+        r->init(&_num_completed, &_server[index].num_completed,
                 get_chunk_cnt(data_size));
         recv_data(conn, data_size, sn, r);
         conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
@@ -487,8 +506,8 @@ public:
             return 0;
         }
 
-        int index = get_conn_index(conn);
-        ++_conn[index].num_sent;
+        int index = get_server_index(conn);
+        ++_server[index].num_sent;
         ++_num_sent;
         VERBOSE_LOG << "sending data " << buffer() << " size "
                     << data_size << " sn " << sn;
@@ -508,17 +527,21 @@ public:
 
         if (hdr->op == IO_COMP) {
             ++_num_completed;
-            ++_conn[get_conn_index(conn)].num_completed;
+            ++_server[get_server_index(conn)].num_completed;
         }
+    }
+
+    long get_num_imcompleted(int server_index) {
+        return _server[server_index].num_sent - _server[server_index].num_completed;
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
         LOG << "setting error flag on connection " << conn;
         --_num_connected;        
-        int index             = get_conn_index(conn);
-        _num_sent            -= (_conn[index].num_sent - _conn[index].num_completed);
-        _conn[index].conn     = NULL;
-        _conn[index].num_sent = _conn[index].num_completed;
+        int index               = get_server_index(conn);
+        _num_sent              -= get_num_imcompleted(index);
+        _server[index].conn     = NULL;
+        _server[index].num_sent = _server[index].num_completed;
         delete conn;
     }
 
@@ -604,13 +627,13 @@ public:
     }
 
     bool run() {
-        if (_conn.empty()) {
-            _conn.resize(opts().servers.size());
+        if (_server.empty()) {
+            _server.resize(opts().servers.size());
         }
-        for (size_t i = 0; i < _conn.size(); i++) {
-            if (_conn[i].conn == NULL) {
-                _conn[i].conn = connect(opts().servers[i], i + 1);
-                if (!_conn[i].conn) {
+        for (size_t i = 0; i < _server.size(); i++) {
+            if (_server[i].conn == NULL) {
+                _server[i].conn = connect(opts().servers[i], i + 1);
+                if (!_server[i].conn) {
                     LOG << "Connect to server ["
                         << opts().servers[i]
                         << "] Failed!";
@@ -646,14 +669,14 @@ public:
                 break;
             }
 
-            if (_num_connected < _conn.size()) {
+            if (_num_connected < _server.size()) {
                 double curr_time = get_time();
                 if (curr_time >= (prev_reconnect_time + 3.0)) {
                     prev_reconnect_time = curr_time;
-                    for (size_t i = 0; i < _conn.size(); i++) {
-                        if (_conn[i].conn == NULL) {
-                            _conn[i].conn = connect(opts().servers[i], i + 1);
-                            if (_conn[i].conn) {
+                    for (size_t i = 0; i < _server.size(); i++) {
+                        if (_server[i].conn == NULL) {
+                            _server[i].conn = connect(opts().servers[i], i + 1);
+                            if (_server[i].conn) {
                                 _num_connected++;
                             }
                         }
@@ -661,14 +684,14 @@ public:
                 }
             }
             if (_num_connected == 0) {
-                LOG << "Are servers are disconnected";;
+                LOG << "Are servers are disconnected";
                 _status = ERROR;
                 break;
             }
             size_t conn_index;
             while (1) {
-                conn_index = IoDemoRandom::rand(0, _conn.size() - 1);
-                if (_conn[conn_index].conn != NULL) {
+                conn_index = IoDemoRandom::rand(0, _server.size() - 1);
+                if (_server[conn_index].conn != NULL) {
                     break;
                 }
             }
@@ -677,10 +700,10 @@ public:
             size_t size;
             switch (op) {
             case IO_READ:
-                size = do_io_read(_conn[conn_index].conn, total_iter);
+                size = do_io_read(_server[conn_index].conn, total_iter);
                 break;
             case IO_WRITE:
-                size = do_io_write(_conn[conn_index].conn, total_iter);
+                size = do_io_write(_server[conn_index].conn, total_iter);
                 break;
             default:
                 abort();
@@ -714,11 +737,9 @@ public:
             check_time_limit(curr_time);
         }
 
-        for (size_t i = 0; i < _conn.size(); i++) {
-            if (_conn[i].conn != NULL) {
-                delete _conn[i].conn;
-                _conn[i].conn = NULL;
-            }
+        for (size_t i = 0; i < _server.size(); i++) {
+            delete _server[i].conn;
+            _server[i].conn = NULL;
         }
         return (_status == OK) || (_status == RUNTIME_EXCEEDED);
     }
@@ -815,23 +836,23 @@ private:
             if (opts().window_size == 1) {
                 std::cout << ", average latency: " << latency_usec << " usec";
             }
-            if (opts().print_conn_status) {
-                long min = _conn[0].num_completed;
-                long max = _conn[0].num_completed;
-                long avg = 0;
-                for (int i = 0; i < _conn.size(); i++) {
-                    if (_conn[i].num_completed < min) {
-                        min = _conn[i].num_completed;
-                    }
-                    if (_conn[i].num_completed > max) {
-                        max = _conn[i].num_completed;
-                    }
-                    avg += _conn[i].num_completed;
+
+            long min = _server[0].num_completed;
+            long max = _server[0].num_completed;
+            long avg = 0;
+            for (int i = 0; i < _server.size(); i++) {
+                if (_server[i].num_completed < min) {
+                    min = _server[i].num_completed;
                 }
-                avg /= _conn.size();
-                std::cout << ", " << _conn.size() << " conns";
-                std::cout << " min " << min << " max " << max << " avg " << avg;
+                if (_server[i].num_completed > max) {
+                    max = _server[i].num_completed;
+                }
+                avg += _server[i].num_completed;
             }
+            avg /= _server.size();
+            std::cout << ", " << _server.size() << " conns";
+            std::cout << " min " << min << " max " << max << " avg " << avg;
+
             std::cout << std::endl;
         }
     }
@@ -842,7 +863,7 @@ private:
         long           num_completed;
         UcxConnection* conn;
     } server_info_t; 
-    std::vector<server_info_t>         _conn;
+    std::vector<server_info_t>         _server;
     size_t                             _num_connected;
     long                               _num_sent;
     long                               _num_completed;
@@ -943,9 +964,8 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->window_size          = 1;
     test_opts->random_seed          = std::time(NULL);
     test_opts->verbose              = false;
-    test_opts->print_conn_status    = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v:x")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -1031,9 +1051,6 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             break;
         case 'v':
             test_opts->verbose = true;
-            break;
-        case 'x':
-            test_opts->print_conn_status = true;
             break;
         case 'h':
         default:
