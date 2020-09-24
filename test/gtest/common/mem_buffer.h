@@ -67,6 +67,9 @@ public:
     /* returns whether any other type of memory besides the CPU is supported */
     static bool is_gpu_supported();
 
+    /* set device context if compiled with GPU support */
+    static void set_device_context();
+
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     virtual ~mem_buffer();
 

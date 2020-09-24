@@ -11,6 +11,7 @@
 
 #include "mem_buffer.h"
 
+#include <sys/types.h>
 #include <ucp/core/ucp_mm.h>
 #include <ucs/debug/assert.h>
 #include <common/test_helpers.h>
@@ -87,6 +88,27 @@ const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
     }
 
     return vec;
+}
+
+void mem_buffer::set_device_context()
+{
+    static __thread bool device_not_set = true;
+
+    if (device_not_set) {
+        try {
+#if HAVE_CUDA
+            CUDA_CALL(cudaSetDevice(0), "set device context");
+#endif
+#if HAVE_ROCM
+            ROCM_CALL(hipSetDevice(0));
+#endif
+        } catch (...) {
+            UCS_TEST_MESSAGE << "Unable to set device context";
+        }
+
+        device_not_set = false;
+    }
+    return;
 }
 
 void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
