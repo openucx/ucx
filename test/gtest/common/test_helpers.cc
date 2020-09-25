@@ -13,6 +13,11 @@
 
 #include <set>
 
+extern "C" {
+// On some platforms users have to declare environ explicitly
+extern char** environ;
+}
+
 namespace ucs {
 
 typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
