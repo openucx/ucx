@@ -61,7 +61,7 @@ public:
         return UCS_OK;
     }
 
-    void send_am_data(unsigned send_flags) {
+    void send_am_data(unsigned send_flags, bool progress_rx) {
         ssize_t res;
 
         m_send_data = 0xdeadbeef;
@@ -69,6 +69,9 @@ public:
             res = uct_ep_am_bcopy(m_e1->ep(0), 0, pack_u64,
                                   &m_send_data, send_flags);
             m_e1->progress();
+            if (progress_rx) {
+                m_e2->progress();
+            }
         } while (res == UCS_ERR_NO_RESOURCE);
         ASSERT_EQ((ssize_t)sizeof(m_send_data), res);
         ++m_am_send_count;
@@ -97,7 +100,7 @@ public:
     {
         ucs_time_t start_time = ucs_get_time();
         for (unsigned i = 0; i < count; ++i) {
-            send_am_data(send_flags);
+            send_am_data(send_flags, true);
             while (m_am_recv_count < m_am_send_count) {
                 progress();
             }
@@ -141,7 +144,7 @@ void test_uct_event::test_recv_am(unsigned arm_flags, unsigned send_flags)
             }
 
             /* send the data */
-            send_am_data(send_flags);
+            send_am_data(send_flags, false);
 
             /* wait for the event */
             EXPECT_TRUE(m_async_event_ctx.wait_for_event(*m_e2, 60));
