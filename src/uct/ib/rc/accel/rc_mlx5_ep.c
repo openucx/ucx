@@ -541,8 +541,15 @@ uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     uint64_t dummy = 0;
 
     UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
-    UCT_RC_CHECK_TX_CQ_RES(&iface->super, &ep->super);
 
+    if (ucs_arbiter_group_is_scheduled(&ep->super.arb_group)) {
+        /* in case if EP is scheduled in arbiter then keepalive
+         * action is not required: next processed operation from
+         * arbiter will make keepalive's work */
+        return UCS_OK;
+    }
+
+    UCT_RC_CHECK_TX_CQ_RES(&iface->super, &ep->super);
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
                                  MLX5_OPCODE_RDMA_WRITE, &dummy, 0,
