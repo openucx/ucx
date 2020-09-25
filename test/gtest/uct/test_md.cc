@@ -17,7 +17,6 @@ extern "C" {
 #include <ucs/arch/atomic.h>
 #include <ucs/sys/math.h>
 }
-#include <linux/sockios.h>
 #include <net/if_arp.h>
 #include <ifaddrs.h>
 #include <netdb.h>
