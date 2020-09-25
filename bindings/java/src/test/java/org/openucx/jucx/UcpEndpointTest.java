@@ -553,7 +553,10 @@ public class UcpEndpointTest extends UcxTest {
         AtomicBoolean errorHandlerCalled = new AtomicBoolean(false);
         UcpEndpointParams epParams = new UcpEndpointParams()
             .setPeerErrorHandlingMode()
-            .setErrorHandler((ep, status, errorMsg) -> errorHandlerCalled.set(true))
+            .setErrorHandler((ep, status, errorMsg) -> {
+                errorHandlerCalled.set(true);
+                assertNotNull(errorMsg);
+            })
             .setUcpAddress(worker2.getAddress());
         UcpEndpoint ep =
             worker1.newEndpoint(epParams);
