@@ -19,6 +19,12 @@ static UCS_F_ALWAYS_INLINE int
 ucp_datatype_iter_is_class(const ucp_datatype_iter_t *dt_iter,
                            enum ucp_dt_type dt_class, unsigned dt_mask)
 {
+    /* The following branch could be eliminated by the compiler if dt_mask and
+     * the tested dt_class are constants, and dt_mask does not contain dt_class.
+     * We still expect that the actual dt_iter->dt_class will be part of dt_mask,
+     * and check for it if assertions are enabled.
+     */
+    ucs_assert(UCS_BIT(dt_iter->dt_class) & dt_mask);
     return (dt_mask & UCS_BIT(dt_class)) && (dt_iter->dt_class == dt_class);
 }
 
@@ -271,8 +277,7 @@ void ucp_datatype_iter_copy_from_next(ucp_datatype_iter_t *dt_iter,
                                       unsigned dt_mask)
 {
     dt_iter->offset = next_iter->offset;
-    if ((dt_mask & UCS_BIT(UCP_DATATYPE_IOV)) &&
-        (dt_iter->dt_class == UCP_DATATYPE_IOV)) {
+    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         dt_iter->type.iov.iov_index  = next_iter->type.iov.iov_index;
         dt_iter->type.iov.iov_offset = next_iter->type.iov.iov_offset;
     }

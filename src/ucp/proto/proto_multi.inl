@@ -85,9 +85,8 @@ ucp_proto_multi_progress(ucp_request_t *req, ucp_proto_send_multi_cb_t send_func
         return UCS_OK;
     } else {
         /* send failed - complete request with error */
-        ucs_assert(status != UCS_OK);
-        ucs_print("send completed with error status %s",
-                  ucs_status_string(status));
+        ucs_debug("send %s completed with status %s",
+                  req->send.proto_config->proto->name, ucs_status_string(status));
         complete_func(req, status);
         return UCS_OK;
     }

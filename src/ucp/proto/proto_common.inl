@@ -25,8 +25,8 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_completion_init(ucp_request_t *req,
                                   uct_completion_callback_t comp_func)
 {
-    req->send.state.uct_comp.count           = 1;
-    req->send.state.uct_comp.func            = comp_func;
+    req->send.state.uct_comp.count = 1;
+    req->send.state.uct_comp.func  = comp_func;
     /* extra ref to be decremented when all sent */
 }
 
