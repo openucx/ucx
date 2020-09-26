@@ -4,15 +4,16 @@
 * Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
+
+#include "uct_test.h"
+#include "uct_p2p_test.h"
+#include <common/test.h>
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>
 
 #include <ucs/time/time.h>
 }
-#include <common/test.h>
-#include "uct_test.h"
-#include "uct_p2p_test.h"
 
 #ifdef ENABLE_STATS
 
