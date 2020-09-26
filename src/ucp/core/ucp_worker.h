@@ -128,17 +128,6 @@ enum {
 };
 
 
-#define UCP_WORKER_UCT_RECV_EVENT_ARM_FLAGS  (UCT_EVENT_RECV | \
-                                              UCT_EVENT_RECV_SIG)
-#define UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS  (UCT_IFACE_FLAG_EVENT_RECV | \
-                                              UCT_IFACE_FLAG_EVENT_RECV_SIG)
-#define UCP_WORKER_UCT_ALL_EVENT_CAP_FLAGS   (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
-                                              UCT_IFACE_FLAG_EVENT_RECV | \
-                                              UCT_IFACE_FLAG_EVENT_RECV_SIG)
-#define UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
-                                              UCT_IFACE_FLAG_EVENT_RECV)
-
-
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \
     UCS_STATS_UPDATE_COUNTER((_worker)->stats, \
                              ((_flags) & UCP_RECV_DESC_FLAG_EAGER_SYNC) ? \

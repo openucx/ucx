@@ -20,7 +20,9 @@
 #include <string.h>
 #include <inttypes.h>
 
-#define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE       262144
+#define UCP_WIREUP_RMA_BW_TEST_MSG_SIZE    262144
+#define UCP_WIREUP_UCT_EVENT_CAP_FLAGS     (UCT_IFACE_FLAG_EVENT_SEND_COMP | \
+                                            UCT_IFACE_FLAG_EVENT_RECV)
 
 #define UCP_WIREUP_CHECK_AMO_FLAGS(_ae, _criteria, _context, _addr_index, _op, _size)      \
     if (!ucs_test_all_flags((_ae)->iface_attr.atomic.atomic##_size._op##_flags,            \
@@ -45,7 +47,6 @@ typedef struct {
     ucp_rsc_index_t       rsc_index;
     unsigned              addr_index;
     unsigned              path_index;
-    ucp_lane_index_t      proxy_lane;
     ucp_md_index_t        dst_md_index;
     ucp_lane_type_mask_t  lane_types;
     double                score[UCP_LANE_TYPE_LAST];
@@ -470,19 +471,16 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
 
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
-                         ucp_md_index_t dst_md_index,
-                         ucp_lane_type_t lane_type, int is_proxy,
+                         ucp_md_index_t dst_md_index, ucp_lane_type_t lane_type,
                          ucp_wireup_select_context_t *select_ctx)
 {
     ucp_wireup_lane_desc_t *lane_desc;
-    ucp_lane_index_t lane, proxy_lane;
     ucp_lane_type_t lane_type_iter;
-    int proxy_changed;
+    ucp_lane_index_t lane;
 
     /* Add a new lane, but try to reuse already added lanes which are selected
      * on the same transport resources.
      */
-    proxy_changed = 0;
     for (lane_desc = select_ctx->lane_descs;
          lane_desc < select_ctx->lane_descs + select_ctx->num_lanes; ++lane_desc) {
         if ((lane_desc->rsc_index == select_info->rsc_index) &&
@@ -496,32 +494,13 @@ ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
             ucs_assertv_always(!(lane_desc->lane_types & UCS_BIT(lane_type)),
                                "lane[%d]=0x%x |= 0x%x", lane, lane_desc->lane_types,
                                lane_type);
-            if (is_proxy && (lane_desc->proxy_lane == UCP_NULL_LANE)) {
-                /* New lane is a proxy, and found existing non-proxy lane with
-                 * same resource. So that lane should be used by the proxy.
-                 */
-                proxy_lane = lane;
-                goto out_add_lane;
-            } else if (!is_proxy && (lane_desc->proxy_lane == lane)) {
-                /* New lane is not a proxy, but found existing proxy lane which
-                 * could use the new lane. It also means we should be able to
-                 * add our new lane.
-                 */
-                lane_desc->proxy_lane = select_ctx->num_lanes;
-                proxy_changed = 1;
-            } else if (!is_proxy && (lane_desc->proxy_lane == UCP_NULL_LANE)) {
-                /* Found non-proxy lane with same resource - don't add */
-                ucs_assert_always(!proxy_changed);
-                lane_desc->lane_types |= UCS_BIT(lane_type);
-                goto out_update_score;
-            }
+            /* The same pair of local/remote resource is already selected, just
+             * update the score and usage.
+             */
+            goto out_update_score;
         }
     }
 
-    /* If a proxy cannot find other lane with same resource, proxy to self */
-    proxy_lane = is_proxy ? select_ctx->num_lanes : UCP_NULL_LANE;
-
-out_add_lane:
     if (select_ctx->num_lanes >= UCP_MAX_LANES) {
         ucs_error("cannot add %s lane - reached limit (%d)",
                   ucp_lane_type_info[lane_type].short_name,
@@ -535,9 +514,8 @@ out_add_lane:
     lane_desc->rsc_index    = select_info->rsc_index;
     lane_desc->addr_index   = select_info->addr_index;
     lane_desc->path_index   = select_info->path_index;
-    lane_desc->proxy_lane   = proxy_lane;
     lane_desc->dst_md_index = dst_md_index;
-    lane_desc->lane_types   = UCS_BIT(lane_type);
+    lane_desc->lane_types   = 0;
     for (lane_type_iter = UCP_LANE_TYPE_FIRST;
          lane_type_iter < UCP_LANE_TYPE_LAST;
          ++lane_type_iter) {
@@ -546,16 +524,8 @@ out_add_lane:
 
 out_update_score:
     lane_desc->score[lane_type] = select_info->score;
+    lane_desc->lane_types      |= UCS_BIT(lane_type);
     return UCS_OK;
-}
-
-static int ucp_wireup_is_lane_proxy(ucp_worker_h worker,
-                                    ucp_rsc_index_t rsc_index,
-                                    uint64_t remote_event_flags)
-{
-    return ucp_worker_is_tl_2iface(worker, rsc_index) &&
-           ((remote_event_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS) ==
-            UCT_IFACE_FLAG_EVENT_RECV_SIG);
 }
 
 static UCS_F_NOINLINE ucs_status_t
@@ -564,27 +534,12 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
                     ucp_lane_type_t lane_type,
                     ucp_wireup_select_context_t *select_ctx)
 {
-    int is_proxy = 0;
     ucp_md_index_t dst_md_index;
-    uint64_t remote_event_flags;
-
-    if ((lane_type == UCP_LANE_TYPE_AM) || (lane_type == UCP_LANE_TYPE_AM_BW) ||
-        (lane_type == UCP_LANE_TYPE_TAG)) {
-        /* If the remote side is not p2p and has only signaled-am wakeup, it may
-         * deactivate its interface and wait for signaled active message to wake up.
-         * Use a proxy lane which would send the first active message as signaled to
-         * make sure the remote interface will indeed wake up. */
-        remote_event_flags = select_params->address->address_list
-                                 [select_info->addr_index].iface_attr.event_flags;
-        is_proxy           = ucp_wireup_is_lane_proxy(select_params->ep->worker,
-                                                      select_info->rsc_index,
-                                                      remote_event_flags);
-    }
 
     dst_md_index = select_params->address->address_list
                                 [select_info->addr_index].md_index;
     return ucp_wireup_add_lane_desc(select_info, dst_md_index, lane_type,
-                                    is_proxy, select_ctx);
+                                    select_ctx);
 }
 
 static int ucp_wireup_compare_score(const void *elem1, const void *elem2,
@@ -835,7 +790,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
 
     /* server is not a proxy because it can create all lanes connected */
     return ucp_wireup_add_lane_desc(&select_info, UCP_NULL_RESOURCE,
-                                    UCP_LANE_TYPE_CM, 0, select_ctx);
+                                    UCP_LANE_TYPE_CM, select_ctx);
 }
 
 static ucs_status_t
@@ -1018,7 +973,7 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
 
         if (ucs_test_all_flags(ucp_ep_get_context_features(select_params->ep),
                                UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-            criteria.local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+            criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
         }
 
         status = ucp_wireup_select_transport(select_params, &criteria, tl_bitmap,
@@ -1177,7 +1132,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-        bw_info.criteria.local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+        bw_info.criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
     }
 
     bw_info.local_dev_bitmap  = UINT64_MAX;
@@ -1260,7 +1215,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-        bw_info.criteria.local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+        bw_info.criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
     }
 
     bw_info.local_dev_bitmap  = UINT64_MAX;
@@ -1369,7 +1324,7 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_WAKEUP)) {
-        criteria.local_event_flags = UCP_WORKER_UCT_UNSIG_EVENT_CAP_FLAGS;
+        criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
     }
 
     /* Do not add tag offload lane, if selected tag lane score is lower
@@ -1574,7 +1529,6 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     for (lane = 0; lane < key->num_lanes; ++lane) {
         ucs_assert(select_ctx->lane_descs[lane].lane_types != 0);
         key->lanes[lane].rsc_index    = select_ctx->lane_descs[lane].rsc_index;
-        key->lanes[lane].proxy_lane   = select_ctx->lane_descs[lane].proxy_lane;
         key->lanes[lane].dst_md_index = select_ctx->lane_descs[lane].dst_md_index;
         key->lanes[lane].path_index   = select_ctx->lane_descs[lane].path_index;
         key->lanes[lane].lane_types   = select_ctx->lane_descs[lane].lane_types;

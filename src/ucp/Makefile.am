@@ -126,7 +126,6 @@ libucp_la_SOURCES = \
 	wireup/address.c \
 	wireup/ep_match.c \
 	wireup/select.c \
-	wireup/signaling_ep.c \
 	wireup/wireup_ep.c \
 	wireup/wireup.c \
 	wireup/wireup_cm.c \
