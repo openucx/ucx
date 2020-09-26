@@ -26,9 +26,10 @@ typedef enum {
  * i.e. check if the remote receive FIFO has room in it.
  * return 1 if can send.
  * return 0 if can't send.
+ * We compare after casting to int32 in order to ignore the event arm bit.
  */
 #define UCT_MM_EP_IS_ABLE_TO_SEND(_head, _tail, _fifo_size) \
-    ucs_likely(((_head) - (_tail)) < (_fifo_size))
+    ucs_likely((int32_t)((_head) - (_tail)) < (int32_t)(_fifo_size))
 
 
 static UCS_F_NOINLINE ucs_status_t
@@ -194,20 +195,22 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_mm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
 
-static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
-                                                     uct_mm_fifo_element_t **elem)
+static inline ucs_status_t
+uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t head,
+                          uct_mm_fifo_element_t **elem)
 {
     uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_mm_iface_t);
-    uint64_t elem_index;       /* the fifo elem's index in the fifo. */
-                               /* must be smaller than fifo size */
-    uint64_t returned_val;
+    uint64_t new_head, prev_head;
+    uint64_t elem_index;   /* index of the element to write */
 
-    elem_index = ep->fifo_ctl->head & iface->fifo_mask;
+    elem_index = head & iface->fifo_mask;
     *elem      = UCT_MM_IFACE_GET_FIFO_ELEM(iface, ep->fifo_elems, elem_index);
+    new_head   = (head + 1) & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED;
 
     /* try to get ownership of the head element */
-    returned_val = ucs_atomic_cswap64(ucs_unaligned_ptr(&ep->fifo_ctl->head), head, head+1);
-    if (returned_val != head) {
+    prev_head = ucs_atomic_cswap64(ucs_unaligned_ptr(&ep->fifo_ctl->head), head,
+                                   new_head);
+    if (prev_head != head) {
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -229,8 +232,7 @@ static UCS_F_ALWAYS_INLINE ssize_t
 uct_mm_ep_am_common_send(uct_mm_send_op_t send_op, uct_mm_ep_t *ep,
                          uct_mm_iface_t *iface, uint8_t am_id, size_t length,
                          uint64_t header, const void *payload,
-                         uct_pack_callback_t pack_cb, void *arg,
-                         unsigned flags)
+                         uct_pack_callback_t pack_cb, void *arg)
 {
     uct_mm_fifo_element_t *elem;
     ucs_status_t status;
@@ -313,7 +315,7 @@ retry:
     }
     elem->flags = elem_flags;
 
-    if (ucs_unlikely(flags & UCT_SEND_FLAG_SIGNALED)) {
+    if (ucs_unlikely(head & UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED)) {
         uct_mm_ep_signal_remote(ep);
     }
 
@@ -339,7 +341,7 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_SEND_AM_SHORT, ep,
                                                   iface, id, length, header,
-                                                  payload, NULL, NULL, 0);
+                                                  payload, NULL, NULL);
 }
 
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
@@ -349,7 +351,7 @@ ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
     return uct_mm_ep_am_common_send(UCT_MM_SEND_AM_BCOPY, ep, iface, id, 0, 0,
-                                    NULL, pack_cb, arg, flags);
+                                    NULL, pack_cb, arg);
 }
 
 static inline int uct_mm_ep_has_tx_resources(uct_mm_ep_t *ep)

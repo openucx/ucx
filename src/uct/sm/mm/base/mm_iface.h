@@ -66,6 +66,9 @@ enum {
 #define UCT_MM_IFACE_FIFO_AI_VALUE              1 /* FIFO window += AI value */
 #define UCT_MM_IFACE_FIFO_MD_FACTOR             2 /* FIFO window /= MD factor */
 
+/* If this bit is set in fifo_ctl.head, trigger async event on the receiver  */
+#define UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED      UCS_BIT(63)
+
 
 /**
  * MM interface configuration

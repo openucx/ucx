@@ -295,14 +295,6 @@ ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
     return status;
 }
 
-static void uct_dc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
-                                       uct_ib_dir_t dir)
-{
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
-
-    iface->super.cq[dir].cq_sn++;
-}
-
 static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
                                                 struct ibv_qp_cap *cap,
                                                 uct_dc_dci_t *dci)
@@ -1134,8 +1126,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_get_address        = uct_dc_mlx5_iface_get_address,
     },
     .create_cq                = uct_ib_mlx5_create_cq,
-    .arm_cq                   = uct_ib_iface_arm_cq,
-    .event_cq                 = uct_dc_mlx5_iface_event_cq,
+    .arm_cq                   = uct_rc_mlx5_iface_common_arm_cq,
+    .event_cq                 = uct_rc_mlx5_iface_common_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
     .set_ep_failed            = uct_dc_mlx5_ep_set_failed,
     },

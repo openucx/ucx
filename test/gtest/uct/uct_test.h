@@ -293,7 +293,7 @@ protected:
         }
 
         void signal();
-        bool wait_for_event(entity &e, int timeout);
+        bool wait_for_event(entity &e, double timeout_sec);
 
     private:
         struct pollfd    wakeup_fd;
@@ -358,7 +358,7 @@ protected:
     virtual void init();
     virtual void cleanup();
     virtual void modify_config(const std::string& name, const std::string& value,
-                               bool optional = false);
+                               modify_config_mode_t mode = FAIL_IF_NOT_EXIST);
     bool get_config(const std::string& name, std::string& value) const;
     void stats_activate();
     void stats_restore();

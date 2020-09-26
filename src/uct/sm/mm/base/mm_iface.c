@@ -164,7 +164,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_EP_CHECK            |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP     |
-                                          UCT_IFACE_FLAG_EVENT_RECV_SIG      |
+                                          UCT_IFACE_FLAG_EVENT_RECV          |
                                           UCT_IFACE_FLAG_EVENT_FD;
 
     iface_attr->cap.atomic32.op_flags   =
@@ -276,7 +276,8 @@ uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
 
     /* read from read_index_elem */
     ucs_memory_cpu_load_fence();
-    ucs_assert(iface->read_index <= iface->recv_fifo_ctl->head);
+    ucs_assert(iface->read_index <=
+               (iface->recv_fifo_ctl->head & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED));
 
     uct_mm_iface_process_recv(iface, iface->read_index_elem);
 
@@ -357,7 +358,22 @@ static ucs_status_t uct_mm_iface_event_fd_arm(uct_iface_h tl_iface,
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     char dummy[UCT_MM_IFACE_MAX_SIG_EVENTS]; /* pop multiple signals at once */
+    uint64_t head, prev_head;
     int ret;
+
+    /* Make the next sender which writes to the FIFO signal the receiver */
+    head      = iface->recv_fifo_ctl->head;
+    prev_head = ucs_atomic_cswap64(ucs_unaligned_ptr(&iface->recv_fifo_ctl->head),
+                                   head, head | UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED);
+    if (prev_head != head) {
+        /* race with sender; need to retry */
+        return UCS_ERR_BUSY;
+    }
+
+    if ((head & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED) > iface->read_index) {
+        /* 'read_index' is being written but not ready yet */
+        return UCS_ERR_BUSY;
+    }
 
     ret = recvfrom(iface->signal_fd, &dummy, sizeof(dummy), 0, NULL, 0);
     if (ret > 0) {

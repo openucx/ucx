@@ -499,13 +499,13 @@ bool uct_test::check_atomics(uint64_t required_ops, atomic_mode mode) {
 
 /* modify the config of all the matching environment parameters */
 void uct_test::modify_config(const std::string& name, const std::string& value,
-                             bool optional) {
+                             modify_config_mode_t mode) {
     ucs_status_t status = UCS_OK;
 
     if (m_cm_config != NULL) {
         status = uct_config_modify(m_cm_config, name.c_str(), value.c_str());
         if (status == UCS_OK) {
-            optional = true;
+            mode = IGNORE_IF_NOT_EXIST;
         } else if (status != UCS_ERR_NO_ELEM) {
             UCS_TEST_ABORT("Couldn't modify cm config parameter: " << name.c_str() <<
                            " to " << value.c_str() << ": " << ucs_status_string(status));
@@ -515,7 +515,7 @@ void uct_test::modify_config(const std::string& name, const std::string& value,
     if (m_iface_config != NULL) {
         status = uct_config_modify(m_iface_config, name.c_str(), value.c_str());
         if (status == UCS_OK) {
-            optional = true;
+            mode = IGNORE_IF_NOT_EXIST;
         } else if (status != UCS_ERR_NO_ELEM) {
             UCS_TEST_ABORT("Couldn't modify iface config parameter: " << name.c_str() <<
                            " to " << value.c_str() << ": " << ucs_status_string(status));
@@ -524,10 +524,10 @@ void uct_test::modify_config(const std::string& name, const std::string& value,
 
     status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
     if (status == UCS_OK) {
-        optional = true;
+        mode = IGNORE_IF_NOT_EXIST;
     }
     if ((status == UCS_OK) || (status == UCS_ERR_NO_ELEM)) {
-        test_base::modify_config(name, value, optional);
+        test_base::modify_config(name, value, mode);
     } else if (status != UCS_OK) {
         UCS_TEST_ABORT("Couldn't modify md config parameter: " << name.c_str() <<
                        " to " << value.c_str() << ": " << ucs_status_string(status));
@@ -1458,7 +1458,7 @@ void uct_test::async_event_ctx::signal() {
     ucs_async_pipe_push(&aux_pipe);
 }
 
-bool uct_test::async_event_ctx::wait_for_event(entity &e, int timeout) {
+bool uct_test::async_event_ctx::wait_for_event(entity &e, double timeout_sec) {
     if (wakeup_fd.fd == -1) {
         /* create wakeup */
         if (e.iface_attr().cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
@@ -1474,11 +1474,12 @@ bool uct_test::async_event_ctx::wait_for_event(entity &e, int timeout) {
         }
     }
 
-    int ret = poll(&wakeup_fd, 1, timeout);
+    int timeout_ms = static_cast<int>((timeout_sec * UCS_MSEC_PER_SEC) *
+                                      ucs::test_time_multiplier());
+    int ret        = poll(&wakeup_fd, 1, timeout_ms);
     EXPECT_TRUE((ret == 0) || (ret == 1));
     if (ret > 0) {
-        if (e.iface_attr().cap.event_flags &
-            UCT_IFACE_FLAG_EVENT_ASYNC_CB) {
+        if (e.iface_attr().cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB) {
             ucs_async_pipe_drain(&aux_pipe);
         }
         return true;

@@ -77,6 +77,9 @@ void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_att
                                           UCT_IFACE_FLAG_PUT_ZCOPY |
                                           UCT_IFACE_FLAG_PENDING   |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+    iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                          UCT_IFACE_FLAG_EVENT_RECV      |
+                                          UCT_IFACE_FLAG_EVENT_ASYNC_CB;
     iface_attr->latency                 = ucs_linear_func_make(80e-9, 0); /* 80 ns */
 }
 
@@ -134,6 +137,19 @@ unsigned uct_scopy_iface_progress(uct_iface_h tl_iface)
     }
 
     return count;
+}
+
+ucs_status_t uct_scopy_iface_event_arm(uct_iface_h tl_iface, unsigned events)
+{
+    uct_scopy_iface_t *iface = ucs_derived_of(tl_iface, uct_scopy_iface_t);
+
+    if ((events & UCT_EVENT_SEND_COMP) &&
+        !ucs_arbiter_is_empty(&iface->arbiter)) {
+        /* cannot go to sleep, need to progress pending operations */
+        return UCS_ERR_BUSY;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_scopy_iface_flush(uct_iface_h tl_iface, unsigned flags,

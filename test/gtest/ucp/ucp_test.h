@@ -198,7 +198,7 @@ public:
                                  int thread_type = SINGLE_THREAD);
 
     virtual void modify_config(const std::string& name, const std::string& value,
-                               bool optional = false);
+                               modify_config_mode_t mode = FAIL_IF_NOT_EXIST);
     void stats_activate();
     void stats_restore();
 

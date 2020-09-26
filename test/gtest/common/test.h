@@ -33,6 +33,13 @@ namespace ucs {
  */
 class test_base {
 public:
+    typedef enum {
+        IGNORE_IF_NOT_EXIST,
+        FAIL_IF_NOT_EXIST,
+        SETENV_IF_NOT_EXIST,
+        SKIP_IF_NOT_EXIST
+    } modify_config_mode_t;
+
     test_base();
     virtual ~test_base();
 
@@ -43,7 +50,7 @@ public:
                             size_t max);
     virtual void set_config(const std::string& config_str);
     virtual void modify_config(const std::string& name, const std::string& value,
-                               bool optional = false);
+                               modify_config_mode_t mode = FAIL_IF_NOT_EXIST);
     virtual void push_config();
     virtual void pop_config();
 
@@ -214,19 +221,23 @@ public:
 /*
  * Helper macro
  */
-#define UCS_TEST_(test_case_name, test_name, parent_class, parent_id, \
+#define UCS_TEST_(test_case_name, test_name, parent_id, \
                   num_threads, skip_cond, skip_reason, ...) \
-class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class { \
+class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public test_case_name { \
  public: \
   GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() { \
      set_num_threads(num_threads); \
-     UCS_PP_FOREACH(UCS_TEST_SET_CONFIG, _, __VA_ARGS__) \
+  } \
+ protected: \
+  virtual void init() { \
+      UCS_PP_FOREACH(UCS_TEST_SET_CONFIG, _, __VA_ARGS__) \
+	  test_case_name::init(); \
   } \
  private: \
   virtual void check_skip_test() { \
-     if (skip_cond) { \
-         UCS_TEST_SKIP_R(skip_reason); \
-     } \
+      if (skip_cond) { \
+          UCS_TEST_SKIP_R(skip_reason); \
+      } \
   } \
   virtual void test_body(); \
   static ::testing::TestInfo* const test_info_;\
@@ -241,8 +252,8 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class { 
         (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
         "", "", \
         (parent_id), \
-        parent_class::SetUpTestCase, \
-        parent_class::TearDownTestCase, \
+		test_case_name::SetUpTestCase, \
+		test_case_name::TearDownTestCase, \
         new ::testing::internal::TestFactoryImpl< \
             GTEST_TEST_CLASS_NAME_(test_case_name, test_name)>); \
 void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
@@ -251,8 +262,8 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
 /*
  * Define test fixture with modified configuration
  */
-#define UCS_TEST_F(test_fixture, test_name, ...)\
-  UCS_TEST_(test_fixture, test_name, test_fixture, \
+#define UCS_TEST_F(test_fixture, test_name, ...) \
+  UCS_TEST_(test_fixture, test_name, \
             ::testing::internal::GetTypeId<test_fixture>(), \
             1, 0, "", __VA_ARGS__)
 
@@ -261,7 +272,7 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
  * Define test fixture with modified configuration and check skip condition
  */
 #define UCS_TEST_SKIP_COND_F(test_fixture, test_name, skip_cond, ...) \
-  UCS_TEST_(test_fixture, test_name, test_fixture, \
+  UCS_TEST_(test_fixture, test_name, \
             ::testing::internal::GetTypeId<test_fixture>(), \
             1, skip_cond, #skip_cond, __VA_ARGS__)
 
@@ -270,7 +281,7 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
  * Define test fixture with multiple threads
  */
 #define UCS_MT_TEST_F(test_fixture, test_name, num_threads, ...) \
-  UCS_TEST_(test_fixture, test_name, test_fixture, \
+  UCS_TEST_(test_fixture, test_name, \
             ::testing::internal::GetTypeId<test_fixture>(), \
             num_threads, 0, "", __VA_ARGS__)
 
@@ -285,9 +296,13 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
    public: \
     GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() { \
        set_num_threads(num_threads); \
-       UCS_PP_FOREACH(UCS_TEST_SET_CONFIG, _, __VA_ARGS__); \
     } \
     virtual void test_body(); \
+   protected: \
+    virtual void init() { \
+        UCS_PP_FOREACH(UCS_TEST_SET_CONFIG, _, __VA_ARGS__) \
+		test_case_name::init(); \
+    } \
    private: \
     virtual void check_skip_test() { \
         if (skip_cond) { \

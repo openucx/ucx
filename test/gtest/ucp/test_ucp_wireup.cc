@@ -1164,6 +1164,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, ud, "ud")
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc_dc, "rc,dc")
 
 class test_ucp_wireup_fallback_amo : public test_ucp_wireup {
+protected:
     void init() {
         size_t device_atomics_cnt = 0;
 
@@ -1188,8 +1189,6 @@ class test_ucp_wireup_fallback_amo : public test_ucp_wireup {
     void cleanup() {
         /* do nothing */
     }
-
-protected:
 
     bool use_device_amo(ucp_ep_h ep) {
         ucp_ep_config_t *ep_config = ucp_ep_config(ep);
