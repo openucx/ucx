@@ -1239,8 +1239,8 @@ void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
     /* this will invoke @ref ucp_cm_disconnect_cb on remote side */
     status = uct_ep_disconnect(uct_cm_ep, 0);
     if (status != UCS_OK) {
-        ucs_warn("failed to disconnect CM lane %p of ep %p, %s", ucp_ep,
-                  uct_cm_ep, ucs_status_string(status));
+        ucs_diag("failed to disconnect CM lane %p of ep %p, %s", ucp_ep,
+                 uct_cm_ep, ucs_status_string(status));
     }
 }
 

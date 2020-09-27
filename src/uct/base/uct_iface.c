@@ -609,7 +609,7 @@ ucs_config_field_t uct_iface_config_table[] = {
    "Priority of methods to allocate intermediate buffers for communication",
    ucs_offsetof(uct_iface_config_t, alloc_methods), UCS_CONFIG_TYPE_ARRAY(alloc_methods)},
 
-  {"FAILURE", "error",
+  {"FAILURE", "diag",
    "Level of network failure reporting",
    ucs_offsetof(uct_iface_config_t, failure), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 

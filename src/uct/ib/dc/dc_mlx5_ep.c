@@ -1302,6 +1302,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci].txwq;
     int16_t outstanding;
     ucs_status_t status;
+    ucs_log_level_t log_lvl;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
@@ -1332,19 +1333,14 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(ep_status));
     } else {
-        status = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
-                                              ep_status);
-        if (status != UCS_OK) {
-            uct_ib_mlx5_completion_with_err(ib_iface, arg,
-                                            &iface->tx.dcis[dci].txwq,
-                                            UCS_LOG_LEVEL_FATAL);
-            return;
-        }
-    }
+        status  = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
+                                               ep_status);
+        log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
 
-    if (ep_status != UCS_ERR_CANCELED) {
-        uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dcis[dci].txwq,
-                                        ib_iface->super.config.failure_level);
+        if (ep_status != UCS_ERR_CANCELED) {
+            uct_ib_mlx5_completion_with_err(ib_iface, arg,
+                                            &iface->tx.dcis[dci].txwq, log_lvl);
+        }
     }
 
     status = uct_dc_mlx5_iface_reset_dci(iface, &iface->tx.dcis[dci]);

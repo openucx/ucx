@@ -33,13 +33,19 @@ UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
         (_status); \
     })
 
+
+#define uct_cm_ep_peer_error(_cep, _fmt, ...) \
+    { \
+        uct_cm_t *_cm_base = ucs_container_of((_cep)->super.super.iface, uct_cm_t, iface); \
+        ucs_log((_cm_base)->config.failure_level, _fmt, ## __VA_ARGS__); \
+    }
+
 /**
  * "Base" structure which defines CM configuration options.
  * Specific CMs extend this structure.
  */
 struct uct_cm_config {
-    /* C standard prohibits empty structures */
-    char  __dummy;
+    int          failure;   /* Level of failure reports */
 };
 
 /**
@@ -62,9 +68,13 @@ typedef struct uct_cm_ops {
 
 
 struct uct_cm {
-    uct_cm_ops_t     *ops;
-    uct_component_h  component;
-    uct_base_iface_t iface;
+    uct_cm_ops_t         *ops;
+    uct_component_h      component;
+    uct_base_iface_t     iface;
+
+    struct {
+        ucs_log_level_t  failure_level;
+    } config;
 };
 
 
@@ -106,7 +116,7 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_base_ep_t, uct_base_ep_t);
 extern ucs_config_field_t uct_cm_config_table[];
 
 UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
-                  uct_component_h);
+                  uct_component_h, const uct_cm_config_t*);
 
 ucs_status_t uct_listener_backlog_adjust(const uct_listener_params_t *params,
                                          int max_value, int *backlog);

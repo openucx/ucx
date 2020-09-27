@@ -151,21 +151,22 @@ ucs_status_t uct_p2p_err_test::last_error = UCS_OK;
 
 UCS_TEST_SKIP_COND_P(uct_p2p_err_test, local_access_error,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
-                                 UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF)) {
+                                 UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF),
+                                 "FAILURE=error") {
     mapped_buffer sendbuf(16, 1, sender());
     mapped_buffer recvbuf(16, 2, receiver());
 
     test_error_run(OP_PUT_ZCOPY, 0,
                    get_unused_address(sendbuf.length()), sendbuf.length(),
-                   sendbuf.memh(), recvbuf.addr(), recvbuf.rkey(),
-                   "");
+                   sendbuf.memh(), recvbuf.addr(), recvbuf.rkey(), "");
 
     recvbuf.pattern_check(2);
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_err_test, remote_access_error,
                      !check_caps(UCT_IFACE_FLAG_PUT_ZCOPY |
-                                 UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM)) {
+                                 UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM),
+                                 "FAILURE=error") {
     mapped_buffer sendbuf(16, 1, sender());
     mapped_buffer recvbuf(16, 2, receiver());
 

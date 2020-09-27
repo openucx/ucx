@@ -377,10 +377,14 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
                  ibv_event_type_str(event->event_type), event->cookie);
         level = UCS_LOG_LEVEL_ERROR;
         break;
+    case IBV_EVENT_COMM_EST:
+    case IBV_EVENT_QP_ACCESS_ERR:
+        snprintf(event_info, sizeof(event_info), "%s on QPN 0x%x",
+                 ibv_event_type_str(event->event_type), event->qp_num);
+        level = UCS_LOG_LEVEL_DIAG;
+        break;
     case IBV_EVENT_QP_FATAL:
     case IBV_EVENT_QP_REQ_ERR:
-    case IBV_EVENT_QP_ACCESS_ERR:
-    case IBV_EVENT_COMM_EST:
     case IBV_EVENT_SQ_DRAINED:
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
@@ -405,12 +409,16 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
         level = UCS_LOG_LEVEL_DEBUG;
         break;
     case IBV_EVENT_DEVICE_FATAL:
-    case IBV_EVENT_PORT_ERR:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
                  ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_ERROR;
         break;
     case IBV_EVENT_PORT_ACTIVE:
+    case IBV_EVENT_PORT_ERR:
+        snprintf(event_info, sizeof(event_info), "%s on port %d",
+                 ibv_event_type_str(event->event_type), event->port_num);
+        level = UCS_LOG_LEVEL_DIAG;
+        break;
 #if HAVE_DECL_IBV_EVENT_GID_CHANGE
     case IBV_EVENT_GID_CHANGE:
 #endif
