@@ -6,13 +6,13 @@
 * See file LICENSE for terms.
 */
 
+#include "uct_test.h"
+#include <common/test.h>
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/sm/mm/base/mm_ep.h>
 #include <uct/sm/scopy/cma/cma_ep.h>
 }
-#include <common/test.h>
-#include "uct_test.h"
 
 #include <vector>
 
