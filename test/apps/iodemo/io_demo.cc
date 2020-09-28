@@ -1264,7 +1264,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->verbose              = false;
     test_opts->validate             = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v:q")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v:qH")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -1354,6 +1354,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'q':
             test_opts->validate = true;
             break;
+        case 'H':
+            UcxLog::use_human_time = true;
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -1379,6 +1382,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -s <random seed>           Random seed to use for randomizing" << std::endl;
             std::cout << "  -v                         Set verbose mode" << std::endl;
             std::cout << "  -q                         Enable data integrity and transaction check" << std::endl;
+            std::cout << "  -H                         Use human-readable timestamps" << std::endl;
             std::cout << "" << std::endl;
             return -1;
         }

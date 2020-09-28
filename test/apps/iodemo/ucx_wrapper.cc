@@ -39,6 +39,8 @@ EmptyCallback* EmptyCallback::get() {
     return &instance;
 }
 
+bool UcxLog::use_human_time = false;
+
 UcxLog::UcxLog(const char* prefix, bool enable) : _enable(enable)
 {
     if (!enable) {
@@ -48,8 +50,13 @@ UcxLog::UcxLog(const char* prefix, bool enable) : _enable(enable)
     struct timeval tv;
     gettimeofday(&tv, NULL);
 
-    char str[64];
-    snprintf(str, sizeof(str), "[%lu.%06lu] ", tv.tv_sec, tv.tv_usec);
+    struct tm tm;
+    char str[32];
+    if (use_human_time) {
+        strftime(str, sizeof(str), "[%a %b %d %T] ", localtime_r(&tv.tv_sec, &tm));
+    } else {
+        snprintf(str, sizeof(str), "[%lu.%06lu] ", tv.tv_sec, tv.tv_usec);
+    }
     std::cout << str << prefix << " ";
 }
 

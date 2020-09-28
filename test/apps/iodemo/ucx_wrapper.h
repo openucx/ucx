@@ -50,8 +50,9 @@ public:
  */
 class UcxLog {
 public:
-    UcxLog(const char* prefix, bool enable = true);
+    static bool use_human_time;
 
+    UcxLog(const char* prefix, bool enable = true);
     ~UcxLog();
 
     template<typename T>
