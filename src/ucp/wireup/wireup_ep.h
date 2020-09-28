@@ -84,6 +84,9 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
                                                const ucp_ep_params_t *params);
 
+void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
+                           ucp_rsc_index_t rsc_index);
+
 ucs_status_t
 ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
                           const ucp_unpacked_address_t *remote_address);
@@ -103,9 +106,6 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep);
 void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self);
-
-void ucp_wireup_ep_replay_pending_requests(ucp_ep_h ucp_ep,
-                                           ucs_queue_head_t *tmp_pending_queue);
 
 ucp_wireup_ep_t *ucp_wireup_ep(uct_ep_h uct_ep);
 

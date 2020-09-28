@@ -491,8 +491,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     }
 
     ucp_stream_ep_cleanup(ucp_ep);
-
-    if (ucp_ep->flags & UCP_EP_FLAG_USED) {
+    if (ucp_ep->flags & UCP_EP_FLAG_USED) {   
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
             ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
             /* Promote close operation to CANCEL in case of transport error,
@@ -620,16 +619,13 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     ucs_status_t ret_status;
     ucp_ep_ext_gen_t *ep_ext;
     ucp_ep_h ucp_ep;
-    khiter_t iter;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
     ucs_debug("worker %p: error handler called for UCT EP %p: %s",
               worker, uct_ep, ucs_status_string(status));
 
-    iter = kh_get(ucp_worker_discard_uct_ep_hash,
-                  &worker->discard_uct_ep_hash, uct_ep);
-    if (iter != kh_end(&worker->discard_uct_ep_hash)) {
+    if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
                   uct_ep, worker);
         ret_status = UCS_OK;
@@ -2263,8 +2259,8 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
         }
 
         status = ucp_address_pack(worker, NULL, tl_bitmap,
-                                  UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
-                                  &attr->address_length,
+                                  UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT,
+                                  NULL, &attr->address_length,
                                   (void**)&attr->address);
     }
 
@@ -2488,7 +2484,7 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     status = ucp_address_pack(worker, NULL, UINT64_MAX,
-                              UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
+                              UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT, NULL,
                               address_length_p, (void**)address_p);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
@@ -2670,6 +2666,26 @@ ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
                                       &cb_id);    
 }
 
+static void
+ucp_worker_discard_wireup_uct_ep(ucp_worker_h worker,
+                                 ucp_wireup_ep_t *wireup_ep,
+                                 unsigned ep_flush_flags,
+                                 uct_ep_h uct_ep)
+{
+    if (uct_ep == NULL) {
+        return;
+    }
+
+    ucp_wireup_ep_disown(&wireup_ep->super.super, uct_ep);
+    /* discard the WIREUP EP's UCT EP */
+    ucp_worker_discard_uct_ep(worker, uct_ep, ep_flush_flags,
+                              /* make sure that there are no WIREUP MSGs
+                               * anymore that are scheduled on the UCT EP, i.e.
+                               * the purge callback hasn't be invoked here */
+                              (uct_pending_purge_callback_t)
+                              ucs_empty_function_do_assert, NULL);
+}
+
 static uct_ep_h
 ucp_worker_discard_wireup_ep(ucp_worker_h worker,
                              ucp_wireup_ep_t *wireup_ep,
@@ -2682,19 +2698,10 @@ ucp_worker_discard_wireup_ep(ucp_worker_h worker,
 
     ucs_assert(wireup_ep != NULL);
 
-    if (wireup_ep->aux_ep != NULL) {
-        /* make sure that there are no WIREUP MSGs anymore that are scheduled
-         * on AUX EP, i.e. the purge callback hasn't be invoked here */
-        uct_ep_pending_purge(wireup_ep->aux_ep,
-                             (uct_pending_purge_callback_t)
-                             ucs_empty_function_do_assert,
-                             NULL);
-
-        /* discard the WIREUP EP's auxiliary EP */
-        ucp_worker_discard_tl_uct_ep(worker, wireup_ep->aux_ep,
-                                     ep_flush_flags);
-        ucp_wireup_ep_disown(&wireup_ep->super.super, wireup_ep->aux_ep);
-    }
+    ucp_worker_discard_wireup_uct_ep(worker, wireup_ep, ep_flush_flags,
+                                     wireup_ep->aux_ep);
+    ucp_worker_discard_wireup_uct_ep(worker, wireup_ep, ep_flush_flags,
+                                     wireup_ep->sockaddr_ep);
 
     is_owner = wireup_ep->super.is_owner;
     uct_ep   = ucp_wireup_ep_extract_next_ep(&wireup_ep->super.super);
@@ -2706,6 +2713,14 @@ ucp_worker_discard_wireup_ep(ucp_worker_h worker,
 
     /* do nothing, if this wireup EP is not an owner for UCT EP */
     return is_owner ? uct_ep : NULL;
+}
+
+/* must be called with async lock held */
+int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep)
+{
+    return kh_get(ucp_worker_discard_uct_ep_hash,
+                  &worker->discard_uct_ep_hash, uct_ep) !=
+           kh_end(&worker->discard_uct_ep_hash);
 }
 
 /* must be called with async lock held */
