@@ -22,9 +22,6 @@ public:
         return params;
     }
 
-    static void ucp_send_cb(void *request, ucs_status_t status) {}
-    static void ucp_recv_cb(void *request, ucs_status_t status, size_t length) {}
-
     size_t wait_stream_recv(void *request);
 
 protected:
@@ -49,8 +46,13 @@ size_t test_ucp_stream_base::wait_stream_recv(void *request)
 ucs_status_ptr_t
 test_ucp_stream_base::stream_send_nb(const ucp::data_type_desc_t& dt_desc)
 {
-    return ucp_stream_send_nb(sender().ep(), dt_desc.buf(), dt_desc.count(),
-                              dt_desc.dt(), ucp_send_cb, 0);
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype     = dt_desc.dt();
+
+    return ucp_stream_send_nbx(sender().ep(), dt_desc.buf(), dt_desc.count(),
+                               &param);
 }
 
 class test_ucp_stream_onesided : public test_ucp_stream_base {
@@ -68,10 +70,15 @@ UCS_TEST_P(test_ucp_stream_onesided, recv_not_connected_ep_cleanup) {
 
     uint64_t recv_data = 0;
     size_t length;
-    void *rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1,
-                                    ucp_dt_make_contig(sizeof(uint64_t)),
-                                    ucp_recv_cb, &length,
-                                    UCP_STREAM_RECV_FLAG_WAITALL);
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                         UCP_OP_ATTR_FIELD_FLAGS;
+    param.datatype     = ucp_dt_make_contig(sizeof(uint64_t));
+    param.flags        = UCP_STREAM_RECV_FLAG_WAITALL;
+
+    void *rreq = ucp_stream_recv_nbx(receiver().ep(), &recv_data, 1,
+                                     &length, &param);
     EXPECT_TRUE(UCS_PTR_IS_PTR(rreq));
     EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(rreq));
     disconnect(receiver());
@@ -92,16 +99,22 @@ UCS_TEST_P(test_ucp_stream_onesided, recv_connected_ep_cleanup) {
     void *sreq = stream_send_nb(send_dt_desc);
 
     size_t recvd_length;
-    void *rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1, dt,
-                                    ucp_recv_cb, &recvd_length,
-                                    UCP_STREAM_RECV_FLAG_WAITALL);
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                         UCP_OP_ATTR_FIELD_FLAGS;
+    param.datatype     = dt;
+    param.flags        = UCP_STREAM_RECV_FLAG_WAITALL;
+
+    void *rreq = ucp_stream_recv_nbx(receiver().ep(), &recv_data, 1,
+                                     &recvd_length, &param);
 
     EXPECT_EQ(sizeof(send_data), wait_stream_recv(rreq));
     EXPECT_EQ(send_data, recv_data);
     request_wait(sreq);
 
-    rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1, dt, ucp_recv_cb,
-                              &recvd_length, UCP_STREAM_RECV_FLAG_WAITALL);
+    rreq = ucp_stream_recv_nbx(receiver().ep(), &recv_data, 1,
+                               &recvd_length, &param);
     EXPECT_TRUE(UCS_PTR_IS_PTR(rreq));
     EXPECT_EQ(UCS_INPROGRESS, ucp_request_check_status(rreq));
     disconnect(sender());
@@ -147,9 +160,12 @@ UCS_TEST_P(test_ucp_stream_onesided, send_recv_no_ep) {
     /* expect data to be received */
     uint64_t recv_data = 0;
     size_t recv_length = 0;
-    void *rreq = ucp_stream_recv_nb(receiver().ep(), &recv_data, 1,
-                                    ucp_dt_make_contig(sizeof(uint64_t)),
-                                    ucp_recv_cb, &recv_length, 0);
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype     = ucp_dt_make_contig(sizeof(uint64_t));
+    void *rreq = ucp_stream_recv_nbx(receiver().ep(), &recv_data, 1,
+                                     &recv_length, &param);
     ASSERT_UCS_PTR_OK(rreq);
     if (rreq != NULL) {
         recv_length = wait_stream_recv(rreq);
@@ -287,9 +303,15 @@ void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
                                       ssize - roffset);
 
         size_t length;
-        void   *rreq = ucp_stream_recv_nb(receiver().ep(), dt_desc.buf(),
-                                          dt_desc.count(), dt_desc.dt(),
-                                          ucp_recv_cb, &length, recv_flags);
+        ucp_request_param_t param;
+
+        param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                             UCP_OP_ATTR_FIELD_FLAGS;
+        param.datatype     = dt_desc.dt();
+        param.flags        = recv_flags;
+
+        void *rreq = ucp_stream_recv_nbx(receiver().ep(), dt_desc.buf(),
+                                         dt_desc.count(), &length, &param);
         ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq));
         if (UCS_PTR_IS_PTR(rreq)) {
             length = wait_stream_recv(rreq);
@@ -325,15 +347,22 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
     std::vector<ucp::data_type_desc_t> dt_rdescs(n_msgs);
     std::vector<void *> rreqs;
 
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                         UCP_OP_ATTR_FIELD_FLAGS;
+    param.flags        = recv_flags;
+
     /* post recvs */
     for (size_t i = 0; i < n_msgs; ++i) {
         ucp::data_type_desc_t &rdesc = dt_rdescs[i].make(datatype, &rbufs[i][0],
                                                          msg_size);
         size_t length;
 
-        void *rreq = ucp_stream_recv_nb(receiver().ep(), rdesc.buf(),
-                                        rdesc.count(), rdesc.dt(), ucp_recv_cb,
-                                        &length, recv_flags);
+        param.datatype = rdesc.dt();
+
+        void *rreq = ucp_stream_recv_nbx(receiver().ep(), rdesc.buf(),
+                                         rdesc.count(), &length, &param);
         EXPECT_TRUE(UCS_PTR_IS_PTR(rreq));
         rreqs.push_back(rreq);
     }
@@ -358,12 +387,14 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
     }
 
     size_t counter = 0;
+    param.flags    = 0;
+    param.datatype = dt_rdescs[0].dt();
     while (rcount < scount) {
         size_t           length = std::numeric_limits<size_t>::max();
         ucs_status_ptr_t rreq;
-        rreq = ucp_stream_recv_nb(receiver().ep(), dt_rdescs[0].buf(),
-                                  dt_rdescs[0].count(), dt_rdescs[0].dt(),
-                                  ucp_recv_cb, &length, 0);
+
+        rreq = ucp_stream_recv_nbx(receiver().ep(), dt_rdescs[0].buf(),
+                                   dt_rdescs[0].count(), &length, &param);
         if (UCS_PTR_IS_PTR(rreq)) {
             length = wait_stream_recv(rreq);
         }
@@ -407,6 +438,9 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
     std::vector<char> rbuf;
     ucs_status_ptr_t  rdata;
     size_t            length;
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
 
     do {
         if (send_i < sbuf.size()) {
@@ -434,9 +468,9 @@ void test_ucp_stream::do_send_recv_data_recv_test(ucp_datatype_t datatype)
             ucp_stream_data_release(receiver().ep(), rdata);
         } else {
             ucp::data_type_desc_t dt_desc(datatype, &rbuf[roffset], ssize - roffset);
-            void *rreq = ucp_stream_recv_nb(receiver().ep(), dt_desc.buf(),
-                                            dt_desc.count(), dt_desc.dt(),
-                                            ucp_recv_cb, &length, 0);
+            param.datatype = dt_desc.dt();
+            void *rreq = ucp_stream_recv_nbx(receiver().ep(), dt_desc.buf(),
+                                             dt_desc.count(), &length, &param);
             ASSERT_TRUE(!UCS_PTR_IS_ERR(rreq));
             if (UCS_PTR_IS_PTR(rreq)) {
                 length = wait_stream_recv(rreq);
@@ -577,6 +611,10 @@ UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
     ucs::fill_random(buf, buf.size());
     std::vector<ucp_dt_iov_t> v(iov_num);
 
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype     = DATATYPE_IOV;
+
     for (size_t size = min_size; size < max_size; ++size) {
         size_t slen = 0;
         for (size_t j = 0; j < iov_num; ++j) {
@@ -591,8 +629,7 @@ UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
             }
         }
 
-        void *sreq = ucp_stream_send_nb(sender().ep(), &v[0], iov_num,
-                                        DATATYPE_IOV, ucp_send_cb, 0);
+        void *sreq = ucp_stream_send_nbx(sender().ep(), &v[0], iov_num, &param);
 
         size_t rlen = 0;
         while (rlen < slen) {
@@ -631,8 +668,6 @@ public:
     }
 
     virtual void init();
-    static void ucp_send_cb(void *request, ucs_status_t status) {}
-    static void ucp_recv_cb(void *request, ucs_status_t status, size_t length) {}
 
     void do_send_worker_poll_test(ucp_datatype_t dt);
     void do_send_recv_test(ucp_datatype_t dt);
@@ -732,6 +767,9 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
     size_t                                             total_sdata;
 
     ASSERT_FALSE(m_msgs.empty());
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
 
     /* Do preposts */
     for (size_t i = 0; i < m_nsenders; ++i) {
@@ -740,9 +778,10 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
                                                          &m_recv_data[i][roffsets[i]],
                                                          m_recv_data[i].size());
         size_t length;
-        void *rreq = ucp_stream_recv_nb(e(m_receiver_idx).ep(0, i),
-                                        rdesc.buf(), rdesc.count(), rdesc.dt(),
-                                        ucp_recv_cb, &length, 0);
+        param.datatype = rdesc.dt();
+        void *rreq = ucp_stream_recv_nbx(e(m_receiver_idx).ep(0, i),
+                                         rdesc.buf(), rdesc.count(), &length,
+                                         &param);
         EXPECT_TRUE(UCS_PTR_IS_PTR(rreq));
         rreqs.push_back(std::make_pair(i, request_wrapper_t(rreq, &rdesc)));
     }
@@ -774,11 +813,10 @@ void test_ucp_stream_many2one::do_send_recv_test(ucp_datatype_t dt)
                 ucp::data_type_desc_t &dt_desc =
                     dt_rdescs[sender_idx].forward_to(roffset);
                 size_t length;
-                void *rreq = ucp_stream_recv_nb(poll_eps[i].ep,
-                                                dt_desc.buf(),
-                                                dt_desc.count(),
-                                                dt_desc.dt(),
-                                                ucp_recv_cb, &length, 0);
+                param.datatype = dt_desc.dt();
+                void *rreq = ucp_stream_recv_nbx(poll_eps[i].ep, dt_desc.buf(),
+                                                 dt_desc.count(), &length,
+                                                 &param);
                 EXPECT_FALSE(UCS_PTR_IS_ERR(rreq));
                 if (rreq == NULL) {
                     EXPECT_LT(size_t(0), length);
@@ -810,8 +848,13 @@ ucs_status_ptr_t
 test_ucp_stream_many2one::stream_send_nb(size_t sender_idx,
                                          const ucp::data_type_desc_t& dt_desc)
 {
-    return ucp_stream_send_nb(m_entities.at(sender_idx).ep(), dt_desc.buf(),
-                              dt_desc.count(), dt_desc.dt(), ucp_send_cb, 0);
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype     = dt_desc.dt();
+
+    return ucp_stream_send_nbx(m_entities.at(sender_idx).ep(), dt_desc.buf(),
+                               dt_desc.count(), &param);
 }
 
 size_t
@@ -972,8 +1015,12 @@ UCS_TEST_P(test_ucp_stream_many2one, drop_data) {
     uint8_t check;
     size_t  check_length;
     ucp_ep_h last_ep = m_entities.at(m_receiver_idx).ep(0, m_nsenders - 1);
-    void *check_req  = ucp_stream_recv_nb(last_ep, &check, 1, DATATYPE,
-                                          ucp_recv_cb, &check_length, 0);
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
+    param.datatype     = DATATYPE;
+    void *check_req    = ucp_stream_recv_nbx(last_ep, &check, 1, &check_length,
+                                             &param);
     EXPECT_FALSE(UCS_PTR_IS_ERR(check_req));
     if (UCS_PTR_IS_PTR(check_req)) {
         wait_stream_recv(check_req);
