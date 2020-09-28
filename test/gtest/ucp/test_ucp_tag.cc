@@ -21,14 +21,19 @@ extern "C" {
 
 
 ucp_params_t test_ucp_tag::get_ctx_params() {
-    ucp_params_t params = ucp_test::get_ctx_params();
-    params.field_mask  |= UCP_PARAM_FIELD_FEATURES |
+    ucp_params_t params = {};
+    params.field_mask   = UCP_PARAM_FIELD_FEATURES |
                           UCP_PARAM_FIELD_REQUEST_INIT |
                           UCP_PARAM_FIELD_REQUEST_SIZE;
     params.features     = UCP_FEATURE_TAG;
     params.request_size = sizeof(request);
     params.request_init = request_init;
     return params;
+}
+
+void test_ucp_tag::get_test_variants(std::vector<ucp_test_variant>& variants)
+{
+    add_variant(variants, get_ctx_params());
 }
 
 void test_ucp_tag::init()
@@ -181,9 +186,9 @@ void test_ucp_tag::check_offload_support(bool offload_required)
 int test_ucp_tag::get_worker_index(int buf_index)
 {
     int worker_index = 0;
-    if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
+    if (get_variant_thread_type() == MULTI_THREAD_CONTEXT) {
         worker_index = buf_index;
-    } else if (GetParam().thread_type == SINGLE_THREAD) {
+    } else if (get_variant_thread_type() == SINGLE_THREAD) {
         ucs_assert((buf_index == 0) && (worker_index == 0));
     }
     return worker_index;
@@ -395,7 +400,7 @@ ucp_context_attr_t test_ucp_tag::ctx_attr;
 class test_ucp_tag_limits : public test_ucp_tag {
 public:
     test_ucp_tag_limits() {
-        m_test_offload = GetParam().variant;
+        m_test_offload = get_variant_value();
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE",
                                                ucs::to_string(m_test_offload).c_str()));
     }
@@ -405,18 +410,9 @@ public:
         check_offload_support(m_test_offload);
     }
 
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls)
-    {
-        std::vector<ucp_test_param> result;
-        generate_test_params_variant(ctx_params, name, test_case_name,
-                                     tls, false, result);
-        generate_test_params_variant(ctx_params, name, test_case_name + "/offload",
-                                     tls, true, result);
-        return result;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, get_ctx_params(), 0, "");
+        add_variant_with_value(variants, get_ctx_params(), 1, "offload");
     }
 
 protected:
@@ -477,11 +473,8 @@ public:
         receiver().connect(&sender(), get_ep_params());
     }
 
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_TAG;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_TAG);
     }
 
 protected:

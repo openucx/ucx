@@ -4,22 +4,19 @@
 * See file LICENSE for terms.
 */
 
+#include "ucp_test.h"
+#include "ucp_datatype.h"
+
 #include <list>
 #include <numeric>
 #include <set>
 #include <vector>
 
-#include "ucp_datatype.h"
-#include "ucp_test.h"
-
 
 class test_ucp_stream_base : public ucp_test {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_STREAM;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_STREAM);
     }
 
     size_t wait_stream_recv(void *request);
@@ -661,10 +658,6 @@ protected:
 public:
     test_ucp_stream_many2one() : m_receiver_idx(3), m_nsenders(3) {
         m_recv_data.resize(m_nsenders);
-    }
-
-    static ucp_params_t get_ctx_params() {
-        return test_ucp_stream::get_ctx_params();
     }
 
     virtual void init();

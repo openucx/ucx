@@ -3,11 +3,11 @@
 * See file LICENSE for terms.
 */
 
-#include <common/test_helpers.h>
 #include <common/test.h>
 
 #include "ucp_datatype.h"
 #include "ucp_test.h"
+
 extern "C" {
 #include <ucp/dt/dt.inl>
 }

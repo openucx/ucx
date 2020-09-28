@@ -12,10 +12,8 @@ extern "C" {
 
 class test_ucp_context : public ucp_test {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP);
     }
 };
 
@@ -32,7 +30,7 @@ UCS_TEST_P(test_ucp_context, minimal_field_mask) {
         ucp_params_t params;
         VALGRIND_MAKE_MEM_UNDEFINED(&params, sizeof(params));
         params.field_mask = UCP_PARAM_FIELD_FEATURES;
-        params.features   = get_ctx_params().features;
+        params.features   = get_variant_ctx_params().features;
 
         UCS_TEST_CREATE_HANDLE(ucp_context_h, ucph, ucp_cleanup,
                                ucp_init, &params, config.get());
@@ -75,14 +73,14 @@ UCS_TEST_P(test_ucp_version, wrong_api_version) {
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);
 
-    ucp_params_t params = get_ctx_params();
     ucp_context_h ucph;
     ucs_status_t status;
     size_t warn_count;
     {
         scoped_log_handler slh(hide_warns_logger);
         warn_count = m_warnings.size();
-        status = ucp_init_version(99, 99, &params, config.get(), &ucph);
+        status = ucp_init_version(99, 99, &get_variant_ctx_params(),
+                                  config.get(), &ucph);
     }
     if (status != UCS_OK) {
         ADD_FAILURE() << "Failed to create UCP with wrong version";

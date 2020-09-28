@@ -21,12 +21,8 @@ extern "C" {
 
 class test_ucp_wireup : public ucp_test {
 public:
-    static std::vector<ucp_test_param>
-    enum_test_params_features(const ucp_params_t& ctx_params,
-                              const std::string& name,
-                              const std::string& test_case_name,
-                              const std::string& tls,
-                              uint64_t features, bool test_all = 0);
+    static void get_test_variants(std::vector<ucp_test_variant>& variants,
+                                  uint64_t features, bool test_all = false);
 
 protected:
     enum {
@@ -98,60 +94,40 @@ private:
     static void unmap_memh(ucp_mem_h memh, ucp_context_h context);
 };
 
-std::vector<ucp_test_param>
-test_ucp_wireup::enum_test_params_features(const ucp_params_t& ctx_params,
-                                           const std::string& name,
-                                           const std::string& test_case_name,
-                                           const std::string& tls,
-                                           uint64_t features, bool test_all)
+void test_ucp_wireup::get_test_variants(std::vector<ucp_test_variant>& variants,
+                                        uint64_t features, bool test_all)
 {
     std::vector<ucp_test_param> result;
-    ucp_params_t tmp_ctx_params = ctx_params;
 
     if (features & UCP_FEATURE_RMA) {
-        tmp_ctx_params.features = UCP_FEATURE_RMA;
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/rma",
-                                     tls, TEST_RMA, result);
-
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/rma",
-                                     tls, TEST_RMA | UNIFIED_MODE, result);
+        add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_RMA, "rma");
+        add_variant_with_value(variants, UCP_FEATURE_RMA,
+                               TEST_RMA | UNIFIED_MODE, "rma,unified");
     }
 
     if (features & UCP_FEATURE_TAG) {
-        tmp_ctx_params.features = UCP_FEATURE_TAG;
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/tag",
-                                     tls, TEST_TAG, result);
-
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/tag",
-                                     tls, TEST_TAG | UNIFIED_MODE, result);
+        add_variant_with_value(variants, UCP_FEATURE_TAG, TEST_TAG, "tag");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_TAG | UNIFIED_MODE, "tag,unified");
     }
 
     if (features & UCP_FEATURE_STREAM) {
-        tmp_ctx_params.features = UCP_FEATURE_STREAM;
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/stream",
-                                     tls, TEST_STREAM, result);
-
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/stream",
-                                     tls, TEST_STREAM | UNIFIED_MODE, result);
+        add_variant_with_value(variants, UCP_FEATURE_STREAM, TEST_STREAM, "stream");
+        add_variant_with_value(variants, UCP_FEATURE_STREAM,
+                               TEST_STREAM | UNIFIED_MODE, "stream,unified");
     }
 
     if (features & (UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64)) {
-        tmp_ctx_params.features = (UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64);
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/amo",
-                                     tls, TEST_AMO, result);
+        add_variant_with_value(variants, UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64,
+                               TEST_AMO, "amo");
     }
 
     if (test_all) {
         uint64_t all_flags = (TEST_TAG | TEST_RMA | TEST_STREAM);
-        tmp_ctx_params.features = features;
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/all",
-                                     tls, all_flags, result);
-
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/all",
-                                     tls, all_flags | UNIFIED_MODE, result);
+        add_variant_with_value(variants, features, all_flags, "all");
+        add_variant_with_value(variants, features, all_flags | UNIFIED_MODE,
+                               "all,unified");
     }
-
-    return result;
 }
 
 void test_ucp_wireup::unmap_memh(ucp_mem_h memh, ucp_context_h context)
@@ -164,7 +140,7 @@ void test_ucp_wireup::unmap_memh(ucp_mem_h memh, ucp_context_h context)
 
 void test_ucp_wireup::init()
 {
-    if (GetParam().variant & UNIFIED_MODE) {
+    if (get_variant_value() & UNIFIED_MODE) {
         modify_config("UNIFIED_MODE",  "y");
     }
 
@@ -173,7 +149,7 @@ void test_ucp_wireup::init()
     m_send_data.resize(BUFFER_LENGTH, 0);
     m_recv_data.resize(BUFFER_LENGTH, 0);
 
-    if (GetParam().variant & (TEST_RMA | TEST_AMO)) {
+    if (get_variant_value() & (TEST_RMA | TEST_AMO)) {
         ucs_status_t status;
         ucp_mem_map_params_t params;
         ucp_mem_h memh;
@@ -241,7 +217,7 @@ void test_ucp_wireup::clear_recv_data() {
 void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
                               std::vector<void*>& reqs, uint64_t send_data)
 {
-    if (GetParam().variant & TEST_TAG) {
+    if (get_variant_value() & TEST_TAG) {
         std::fill(m_send_data.begin(), m_send_data.end(), send_data);
         for (int i = 0; i < repeat; ++i) {
             void *req = ucp_tag_send_nb(ep, &m_send_data[0], length,
@@ -252,7 +228,7 @@ void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
                 ASSERT_UCS_OK(UCS_PTR_STATUS(req));
             }
         }
-    } else if (GetParam().variant & TEST_STREAM) {
+    } else if (get_variant_value() & TEST_STREAM) {
         std::fill(m_send_data.begin(), m_send_data.end(), send_data);
         for (int i = 0; i < repeat; ++i) {
             void *req = ucp_stream_send_nb(ep, &m_send_data[0], length, DT_U64,
@@ -263,7 +239,7 @@ void test_ucp_wireup::send_nb(ucp_ep_h ep, size_t length, int repeat,
                 ASSERT_UCS_OK(UCS_PTR_STATUS(req));
             }
         }
-    } else if (GetParam().variant & TEST_RMA) {
+    } else if (get_variant_value() & TEST_RMA) {
         clear_recv_data();
 
         ucp_mem_h memh  = (sender().ucph() == ep->worker->context) ?
@@ -298,16 +274,16 @@ void test_ucp_wireup::send_b(ucp_ep_h ep, size_t length, int repeat,
 void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
                              int repeat, uint64_t recv_data)
 {
-    if (GetParam().variant & (TEST_TAG | TEST_STREAM)) {
+    if (get_variant_value() & (TEST_TAG | TEST_STREAM)) {
         for (int i = 0; i < repeat; ++i) {
             size_t recv_length;
             void *req;
 
             clear_recv_data();
-            if (GetParam().variant & TEST_TAG) {
+            if (get_variant_value() & TEST_TAG) {
                 req = ucp_tag_recv_nb(worker, &m_recv_data[0], length, DT_U64,
                                       TAG, (ucp_tag_t)-1, tag_recv_completion);
-            } else if (GetParam().variant & TEST_STREAM) {
+            } else if (get_variant_value() & TEST_STREAM) {
                 req = ucp_stream_recv_nb(ep, &m_recv_data[0], length, DT_U64,
                                          stream_recv_completion, &recv_length,
                                          UCP_STREAM_RECV_FLAG_WAITALL);
@@ -326,7 +302,7 @@ void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
                                          m_recv_data.begin() + length,
                                          recv_data));
         }
-    } else if (GetParam().variant & TEST_RMA) {
+    } else if (get_variant_value() & TEST_RMA) {
         for (size_t i = 0; i < length; ++i) {
             while (m_recv_data[i] != recv_data + repeat - 1) {
                 progress();
@@ -403,12 +379,10 @@ bool test_ucp_wireup::ep_iface_has_caps(const entity& e, const std::string& tl,
 
 class test_ucp_wireup_1sided : public test_ucp_wireup {
 public:
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
-                     const std::string& test_case_name, const std::string& tls)
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        return enum_test_params_features(ctx_params, name, test_case_name, tls,
-                                         UCP_FEATURE_RMA | UCP_FEATURE_TAG);
+        test_ucp_wireup::get_test_variants(variants,
+                                           UCP_FEATURE_RMA | UCP_FEATURE_TAG);
     }
 
     test_ucp_wireup_1sided() {
@@ -537,7 +511,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup) {
 UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
     sender().connect(&receiver(), get_ep_params());
     send_recv(sender().ep(), receiver().worker(), receiver().ep(), BUFFER_LENGTH, 1);
-    if (is_loopback() && (GetParam().variant & TEST_TAG)) {
+    if (is_loopback() && (get_variant_value() & TEST_TAG)) {
         /* expect the endpoint to be connected to itself */
         ucp_ep_h ep         = sender().ep();
         ucp_worker_h worker = sender().worker();
@@ -708,13 +682,10 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_1sided)
 
 class test_ucp_wireup_2sided : public test_ucp_wireup {
 public:
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
-                     const std::string& test_case_name, const std::string& tls)
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        return enum_test_params_features(ctx_params, name, test_case_name, tls,
-                                         UCP_FEATURE_RMA | UCP_FEATURE_TAG |
-                                         UCP_FEATURE_STREAM);
+        test_ucp_wireup::get_test_variants(variants, UCP_FEATURE_RMA |
+                                           UCP_FEATURE_TAG | UCP_FEATURE_STREAM);
     }
 
 protected:
@@ -756,7 +727,7 @@ void test_ucp_wireup_2sided::test_connect_loopback(bool delay_before_connect,
 
         EXPECT_NE(ep1, ep2);
 
-        if (GetParam().variant & TEST_STREAM) {
+        if (get_variant_value() & TEST_STREAM) {
             uint64_t data1 = (base_index * 10) + 1;
             uint64_t data2 = (base_index * 10) + 2;
 
@@ -794,7 +765,7 @@ UCS_TEST_P(test_ucp_wireup_2sided, no_loopback_with_delay) {
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_wireup_2sided, async_connect,
-                     !(GetParam().ctx_params.features & UCP_FEATURE_TAG)) {
+                     !(get_variant_ctx_params().features & UCP_FEATURE_TAG)) {
     sender().connect(&receiver(), get_ep_params());
     ucp_ep_h send_ep = sender().ep();
     std::vector<void *> reqs;
@@ -907,13 +878,10 @@ public:
         m_num_lanes = 0;
     }
 
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
-                     const std::string& test_case_name, const std::string& tls)
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        return enum_test_params_features(ctx_params, name, test_case_name, tls,
-                                         UCP_FEATURE_TAG | UCP_FEATURE_RMA |
-                                         UCP_FEATURE_STREAM, 1);
+        test_ucp_wireup::get_test_variants(variants, UCP_FEATURE_RMA |
+                                           UCP_FEATURE_TAG | UCP_FEATURE_STREAM);
     }
 
     void init() {
@@ -1061,18 +1029,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
 
 class test_ucp_wireup_unified : public test_ucp_wireup {
 public:
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
-                     const std::string& test_case_name, const std::string& tls)
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        std::vector<ucp_test_param> result;
-        ucp_params_t tmp_ctx_params = ctx_params;
-
-        tmp_ctx_params.features = UCP_FEATURE_TAG;
-
-        generate_test_params_variant(tmp_ctx_params, name, test_case_name + "/uni",
-                                     tls, TEST_TAG | UNIFIED_MODE, result);
-        return result;
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_TAG | UNIFIED_MODE, "uni");
     }
 
     bool context_has_tls(ucp_context_h ctx, const std::string& tl,
@@ -1250,40 +1210,22 @@ protected:
     }
 
 public:
-
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_wireup::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features    |= (UCP_FEATURE_AMO32 |
-                               UCP_FEATURE_AMO64);
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        test_ucp_wireup::get_test_variants(variants, UCP_FEATURE_AMO32 |
+                                           UCP_FEATURE_AMO64);
     }
 };
 
 class test_ucp_wireup_amo : public test_ucp_wireup {
 public:
-    typedef struct {
-        test_ucp_wireup_amo *test;
-    } request_t;
-
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_wireup::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_REQUEST_SIZE;
-        params.request_size = sizeof(request_t);
-        return params;
-    }
-
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
-                     const std::string& test_case_name, const std::string& tls)
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        uint64_t amo_features;
-
-        EXPECT_TRUE((sizeof(elem_type) == 4ul) || (sizeof(elem_type) == 8ul));
-        amo_features = (sizeof(elem_type) == 4ul) ? UCP_FEATURE_AMO32 :
-                       UCP_FEATURE_AMO64;
-        return enum_test_params_features(ctx_params, name, test_case_name, tls,
-                                         amo_features, false);
+        UCS_STATIC_ASSERT((sizeof(elem_type) == sizeof(uint32_t)) ||
+                          (sizeof(elem_type) == sizeof(uint64_t)));
+        uint64_t amo_features = (sizeof(elem_type) == sizeof(uint32_t)) ?
+                                UCP_FEATURE_AMO32 : UCP_FEATURE_AMO64;
+        test_ucp_wireup::get_test_variants(variants, amo_features);
     }
 
 protected:
@@ -1306,12 +1248,12 @@ protected:
         m_send_data[0] = ucs_generate_uuid(0);
     }
 
-    static void flush_cb(void *req, ucs_status_t status) {
-        request_t *request = (request_t *)req;
+    static void flush_cb(void *req, ucs_status_t status, void *user_data) {
+        test_ucp_wireup_amo *test = (test_ucp_wireup_amo*)user_data;
 
         ASSERT_UCS_OK(status);
-        request->test->rkeys_cleanup();
-        request->test->memhs_cleanup();
+        test->rkeys_cleanup();
+        test->memhs_cleanup();
     }
 };
 
@@ -1328,9 +1270,14 @@ UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
                                           m_send_data[0], sizeof(elem_type),
                                           (uint64_t)&m_recv_data[0], rkey);
     ASSERT_UCS_OK(status);
-    request_t *req = (request_t *)ucp_ep_flush_nb(sender().ep(), 0, flush_cb);
+
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                         UCP_OP_ATTR_FIELD_USER_DATA;
+    param.cb.send      = flush_cb;
+    param.user_data    = this;
+    void *req = ucp_ep_flush_nbx(sender().ep(), &param);
     if (UCS_PTR_IS_PTR(req)) {
-        req->test = this;
         request_wait(req);
     } else {
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
@@ -1419,11 +1366,8 @@ protected:
     std::vector<std::string> m_ib_devices;
 
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_TAG;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_TAG);
     }
 };
 
@@ -1469,12 +1413,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, ib, "ib")
 
 class test_ucp_wireup_keepalive : public test_ucp_wireup {
 public:
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
-                     const std::string& test_case_name, const std::string& tls)
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        return enum_test_params_features(ctx_params, name, test_case_name, tls,
-                                         UCP_FEATURE_RMA | UCP_FEATURE_TAG);
+        test_ucp_wireup::get_test_variants(variants,
+                                           UCP_FEATURE_RMA | UCP_FEATURE_TAG);
     }
 
     ucp_ep_params_t get_ep_params() {

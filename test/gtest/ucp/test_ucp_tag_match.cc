@@ -34,34 +34,28 @@ public:
     virtual void init()
     {
         modify_config("TM_THRESH", "1");
-        if (GetParam().variant & ENABLE_PROTO) {
+        if (get_variant_value() & ENABLE_PROTO) {
             modify_config("PROTO_ENABLE", "y");
             modify_config("MAX_EAGER_LANES", "2");
         }
         test_ucp_tag::init();
     }
 
-    static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
-                                                        const std::string& name,
-                                                        const std::string& test_case_name,
-                                                        const std::string& tls)
-    {
-        std::vector<ucp_test_param> result;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         UCS_STATIC_ASSERT(!(ENABLE_PROTO & RECV_REQ_INTERNAL));
         UCS_STATIC_ASSERT(!(ENABLE_PROTO & RECV_REQ_EXTERNAL));
 
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     RECV_REQ_INTERNAL, result);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     RECV_REQ_EXTERNAL, result);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     RECV_REQ_INTERNAL | ENABLE_PROTO, result);
-        return result;
+        add_variant_with_value(variants, get_ctx_params(), RECV_REQ_INTERNAL,
+                               "req_int");
+        add_variant_with_value(variants, get_ctx_params(), RECV_REQ_EXTERNAL,
+                               "req_ext");
+        add_variant_with_value(variants, get_ctx_params(),
+                               RECV_REQ_INTERNAL | ENABLE_PROTO, "req_int_proto");
     }
 
     virtual bool is_external_request()
     {
-        return GetParam().variant == RECV_REQ_EXTERNAL;
+        return get_variant_value() == RECV_REQ_EXTERNAL;
     }
 
 protected:
@@ -99,7 +93,7 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_unexp) {
 
 UCS_TEST_SKIP_COND_P(test_ucp_tag_match, send_recv_unexp_rqfree,
                      /* request free cannot be used for external requests */
-                     (GetParam().variant == RECV_REQ_EXTERNAL)) {
+                     (get_variant_value() == RECV_REQ_EXTERNAL)) {
     request *my_recv_req;
     uint64_t send_data = 0xdeadbeefdeadbeef;
     uint64_t recv_data = 0;
@@ -474,38 +468,24 @@ public:
     enum {
         RNDV_SCHEME_AUTO = 0,
         RNDV_SCHEME_PUT_ZCOPY,
-        RNDV_SCHEME_GET_ZCOPY
+        RNDV_SCHEME_GET_ZCOPY,
+        RNDV_SCHEME_LAST
     };
 
     static const std::string rndv_schemes[];
 
     void init() {
-        ASSERT_LE(GetParam().variant, (int)RNDV_SCHEME_GET_ZCOPY);
-        modify_config("RNDV_SCHEME", rndv_schemes[GetParam().variant]);
+        ASSERT_LE(get_variant_value(), (int)RNDV_SCHEME_GET_ZCOPY);
+        modify_config("RNDV_SCHEME", rndv_schemes[get_variant_value()]);
 
         test_ucp_tag_match::init();
     }
 
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls)
-    {
-        std::vector<ucp_test_param> result;
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name + "/rndv_" +
-                                     rndv_schemes[RNDV_SCHEME_AUTO],
-                                     tls, RNDV_SCHEME_AUTO, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name + "/rndv_" +
-                                     rndv_schemes[RNDV_SCHEME_PUT_ZCOPY],
-                                     tls, RNDV_SCHEME_PUT_ZCOPY, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name + "/rndv_" +
-                                     rndv_schemes[RNDV_SCHEME_GET_ZCOPY],
-                                     tls, RNDV_SCHEME_GET_ZCOPY, result);
-        return result;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        for (int rndv_scheme = 0; rndv_scheme < RNDV_SCHEME_LAST; ++rndv_scheme) {
+            add_variant_with_value(variants, get_ctx_params(), rndv_scheme,
+                                   "rndv_" + rndv_schemes[rndv_scheme]);
+        }
     }
 };
 

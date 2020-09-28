@@ -35,13 +35,28 @@ namespace ucp {
 extern const uint32_t MAGIC;
 }
 
-
-struct ucp_test_param {
-    ucp_params_t              ctx_params;
-    std::vector<std::string>  transports;
-    int                       variant;
-    int                       thread_type;
+struct ucp_test_variant_value {
+    int                                 value;  /* User-defined value */
+    std::string                         name;   /* Variant description */
 };
+
+
+/* Specifies extended test parameter */
+struct ucp_test_variant {
+    ucp_params_t                        ctx_params;  /* UCP context parameters */
+    int                                 thread_type; /* Thread mode */
+    std::vector<ucp_test_variant_value> values;      /* Extended test parameters */
+};
+
+
+/* UCP test parameter which includes the transports to test and option to
+ * define extended parameters by adding values to 'variant'
+ */
+struct ucp_test_param {
+    std::vector<std::string>            transports;  /* Transports to test */
+    ucp_test_variant                    variant;     /* Test variant */
+};
+
 
 class ucp_test; // forward declaration
 
@@ -179,23 +194,11 @@ public:
     ucp_config_t* m_ucp_config;
 
     static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params,
-                     const std::string& name,
-                     const std::string& test_case_name,
+    enum_test_params(const std::vector<ucp_test_variant>& variants,
                      const std::string& tls);
 
-    static ucp_params_t get_ctx_params();
     virtual ucp_worker_params_t get_worker_params();
     virtual ucp_ep_params_t get_ep_params();
-
-    static void
-    generate_test_params_variant(const ucp_params_t& ctx_params,
-                                 const std::string& name,
-                                 const std::string& test_case_name,
-                                 const std::string& tls,
-                                 int variant,
-                                 std::vector<ucp_test_param>& test_params,
-                                 int thread_type = SINGLE_THREAD);
 
     virtual void modify_config(const std::string& name, const std::string& value,
                                modify_config_mode_t mode = FAIL_IF_NOT_EXIST);
@@ -203,14 +206,15 @@ public:
     void stats_restore();
 
 private:
-    static void set_ucp_config(ucp_config_t *config,
-                               const ucp_test_param& test_param);
-    static bool check_test_param(const std::string& name,
-                                 const std::string& test_case_name,
-                                 const ucp_test_param& test_param);
+    static void set_ucp_config(ucp_config_t *config, const std::string& tls);
+    static bool check_tls(const std::string& tls);
+    static void add_variant_value(std::vector<ucp_test_variant_value>& values,
+                                  int value, std::string name);
     ucs_status_t request_process(void *req, int worker_index, bool wait);
 
 protected:
+    typedef void (*get_variants_func_t)(std::vector<ucp_test_variant>&);
+
     virtual void init();
     bool is_self() const;
     virtual void cleanup();
@@ -225,8 +229,59 @@ protected:
     void disconnect(entity& entity);
     ucs_status_t request_wait(void *req, int worker_index = 0);
     void request_release(void *req);
-    void set_ucp_config(ucp_config_t *config);
     int max_connections();
+
+    // Add test variant without values, with given context params
+    static ucp_test_variant&
+    add_variant(std::vector<ucp_test_variant>& variants,
+                const ucp_params_t& ctx_params, int thread_type = SINGLE_THREAD);
+
+    // Add test variant without values, with given context features
+    static ucp_test_variant&
+    add_variant(std::vector<ucp_test_variant>& variants, uint64_t ctx_features,
+                int thread_type = SINGLE_THREAD);
+
+    // Add test variant with context params and single value
+    static void
+    add_variant_with_value(std::vector<ucp_test_variant>& variants,
+                           const ucp_params_t& ctx_params, int value,
+                           const std::string& name,
+                           int thread_type = SINGLE_THREAD);
+
+    // Add test variant with context features and single value
+    static void
+    add_variant_with_value(std::vector<ucp_test_variant>& variants,
+                           uint64_t ctx_features, int value,
+                           const std::string& name,
+                           int thread_type = SINGLE_THREAD);
+
+    // Add test variants based on existing generator and additional single value
+    static void
+    add_variant_values(std::vector<ucp_test_variant>& variants,
+                       get_variants_func_t generator, int value,
+                       const std::string& name = "");
+
+    // Add test variants based on existing generator a bit-set of values
+    static void
+    add_variant_values(std::vector<ucp_test_variant>& variants,
+                       get_variants_func_t generator, uint64_t bitmap,
+                       const char **names);
+
+    // Add test variants based on existing generator and enumerating all
+    // supported memory types which are part of 'mem_types_mask'
+    static void
+    add_variant_memtypes(std::vector<ucp_test_variant>& variants,
+                         get_variants_func_t generator,
+                         uint64_t mem_types_mask = UINT64_MAX);
+
+    // Return variant value at a given position
+    int get_variant_value(unsigned index = 0) const;
+
+    // Get thread mode for the test
+    int get_variant_thread_type() const;
+
+    // Return context parameters of the current test variant
+    const ucp_params_t& get_variant_ctx_params() const;
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         entity *e = reinterpret_cast<entity*>(arg);
@@ -265,6 +320,15 @@ protected:
 
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 
+template <class T>
+std::vector<ucp_test_param> enum_test_params(const std::string& tls)
+{
+    std::vector<ucp_test_variant> v;
+
+    T::get_test_variants(v);
+    return T::enum_test_params(v, tls);
+}
+
 /**
  * Instantiate the parameterized test case a combination of transports.
  *
@@ -274,10 +338,7 @@ std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
  */
 #define UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name, _tls) \
     INSTANTIATE_TEST_CASE_P(_name,  _test_case, \
-                            testing::ValuesIn(_test_case::enum_test_params(_test_case::get_ctx_params(), \
-                                                                           #_name, \
-                                                                           #_test_case, \
-                                                                           _tls)));
+                            testing::ValuesIn(enum_test_params<_test_case>(_tls)));
 
 
 /**

@@ -14,26 +14,12 @@ extern "C" {
 
 
 class test_ucp_rma : public test_ucp_memheap {
-private:
-    static void send_completion(void *request, ucs_status_t status){}
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_RMA;
-        return params;
-    }
-
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
-                     const std::string& test_case_name, const std::string& tls) {
-        std::vector<ucp_test_param> result;
-        generate_test_params_variant(ctx_params, name, test_case_name + "/flush_worker",
-                                     tls, 0, result);
-        generate_test_params_variant(ctx_params, name, test_case_name + "/flush_ep",
-                                     tls, FLUSH_EP, result);
-        generate_test_params_variant(ctx_params, name, test_case_name + "/flush_ep_proto",
-                                     tls, FLUSH_EP | ENABLE_PROTO, result);
-        return result;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "flush_worker");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, FLUSH_EP, "flush_ep");
+        add_variant_with_value(variants, UCP_FEATURE_RMA,
+                               FLUSH_EP | ENABLE_PROTO, "flush_ep_proto");
     }
 
     virtual void init() {
@@ -155,11 +141,11 @@ private:
     }
 
     bool is_ep_flush() {
-        return GetParam().variant & FLUSH_EP;
+        return get_variant_value() & FLUSH_EP;
     }
 
     bool enable_proto() {
-        return GetParam().variant & ENABLE_PROTO;
+        return get_variant_value() & ENABLE_PROTO;
     }
 };
 
