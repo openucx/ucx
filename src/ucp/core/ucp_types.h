@@ -76,7 +76,7 @@ typedef enum {
 /**
  * Active message codes
  */
-enum {
+typedef enum {
     UCP_AM_ID_WIREUP            =  1, /* Connection establishment */
 
     UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager TAG */
@@ -112,7 +112,7 @@ enum {
     UCP_AM_ID_SINGLE_REPLY      =  26, /* Single fragment user defined AM
                                           carrying remote ep for reply */
     UCP_AM_ID_LAST
-};
+} ucp_am_id_t;
 
 
 /**

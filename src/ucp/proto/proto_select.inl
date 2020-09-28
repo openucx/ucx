@@ -95,4 +95,32 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
     return ucp_proto_thresholds_search(select_elem->thresholds, msg_length);
 }
 
+/*
+ * @note op_attr_mask is from @ref ucp_request_param_t, defined by @ref ucp_op_attr_t.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
+                            ucp_operation_id_t op_id, uint32_t op_attr_mask,
+                            ucp_dt_class_t dt_class, ucs_memory_type_t mem_type,
+                            uint8_t sg_count)
+{
+    if (dt_class == UCP_DATATYPE_CONTIG) {
+        ucs_assert(sg_count == 1);
+    } else if (dt_class != UCP_DATATYPE_IOV) {
+        ucs_assert(sg_count == 0);
+    }
+
+    /* construct a protocol lookup key based on all operation parameters
+     * op_flags are modifiers for the operation, for now only FAST_CMPL is
+     * supported */
+    select_param->op_id      = op_id;
+    select_param->op_flags   = ucp_proto_select_op_attr_to_flags(op_attr_mask);
+    select_param->dt_class   = dt_class;
+    select_param->mem_type   = mem_type;
+    select_param->sys_dev    = 0;
+    select_param->sg_count   = sg_count;
+    select_param->padding[0] = 0;
+    select_param->padding[1] = 0;
+}
+
 #endif

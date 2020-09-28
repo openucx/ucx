@@ -48,7 +48,9 @@ noinst_HEADERS = \
 	proto/proto_am.h \
 	proto/proto_am.inl \
 	proto/proto_common.h \
+	proto/proto_common.inl \
 	proto/proto_multi.h \
+	proto/proto_multi.inl \
 	proto/proto_select.h \
 	proto/proto_select.inl \
 	proto/proto_single.h \

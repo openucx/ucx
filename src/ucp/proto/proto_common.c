@@ -8,12 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "proto_common.h"
-#include "proto_select.inl"
-
-#include <ucp/core/ucp_mm.h>
-#include <ucp/core/ucp_worker.inl>
-#include <ucp/dt/dt.h>
+#include "proto_common.inl"
 
 
 static ucp_rsc_index_t
@@ -400,4 +395,23 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
     }
 
     ucp_proto_common_add_overheads(params, overhead, perf_params->reg_md_map);
+}
+
+void ucp_proto_request_select_error(ucp_request_t *req,
+                                    ucp_proto_select_t *proto_select,
+                                    ucp_worker_cfg_index_t rkey_cfg_index,
+                                    const ucp_proto_select_param_t *sel_param,
+                                    size_t msg_length)
+{
+    ucp_ep_h ep = req->send.ep;
+    ucs_string_buffer_t strb;
+
+    ucp_proto_select_param_str(sel_param, &strb);
+    ucp_proto_select_dump(ep->worker, ep->cfg_index, rkey_cfg_index,
+                          proto_select, stdout);
+    ucs_fatal("req %p on ep %p to %s: could not find a protocol for %s "
+              "length %zu",
+              req, ep, ucp_ep_peer_name(ep), ucs_string_buffer_cstr(&strb),
+              msg_length);
+    ucs_string_buffer_cleanup(&strb);
 }

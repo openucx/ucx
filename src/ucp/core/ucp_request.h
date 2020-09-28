@@ -14,6 +14,7 @@
 #include "ucp_mm.h"
 
 #include <ucp/api/ucp.h>
+#include <ucp/dt/datatype_iter.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
@@ -51,9 +52,10 @@ enum {
     UCP_REQUEST_FLAG_SEND_TAG             = UCS_BIT(14),
     UCP_REQUEST_FLAG_RNDV_FRAG            = UCS_BIT(15),
     UCP_REQUEST_FLAG_RECV_AM              = UCS_BIT(16),
+    UCP_REQUEST_FLAG_PROTO_INITIALIZED    = UCS_BIT(17),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(17),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(18)
+    UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(18),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(19)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
@@ -119,6 +121,9 @@ struct ucp_request {
             size_t                  length;     /* Total length, in bytes */
             ucs_memory_type_t       mem_type;   /* Memory type */
             ucp_send_nbx_callback_t cb;         /* Completion callback */
+
+            const ucp_proto_config_t *proto_config; /* Selected protocol for the request */
+            ucp_datatype_iter_t      dt_iter;       /* Send buffer state */
 
             union {
                 ucp_wireup_msg_t  wireup;
@@ -267,9 +272,11 @@ struct ucp_request {
                 uct_completion_t  uct_comp; /* UCT completion */
             } state;
 
-            ucp_lane_index_t      pending_lane; /* Lane on which request was moved
-                                                 * to pending state */
-            ucp_lane_index_t      lane;     /* Lane on which this request is being sent */
+            ucp_lane_index_t      pending_lane;   /* Lane on which request was moved
+                                                   * to pending state */
+            ucp_lane_index_t      lane;           /* Lane on which this request is being sent */
+            ucp_lane_index_t      multi_lane_idx; /* Index of the lane with multi-send */
+
             uct_pending_req_t     uct;      /* UCT pending request */
             ucp_mem_desc_t        *mdesc;
         } send;
