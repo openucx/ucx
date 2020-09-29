@@ -776,19 +776,25 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
     }
 }
 
-static ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
+static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
+                                                 uct_dc_dci_t *dci)
 {
     struct ibv_qp_cap cap = {};
+
+    return uct_dc_mlx5_iface_create_qp(iface, &cap, dci);
+}
+
+static ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
+{
     ucs_status_t status;
     int i;
 
     ucs_debug("creating %d dci(s)", iface->tx.ndci);
+    ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
 
     iface->tx.stack_top = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
-        ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
-
-        status = uct_dc_mlx5_iface_create_qp(iface, &cap, &iface->tx.dcis[i]);
+        status = uct_dc_mlx5_iface_create_dci(iface, &iface->tx.dcis[i]);
         if (status != UCS_OK) {
             goto err;
         }
