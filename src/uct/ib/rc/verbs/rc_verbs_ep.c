@@ -252,7 +252,7 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
     UCT_RC_CHECK_AM_SHORT(id, length, iface->config.max_inline);
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
     uct_rc_verbs_iface_fill_inl_am_sge(iface, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
@@ -276,7 +276,7 @@ ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 
     UCT_CHECK_AM_ID(id);
 
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
     UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                       id, uct_rc_am_hdr_fill, uct_rc_hdr_t,
@@ -309,7 +309,7 @@ ucs_status_t uct_rc_verbs_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *he
     UCT_RC_CHECK_AM_ZCOPY(id, header_length, uct_iov_total_length(iov, iovcnt),
                           iface->config.short_desc_size,
                           iface->super.super.config.seg_size);
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
+    UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
 
     UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(&iface->super, &iface->short_desc_mp,
@@ -461,7 +461,7 @@ ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
     iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
     /* Reset CI to prevent cq_available overrun on ep_destroy */
     ep->txcnt.ci = ep->txcnt.pi;
-    uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, 0);
 
     return iface->super.ops->set_ep_failed(&iface->super, &ep->super.super.super,
                                            status);

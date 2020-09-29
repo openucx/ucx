@@ -935,7 +935,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     ucs_debug("ep (%p) is destroyed with %d outstanding ops",
               self, (int16_t)iface->super.super.config.tx_qp_len -
               uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
-    uct_rc_txqp_purge_outstanding(&iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED, 1);
+    uct_rc_txqp_purge_outstanding(&iface->super.super,
+                                  &iface->tx.dcis[self->dci].txqp,
+                                  UCS_ERR_CANCELED, 1);
     iface->tx.dcis[self->dci].ep = NULL;
 }
 
@@ -1281,7 +1283,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
-    uct_rc_txqp_purge_outstanding(txqp, ep_status, 0);
+    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, 0);
 
     /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
        is not updated for the error cqe and all outstanding wqes*/
