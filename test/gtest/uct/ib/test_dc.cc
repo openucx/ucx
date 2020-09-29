@@ -84,11 +84,11 @@ protected:
         entity *e;
     } comp;
 
-    static void uct_comp_cb(uct_completion_t *uct_comp, ucs_status_t status)
+    static void uct_comp_cb(uct_completion_t *uct_comp)
     {
         struct dcs_comp *comp = (struct dcs_comp *)uct_comp;
 
-        EXPECT_UCS_OK(status);
+        EXPECT_UCS_OK(uct_comp->status);
 
         comp->e->destroy_eps();
     }

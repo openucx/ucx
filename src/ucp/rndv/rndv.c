@@ -543,7 +543,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
                                        status);
         if (rndv_req->send.state.dt.offset == rndv_req->send.length) {
             if (rndv_req->send.state.uct_comp.count == 0) {
-                rndv_req->send.state.uct_comp.func(&rndv_req->send.state.uct_comp, status);
+                uct_completion_update_status(&rndv_req->send.state.uct_comp,
+                                             status);
+                rndv_req->send.state.uct_comp.func(&rndv_req->send.state.uct_comp);
             }
             return UCS_OK;
         } else if (!UCS_STATUS_IS_ERR(status)) {
@@ -569,18 +571,18 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     }
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self, status),
-                      uct_completion_t *self, ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self),
+                      uct_completion_t *self)
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t,
                                                send.state.uct_comp);
 
     if (rndv_req->send.state.dt.offset == rndv_req->send.length) {
-        ucp_rndv_complete_rma_get_zcopy(rndv_req, status);
+        ucp_rndv_complete_rma_get_zcopy(rndv_req, self->status);
     }
 }
 
-static void ucp_rndv_put_completion(uct_completion_t *self, ucs_status_t status)
+static void ucp_rndv_put_completion(uct_completion_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t,
                                            send.state.uct_comp);
@@ -714,8 +716,8 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self, status),
-                      uct_completion_t *self, ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
+                      uct_completion_t *self)
 {
     ucp_request_t *freq              = ucs_container_of(self, ucp_request_t,
                                                         send.state.uct_comp);
@@ -867,8 +869,8 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, ucs_ptr_map_key_t rreq_id,
     return ucp_request_send(freq, 0);
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self, status),
-                      uct_completion_t *self, ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self),
+                      uct_completion_t *self)
 {
     ucp_request_t *freq     = ucs_container_of(self, ucp_request_t,
                                                send.state.uct_comp);
@@ -1405,7 +1407,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_put_zcopy, (self),
                                    status);
     if (sreq->send.state.dt.offset == sreq->send.length) {
         if (sreq->send.state.uct_comp.count == 0) {
-            sreq->send.state.uct_comp.func(&sreq->send.state.uct_comp, status);
+            uct_completion_update_status(&sreq->send.state.uct_comp, status);
+            sreq->send.state.uct_comp.func(&sreq->send.state.uct_comp);
         }
         return UCS_OK;
     } else if (!UCS_STATUS_IS_ERR(status)) {
@@ -1423,11 +1426,12 @@ static void ucp_rndv_am_zcopy_send_req_complete(ucp_request_t *req,
     ucp_request_complete_send(req, status);
 }
 
-static void ucp_rndv_am_zcopy_completion(uct_completion_t *self,
-                                         ucs_status_t status)
+static void ucp_rndv_am_zcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t,
                                            send.state.uct_comp);
+    ucs_status_t status = self->status;
+
     if (sreq->send.state.dt.offset == sreq->send.length) {
         ucp_rndv_am_zcopy_send_req_complete(sreq, status);
     } else if (status != UCS_OK) {
@@ -1463,10 +1467,11 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
                                  ucp_rndv_am_zcopy_send_req_complete, 1);
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_rndv_send_frag_put_completion, (self, status),
-                      uct_completion_t *self, ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(ucp_rndv_send_frag_put_completion, (self),
+                      uct_completion_t *self)
 {
-    ucp_request_t *freq = ucs_container_of(self, ucp_request_t, send.state.uct_comp);
+    ucp_request_t *freq = ucs_container_of(self, ucp_request_t,
+                                           send.state.uct_comp);
     ucp_request_t *req  = freq->send.rndv_put.sreq;
 
     /* release memory descriptor */
@@ -1485,10 +1490,11 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_send_frag_put_completion, (self, status),
     ucp_request_put(freq);
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_rndv_put_pipeline_frag_get_completion, (self, status),
-                      uct_completion_t *self, ucs_status_t status)
+UCS_PROFILE_FUNC_VOID(ucp_rndv_put_pipeline_frag_get_completion, (self),
+                      uct_completion_t *self)
 {
-    ucp_request_t *freq  = ucs_container_of(self, ucp_request_t, send.state.uct_comp);
+    ucp_request_t *freq  = ucs_container_of(self, ucp_request_t,
+                                            send.state.uct_comp);
     ucp_request_t *fsreq = freq->send.rndv_get.rreq;
 
     /* get completed on memtype endpoint to stage on host. send put request to receiver*/

@@ -103,26 +103,24 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
     return UCS_INPROGRESS;
 }
 
-static void ucp_rma_request_bcopy_completion(uct_completion_t *self,
-                                             ucs_status_t status)
+static void ucp_rma_request_bcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
 
     if (ucs_likely(req->send.length == req->send.state.dt.offset)) {
-        ucp_request_complete_send(req, status);
+        ucp_request_complete_send(req, self->status);
     }
 }
 
-static void ucp_rma_request_zcopy_completion(uct_completion_t *self,
-                                             ucs_status_t status)
+static void ucp_rma_request_zcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
 
     if (ucs_likely(req->send.length == req->send.state.dt.offset)) {
         ucp_request_send_buffer_dereg(req);
-        ucp_request_complete_send(req, status);
+        ucp_request_complete_send(req, self->status);
     }
 }
 

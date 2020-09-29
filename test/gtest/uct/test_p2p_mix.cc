@@ -22,9 +22,9 @@ ucs_status_t uct_p2p_mix_test::am_callback(void *arg, void *data, size_t length,
     return UCS_OK;
 }
 
-void uct_p2p_mix_test::completion_callback(uct_completion_t *comp, ucs_status_t status)
+void uct_p2p_mix_test::completion_callback(uct_completion_t *comp)
 {
-    EXPECT_UCS_OK(status);
+    EXPECT_UCS_OK(comp->status);
 }
 
 template <typename T, uct_atomic_op_t OP>

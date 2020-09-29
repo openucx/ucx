@@ -3340,6 +3340,23 @@ ucs_status_t uct_listener_query(uct_listener_h listener,
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief Update status of UCT completion handle.
+ *
+ * @param comp   [in]         Completion handle to update.
+ * @param status [in]         Status to update @a comp handle.
+ */
+static UCS_F_ALWAYS_INLINE
+void uct_completion_update_status(uct_completion_t *comp, ucs_status_t status)
+{
+    if (ucs_unlikely(status != UCS_OK) && (comp->status == UCS_OK)) {
+        /* store first failure status */
+        comp->status = status;
+    }
+}
+
+
+/**
  * @example uct_hello_world.c
  * UCT hello world client / server example utility.
  */

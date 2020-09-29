@@ -82,13 +82,12 @@ static uct_atomic_op_t ucp_uct_atomic_op_table[] = {
 };
 
 
-static void ucp_amo_completed_single(uct_completion_t *self,
-                                     ucs_status_t status)
+static void ucp_amo_completed_single(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
     ucp_trace_req(req, "invoking completion");
-    ucp_request_complete_send(req, status);
+    ucp_request_complete_send(req, self->status);
 }
 
 static UCS_F_ALWAYS_INLINE void

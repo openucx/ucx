@@ -567,12 +567,11 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
                                    rndv_rts_hdr, packed_len, 0);
 }
 
-static void ucp_tag_offload_rndv_zcopy_completion(uct_completion_t *self,
-                                          ucs_status_t status)
+static void ucp_tag_offload_rndv_zcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
-    ucp_proto_am_zcopy_req_complete(req, status);
+    ucp_proto_am_zcopy_req_complete(req, self->status);
 }
 
 ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)

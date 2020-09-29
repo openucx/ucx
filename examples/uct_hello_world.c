@@ -148,10 +148,10 @@ ucs_status_t do_am_bcopy(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
 }
 
 /* Completion callback for am_zcopy */
-void zcopy_completion_cb(uct_completion_t *self, ucs_status_t status)
+void zcopy_completion_cb(uct_completion_t *self)
 {
     zcopy_comp_t *comp = (zcopy_comp_t *)self;
-    assert((comp->uct_comp.count == 0) && (status == UCS_OK));
+    assert((comp->uct_comp.count == 0) && (self->status == UCS_OK));
     if (comp->memh != UCT_MEM_HANDLE_NULL) {
         uct_md_mem_dereg(comp->md, comp->memh);
     }

@@ -26,7 +26,7 @@ protected:
     static ucs_status_t am_callback(void *arg, void *data, size_t length,
                                     unsigned flags);
 
-    static void completion_callback(uct_completion_t *comp, ucs_status_t status);
+    static void completion_callback(uct_completion_t *comp);
 
     template <typename T, uct_atomic_op_t OP>
     ucs_status_t atomic_fop(const mapped_buffer &sendbuf,

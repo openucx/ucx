@@ -579,7 +579,7 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 
 int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
 
-void ucp_ep_flush_completion(uct_completion_t *self, ucs_status_t status);
+void ucp_ep_flush_completion(uct_completion_t *self);
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 

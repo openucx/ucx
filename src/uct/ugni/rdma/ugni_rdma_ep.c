@@ -238,14 +238,14 @@ ucs_status_t uct_ugni_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
     return uct_ugni_post_rdma(iface, ep, rdma);
 }
 
-static void uct_ugni_amo_unpack64(uct_completion_t *self, ucs_status_t status)
+static void uct_ugni_amo_unpack64(uct_completion_t *self)
 {
     uct_ugni_rdma_fetch_desc_t *fma_desc = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
 
     /* Call the original callback and skip padding */
     *(uint64_t *)fma_desc->user_buffer = *(uint64_t *)(fma_desc + 1);
-    uct_ugni_invoke_orig_comp(fma_desc, status);
+    uct_ugni_invoke_orig_comp(fma_desc, self->status);
 }
 
 ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64_t swap,
@@ -271,14 +271,14 @@ ucs_status_t uct_ugni_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, uint64
     return uct_ugni_post_fma(iface, ep, &fma_desc->super, UCS_INPROGRESS);
 }
 
-static void uct_ugni_amo_unpack32(uct_completion_t *self, ucs_status_t status)
+static void uct_ugni_amo_unpack32(uct_completion_t *self)
 {
     uct_ugni_rdma_fetch_desc_t *fma_desc = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
 
     /* Call the original callback and skip padding */
     *(uint32_t *)fma_desc->user_buffer = *(uint32_t *)(fma_desc + 1);
-    uct_ugni_invoke_orig_comp(fma_desc, status);
+    uct_ugni_invoke_orig_comp(fma_desc, self->status);
 }
 
 ucs_status_t uct_ugni_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare, uint32_t swap,
@@ -496,7 +496,7 @@ ucs_status_t uct_ugni_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
     }
 }
 
-static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, ucs_status_t status)
+static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self)
 {
     uct_ugni_rdma_fetch_desc_t *fma_desc = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
@@ -505,7 +505,7 @@ static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self, ucs_status_t sta
     fma_desc->super.unpack_cb(fma_desc->user_buffer, (char *)(fma_desc + 1) + fma_desc->padding,
                               fma_desc->super.desc.length - fma_desc->padding - fma_desc->tail);
 
-    uct_ugni_invoke_orig_comp(fma_desc, status);
+    uct_ugni_invoke_orig_comp(fma_desc, self->status);
 }
 
 static inline void uct_ugni_format_get_fma(uct_ugni_rdma_fetch_desc_t *fma_desc,
@@ -600,7 +600,7 @@ ucs_status_t uct_ugni_ep_get_bcopy(uct_ep_h tl_ep,
     return uct_ugni_post_fma(iface, ep, &fma_desc->super, UCS_INPROGRESS);
 }
 
-static void assemble_composed_unaligned(uct_completion_t *self, ucs_status_t status)
+static void assemble_composed_unaligned(uct_completion_t *self)
 {
     uct_ugni_rdma_fetch_desc_t *fma_head = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
@@ -616,7 +616,7 @@ static void assemble_composed_unaligned(uct_completion_t *self, ucs_status_t sta
                (char *)(fma_head + 1) + rdma->tail,
                fma_head->super.desc.length - (fma_head->tail + rdma->tail));
     }
-    uct_ugni_invoke_orig_comp(fma_head, status);
+    uct_ugni_invoke_orig_comp(fma_head, self->status);
 }
 
 static void free_composed_desc(void *arg)
