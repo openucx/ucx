@@ -66,7 +66,6 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->num_lanes        = 0;
     for (i = 0; i < UCP_MAX_LANES; ++i) {
         key->lanes[i].rsc_index    = UCP_NULL_RESOURCE;
-        key->lanes[i].proxy_lane   = UCP_NULL_LANE;
         key->lanes[i].lane_types   = 0;
         key->lanes[i].dst_md_index = UCP_NULL_RESOURCE;
     }
@@ -803,7 +802,7 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
 
 void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 {
-    ucp_lane_index_t lane, proxy_lane;
+    ucp_lane_index_t lane;
     uct_ep_h uct_ep;
 
     ucs_debug("ep %p: cleanup lanes", ep);
@@ -819,14 +818,6 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         uct_ep = ep->uct_eps[lane];
         if (uct_ep == NULL) {
-            continue;
-        }
-
-        proxy_lane = ucp_ep_get_proxy_lane(ep, lane);
-        if ((proxy_lane != UCP_NULL_LANE) && (proxy_lane != lane) &&
-            (ep->uct_eps[lane] == ep->uct_eps[proxy_lane]))
-        {
-            /* duplicate of another lane */
             continue;
         }
 
@@ -1039,7 +1030,6 @@ int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
                                 ucp_lane_index_t lane, int compare_types)
 {
     return (key1->lanes[lane].rsc_index    == key2->lanes[lane].rsc_index)    &&
-           (key1->lanes[lane].proxy_lane   == key2->lanes[lane].proxy_lane)   &&
            (key1->lanes[lane].dst_md_index == key2->lanes[lane].dst_md_index) &&
            (key1->lanes[lane].path_index   == key2->lanes[lane].path_index)   &&
            ((key1->lanes[lane].lane_types  == key2->lanes[lane].lane_types) ||
@@ -1957,42 +1947,27 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
     ucp_context_h context = worker->context;
     uct_tl_resource_desc_t *rsc;
     ucp_rsc_index_t rsc_index;
-    ucp_lane_index_t proxy_lane;
     ucp_md_index_t dst_md_index;
     ucp_rsc_index_t cmpt_index;
     unsigned path_index;
     char *p, *endp;
-    char *desc_str;
     int prio;
 
     p          = buf;
     endp       = buf + max;
     rsc_index  = key->lanes[lane].rsc_index;
-    proxy_lane = key->lanes[lane].proxy_lane;
     rsc        = &context->tl_rscs[rsc_index].tl_rsc;
 
-    if ((proxy_lane == lane) || (proxy_lane == UCP_NULL_LANE)) {
-        if (key->lanes[lane].proxy_lane == lane) {
-            desc_str = " <proxy>";
-        } else {
-            desc_str = "";
-        }
-        path_index = key->lanes[lane].path_index;
-        snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d]%s %-*c-> ",
-                 lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index,
-                 context->tl_rscs[rsc_index].md_index, desc_str,
-                 20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name) + strlen(desc_str)),
-                 ' ');
-        p += strlen(p);
+    path_index = key->lanes[lane].path_index;
+    snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d] %-*c-> ",
+             lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index,
+             context->tl_rscs[rsc_index].md_index,
+             20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)),
+             ' ');
+    p += strlen(p);
 
-        if (addr_indices != NULL) {
-            snprintf(p, endp - p, "addr[%d].", addr_indices[lane]);
-            p += strlen(p);
-        }
-
-    } else {
-        snprintf(p, endp - p, "lane[%d]: proxy to lane[%d] %12c -> ", lane,
-                 proxy_lane, ' ');
+    if (addr_indices != NULL) {
+        snprintf(p, endp - p, "addr[%d].", addr_indices[lane]);
         p += strlen(p);
     }
 

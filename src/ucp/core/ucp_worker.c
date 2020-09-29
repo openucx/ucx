@@ -738,9 +738,8 @@ static ucs_status_t ucp_worker_iface_check_events_do(ucp_worker_iface_t *wiface,
         return UCS_OK;
     } else if (*progress_count == 0) {
         /* Arm the interface to wait for next event */
-        ucs_assert(wiface->attr.cap.event_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS);
-        status = uct_iface_event_arm(wiface->iface,
-                                     UCP_WORKER_UCT_RECV_EVENT_ARM_FLAGS);
+        ucs_assert(wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_RECV);
+        status = uct_iface_event_arm(wiface->iface, UCT_EVENT_RECV);
         if (status == UCS_OK) {
             ucs_trace("armed iface %p", wiface->iface);
 
@@ -1340,7 +1339,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
 
         if (context->config.ext.adaptive_progress &&
-            (wiface->attr.cap.event_flags & UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS))
+            (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_RECV))
         {
             ucp_worker_iface_deactivate(wiface, 1);
         } else {

@@ -36,7 +36,7 @@ enum {
 
 /* Which iface event flags would be packed in the address */
 enum {
-    UCP_ADDRESS_IFACE_EVENT_FLAGS = UCP_WORKER_UCT_RECV_EVENT_CAP_FLAGS
+    UCP_ADDRESS_IFACE_EVENT_FLAGS = UCT_IFACE_FLAG_EVENT_RECV
 };
 
 
