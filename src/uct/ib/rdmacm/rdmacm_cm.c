@@ -139,13 +139,16 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     char dev_name[UCT_DEVICE_NAME_MAX];
     uct_ib_roce_version_info_t roce_info;
     unsigned address_pack_flags;
+    union ibv_gid gid;
+    int ret;
 
     /* get the qp attributes in order to modify the qp state.
      * the ah_attr fields from them are required to extract the device address
      * of the remote peer.
      */
     qp_attr.qp_state = IBV_QPS_RTR;
-    if (rdma_init_qp_attr(cm_id, &qp_attr, &qp_attr_mask)) {
+    ret              = rdma_init_qp_attr(cm_id, &qp_attr, &qp_attr_mask);
+    if (ret) {
         ucs_error("rdma_init_qp_attr (id=%p, qp_state=%d) failed: %m",
                   cm_id, qp_attr.qp_state);
         return UCS_ERR_IO_ERROR;
@@ -171,28 +174,41 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
         /* Ethernet address */
         ucs_assert(qp_attr.ah_attr.is_global);
+        gid                = qp_attr.ah_attr.grh.dgid;
         address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_ETH;
 
         /* pack the remote RoCE version as ANY assuming that rdmacm guarantees
          * that the remote peer is reachable to the local one */
         roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
         roce_info.addr_family = 0;
+    } else if (qp_attr.ah_attr.is_global) {
+        gid                = qp_attr.ah_attr.grh.dgid;
+        address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
+                             UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
     } else {
-        address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
-                             UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
+        /* For local IB address, assume the remote subnet prefix is the same
+         * and pack it to make reachability check pass*/
+        ret = ibv_query_gid(cm_id->verbs, cm_id->port_num,
+                            UCT_IB_MD_DEFAULT_GID_INDEX, &gid);
+        if (ret) {
+            ucs_error("ibv_query_gid(dev=%s port=%d index=%d) failed: %m",
+                      ibv_get_device_name(cm_id->verbs->device),
+                      cm_id->port_num, UCT_IB_MD_DEFAULT_GID_INDEX);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        address_pack_flags = UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
     }
 
-    addr_length = uct_ib_address_size(&qp_attr.ah_attr.grh.dgid,
-                                      address_pack_flags);
+    addr_length = uct_ib_address_size(&gid, address_pack_flags);
     dev_addr    = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
         ucs_error("failed to allocate IB device address");
         return UCS_ERR_NO_MEMORY;
     }
 
-    uct_ib_address_pack(&qp_attr.ah_attr.grh.dgid,
-                        qp_attr.ah_attr.dlid, address_pack_flags, &roce_info,
-                        dev_addr);
+    uct_ib_address_pack(&gid, qp_attr.ah_attr.dlid, address_pack_flags,
+                        &roce_info, dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t *)dev_addr;
     *dev_addr_len_p = addr_length;
