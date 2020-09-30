@@ -43,16 +43,25 @@ typedef struct ucp_mem_desc {
     ucp_mem_h                     memh;
 } ucp_mem_desc_t;
 
-
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
 void ucp_reg_mpool_free(ucs_mpool_t *mp, void *chunk);
 
 void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 
-ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+typedef struct ucp_mem_type_mem_desc {
+    void                          *address;     /* Region start address */
+    size_t                        length;       /* Region length */
+    size_t                        frag_size;    /* Size of individual fragment */
+    unsigned                      num_frags;    /* total frags added */
+    ucp_mem_h                     memh;
+} ucp_mem_type_mem_desc_t;
 
-void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
+ucs_status_t ucp_mem_type_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p,
+                                            void **chunk_p);
+void ucp_mem_type_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
+void ucp_mem_type_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
+
 
 /**
  * Update memory registration to a specified set of memory domains.

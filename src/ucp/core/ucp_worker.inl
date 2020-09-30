@@ -35,6 +35,23 @@ ucp_worker_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
 KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t,
            1, ucp_worker_rkey_config_hash_func, ucp_worker_rkey_config_is_equal);
 
+static UCS_F_ALWAYS_INLINE khint_t
+ucp_worker_mpool_hash_func(ucp_worker_mpool_key_t mpool_key)
+{
+    return (khint_t)mpool_key.mem_type ^ (mpool_key.device_id << 16);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_mpool_key_is_equal(ucp_worker_mpool_key_t mpool_key1,
+                              ucp_worker_mpool_key_t mpool_key2)
+{
+    return (mpool_key1.device_id == mpool_key2.device_id) &&
+           (mpool_key1.mem_type  == mpool_key2.mem_type);
+}
+
+KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t*,
+           1, ucp_worker_mpool_hash_func, ucp_worker_mpool_key_is_equal);
+
 /**
  * @return Worker name
  */
