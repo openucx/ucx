@@ -166,8 +166,7 @@ const unsigned IoDemoRandom::_C = 12345U;
 const unsigned IoDemoRandom::_M = 0x7fffffffU;
 
 class P2pDemoCommon : public UcxContext {
-protected:
-
+public:
     /* data validation header */
     typedef struct __attribute__ ((packed)) {
         uint16_t    chk_sum;
@@ -186,6 +185,7 @@ protected:
         size_t      data_size;
     } iomsg_t;
 
+protected:
     typedef enum {
         XFER_TYPE_SEND,
         XFER_TYPE_RECV
@@ -282,8 +282,8 @@ protected:
         }
 
         inline uint16_t calc_chksum() const {
-            uint16_t chk_sum = ucs_crc16(tr_hdr(), (uintptr_t)tr_hdr() -
-                                                   (uintptr_t)_iov[0]->buffer());
+            uint16_t chk_sum = ucs_crc16(tr_hdr(),
+                                         _iov[0]->size() - sizeof(chk_hdr_t));
 
             for (size_t i = 1; i < _iov.size(); ++i) {
                 chk_sum ^= ucs_crc16(_iov[i]->buffer(), _iov[i]->size());
@@ -331,7 +331,7 @@ protected:
     public:
         IoMessage(size_t io_msg_size, MemoryPool<IoMessage>& pool) :
             _buffer(malloc(io_msg_size)), _pool(pool),
-            _io_msg_size(std::max(io_msg_size, sizeof(iomsg_t))) {
+            _io_msg_size(io_msg_size) {
 
             if (_buffer == NULL) {
                 throw std::bad_alloc();
@@ -341,7 +341,6 @@ protected:
         void init(io_op_t op, uint32_t sn, size_t data_size, bool validate) {
             iomsg_t *m = reinterpret_cast<iomsg_t *>(_buffer);
 
-            assert(sizeof(*m) <= _io_msg_size);
             m->tr.sn     = sn;
             m->op        = op;
             m->data_size = data_size;
@@ -428,10 +427,10 @@ protected:
         /* send IO_READ_COMP as a data since the transaction must be matched
          * by sn on receiver side */
         if (msg->msg()->op == IO_READ_COMP) {
-            return conn->send_data(msg->buffer(), sizeof(iomsg_t),
+            return conn->send_data(msg->buffer(), opts().iomsg_size,
                                    msg->msg()->tr.sn, msg);
         } else {
-            return conn->send_io_message(msg->buffer(), sizeof(iomsg_t), msg);
+            return conn->send_io_message(msg->buffer(), opts().iomsg_size, msg);
         }
     }
 
@@ -468,23 +467,27 @@ protected:
         return (data_size + chunk_size - 1) / chunk_size;
     }
 
-    static bool validate(uint32_t sn, const BufferIov &iov) {
-        bool pass = true;
-
+    static void validate(uint32_t sn, const BufferIov &iov) {
         if (sn != iov.sn()) {
-            pass = false;
-            LOG << "detected transaction mismatch " << sn << " != " << iov.sn();
+            LOG << "ERROR: transaction mismatch " << sn << " != " << iov.sn();
+            abort();
         }
 
         /* recalc check sum of all fragments and compare to stored value */
         uint16_t recalc_chksum = iov.calc_chksum();
         if (iov.chksum() != recalc_chksum) {
-            pass = false;
-            LOG << "detected data corruption " << iov.sn() << " != "
+            LOG << "ERROR: data corruption " << iov.chksum() << " != "
                 << recalc_chksum;
+            abort();
         }
+    }
 
-        return pass;
+    void validate(const iomsg_t *msg) {
+        if (msg->hdr.chk_sum !=
+            ucs_crc16(&msg->tr, sizeof(*msg) - sizeof(msg->hdr))) {
+            LOG << "ERROR: corrupted io message";
+            abort();
+        }
     }
 
 protected:
@@ -521,9 +524,7 @@ public:
 
             if (status == UCS_OK) {
                 if (_server->opts().validate) {
-                    if (!validate(_sn, *_iov)) {
-                        abort();
-                    }
+                    validate(_sn, *_iov);
                 }
                 _server->send_io_message(_conn, IO_WRITE_COMP, _sn, 0);
             }
@@ -609,6 +610,10 @@ public:
                     << msg->tr.sn << " data size " << msg->data_size
                     << " conn " << conn;
 
+        if (opts().validate) {
+            validate(msg);
+        }
+
         if (msg->op == IO_READ) {
             handle_io_read_request(conn, msg);
         } else if (msg->op == IO_WRITE) {
@@ -656,9 +661,7 @@ public:
 
             ++(*_io_counter);
             if (_validate && (status == UCS_OK)) {
-                if (!validate(_sn, *_iov)) {
-                    abort();
-                }
+                validate(_sn, *_iov);
             }
 
             _iov->release();
@@ -1144,6 +1147,11 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             break;
         case 'r':
             test_opts->iomsg_size = strtol(optarg, NULL, 0);
+            if (test_opts->iomsg_size < sizeof(P2pDemoCommon::iomsg_t)) {
+                std::cout << "io message size must be >= "
+                          << sizeof(P2pDemoCommon::iomsg_t) << std::endl;
+                return -1;
+            }
             break;
         case 'd':
             if (set_data_size(optarg, test_opts) == -1) {
