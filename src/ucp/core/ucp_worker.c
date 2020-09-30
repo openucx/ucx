@@ -464,19 +464,16 @@ static uct_ep_t ucp_failed_tl_ep = {
 static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 {
     ucp_worker_err_handle_arg_t *err_handle_arg = arg;
-    ucp_worker_h worker                         = err_handle_arg->worker;
     ucp_ep_h ucp_ep                             = err_handle_arg->ucp_ep;
-    uct_ep_h uct_ep                             = err_handle_arg->uct_ep;
     ucs_status_t status                         = err_handle_arg->status;
-    ucp_lane_index_t failed_lane                = err_handle_arg->failed_lane;
+    ucp_worker_h worker                         = ucp_ep->worker;
     ucp_lane_index_t lane;
     ucp_ep_config_key_t key;
     ucp_request_t *close_req;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_debug("ep %p: handle error on lane[%d]=%p: %s",
-              ucp_ep, failed_lane, uct_ep, ucs_status_string(status));
+    ucs_debug("ep %p: handle error: %s", ucp_ep, ucs_status_string(status));
 
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FAILED);
 
@@ -596,11 +593,8 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
         goto out;
     }
 
-    err_handle_arg->worker      = worker;
     err_handle_arg->ucp_ep      = ucp_ep;
-    err_handle_arg->uct_ep      = uct_ep;
     err_handle_arg->status      = status;
-    err_handle_arg->failed_lane = lane;
 
     /* invoke the rest of the error handling flow from the main thread */
     uct_worker_progress_register_safe(worker->uct,

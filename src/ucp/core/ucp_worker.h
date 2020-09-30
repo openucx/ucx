@@ -272,10 +272,7 @@ typedef struct ucp_worker {
  * UCP worker argument for the error handling callback
  */
 typedef struct ucp_worker_err_handle_arg {
-    ucp_worker_h     worker;
     ucp_ep_h         ucp_ep;
-    uct_ep_h         uct_ep;
-    ucp_lane_index_t failed_lane;
     ucs_status_t     status;
 } ucp_worker_err_handle_arg_t;
 
