@@ -554,6 +554,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                               &config->super, init_attr);
 
     self->tx.cq_available           = init_attr->tx_cq_len - 1;
+    self->tx.cq_free                = 0;
     self->rx.srq.available          = 0;
     self->rx.srq.quota              = 0;
     self->config.tx_qp_len          = config->super.tx.queue_len;
@@ -576,6 +577,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
 #if UCS_ENABLE_ASSERT
     self->config.tx_cq_len          = init_attr->tx_cq_len;
 #endif
+    self->tx.in_pending             = 0;
     max_ib_msg_size                 = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
 
     if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
