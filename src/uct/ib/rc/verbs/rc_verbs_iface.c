@@ -106,7 +106,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
             continue;
         }
 
-        count = uct_rc_verbs_txcq_get_comp_count(&wc[i], &ep->super.txqp);
+        count = wc[i].wr_id - ep->txcnt.ci;
         ucs_trace_poll("rc_verbs iface %p tx_wc wrid 0x%lx ep %p qpn 0x%x count %d",
                        iface, wc[i].wr_id, ep, wc[i].qp_num, count);
         ep->txcnt.ci += count;

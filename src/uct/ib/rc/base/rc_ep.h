@@ -80,9 +80,12 @@ enum {
     /* tx_moderation == 0 for TLs which don't support it */ \
     if (ucs_unlikely((_iface)->tx.cq_available <= \
         (signed)(_iface)->config.tx_moderation)) { \
-        if (uct_rc_ep_check_cqe(_iface, _ep) != UCS_OK) { \
+        if (!uct_rc_iface_have_tx_cqe_avail(_iface)) { \
+            UCS_STATS_UPDATE_COUNTER((_iface)->stats, UCT_RC_IFACE_STAT_NO_CQE, 1); \
+            UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, UCT_EP_STAT_NO_RES, 1); \
             return _ret; \
         } \
+        (_ep)->txqp.unsignaled = RC_UNSIGNALED_INF; \
     }
 
 #define UCT_RC_CHECK_TXQP_RET(_iface, _ep, _ret) \
@@ -178,13 +181,6 @@ struct uct_rc_txqp {
     /* RC_UNSIGNALED_INF value forces signaled in moderation logic when
      * CQ credits are close to zero (less tx_moderation value) */
     uint16_t            unsignaled;
-    /* Saved unsignaled value before it was set to inf to have possibility
-     * to return correct amount of CQ credits on TX completion */
-    uint16_t            unsignaled_store;
-    /* If unsignaled was stored several times to aggregative value, let's return
-     * credits only when this counter == 0 because it's impossible to return
-     * exact value on each signaled completion */
-    uint16_t            unsignaled_store_count;
     int16_t             available;
     UCS_STATS_NODE_DECLARE(stats)
 };
@@ -253,8 +249,6 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                              unsigned flags);
-
-ucs_status_t uct_rc_ep_check_cqe(uct_rc_iface_t *iface, uct_rc_ep_t *ep);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op,
                                                    const void *resp);
