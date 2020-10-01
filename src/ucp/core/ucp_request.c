@@ -408,7 +408,9 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
 void ucp_request_handle_send_error(ucp_request_t *req, ucs_status_t status)
 {
-    if (req->send.state.uct_comp.func) {
+    if (req->send.uct.func == ucp_proto_progress_am_single) {
+        req->send.proto.comp_cb(req);
+    } else if (req->send.state.uct_comp.func) {
         /* fast-forward the sending state to complete the operation when last
          * network completion callback is called
          */

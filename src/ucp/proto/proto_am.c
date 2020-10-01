@@ -78,10 +78,12 @@ ucs_status_t ucp_proto_progress_am_single(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_single(self, req->send.proto.am_id,
                                            ucp_proto_pack,
                                            ucp_proto_max_packed_size());
-    if (status == UCS_OK) {
-        req->send.proto.comp_cb(req);
+    ucs_assert(status != UCS_INPROGRESS);
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return UCS_ERR_NO_RESOURCE;
     }
-    return status;
+    req->send.proto.comp_cb(req);
+    return UCS_OK;
 }
 
 void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
