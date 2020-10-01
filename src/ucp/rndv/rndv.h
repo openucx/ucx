@@ -9,6 +9,7 @@
 
 #include <ucp/core/ucp_types.h>
 #include <ucp/proto/proto_am.h>
+#include <ucs/datastruct/ptr_map.h>
 
 
 enum ucp_rndv_rts_flags {
@@ -63,5 +64,8 @@ ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq);
 void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                       const void *rkey_buf);
+
+void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
+                           ucs_ptr_map_key_t remote_req_id, ucs_status_t status);
 
 #endif

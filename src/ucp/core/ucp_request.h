@@ -87,7 +87,9 @@ enum {
     UCP_RECV_DESC_FLAG_EAGER_LAST     = UCS_BIT(5), /* Last fragment of eager tag message.
                                                        Used by tag offload protocol. */
     UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(6), /* Rendezvous request */
-    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(7)  /* Descriptor was allocated with malloc
+    UCP_RECV_DESC_FLAG_RNDV_STARTED   = UCS_BIT(7), /* Rendezvous receive was initiated
+                                                       (in AM API) */
+    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(8)  /* Descriptor was allocated with malloc
                                                        and must be freed, not returned to the
                                                        memory pool or UCT */
 };
@@ -291,6 +293,8 @@ struct ucp_request {
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
+            ssize_t               remaining;  /* How much more data
+                                               * to be received */
 
             union {
                 struct {
@@ -299,8 +303,6 @@ struct ucp_request {
                     uint64_t                    sn;         /* Tag match sequence */
                     ucp_tag_recv_nbx_callback_t cb;         /* Completion callback */
                     ucp_tag_recv_info_t         info;       /* Completion info to fill */
-                    ssize_t                     remaining;  /* How much more data
-                                                             * to be received */
 
                     /* Can use union, because rdesc is used in expected flow,
                      * while non_contig_buf is used in unexpected flow only. */

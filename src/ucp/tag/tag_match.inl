@@ -244,7 +244,7 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
      * subtraction of already received data.
      * NOTE: total length of unexpected eager offload message is not known
      * until last fragment arrives, so it is initialized to SIZE_MAX. */
-    offset = SIZE_MAX - req->recv.tag.remaining;
+    offset = SIZE_MAX - req->recv.remaining;
 
     if (ucs_unlikely(req->status != UCS_OK)) {
         goto out;
@@ -286,7 +286,11 @@ ucp_request_recv_offload_data(ucp_request_t *req, const void *data,
     req->status = UCS_OK;
 
 out:
-    req->recv.tag.remaining -= length;
+    ucs_assertv(req->recv.remaining >= length,
+                "req->recv.remaining %zu, length %zu",
+                req->recv.remaining, length);
+
+    req->recv.remaining -= length;
 
     if (!(recv_flags & UCP_RECV_DESC_FLAG_EAGER_LAST)) {
         return UCS_INPROGRESS;

@@ -107,7 +107,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
         } else {
             eagerf_hdr                = data;
             req->recv.tag.info.length =
-            req->recv.tag.remaining   = eagerf_hdr->total_len;
+            req->recv.remaining       = eagerf_hdr->total_len;
 
             status = ucp_tag_request_process_recv_data(req,
                                                        UCS_PTR_BYTE_OFFSET(data, hdr_len),

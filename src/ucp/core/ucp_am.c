@@ -112,6 +112,24 @@ size_t ucp_am_max_header_size(ucp_worker_h worker)
     return ucs_min(max_am_header, UINT32_MAX);
 }
 
+static void ucp_am_rndv_send_ats(ucp_worker_h worker,
+                                 ucp_am_rndv_rts_hdr_t *rts,
+                                 ucs_status_t status)
+{
+    ucp_request_t *req;
+
+    req = ucp_request_get(worker);
+    if (ucs_unlikely(req == NULL)) {
+        ucs_error("failed to allocate request for AM RNDV ATS");
+        return;
+    }
+
+    req->send.ep = ucp_worker_get_ep_by_id(worker, rts->super.sreq.ep_id);
+    req->flags   = 0;
+
+    ucp_rndv_req_send_ats(req, NULL, rts->super.sreq.req_id, status);
+}
+
 UCS_PROFILE_FUNC_VOID(ucp_am_data_release, (worker, data),
                       ucp_worker_h worker, void *data)
 {
@@ -123,6 +141,18 @@ UCS_PROFILE_FUNC_VOID(ucp_am_data_release, (worker, data),
          * originally allocated pointer resides. */
         ucs_free((char*)rdesc - sizeof(ucp_am_first_hdr_t));
         return;
+    }
+
+    if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV) {
+        if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV_STARTED) {
+            ucs_error("rndv receive is initiated on desc %p and cannot be released ",
+                      data);
+            return;
+        }
+
+        /* This data is not needed (rndv receive was not initiated), send ATS
+         * back to the sender to complete its send request. */
+        ucp_am_rndv_send_ats(worker, data, UCS_OK);
     }
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -664,6 +694,7 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.datatype                   = datatype;
     req->send.mem_type                   = UCS_MEMORY_TYPE_HOST;
     req->send.lane                       = ep->am_lane;
+    req->send.pending_lane               = UCP_NULL_LANE;
 
     ucp_request_send_state_init(req, datatype, count);
     req->send.length = ucp_dt_length(req->send.datatype, count,
@@ -678,6 +709,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
 {
     unsigned user_header_length = req->send.msg_proto.am.header_length;
     ucp_context_t *context      = req->send.ep->worker->context;
+    ucp_ep_config_t *ep_config  = ucp_ep_config(req->send.ep);
     size_t rndv_rma_thresh, rndv_am_thresh, rndv_thresh;
     size_t zcopy_thresh;
     ssize_t max_short;
@@ -693,7 +725,8 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
     }
 
     /* TODO: Add support for UCP_AM_SEND_EAGER/RNDV flags */
-    ucp_request_param_rndv_thresh(req, param, &rndv_rma_thresh,
+    ucp_request_param_rndv_thresh(req, param, &ep_config->rndv.rma_thresh,
+                                  &ep_config->rndv.am_thresh, &rndv_rma_thresh,
                                   &rndv_am_thresh);
     rndv_thresh = ucs_min(rndv_rma_thresh, rndv_am_thresh);
 
@@ -865,6 +898,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
                  size_t count, const ucp_request_param_t *param)
 {
     ucp_am_rndv_rts_hdr_t *rts = data_desc;
+    ucp_recv_desc_t *desc      = (ucp_recv_desc_t*)data_desc - 1;
     ucs_status_ptr_t ret;
     ucp_request_t *req;
     ucp_datatype_t datatype;
@@ -874,10 +908,21 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     ucs_assert(rts->super.flags & UCP_RNDV_RTS_FLAG_AM);
+    ucs_assert(desc->flags & UCP_RECV_DESC_FLAG_RNDV);
+
+    if (ucs_unlikely(desc->flags & UCP_RECV_DESC_FLAG_RNDV_STARTED)) {
+        ucs_error("ucp_am_recv_data_nbx was already called for desc %p",
+                  data_desc);
+        ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+        goto out;
+    }
 
     req = ucp_request_get_param(worker, param,
                                 {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                  goto out;});
+
+    /* Mark that rendezvous is started on this data descriptor */
+    desc->flags       |= UCP_RECV_DESC_FLAG_RNDV_STARTED;
 
     /* Initialize receive request */
     datatype           = ucp_request_param_datatype(param);
@@ -1208,15 +1253,15 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     ucp_am_rndv_rts_hdr_t *rts = data;
     ucp_worker_h worker        = arg;
     uint16_t am_id             = rts->am.am_id;
+    ucp_recv_desc_t *desc      = NULL;
     ucp_am_entry_t *am_cb;
-    ucp_recv_desc_t *desc;
     ucp_am_recv_param_t param;
     ucs_status_t status, desc_status;
     void *hdr;
 
     if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
-        /* TODO: send ATS */
-        return UCS_OK;
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_send_ats;
     }
 
     if (rts->am.header_length != 0) {
@@ -1227,11 +1272,12 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     }
 
     desc_status = ucp_recv_desc_init(worker, data, length, 0, tl_flags, 0,
-                                     0, 0, &desc);
+                                     UCP_RECV_DESC_FLAG_RNDV, 0, &desc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(desc_status))) {
         ucs_error("worker %p could not allocate descriptor for active"
                   " message RTS on callback %u", worker, am_id);
-        return UCS_OK; /* release UCT desc, TODO: Send ATS */
+        status = UCS_ERR_NO_MEMORY;
+        goto out_send_ats;
     }
 
     am_cb           = &ucs_array_elem(&worker->am, am_id);
@@ -1240,13 +1286,28 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
                                           rts->super.sreq.ep_id);
     status          = am_cb->cb(am_cb->context, hdr, rts->am.header_length,
                                 desc + 1, rts->super.size, &param);
-    if (status != UCS_INPROGRESS) {
-        /* TODO: Check that recv was not called and if not, send
-         * reject to the peer. */
-        return UCS_OK;
+    if ((status == UCS_INPROGRESS) ||
+        (desc->flags & UCP_RECV_DESC_FLAG_RNDV_STARTED)) {
+        /* User either wants to save descriptor for later use or initiated
+         * rendezvous receive (by ucp_am_recv_data_nbx) in the callback. */
+        ucs_assert(!UCS_STATUS_IS_ERR(status));
+        return desc_status;
     }
 
-    return desc_status;
+    /* User does not want to receive the data, fall through to send ATS. */
+
+out_send_ats:
+    /* Some error occured or user does not need this data. Send ATS back to the
+     * sender to complete its send request. */
+    ucp_am_rndv_send_ats(worker, rts, status);
+
+    if ((desc != NULL) && !(desc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
+        /* Release descriptor if it was allocated on UCP mpool, otherwise it
+         * will be freed by UCT, when UCS_OK is returned from this func. */
+        ucp_recv_desc_release(desc);
+    }
+
+    return UCS_OK;
 }
 
 UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE,
