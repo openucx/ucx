@@ -73,6 +73,11 @@ MAKEP="make -j${parallel_jobs}"
 export AUTOMAKE_JOBS=$parallel_jobs
 
 #
+# Set initial port number for client/server applications
+#
+server_port=$((10000 + (1000 * EXECUTOR_NUMBER)))
+
+#
 # Override maven repository path, to cache the downloaded packages accross tests
 #
 export maven_repo=${WORKSPACE}/.deps
@@ -752,8 +757,8 @@ run_client_server_app() {
 	kill_server=$4
 	error_emulation=$5
 
-	server_port=$((10000 + EXECUTOR_NUMBER))
 	server_port_arg="-p $server_port"
+	server_port=$((server_port + 1))
 
 	affinity_server=$(slice_affinity 0)
 	affinity_client=$(slice_affinity 1)
@@ -781,9 +786,8 @@ run_client_server_app() {
 	if [ $kill_server -eq 1 ]
 	then
 		kill -9 ${server_pid}
-	else
-		wait ${server_pid}
 	fi
+	wait ${server_pid} || true
 }
 
 run_hello() {
