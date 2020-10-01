@@ -256,12 +256,14 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   void *arg)
 {
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_rc_iface_t *iface UCS_V_UNUSED;
+    uct_rc_ep_t *ep        = ucs_container_of(group, uct_rc_ep_t, arb_group);;
+    uct_rc_iface_t *iface  = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
     ucs_status_t status;
-    uct_rc_ep_t *ep;
 
     ucs_trace_data("progressing pending request %p", req);
+    iface->tx.in_pending = 1;
     status = req->func(req);
+    iface->tx.in_pending = 0;
     ucs_trace_data("status returned from progress pending: %s",
                    ucs_status_string(status));
 
@@ -270,8 +272,6 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
     } else {
-        ep    = ucs_container_of(group, uct_rc_ep_t, arb_group);
-        iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
         if (!uct_rc_iface_has_tx_resources(iface)) {
             /* No iface resources */
             return UCS_ARBITER_CB_RESULT_STOP;

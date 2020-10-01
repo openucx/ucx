@@ -1149,8 +1149,8 @@ static int uct_rc_mlx5_common_clean_tx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_common_clean_tx_cq_ctx_t *ctx = arg;
 
     if (cqe != NULL) {
-        uct_rc_mlx5_common_update_tx_res(&iface->super, ctx->txwq, ctx->txqp,
-                                         htons(cqe->wqe_counter));
+        uct_rc_mlx5_common_free_tx_res(&iface->super, ctx->txwq, ctx->txqp,
+                                       htons(cqe->wqe_counter));
     }
 
     if (uct_rc_txqp_available(ctx->txqp) == ctx->txwq->bb_max) {

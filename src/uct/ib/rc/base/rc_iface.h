@@ -207,6 +207,7 @@ struct uct_rc_iface {
          * In case of verbs TL we use QWE number, so 1 post always takes 1
          * credit */
         signed                  cq_available;
+        signed                  cq_free;
         ssize_t                 reads_available;
         ssize_t                 reads_completed;
         uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
@@ -214,6 +215,7 @@ struct uct_rc_iface {
         uct_rc_iface_send_op_t  *ops_buffer;
         uct_ib_fence_info_t     fi;
         int                     arb_cbq_id; /* callback id of arbiter dispatch */
+        int                     in_pending;
     } tx;
 
     struct {

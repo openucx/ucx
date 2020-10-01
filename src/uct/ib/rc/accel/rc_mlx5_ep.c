@@ -22,6 +22,11 @@
 #include "rc_mlx5.inl"
 
 
+static void uct_rc_iface_check_pending(uct_rc_iface_t *iface, uct_rc_ep_t *ep)
+{
+    ucs_assert(iface->tx.in_pending || ucs_arbiter_group_is_empty(&ep->arb_group));
+}
+
 /*
  *
  * Helper function for buffer-copy post.
@@ -107,6 +112,8 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     UCT_RC_MLX5_CHECK_AM_SHORT(id, length, 0);
     UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
+
+    uct_rc_iface_check_pending(&iface->super, &ep->super);
 
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
@@ -299,6 +306,8 @@ uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     UCT_RC_CHECK_RMA_RES(&iface->super, &ep->super);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
 
+    uct_rc_iface_check_pending(&iface->super, &ep->super);
+
     uct_rc_mlx5_am_hdr_fill(&cache.am_hdr.rc_hdr, id);
     cache.am_hdr.am_hdr = hdr;
 
@@ -331,6 +340,8 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                       id, uct_rc_mlx5_am_hdr_fill, uct_rc_mlx5_hdr_t,
                                       pack_cb, arg, &length);
 
+    uct_rc_iface_check_pending(&iface->super, &ep->super);
+
     uct_rc_mlx5_txqp_bcopy_post(iface, &ep->super.txqp, &ep->tx.wq,
                                 MLX5_OPCODE_SEND, sizeof(uct_rc_mlx5_hdr_t) + length,
                                 0, 0, MLX5_WQE_CTRL_SOLICITED, 0, desc, desc + 1,
@@ -354,6 +365,8 @@ ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
                                iface->super.super.config.seg_size, 0);
     UCT_RC_CHECK_FC(&iface->super, &ep->super, id);
     UCT_RC_CHECK_NUM_RDMA_READ(&iface->super);
+
+    uct_rc_iface_check_pending(&iface->super, &ep->super);
 
     status = uct_rc_mlx5_ep_zcopy_post(ep, MLX5_OPCODE_SEND, iov, iovcnt, 0ul,
                                        id, header, header_length, 0, 0, 0ul, 0, 0,
@@ -1020,8 +1033,8 @@ ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
                                                        &ep->super.txqp, status, 0);
 
     if (cqe != NULL) {
-        uct_rc_mlx5_common_update_tx_res(&iface->super, &ep->tx.wq,
-                                         &ep->super.txqp, htons(cqe->wqe_counter));
+        uct_rc_mlx5_common_free_tx_res(&iface->super, &ep->tx.wq,
+                                       &ep->super.txqp, htons(cqe->wqe_counter));
         iface_res_released = 1;
     }
 
