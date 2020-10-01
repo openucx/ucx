@@ -553,6 +553,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
  * available TX resources. */
 #define UCT_DC_CHECK_RES_AND_FC(_iface, _ep) \
     { \
+        UCT_RC_CHECK_NUM_RDMA_READ(&(_iface)->super.super) \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= \
                          (_iface)->super.super.config.fc_hard_thresh)) { \
             ucs_status_t _status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \

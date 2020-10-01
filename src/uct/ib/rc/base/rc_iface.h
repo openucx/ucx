@@ -208,6 +208,7 @@ struct uct_rc_iface {
          * credit */
         signed                  cq_available;
         ssize_t                 reads_available;
+        ssize_t                 reads_completed;
         uct_rc_iface_send_op_t  *free_ops; /* stack of free send operations */
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
@@ -391,6 +392,15 @@ static UCS_F_ALWAYS_INLINE int
 uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
 {
     return iface->tx.cq_available > 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_update_reads(uct_rc_iface_t *iface)
+{
+    ucs_assert(iface->tx.reads_completed >= 0);
+
+    iface->tx.reads_available += iface->tx.reads_completed;
+    iface->tx.reads_completed  = 0;
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_iface_send_op_t*

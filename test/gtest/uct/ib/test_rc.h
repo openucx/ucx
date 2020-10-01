@@ -19,6 +19,13 @@ extern "C" {
 
 class test_rc : public uct_test {
 public:
+    typedef struct pending_send_request {
+        uct_pending_req_t uct;
+        int               cb_count;
+        int               purge_count;
+        uct_ep_h          ep;
+    } pending_send_request_t;
+
     virtual void init();
     void connect();
 
@@ -55,12 +62,6 @@ protected:
 
 class test_rc_flow_control : public test_rc {
 public:
-    typedef struct pending_send_request {
-        uct_pending_req_t uct;
-        int               cb_count;
-        int               purge_count;
-    } pending_send_request_t;
-
     void init();
     void cleanup();
 
