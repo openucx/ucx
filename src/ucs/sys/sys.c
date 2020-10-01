@@ -49,7 +49,7 @@
 #define UCS_PROCESS_NS_NET_DFLT    0xF0000080U
 
 #define UCS_NS_INFO_ITEM(_id, _name, _dflt) \
-    [_id] = {.name = _name, .dflt = _dflt, .value = _dflt, \
+    [_id] = {.name = (_name), .dflt = (_dflt), .value = (_dflt), \
              .init_once = UCS_INIT_ONCE_INITIALIZER}
 
 
@@ -1342,6 +1342,8 @@ ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
         res = stat(filename, &st);
         if (res == 0) {
             ucs_sys_namespace_info[ns].value = (ucs_sys_ns_t)st.st_ino;
+        } else {
+            ucs_debug("failed to stat(%s): %m", filename);
         }
     }
 
