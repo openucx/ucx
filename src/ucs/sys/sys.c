@@ -48,17 +48,23 @@
 #define UCS_PROCESS_NS_FIRST       0xF0000000U
 #define UCS_PROCESS_NS_NET_DFLT    0xF0000080U
 
+#define UCS_NS_INFO_ITEM(_id, _name, _dflt) \
+    [_id] = {.name = _name, .dflt = _dflt, \
+             .init_once = UCS_INIT_ONCE_INITIALIZER}
+
 
 struct {
-    const char  *name;
-    ucs_sys_ns_t dflt;
+    const char     *name;
+    ucs_sys_ns_t    dflt;
+    ucs_sys_ns_t    value;
+    ucs_init_once_t init_once; /* use own initialization sequence per NS */
 } static ucs_sys_namespace_info[] = {
-    [UCS_SYS_NS_TYPE_IPC]  = {.name = "ipc",  .dflt = UCS_PROCESS_NS_FIRST - 1},
-    [UCS_SYS_NS_TYPE_MNT]  = {.name = "mnt",  .dflt = UCS_PROCESS_NS_FIRST - 0},
-    [UCS_SYS_NS_TYPE_NET]  = {.name = "net",  .dflt = UCS_PROCESS_NS_NET_DFLT},
-    [UCS_SYS_NS_TYPE_PID]  = {.name = "pid",  .dflt = UCS_PROCESS_NS_FIRST - 4},
-    [UCS_SYS_NS_TYPE_USER] = {.name = "user", .dflt = UCS_PROCESS_NS_FIRST - 3},
-    [UCS_SYS_NS_TYPE_UTS]  = {.name = "uts",  .dflt = UCS_PROCESS_NS_FIRST - 2}
+    UCS_NS_INFO_ITEM(UCS_SYS_NS_TYPE_IPC,  "ipc",  UCS_PROCESS_NS_FIRST - 1),
+    UCS_NS_INFO_ITEM(UCS_SYS_NS_TYPE_MNT,  "mnt",  UCS_PROCESS_NS_FIRST - 0),
+    UCS_NS_INFO_ITEM(UCS_SYS_NS_TYPE_NET,  "net",  UCS_PROCESS_NS_NET_DFLT),
+    UCS_NS_INFO_ITEM(UCS_SYS_NS_TYPE_PID,  "pid",  UCS_PROCESS_NS_FIRST - 4),
+    UCS_NS_INFO_ITEM(UCS_SYS_NS_TYPE_USER, "user", UCS_PROCESS_NS_FIRST - 3),
+    UCS_NS_INFO_ITEM(UCS_SYS_NS_TYPE_UTS,  "uts",  UCS_PROCESS_NS_FIRST - 2)
 };
 
 typedef struct {
@@ -1329,15 +1335,17 @@ ucs_sys_ns_t ucs_sys_get_ns(ucs_sys_namespace_type_t ns)
         return 0;
     }
 
-    snprintf(filename, sizeof(filename), "%s/%s", UCS_PROCESS_NS_DIR,
-             ucs_sys_namespace_info[ns].name);
+    UCS_INIT_ONCE(&ucs_sys_namespace_info[ns].init_once) {
+        snprintf(filename, sizeof(filename), "%s/%s", UCS_PROCESS_NS_DIR,
+                 ucs_sys_namespace_info[ns].name);
 
-    res = stat(filename, &st);
-    if (res == 0) {
-        return (ucs_sys_ns_t)st.st_ino;
+        res                              = stat(filename, &st);
+        ucs_sys_namespace_info[ns].value = (res == 0) ?
+                                           (ucs_sys_ns_t)st.st_ino :
+                                           ucs_sys_namespace_info[ns].dflt;
     }
 
-    return ucs_sys_namespace_info[ns].dflt;
+    return ucs_sys_namespace_info[ns].value;
 }
 
 int ucs_sys_ns_is_default(ucs_sys_namespace_type_t ns)
