@@ -247,8 +247,8 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 
-int uct_rc_txqp_purge_outstanding(uct_rc_txqp_t *txqp, ucs_status_t status,
-                                  int is_log);
+int uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
+                                  ucs_status_t status, int is_log);
 
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                              unsigned flags);
@@ -267,7 +267,7 @@ void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(64, 1)(uct_rc_iface_send_op_t *op,
 ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               uint32_t qp_num
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
-void uct_rc_txqp_cleanup(uct_rc_txqp_t *txqp);
+void uct_rc_txqp_cleanup(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp);
 
 static inline int16_t uct_rc_txqp_available(uct_rc_txqp_t *txqp)
 {

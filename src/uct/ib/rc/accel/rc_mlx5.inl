@@ -37,6 +37,8 @@ uct_rc_mlx5_common_update_tx_res(uct_rc_iface_t *rc_iface, uct_ib_mlx5_txwq_t *t
     rc_iface->tx.cq_available += bb_num + rc_iface->tx.cq_free;
     rc_iface->tx.cq_free       = 0;
 
+    uct_rc_iface_update_reads(rc_iface);
+
     ucs_assertv(rc_iface->tx.cq_available <= rc_iface->config.tx_cq_len,
                 "cq_available=%d tx_cq_len=%d bb_num=%d txwq=%p txqp=%p",
                 rc_iface->tx.cq_available, rc_iface->config.tx_cq_len, bb_num,
@@ -62,6 +64,9 @@ uct_rc_mlx5_common_free_tx_res(uct_rc_iface_t *rc_iface, uct_ib_mlx5_txwq_t *txw
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 
     rc_iface->tx.cq_free += bb_num;
+
+    uct_rc_iface_update_reads(rc_iface);
+
     ucs_assertv(rc_iface->tx.cq_available + bb_num <= rc_iface->config.tx_cq_len,
                 "cq_available=%d tx_cq_len=%d bb_num=%d txwq=%p txqp=%p",
                 rc_iface->tx.cq_available, rc_iface->config.tx_cq_len, bb_num,

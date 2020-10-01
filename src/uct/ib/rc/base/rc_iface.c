@@ -598,7 +598,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         self->tx.reads_available = config->tx.max_get_bytes;
     }
 
-    self->tx.arb_cbq_id = UCS_CALLBACKQ_ID_NULL;
+    self->tx.arb_cbq_id      = UCS_CALLBACKQ_ID_NULL;
+    self->tx.reads_completed = 0;
 
     uct_ib_fence_info_init(&self->tx.fi);
     uct_rc_iface_set_path_mtu(self, config);

@@ -1029,7 +1029,8 @@ ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
                                                        uct_rc_mlx5_iface_common_t);
     int iface_res_released;
 
-    iface_res_released = uct_rc_txqp_purge_outstanding(&ep->super.txqp, status, 0);
+    iface_res_released = uct_rc_txqp_purge_outstanding(&iface->super,
+                                                       &ep->super.txqp, status, 0);
 
     if (cqe != NULL) {
         uct_rc_mlx5_common_free_tx_res(&iface->super, &ep->tx.wq,
