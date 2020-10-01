@@ -87,15 +87,12 @@ public:
 
 protected:
 
-    // Called when new connection is created on server side
-    virtual void dispatch_new_connection(UcxConnection *conn);
-
     // Called when new IO message is received
     virtual void dispatch_io_message(UcxConnection* conn, const void *buffer,
-                                     size_t length);
+                                     size_t length) = 0;
 
     // Called when there is a fatal failure on the connection
-    virtual void dispatch_connection_error(UcxConnection* conn);
+    virtual void dispatch_connection_error(UcxConnection* conn) = 0;
 
 private:
     typedef enum {
@@ -187,6 +184,10 @@ public:
         return _conn_id;
     }
 
+    ucs_status_t ucx_status() const {
+        return _ucx_status;
+    }
+
 private:
     static ucp_tag_t make_data_tag(uint32_t conn_id, uint32_t sn);
 
@@ -233,6 +234,7 @@ private:
     ucp_ep_h           _ep;
     void*              _close_request;
     ucs_list_link_t    _all_requests;
+    ucs_status_t       _ucx_status;
 };
 
 #endif

@@ -47,8 +47,9 @@ static const char *io_op_names[] = {
 typedef struct {
     std::vector<const char*> servers;
     int                      port_num;
-    long                     client_retries;
     double                   client_timeout;
+    long                     client_retries;
+    double                   client_retry_interval;
     double                   client_runtime_limit;
     double                   print_interval;
     size_t                   iomsg_size;
@@ -630,7 +631,8 @@ public:
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
-        LOG << "deleting connection " << conn;
+        LOG << "deleting connection with status "
+            << ucs_status_string(conn->ucx_status());
         delete conn;
     }
 
@@ -739,8 +741,7 @@ public:
 
     typedef enum {
         OK,
-        CONN_RETRIES_EXCEEDED,
-        WAIT_RESPONSES_TIMEOUT
+        CONN_RETRIES_EXCEEDED
     } status_t;
 
     size_t get_server_index(const UcxConnection *conn) {
@@ -794,6 +795,14 @@ public:
         return data_size;
     }
 
+    void close_uncompleted_servers(const char *reason) {
+        for (size_t i = 0; i < _active_servers.size(); ++i) {
+            if (get_num_uncompleted(i) > 0) {
+                terminate_connection(_server_info[i].conn, reason);
+            }
+        }
+    }
+
     virtual void dispatch_io_message(UcxConnection* conn, const void *buffer,
                                      size_t length) {
         iomsg_t const *msg = reinterpret_cast<const iomsg_t*>(buffer);
@@ -825,7 +834,11 @@ public:
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
-        LOG << "setting error flag on connection " << conn;
+        terminate_connection(conn, ucs_status_string(conn->ucx_status()));
+    }
+
+    void terminate_connection(UcxConnection *conn, const char *reason) {
+        LOG << "terminate connection " << conn << " due to " << reason;
         size_t server_index        = get_server_index(conn);
         server_info_t& server_info = _server_info[server_index];
 
@@ -858,7 +871,8 @@ public:
         long count;
 
         count = 0;
-        while (((_num_sent - _num_completed) > max_outstanding) && (_status == OK)) {
+        while (((_num_sent - _num_completed) > max_outstanding) &&
+               (_status == OK)) {
             if (count < 1000) {
                 progress();
                 ++count;
@@ -877,10 +891,10 @@ public:
 
             timersub(&tv_curr, &tv_start, &tv_diff);
             double elapsed = tv_diff.tv_sec + (tv_diff.tv_usec * 1e-6);
-            if (elapsed > _test_opts.client_timeout * 10) {
+            if (elapsed > _test_opts.client_timeout) {
                 LOG << "timeout waiting for " << (_num_sent - _num_completed)
                     << " replies";
-                _status = WAIT_RESPONSES_TIMEOUT;
+                close_uncompleted_servers("timeout for replies");
             }
         }
     }
@@ -949,6 +963,7 @@ public:
 
     void connect_all(bool force) {
         if (_active_servers.size() == _server_info.size()) {
+            assert(_status == OK);
             // All servers are connected
             return;
         }
@@ -960,7 +975,7 @@ public:
         }
 
         double curr_time = get_time();
-        if (curr_time < (_prev_connect_time + opts().client_timeout)) {
+        if (curr_time < (_prev_connect_time + opts().client_retry_interval)) {
             // Not enough time elapsed since previous connection attempt
             return;
         }
@@ -999,6 +1014,10 @@ public:
         _prev_connect_time = curr_time;
     }
 
+    static inline bool is_control_iter(long iter) {
+        return (iter % 10) == 0;
+    }
+
     status_t run() {
         _server_info.resize(opts().servers.size());
         std::for_each(_server_info.begin(), _server_info.end(),
@@ -1020,19 +1039,15 @@ public:
             VERBOSE_LOG << " <<<< iteration " << total_iter << " >>>>";
 
             wait_for_responses(opts().window_size - 1);
-            if (_status != OK) {
-                break;
-            }
-
-            connect_all((total_iter % 10) == 0);
+            connect_all(is_control_iter(total_iter));
             if (_status != OK) {
                 break;
             }
 
             if (_active_servers.empty()) {
                 LOG << "All remote servers are down, reconnecting in "
-                    << opts().client_timeout << " seconds";
-                sleep(opts().client_timeout);
+                    << opts().client_retry_interval << " seconds";
+                sleep(opts().client_retry_interval);
                 continue;
             }
 
@@ -1058,7 +1073,7 @@ public:
             op_info[op].total_bytes += size;
             op_info[op].num_iters++;
 
-            if (((total_iter % 10) == 0) && (total_iter > total_prev_iter)) {
+            if (is_control_iter(total_iter) && (total_iter > total_prev_iter)) {
                 /* Print performance every 1 second */
                 double curr_time = get_time();
                 if (curr_time >= (prev_time + opts().print_interval)) {
@@ -1107,8 +1122,6 @@ public:
             return "OK";
         case CONN_RETRIES_EXCEEDED:
             return "connection retries exceeded";
-        case WAIT_RESPONSES_TIMEOUT:
-            return "wait responses timeout";
         default:
             return "invalid status";
         }
@@ -1285,23 +1298,24 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     bool found;
     int c;
 
-    test_opts->port_num             = 1337;
-    test_opts->client_retries       = std::numeric_limits<long>::max();
-    test_opts->client_timeout       = 5.0;
-    test_opts->client_runtime_limit = std::numeric_limits<double>::max();
-    test_opts->print_interval       = 1.0;
-    test_opts->min_data_size        = 4096;
-    test_opts->max_data_size        = 4096;
-    test_opts->chunk_size           = std::numeric_limits<unsigned>::max();
-    test_opts->num_offcache_buffers = 0;
-    test_opts->iomsg_size           = 256;
-    test_opts->iter_count           = 1000;
-    test_opts->window_size          = 1;
-    test_opts->random_seed          = std::time(NULL);
-    test_opts->verbose              = false;
-    test_opts->validate             = false;
+    test_opts->port_num              = 1337;
+    test_opts->client_timeout        = 50.0;
+    test_opts->client_retries        = std::numeric_limits<long>::max();
+    test_opts->client_retry_interval = 5.0;
+    test_opts->client_runtime_limit  = std::numeric_limits<double>::max();
+    test_opts->print_interval        = 1.0;
+    test_opts->min_data_size         = 4096;
+    test_opts->max_data_size         = 4096;
+    test_opts->chunk_size            = std::numeric_limits<unsigned>::max();
+    test_opts->num_offcache_buffers  = 0;
+    test_opts->iomsg_size            = 256;
+    test_opts->iter_count            = 1000;
+    test_opts->window_size           = 1;
+    test_opts->random_seed           = std::time(NULL);
+    test_opts->verbose               = false;
+    test_opts->validate              = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v:qHP:")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:y:vqHP:")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -1309,6 +1323,13 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'c':
             if (strcmp(optarg, "inf")) {
                 test_opts->client_retries = strtol(optarg, NULL, 0);
+            }
+            break;
+        case 'y':
+            if (set_time(optarg, &test_opts->client_retry_interval) != 0) {
+                std::cout << "invalid '" << optarg
+                          << "' value for client retry interval" << std::endl;
+                return -1;
             }
             break;
         case 'r':
@@ -1414,9 +1435,10 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -w <window-size>           Number of outstanding requests" << std::endl;
             std::cout << "  -k <chunk-size>            Split the data transfer to chunks of this size" << std::endl;
             std::cout << "  -r <io-request-size>       Size of IO request packet" << std::endl;
+            std::cout << "  -t <client timeout>        Client timeout (or \"inf\")" << std::endl;
             std::cout << "  -c <client retries>        Number of connection retries on client" << std::endl;
             std::cout << "                             (or \"inf\") for failure" << std::endl;
-            std::cout << "  -t <client timeout>        Client timeout (or \"inf\")" << std::endl;
+            std::cout << "  -y <client retry interval> Client retry interval" << std::endl;
             std::cout << "  -l <client run-time limit> Time limit to run the IO client (or \"inf\")" << std::endl;
             std::cout << "                             Examples: -l 17.5s; -l 10m; 15.5h" << std::endl;
             std::cout << "  -s <random seed>           Random seed to use for randomizing" << std::endl;
