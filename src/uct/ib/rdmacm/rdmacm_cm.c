@@ -151,6 +151,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
     char dev_name[UCT_DEVICE_NAME_MAX];
     char ah_attr_str[128];
     uct_ib_roce_version_info_t roce_info;
+    int ret;
 
     params.flags = 0;
 
@@ -159,24 +160,24 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
      * of the remote peer.
      */
     qp_attr.qp_state = IBV_QPS_RTR;
-    if (rdma_init_qp_attr(cm_id, &qp_attr, &qp_attr_mask)) {
+    ret              = rdma_init_qp_attr(cm_id, &qp_attr, &qp_attr_mask);
+    if (ret) {
         ucs_error("rdma_init_qp_attr (id=%p, qp_state=%d) failed: %m",
                   cm_id, qp_attr.qp_state);
         return UCS_ERR_IO_ERROR;
     }
 
-    if (ibv_query_port(cm_id->verbs, cm_id->port_num, &port_attr)) {
+    ret = ibv_query_port(cm_id->pd->context, cm_id->port_num, &port_attr);
+    if (ret) {
         uct_rdmacm_cm_id_to_dev_name(cm_id, dev_name);
         ucs_error("ibv_query_port (%s) failed: %m", dev_name);
         return UCS_ERR_IO_ERROR;
     }
 
     if (qp_attr.ah_attr.is_global) {
-        ucs_assert(!memcmp(&cm_id->route.addr.addr.ibaddr.dgid,
-                           &qp_attr.ah_attr.grh.dgid,
-                           sizeof(qp_attr.ah_attr.grh.dgid)));
         params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
         params.gid_index = qp_attr.ah_attr.grh.sgid_index;
+        params.gid       = qp_attr.ah_attr.grh.dgid;
     }
 
     ucs_debug("cm_id %p: ah_attr %s", cm_id,
@@ -196,12 +197,26 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
         roce_info.addr_family = 0;
         params.roce_info      = roce_info;
         params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_ETH;
+    } else if (qp_attr.ah_attr.is_global) {
+        params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
+                                UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
     } else {
-        params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID |
-                                UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
+        /* For local IB address, assume the remote subnet prefix is the same
+         * and pack it to make reachability check pass */
+        ret = ibv_query_gid(cm_id->verbs, cm_id->port_num,
+                            UCT_IB_MD_DEFAULT_GID_INDEX, &params.gid);
+        if (ret) {
+            ucs_error("ibv_query_gid(dev=%s port=%d index=%d) failed: %m",
+                      ibv_get_device_name(cm_id->verbs->device),
+                      cm_id->port_num, UCT_IB_MD_DEFAULT_GID_INDEX);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        params.gid_index = UCT_IB_MD_DEFAULT_GID_INDEX;
+        params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
+                           UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
     }
 
-    params.gid  = cm_id->route.addr.addr.ibaddr.dgid;
     params.lid  = qp_attr.ah_attr.dlid;
     addr_length = uct_ib_address_size(&params);
     dev_addr    = ucs_malloc(addr_length, "IB device address");
