@@ -35,7 +35,7 @@ const unsigned ucs_sys_event_set_max_wait_events =
     UCS_ALLOCA_MAX_SIZE / sizeof(struct epoll_event);
 
 
-static inline int ucs_event_set_map_to_raw_events(int events)
+static inline int ucs_event_set_map_to_raw_events(ucs_event_set_types_t events)
 {
     int raw_events = 0;
 
@@ -56,7 +56,7 @@ static inline int ucs_event_set_map_to_raw_events(int events)
 
 static inline int ucs_event_set_map_to_events(int raw_events)
 {
-    int events = 0;
+    ucs_event_set_types_t events = 0;
 
     if (raw_events & EPOLLIN) {
          events |= UCS_EVENT_SET_EVREAD;
@@ -126,7 +126,8 @@ err_close_event_fd:
 }
 
 ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int fd,
-                               ucs_event_set_type_t events, void *callback_data)
+                               ucs_event_set_types_t events,
+                               void *callback_data)
 {
     struct epoll_event raw_event;
     int ret;
@@ -146,7 +147,8 @@ ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int fd,
 }
 
 ucs_status_t ucs_event_set_mod(ucs_sys_event_set_t *event_set, int fd,
-                               ucs_event_set_type_t events, void *callback_data)
+                               ucs_event_set_types_t events,
+                               void *callback_data)
 {
     struct epoll_event raw_event;
     int ret;

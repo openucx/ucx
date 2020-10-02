@@ -299,7 +299,8 @@ void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
     kh_del(uct_ib_async_event, &dev->async_events_hash, iter);
     ucs_spin_unlock(&dev->async_event_lock);
 }
-static void uct_ib_async_event_handler(int fd, int events, void *arg)
+static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
+                                       void *arg)
 {
     uct_ib_device_t *dev = arg;
     struct ibv_async_event ibevent;

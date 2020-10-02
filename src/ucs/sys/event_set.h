@@ -9,27 +9,34 @@
 
 #include <ucs/type/status.h>
 
+#include <stdint.h>
+
+
 /**
  * ucs_sys_event_set_t structure used in ucs_event_set_XXX functions.
  *
  */
 typedef struct ucs_sys_event_set ucs_sys_event_set_t;
 
+/**
+ * Bit set composed using the available event types
+ */
+typedef uint8_t ucs_event_set_types_t;
 
 /**
  * ucs_event_set_handler call this handler for notifying event
  *
  * @param [in] callback_data  User data which set in ucs_event_set_add().
- * @param [in] event          Detection event. Sets of ucs_event_set_type_t.
+ * @param [in] events         Detection event. Sets of ucs_event_set_types_t.
  * @param [in] arg            User data which set in ucs_event_set_wait().
  *
  */
-typedef void (*ucs_event_set_handler_t)(void *callback_data, int event,
+typedef void (*ucs_event_set_handler_t)(void *callback_data,
+                                        ucs_event_set_types_t events,
                                         void *arg);
 
 /**
- * ucs_event_set_type_t member is a bit set composed using the following
- * available event types
+ * Event types that could be requested to notify 
  */
 typedef enum {
     UCS_EVENT_SET_EVREAD         = UCS_BIT(0),
@@ -73,7 +80,7 @@ ucs_status_t ucs_event_set_create(ucs_sys_event_set_t **event_set_p);
  * @return UCS_OK on success or an error code on failure.
  */
 ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int fd,
-                               ucs_event_set_type_t events,
+                               ucs_event_set_types_t events,
                                void *callback_data);
 
 /**
@@ -87,7 +94,7 @@ ucs_status_t ucs_event_set_add(ucs_sys_event_set_t *event_set, int fd,
  * @return UCS_OK on success or an error code on failure.
  */
 ucs_status_t ucs_event_set_mod(ucs_sys_event_set_t *event_set, int fd,
-                               ucs_event_set_type_t events,
+                               ucs_event_set_types_t events,
                                void *callback_data);
 
 /**

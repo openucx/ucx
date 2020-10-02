@@ -67,15 +67,16 @@ static void ucs_async_thread_put(ucs_async_thread_t *thread)
     }
 }
 
-static void ucs_async_thread_ev_handler(void *callback_data, int event,
+static void ucs_async_thread_ev_handler(void *callback_data,
+                                        ucs_event_set_types_t events,
                                         void *arg)
 {
     ucs_async_thread_callback_arg_t *cb_arg = (void*)arg;
     int fd                                  = (int)(uintptr_t)callback_data;
     ucs_status_t status;
 
-    ucs_trace_async("ucs_async_thread_ev_handler(fd=%d, event=%d)",
-                    fd, event);
+    ucs_trace_async("ucs_async_thread_ev_handler(fd=%d, events=%d)",
+                    fd, events);
 
     if (fd == ucs_async_pipe_rfd(&cb_arg->thread->wakeup)) {
         ucs_trace_async("progress thread woken up");
@@ -83,7 +84,7 @@ static void ucs_async_thread_ev_handler(void *callback_data, int event,
         return;
     }
 
-    status = ucs_async_dispatch_handlers(&fd, 1, event);
+    status = ucs_async_dispatch_handlers(&fd, 1, events);
     if (status == UCS_ERR_NO_PROGRESS) {
          *cb_arg->is_missed = 1;
     }
@@ -300,7 +301,8 @@ static void ucs_async_thread_mutex_cleanup(ucs_async_context_t *async)
 }
 
 static ucs_status_t ucs_async_thread_add_event_fd(ucs_async_context_t *async,
-                                                  int event_fd, int events)
+                                                  int event_fd,
+                                                  ucs_event_set_types_t events)
 {
     ucs_async_thread_t *thread;
     ucs_status_t status;
@@ -311,8 +313,7 @@ static ucs_status_t ucs_async_thread_add_event_fd(ucs_async_context_t *async,
     }
 
     /* Store file descriptor into void * storage without memory allocation. */
-    status = ucs_event_set_add(thread->event_set, event_fd,
-                               (ucs_event_set_type_t)events,
+    status = ucs_event_set_add(thread->event_set, event_fd, events,
                                (void *)(uintptr_t)event_fd);
     if (status != UCS_OK) {
         status = UCS_ERR_IO_ERROR;
@@ -343,13 +344,13 @@ static ucs_status_t ucs_async_thread_remove_event_fd(ucs_async_context_t *async,
     return UCS_OK;
 }
 
-static ucs_status_t ucs_async_thread_modify_event_fd(ucs_async_context_t *async,
-                                                     int event_fd, int events)
+static ucs_status_t
+ucs_async_thread_modify_event_fd(ucs_async_context_t *async, int event_fd,
+                                 ucs_event_set_types_t events)
 {
     /* Store file descriptor into void * storage without memory allocation. */
     return ucs_event_set_mod(ucs_async_thread_global_context.thread->event_set,
-                             event_fd, (ucs_event_set_type_t)events,
-                             (void *)(uintptr_t)event_fd);
+                             event_fd, events, (void *)(uintptr_t)event_fd);
 }
 
 static int ucs_async_thread_mutex_try_block(ucs_async_context_t *async)

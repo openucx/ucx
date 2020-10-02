@@ -194,7 +194,8 @@ static ucs_status_t uct_tcp_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 }
 
 static void uct_tcp_iface_handle_events(void *callback_data,
-                                        int events, void *arg)
+                                        ucs_event_set_types_t events,
+                                        void *arg)
 {
     unsigned *count  = (unsigned*)arg;
     uct_tcp_ep_t *ep = (uct_tcp_ep_t*)callback_data;
@@ -251,7 +252,9 @@ static ucs_status_t uct_tcp_iface_flush(uct_iface_h tl_iface, unsigned flags,
     return UCS_OK;
 }
 
-static void uct_tcp_iface_connect_handler(int listen_fd, int events, void *arg)
+static void
+uct_tcp_iface_connect_handler(int listen_fd, ucs_event_set_types_t events,
+                              void *arg)
 {
     uct_tcp_iface_t *iface = arg;
     struct sockaddr_in peer_addr;

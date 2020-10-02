@@ -113,18 +113,16 @@ protected:
         close(m_pipefd[1]);
     }
 
-    void event_set_ctl(event_set_op_t op, int fd, int events) {
+    void event_set_ctl(event_set_op_t op, int fd, ucs_event_set_types_t events) {
         ucs_status_t status = UCS_OK;
 
         switch (op) {
         case EVENT_SET_OP_ADD:
-            status = ucs_event_set_add(m_event_set, fd,
-                                       (ucs_event_set_type_t)events,
+            status = ucs_event_set_add(m_event_set, fd, events,
                                        (void *)(uintptr_t)fd);
             break;
         case EVENT_SET_OP_MOD:
-            status = ucs_event_set_mod(m_event_set, fd,
-                                       (ucs_event_set_type_t)events,
+            status = ucs_event_set_mod(m_event_set, fd, events,
                                        (void *)(uintptr_t)fd);
             break;
         case EVENT_SET_OP_DEL:
@@ -163,7 +161,8 @@ const char *test_event_set::evfd_data = UCS_EVENT_SET_TEST_STRING;
 
 pthread_barrier_t test_event_set::barrier;
 
-static void event_set_func1(void *callback_data, int events, void *arg)
+static void event_set_func1(void *callback_data, ucs_event_set_types_t events,
+                            void *arg)
 {
     char buf[MAX_BUF_LEN];
     char *extra_str = (char *)((void**)arg)[0];
@@ -184,17 +183,20 @@ static void event_set_func1(void *callback_data, int events, void *arg)
     EXPECT_EQ(UCS_EVENT_SET_EXTRA_NUM, *extra_num);
 }
 
-static void event_set_func2(void *callback_data, int events, void *arg)
+static void event_set_func2(void *callback_data, ucs_event_set_types_t events,
+                            void *arg)
 {
     EXPECT_EQ(UCS_EVENT_SET_EVWRITE, events);
 }
 
-static void event_set_func3(void *callback_data, int events, void *arg)
+static void event_set_func3(void *callback_data, ucs_event_set_types_t events,
+                            void *arg)
 {
     ADD_FAILURE();
 }
 
-static void event_set_func4(void *callback_data, int events, void *arg)
+static void event_set_func4(void *callback_data, ucs_event_set_types_t events,
+                            void *arg)
 {
     EXPECT_EQ(UCS_EVENT_SET_EVREAD, events);
 }
@@ -259,8 +261,8 @@ UCS_TEST_P(test_event_set, ucs_event_set_trig_modes) {
     /* Test edge-triggered mode */
     /* Set edge-triggered mode */
     event_set_ctl(EVENT_SET_OP_MOD, m_pipefd[0],
-                  (ucs_event_set_type_t)(UCS_EVENT_SET_EVREAD |
-                                         UCS_EVENT_SET_EDGE_TRIGGERED));
+                  UCS_EVENT_SET_EVREAD |
+                  UCS_EVENT_SET_EDGE_TRIGGERED);
 
     /* Should have only one event to read */
     event_set_wait(1u, 0, event_set_func4, NULL);

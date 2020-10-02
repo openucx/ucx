@@ -14,7 +14,9 @@
 #include <ucs/async/async.h>
 
 
-static void uct_tcp_listener_conn_req_handler(int fd, int events, void *arg)
+static void
+uct_tcp_listener_conn_req_handler(int fd, ucs_event_set_types_t events,
+                                  void *arg)
 {
     uct_tcp_listener_t *listener = (uct_tcp_listener_t *)arg;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];

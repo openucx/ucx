@@ -256,12 +256,12 @@ struct uct_tcp_ep {
     uct_base_ep_t                 super;
     uint8_t                       flags;            /* Endpoint flags */
     uint8_t                       conn_retries;     /* Number of connection attempts done */
-    uct_tcp_ep_conn_state_t       conn_state;       /* State of connection with peer */
+    uint8_t                       conn_state;       /* State of connection with peer */
+    ucs_event_set_types_t         events;           /* Current notifications */
     int                           fd;               /* Socket file descriptor */
     int                           stale_fd;         /* Old file descriptor which should be
                                                      * closed as soon as the EP is connected
                                                      * using the new fd */
-    int                           events;           /* Current notifications */
     uct_tcp_cm_conn_sn_t          conn_sn;          /* Connection sequence number */
     uct_tcp_ep_ctx_t              tx;               /* TX resources */
     uct_tcp_ep_ctx_t              rx;               /* RX resources */
@@ -416,7 +416,8 @@ void uct_tcp_ep_remove(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 void uct_tcp_ep_add(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
-void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int remove);
+void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, ucs_event_set_types_t add,
+                           ucs_event_set_types_t rem);
 
 void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep);
 

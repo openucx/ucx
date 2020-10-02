@@ -80,9 +80,9 @@ static ucs_async_ops_t ucs_async_poll_ops = {
     .context_cleanup    = ucs_empty_function,
     .context_try_block  = ucs_async_poll_tryblock,
     .context_unblock    = ucs_empty_function,
-    .add_event_fd       = ucs_empty_function_return_success,
+    .add_event_fd       = (void*)ucs_empty_function_return_success,
     .remove_event_fd    = ucs_empty_function_return_success,
-    .modify_event_fd    = ucs_empty_function_return_success,
+    .modify_event_fd    = (void*)ucs_empty_function_return_success,
     .add_timer          = ucs_empty_function_return_success,
     .remove_timer       = ucs_empty_function_return_success,
 };
@@ -97,7 +97,8 @@ static inline int ucs_async_handler_kh_is_end(khiter_t hash_it)
     return hash_it == kh_end(&ucs_async_global_context.handlers);
 }
 
-static inline uint64_t ucs_async_missed_event_pack(int id, int events)
+static inline uint64_t ucs_async_missed_event_pack(int id,
+                                                   ucs_event_set_types_t events)
 {
     return ((uint64_t)id << UCS_ASYNC_MISSED_QUEUE_SHIFT) | (uint32_t)events;
 }
@@ -235,7 +236,8 @@ out_unlock:
     return status;
 }
 
-static void ucs_async_handler_invoke(ucs_async_handler_t *handler, int events)
+static void ucs_async_handler_invoke(ucs_async_handler_t *handler,
+                                     ucs_event_set_types_t events)
 {
     ucs_trace_async("calling async handler " UCS_ASYNC_HANDLER_FMT,
                     UCS_ASYNC_HANDLER_ARG(handler));
@@ -251,7 +253,7 @@ static void ucs_async_handler_invoke(ucs_async_handler_t *handler, int events)
 }
 
 static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler,
-                                               int events)
+                                               ucs_event_set_types_t events)
 {
     ucs_async_context_t *async;
     ucs_async_mode_t mode;
@@ -288,7 +290,7 @@ static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler,
 }
 
 ucs_status_t ucs_async_dispatch_handlers(int *handler_ids, size_t count,
-                                         int events)
+                                         ucs_event_set_types_t events)
 {
     ucs_status_t status = UCS_OK, tmp_status;
     ucs_async_handler_t *handler;
@@ -414,8 +416,8 @@ void ucs_async_context_destroy(ucs_async_context_t *async)
 
 static ucs_status_t
 ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
-                        int events, ucs_async_event_cb_t cb, void *arg,
-                        ucs_async_context_t *async, int *id_p)
+                        ucs_event_set_types_t events, ucs_async_event_cb_t cb,
+                        void *arg, ucs_async_context_t *async, int *id_p)
 {
     ucs_async_handler_t *handler;
     ucs_status_t status;
@@ -473,8 +475,9 @@ err:
 }
 
 ucs_status_t ucs_async_set_event_handler(ucs_async_mode_t mode, int event_fd,
-                                         int events, ucs_async_event_cb_t cb,
-                                         void *arg, ucs_async_context_t *async)
+                                         ucs_event_set_types_t events,
+                                         ucs_async_event_cb_t cb, void *arg,
+                                         ucs_async_context_t *async)
 {
     ucs_status_t status;
     int event_id;
@@ -583,7 +586,7 @@ ucs_status_t ucs_async_remove_handler(int id, int is_sync)
     return UCS_OK;
 }
 
-ucs_status_t ucs_async_modify_handler(int fd, int events)
+ucs_status_t ucs_async_modify_handler(int fd, ucs_event_set_types_t events)
 {
     ucs_async_handler_t *handler;
     ucs_status_t status;

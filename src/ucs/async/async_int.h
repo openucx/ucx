@@ -18,7 +18,7 @@ typedef struct ucs_async_handler ucs_async_handler_t;
 struct ucs_async_handler {
     int                        id;      /* Event/Timer ID */
     ucs_async_mode_t           mode;    /* Event delivery mode */
-    int                        events;  /* Bitmap of events */
+    ucs_event_set_types_t      events;  /* Bitmap of events */
     pthread_t                  caller;  /* Thread which invokes the callback */
     ucs_async_event_cb_t       cb;      /* Callback function */
     void                       *arg;    /* Callback argument */
@@ -35,7 +35,8 @@ struct ucs_async_handler {
  * @param count         Number of events
  * @param events        Events to pass to the handler
  */
-ucs_status_t ucs_async_dispatch_handlers(int *handler_ids, size_t count, int events);
+ucs_status_t ucs_async_dispatch_handlers(int *handler_ids, size_t count,
+                                         ucs_event_set_types_t events);
 
 
 /**
@@ -64,10 +65,10 @@ typedef struct ucs_async_ops {
     void         (*context_unblock)(ucs_async_context_t *async);
 
     ucs_status_t (*add_event_fd)(ucs_async_context_t *async, int event_fd,
-                                 int events);
+                                 ucs_event_set_types_t events);
     ucs_status_t (*remove_event_fd)(ucs_async_context_t *async, int event_fd);
     ucs_status_t (*modify_event_fd)(ucs_async_context_t *async, int event_fd,
-                                    int events);
+                                    ucs_event_set_types_t events);
 
     ucs_status_t (*add_timer)(ucs_async_context_t *async, int timer_id,
                               ucs_time_t interval);

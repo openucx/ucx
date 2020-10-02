@@ -90,7 +90,7 @@ err:
     return UCS_ERR_IO_ERROR;
 }
 
-void uct_tcp_sa_data_handler(int fd, int events, void *arg)
+void uct_tcp_sa_data_handler(int fd, ucs_event_set_types_t events, void *arg)
 {
     uct_tcp_sockcm_ep_t *ep = (uct_tcp_sockcm_ep_t*)arg;
     ucs_log_level_t log_level;

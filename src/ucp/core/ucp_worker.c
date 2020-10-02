@@ -118,7 +118,7 @@ static ucs_status_t ucp_worker_wakeup_ctl_fd(ucp_worker_h worker,
                                              ucp_worker_event_fd_op_t op,
                                              int event_fd)
 {
-    ucs_event_set_type_t events = UCS_EVENT_SET_EVREAD;
+    ucs_event_set_types_t events = UCS_EVENT_SET_EVREAD;
     ucs_status_t status;
 
     if (!(worker->context->config.features & UCP_FEATURE_WAKEUP)) {
@@ -900,10 +900,11 @@ static void ucp_worker_iface_async_cb_event(void *arg, unsigned flags)
     ucp_worker_iface_event_common(wiface);
 }
 
-static void ucp_worker_iface_async_fd_event(int fd, int events, void *arg)
+static void
+ucp_worker_iface_async_fd_event(int fd, ucs_event_set_types_t events, void *arg)
 {
     ucp_worker_iface_t *wiface = arg;
-    int event_fd               = ucp_worker_iface_get_event_fd(wiface);;
+    int event_fd               = ucp_worker_iface_get_event_fd(wiface);
     ucs_status_t status;
 
     ucs_assertv(fd == event_fd, "fd=%d vs wiface::event_fd=%d", fd, event_fd);
