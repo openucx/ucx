@@ -590,7 +590,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
 }
 
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
-                                    uct_rc_fc_request_t *req)
+                                    uct_rc_pending_req_t *req)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
 

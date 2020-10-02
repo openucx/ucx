@@ -345,7 +345,7 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
                                                        priv);
     uct_rc_ep_t UCS_V_UNUSED *ep    = ucs_container_of(group, uct_rc_ep_t,
                                                        arb_group);
-    uct_rc_fc_request_t *freq;
+    uct_rc_pending_req_t *freq;
 
     /* Invoke user's callback only if it is not internal FC message */
     if (ucs_likely(req->func != uct_rc_ep_fc_grant)){
@@ -355,7 +355,7 @@ static ucs_arbiter_cb_result_t uct_rc_ep_abriter_purge_cb(ucs_arbiter_t *arbiter
             ucs_debug("ep=%p cancelling user pending request %p", ep, req);
         }
     } else {
-        freq = ucs_derived_of(req, uct_rc_fc_request_t);
+        freq = ucs_derived_of(req, uct_rc_pending_req_t);
         ucs_mpool_put(freq);
     }
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
@@ -375,10 +375,10 @@ void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
 {
     ucs_status_t status;
-    uct_rc_fc_request_t *freq = ucs_derived_of(self, uct_rc_fc_request_t);
-    uct_rc_ep_t *ep           = ucs_derived_of(freq->ep, uct_rc_ep_t);
-    uct_rc_iface_t *iface     = ucs_derived_of(ep->super.super.iface,
-                                               uct_rc_iface_t);
+    uct_rc_pending_req_t *freq = ucs_derived_of(self, uct_rc_pending_req_t);
+    uct_rc_ep_t *ep            = ucs_derived_of(freq->ep, uct_rc_ep_t);
+    uct_rc_iface_t *iface      = ucs_derived_of(ep->super.super.iface,
+                                                uct_rc_iface_t);
 
     ucs_assert_always(iface->config.fc_enabled);
     status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FC_PURE_GRANT, NULL);

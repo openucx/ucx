@@ -824,7 +824,7 @@ ucs_status_t uct_dc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 #endif
 
 ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
-                                    uct_rc_fc_request_t *req)
+                                    uct_rc_pending_req_t *req)
 {
     uct_dc_mlx5_ep_t *dc_ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
@@ -1223,7 +1223,7 @@ uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *gro
     uct_dc_mlx5_iface_t *iface   = ucs_derived_of(ep->super.super.iface,
                                                   uct_dc_mlx5_iface_t);
     uct_pending_req_t *req       = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_rc_fc_request_t *freq;
+    uct_rc_pending_req_t *freq;
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface) &&
         (uct_dc_mlx5_pending_req_priv(req)->ep != ep)) {
@@ -1240,7 +1240,7 @@ uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *gro
     } else {
         /* User callback should not be called for FC messages.
          * Just return pending request memory to the pool */
-        freq = ucs_derived_of(req, uct_rc_fc_request_t);
+        freq = ucs_derived_of(req, uct_rc_pending_req_t);
         ucs_mpool_put(freq);
     }
 
