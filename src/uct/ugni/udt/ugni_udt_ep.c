@@ -53,7 +53,7 @@ ucs_arbiter_cb_result_t uct_ugni_udt_ep_process_pending(ucs_arbiter_t *arbiter,
 }
 
 static ucs_arbiter_cb_result_t
-uct_ugni_udt_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+uct_ugni_udt_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
                                  ucs_arbiter_group_t *group,
                                  ucs_arbiter_elem_t *elem, void *arg)
 {
@@ -63,7 +63,7 @@ uct_ugni_udt_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
                                              uct_ugni_iface_t);
     ucs_arbiter_cb_result_t result;
 
-    result = uct_ugni_ep_abriter_purge_cb(arbiter, group, elem, arg);
+    result = uct_ugni_ep_arbiter_purge_cb(arbiter, group, elem, arg);
     if (UCS_ARBITER_CB_RESULT_REMOVE_ELEM == result) {
         uct_worker_progress_remove(iface->super.worker, &iface->super.prog);
     }
@@ -79,7 +79,7 @@ void uct_ugni_udt_ep_pending_purge(uct_ep_h tl_ep,
     uct_purge_cb_args_t args = {cb, arg};
 
     ucs_arbiter_group_purge(&iface->arbiter, &ep->arb_group,
-                            uct_ugni_udt_ep_abriter_purge_cb, &args);
+                            uct_ugni_udt_ep_arbiter_purge_cb, &args);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_udt_ep_t, const uct_ep_params_t *params)
