@@ -132,9 +132,11 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         return status;
     }
 
+    attr->ep_addr_len      = sizeof(uct_tcp_ep_addr_t);
     attr->iface_addr_len   = sizeof(in_port_t);
     attr->device_addr_len  = sizeof(struct sockaddr_in);
     attr->cap.flags        = UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                             UCT_IFACE_FLAG_CONNECT_TO_EP    |
                              UCT_IFACE_FLAG_AM_SHORT         |
                              UCT_IFACE_FLAG_AM_BCOPY         |
                              UCT_IFACE_FLAG_PENDING          |
@@ -284,9 +286,17 @@ uct_tcp_iface_connect_handler(int listen_fd, ucs_event_set_types_t events,
     }
 }
 
-ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd)
+ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
+                                       int set_nb)
 {
     ucs_status_t status;
+
+    if (set_nb) {
+        status = ucs_sys_fcntl_modfl(fd, O_NONBLOCK, 0);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
 
     status = ucs_socket_setopt(fd, IPPROTO_TCP, TCP_NODELAY,
                                (const void*)&iface->sockopt.nodelay,
@@ -315,6 +325,8 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = uct_tcp_ep_create,
     .ep_destroy               = uct_tcp_ep_destroy,
+    .ep_get_address           = uct_tcp_ep_get_address,
+    .ep_connect_to_ep         = uct_tcp_ep_connect_to_ep,
     .iface_flush              = uct_tcp_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = uct_base_iface_progress_enable,
@@ -552,6 +564,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_conn_match_init(&self->conn_match_ctx,
                         ucs_field_sizeof(uct_tcp_ep_t, peer_addr),
                         &uct_tcp_cm_conn_match_ops);
+    status = ucs_ptr_map_init(&self->ep_ptr_map);
+    ucs_assert_always(status == UCS_OK);
 
     if (self->config.tx_seg_size > self->config.rx_seg_size) {
         ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
@@ -667,6 +681,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
 
     uct_tcp_iface_ep_list_cleanup(self);
     ucs_conn_match_cleanup(&self->conn_match_ctx);
+    ucs_ptr_map_destroy(&self->ep_ptr_map);
 
     ucs_mpool_cleanup(&self->rx_mpool, 1);
     ucs_mpool_cleanup(&self->tx_mpool, 1);

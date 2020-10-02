@@ -14,6 +14,7 @@
 #include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 #include <ucs/datastruct/conn_match.h>
+#include <ucs/datastruct/ptr_map.inl>
 #include <ucs/algorithm/crc.h>
 #include <ucs/sys/event_set.h>
 #include <ucs/sys/iovec.h>
@@ -56,14 +57,19 @@
 #define UCT_TCP_EP_CTX_CAPS                  (UCT_TCP_EP_FLAG_CTX_TYPE_TX | \
                                               UCT_TCP_EP_FLAG_CTX_TYPE_RX)
 
-/* Maximal value for connection sequnce number */
-#define UCT_TCP_CM_CONN_SN_MAX               UINT32_MAX
+/* Maximal value for connection sequence number */
+#define UCT_TCP_CM_CONN_SN_MAX               UINT64_MAX
 
 
 /**
- * TCP connection sequence number
+ * TCP EP connection manager ID
  */
-typedef uint32_t uct_tcp_cm_conn_sn_t;
+typedef union uct_tcp_ep_cm_id {
+    ucs_conn_sn_t              conn_sn;        /* Connection sequence number, used by EPs
+                                                * created with CONNECT_TO_IFACE method */
+    ucs_ptr_map_key_t          ptr_map_key;    /* PTR map key, used by EPs created with
+                                                * CONNECT_TO_EP method */
+} uct_tcp_ep_cm_id_t;
 
 
 /**
@@ -91,7 +97,12 @@ enum {
     /* EP is on connection matching context. */
     UCT_TCP_EP_FLAG_ON_MATCH_CTX       = UCS_BIT(6),
     /* EP failed and a callback for handling error is scheduled. */
-    UCT_TCP_EP_FLAG_FAILED             = UCS_BIT(7)
+    UCT_TCP_EP_FLAG_FAILED             = UCS_BIT(7),
+    /* EP is created to utilize CONNECT_TO_EP connection establishment
+     * method. */
+    UCT_TCP_EP_FLAG_CONNECT_TO_EP      = UCS_BIT(8),
+    /* EP is on EP PTR map. */
+    UCT_TCP_EP_FLAG_ON_PTR_MAP         = UCS_BIT(9)
 };
 
 
@@ -126,7 +137,7 @@ typedef enum uct_tcp_ep_conn_state {
 /* Forward declaration */
 typedef struct uct_tcp_ep uct_tcp_ep_t;
 
-typedef unsigned (*uct_tcp_ep_progress_t)(uct_tcp_ep_t *ep);
+typedef ucs_callback_t uct_tcp_ep_progress_t;
 
 
 /**
@@ -160,12 +171,23 @@ typedef enum uct_tcp_cm_conn_event {
 
 
 /**
+ * TCP connection request packet flags
+ */
+enum {
+    /* Inditicates whether both EPs of the connection has to use CONNECT_TO_EP
+     * CONNECT_TO_EP of connection establishmnet */
+    UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP = UCS_BIT(0)
+};
+
+
+/**
  * TCP connection request packet
  */
 typedef struct uct_tcp_cm_conn_req_pkt {
     uct_tcp_cm_conn_event_t       event;      /* Connection event ID */
+    uint8_t                       flags;      /* Packet flags */
     struct sockaddr_in            iface_addr; /* Socket address of UCT local iface */
-    uct_tcp_cm_conn_sn_t          conn_sn;    /* Connection sequence number */
+    uct_tcp_ep_cm_id_t            cm_id;      /* EP connection mananger ID */
 } UCS_S_PACKED uct_tcp_cm_conn_req_pkt_t;
 
 
@@ -250,19 +272,29 @@ typedef struct uct_tcp_ep_zcopy_tx {
 
 
 /**
+ * TCP endpoint address
+ */
+typedef struct uct_tcp_ep_addr {
+    in_port_t                     iface_addr;     /* Interface address */
+    ucs_ptr_map_key_t             ptr_map_key;    /* PTR map key, used by EPs created with
+                                                   * CONNECT_TO_EP method */
+} UCS_S_PACKED uct_tcp_ep_addr_t;
+
+
+/**
  * TCP endpoint
  */
 struct uct_tcp_ep {
     uct_base_ep_t                 super;
-    uint8_t                       flags;            /* Endpoint flags */
     uint8_t                       conn_retries;     /* Number of connection attempts done */
     uint8_t                       conn_state;       /* State of connection with peer */
     ucs_event_set_types_t         events;           /* Current notifications */
+    uint16_t                      flags;            /* Endpoint flags */
     int                           fd;               /* Socket file descriptor */
     int                           stale_fd;         /* Old file descriptor which should be
                                                      * closed as soon as the EP is connected
                                                      * using the new fd */
-    uct_tcp_cm_conn_sn_t          conn_sn;          /* Connection sequence number */
+    uct_tcp_ep_cm_id_t            cm_id;            /* EP connection mananger ID */
     uct_tcp_ep_ctx_t              tx;               /* TX resources */
     uct_tcp_ep_ctx_t              rx;               /* RX resources */
     struct sockaddr_in            peer_addr;        /* Remote iface addr */
@@ -271,7 +303,8 @@ struct uct_tcp_ep {
                                                      * outstanding PUTs acknowledgment */
     union {
         ucs_list_link_t           list;             /* List element to insert into TCP EP list */
-        ucs_conn_match_elem_t     elem;             /* Connection matching element */
+        ucs_conn_match_elem_t     elem;             /* Connection matching element, used by EPs
+                                                     * created with CONNECT_TO_IFACE method */
     };
 };
 
@@ -282,7 +315,10 @@ struct uct_tcp_ep {
 typedef struct uct_tcp_iface {
     uct_base_iface_t              super;             /* Parent class */
     int                           listen_fd;         /* Server socket */
-    ucs_conn_match_ctx_t          conn_match_ctx;    /* Connection matching context */
+    ucs_conn_match_ctx_t          conn_match_ctx;    /* Connection matching context that contains EPs
+                                                      * created with CONNECT_TO_IFACE method */
+    ucs_ptr_map_t                 ep_ptr_map;        /* EP PTR map that contains EPs created
+                                                      * with CONNECT_TO_EP method */
     ucs_list_link_t               ep_list;           /* List of endpoints */
     char                          if_name[IFNAMSIZ]; /* Network interface name */
     ucs_sys_event_set_t           *event_set;        /* Event set identifier */
@@ -370,7 +406,8 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 int uct_tcp_sockaddr_cmp(const struct sockaddr *sa1,
                          const struct sockaddr *sa2);
 
-ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd);
+ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
+                                       int set_nb);
 
 size_t uct_tcp_iface_get_max_iov(const uct_tcp_iface_t *iface);
 
@@ -379,6 +416,8 @@ size_t uct_tcp_iface_get_max_zcopy_header(const uct_tcp_iface_t *iface);
 void uct_tcp_iface_add_ep(uct_tcp_ep_t *ep);
 
 void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
+
+int uct_tcp_cm_ep_accept_conn(uct_tcp_ep_t *ep);
 
 int uct_tcp_iface_is_self_addr(uct_tcp_iface_t *iface,
                                const struct sockaddr_in *peer_addr);
@@ -390,19 +429,27 @@ ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
                              uct_tcp_ep_t **ep_p);
 
+uint64_t uct_tcp_ep_get_cm_id(const uct_tcp_ep_t *ep);
+
 ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params,
                                uct_ep_h *ep_p);
 
+ucs_status_t uct_tcp_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr);
+
+ucs_status_t uct_tcp_ep_connect_to_ep(uct_ep_h ep,
+                                      const uct_device_addr_t *dev_addr,
+                                      const uct_ep_addr_t *ep_addr);
+
 const char *uct_tcp_ep_ctx_caps_str(uint8_t ep_ctx_caps, char *str_buffer);
 
-void uct_tcp_ep_change_ctx_caps(uct_tcp_ep_t *ep, uint8_t new_caps);
+void uct_tcp_ep_change_ctx_caps(uct_tcp_ep_t *ep, uint16_t new_caps);
 
-void uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep, uint8_t cap);
+void uct_tcp_ep_add_ctx_cap(uct_tcp_ep_t *ep, uint16_t cap);
 
-void uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep, uint8_t cap);
+void uct_tcp_ep_remove_ctx_cap(uct_tcp_ep_t *ep, uint16_t cap);
 
 void uct_tcp_ep_move_ctx_cap(uct_tcp_ep_t *from_ep, uct_tcp_ep_t *to_ep,
-                             uint8_t ctx_cap);
+                             uint16_t ctx_cap);
 
 void uct_tcp_ep_destroy_internal(uct_ep_h tl_ep);
 
@@ -410,7 +457,12 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep);
 
 void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep);
 
+void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep);
+
 int uct_tcp_ep_is_self(const uct_tcp_ep_t *ep);
+
+uct_tcp_ep_t* uct_tcp_ep_ptr_map_retrieve(uct_tcp_iface_t *iface,
+                                          ucs_ptr_map_key_t ptr_map_key);
 
 void uct_tcp_ep_remove(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
@@ -452,7 +504,7 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
 
 unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep_p, void *pkt, uint32_t length);
 
-unsigned uct_tcp_cm_conn_progress(uct_tcp_ep_t *ep);
+unsigned uct_tcp_cm_conn_progress(void *arg);
 
 uct_tcp_ep_conn_state_t
 uct_tcp_cm_set_conn_state(uct_tcp_ep_t *ep,
@@ -461,14 +513,17 @@ uct_tcp_cm_set_conn_state(uct_tcp_ep_t *ep,
 void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
                                   uct_tcp_ep_conn_state_t new_conn_state);
 
-uct_tcp_cm_conn_sn_t
-uct_tcp_cm_get_conn_sn(uct_tcp_iface_t *iface,
-                       const struct sockaddr_in *dest_address);
+void uct_tcp_cm_ep_set_conn_sn(uct_tcp_ep_t *ep);
 
 uct_tcp_ep_t *uct_tcp_cm_get_ep(uct_tcp_iface_t *iface,
                                 const struct sockaddr_in *dest_address,
-                                uct_tcp_cm_conn_sn_t conn_sn,
+                                ucs_conn_sn_t conn_sn,
                                 uint8_t with_ctx_cap);
+
+uct_tcp_ep_t *uct_tcp_cm_get_conn_to_ep(uct_tcp_iface_t *iface,
+                                        const struct sockaddr_in *dest_address,
+                                        ucs_conn_sn_t conn_sn,
+                                        uint8_t with_ctx_cap);
 
 void uct_tcp_cm_insert_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
