@@ -1136,11 +1136,7 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
-    ucs_trace_data("progressing pending request %p", req);
-    status = req->func(req);
-    ucs_trace_data("status returned from progress pending: %s",
-                   ucs_status_string(status));
-
+    status = uct_rc_iface_invoke_pending_cb(&iface->super.super, req);
     if (status == UCS_OK) {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
@@ -1173,7 +1169,7 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
     int is_only                = ucs_arbiter_elem_is_only(elem);
     ucs_arbiter_cb_result_t res;
 
-    res     = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
+    res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
     if (res == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
         /* For dcs* policies release dci if this is the last elem in the group
          * and the dci has no outstanding operations. For example pending
