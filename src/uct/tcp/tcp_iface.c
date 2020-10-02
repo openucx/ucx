@@ -629,6 +629,7 @@ void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep)
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
     UCS_ASYNC_BLOCK(iface->super.worker->async);
+    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
     ucs_list_del(&ep->list);
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
 }
