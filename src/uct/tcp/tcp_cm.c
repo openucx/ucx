@@ -223,7 +223,7 @@ uct_tcp_cm_conn_match_address_str(const ucs_conn_match_ctx_t *conn_match_ctx,
                                   const void *address, char *str,
                                   size_t max_size)
 {
-    return ucs_sockaddr_str((const struct sockaddr*)&address,
+    return ucs_sockaddr_str((const struct sockaddr*)address,
                             str, ucs_min(max_size, UCS_SOCKADDR_STRING_LEN));
 }
 
