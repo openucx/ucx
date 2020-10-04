@@ -19,7 +19,7 @@
  */
 class mem_buffer {
 public:
-    static std::vector<ucs_memory_type_t> supported_mem_types();
+    static const std::vector<ucs_memory_type_t>& supported_mem_types();
 
     /* allocate buffer of a given memory type */
     static void *allocate(size_t size, ucs_memory_type_t mem_type);

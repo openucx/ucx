@@ -43,7 +43,7 @@
 #endif
 
 
-std::vector<ucs_memory_type_t> mem_buffer::supported_mem_types()
+const std::vector<ucs_memory_type_t>& mem_buffer::supported_mem_types()
 {
     static std::vector<ucs_memory_type_t> vec;
 

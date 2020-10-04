@@ -411,7 +411,8 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
     }
 
     ucs_snprintf_zero(device->name, sizeof(device->name), "%s", dev_name);
-    device->type = dev_type;
+    device->type       = dev_type;
+    device->sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     *num_tl_devices_p = 1;
     *tl_devices_p     = device;

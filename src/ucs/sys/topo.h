@@ -14,10 +14,10 @@
 
 BEGIN_C_DECLS
 
-#define UCS_SYS_DEVICE_ID_UNKNOWN UINT16_MAX /* Indicate that the ucs_sys_device_t
-                                              * for the device has no real bus_id
-                                              * e.g. virtual devices like CMA/knem
-                                              */
+#define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX /* Indicate that the ucs_sys_device_t
+                                             * for the device has no real bus_id
+                                             * e.g. virtual devices like CMA/knem
+                                             */
 
 
 typedef struct ucs_sys_bus_id {
@@ -34,7 +34,7 @@ typedef struct ucs_sys_bus_id {
  * Obtained from a translation of the device bus id into a short integer
  * Refer ucs_topo_find_device_by_bus_id()
  */
-typedef uint16_t ucs_sys_device_t;
+typedef uint8_t ucs_sys_device_t;
 
 
 /*
@@ -76,15 +76,29 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
 
 
 /**
+ * Return system device name in BFD format: <domain>:<bus>:<device>.<function>
+ *
+ * @param [in]  sys_dev  System device id, as returned from
+ *                       @ref ucs_topo_find_device_by_bus_id
+ * @param [out] buffer   String buffer, filled the device name
+ * @param [in]  max      Maximal size of @a buffer
+ */
+const char *
+ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max);
+
+
+/**
  * Print a map indicating the topology information between system
  * devices discovered
  */
 void ucs_topo_print_info(FILE *stream);
 
+
 /**
  * Initialize UCS topology subsystem.
  */
 void ucs_topo_init();
+
 
 /**
  * Cleanup UCS topology subsystem.

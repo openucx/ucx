@@ -20,6 +20,7 @@
 #include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
 #include <sys/poll.h>
+#include <libgen.h>
 #include <sched.h>
 
 
@@ -985,6 +986,46 @@ ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state)
     return UCS_OK;
 }
 
+static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
+{
+    char path_buffer[PATH_MAX], *resolved_path;
+    ucs_sys_device_t sys_dev;
+    ucs_sys_bus_id_t bus_id;
+    ucs_status_t status;
+    char *pcie_bus;
+    int num_fields;
+
+    /* realpath name is of form /sys/devices/.../0000:05:00.0/infiniband/mlx5_0
+     * and bus_id is constructed from 0000:05:00.0 */
+
+    resolved_path = realpath(dev->ibv_context->device->ibdev_path, path_buffer);
+    if (resolved_path == NULL) {
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    /* Make sure there is "/infiniband/" substring in path_buffer*/
+    if (strstr(path_buffer, "/infiniband/") == NULL) {
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    pcie_bus   = basename(dirname(dirname(path_buffer)));
+    num_fields = sscanf(pcie_bus, "%hx:%hhx:%hhx.%hhx", &bus_id.domain,
+                        &bus_id.bus, &bus_id.slot, &bus_id.function);
+    if (num_fields != 4) {
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
+    if (status != UCS_OK) {
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    ucs_debug("%s bus id %hu:%hhu:%hhu.%hhu sys_dev %d",
+              uct_ib_device_name(dev), bus_id.domain, bus_id.bus, bus_id.slot,
+              bus_id.function, sys_dev );
+    return sys_dev;
+}
+
 ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
                                        uct_tl_device_resource_t **tl_devices_p,
                                        unsigned *num_tl_devices_p)
@@ -1020,7 +1061,8 @@ ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
         ucs_snprintf_zero(tl_devices[num_tl_devices].name,
                           sizeof(tl_devices[num_tl_devices].name),
                           "%s:%d", uct_ib_device_name(dev), port_num);
-        tl_devices[num_tl_devices].type = UCT_DEVICE_TYPE_NET;
+        tl_devices[num_tl_devices].type       = UCT_DEVICE_TYPE_NET;
+        tl_devices[num_tl_devices].sys_device = uct_ib_device_get_sys_dev(dev);
         ++num_tl_devices;
     }
 
