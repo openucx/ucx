@@ -92,7 +92,7 @@ ucp_proto_am_zcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
                                               ucp_proto_request_zcopy_completion);
         if (status != UCS_OK) {
             ucp_proto_request_zcopy_complete(req, status);
-            return UCS_OK;
+            return UCS_OK; /* remove from pending after request is completed */
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;

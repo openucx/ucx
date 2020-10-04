@@ -35,10 +35,9 @@ static ucs_status_t ucp_eager_short_progress(uct_pending_req_t *self)
         return status;
     }
 
-    /* UCS_INPROGRESS is not expected */
-    ucs_assert((status == UCS_OK) || UCS_STATUS_IS_ERR(status));
-
     ucp_datatype_iter_cleanup(&req->send.dt_iter, UCS_BIT(UCP_DATATYPE_CONTIG));
+
+    ucs_assert(status != UCS_INPROGRESS);
     ucp_request_complete_send(req, status);
     return UCS_OK;
 }

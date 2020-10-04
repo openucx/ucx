@@ -244,23 +244,24 @@ ucp_datatype_iter_next_ptr(const ucp_datatype_iter_t *dt_iter,
 /*
  * Returns a pointer to next chunk of data as IOV entry of registered memory
  * (could be done only on some datatype classes)
+ *
+ * @param memh_index  Index of UCT memory handle (within the memory domain map
+ *                    which was passed to @ref ucp_datatype_iter_mem_reg, or
+ *                    UCP_NULL_RESOURCE to pass UCT_MEM_HANDLE_NULL.
  */
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
-                           ucp_md_index_t md_index, size_t max_length,
+                           ucp_rsc_index_t memh_index, size_t max_length,
                            ucp_datatype_iter_t *next_iter, uct_iov_t *iov)
 {
-    ucp_md_map_t md_map = dt_iter->type.contig.reg.md_map;
-    ucp_md_index_t memh_index;
-
     /* TODO support IOV datatype */
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
 
-    if (md_map & UCS_BIT(md_index)) {
-        memh_index  = ucs_bitmap2idx(md_map, md_index);
-        iov[0].memh = dt_iter->type.contig.reg.memh[memh_index];
-    } else {
+    if (memh_index == UCP_NULL_RESOURCE) {
         iov[0].memh = UCT_MEM_HANDLE_NULL;
+    } else {
+        ucs_assert(memh_index < ucs_popcount(dt_iter->type.contig.reg.md_map));
+        iov[0].memh = dt_iter->type.contig.reg.memh[memh_index];
     }
 
     iov[0].length   = ucp_datatype_iter_next_ptr(dt_iter, max_length, next_iter,

@@ -122,7 +122,7 @@ ucp_proto_multi_zcopy_progress(uct_pending_req_t *uct_req,
         status = ucp_proto_request_zcopy_init(req, priv->reg_md_map, comp_func);
         if (status != UCS_OK) {
             ucp_proto_request_zcopy_complete(req, status);
-            return UCS_OK;
+            return UCS_OK; /* remove from pending after request is completed */
         }
 
         ucp_proto_multi_request_init(req);
