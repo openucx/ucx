@@ -15,9 +15,9 @@ typedef uint64_t uct_cuda_copy_iface_addr_t;
 
 
 typedef enum uct_cuda_copy_stream {
-    UCT_CUDA_COPY_H2D_STREAM  = 0,
-    UCT_CUDA_COPY_D2H_STREAM  = 1,
-    UCT_CUDA_COPY_LAST_STREAM = 2
+    UCT_CUDA_COPY_STREAM_H2D,
+    UCT_CUDA_COPY_STREAM_D2H,
+    UCT_CUDA_COPY_STREAM_LAST
 } uct_cuda_copy_stream_t;
 
 
@@ -25,9 +25,8 @@ typedef struct uct_cuda_copy_iface {
     uct_base_iface_t            super;
     uct_cuda_copy_iface_addr_t  id;
     ucs_mpool_t                 cuda_event_desc;
-    ucs_queue_head_t            outstanding_event_q[UCT_CUDA_COPY_LAST_STREAM];
-    cudaStream_t                stream[UCT_CUDA_COPY_LAST_STREAM];
-    unsigned long               stream_refcount[UCT_CUDA_COPY_LAST_STREAM];
+    ucs_queue_head_t            outstanding_event_q[UCT_CUDA_COPY_STREAM_LAST];
+    cudaStream_t                stream[UCT_CUDA_COPY_STREAM_LAST];
     struct {
         unsigned                max_poll;
         unsigned                max_cuda_events;
@@ -50,7 +49,6 @@ typedef struct uct_cuda_copy_event_desc {
     cudaEvent_t event;
     uct_completion_t *comp;
     ucs_queue_elem_t  queue;
-    unsigned          stream_id;
 } uct_cuda_copy_event_desc_t;
 
 #endif
