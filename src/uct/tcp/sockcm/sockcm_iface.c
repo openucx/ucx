@@ -157,7 +157,8 @@ static ucs_status_t uct_sockcm_iface_process_conn_req(uct_sockcm_ctx_t *sock_id_
     return UCS_OK;
 }
 
-static void uct_sockcm_iface_recv_handler(int fd, int events, void *arg)
+static void uct_sockcm_iface_recv_handler(int fd, ucs_event_set_types_t events,
+                                          void *arg)
 {
     uct_sockcm_ctx_t *sock_id_ctx = (uct_sockcm_ctx_t *) arg;
     ucs_status_t status;
@@ -196,7 +197,8 @@ out_remove_handler:
     }
 }
 
-static void uct_sockcm_iface_event_handler(int fd, int events, void *arg)
+static void uct_sockcm_iface_event_handler(int fd, ucs_event_set_types_t events,
+                                           void *arg)
 {
     size_t recv_len               = 0;
     uct_sockcm_iface_t *iface     = arg;

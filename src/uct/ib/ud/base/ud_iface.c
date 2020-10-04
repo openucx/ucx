@@ -223,7 +223,8 @@ static inline void uct_ud_iface_async_progress(uct_ud_iface_t *iface)
     }
 }
 
-static void uct_ud_iface_async_handler(int fd, int events, void *arg)
+static void uct_ud_iface_async_handler(int fd, ucs_event_set_types_t events,
+                                       void *arg)
 {
     uct_ud_iface_t *iface = arg;
 
@@ -241,7 +242,8 @@ static void uct_ud_iface_async_handler(int fd, int events, void *arg)
     iface->async.event_cb(iface->async.event_arg, 0);
 }
 
-static void uct_ud_iface_timer(int timer_id, int events, void *arg)
+static void uct_ud_iface_timer(int timer_id, ucs_event_set_types_t events,
+                               void *arg)
 {
     uct_ud_iface_t *iface = arg;
 

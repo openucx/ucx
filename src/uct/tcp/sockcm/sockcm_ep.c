@@ -212,7 +212,8 @@ static void uct_sockcm_handle_info_sent(uct_sockcm_ep_t *ep)
     }
 }
 
-static void uct_sockcm_ep_event_handler(int fd, int events, void *arg)
+static void uct_sockcm_ep_event_handler(int fd, ucs_event_set_types_t events,
+                                        void *arg)
 {
     uct_sockcm_ep_t *ep = (uct_sockcm_ep_t *) arg;
 

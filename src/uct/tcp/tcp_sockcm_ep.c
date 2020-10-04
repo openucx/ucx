@@ -175,7 +175,8 @@ static void uct_tcp_sockcm_ep_invoke_error_cb(uct_tcp_sockcm_ep_t *cep,
 
 void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
                                            ucs_status_t status,
-                                           int events, const char *reason)
+                                           ucs_event_set_types_t events,
+                                           const char *reason)
 {
     ucs_status_t async_status;
 
@@ -285,7 +286,7 @@ ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep)
 {
     ucs_status_t status;
     size_t sent_length;
-    int events;
+    ucs_event_set_types_t events;
 
     ucs_assert(ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_CLIENT      |
                                               UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED) ||

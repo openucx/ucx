@@ -82,4 +82,5 @@ void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep);
 
 void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
                                            ucs_status_t status,
-                                           int events, const char *reason);
+                                           ucs_event_set_types_t events,
+                                           const char *reason);

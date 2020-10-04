@@ -471,12 +471,13 @@ out_create_ep:
     return UCS_OK;
 }
 
-void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int rem)
+void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, ucs_event_set_types_t add,
+                           ucs_event_set_types_t rem)
 {
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
-    int old_events         = ep->events;
-    int new_events         = (ep->events | add) & ~rem;
+    uct_tcp_iface_t *iface           = ucs_derived_of(ep->super.super.iface,
+                                                      uct_tcp_iface_t);
+    ucs_event_set_types_t old_events = ep->events;
+    ucs_event_set_types_t new_events = (ep->events | add) & ~rem;
     ucs_status_t status;
 
     if (new_events != ep->events) {
@@ -488,13 +489,11 @@ void uct_tcp_ep_mod_events(uct_tcp_ep_t *ep, int add, int rem)
         if (new_events == 0) {
             status = ucs_event_set_del(iface->event_set, ep->fd);
         } else if (old_events != 0) {
-            status = ucs_event_set_mod(iface->event_set, ep->fd,
-                                       (ucs_event_set_type_t)ep->events,
-                                       (void *)ep);
+            status = ucs_event_set_mod(iface->event_set, ep->fd, ep->events,
+                                       (void*)ep);
         } else {
-            status = ucs_event_set_add(iface->event_set, ep->fd,
-                                       (ucs_event_set_type_t)ep->events,
-                                       (void *)ep);
+            status = ucs_event_set_add(iface->event_set, ep->fd, ep->events,
+                                       (void*)ep);
         }
         if (status != UCS_OK) {
             ucs_fatal("unable to modify event set for tcp_ep %p (fd=%d)", ep,

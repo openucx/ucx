@@ -183,7 +183,7 @@ static ucs_status_t ucs_async_signal_dispatch_timer(int uid)
 
 static inline int ucs_signal_map_to_events(int si_code)
 {
-    int events;
+    ucs_event_set_types_t events;
 
     switch (si_code) {
     case POLL_IN:
@@ -338,8 +338,9 @@ static void ucs_async_signal_cleanup(ucs_async_context_t *async)
     }
 }
 
-static ucs_status_t ucs_async_signal_modify_event_fd(ucs_async_context_t *async,
-                                                     int event_fd, int events)
+static ucs_status_t
+ucs_async_signal_modify_event_fd(ucs_async_context_t *async, int event_fd,
+                                 ucs_event_set_types_t events)
 {
     ucs_status_t status;
     int add, rm;
@@ -365,7 +366,8 @@ static ucs_status_t ucs_async_signal_modify_event_fd(ucs_async_context_t *async,
 }
 
 static ucs_status_t ucs_async_signal_add_event_fd(ucs_async_context_t *async,
-                                                  int event_fd, int events)
+                                                  int event_fd,
+                                                  ucs_event_set_types_t events)
 {
     ucs_status_t status;
     pid_t tid;
