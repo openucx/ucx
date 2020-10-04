@@ -97,6 +97,10 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
 void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
                                 const ucp_proto_common_perf_params_t *perf_params);
 
+
+void ucp_proto_request_zcopy_completion(uct_completion_t *self);
+
+
 void ucp_proto_request_select_error(ucp_request_t *req,
                                     ucp_proto_select_t *proto_select,
                                     ucp_worker_cfg_index_t rkey_cfg_index,

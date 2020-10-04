@@ -32,10 +32,11 @@ static UCS_F_ALWAYS_INLINE void
 ucp_datatype_contig_iter_init(ucp_context_h context, void *buffer, size_t length,
                               ucp_datatype_t datatype, ucp_datatype_iter_t *dt_iter)
 {
-    dt_iter->mem_type           = ucp_memory_type_detect(context, buffer,
-                                                         length);
-    dt_iter->length             = length;
-    dt_iter->type.contig.buffer = buffer;
+    dt_iter->mem_type               = ucp_memory_type_detect(context, buffer,
+                                                             length);
+    dt_iter->length                 = length;
+    dt_iter->type.contig.buffer     = buffer;
+    dt_iter->type.contig.reg.md_map = 0;
 }
 
 static UCS_F_ALWAYS_INLINE void

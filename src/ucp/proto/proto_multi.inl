@@ -108,4 +108,30 @@ ucp_proto_multi_progress(ucp_request_t *req, ucp_proto_send_multi_cb_t send_func
     return UCS_INPROGRESS;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_multi_zcopy_progress(uct_pending_req_t *uct_req,
+                               ucp_proto_send_multi_cb_t send_func,
+                               uct_completion_callback_t comp_func)
+{
+    ucp_request_t *req                 = ucs_container_of(uct_req, ucp_request_t,
+                                                          send.uct);
+    const ucp_proto_multi_priv_t *priv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        status = ucp_proto_request_zcopy_init(req, priv->reg_md_map, comp_func);
+        if (status != UCS_OK) {
+            ucp_proto_request_zcopy_complete(req, status);
+            return UCS_OK;
+        }
+
+        ucp_proto_multi_request_init(req);
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+
+    return ucp_proto_multi_progress(req, send_func,
+                                    ucp_request_invoke_uct_completion,
+                                    UCS_BIT(UCP_DATATYPE_CONTIG));
+}
+
 #endif

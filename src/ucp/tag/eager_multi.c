@@ -162,8 +162,50 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY,
     };
 
-    ucp_proto_eager_multi_init_common(&params);
-    return UCS_ERR_UNSUPPORTED; /* TODO enable when progress is implemented */
+    return ucp_proto_eager_multi_init_common(&params);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
+                                      const ucp_proto_multi_lane_priv_t *lpriv,
+                                      ucp_datatype_iter_t *next_iter)
+{
+    union {
+        ucp_eager_first_hdr_t  first;
+        ucp_eager_middle_hdr_t middle;
+    } hdr;
+    ucp_am_id_t am_id;
+    size_t hdr_size;
+    uct_iov_t iov;
+
+    if (req->send.dt_iter.offset == 0) {
+        am_id    = UCP_AM_ID_EAGER_FIRST;
+        hdr_size = sizeof(hdr.first);
+        ucp_eager_proto_set_first_hdr(req, &hdr.first);
+    } else {
+        am_id    = UCP_AM_ID_EAGER_MIDDLE;
+        hdr_size = sizeof(hdr.middle);
+        ucp_eager_proto_set_middle_hdr(req, &hdr.middle);
+    }
+
+    ucp_datatype_iter_next_iov(&req->send.dt_iter, lpriv->super.memh_index,
+                               ucp_proto_multi_max_payload(req, lpriv, hdr_size),
+                               next_iter, &iov);
+    return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id, &hdr,
+                           hdr_size, &iov, 1, 0, &req->send.state.uct_comp);
+}
+
+static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_eager_multi_proto_request_init(req);
+    }
+
+    return ucp_proto_multi_zcopy_progress(self,
+                                          ucp_proto_eager_zcopy_multi_send_func,
+                                          ucp_proto_request_zcopy_completion);
 }
 
 static ucp_proto_t ucp_eager_zcopy_multi_proto = {
@@ -171,6 +213,6 @@ static ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_zcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = (uct_pending_callback_t)ucs_empty_function_do_assert
+    .progress   = ucp_proto_eager_zcopy_multi_progress
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_multi_proto);
