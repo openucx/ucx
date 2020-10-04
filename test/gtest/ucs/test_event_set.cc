@@ -261,8 +261,7 @@ UCS_TEST_P(test_event_set, ucs_event_set_trig_modes) {
     /* Test edge-triggered mode */
     /* Set edge-triggered mode */
     event_set_ctl(EVENT_SET_OP_MOD, m_pipefd[0],
-                  UCS_EVENT_SET_EVREAD |
-                  UCS_EVENT_SET_EDGE_TRIGGERED);
+                  UCS_EVENT_SET_EVREAD | UCS_EVENT_SET_EDGE_TRIGGERED);
 
     /* Should have only one event to read */
     event_set_wait(1u, 0, event_set_func4, NULL);
