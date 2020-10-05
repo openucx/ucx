@@ -119,18 +119,6 @@ ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
                                void *priv_data, size_t priv_data_max,
                                size_t *priv_data_ret);
 
-ucs_status_t uct_cm_ep_set_pack_cb(const uct_ep_params_t *params,
-                                   uct_cm_base_ep_t *cep);
-
-ucs_status_t uct_cm_ep_set_disconnect_cb(const uct_ep_params_t *params,
-                                         uct_cm_base_ep_t *cep);
-
-ucs_status_t uct_cm_ep_client_set_connect_cb(const uct_ep_params_t *params,
-                                             uct_cm_base_ep_t *cep);
-
-ucs_status_t uct_cm_ep_server_set_notify_cb(const uct_ep_params_t *params,
-                                            uct_cm_base_ep_t *cep);
-
 void uct_cm_ep_disconnect_cb(uct_cm_base_ep_t *cep);
 
 void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
