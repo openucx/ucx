@@ -134,8 +134,11 @@ struct ucp_request {
                     ucp_lane_index_t       am_bw_index; /* AM BW lane index */
                     uint64_t               message_id;  /* used to identify matching parts
                                                            of a large message */
+                    ucs_ptr_map_key_t      sreq_id;     /* send request ID on the
+                                                           sender side */
                     ucs_ptr_map_key_t      rreq_id;     /* receive request ID on the
                                                            recv side (used in AM rndv) */
+
                     union {
                         struct {
                             ucp_tag_t      tag;
@@ -207,7 +210,7 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    ucs_ptr_map_key_t req_id;         /* the send request ID on receiver side */
+                    ucs_ptr_map_key_t sreq_id;        /* the send request ID on receiver side */
                     ucp_request_t     *rreq;          /* pointer to the receive request */
                     size_t            length;         /* the length of the data that should be fetched
                                                        * from sender side */
@@ -295,6 +298,7 @@ struct ucp_request {
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
             ssize_t               remaining;  /* How much more data
                                                * to be received */
+            ucs_ptr_map_key_t     rreq_id;  /* the receive request ID on receiver side */
 
             union {
                 struct {

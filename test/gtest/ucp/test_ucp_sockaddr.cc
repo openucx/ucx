@@ -978,34 +978,38 @@ protected:
 
     void test_tag_send_recv(size_t size, bool is_exp, bool is_sync = false)
     {
-        std::string send_buf(size, 'x');
-        std::string recv_buf(size, 'y');
+        /* send multiple messages to test the protocol both before and after
+         * connection establishment */
+        for (int i = 0; i < 100; i++) {
+            std::string send_buf(size, 'x');
+            std::string recv_buf(size, 'y');
 
-        void *rreq = NULL, *sreq = NULL;
+            void *rreq = NULL, *sreq = NULL;
 
-        if (is_exp) {
-            rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
-                                   ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
+            if (is_exp) {
+                rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
+                                       ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
+            }
+
+            if (is_sync) {
+                sreq = ucp_tag_send_sync_nb(sender().ep(), &send_buf[0], size,
+                                            ucp_dt_make_contig(1), 0, scomplete_cb);
+            } else {
+                sreq = ucp_tag_send_nb(sender().ep(), &send_buf[0], size,
+                                       ucp_dt_make_contig(1), 0, scomplete_cb);
+            }
+
+            if (!is_exp) {
+                short_progress_loop();
+                rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
+                                       ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
+            }
+
+            request_wait(sreq);
+            request_wait(rreq);
+
+            compare_buffers(send_buf, recv_buf);
         }
-
-        if (is_sync) {
-            sreq = ucp_tag_send_sync_nb(sender().ep(), &send_buf[0], size,
-                                        ucp_dt_make_contig(1), 0, scomplete_cb);
-        } else {
-            sreq = ucp_tag_send_nb(sender().ep(), &send_buf[0], size,
-                                   ucp_dt_make_contig(1), 0, scomplete_cb);
-        }
-
-        if (!is_exp) {
-            short_progress_loop();
-            rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
-                                   ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
-        }
-
-        request_wait(sreq);
-        request_wait(rreq);
-
-        compare_buffers(send_buf, recv_buf);
     }
 
     void wait_for_server_ep()

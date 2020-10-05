@@ -105,6 +105,8 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
         return status;
     }
 
+    sreq->send.msg_proto.sreq_id = ucp_send_request_get_id(sreq);
+
     if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
         status = ucp_tag_offload_start_rndv(sreq);
     } else {

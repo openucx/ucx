@@ -52,7 +52,7 @@ static size_t ucp_tag_pack_eager_sync_only_dt(void *dest, void *arg)
 
     hdr->super.super.tag = req->send.msg_proto.tag.tag;
     hdr->req.ep_id       = ucp_send_request_get_ep_remote_id(req);
-    hdr->req.req_id      = ucp_send_request_get_id(req);
+    hdr->req.req_id      = req->send.msg_proto.sreq_id;
 
     return ucp_tag_pack_eager_common(req, hdr + 1, req->send.length,
                                      sizeof(*hdr), 1);
@@ -92,7 +92,7 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
     hdr->super.total_len       = req->send.length;
     hdr->req.ep_id             = ucp_send_request_get_ep_remote_id(req);
     hdr->super.msg_id          = req->send.msg_proto.message_id;
-    hdr->req.req_id            = ucp_send_request_get_id(req);
+    hdr->req.req_id            = req->send.msg_proto.sreq_id;
 
     return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 1);
 }
@@ -256,7 +256,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_single(uct_pending_req_t *self)
 
     hdr.super.super.tag = req->send.msg_proto.tag.tag;
     hdr.req.ep_id       = ucp_send_request_get_ep_remote_id(req);
-    hdr.req.req_id      = ucp_send_request_get_id(req);
+    hdr.req.req_id      = req->send.msg_proto.sreq_id;
 
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_EAGER_SYNC_ONLY, &hdr,
                                   sizeof(hdr), NULL, 0ul,
@@ -272,7 +272,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
     first_hdr.super.super.super.tag = req->send.msg_proto.tag.tag;
     first_hdr.super.total_len       = req->send.length;
     first_hdr.req.ep_id             = ucp_send_request_get_ep_remote_id(req);
-    first_hdr.req.req_id            = ucp_send_request_get_id(req);
+    first_hdr.req.req_id            = req->send.msg_proto.sreq_id;
     first_hdr.super.msg_id          = req->send.msg_proto.message_id;
     middle_hdr.msg_id               = req->send.msg_proto.message_id;
     middle_hdr.offset               = req->send.state.dt.offset;

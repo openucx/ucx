@@ -100,7 +100,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
     void *rkey_buf;
 
     rndv_rts_hdr->sreq.ep_id  = ucp_send_request_get_ep_remote_id(sreq);
-    rndv_rts_hdr->sreq.req_id = ucp_send_request_get_id(sreq);
+    rndv_rts_hdr->sreq.req_id = sreq->send.msg_proto.sreq_id;
     rndv_rts_hdr->size        = sreq->send.length;
     rndv_rts_hdr->flags       = flags;
 
@@ -135,13 +135,11 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
     ucp_request_t *rndv_req          = arg;
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = dest;
     ucp_request_t *rreq              = rndv_req->send.rndv_rtr.rreq;
-    ucp_ep_h ep                      = rndv_req->send.ep;
     ssize_t packed_rkey_size;
 
-    rndv_rtr_hdr->sreq_id = rndv_req->send.rndv_rtr.req_id;
+    rndv_rtr_hdr->sreq_id = rndv_req->send.rndv_rtr.sreq_id;
     /* request of receiver side */
-    rndv_rtr_hdr->rreq_id = ucp_worker_get_request_id(ep->worker, rreq,
-                                                      ucp_ep_use_indirect_id(ep));
+    rndv_rtr_hdr->rreq_id = rreq->recv.rreq_id;
 
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
@@ -404,15 +402,21 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
                                   ucs_ptr_map_key_t sender_req_id,
                                   size_t recv_length, size_t offset)
 {
+    ucp_ep_h ep = rndv_req->send.ep;
+
     ucp_trace_req(rndv_req, "send rtr remote sreq_id 0x%"PRIxPTR" rreq %p",
                   sender_req_id, rreq);
 
-    rndv_req->send.lane            = ucp_ep_get_am_lane(rndv_req->send.ep);
-    rndv_req->send.uct.func        = ucp_proto_progress_rndv_rtr;
-    rndv_req->send.rndv_rtr.req_id = sender_req_id;
-    rndv_req->send.rndv_rtr.rreq   = rreq;
-    rndv_req->send.rndv_rtr.length = recv_length;
-    rndv_req->send.rndv_rtr.offset = offset;
+    rndv_req->send.lane             = ucp_ep_get_am_lane(rndv_req->send.ep);
+    rndv_req->send.uct.func         = ucp_proto_progress_rndv_rtr;
+    rndv_req->send.rndv_rtr.sreq_id = sender_req_id;
+    rndv_req->send.rndv_rtr.rreq    = rreq;
+    rndv_req->send.rndv_rtr.length  = recv_length;
+    rndv_req->send.rndv_rtr.offset  = offset;
+
+    rndv_req->send.rndv_rtr.rreq->recv.rreq_id =
+                    ucp_worker_get_request_id(ep->worker, rreq,
+                                              ucp_ep_use_indirect_id(ep));
 
     ucp_request_send(rndv_req, 0);
 }
@@ -1669,6 +1673,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
          * need it registered (if am and tag is the same lane). */
         ucp_tag_offload_cancel_rndv(sreq);
     }
+
+    ucp_worker_del_request_id(sreq->send.ep->worker, sreq->send.msg_proto.sreq_id);
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) && rndv_rtr_hdr->address) {
         status = ucp_ep_rkey_unpack(ep, rndv_rtr_hdr + 1,

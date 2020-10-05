@@ -649,6 +649,8 @@ static ucs_status_t ucp_am_send_start_rndv(ucp_request_t *sreq)
                   sreq->send.length);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
+    sreq->send.msg_proto.sreq_id = ucp_send_request_get_id(sreq);
+
     /* Note: no need to call ucp_ep_resolve_remote_id() here, because it
      * was done in ucp_am_send_nbx
      */
