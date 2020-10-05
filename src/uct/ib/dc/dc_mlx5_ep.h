@@ -572,6 +572,10 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
             } \
         } \
         UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
+        if (!uct_dc_mlx5_iface_is_dci_rand(_iface)) { \
+            uct_rc_iface_check_pending(&(_iface)->super.super, \
+                                       &(_ep)->arb_group); \
+        } \
     }
 
 

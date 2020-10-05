@@ -543,6 +543,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.ooo_rw             = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
     self->config.tx_cq_len          = init_attr->cq_len[UCT_IB_DIR_TX];
+    self->tx.in_pending             = 0;
 #endif
     max_ib_msg_size                 = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
 
