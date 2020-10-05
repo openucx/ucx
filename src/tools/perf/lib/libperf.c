@@ -511,7 +511,7 @@ static ucs_status_t uct_perf_test_check_md_support(ucx_perf_params_t *params,
                                                    ucs_memory_type_t mem_type,
                                                    uct_md_attr_t *md_attr)
 {
-    if (!(md_attr->cap.access_mem_type == mem_type) &&
+    if (!(md_attr->cap.access_mem_types & UCS_BIT(mem_type)) &&
         !(md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Unsupported memory type %s by "UCT_PERF_TEST_PARAMS_FMT,
