@@ -669,7 +669,7 @@ public:
         m_s1->m_e->destroy_eps();
         m_s1->m_e->connect(0, *m_s0->m_e, 0);
 
-        ASSERT_EQ(2, m_err_count);
+        ASSERT_EQ(err_count(), m_err_count);
     }
 
     typedef ucs_status_t (uct_cancel_test::* send_func_t)(peer *s);
@@ -756,17 +756,26 @@ protected:
     }
 
     void check_skip_test_tl() {
-        const resource *r = dynamic_cast<const resource*>(GetParam());
-
-        if ((r->tl_name != "rc_mlx5") &&
-            (r->tl_name != "dc_mlx5") &&
-            (r->tl_name != "rc_verbs")) {
+        if (err_count() == -1) {
             UCS_TEST_SKIP_R("not supported yet");
         }
 
         check_skip_test();
     }
 
+    int err_count() {
+        const resource *r = dynamic_cast<const resource*>(GetParam());
+
+        if (r->tl_name == "dc_mlx5") {
+            return 0;
+        } else if (r->tl_name == "rc_verbs") {
+            return 1;
+        } else if (r->tl_name == "rc_mlx5") {
+            return 2;
+        }
+
+        return -1;
+    }
 };
 
 UCS_TEST_SKIP_COND_P(uct_cancel_test, am_zcopy,

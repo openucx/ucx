@@ -96,6 +96,8 @@ ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
     case IBV_WC_RETRY_EXC_ERR:
     case IBV_WC_RNR_RETRY_EXC_ERR:
         return UCS_ERR_ENDPOINT_TIMEOUT;
+    case IBV_WC_WR_FLUSH_ERR:
+        return UCS_ERR_CANCELED;
     default:
         return UCS_ERR_IO_ERROR;
     }
