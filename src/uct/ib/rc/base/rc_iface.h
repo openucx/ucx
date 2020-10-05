@@ -497,13 +497,11 @@ uct_rc_iface_fence_relaxed_order(uct_iface_h tl_iface)
     return uct_rc_iface_fence(tl_iface, 0);
 }
 
-#if UCS_ENABLE_ASSERT
-static UCS_F_ALWAYS_INLINE int
+static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_check_pending(uct_rc_iface_t *iface, ucs_arbiter_group_t *arb_group)
 {
-    return (iface->tx.in_pending || ucs_arbiter_group_is_empty(arb_group));
+    ucs_assert(iface->tx.in_pending || ucs_arbiter_group_is_empty(arb_group));
 }
-#endif
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_iface_invoke_pending_cb(uct_rc_iface_t *iface, uct_pending_req_t *req)

@@ -174,7 +174,7 @@ enum {
 #define UCT_RC_CHECK_RES_AND_FC(_iface, _ep, _am_id) \
     UCT_RC_CHECK_RES(_iface, _ep) \
     UCT_RC_CHECK_FC(_iface, _ep, _am_id) \
-    ucs_assert(uct_rc_iface_check_pending(_iface, &(_ep)->arb_group));
+    uct_rc_iface_check_pending(_iface, &(_ep)->arb_group);
 
 /* this is a common type for all rc and dc transports */
 struct uct_rc_txqp {
