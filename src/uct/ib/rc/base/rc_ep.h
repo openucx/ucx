@@ -179,6 +179,10 @@ enum {
     UCT_RC_CHECK_FC(_iface, _ep, _am_id) \
     uct_rc_iface_check_pending(_iface, &(_ep)->arb_group);
 
+enum {
+    UCT_RC_TXQP_FLAG_ERR        = UCS_BIT(0),
+};
+
 /* this is a common type for all rc and dc transports */
 struct uct_rc_txqp {
     ucs_queue_head_t    outstanding;
@@ -186,6 +190,7 @@ struct uct_rc_txqp {
      * CQ credits are close to zero (less tx_moderation value) */
     uint16_t            unsignaled;
     int16_t             available;
+    uint8_t             flags;
     UCS_STATS_NODE_DECLARE(stats)
 };
 
