@@ -1214,7 +1214,7 @@ uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
 }
 
 static ucs_arbiter_cb_result_t
-uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+uct_dc_mlx5_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                                 ucs_arbiter_elem_t *elem, void *arg)
 {
     uct_purge_cb_args_t *cb_args = arg;
@@ -1257,16 +1257,16 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface),
                                 uct_dc_mlx5_ep_rand_arb_group(iface, ep),
-                                uct_dc_mlx5_ep_abriter_purge_cb, &args);
+                                uct_dc_mlx5_ep_arbiter_purge_cb, &args);
         return;
     }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_dci_waitq(iface), &ep->arb_group,
-                                uct_dc_mlx5_ep_abriter_purge_cb, &args);
+                                uct_dc_mlx5_ep_arbiter_purge_cb, &args);
     } else {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group,
-                                uct_dc_mlx5_ep_abriter_purge_cb, &args);
+                                uct_dc_mlx5_ep_arbiter_purge_cb, &args);
         uct_dc_mlx5_iface_dci_free(iface, ep);
     }
 }
