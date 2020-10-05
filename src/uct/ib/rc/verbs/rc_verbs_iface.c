@@ -100,6 +100,13 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, wc[i].qp_num),
                             uct_rc_verbs_ep_t);
         if (ucs_unlikely((wc[i].status != IBV_WC_SUCCESS) || (ep == NULL))) {
+            count = wc[i].wr_id - ep->txcnt.ci;
+            ep->txcnt.ci += count;
+
+            uct_rc_txqp_available_add(&ep->super.txqp, count);
+            iface->super.tx.cq_available += count;
+            uct_rc_iface_update_reads(&iface->super);
+
             status = uct_rc_verbs_wc_to_ucs_status(wc[i].status);
             iface->super.super.ops->handle_failure(&iface->super.super, &wc[i],
                                                    status);
