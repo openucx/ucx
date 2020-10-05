@@ -496,8 +496,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         self->async.tick = ucs_time_from_sec(config->event_timer_tick);
     }
 
-    uct_iface_set_async_event_cb_params(params, &self->async.event_cb,
-                                        self->async.event_arg);
+    uct_iface_set_async_event_params(params, &self->async.event_cb,
+                                     &self->async.event_arg);
 
     self->async.timer_id = 0;
 

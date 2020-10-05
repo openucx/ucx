@@ -154,9 +154,9 @@ void uct_iface_mpool_empty_warn(uct_base_iface_t *iface, ucs_mpool_t *mp)
     }
 }
 
-void uct_iface_set_async_event_cb_params(const uct_iface_params_t *params,
-                                         uct_async_event_cb_t *event_cb,
-                                         void *event_arg)
+void uct_iface_set_async_event_params(const uct_iface_params_t *params,
+                                      uct_async_event_cb_t *event_cb,
+                                      void **event_arg)
 {
 
     if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB) {
@@ -166,9 +166,9 @@ void uct_iface_set_async_event_cb_params(const uct_iface_params_t *params,
     }
 
     if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG) {
-        event_arg = params->async_event_arg;
+        *event_arg = params->async_event_arg;
     } else {
-        event_arg = NULL;
+        *event_arg = NULL;
     }
 }
 

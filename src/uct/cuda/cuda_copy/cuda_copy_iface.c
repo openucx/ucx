@@ -322,8 +322,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         return UCS_ERR_IO_ERROR;
     }
 
-    uct_iface_set_async_event_cb_params(params, &self->async.event_cb,
-                                        self->async.event_arg);
+    uct_iface_set_async_event_params(params, &self->async.event_cb,
+                                     &self->async.event_arg);
 
     for (i = 0; i < UCT_CUDA_COPY_STREAM_LAST; i++) {
         self->stream[i]          = 0;
