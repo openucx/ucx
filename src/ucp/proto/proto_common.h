@@ -55,6 +55,7 @@ typedef struct {
 } ucp_proto_common_lane_priv_t;
 
 
+typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
 typedef void (*ucp_proto_complete_cb_t)(ucp_request_t *req, ucs_status_t status);
 
 

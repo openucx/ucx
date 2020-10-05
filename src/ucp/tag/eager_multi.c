@@ -197,13 +197,8 @@ ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
 
 static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-
-    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        ucp_eager_multi_proto_request_init(req);
-    }
-
     return ucp_proto_multi_zcopy_progress(self,
+                                          ucp_eager_multi_proto_request_init,
                                           ucp_proto_eager_zcopy_multi_send_func,
                                           ucp_proto_request_zcopy_completion);
 }

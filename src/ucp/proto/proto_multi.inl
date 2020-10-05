@@ -110,6 +110,7 @@ ucp_proto_multi_progress(ucp_request_t *req, ucp_proto_send_multi_cb_t send_func
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_multi_zcopy_progress(uct_pending_req_t *uct_req,
+                               ucp_proto_init_cb_t init_func,
                                ucp_proto_send_multi_cb_t send_func,
                                uct_completion_callback_t comp_func)
 {
@@ -126,6 +127,7 @@ ucp_proto_multi_zcopy_progress(uct_pending_req_t *uct_req,
         }
 
         ucp_proto_multi_request_init(req);
+        init_func(req);
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
