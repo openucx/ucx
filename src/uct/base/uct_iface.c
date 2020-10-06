@@ -158,7 +158,6 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       uct_async_event_cb_t *event_cb,
                                       void **event_arg)
 {
-
     if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB) {
         *event_cb = params->async_event_cb;
     } else {

@@ -326,7 +326,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
                                      &self->async.event_arg);
 
     for (i = 0; i < UCT_CUDA_COPY_STREAM_LAST; i++) {
-        self->stream[i]          = 0;
+        self->stream[i] = 0;
         ucs_queue_head_init(&self->outstanding_event_q[i]);
     }
 
@@ -345,7 +345,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
     if (active) {
         for (i = 0; i < UCT_CUDA_COPY_STREAM_LAST; i++) {
             if (self->stream[i] != 0) {
-                ucs_assert(ucs_queue_length(&self->outstanding_event_q[i]) == 0);
+                ucs_assert(ucs_queue_is_empty(&self->outstanding_event_q[i]));
                 UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(self->stream[i]));
             }
         }

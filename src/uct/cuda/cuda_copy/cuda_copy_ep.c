@@ -42,9 +42,9 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
                     (_rkey))
 
 #define UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(_iface, _id) \
-    if (((_iface)->stream[_id]) == 0) { \
+    if ((_iface)->stream[_id] == 0) { \
         ucs_status_t __status; \
-        __status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(&((_iface)->stream[_id]), \
+        __status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(&(_iface)->stream[_id], \
                                                                    cudaStreamNonBlocking)); \
         if (UCS_OK != __status) { \
             return UCS_ERR_IO_ERROR; \
