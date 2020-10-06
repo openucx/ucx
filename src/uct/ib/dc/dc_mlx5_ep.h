@@ -16,14 +16,21 @@
 #define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
 
 
-enum {
+enum uct_dc_mlx5_ep_flags {
+    UCT_DC_MLX5_EP_FLAG_TX_WAIT           = UCS_BIT(0), /* ep is in the tx_wait state. See
+                                                           description of the dcs+quota dci
+                                                           selection policy above */
+    UCT_DC_MLX5_EP_FLAG_GRH               = UCS_BIT(1), /* ep has GRH address. Used by
+                                                           dc_mlx5 endpoint */
+    UCT_DC_MLX5_EP_FLAG_VALID             = UCS_BIT(2), /* ep is a valid endpoint */
     /* Indicates that FC grant has been requested, but is not received yet.
      * Flush will not complete until an outgoing grant request is acked.
      * It is needed to avoid the following cases:
      * 1) Grant arrives for the recently deleted ep.
      * 2) QP resources are available, but there are some pending requests. */
-    UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT = UCS_BIT(0)
+    UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT = UCS_BIT(3)
 };
+
 
 struct uct_dc_mlx5_ep {
     /*
@@ -249,21 +256,11 @@ static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_ep_clear_fc_grant_flag(uct_dc_mlx5_iface_t *iface,
                                    uct_dc_mlx5_ep_t *ep)
 {
-    ucs_assert((ep->fc.flags & UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT) &&
+    ucs_assert((ep->flags & UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT) &&
                iface->tx.fc_grants);
-    ep->fc.flags &= ~UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT;
+    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT;
     --iface->tx.fc_grants;
 }
-
-enum uct_dc_mlx5_ep_flags {
-    UCT_DC_MLX5_EP_FLAG_TX_WAIT  = UCS_BIT(0), /* ep is in the tx_wait state. See
-                                                  description of the dcs+quota dci
-                                                  selection policy above */
-    UCT_DC_MLX5_EP_FLAG_GRH      = UCS_BIT(1), /* ep has GRH address. Used by
-                                                  dc_mlx5 endpoint */
-    UCT_DC_MLX5_EP_FLAG_VALID    = UCS_BIT(2)  /* ep is a valid endpoint */
-};
-
 
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
                                    ucs_status_t status);
@@ -500,7 +497,7 @@ out_no_res:
 
 static UCS_F_ALWAYS_INLINE int uct_dc_mlx5_ep_fc_wait_for_grant(uct_dc_mlx5_ep_t *ep)
 {
-    return ep->fc.flags & UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT;
+    return ep->flags & UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT;
 }
 
 ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep);

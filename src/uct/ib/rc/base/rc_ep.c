@@ -69,8 +69,7 @@ ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize
 {
     ucs_status_t status;
 
-    fc->fc_wnd     = winsize;
-    fc->flags      = 0;
+    fc->fc_wnd = winsize;
 
     status = UCS_STATS_NODE_ALLOC(&fc->stats, &uct_rc_fc_stats_class,
                                   stats_parent);
@@ -102,6 +101,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
     }
 
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->flags      = 0;
 
     status = uct_rc_fc_init(&self->fc, iface->config.fc_wnd_size
                             UCS_STATS_ARG(self->super.stats));

@@ -385,7 +385,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
         /* Got soft credit request. Mark ep that it needs to grant
          * credits to the peer in outgoing AM (if any). */
-        ep->fc.flags |= UCT_RC_EP_FC_FLAG_GRANT;
+        ep->flags |= UCT_RC_EP_FC_FLAG_GRANT;
 
     } else if (fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
