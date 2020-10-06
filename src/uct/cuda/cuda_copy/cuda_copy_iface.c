@@ -77,7 +77,6 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_PENDING;
 
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                          UCT_IFACE_FLAG_EVENT_RECV      |
                                           UCT_IFACE_FLAG_EVENT_ASYNC_CB;
 
     iface_attr->cap.put.max_short       = UINT_MAX;
@@ -340,8 +339,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 
     UCT_CUDADRV_CTX_ACTIVE(active);
 
-    uct_base_iface_progress_disable(&self->super.super,
-                                    UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+    uct_base_iface_progress_disable(&self->super.super, UCT_PROGRESS_SEND);
     if (active) {
         for (i = 0; i < UCT_CUDA_COPY_STREAM_LAST; i++) {
             if (self->stream[i] != 0) {
