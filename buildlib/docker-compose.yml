@@ -5,6 +5,7 @@ services:
     image: centos7-mofed5.0-cuda10.1
     build:
       context: .
+      network: host
       dockerfile: centos7-release.Dockerfile
       args:
         MOFED_VERSION: 5.0-1.0.0.0
@@ -14,6 +15,7 @@ services:
     image: centos7-mofed5.0-cuda10.2
     build:
       context: .
+      network: host
       dockerfile: centos7-release.Dockerfile
       args:
         MOFED_VERSION: 5.0-1.0.0.0
@@ -23,6 +25,7 @@ services:
     image: centos7-mofed5.0-cuda11.0
     build:
       context: .
+      network: host
       dockerfile: centos7-release.Dockerfile
       args:
         MOFED_VERSION: 5.0-1.0.0.0
@@ -32,6 +35,7 @@ services:
     image: ubuntu16.04-mofed5.0-cuda10.1
     build:
       context: .
+      network: host
       dockerfile: ubuntu-release.Dockerfile
       args:
         MOFED_VERSION: 5.0-1.0.0.0
@@ -41,6 +45,7 @@ services:
     image: ubuntu16.04-mofed5.0-cuda10.2
     build:
       context: .
+      network: host
       dockerfile: ubuntu-release.Dockerfile
       args:
         MOFED_VERSION: 5.0-1.0.0.0
@@ -50,6 +55,7 @@ services:
     image: ubuntu18.04-mofed5.0-cuda10.1
     build:
       context: .
+      network: host
       dockerfile: ubuntu-release.Dockerfile
       args:
         MOFED_VERSION: 5.0-1.0.0.0
@@ -59,6 +65,7 @@ services:
     image: ubuntu18.04-mofed5.0-cuda10.2
     build:
       context: .
+      network: host
       dockerfile: ubuntu-release.Dockerfile
       args:
         MOFED_VERSION: 5.0-1.0.0.0
@@ -68,6 +75,7 @@ services:
     image: ubuntu18.04-mofed5.0-cuda11.0
     build:
       context: .
+      network: host
       dockerfile: ubuntu-release.Dockerfile
       args:
         MOFED_VERSION: 5.0-1.0.0.0
