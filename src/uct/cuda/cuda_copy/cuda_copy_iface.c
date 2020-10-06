@@ -133,22 +133,38 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
+uct_cuda_copy_queue_head_ready(ucs_queue_head_t *queue_head)
+{
+    cudaError_t result = cudaSuccess;
+    uct_cuda_copy_event_desc_t *cuda_event;
+
+    if (ucs_queue_is_empty(queue_head)) {
+        return 0;
+    } else {
+        cuda_event =
+            ucs_queue_head_elem_non_empty(queue_head, uct_cuda_copy_event_desc_t,
+                                          queue);
+        result = cudaEventQuery(cuda_event->event);
+        if (cudaSuccess != result) {
+            return 0;
+        } else {
+            return 1;
+        }
+    }
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_copy_progress_event_queue(uct_cuda_copy_iface_t *iface,
                                    uct_cuda_copy_stream_t id,
                                    unsigned max_events)
 {
-    unsigned count = 0;
-    cudaError_t result = cudaSuccess;
+    ucs_queue_head_t *queue_head = &iface->outstanding_event_q[id];
+    unsigned count               = 0;
     uct_cuda_copy_event_desc_t *cuda_event;
-    ucs_queue_iter_t iter;
 
-    ucs_queue_for_each_safe(cuda_event, iter,
-                            &iface->outstanding_event_q[id], queue) {
-        result = cudaEventQuery(cuda_event->event);
-        if (cudaSuccess != result) {
-            break;
-        }
-        ucs_queue_del_iter(&iface->outstanding_event_q[id], iter);
+    ucs_queue_for_each_extract(cuda_event, queue_head, queue,
+                               uct_cuda_copy_queue_head_ready(queue_head)) {
+        ucs_queue_remove(queue_head, &cuda_event->queue);
         if (cuda_event->comp != NULL) {
             uct_invoke_completion(cuda_event->comp, UCS_OK);
         }
@@ -197,13 +213,10 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
     int i;
     ucs_status_t status;
-    uct_cuda_copy_event_desc_t *cuda_event;
 
     for (i = 0; i < UCT_CUDA_COPY_STREAM_LAST; i++) {
-        ucs_queue_for_each(cuda_event, &iface->outstanding_event_q[i], queue) {
-            if (cudaSuccess == cudaEventQuery(cuda_event->event)) {
-                return UCS_ERR_BUSY;
-            }
+        if (uct_cuda_copy_queue_head_ready(&iface->outstanding_event_q[i])) {
+            return UCS_ERR_BUSY;
         }
     }
 
