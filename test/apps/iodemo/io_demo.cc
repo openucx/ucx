@@ -50,6 +50,7 @@ typedef struct {
     long                     client_retries;
     double                   client_timeout;
     double                   client_runtime_limit;
+    double                   print_interval;
     size_t                   iomsg_size;
     size_t                   min_data_size;
     size_t                   max_data_size;
@@ -1030,7 +1031,7 @@ public:
             if (((total_iter % 10) == 0) && (total_iter > total_prev_iter)) {
                 /* Print performance every 1 second */
                 double curr_time = get_time();
-                if (curr_time >= (prev_time + 1.0)) {
+                if (curr_time >= (prev_time + opts().print_interval)) {
                     wait_for_responses(0);
                     if (_status != OK) {
                         break;
@@ -1126,12 +1127,16 @@ private:
 
             // Collect min/max among all connections
             long delta_min = std::numeric_limits<long>::max(), delta_max = 0;
+            size_t min_index = 0;
             for (size_t server_index = 0; server_index < _server_info.size();
                  ++server_index) {
                 server_info_t& server_info = _server_info[server_index];
                 long delta_completed = server_info.num_completed[op_id] -
                                        server_info.prev_completed[op_id];
-                delta_min = std::min(delta_completed, delta_min);
+                if (delta_completed < delta_min) {
+                    delta_min = delta_completed;
+                    min_index = server_index;
+                }
                 delta_max = std::max(delta_completed, delta_max);
 
                 server_info.prev_completed[op_id] =
@@ -1139,8 +1144,9 @@ private:
             }
 
             // Report delta of min/max/total operations for every connection
-            log << " min:" << delta_min << " max:" << delta_max
-                << " total:" << op_info[op_id].num_iters << " ops";
+            log << " min:" << delta_min << " (" << opts().servers[min_index]
+               << ") max:" << delta_max << " total:"
+                << op_info[op_id].num_iters << " ops";
             op_info[op_id].num_iters = 0;
         }
 
@@ -1253,6 +1259,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->client_retries       = std::numeric_limits<long>::max();
     test_opts->client_timeout       = 5.0;
     test_opts->client_runtime_limit = std::numeric_limits<double>::max();
+    test_opts->print_interval       = 1.0;
     test_opts->min_data_size        = 4096;
     test_opts->max_data_size        = 4096;
     test_opts->chunk_size           = std::numeric_limits<unsigned>::max();
@@ -1264,7 +1271,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->verbose              = false;
     test_opts->validate             = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v:q")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v:qHP:")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -1354,6 +1361,12 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'q':
             test_opts->validate = true;
             break;
+        case 'H':
+            UcxLog::use_human_time = true;
+            break;
+        case 'P':
+            test_opts->print_interval = atof(optarg);
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -1379,6 +1392,8 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -s <random seed>           Random seed to use for randomizing" << std::endl;
             std::cout << "  -v                         Set verbose mode" << std::endl;
             std::cout << "  -q                         Enable data integrity and transaction check" << std::endl;
+            std::cout << "  -H                         Use human-readable timestamps" << std::endl;
+            std::cout << "  -P <interval>              Set report printing interval"  << std::endl;
             std::cout << "" << std::endl;
             return -1;
         }
