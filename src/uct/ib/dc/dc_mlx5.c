@@ -963,10 +963,10 @@ void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
 
 ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
 {
-    uct_rc_fc_request_t *freq = ucs_derived_of(self, uct_rc_fc_request_t);
-    uct_dc_mlx5_ep_t *ep      = ucs_derived_of(freq->ep, uct_dc_mlx5_ep_t);
-    uct_rc_iface_t *iface     = ucs_derived_of(ep->super.super.iface,
-                                               uct_rc_iface_t);
+    uct_rc_pending_req_t *freq = ucs_derived_of(self, uct_rc_pending_req_t);
+    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(freq->ep, uct_dc_mlx5_ep_t);
+    uct_rc_iface_t *iface      = ucs_derived_of(ep->super.super.iface,
+                                                uct_rc_iface_t);
     ucs_status_t status;
 
     ucs_assert_always(iface->config.fc_enabled);
@@ -996,11 +996,12 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         ep = iface->tx.fc_ep;
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
 
-        dc_req = ucs_mpool_get(&iface->super.super.tx.fc_mp);
+        dc_req = ucs_mpool_get(&iface->super.super.tx.pending_mp);
         if (ucs_unlikely(dc_req == NULL)) {
             ucs_error("Failed to allocate FC request");
             return UCS_ERR_NO_MEMORY;
         }
+
         dc_req->super.super.func = uct_dc_mlx5_iface_fc_grant;
         dc_req->super.ep         = &ep->super.super;
         dc_req->dct_num          = imm_data;
@@ -1009,7 +1010,8 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
 
         status = uct_dc_mlx5_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){
-            uct_dc_mlx5_ep_pending_common(iface, ep, &dc_req->super.super, 0, 1);
+            uct_dc_mlx5_ep_pending_common(iface, ep, &dc_req->super.super,
+                                          0, 1);
         } else {
             ucs_assertv_always(status == UCS_OK,
                                "Failed to send FC grant msg: %s",

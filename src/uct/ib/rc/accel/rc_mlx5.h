@@ -116,7 +116,7 @@ ucs_status_t uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
-                                    uct_rc_fc_request_t *req);
+                                    uct_rc_pending_req_t *req);
 
 ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,

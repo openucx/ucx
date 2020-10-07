@@ -720,7 +720,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
 
-    init_attr.fc_req_size           = sizeof(uct_rc_fc_request_t);
+    init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
     init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.rx_hdr_len            = sizeof(uct_rc_mlx5_hdr_t);
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
