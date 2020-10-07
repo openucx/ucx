@@ -23,7 +23,7 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
     char str_ctx_caps[UCT_TCP_EP_CTX_CAPS_STR_MAX];
     uct_tcp_ep_conn_state_t old_conn_state;
 
-    old_conn_state = ep->conn_state;
+    old_conn_state = (uct_tcp_ep_conn_state_t)ep->conn_state;
     ep->conn_state = new_conn_state;
 
     switch(ep->conn_state) {
