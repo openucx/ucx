@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/tag/eager.h>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
 
@@ -57,7 +58,6 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep         = req->send.ep;
     ucp_dt_state_t state = req->send.state.dt;
-    ucs_status_t status;
     ssize_t packed_len;
     uct_ep_h uct_ep;
     int pending_add_res;
@@ -88,12 +88,11 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             if ((packed_len == UCS_ERR_NO_RESOURCE) &&
                 (req->send.lane != req->send.pending_lane)) {
                 /* switch to new pending lane */
-                pending_add_res = ucp_request_pending_add(req, &status, 0);
+                pending_add_res = ucp_request_pending_add(req, 0);
                 if (!pending_add_res) {
                     /* failed to switch req to pending queue, try again */
                     continue;
                 }
-                ucs_assert(status == UCS_INPROGRESS);
                 return (ucs_status_t)UCP_STATUS_PENDING_SWITCH;
             } else {
                 return (ucs_status_t)packed_len;
@@ -258,6 +257,28 @@ ucs_status_t ucp_am_zcopy_common(ucp_request_t *req, const void *hdr,
                            &req->send.state.uct_comp);
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_zcopy_single_handle_status(ucp_request_t *req,
+                                  const ucp_dt_state_t *dt_state,
+                                  ucs_status_t status,
+                                  ucp_req_complete_func_t complete_ok)
+{
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    if (status == UCS_OK) {
+        complete_ok(req, UCS_OK);
+    } else {
+        /* IN_PROGRESS also goes here */
+        ucp_request_send_state_advance(req, dt_state,
+                                       UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
+                                       status);
+    }
+
+    return UCS_OK;
+}
+
 static UCS_F_ALWAYS_INLINE
 ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
                                     const void *hdr, size_t hdr_size,
@@ -277,14 +298,8 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     status = ucp_am_zcopy_common(req, hdr, hdr_size, user_hdr_desc, user_hdr_size,
                                  iov, max_iov, req->send.length + user_hdr_size,
                                  am_id, &state);
-    if (status == UCS_OK) {
-        complete(req, UCS_OK);
-    } else {
-        ucp_request_send_state_advance(req, &state,
-                                       UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
-                                       status);
-    }
-    return UCS_STATUS_IS_ERR(status) ? status : UCS_OK;
+
+    return ucp_am_zcopy_single_handle_status(req, &state, status, complete);
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -418,12 +433,11 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         if (status == UCS_ERR_NO_RESOURCE) {
             if (req->send.lane != req->send.pending_lane) {
                 /* switch to new pending lane */
-                pending_add_res = ucp_request_pending_add(req, &status, 0);
+                pending_add_res = ucp_request_pending_add(req, 0);
                 if (!pending_add_res) {
                     /* failed to switch req to pending queue, try again */
                     continue;
                 }
-                ucs_assert(status == UCS_INPROGRESS);
                 return UCS_OK;
             }
 
@@ -437,7 +451,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             if (req->send.state.uct_comp.count == 0) {
                complete(req, status);
             }
-            return status;
+            return UCS_OK;
         } else {
             if (enable_am_bw) {
                 ucp_send_request_next_am_bw_lane(req);
@@ -520,6 +534,39 @@ ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucs_ptr_map_key_t ep_id)
     req->send.proto.status  = UCS_OK;
 
     return req;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_bcopy_handle_status_from_pending(uct_pending_req_t *self, int multi,
+                                        int tag_sync, ucs_status_t status)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    if (multi) {
+        if (status == UCS_INPROGRESS) {
+            return UCS_INPROGRESS;
+        }
+
+        if (ucs_unlikely(status == UCP_STATUS_PENDING_SWITCH)) {
+            return UCS_OK;
+        }
+    } else {
+        ucs_assert(status != UCS_INPROGRESS);
+    }
+
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucp_request_send_generic_dt_finish(req);
+    if (tag_sync) {
+        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+                                      status);
+    } else {
+        ucp_request_complete_send(req, status);
+    }
+
+    return UCS_OK;
 }
 
 #endif

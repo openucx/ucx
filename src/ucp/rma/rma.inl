@@ -18,7 +18,10 @@
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
 {
-    ucs_status_t status = ucp_request_send(req, 0);
+    ucs_status_t status;
+
+    ucp_request_send(req, 0);
+    status = req->status;
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucs_trace_req("releasing send request %p, returning status %s", req,
@@ -36,14 +39,14 @@ ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_rma_send_request(ucp_request_t *req, const ucp_request_param_t *param)
 {
-    ucs_status_t status = ucp_request_send(req, 0);
+    ucp_request_send(req, 0);
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        ucp_request_imm_cmpl_param(param, req, status, send);
+        ucp_request_imm_cmpl_param(param, req, send);
     }
 
     ucs_trace_req("returning request %p, status %s", req,
-                  ucs_status_string(status));
+                  ucs_status_string(req->status));
 
     ucp_request_set_send_callback_param(param, req, send);
 

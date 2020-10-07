@@ -106,20 +106,23 @@
 
 #define ucp_request_cb_param(_param, _req, _cb, ...) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
-        param->cb._cb(req + 1, status, ##__VA_ARGS__, param->user_data); \
+        param->cb._cb(req + 1, (_req)->status, ##__VA_ARGS__, param->user_data); \
     }
 
 
-#define ucp_request_imm_cmpl_param(_param, _req, _status, _cb, ...) \
+#define ucp_request_imm_cmpl_param(_param, _req, _cb, ...) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) { \
         ucp_request_cb_param(_param, _req, _cb, ##__VA_ARGS__); \
         ucs_trace_req("request %p completed, but immediate completion is " \
                       "prohibited, status %s", _req, \
-                      ucs_status_string(_status)); \
+                      ucs_status_string((_req)->status)); \
         return (_req) + 1; \
     } \
-    ucp_request_put_param(_param, _req); \
-    return UCS_STATUS_PTR(_status);
+    { \
+        ucs_status_t _status = (_req)->status; \
+        ucp_request_put_param(_param, _req); \
+        return UCS_STATUS_PTR(_status); \
+    }
 
 
 #define ucp_request_set_callback_param(_param, _param_cb, _req, _req_cb) \
@@ -226,8 +229,7 @@ ucp_request_can_complete_stream_recv(ucp_request_t *req)
  *         *req_status if filled with the completion status if completed.
  */
 static int UCS_F_ALWAYS_INLINE
-ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status,
-                     unsigned pending_flags)
+ucp_request_try_send(ucp_request_t *req, unsigned pending_flags)
 {
     ucs_status_t status;
 
@@ -235,22 +237,17 @@ ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status,
     /* coverity[address_free] */
     status = req->send.uct.func(&req->send.uct);
     if (status == UCS_OK) {
-        /* Completed the operation */
-        *req_status = UCS_OK;
+        /* Completed the operation, error also goes here */
         return 1;
     } else if (status == UCS_INPROGRESS) {
         /* Not completed, but made progress */
         return 0;
-    } else if (status != UCS_ERR_NO_RESOURCE) {
-        /* Unexpected error */
-        ucp_request_complete_send(req, status);
-        *req_status = status;
-        return 1;
+    } else if (status == UCS_ERR_NO_RESOURCE) {
+        /* No send resources, try to add to pending queue */
+        return ucp_request_pending_add(req, pending_flags);
     }
 
-    /* No send resources, try to add to pending queue */
-    ucs_assert(status == UCS_ERR_NO_RESOURCE);
-    return ucp_request_pending_add(req, req_status, pending_flags);
+    ucs_fatal("unexpected error: %s", ucs_status_string(status));
 }
 
 /**
@@ -259,17 +256,11 @@ ucp_request_try_send(ucp_request_t *req, ucs_status_t *req_status,
  * @param [in]  req             Request to start.
  * @param [in]  pending_flags   flags to be passed to UCT if request will be
  *                              added to pending queue.
- *
- * @return UCS_OK - completed (callback will not be called)
- *         UCS_INPROGRESS - started but not completed
- *         other error - failure
- */
-static UCS_F_ALWAYS_INLINE ucs_status_t
+ * */
+static UCS_F_ALWAYS_INLINE void
 ucp_request_send(ucp_request_t *req, unsigned pending_flags)
 {
-    ucs_status_t status = UCS_ERR_NOT_IMPLEMENTED;
-    while (!ucp_request_try_send(req, &status, pending_flags));
-    return status;
+    while (!ucp_request_try_send(req, pending_flags));
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -352,6 +343,21 @@ ucp_request_send_state_reset(ucp_request_t *req,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_request_send_state_advance_comp(ucp_request_t *req, ucs_status_t status)
+{
+    ucs_assert(status != UCS_ERR_NO_RESOURCE);
+
+    if (status == UCS_INPROGRESS) {
+        ++req->send.state.uct_comp.count;
+    } else if (UCS_STATUS_IS_ERR(status)) {
+        uct_completion_update_status(&req->send.state.uct_comp, status);
+        if (req->send.state.uct_comp.count == 0) {
+            req->send.state.uct_comp.func(&req->send.state.uct_comp);
+        }
+    }
+}
+
 /**
  * Advance state of send request after UCT operation. This function applies
  * @a new_dt_state to @a req request according to @a proto protocol. Also, UCT
@@ -370,27 +376,16 @@ ucp_request_send_state_advance(ucp_request_t *req,
                                const ucp_dt_state_t *new_dt_state,
                                unsigned proto, ucs_status_t status)
 {
-    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        /* Don't advance after failed operation in order to continue on next try
-         * from last valid point.
-         */
+    if (status == UCS_ERR_NO_RESOURCE) {
+        /* Don't advance in order to continue
+         * on next try from last valid point. */
         return;
     }
 
     switch (proto) {
-    case UCP_REQUEST_SEND_PROTO_RMA:
-        if (status == UCS_INPROGRESS) {
-            ++req->send.state.uct_comp.count;
-        }
-        break;
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-        /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
-        if (status == UCS_INPROGRESS) {
-            ++req->send.state.uct_comp.count;
-        }
-        /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
         ucs_assert(new_dt_state != NULL);
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
@@ -400,6 +395,19 @@ ucp_request_send_state_advance(ucp_request_t *req,
             /* cppcheck-suppress nullPointer */
             req->send.state.dt        = *new_dt_state;
         }
+
+        if (UCS_STATUS_IS_ERR(status)) {
+            /* fast-forward multi-fragment protocol */
+            req->send.state.dt.offset = req->send.length;
+        }
+
+        if (proto != UCP_REQUEST_SEND_PROTO_BCOPY_AM) {
+            ucp_request_send_state_advance_comp(req, status);
+        }
+
+        break;
+    case UCP_REQUEST_SEND_PROTO_RMA:
+        ucp_request_send_state_advance_comp(req, status);
         break;
     default:
         ucs_fatal("unknown protocol");

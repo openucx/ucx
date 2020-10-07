@@ -69,8 +69,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->status = status;
         UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 
-        ucp_request_imm_cmpl_param(param, req, status, recv,
-                                   &req->recv.tag.info);
+        ucp_request_imm_cmpl_param(param, req, recv, &req->recv.tag.info);
     }
 
     /* TODO: allocate request only in case if flag

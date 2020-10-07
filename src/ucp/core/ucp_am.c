@@ -490,32 +490,18 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
 
 static ucs_status_t ucp_am_bcopy_single(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t status;
+    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE,
+                                                 ucp_am_bcopy_pack_args_single);
 
-    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE,
-                                    ucp_am_bcopy_pack_args_single);
-    if (status == UCS_OK) {
-        ucp_request_send_generic_dt_finish(req);
-        ucp_request_complete_send(req, UCS_OK);
-    }
-
-    return status;
+    return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
 
 static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t status;
+    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE_REPLY,
+                                                 ucp_am_bcopy_pack_args_single_reply);
 
-    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE_REPLY,
-                                    ucp_am_bcopy_pack_args_single_reply);
-    if (status == UCS_OK) {
-        ucp_request_send_generic_dt_finish(req);
-        ucp_request_complete_send(req, UCS_OK);
-    }
-
-    return status;
+    return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
 
 static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
@@ -524,17 +510,8 @@ static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
                                                 UCP_AM_ID_MIDDLE,
                                                 ucp_am_bcopy_pack_args_first,
                                                 ucp_am_bcopy_pack_args_mid, 0);
-    ucp_request_t *req;
 
-    if (status == UCS_OK) {
-        req = ucs_container_of(self, ucp_request_t, send.uct);
-        ucp_request_send_generic_dt_finish(req);
-        ucp_request_complete_send(req, UCS_OK);
-    } else if (status == UCP_STATUS_PENDING_SWITCH) {
-        status = UCS_OK;
-    }
-
-    return status;
+    return ucp_am_bcopy_handle_status_from_pending(self, 1, 0, status);
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_am_zcopy_complete_common(ucp_request_t *req)
@@ -779,9 +756,9 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
      * If it is completed immediately, release the request and return the status.
      * Otherwise, return the request.
      */
-    status = ucp_request_send(req, 0);
+    ucp_request_send(req, 0);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        ucp_request_imm_cmpl_param(param, req, status, send);
+        ucp_request_imm_cmpl_param(param, req, send);
     }
 
     ucp_request_set_send_callback_param(param, req, send);
