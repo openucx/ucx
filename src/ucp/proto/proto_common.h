@@ -55,6 +55,7 @@ typedef struct {
 } ucp_proto_common_lane_priv_t;
 
 
+typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
 typedef void (*ucp_proto_complete_cb_t)(ucp_request_t *req, ucs_status_t status);
 
 
@@ -96,6 +97,10 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
 
 void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
                                 const ucp_proto_common_perf_params_t *perf_params);
+
+
+void ucp_proto_request_zcopy_completion(uct_completion_t *self);
+
 
 void ucp_proto_request_select_error(ucp_request_t *req,
                                     ucp_proto_select_t *proto_select,

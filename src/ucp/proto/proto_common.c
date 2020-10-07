@@ -397,6 +397,16 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
     ucp_proto_common_add_overheads(params, overhead, perf_params->reg_md_map);
 }
 
+void ucp_proto_request_zcopy_completion(uct_completion_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.state.uct_comp);
+
+    /* request should NOT be on pending queue because when we decrement the last
+     * refcount the request is not on the pending queue any more
+     */
+    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
+}
+
 void ucp_proto_request_select_error(ucp_request_t *req,
                                     ucp_proto_select_t *proto_select,
                                     ucp_worker_cfg_index_t rkey_cfg_index,

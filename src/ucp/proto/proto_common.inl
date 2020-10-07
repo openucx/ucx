@@ -25,9 +25,57 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_completion_init(ucp_request_t *req,
                                   uct_completion_callback_t comp_func)
 {
-    req->send.state.uct_comp.count = 1;
-    req->send.state.uct_comp.func  = comp_func;
+    req->send.state.uct_comp.func   = comp_func;
+    req->send.state.uct_comp.count  = 1;
+    req->send.state.uct_comp.status = UCS_OK;
     /* extra ref to be decremented when all sent */
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
+                             uct_completion_callback_t comp_func)
+{
+    ucp_ep_h ep = req->send.ep;
+    ucs_status_t status;
+
+    ucp_trace_req(req, "ucp_proto_zcopy_request_init for %s",
+                  req->send.proto_config->proto->name);
+
+    ucp_proto_request_completion_init(req, comp_func);
+
+    status = ucp_datatype_iter_mem_reg(ep->worker->context, &req->send.dt_iter,
+                                       md_map);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucp_trace_req(req, "registered md_map 0x%"PRIx64"/0x%"PRIx64,
+                  req->send.dt_iter.type.contig.reg.md_map, md_map);
+
+    /* We expect the registration to happen on all desired memory domains, since
+     * the protocol initialization code would already disqualify any memory
+     * domain which does not support registration, or does not require a local
+     * memory key for zero-copy operations. This assumption simplifies memory
+     * key lookups during protocol progress.
+     */
+    ucs_assert(req->send.dt_iter.type.contig.reg.md_map == md_map);
+
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_request_zcopy_cleanup(ucp_request_t *req)
+{
+    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
+                                &req->send.dt_iter);
+    ucp_datatype_iter_cleanup(&req->send.dt_iter, UCS_BIT(UCP_DATATYPE_CONTIG));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_proto_request_zcopy_cleanup(req);
+    ucp_request_complete_send(req, status);
 }
 
 /* Select protocol for the request and initialize protocol-related fields */

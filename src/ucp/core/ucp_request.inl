@@ -764,4 +764,19 @@ ucp_request_param_rndv_thresh(ucp_request_t *req,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_invoke_uct_completion(uct_completion_t *comp, ucs_status_t status)
+{
+    uct_completion_update_status(comp, status);
+    if (--comp->count == 0) {
+        comp->func(comp);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_invoke_uct_completion(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
+}
+
 #endif
