@@ -155,7 +155,7 @@ enum {
                 (_ep)->fc.fc_wnd = INT16_MAX; \
             } \
         } \
-        (_am_id) |= uct_rc_fc_get_fc_hdr((_ep)->fc.flags); /* take grant bit */ \
+        (_am_id) |= uct_rc_fc_get_fc_hdr((_ep)->flags); /* take grant bit */ \
     }
 
 #define UCT_RC_UPDATE_FC(_iface, _ep, _fc_hdr) \
@@ -169,11 +169,15 @@ enum {
             UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ, 1); \
         } \
         \
-        (_ep)->fc.flags = 0; \
+        (_ep)->flags &= ~UCT_RC_EP_FC_MASK; \
         \
         UCT_RC_UPDATE_FC_WND(_iface, &(_ep)->fc) \
     }
 
+#define UCT_RC_CHECK_RES_AND_FC(_iface, _ep, _am_id) \
+    UCT_RC_CHECK_RES(_iface, _ep) \
+    UCT_RC_CHECK_FC(_iface, _ep, _am_id) \
+    uct_rc_iface_check_pending(_iface, &(_ep)->arb_group);
 
 /* this is a common type for all rc and dc transports */
 struct uct_rc_txqp {
@@ -189,7 +193,6 @@ typedef struct uct_rc_fc {
     /* Not more than fc_wnd active messages can be sent w/o acknowledgment */
     int16_t             fc_wnd;
     /* used only for FC protocol at this point (3 higher bits) */
-    uint8_t             flags;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_fc_t;
 
@@ -201,6 +204,7 @@ struct uct_rc_ep {
     uct_rc_fc_t         fc;
     uint16_t            atomic_mr_offset;
     uint8_t             path_index;
+    uint8_t             flags;
 };
 
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*);

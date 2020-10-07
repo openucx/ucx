@@ -87,3 +87,4 @@ GTAGS
 /modules
 *.swp
 compile_commands.json
+.idea/

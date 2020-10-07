@@ -421,7 +421,7 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
     }
 }
 
-static ucs_arbiter_cb_result_t uct_mm_ep_abriter_purge_cb(ucs_arbiter_t *arbiter,
+static ucs_arbiter_cb_result_t uct_mm_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
                                                           ucs_arbiter_group_t *group,
                                                           ucs_arbiter_elem_t *elem,
                                                           void *arg)
@@ -449,7 +449,7 @@ void uct_mm_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
     uct_purge_cb_args_t  args = {cb, arg};
 
     ucs_arbiter_group_purge(&iface->arbiter, &ep->arb_group,
-                            uct_mm_ep_abriter_purge_cb, &args);
+                            uct_mm_ep_arbiter_purge_cb, &args);
 }
 
 ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,

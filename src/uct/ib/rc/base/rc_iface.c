@@ -348,7 +348,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 {
     ucs_status_t status;
     int16_t      cur_wnd;
-    uct_rc_fc_request_t *fc_req;
+    uct_rc_pending_req_t *fc_req;
     uct_rc_ep_t  *ep  = uct_rc_iface_lookup_ep(iface, qp_num);
     uint8_t fc_hdr    = uct_rc_fc_get_fc_hdr(hdr->am_id);
 
@@ -385,11 +385,11 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
         /* Got soft credit request. Mark ep that it needs to grant
          * credits to the peer in outgoing AM (if any). */
-        ep->fc.flags |= UCT_RC_EP_FC_FLAG_GRANT;
+        ep->flags |= UCT_RC_EP_FC_FLAG_GRANT;
 
     } else if (fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
-        fc_req = ucs_mpool_get(&iface->tx.fc_mp);
+        fc_req = ucs_mpool_get(&iface->tx.pending_mp);
         if (ucs_unlikely(fc_req == NULL)) {
             ucs_error("Failed to allocate FC request. "
                       "Grant will not be sent on ep %p", ep);
@@ -543,6 +543,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->config.ooo_rw             = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
     self->config.tx_cq_len          = init_attr->cq_len[UCT_IB_DIR_TX];
+    self->tx.in_pending             = 0;
 #endif
     max_ib_msg_size                 = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
 
@@ -642,7 +643,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                                config->fc.hard_thresh), 1);
 
         /* Create mempool for pending requests for FC grant */
-        status = ucs_mpool_init(&self->tx.fc_mp,
+        status = ucs_mpool_init(&self->tx.pending_mp,
                                 0,
                                 init_attr->fc_req_size,
                                 0,
@@ -698,7 +699,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     ucs_mpool_cleanup(&self->tx.mp, 1);
     ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */
     if (self->config.fc_enabled) {
-        ucs_mpool_cleanup(&self->tx.fc_mp, 1);
+        ucs_mpool_cleanup(&self->tx.pending_mp, 1);
     }
 }
 

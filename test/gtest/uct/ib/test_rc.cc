@@ -615,11 +615,12 @@ void test_rc_flow_control::test_pending_grant(int wnd)
     send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
     EXPECT_LE(get_fc_ptr(m_e1)->fc_wnd, 0);
 
-    /* Enable send capabilities of m_e2 and send AM message
-     * to force pending queue dispatch */
+    /* Enable send capabilities of m_e2 and send short put message to force
+     * pending queue dispatch. Can't send AM message for that, because it may
+     * trigger reordering assert due to disable/enable entity hack. */
     enable_entity(m_e2);
     set_tx_moderation(m_e2, 0);
-    send_am_messages(m_e2, 1, UCS_OK);
+    EXPECT_EQ(UCS_OK, uct_ep_put_short(m_e2->ep(0), NULL, 0, 0, 0));
 
     /* Check that m_e1 got grant */
     validate_grant(m_e1);

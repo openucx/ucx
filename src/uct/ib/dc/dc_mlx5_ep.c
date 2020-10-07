@@ -824,7 +824,7 @@ ucs_status_t uct_dc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 #endif
 
 ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
-                                    uct_rc_fc_request_t *req)
+                                    uct_rc_pending_req_t *req)
 {
     uct_dc_mlx5_ep_t *dc_ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
@@ -1136,11 +1136,7 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
-    ucs_trace_data("progressing pending request %p", req);
-    status = req->func(req);
-    ucs_trace_data("status returned from progress pending: %s",
-                   ucs_status_string(status));
-
+    status = uct_rc_iface_invoke_pending_cb(&iface->super.super, req);
     if (status == UCS_OK) {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
@@ -1173,7 +1169,7 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
     int is_only                = ucs_arbiter_elem_is_only(elem);
     ucs_arbiter_cb_result_t res;
 
-    res     = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
+    res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
     if (res == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
         /* For dcs* policies release dci if this is the last elem in the group
          * and the dci has no outstanding operations. For example pending
@@ -1214,7 +1210,7 @@ uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
 }
 
 static ucs_arbiter_cb_result_t
-uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+uct_dc_mlx5_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                                 ucs_arbiter_elem_t *elem, void *arg)
 {
     uct_purge_cb_args_t *cb_args = arg;
@@ -1223,7 +1219,7 @@ uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *gro
     uct_dc_mlx5_iface_t *iface   = ucs_derived_of(ep->super.super.iface,
                                                   uct_dc_mlx5_iface_t);
     uct_pending_req_t *req       = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_rc_fc_request_t *freq;
+    uct_rc_pending_req_t *freq;
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface) &&
         (uct_dc_mlx5_pending_req_priv(req)->ep != ep)) {
@@ -1240,7 +1236,7 @@ uct_dc_mlx5_ep_abriter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *gro
     } else {
         /* User callback should not be called for FC messages.
          * Just return pending request memory to the pool */
-        freq = ucs_derived_of(req, uct_rc_fc_request_t);
+        freq = ucs_derived_of(req, uct_rc_pending_req_t);
         ucs_mpool_put(freq);
     }
 
@@ -1257,16 +1253,16 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface),
                                 uct_dc_mlx5_ep_rand_arb_group(iface, ep),
-                                uct_dc_mlx5_ep_abriter_purge_cb, &args);
+                                uct_dc_mlx5_ep_arbiter_purge_cb, &args);
         return;
     }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_dci_waitq(iface), &ep->arb_group,
-                                uct_dc_mlx5_ep_abriter_purge_cb, &args);
+                                uct_dc_mlx5_ep_arbiter_purge_cb, &args);
     } else {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group,
-                                uct_dc_mlx5_ep_abriter_purge_cb, &args);
+                                uct_dc_mlx5_ep_arbiter_purge_cb, &args);
         uct_dc_mlx5_iface_dci_free(iface, ep);
     }
 }
@@ -1285,7 +1281,7 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
             if (status != UCS_OK) {
                 return status;
             }
-            ep->fc.flags |= UCT_DC_MLX5_EP_FC_FLAG_WAIT_FOR_GRANT;
+            ep->flags |= UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT;
             ++iface->tx.fc_grants;
         }
     } else {

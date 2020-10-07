@@ -141,7 +141,7 @@ typedef struct uct_dc_fc_sender_data {
 } UCS_S_PACKED uct_dc_fc_sender_data_t;
 
 typedef struct uct_dc_fc_request {
-    uct_rc_fc_request_t           super;
+    uct_rc_pending_req_t          super;
     uct_dc_fc_sender_data_t       sender;
     uint32_t                      dct_num;
 

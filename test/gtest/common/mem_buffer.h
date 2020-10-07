@@ -76,6 +76,10 @@ public:
 private:
     static void abort_wrong_mem_type(ucs_memory_type_t mem_type);
 
+    static bool is_cuda_supported();
+
+    static bool is_rocm_supported();
+
     static uint64_t pat(uint64_t prev);
 
     const ucs_memory_type_t m_mem_type;

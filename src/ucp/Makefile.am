@@ -54,6 +54,7 @@ noinst_HEADERS = \
 	proto/proto_select.h \
 	proto/proto_select.inl \
 	proto/proto_single.h \
+	proto/proto_single.inl \
 	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \

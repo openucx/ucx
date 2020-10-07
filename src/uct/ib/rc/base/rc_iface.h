@@ -126,10 +126,10 @@ typedef struct uct_rc_hdr {
 } UCS_S_PACKED uct_rc_hdr_t;
 
 
-typedef struct uct_rc_fc_request {
+typedef struct uct_rc_pending_req {
     uct_pending_req_t super;
     uct_ep_t          *ep;
-} uct_rc_fc_request_t;
+} uct_rc_pending_req_t;
 
 
 /**
@@ -183,7 +183,7 @@ typedef struct uct_rc_iface_ops {
                                     const uct_rc_iface_common_config_t *config);
     void                 (*cleanup_rx)(uct_rc_iface_t *iface);
     ucs_status_t         (*fc_ctrl)(uct_ep_t *ep, unsigned op,
-                                    uct_rc_fc_request_t *req);
+                                    uct_rc_pending_req_t *req);
     ucs_status_t         (*fc_handler)(uct_rc_iface_t *iface, unsigned qp_num,
                                        uct_rc_hdr_t *hdr, unsigned length,
                                        uint32_t imm_data, uint16_t lid,
@@ -201,9 +201,10 @@ struct uct_rc_iface {
     uct_ib_iface_t              super;
 
     struct {
-        ucs_mpool_t             mp;       /* pool for send descriptors */
-        ucs_mpool_t             fc_mp;    /* pool for FC grant pending requests */
-        ucs_mpool_t             flush_mp; /* pool for flush completions */
+        ucs_mpool_t             mp;         /* pool for send descriptors */
+        ucs_mpool_t             pending_mp; /* pool for FC grant and keepalive
+                                               pending requests */
+        ucs_mpool_t             flush_mp;   /* pool for flush completions */
         /* Credits for completions.
          * May be negative in case mlx5 because we take "num_bb" credits per
          * post to be able to calculate credits of outstanding ops on failure.
@@ -216,6 +217,9 @@ struct uct_rc_iface {
         ucs_arbiter_t           arbiter;
         uct_rc_iface_send_op_t  *ops_buffer;
         uct_ib_fence_info_t     fi;
+#if UCS_ENABLE_ASSERT
+        int                     in_pending;
+#endif
     } tx;
 
     struct {
@@ -373,7 +377,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
 ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_fc_request_t *req)
+uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_pending_req_t *req)
 {
     uct_rc_iface_t *iface   = ucs_derived_of(ep->iface, uct_rc_iface_t);
     uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops,
@@ -493,4 +497,32 @@ uct_rc_iface_fence_relaxed_order(uct_iface_h tl_iface)
 
     return uct_rc_iface_fence(tl_iface, 0);
 }
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_check_pending(uct_rc_iface_t *iface, ucs_arbiter_group_t *arb_group)
+{
+    ucs_assert(iface->tx.in_pending || ucs_arbiter_group_is_empty(arb_group));
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_rc_iface_invoke_pending_cb(uct_rc_iface_t *iface, uct_pending_req_t *req)
+{
+    ucs_status_t status;
+
+    ucs_trace_data("progressing pending request %p", req);
+#if UCS_ENABLE_ASSERT
+    iface->tx.in_pending = 1;
+#endif
+
+    status = req->func(req);
+
+#if UCS_ENABLE_ASSERT
+    iface->tx.in_pending = 0;
+#endif
+    ucs_trace_data("status returned from progress pending: %s",
+                   ucs_status_string(status));
+
+    return status;
+}
+
 #endif
