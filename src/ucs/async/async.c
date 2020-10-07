@@ -80,9 +80,9 @@ static ucs_async_ops_t ucs_async_poll_ops = {
     .context_cleanup    = ucs_empty_function,
     .context_try_block  = ucs_async_poll_tryblock,
     .context_unblock    = ucs_empty_function,
-    .add_event_fd       = (void*)ucs_empty_function_return_success,
+    .add_event_fd       = (ucs_async_add_event_fd_t)ucs_empty_function_return_success,
     .remove_event_fd    = ucs_empty_function_return_success,
-    .modify_event_fd    = (void*)ucs_empty_function_return_success,
+    .modify_event_fd    = (ucs_async_modify_event_fd_t)ucs_empty_function_return_success,
     .add_timer          = ucs_empty_function_return_success,
     .remove_timer       = ucs_empty_function_return_success,
 };

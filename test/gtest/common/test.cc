@@ -127,14 +127,12 @@ void test_base::modify_config(const std::string& name, const std::string& value,
             GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
                          << value << ", error message: "
                          << ucs_status_string(status) << "(" << status << ")";
-            break;
         case SETENV_IF_NOT_EXIST:
             m_env_stack.push_back(new scoped_setenv(("UCX_" + name).c_str(),
                                                     value.c_str()));
             break;
         case SKIP_IF_NOT_EXIST:
             UCS_TEST_SKIP_R(name + " is not a valid configuration");
-            break;
         case IGNORE_IF_NOT_EXIST:
             break;
         }
