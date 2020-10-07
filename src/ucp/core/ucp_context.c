@@ -310,7 +310,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "(0 - disabled, inf - check all endpoints on every round)",
    ucs_offsetof(ucp_config_t, ctx.keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
-  {"PROTO_INDIRECT_ID", "auto",
+  {"PROTO_INDIRECT_ID", "off",
    "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
    "A value of 'auto' means to enable only if error handling is enabled on the\n"
    "endpoint.",
