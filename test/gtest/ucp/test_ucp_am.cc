@@ -613,6 +613,7 @@ public:
     {
         EXPECT_FALSE(m_am_received);
         EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
+        EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
 
         m_rx_buf.resize(length, 'u');
 

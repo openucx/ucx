@@ -1081,11 +1081,18 @@ ucp_am_copy_data_fragment(ucp_recv_desc_t *first_rdesc, void *data,
     first_rdesc->am_first.remaining -= length;
 }
 
-static UCS_F_ALWAYS_INLINE ucp_ep_h
-ucp_am_hdr_reply_ep(ucp_worker_h worker, uint16_t flags, uint64_t ep_id)
+static UCS_F_ALWAYS_INLINE uint64_t
+ucp_am_hdr_reply_ep(ucp_worker_h worker, uint16_t flags, uint64_t ep_id,
+                    ucp_ep_h *reply_ep_p)
 {
-    return (flags & UCP_AM_SEND_REPLY) ?
-           ucp_worker_get_ep_by_id(worker, ep_id) : NULL;
+    if (flags & UCP_AM_SEND_REPLY) {
+        *reply_ep_p = ucp_worker_get_ep_by_id(worker, ep_id);
+        return UCP_AM_RECV_ATTR_FIELD_REPLY_EP;
+    }
+
+    *reply_ep_p = NULL;
+
+    return 0ul;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -1109,11 +1116,13 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
     ucs_list_del(&first_rdesc->am_first.list);
 
     first_hdr = (ucp_am_first_hdr_t*)(first_rdesc + 1);
-    reply_ep  = ucp_am_hdr_reply_ep(worker, first_hdr->super.super.flags,
-                                    first_hdr->super.ep_id);
-    status    = ucp_am_invoke_cb(worker, &first_hdr->super.super,
-                                 sizeof(*first_hdr), first_hdr->total_size,
-                                 reply_ep, 1);
+
+    ucp_am_hdr_reply_ep(worker, first_hdr->super.super.flags,
+                        first_hdr->super.ep_id, &reply_ep);
+
+    status = ucp_am_invoke_cb(worker, &first_hdr->super.super,
+                              sizeof(*first_hdr), first_hdr->total_size,
+                              reply_ep, 1);
     if (status != UCS_INPROGRESS) {
         ucs_free(first_rdesc); /* user does not need to hold this data */
         return;
@@ -1281,9 +1290,10 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     }
 
     am_cb           = &ucs_array_elem(&worker->am, am_id);
-    param.recv_attr = UCP_AM_RECV_ATTR_FLAG_DATA | UCP_AM_RECV_ATTR_FLAG_RNDV;
-    param.reply_ep  = ucp_am_hdr_reply_ep(worker, rts->am.flags,
-                                          rts->super.sreq.ep_id);
+    param.recv_attr = UCP_AM_RECV_ATTR_FLAG_RNDV |
+                      ucp_am_hdr_reply_ep(worker, rts->am.flags,
+                                          rts->super.sreq.ep_id,
+                                          &param.reply_ep);
     status          = am_cb->cb(am_cb->context, hdr, rts->am.header_length,
                                 desc + 1, rts->super.size, &param);
     if ((status == UCS_INPROGRESS) ||
