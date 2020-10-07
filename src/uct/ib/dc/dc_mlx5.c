@@ -992,7 +992,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
 
     ucs_assert(rc_iface->config.fc_enabled);
 
-    if (fc_hdr == UCT_RC_EP_FC_FLAG_HARD_REQ) {
+    if (fc_hdr == UCT_RC_EP_FLAG_FC_HARD_REQ) {
         ep = iface->tx.fc_ep;
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
 

@@ -892,7 +892,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      &av, ah_attr.is_global ? mlx5_av_grh(&mlx5_av) : NULL,
                                      uct_ib_mlx5_wqe_av_size(&av), 0, INT_MAX);
     } else {
-        ucs_assert(op == UCT_RC_EP_FC_FLAG_HARD_REQ);
+        ucs_assert(op == UCT_RC_EP_FLAG_FC_HARD_REQ);
         sender.ep               = (uint64_t)dc_ep;
         sender.global.gid       = ib_iface->gid_info.gid;
         sender.global.is_global = dc_ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
@@ -1276,7 +1276,7 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
         if ((ep->fc.fc_wnd == iface->super.super.config.fc_hard_thresh) &&
             !uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
             status = uct_rc_fc_ctrl(&ep->super.super,
-                                    UCT_RC_EP_FC_FLAG_HARD_REQ,
+                                    UCT_RC_EP_FLAG_FC_HARD_REQ,
                                     NULL);
             if (status != UCS_OK) {
                 return status;

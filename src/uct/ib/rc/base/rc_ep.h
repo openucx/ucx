@@ -41,25 +41,25 @@ enum {
 enum {
     /* Soft Credit Request: indicates that peer needs to piggy-back credits
      * grant to counter AM (if any). Can be bundled with
-     * UCT_RC_EP_FC_FLAG_GRANT  */
-    UCT_RC_EP_FC_FLAG_SOFT_REQ  = UCS_BIT(UCT_AM_ID_BITS),
+     * UCT_RC_EP_FLAG_FC_GRANT  */
+    UCT_RC_EP_FLAG_FC_SOFT_REQ  = UCS_BIT(UCT_AM_ID_BITS),
 
     /* Hard Credit Request: indicates that wnd is close to be exhausted.
      * The peer must send separate AM with credit grant as soon as it
      * receives AM  with this bit set. Can be bundled with
-     * UCT_RC_EP_FC_FLAG_GRANT */
-    UCT_RC_EP_FC_FLAG_HARD_REQ  = UCS_BIT((UCT_AM_ID_BITS) + 1),
+     * UCT_RC_EP_FLAG_FC_GRANT */
+    UCT_RC_EP_FLAG_FC_HARD_REQ  = UCS_BIT((UCT_AM_ID_BITS) + 1),
 
     /* Credit Grant: ep should update its FC wnd as soon as it receives AM with
      * this bit set. Can be bundled with either soft or hard request bits */
-    UCT_RC_EP_FC_FLAG_GRANT     = UCS_BIT((UCT_AM_ID_BITS) + 2),
+    UCT_RC_EP_FLAG_FC_GRANT     = UCS_BIT((UCT_AM_ID_BITS) + 2),
 
     /* Special FC AM with Credit Grant: Just an empty message indicating
      * credit grant. Can't be bundled with any other FC flag (as it consumes
      * all 3 FC bits). */
-    UCT_RC_EP_FC_PURE_GRANT     = (UCT_RC_EP_FC_FLAG_HARD_REQ |
-                                   UCT_RC_EP_FC_FLAG_SOFT_REQ |
-                                   UCT_RC_EP_FC_FLAG_GRANT)
+    UCT_RC_EP_FC_PURE_GRANT     = (UCT_RC_EP_FLAG_FC_HARD_REQ |
+                                   UCT_RC_EP_FLAG_FC_SOFT_REQ |
+                                   UCT_RC_EP_FLAG_FC_GRANT)
 };
 
 /*
@@ -160,12 +160,12 @@ enum {
 
 #define UCT_RC_UPDATE_FC(_iface, _ep, _fc_hdr) \
     { \
-        if ((_fc_hdr) & UCT_RC_EP_FC_FLAG_GRANT) { \
+        if ((_fc_hdr) & UCT_RC_EP_FLAG_FC_GRANT) { \
             UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_GRANT, 1); \
         } \
-        if ((_fc_hdr) & UCT_RC_EP_FC_FLAG_SOFT_REQ) { \
+        if ((_fc_hdr) & UCT_RC_EP_FLAG_FC_SOFT_REQ) { \
             UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_SOFT_REQ, 1); \
-        } else if ((_fc_hdr) & UCT_RC_EP_FC_FLAG_HARD_REQ) { \
+        } else if ((_fc_hdr) & UCT_RC_EP_FLAG_FC_HARD_REQ) { \
             UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ, 1); \
         } \
         \
@@ -446,9 +446,9 @@ static UCS_F_ALWAYS_INLINE uint8_t
 uct_rc_fc_req_moderation(uct_rc_fc_t *fc, uct_rc_iface_t *iface)
 {
     return (fc->fc_wnd == iface->config.fc_hard_thresh) ?
-            UCT_RC_EP_FC_FLAG_HARD_REQ :
+            UCT_RC_EP_FLAG_FC_HARD_REQ :
            (fc->fc_wnd == iface->config.fc_soft_thresh) ?
-            UCT_RC_EP_FC_FLAG_SOFT_REQ : 0;
+            UCT_RC_EP_FLAG_FC_SOFT_REQ : 0;
 }
 
 static UCS_F_ALWAYS_INLINE int
