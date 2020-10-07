@@ -4,7 +4,7 @@
 # See file LICENSE for terms.
 #
 
-noinst_PROGRAMS = io_demo
+bin_PROGRAMS = io_demo
 
 noinst_HEADERS = \
 	ucx_wrapper.h
