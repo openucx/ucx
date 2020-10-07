@@ -164,7 +164,7 @@ uct_cuda_copy_progress_event_queue(uct_cuda_copy_iface_t *iface,
     uct_cuda_copy_event_desc_t *cuda_event;
 
     ucs_queue_for_each_extract(cuda_event, queue_head, queue,
-                               uct_cuda_copy_queue_head_ready(queue_head)) {
+                               cudaEventQuery(cuda_event->event) == cudaSuccess) {
         ucs_queue_remove(queue_head, &cuda_event->queue);
         if (cuda_event->comp != NULL) {
             uct_invoke_completion(cuda_event->comp, UCS_OK);
