@@ -94,12 +94,8 @@ public:
         size_t size = ucs_max(min, ucs_min(64ul, max));
         uint8_t mem_type_index;
 
-        ucs_for_each_bit(mem_type_index, sender().md_attr().cap.access_mem_types) {
-            ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
-            /* test just the first mem_type that md can access */
-            /* TODO: generalize to all mem_types */
-            break;
-        }
+        ucs_assert(sender().md_attr().cap.access_mem_types != 0);
+        mem_type_index = ucs_ffs64(sender().md_attr().cap.access_mem_types);
 
         lbuf = new mapped_buffer(size, 0, sender(), 0, (ucs_memory_type_t)mem_type_index);
         rbuf = new mapped_buffer(size, 0, receiver(), 0, (ucs_memory_type_t)mem_type_index);
