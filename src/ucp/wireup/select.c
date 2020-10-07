@@ -950,8 +950,6 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
     ucp_worker_h worker            = select_params->ep->worker;
     uint64_t tl_bitmap             = select_params->tl_bitmap;
     ucp_wireup_criteria_t criteria = {0};
-    unsigned ep_init_flags         = ucp_wireup_ep_init_flags(select_params,
-                                                              select_ctx);
     const uct_iface_attr_t *iface_attr;
     ucs_status_t status;
 
@@ -969,15 +967,13 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
         criteria.remote_event_flags = 0;
         criteria.local_event_flags  = 0;
         criteria.calc_score         = ucp_wireup_am_score_func;
-        ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
+        ucp_wireup_fill_peer_err_criteria(&criteria,
+                                          ucp_wireup_ep_init_flags(select_params,
+                                                                   select_ctx));
 
         if (ucs_test_all_flags(ucp_ep_get_context_features(select_params->ep),
                                UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-            if (UCP_EP_INIT_FLAG_MEM_TYPE & ep_init_flags) {
-                criteria.local_event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP;
-            } else {
-                criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
-            }
+            criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
         }
 
         status = ucp_wireup_select_transport(select_params, &criteria, tl_bitmap,
@@ -1136,11 +1132,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-        if (UCP_EP_INIT_FLAG_MEM_TYPE & ep_init_flags) {
-            bw_info.criteria.local_event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP;
-        } else {
-            bw_info.criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
-        }
+        bw_info.criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
     }
 
     bw_info.local_dev_bitmap  = UINT64_MAX;
@@ -1223,11 +1215,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP)) {
-        if (UCP_EP_INIT_FLAG_MEM_TYPE & ep_init_flags) {
-            bw_info.criteria.local_event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP;
-        } else {
-            bw_info.criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
-        }
+        bw_info.criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
     }
 
     bw_info.local_dev_bitmap  = UINT64_MAX;
@@ -1313,8 +1301,6 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
     ucp_ep_h ep                          = select_params->ep;
     ucp_wireup_criteria_t criteria       = {0};
     ucp_wireup_select_info_t select_info = {0};
-    unsigned ep_init_flags               = ucp_wireup_ep_init_flags(select_params,
-                                                                    select_ctx);
     ucs_status_t status;
 
     if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) ||
@@ -1338,11 +1324,7 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
 
     if (ucs_test_all_flags(ucp_ep_get_context_features(ep),
                            UCP_FEATURE_WAKEUP)) {
-        if (UCP_EP_INIT_FLAG_MEM_TYPE & ep_init_flags) {
-            criteria.local_event_flags = UCT_IFACE_FLAG_EVENT_SEND_COMP;
-        } else {
-            criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
-        }
+        criteria.local_event_flags = UCP_WIREUP_UCT_EVENT_CAP_FLAGS;
     }
 
     /* Do not add tag offload lane, if selected tag lane score is lower
