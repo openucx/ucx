@@ -170,22 +170,6 @@ void UcxContext::progress()
     progress_failed_connections();
 }
 
-void UcxContext::dispatch_new_connection(UcxConnection *conn)
-{
-    // To be implemented in a subclass
-}
-
-void UcxContext::dispatch_io_message(UcxConnection* conn, const void *buffer,
-                                     size_t length)
-{
-    // To be implemented in a subclass
-}
-
-void UcxContext::dispatch_connection_error(UcxConnection* conn)
-{
-    // To be implemented in a subclass
-}
-
 uint32_t UcxContext::get_next_conn_id()
 {
     static uint32_t conn_id = 1;
@@ -272,7 +256,6 @@ void UcxContext::progress_conn_requests()
         UcxConnection *conn = new UcxConnection(*this, get_next_conn_id());
         if (conn->accept(_conn_requests.front())) {
             add_connection(conn);
-            dispatch_new_connection(conn);
         } else {
             delete conn;
         }
@@ -418,7 +401,7 @@ unsigned UcxConnection::_num_instances = 0;
 
 UcxConnection::UcxConnection(UcxContext &context, uint32_t conn_id) :
     _context(context), _conn_id(conn_id), _remote_conn_id(0),
-    _ep(NULL), _close_request(NULL)
+    _ep(NULL), _close_request(NULL), _ucx_status(UCS_OK)
 {
     ++_num_instances;
     struct sockaddr_in in_addr = {0};
@@ -683,6 +666,7 @@ void UcxConnection::request_completed(ucx_request *r)
 void UcxConnection::handle_connection_error(ucs_status_t status)
 {
     UCX_CONN_LOG << "detected error: " << ucs_status_string(status);
+    _ucx_status = status;
 
     if (_remote_conn_id != 0) {
         /* the upper layer should close the connection */
