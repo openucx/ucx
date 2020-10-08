@@ -354,7 +354,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
     ucs_assert(iface->config.fc_enabled);
 
-    if (fc_hdr & UCT_RC_EP_FC_FLAG_GRANT) {
+    if (fc_hdr & UCT_RC_EP_FLAG_FC_GRANT) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_GRANT, 1);
 
         /* Got either grant flag or special FC grant message */
@@ -380,14 +380,14 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         }
     }
 
-    if (fc_hdr & UCT_RC_EP_FC_FLAG_SOFT_REQ) {
+    if (fc_hdr & UCT_RC_EP_FLAG_FC_SOFT_REQ) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_SOFT_REQ, 1);
 
         /* Got soft credit request. Mark ep that it needs to grant
          * credits to the peer in outgoing AM (if any). */
-        ep->flags |= UCT_RC_EP_FC_FLAG_GRANT;
+        ep->flags |= UCT_RC_EP_FLAG_FC_GRANT;
 
-    } else if (fc_hdr & UCT_RC_EP_FC_FLAG_HARD_REQ) {
+    } else if (fc_hdr & UCT_RC_EP_FLAG_FC_HARD_REQ) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
         fc_req = ucs_mpool_get(&iface->tx.pending_mp);
         if (ucs_unlikely(fc_req == NULL)) {
