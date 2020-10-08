@@ -288,6 +288,64 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
     }
 }
 
+UCS_TEST_P(test_md, mem_query) {
+    for (size_t i = 0; i < mem_buffer::supported_mem_types().size(); ++i) {
+        ucs_memory_type_t mem_type = mem_buffer::supported_mem_types()[i];
+        if (!(md_attr().cap.detect_mem_types & UCS_BIT(mem_type))) {
+            continue;
+        }
+
+        mem_buffer mem_buf(4 * UCS_KBYTE, mem_type);
+        uct_md_mem_attr_t mem_attr = {};
+
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+        ucs_status_t status = uct_md_mem_query(md(), mem_buf.ptr(),
+                                               mem_buf.size(), &mem_attr);
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(mem_type, mem_attr.mem_type);
+        EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
+
+        char bdf_buf[32];
+        UCS_TEST_MESSAGE << ucs_memory_type_names[mem_type] << ": "
+                         << ucs_topo_sys_device_bdf_name(mem_attr.sys_dev, bdf_buf,
+                                                         sizeof(bdf_buf));
+    }
+}
+
+UCS_TEST_P(test_md, sys_device) {
+    uct_tl_resource_desc_t *tl_resources;
+    unsigned num_tl_resources;
+
+    ucs_status_t status = uct_md_query_tl_resources(md(), &tl_resources,
+                                                    &num_tl_resources);
+    ASSERT_UCS_OK(status);
+
+    for (unsigned i = 0; i < num_tl_resources; ++i) {
+        char bdf_buf[32];
+        const char *bdf_name =
+                ucs_topo_sys_device_bdf_name(tl_resources[i].sys_device, bdf_buf,
+                                             sizeof(bdf_buf));
+        ASSERT_TRUE(bdf_name != NULL);
+        UCS_TEST_MESSAGE << tl_resources[i].dev_name << ": " << bdf_name;
+
+        /* Expect 0 latency and infinite bandwidth within same device */
+        ucs_sys_dev_distance_t distance;
+        ucs_topo_get_distance(tl_resources[i].sys_device,
+                              tl_resources[i].sys_device,
+                              &distance);
+        EXPECT_NEAR(distance.latency, 0, 1e-9);
+        EXPECT_GT(distance.bandwidth, 1e12);
+
+        /* Expect real device detection on IB transports */
+        if (!strcmp(md_attr().component_name, "ib")) {
+            EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, tl_resources[i].sys_device);
+        }
+    }
+
+    uct_release_tl_resource_list(tl_resources);
+}
+
 UCS_TEST_SKIP_COND_P(test_md, reg,
                      !check_caps(UCT_MD_FLAG_REG)) {
     size_t size;

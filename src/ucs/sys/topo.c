@@ -8,19 +8,19 @@
 #  include "config.h"
 #endif
 
-#include <ucs/sys/topo.h>
-#include <ucs/sys/string.h>
-#include <ucs/type/status.h>
-#include <stdio.h>
+#include "topo.h"
+#include "string.h"
+
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
-#include <ucs/debug/log.h>
 #include <ucs/debug/assert.h>
-#include <limits.h>
+#include <ucs/debug/log.h>
 #include <inttypes.h>
+#include <float.h>
 
-#define UCS_TOPO_MAX_SYS_DEVICES 1024
-#define UCS_TOPO_HOP_OVERHEAD    1E-7
+
+#define UCS_TOPO_MAX_SYS_DEVICES  256
+#define UCS_TOPO_SYSFS_PCI_PREFIX "/sys/class/pci_bus"
 
 typedef int64_t ucs_bus_id_bit_rep_t;
 
@@ -36,6 +36,7 @@ typedef struct ucs_topo_global_ctx {
     ucs_spinlock_t                lock;
     ucs_topo_sys_dev_to_bus_arr_t sys_dev_to_bus_lookup;
 } ucs_topo_global_ctx_t;
+
 
 static ucs_topo_global_ctx_t ucs_topo_ctx;
 
@@ -81,8 +82,9 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                   *sys_dev);
     } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
+        ucs_assert_always(ucs_topo_ctx.sys_dev_to_bus_lookup.count <
+                          UCS_TOPO_MAX_SYS_DEVICES);
         *sys_dev = ucs_topo_ctx.sys_dev_to_bus_lookup.count;
-        ucs_assert(*sys_dev < UCS_TOPO_MAX_SYS_DEVICES);
         kh_value(&ucs_topo_ctx.bus_to_sys_dev_hash, hash_it) = *sys_dev;
         ucs_debug("bus id 0x%"PRIx64" doesn't exist. sys_dev = %u",
                   bus_id_bit_rep, *sys_dev);
@@ -95,11 +97,11 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
     return UCS_OK;
 }
 
-static void ucs_topo_get_path_with_bus(unsigned bus, char *path)
+static void
+ucs_topo_get_bus_path(const ucs_sys_bus_id_t *bus_id, char *path, size_t max)
 {
-    static const char sysfs_pci_prefix[] = "/sys/class/pci_bus";
-
-    sprintf(path, "%s/0000:%02x", sysfs_pci_prefix, bus);
+    ucs_snprintf_safe(path, max, "%s/%04x:%02x", UCS_TOPO_SYSFS_PCI_PREFIX,
+                      bus_id->domain, bus_id->bus);
 }
 
 ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
@@ -107,39 +109,66 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
                                    ucs_sys_dev_distance_t *distance)
 {
     char path1[PATH_MAX], path2[PATH_MAX];
-    unsigned bus1, bus2;
     ssize_t path_distance;
 
+    /* If one of the devices is unknown, we assume near topology */
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
-        (ucs_topo_ctx.sys_dev_to_bus_lookup.count < 2) ) {
-        return UCS_ERR_IO_ERROR;
+        (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
+        path_distance = 0;
+    } else {
+        if ((device1 >= ucs_topo_ctx.sys_dev_to_bus_lookup.count) ||
+            (device2 >= ucs_topo_ctx.sys_dev_to_bus_lookup.count)) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        ucs_topo_get_bus_path(&ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[device1],
+                              path1, sizeof(path1));
+        ucs_topo_get_bus_path(&ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[device2],
+                              path2, sizeof(path2));
+
+        path_distance = ucs_path_calc_distance(path1, path2);
+        if (path_distance < 0) {
+            return (ucs_status_t)path_distance;
+        }
     }
 
-    if (device1 == device2) {
-        distance->latency = 0;
-        return UCS_OK;
+    /* Rough approximation of bandwidth/latency as function of PCI distance in
+     * sysfs.
+     * TODO implement more accurate estimation, based on system type, PCIe
+     * switch, etc.
+     */
+    if (path_distance <= 2) {
+        distance->latency   = 0;
+        distance->bandwidth = DBL_MAX;
+    } else if (path_distance <= 4) {
+        distance->latency   = 300e-9;
+        distance->bandwidth = 2000 * UCS_MBYTE;
+    } else {
+        distance->latency   = 900e-9;
+        distance->bandwidth = 300 * UCS_MBYTE;
     }
-
-    ucs_assert(device1 < UCS_TOPO_MAX_SYS_DEVICES);
-    ucs_assert(device2 < UCS_TOPO_MAX_SYS_DEVICES);
-
-    bus1 = ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[device1].bus;
-    bus2 = ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[device2].bus;
-
-    ucs_topo_get_path_with_bus(bus1, path1);
-    ucs_topo_get_path_with_bus(bus2, path2);
-
-    path_distance = ucs_path_calc_distance(path1, path2);
-    if (path_distance < 0) {
-        return (ucs_status_t)path_distance;
-    }
-
-    distance->latency = UCS_TOPO_HOP_OVERHEAD * path_distance;
 
     return UCS_OK;
 }
 
+const char *
+ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
+{
+    const ucs_sys_bus_id_t* bus_id;
+
+    if (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+        return "<unknown>";
+    }
+
+    if (sys_dev >= ucs_topo_ctx.sys_dev_to_bus_lookup.count) {
+        return NULL;
+    }
+
+    bus_id = &ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[sys_dev];
+    ucs_snprintf_safe(buffer, max, "%04x:%02x:%02x.%d", bus_id->domain,
+                      bus_id->bus, bus_id->slot, bus_id->function);
+    return buffer;
+}
 
 void ucs_topo_print_info(FILE *stream)
 {

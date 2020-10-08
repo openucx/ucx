@@ -143,8 +143,14 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         return;
     }
 
-    printf("#   Transport: %s\n", resource->tl_name);
-    printf("#      Device: %s\n", resource->dev_name);
+    printf("#      Transport: %s\n", resource->tl_name);
+    printf("#         Device: %s\n", resource->dev_name);
+    printf("#  System device: %s",
+           ucs_topo_sys_device_bdf_name(resource->sys_device, buf, sizeof(buf)));
+    if (resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        printf(" (%d)", resource->sys_device);
+    }
+    printf("\n");
 
     status = uct_iface_open(md, worker, &iface_params, iface_config, &iface);
     uct_config_release(iface_config);
