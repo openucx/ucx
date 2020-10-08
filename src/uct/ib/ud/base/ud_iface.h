@@ -566,7 +566,7 @@ uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface)
      } while(0);
 
 #define UCT_UD_CHECK_BCOPY_LENGTH(iface, len) \
-    UCT_UD_CHECK_LENGTH(iface, 0, len, "am_bcopy length")
+    UCT_UD_CHECK_LENGTH(iface, 0, len, "am_bcopy")
 
 #define UCT_UD_CHECK_ZCOPY_LENGTH(iface, header_len, payload_len) \
     UCT_UD_CHECK_LENGTH(iface, header_len, payload_len, "am_zcopy payload")
