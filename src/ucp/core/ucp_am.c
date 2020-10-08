@@ -954,26 +954,22 @@ out:
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_invoke_cb(ucp_worker_h worker, ucp_am_hdr_t *am_hdr,
                  size_t am_hdr_length, size_t data_length,
-                 ucp_ep_h reply_ep, int has_desc, uint64_t recv_flags)
+                 ucp_ep_h reply_ep, uint64_t recv_flags)
 {
     uint16_t           am_id = am_hdr->am_id;
     uint32_t user_hdr_length = am_hdr->header_length;
         void        *am_data = UCS_PTR_BYTE_OFFSET(am_hdr, am_hdr_length);
     ucp_am_entry_t    *am_cb = &ucs_array_elem(&worker->am, am_id);
     ucp_am_recv_param_t param;
+    unsigned flags;
 
     if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
         return UCS_OK;
     }
 
     if (ucs_likely(am_cb->flags & UCP_AM_CB_PRIV_FLAG_NBX)) {
-        if (has_desc) {
-            param.recv_attr = recv_flags | UCP_AM_RECV_ATTR_FLAG_DATA;
-        } else {
-            param.recv_attr = recv_flags;
-        }
-
-        param.reply_ep      = reply_ep;
+        param.recv_attr = recv_flags;
+        param.reply_ep  = reply_ep;
 
         return am_cb->cb(am_cb->context, user_hdr_length ? am_data : NULL,
                          user_hdr_length,
@@ -988,8 +984,11 @@ ucp_am_invoke_cb(ucp_worker_h worker, ucp_am_hdr_t *am_hdr,
         return UCS_OK;
     }
 
+    flags = (recv_flags & UCP_AM_RECV_ATTR_FLAG_DATA) ?
+            UCP_CB_PARAM_FLAG_DATA : 0;
+
     return am_cb->cb_old(am_cb->context, am_data, data_length, reply_ep,
-                         has_desc ? UCP_CB_PARAM_FLAG_DATA : 0);
+                         flags);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -1001,9 +1000,12 @@ ucp_am_handler_common(ucp_worker_h worker, ucp_am_hdr_t *am_hdr, size_t hdr_size
     void *data;
     ucs_status_t status;
 
-    status = ucp_am_invoke_cb(worker, am_hdr, hdr_size, total_length - hdr_size,
-                              reply_ep, am_flags & UCT_CB_PARAM_FLAG_DESC,
-                              recv_flags);
+    recv_flags |= (am_flags & UCT_CB_PARAM_FLAG_DESC) ?
+                  UCP_AM_RECV_ATTR_FLAG_DATA : 0;
+
+    status      = ucp_am_invoke_cb(worker, am_hdr, hdr_size,
+                                   total_length - hdr_size, reply_ep,
+                                   recv_flags);
     if (status != UCS_INPROGRESS) {
         return UCS_OK; /* we do not need UCT desc, just return UCS_OK */
     }
@@ -1121,7 +1123,8 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
 
     status     = ucp_am_invoke_cb(worker, &first_hdr->super.super,
                                   sizeof(*first_hdr), first_hdr->total_size,
-                                  reply_ep, 1, recv_flags);
+                                  reply_ep,
+                                  recv_flags | UCP_AM_RECV_ATTR_FLAG_DATA);
     if (status != UCS_INPROGRESS) {
         ucs_free(first_rdesc); /* user does not need to hold this data */
         return;
