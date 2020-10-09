@@ -55,7 +55,7 @@ void ucp_wireup_ep_replay_pending_requests(ucp_ep_h ucp_ep,
         req = ucs_container_of(uct_req, ucp_request_t, send.uct);
         ucs_assert(req->send.ep == ucp_ep);
         ucp_request_send(req, 0);
-        --ucp_ep->worker->flush_ops_count;
+        ucp_worker_flush_ops_count_dec(ucp_ep->worker);
     }
 }
 
@@ -209,7 +209,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
         }
     } else {
         ucs_queue_push(&wireup_ep->pending_q, ucp_wireup_ep_req_priv(req));
-        ++ucp_ep->worker->flush_ops_count;
+        ucp_worker_flush_ops_count_inc(worker);
         status = UCS_OK;
     }
 out:
@@ -222,17 +222,15 @@ static void
 ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
                             void *arg)
 {
-    ucp_wireup_ep_t   *wireup_ep = ucp_wireup_ep(uct_ep);
-    ucp_worker_h      worker;
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_worker_h worker        = wireup_ep->super.ucp_ep->worker;
     uct_pending_req_t *req;
-    ucp_request_t     *ucp_req;
-
-    worker = wireup_ep->super.ucp_ep->worker;
+    ucp_request_t *ucp_req;
 
     ucs_queue_for_each_extract(req, &wireup_ep->pending_q, priv, 1) {
         ucp_req = ucs_container_of(req, ucp_request_t, send.uct);
         UCS_ASYNC_BLOCK(&worker->async);
-        --worker->flush_ops_count;
+        ucp_worker_flush_ops_count_dec(worker);
         UCS_ASYNC_UNBLOCK(&worker->async);
         cb(&ucp_req->send.uct, arg);
     }
@@ -369,7 +367,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     ucs_queue_head_init(&self->pending_q);
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
-    ++ucp_ep->worker->flush_ops_count;
+    ucp_worker_flush_ops_count_inc(ucp_ep->worker);
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 
     ucs_trace("ep %p: created wireup ep %p to %s ", ucp_ep, self,
@@ -403,7 +401,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
-    --worker->flush_ops_count;
+    ucp_worker_flush_ops_count_dec(worker);
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 

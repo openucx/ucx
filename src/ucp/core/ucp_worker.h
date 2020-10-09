@@ -162,7 +162,7 @@ typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
 
 
 /* Hash set to UCT EPs that are being discarded on UCP Worker */
-KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, char);
+KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 
@@ -319,5 +319,21 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
                                unsigned ep_flush_flags,
                                uct_pending_purge_callback_t purge_cb,
                                void *purge_arg);
+
+/* must be called with async lock held */
+static UCS_F_ALWAYS_INLINE void
+ucp_worker_flush_ops_count_inc(ucp_worker_h worker)
+{
+    ucs_assert(worker->flush_ops_count < UINT_MAX);
+    ++worker->flush_ops_count;
+}
+
+/* must be called with async lock held */
+static UCS_F_ALWAYS_INLINE void
+ucp_worker_flush_ops_count_dec(ucp_worker_h worker)
+{
+    ucs_assert(worker->flush_ops_count > 0);
+    --worker->flush_ops_count;
+}
 
 #endif

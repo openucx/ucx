@@ -37,20 +37,11 @@ static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
 static ucs_status_t ucp_rma_sw_progress_put(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep       = req->send.ep;
     ssize_t packed_len;
     ucs_status_t status;
 
-    req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_PUT,
-                                     ucp_rma_sw_put_pack_cb, req, 0);
-    if (packed_len > 0) {
-        status = UCS_OK;
-        ucp_ep_rma_remote_request_sent(ep);
-    } else {
-        status = (ucs_status_t)packed_len;
-    }
-
+    status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_PUT, ucp_rma_sw_put_pack_cb,
+                                    &packed_len);
     return ucp_rma_request_advance(req, packed_len - sizeof(ucp_put_hdr_t),
                                    status);
 }
@@ -73,26 +64,19 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
 static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep       = req->send.ep;
     ucs_status_t status;
     ssize_t packed_len;
 
-    req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane],
-                                     UCP_AM_ID_GET_REQ,
-                                     ucp_rma_sw_get_req_pack_cb, req, 0);
-    if (packed_len < 0) {
-        status = (ucs_status_t)packed_len;
-        if (status != UCS_ERR_NO_RESOURCE) {
-            ucp_request_complete_send(req, status);
-        }
-        return status;
+    status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_GET_REQ,
+                                    ucp_rma_sw_get_req_pack_cb, &packed_len);
+    if ((status != UCS_OK) && (status != UCS_ERR_NO_RESOURCE)) {
+        ucp_request_complete_send(req, status);
     }
 
-    /* get request packet sent, complete the request object when all data arrives */
-    ucs_assert(packed_len == sizeof(ucp_get_req_hdr_t));
-    ucp_ep_rma_remote_request_sent(ep);
-    return UCS_OK;
+    /* If completed with UCS_OK, it means that get request packet sent,
+     * complete the request object when all data arrives */
+    ucs_assert((status != UCS_OK) || (packed_len == sizeof(ucp_get_req_hdr_t)));
+    return status;
 }
 
 ucp_rma_proto_t ucp_rma_sw_proto = {

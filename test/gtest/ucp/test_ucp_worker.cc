@@ -72,6 +72,7 @@ protected:
     void test_worker_discard(void *ep_flush_func,
                              void *ep_pending_add_func,
                              void *ep_pending_purge_func,
+                             bool wait_for_comp = true,
                              unsigned ep_count = 8,
                              unsigned wireup_ep_count = 0,
                              unsigned wireup_aux_ep_count = 0) {
@@ -157,6 +158,13 @@ protected:
             } else {
                 EXPECT_EQ(0u, purged_reqs_count);
             }
+        }
+
+        if (!wait_for_comp) {
+            /* destroy sender's entity here to have an access to the valid
+             * pointers */
+            sender().cleanup();
+            return;
         }
 
         void *flush_req = sender().flush_worker_nb(0);
@@ -353,6 +361,7 @@ UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_ok) {
     test_worker_discard((void*)ucs_empty_function_return_success /* ep_flush */,
                         (void*)ucs_empty_function_do_assert      /* ep_pending_add */,
                         (void*)ucs_empty_function                /* ep_pending_purge */,
+                        true                                     /* wait for the completion */,
                         8                                        /* UCT EP count */,
                         6                                        /* WIREUP EP count */,
                         3                                        /* WIREUP AUX EP count */);
@@ -368,6 +377,7 @@ UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_ok_pending_purge) {
     test_worker_discard((void*)ucs_empty_function_return_success /* ep_flush */,
                         (void*)ep_pending_add_save_req           /* ep_pending_add */,
                         (void*)ep_pending_purge_func_iter_reqs   /* ep_pending_purge */,
+                        true                                     /* wait for the completion */,
                         8                                        /* UCT EP count */,
                         6                                        /* WIREUP EP count */,
                         3                                        /* WIREUP AUX EP count */);
@@ -383,6 +393,7 @@ UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_in_progress) {
     test_worker_discard((void*)ep_flush_func_return_in_progress /* ep_flush */,
                         (void*)ucs_empty_function_do_assert     /* ep_pending_add */,
                         (void*)ucs_empty_function               /* ep_pending_purge */,
+                        true                                    /* wait for the completion */,
                         8                                       /* UCT EP count */,
                         6                                       /* WIREUP EP count */,
                         3                                       /* WIREUP AUX EP count */);
@@ -398,6 +409,7 @@ UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_no_resource_pending_add_busy
     test_worker_discard((void*)ep_flush_func_return_3_no_resource_then_ok /* ep_flush */,
                         (void*)ucs_empty_function_return_busy             /* ep_pending_add */,
                         (void*)ucs_empty_function                         /* ep_pending_purge */,
+                        true                                              /* wait for the completion */,
                         8                                                 /* UCT EP count */,
                         6                                                 /* WIREUP EP count */,
                         3                                                 /* WIREUP AUX EP count */);
@@ -413,9 +425,27 @@ UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_no_resource_pending_add_ok_t
     test_worker_discard((void*)ep_flush_func_return_3_no_resource_then_ok /* ep_flush */,
                         (void*)ep_pending_add_func_return_ok_then_busy    /* ep_pending_add */,
                         (void*)ucs_empty_function                         /* ep_pending_purge */,
+                        true                                              /* wait for the completion */,
                         8                                                 /* UCT EP count */,
                         6                                                 /* WIREUP EP count */,
                         3                                                 /* WIREUP AUX EP count */);
+}
+
+UCS_TEST_P(test_ucp_worker_discard, flush_ok_not_wait_comp) {
+    test_worker_discard((void*)ucs_empty_function_return_success /* ep_flush */,
+                        (void*)ucs_empty_function_do_assert      /* ep_pending_add */,
+                        (void*)ucs_empty_function                /* ep_pending_purge */,
+                        false                                    /* don't wait for the completion */);
+}
+
+UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_ok_not_wait_comp) {
+    test_worker_discard((void*)ucs_empty_function_return_success /* ep_flush */,
+                        (void*)ucs_empty_function_do_assert      /* ep_pending_add */,
+                        (void*)ucs_empty_function                /* ep_pending_purge */,
+                        false                                    /* don't wait for the completion */,
+                        8                                        /* UCT EP count */,
+                        6                                        /* WIREUP EP count */,
+                        3                                        /* WIREUP AUX EP count */);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_discard, all, "all")

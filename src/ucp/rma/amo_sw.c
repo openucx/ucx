@@ -52,31 +52,22 @@ static size_t ucp_amo_sw_fetch_pack_cb(void *dest, void *arg)
     return ucp_amo_sw_pack(dest, arg, 1);
 }
 
-static ucs_status_t ucp_amo_sw_progress(uct_pending_req_t *self,
-                                        uct_pack_callback_t pack_cb, int fetch)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
+                    int fetch)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep       = req->send.ep;
     ucs_status_t status;
     ssize_t packed_len;
 
-    req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane],
-                                 UCP_AM_ID_ATOMIC_REQ, pack_cb, req, 0);
-    if (packed_len > 0) {
-        ucp_ep_rma_remote_request_sent(ep);
-        if (!fetch) {
-            ucp_request_complete_send(req, UCS_OK);
-        }
-        return UCS_OK;
-    } else {
-        status = (ucs_status_t)packed_len;
-        if (status != UCS_ERR_NO_RESOURCE) {
-            /* failure */
-            ucp_request_complete_send(req, status);
-        }
-        return status;
+    status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_ATOMIC_REQ, pack_cb,
+                                    &packed_len);
+    if (((status != UCS_ERR_NO_RESOURCE) && (status != UCS_OK)) ||
+        ((status == UCS_OK) && !fetch)) {
+        ucp_request_complete_send(req, status);
     }
+
+    return status;
 }
 
 static ucs_status_t ucp_amo_sw_progress_post(uct_pending_req_t *self)

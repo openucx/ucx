@@ -79,7 +79,6 @@ static inline ucs_status_t ucp_rma_wait(ucp_worker_h worker, void *user_req,
 static inline void ucp_ep_rma_remote_request_sent(ucp_ep_t *ep)
 {
     ++ucp_ep_flush_state(ep)->send_sn;
-    ++ep->worker->flush_ops_count;
 }
 
 static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
@@ -87,7 +86,7 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
     ucp_ep_flush_state_t *flush_state = ucp_ep_flush_state(ep);
     ucp_request_t *req;
 
-    --ep->worker->flush_ops_count;
+    ucp_worker_flush_ops_count_dec(ep->worker);
     ++flush_state->cmpl_sn;
 
     ucs_queue_for_each_extract(req, &flush_state->reqs, send.flush.queue,
@@ -96,6 +95,32 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
                                                       flush_state->cmpl_sn)) {
         ucp_ep_flush_remote_completed(req);
     }
+}
+
+static inline ucs_status_t ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id,
+                                                  uct_pack_callback_t pack_cb,
+                                                  ssize_t *packed_len_p)
+{
+    ucp_ep_t *ep = req->send.ep;
+
+    /* make an asuumption here that EP was able to send the AM, since there
+     * are transports (e.g. SELF - it does send-recv in the AM function) that is
+     * able to complete the remote request operation inside uct_ep_am_bcopy()
+     * and decrement the flush_ops_count before it was incremented */
+    ucp_worker_flush_ops_count_inc(ep->worker);
+    req->send.lane = ucp_ep_get_am_lane(ep);
+    *packed_len_p  = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], id, pack_cb,
+                                     req, 0);
+    if (*packed_len_p > 0) {
+        ucp_ep_rma_remote_request_sent(ep);
+        return UCS_OK;
+    }
+    
+    /* unroll incrementing the flush_ops_count, since uct_ep_am_bcopy()
+     * completed with error */
+    ucp_worker_flush_ops_count_dec(ep->worker);
+
+    return (ucs_status_t)*packed_len_p;
 }
 
 #endif
