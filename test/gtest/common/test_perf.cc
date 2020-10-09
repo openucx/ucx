@@ -3,7 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University 
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -253,7 +253,8 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
 }
 
 void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
-                         const std::string &tl_name, const std::string &dev_name)
+                         const std::string &tl_name, const std::string &dev_name,
+                         double *perf_value)
 {
     std::vector<int> cpus = get_affinity();
     if (cpus.size() < 2) {
@@ -289,6 +290,10 @@ void test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
             }
         } else {
             UCS_TEST_MESSAGE << result_str << " (attempt " << i << ")";
+        }
+
+        if (perf_value != NULL) {
+            *perf_value = value;
         }
 
         if (!check_perf) {

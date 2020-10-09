@@ -3,6 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University 
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -47,6 +48,7 @@ typedef enum {
 
 typedef enum {
     UCX_PERF_TEST_TYPE_PINGPONG,         /* Ping-pong mode */
+    UCX_PERF_TEST_TYPE_PINGPONG_WFE,     /* Ping-pong mode with wait for event */
     UCX_PERF_TEST_TYPE_STREAM_UNI,       /* Unidirectional stream */
     UCX_PERF_TEST_TYPE_STREAM_BI,        /* Bidirectional stream */
     UCX_PERF_TEST_TYPE_LAST

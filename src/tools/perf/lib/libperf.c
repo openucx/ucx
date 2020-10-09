@@ -3,7 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015-2016. ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2017-2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -323,7 +323,8 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     ucs_time_t median;
     double factor;
 
-    if (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) {
+    if ((perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) ||
+        (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG_WFE)) {
         factor = 2.0;
     } else {
         factor = 1.0;

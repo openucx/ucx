@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -197,6 +198,7 @@ public:
             /* coverity[switch_selector_expr_is_constant] */
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
+            case UCX_PERF_TEST_TYPE_PINGPONG_WFE:
                 *((uint8_t*)buffer + length - 1) = sn;
                 break;
             case UCX_PERF_TEST_TYPE_STREAM_UNI:
@@ -285,6 +287,13 @@ public:
                     progress_responder();
                 }
                 return UCS_OK;
+       case UCX_PERF_TEST_TYPE_PINGPONG_WFE:
+            ptr = (volatile uint8_t*)buffer + length - 1;
+            while (*ptr != sn) {
+                ucp_worker_wait_mem(worker, (void *)ptr);
+                progress_responder();
+            }
+		return UCS_OK;
             case UCX_PERF_TEST_TYPE_STREAM_UNI:
                 return UCS_OK;
             default:
@@ -510,6 +519,7 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (TYPE) {
         case UCX_PERF_TEST_TYPE_PINGPONG:
+        case UCX_PERF_TEST_TYPE_PINGPONG_WFE:
             return run_pingpong();
         case UCX_PERF_TEST_TYPE_STREAM_UNI:
             return run_stream_uni();
@@ -625,6 +635,7 @@ ucs_status_t ucp_perf_test_dispatch(ucx_perf_context_t *perf)
 {
     UCS_PP_FOREACH(TEST_CASE_ALL_OSD, perf,
         (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_PINGPONG),
+        (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_PINGPONG_WFE),
         (UCX_PERF_CMD_PUT,   UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_GET,   UCX_PERF_TEST_TYPE_STREAM_UNI),
         (UCX_PERF_CMD_ADD,   UCX_PERF_TEST_TYPE_STREAM_UNI),
