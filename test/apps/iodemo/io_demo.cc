@@ -867,13 +867,14 @@ public:
     void wait_for_responses(long max_outstanding) {
         struct timeval tv_start = {};
         bool timer_started      = false;
+        bool timer_finished     = false;
         struct timeval tv_curr, tv_diff;
         long count;
 
         count = 0;
         while (((_num_sent - _num_completed) > max_outstanding) &&
                (_status == OK)) {
-            if (count < 1000) {
+            if ((count < 1000) || timer_finished) {
                 progress();
                 ++count;
                 continue;
@@ -895,6 +896,7 @@ public:
                 LOG << "timeout waiting for " << (_num_sent - _num_completed)
                     << " replies";
                 close_uncompleted_servers("timeout for replies");
+                timer_finished = true;
             }
         }
     }
