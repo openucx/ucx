@@ -131,6 +131,7 @@ ucs_ptr_map_extract(ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
     void *value;
 
     if (ucs_likely(!(key & UCS_PTR_MAP_KEY_INDIRECT_FLAG))) {
+        ucs_assert(key != 0);
         return (void*)key;
     }
 

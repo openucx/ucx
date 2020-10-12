@@ -1674,7 +1674,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         ucp_tag_offload_cancel_rndv(sreq);
     }
 
-    ucp_worker_del_request_id(sreq->send.ep->worker, sreq->send.msg_proto.sreq_id);
+    if (ucp_ep_use_indirect_id(ep)) {
+        ucp_worker_del_request_id(sreq->send.ep->worker, sreq->send.msg_proto.sreq_id);
+    }
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) && rndv_rtr_hdr->address) {
         status = ucp_ep_rkey_unpack(ep, rndv_rtr_hdr + 1,
