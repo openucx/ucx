@@ -481,9 +481,15 @@ make_scripts()
 
 			list_pids_with_role() {
 			    # list all process ids with role \$1
+			    if [ "\$1" == "all" ]
+			    then
+			        pattern=".*"
+			    else
+			        pattern="\$1"
+			    fi
 			    for pid in \$(list_pids)
 			    do
-			        grep -qP "IODEMO_ROLE=\$1\x00" /proc/\${pid}/environ \\
+			        grep -qP "IODEMO_ROLE=\${pattern}\x00" /proc/\${pid}/environ \\
 			            && echo \${pid}
 			    done
 			}
@@ -537,6 +543,7 @@ make_scripts()
 			            shift
 			            ;;
 			        -list-tags)
+			            echo all # this tag means to operate on all processes
 			            for ((i=0;i<${num_servers_per_host[${host}]};++i))
 			            do
 			                echo "server_\${i}"
@@ -621,13 +628,7 @@ make_scripts()
 
 		# 'run_all' will start all servers, then clients, then wait for finish
 		cat >>${command_file} <<-EOF
-			run_all() {
-			    ${set_verbose}
-
-			    # kill existing processes and trap signals
-			    kill_iodemo
-			    trap signal_handler INT TERM
-
+			start_all() {
 			    set_env_vars
 
 			    echo "Starting servers"
@@ -652,6 +653,16 @@ make_scripts()
 		done
 
 		cat >>${command_file} <<-EOF
+			}
+
+			run_all() {
+			    ${set_verbose}
+
+			    # kill existing processes and trap signals
+			    kill_iodemo
+			    trap signal_handler INT TERM
+
+			    start_all
 
 			    # Wait for background processes
 			    wait ${wait_redirect}
