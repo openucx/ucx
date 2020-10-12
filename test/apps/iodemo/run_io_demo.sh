@@ -306,7 +306,7 @@ build_server_args_list() {
 	show_var_verbose iodemo_server_args
 }
 
-make_scripts()
+check_num_hosts()
 {
 	# save number of hosts
 	num_hosts=$(split_list ${host_list} | wc -w)
@@ -316,82 +316,128 @@ make_scripts()
 	fi
 
 	show_var_verbose num_hosts
+}
 
-	# build server-side arguments based on client arguments
-	build_server_args_list ${iodemo_client_args}
+mapping_error()
+{
+	error "Could not map by $1 ${num_clients} clients and" \
+	      "${num_servers} servers on ${num_hosts} nodes," \
+	      "with ${tasks_per_node} tasks per node." \
+	      "\nPlease increase --tasks-per-node parameter or use more nodes."
+}
 
-	# initialize mapping-related variables
+create_mapping_bynode()
+{
+	# Initialize mapping-related variables
+	max_clients_per_node=$(( (num_clients + num_hosts - 1) / num_hosts ))
+	max_servers_per_node=$(( (num_servers + num_hosts - 1) / num_hosts ))
+	max_ppn_per_node=$((max_clients_per_node + max_servers_per_node))
+	if [ ${max_ppn_per_node} -gt ${tasks_per_node} ]
+	then
+		mapping_error node
+	fi
+
+	# Calculate the index starting which the node will have one process less.
+	# If the maping is balanced, the index will be equal to the number of nodes, 
+	# which means no node will have one process less.
+	# The expression "(x + N - 1) % N" yields a number in the range 0..N-1 and
+	# then adding 1 yields the equivalent of "x % N" in the range 1..N.
+	# 
+	remainder_client_index=$(((num_clients + num_hosts - 1) % num_hosts + 1))
+	remainder_server_index=$(((num_servers + num_hosts - 1) % num_hosts + 1))
+	show_var remainder_client_index
+	show_var remainder_client_index
+	
+	host_index=0
+	for host in $(split_list ${host_list})
+	do
+		# Add same amount of clients/servers on each host, except few last hosts
+		# which may have less (if mapping is not balanced) 
+		num_clients_per_host[${host}]=$((max_clients_per_node - \
+		                                 (host_index >= remainder_client_index)))
+		num_servers_per_host[${host}]=$((max_servers_per_node - \
+		                                 (host_index >= remainder_server_index)))
+		host_index=$((host_index + 1))
+	done
+}
+
+create_mapping_byslot()
+{
+	remaining_servers=${num_servers}
+	remaining_clients=${num_clients}
+	for host in $(split_list ${host_list})
+	do
+		# Servers take slots first, and clients take what is left
+		node_num_servers=$(min ${tasks_per_node} ${remaining_servers})
+		node_num_clients=$(min $((tasks_per_node - node_num_servers)) \
+		                       ${remaining_clients})
+		num_servers_per_host[${host}]=${node_num_servers}
+		num_clients_per_host[${host}]=${node_num_clients}
+		
+		remaining_clients=$((remaining_clients - node_num_clients))
+		remaining_servers=$((remaining_servers - node_num_servers))
+	done
+
+	if [ ${remaining_servers} -ne 0 ] || [ ${remaining_clients} -ne 0 ]
+	then
+		mapping_error slot
+	fi
+}
+
+make_scripts()
+{
+	#
+	# Create process maping
+	#
+	declare -A num_servers_per_host
+	declare -A num_clients_per_host
 	case ${map_by} in
 	node)
-		max_clients_per_node=$(( (num_clients + num_hosts - 1) / num_hosts ))
-		max_servers_per_node=$(( (num_servers + num_hosts - 1) / num_hosts ))
-		max_ppn_per_node=$((max_clients_per_node + max_servers_per_node))
-		if [ ${max_ppn_per_node} -gt ${tasks_per_node} ]
-		then
-			error "trying to launch ${max_clients_per_node} clients and" \
-			      "${max_servers_per_node} servers per node, but only" \
-			      "${tasks_per_node} tasks are allowed." \
-			      "\nPlease increase --tasks-per-node parameter or use more nodes."
-		fi
+		create_mapping_bynode
 		;;
 	slot)
-		num_tasks=$((num_clients + num_servers))
-		max_tasks=$((tasks_per_node * num_hosts))
-		if [ ${num_tasks} -gt ${max_tasks} ]
-		then
-			error "trying to launch ${num_clients} clients and" \
-			      "${num_servers} servers, but only ${max_tasks} tasks" \
-			      "in total are allowed." \
-			      "\nPlease increase --tasks-per-node parameter or use more nodes."
-		fi
+		create_mapping_byslot
 		;;
 	*)
-		error "invalid mapping type '${map_by}'"
+		error "Invalid mapping type '${map_by}'"
 		;;
 	esac
 
-	# collect ip addresses of each host
+	#
+	# Print the mapping
+	#
+	if is_verbose
+	then
+		for host in $(split_list ${host_list})
+		do
+			echo "${host} : ${num_servers_per_host[${host}]} servers, " \
+			     "${num_clients_per_host[${host}]} clients"
+		done
+	fi
+
+	#
+	# Collect ip addresses of each host
+	#
 	declare -A ip_address_per_host
 	collect_ip_addrs
 
 	#
-	# create the process mapping: fill 'num_servers_per_host' and
-	# 'num_clients_per_host' associative arrays, and build 'client_connect_list'
+	# Create list of servers' addresses
 	#
-	declare -A num_servers_per_host
-	declare -A num_clients_per_host
 	client_connect_list=""
-	added_servers=0
-	added_clients=0
 	for host in $(split_list ${host_list})
 	do
-		case ${map_by} in
-		node)
-			# For each node, add both servers and clients, the last node may
-			# have less than others
-			node_num_servers=$(min ${max_servers_per_node} $((num_servers - added_servers)))
-			node_num_clients=$(min ${max_clients_per_node} $((num_clients - added_clients)))
-			;;
-		slot)
-			# Servers take slots first, and clients take what is left
-			node_num_servers=$(min ${tasks_per_node} $((num_servers - added_servers)))
-			node_num_clients=$(min $((tasks_per_node - node_num_servers)) \
-			                       $((num_clients - added_clients)))
-			;;
-		esac
-
-		num_servers_per_host[${host}]=${node_num_servers}
-		num_clients_per_host[${host}]=${node_num_clients}
-
-		for ((i=0;i<node_num_servers;++i))
+		for ((i=0;i<${num_servers_per_host[${host}]};++i))
 		do
 			port_num=$((base_port_num + i))
 			client_connect_list+=" ${ip_address_per_host[${host}]}:${port_num}"
 		done
-
-		added_servers=$((added_servers + node_num_servers))
-		added_clients=$((added_clients + node_num_clients))
 	done
+
+	#
+	# Build server-side arguments based on client arguments
+	#
+	build_server_args_list ${iodemo_client_args}
 
 	#
 	# In verbose mode, make following changes:
@@ -435,9 +481,15 @@ make_scripts()
 
 			list_pids_with_role() {
 			    # list all process ids with role \$1
+			    if [ "\$1" == "all" ]
+			    then
+			        pattern=".*"
+			    else
+			        pattern="\$1"
+			    fi
 			    for pid in \$(list_pids)
 			    do
-			        grep -qP "IODEMO_ROLE=\$1\x00" /proc/\${pid}/environ \\
+			        grep -qP "IODEMO_ROLE=\${pattern}\x00" /proc/\${pid}/environ \\
 			            && echo \${pid}
 			    done
 			}
@@ -491,6 +543,7 @@ make_scripts()
 			            shift
 			            ;;
 			        -list-tags)
+			            echo all # this tag means to operate on all processes
 			            for ((i=0;i<${num_servers_per_host[${host}]};++i))
 			            do
 			                echo "server_\${i}"
@@ -575,13 +628,7 @@ make_scripts()
 
 		# 'run_all' will start all servers, then clients, then wait for finish
 		cat >>${command_file} <<-EOF
-			run_all() {
-			    ${set_verbose}
-
-			    # kill existing processes and trap signals
-			    kill_iodemo
-			    trap signal_handler INT TERM
-
+			start_all() {
 			    set_env_vars
 
 			    echo "Starting servers"
@@ -606,6 +653,16 @@ make_scripts()
 		done
 
 		cat >>${command_file} <<-EOF
+			}
+
+			run_all() {
+			    ${set_verbose}
+
+			    # kill existing processes and trap signals
+			    kill_iodemo
+			    trap signal_handler INT TERM
+
+			    start_all
 
 			    # Wait for background processes
 			    wait ${wait_redirect}
@@ -672,10 +729,6 @@ run() {
 		do
 			command_file="$PWD/iodemo_commands_${host}.sh"
 			echo "${host} : ${command_file}"
-			if is_verbose
-			then
-				awk '{printf "\t%3d.\t%s\n", NR, $0}' < ${command_file}
-			fi
 		done
 	else
 		trap kill_all SIGINT
@@ -690,6 +743,7 @@ main()
 	check_params
 	show_config
 	set_ssh_options
+	check_num_hosts
 	make_scripts
 	run
 }
