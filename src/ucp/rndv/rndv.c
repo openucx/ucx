@@ -1672,9 +1672,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         /* Do not deregister memory here, because am zcopy rndv may
          * need it registered (if am and tag is the same lane). */
         ucp_tag_offload_cancel_rndv(sreq);
-    }
-
-    if (ucp_ep_use_indirect_id(ep)) {
+        ucs_assert(!ucp_ep_use_indirect_id(ep));
+    } else {
         ucp_worker_del_request_id(sreq->send.ep->worker, sreq->send.msg_proto.sreq_id);
     }
 
