@@ -796,11 +796,19 @@ public:
     }
 
     void close_uncompleted_servers(const char *reason) {
+        std::vector<size_t> server_idxs;
+        server_idxs.reserve(_active_servers.size());
+
         for (size_t i = 0; i < _active_servers.size(); ++i) {
             if (get_num_uncompleted(_active_servers[i]) > 0) {
-                terminate_connection(_server_info[_active_servers[i]].conn,
-                                     reason);
+                server_idxs.push_back(_active_servers[i]);
             }
+        }
+
+        while (!server_idxs.empty()) {
+            size_t i = server_idxs.back();
+            terminate_connection(_server_info[i].conn, reason);
+            server_idxs.pop_back();
         }
     }
 
