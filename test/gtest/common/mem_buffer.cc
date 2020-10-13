@@ -48,7 +48,7 @@ bool mem_buffer::is_cuda_supported()
 #if HAVE_CUDA
     int num_gpus;
     cudaError_t cudaErr = cudaGetDeviceCount(&num_gpus);
-    return (cudaErr == cudaSuccess) || (num_gpus > 0);
+    return (cudaErr == cudaSuccess) && (num_gpus > 0);
 #else
     return false;
 #endif
@@ -57,8 +57,9 @@ bool mem_buffer::is_cuda_supported()
 bool mem_buffer::is_rocm_supported()
 {
 #if HAVE_ROCM
-    hsa_status_t status = hsa_init();
-    return status == HSA_STATUS_SUCCESS;
+    int num_gpus;
+    hipError_t hipErr = hipGetDeviceCount(&num_gpus);
+    return (hipErr == hipSuccess) && (num_gpus > 0);
 #else
     return false;
 #endif
