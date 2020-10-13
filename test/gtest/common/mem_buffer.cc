@@ -57,8 +57,9 @@ bool mem_buffer::is_cuda_supported()
 bool mem_buffer::is_rocm_supported()
 {
 #if HAVE_ROCM
-    hsa_status_t status = hsa_init();
-    return status == HSA_STATUS_SUCCESS;
+    int num_gpus;
+    hipError_t hipErr = hipGetDeviceCount(&num_gpus);
+    return (hipErr == hipSuccess) || (num_gpus > 0);
 #else
     return false;
 #endif
