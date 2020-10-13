@@ -142,7 +142,7 @@ static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
 static void
 uct_rc_iface_flush_comp_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    uct_rc_iface_t *iface      = ucs_container_of(mp, uct_rc_iface_t, tx.flush_mp);
+    uct_rc_iface_t *iface      = ucs_container_of(mp, uct_rc_iface_t, tx.send_op_mp);
     uct_rc_iface_send_op_t *op = obj;
 
     op->handler = uct_rc_ep_flush_op_completion_handler;
@@ -150,7 +150,7 @@ uct_rc_iface_flush_comp_init(ucs_mpool_t *mp, void *obj, void *chunk)
     op->iface   = iface;
 }
 
-static ucs_mpool_ops_t uct_rc_flush_comp_mpool_ops = {
+static ucs_mpool_ops_t uct_rc_send_op_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_rc_iface_flush_comp_init,
@@ -441,9 +441,9 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
     /* Create memory pool for flush completions. Can't just alloc a certain
      * size buffer, because number of simultaneous flushes is not limited by
      * CQ or QP resources. */
-    status = ucs_mpool_init(&iface->tx.flush_mp, 0, sizeof(*op), 0,
+    status = ucs_mpool_init(&iface->tx.send_op_mp, 0, sizeof(*op), 0,
                             UCS_SYS_CACHE_LINE_SIZE, 256,
-                            UINT_MAX, &uct_rc_flush_comp_mpool_ops,
+                            UINT_MAX, &uct_rc_send_op_mpool_ops,
                             "flush-comps-only");
 
     return status;
@@ -466,7 +466,7 @@ static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
     }
     ucs_free(iface->tx.ops_buffer);
 
-    ucs_mpool_cleanup(&iface->tx.flush_mp, 1);
+    ucs_mpool_cleanup(&iface->tx.send_op_mp, 1);
 }
 
 unsigned uct_rc_iface_do_progress(uct_iface_h tl_iface)
