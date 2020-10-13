@@ -359,7 +359,7 @@ uct_rc_txqp_add_flush_comp(uct_rc_iface_t *iface, uct_base_ep_t *ep,
     uct_rc_iface_send_op_t *op;
 
     if (comp != NULL) {
-        op = (uct_rc_iface_send_op_t*)ucs_mpool_get(&iface->tx.flush_mp);
+        op = (uct_rc_iface_send_op_t*)ucs_mpool_get(&iface->tx.send_op_mp);
         if (ucs_unlikely(op == NULL)) {
             ucs_error("Failed to allocate flush completion");
             return UCS_ERR_NO_MEMORY;

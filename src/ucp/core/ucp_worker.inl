@@ -168,11 +168,11 @@ ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
 }
 
 /**
- * Check if interface with @a iface_attr supports point to pont connections.
+ * Check if interface with @a iface_attr supports point-to-point connections.
  *
  * @param [in]  iface_attr   iface attributes.
  *
- * @return 1 if iface supports point to pont connections, otherwise 0.
+ * @return 1 if iface supports point-to-point connections, otherwise 0.
  */
 static UCS_F_ALWAYS_INLINE int
 ucp_worker_iface_is_tl_p2p(const uct_iface_attr_t *iface_attr)
@@ -181,12 +181,12 @@ ucp_worker_iface_is_tl_p2p(const uct_iface_attr_t *iface_attr)
 }
 
 /**
- * Check if TL supports point to pont connections.
+ * Check if TL supports point-to-point connections.
  *
  * @param [in]  worker       UCP worker.
  * @param [in]  rsc_index    resource index.
  *
- * @return 1 if TL supports point to pont connections, otherwise 0.
+ * @return 1 if TL supports point-to-point connections, otherwise 0.
  */
 static UCS_F_ALWAYS_INLINE int
 ucp_worker_is_tl_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
