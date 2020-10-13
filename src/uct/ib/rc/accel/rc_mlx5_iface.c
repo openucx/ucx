@@ -214,7 +214,7 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         txwq_copy.qend = UCS_PTR_BYTE_OFFSET(txwq_copy.qstart, txwq_size);
     }
 
-    if (uct_rc_mlx5_ep_handle_failure(ep, status) == UCS_OK) {
+    if (uct_rc_mlx5_ep_handle_failure(ep, status, ep->tx.wq.sw_pi) == UCS_OK) {
         log_lvl = ib_iface->super.config.failure_level;
     }
 

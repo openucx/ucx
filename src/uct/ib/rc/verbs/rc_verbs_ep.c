@@ -501,7 +501,7 @@ ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
     iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
     /* Reset CI to prevent cq_available overrun on ep_destroy */
     ep->txcnt.ci = ep->txcnt.pi;
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, 0);
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, ep->txcnt.pi, 0);
 
     return iface->super.ops->set_ep_failed(&iface->super, &ep->super.super.super,
                                            status);
@@ -622,6 +622,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
                                                  uct_rc_verbs_iface_t);
     uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
 
+    /* TODO should be removed by flush */
+    uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
+                                  UCS_ERR_CANCELED, self->txcnt.pi, 1);
     /* NOTE: usually, ci == pi here, but if user calls
      *       flush(UCT_FLUSH_FLAG_CANCEL) then ep_destroy without next progress,
      *       TX-completion handler is not able to return CQ credits because
