@@ -797,8 +797,9 @@ public:
 
     void close_uncompleted_servers(const char *reason) {
         for (size_t i = 0; i < _active_servers.size(); ++i) {
-            if (get_num_uncompleted(i) > 0) {
-                terminate_connection(_server_info[i].conn, reason);
+            if (get_num_uncompleted(_active_servers[i]) > 0) {
+                terminate_connection(_server_info[_active_servers[i]].conn,
+                                     reason);
             }
         }
     }
