@@ -1228,7 +1228,8 @@ struct uct_listener_params {
  *
  * This structure defines the attributes of a Memory Domain which includes
  * maximum memory that can be allocated, credentials required for accessing the memory,
- * and CPU mask indicating the proximity of CPUs.
+ * CPU mask indicating the proximity of CPUs, and bitmaps indicating the types
+ * of memory (CPU/CUDA/ROCM) that can be detected, allocated and accessed.
  */
 struct uct_md_attr {
     struct {
