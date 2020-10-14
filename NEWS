@@ -16,7 +16,7 @@
 ## 1.9.0 (September 19, 2020)
 ### Features:
 #### UCX Core
-- Added a new class of communication APIs '*_nbx' that enable API extendability while
+- Added a new class of communication routines '*_nbx' that enable API extendability while
   preserving ABI backward compatibility
 - Added asynchronous event support to UCT/IB/DEVX
 - Added support for latest CUDA library version
@@ -47,7 +47,7 @@
 - Added configuration map to ucp_params to be able to set UCX properties programmatically
 
 ### Bugfixes:
-- Fixes for most resent versions of GCC, CLANG, ARMCLANG, PGI
+- Fixes for most recent versions of GCC, CLANG, ARMCLANG, PGI
 - Fixes in UCT/IB for strict order keys
 - Fixes in memory barrier code for aarch64
 - Fixes in UCT/IB/DEVX for fork system call
@@ -62,7 +62,6 @@
 - Fixes in RDMACM code
 - Fixes in memcpy selection for AMD
 - Fixed in UCT/UD endpoint flush functionality
-- Fixes in XPMEM detection
 - Fixes in rendezvous staging protocol
 - Fixes in ROCEv1 mlx5 UDP source port configuration
 - Multiple fixes in RPM spec file
