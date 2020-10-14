@@ -586,11 +586,12 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 /**
  * @brief Do keepalive operation.
  *
- * @param [in] ep           Endpoint object to operate keepalive.
- *
- * @return otherwise        1 - if keepalive operation is done, 0 - keepalive
- *                          operation is not supported or not done
+ * @param [in]     ep       Endpoint object to operate keepalive.
+ * @param [in/out] lane_map Map of lanes to process. During processing bit
+ *                          corresponding to processed lane is set to 0.
+ *                          Used for procerssing situation when any UCT lane
+ *                          has no resources.
  */
-unsigned ucp_ep_do_keepalive(ucp_ep_h ep);
+void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map);
 
 #endif

@@ -115,6 +115,15 @@ static inline int ucs_list_is_empty(ucs_list_link_t *head)
 }
 
 /**
+ * @return Whether the list contains only elem.
+ */
+static inline int ucs_list_is_only(ucs_list_link_t *head,
+                                   ucs_list_link_t *elem)
+{
+    return (head->next == elem) && (elem->next == head);
+}
+
+/**
  * Move the items from 'newlist' to the tail of the list pointed by 'head'
  *
  * @param head       List to whose tail to add the items.

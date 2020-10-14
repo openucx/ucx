@@ -2227,21 +2227,21 @@ int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
            (config->key.cm_lane  != UCP_NULL_LANE);
 }
 
-unsigned ucp_ep_do_keepalive(ucp_ep_h ep)
+void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
 {
+    ucp_lane_map_t check_lanes = *lane_map;
     ucp_lane_index_t lane;
+    ucs_status_t status;
 
-    if (!ucp_ep_keepalive_is_enabled(ep)) {
-        return 0;
-    }
-
-    /* TODO: add error handling: in future uct_ep_check may check peer
-     * immediately */
-    ucs_for_each_bit(lane, ucp_ep_config(ep)->key.ep_check_map) {
+    ucs_for_each_bit(lane, check_lanes) {
         ucs_assert(lane < UCP_MAX_LANES);
         /* coverity[overrun-local] */
-        uct_ep_check(ep->uct_eps[lane], 0, NULL);
+        status = uct_ep_check(ep->uct_eps[lane], 0, NULL);
+        if (status == UCS_OK) {
+            *lane_map &= ~UCS_BIT(lane);
+        } else if (status != UCS_ERR_NO_RESOURCE) {
+            ucs_warn("unexpected return status from uct_ep_check(ep=%p): %s",
+                     ep, ucs_status_string(status));
+        }
     }
-
-    return 1;
 }

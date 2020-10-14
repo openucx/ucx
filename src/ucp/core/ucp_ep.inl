@@ -272,11 +272,4 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)
     UCS_STATIC_ASSERT(sizeof(ep->flags) <= sizeof(int));
     return ep->flags & UCP_EP_FLAG_INDIRECT_ID;
 }
-
-static UCS_F_ALWAYS_INLINE int ucp_ep_keepalive_is_enabled(ucp_ep_h ep)
-{
-    return (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-           (ucp_ep_config(ep)->key.ep_check_map != 0) &&
-           !(ep->flags & UCP_EP_FLAG_FAILED);
-}
 #endif
