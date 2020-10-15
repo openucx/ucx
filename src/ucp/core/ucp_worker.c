@@ -1283,6 +1283,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 {
     ucp_context_h context            = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
+    uint8_t mem_type_index;
     ucs_status_t status;
 
     ucs_assert(wiface != NULL);
@@ -1327,8 +1328,12 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
     }
 
-    context->mem_type_access_tls[context->tl_mds[resource->md_index].
-                                 attr.cap.access_mem_type] |= UCS_BIT(tl_id);
+    ucs_for_each_bit(mem_type_index,
+        context->tl_mds[resource->md_index].attr.cap.access_mem_types) {
+        ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
+        context->mem_type_access_tls[mem_type_index] |= UCS_BIT(tl_id);
+    }
+
     return UCS_OK;
 
 err_unset_handler:

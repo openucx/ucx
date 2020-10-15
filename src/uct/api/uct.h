@@ -1228,7 +1228,8 @@ struct uct_listener_params {
  *
  * This structure defines the attributes of a Memory Domain which includes
  * maximum memory that can be allocated, credentials required for accessing the memory,
- * and CPU mask indicating the proximity of CPUs.
+ * CPU mask indicating the proximity of CPUs, and bitmaps indicating the types
+ * of memory (CPU/CUDA/ROCM) that can be detected, allocated and accessed.
  */
 struct uct_md_attr {
     struct {
@@ -1238,7 +1239,7 @@ struct uct_md_attr {
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
         uint64_t             alloc_mem_types;  /**< Bitmap of memory types that Memory Domain can allocate memory on */
-        ucs_memory_type_t    access_mem_type; /**< Memory type that Memory Domain can access */
+        uint64_t             access_mem_types; /**< Memory types that Memory Domain can access */
     } cap;
 
     ucs_linear_func_t        reg_cost;  /**< Memory registration cost estimation

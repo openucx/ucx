@@ -187,7 +187,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                  * copy operation must be able to access the relevant memory type
                  * TODO UCT should expose a bitmap of accessible memory types
                  */
-                if (md_attr->cap.access_mem_type != select_param->mem_type) {
+                if (!(md_attr->cap.access_mem_types & UCS_BIT(select_param->mem_type))) {
                     ucs_trace("lane[%d]: no access to mem type %s", lane,
                               ucs_memory_type_names[select_param->mem_type]);
                     continue;
