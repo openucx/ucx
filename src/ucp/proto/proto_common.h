@@ -12,10 +12,13 @@
 
 
 typedef enum {
-    UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY = UCS_BIT(0), /* Send buffer is used by
-                                                           zero-copy operations */
-    UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY = UCS_BIT(1)  /* Receive side is not
-                                                           doing memory copy */
+    UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY    = UCS_BIT(0), /* Send buffer is used by
+                                                              zero-copy operations */
+    UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    = UCS_BIT(1), /* Receive side is not
+                                                              doing memory copy */
+    UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS = UCS_BIT(2), /* One-sided remote access */
+    UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE      = UCS_BIT(3)  /* Protocol supports
+                                                              non-host buffers */
 } ucp_proto_common_init_flags_t;
 
 

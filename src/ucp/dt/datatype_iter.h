@@ -8,6 +8,7 @@
 #define UCP_DATATYPE_ITER_H_
 
 #include "dt.h"
+#include "dt_generic.h"
 
 #include <ucp/api/ucp.h>
 

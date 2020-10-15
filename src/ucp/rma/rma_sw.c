@@ -22,8 +22,9 @@ static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
     ucp_put_hdr_t *puth = dest;
     size_t length;
 
-    puth->address = req->send.rma.remote_addr;
-    puth->ep_id   = ucp_ep_remote_id(ep);
+    puth->address  = req->send.rma.remote_addr;
+    puth->ep_id    = ucp_ep_remote_id(ep);
+    puth->mem_type = UCS_MEMORY_TYPE_HOST;
 
     ucs_assert(puth->ep_id != UCP_EP_ID_INVALID);
 
@@ -37,11 +38,13 @@ static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
 static ucs_status_t ucp_rma_sw_progress_put(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ssize_t packed_len;
+    ssize_t packed_len = 0;
     ucs_status_t status;
 
-    status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_PUT, ucp_rma_sw_put_pack_cb,
-                                    &packed_len);
+    req->send.lane = ucp_ep_get_am_lane(req->send.ep);
+    status         = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_PUT, req->send.lane,
+                                            ucp_rma_sw_put_pack_cb, req,
+                                            &packed_len);
     return ucp_rma_request_advance(req, packed_len - sizeof(ucp_put_hdr_t),
                                    status);
 }
@@ -64,12 +67,16 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
 static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ssize_t packed_len = 0;
     ucs_status_t status;
-    ssize_t packed_len;
 
-    status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_GET_REQ,
-                                    ucp_rma_sw_get_req_pack_cb, &packed_len);
+    req->send.lane = ucp_ep_get_am_lane(req->send.ep);
+    status         = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_GET_REQ,
+                                            req->send.lane,
+                                            ucp_rma_sw_get_req_pack_cb, req,
+                                            &packed_len);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_RESOURCE)) {
+        /* completed with error */
         ucp_request_complete_send(req, status);
     }
 
@@ -134,7 +141,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
     ucp_put_hdr_t *puth = data;
     ucp_worker_h worker = arg;
 
-    memcpy((void*)puth->address, puth + 1, length - sizeof(*puth));
+    ucp_dt_contig_unpack(worker, (void*)puth->address, puth + 1,
+                         length - sizeof(*puth), puth->mem_type);
     ucp_rma_sw_send_cmpl(ucp_worker_get_ep_by_id(worker, puth->ep_id));
     return UCS_OK;
 }
@@ -252,8 +260,9 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     switch (id) {
     case UCP_AM_ID_PUT:
         puth = data;
-        snprintf(buffer, max, "PUT [addr 0x%"PRIx64" ep_id 0x%"PRIx64"]",
-                 puth->address, puth->ep_id);
+        snprintf(buffer, max, "PUT [addr 0x%"PRIx64" ep_id 0x%"PRIx64" %s]",
+                 puth->address, puth->ep_id,
+                 ucs_memory_type_names[puth->mem_type]);
         header_len = sizeof(*puth);
         break;
     case UCP_AM_ID_GET_REQ:

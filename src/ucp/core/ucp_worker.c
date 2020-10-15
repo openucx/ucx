@@ -1819,6 +1819,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
 {
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t *rkey_config;
+    ucs_status_t status;
     khiter_t khiter;
     int khret;
 
@@ -1827,18 +1828,24 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     if (worker->rkey_config_count >= UCP_WORKER_MAX_RKEY_CONFIG) {
         ucs_error("too many rkey configurations: %d (max: %d)",
                   worker->rkey_config_count, UCP_WORKER_MAX_RKEY_CONFIG);
-        return UCS_ERR_EXCEEDS_LIMIT;
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        goto err;
     }
 
     /* initialize rkey configuration */
     rkey_cfg_index   = worker->rkey_config_count;
     rkey_config      = &worker->rkey_config[rkey_cfg_index];
     rkey_config->key = *key;
+    status           = ucp_proto_select_init(&rkey_config->proto_select);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
                     &khret);
     if (khret == UCS_KH_PUT_FAILED) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err_proto_cleanup;
     }
 
     /* we should not get into this function if key already exists */
@@ -1849,6 +1856,11 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     ++worker->rkey_config_count;
     *cfg_index_p = rkey_cfg_index;
     return UCS_OK;
+
+err_proto_cleanup:
+    ucp_proto_select_cleanup(&rkey_config->proto_select);
+err:
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
@@ -1856,15 +1868,19 @@ static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
     worker->keepalive.iter = &worker->all_eps;
 }
 
-static void ucp_worker_destroy_ep_configs(ucp_worker_h worker)
+static void ucp_worker_destroy_configs(ucp_worker_h worker)
 {
     unsigned i;
 
     for (i = 0; i < worker->ep_config_count; ++i) {
         ucp_ep_config_cleanup(worker, &worker->ep_config[i]);
     }
-
     worker->ep_config_count = 0;
+
+    for (i = 0; i < worker->rkey_config_count; ++i) {
+        ucp_proto_select_cleanup(&worker->rkey_config[i].proto_select);
+    }
+    worker->rkey_config_count = 0;
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context,
@@ -2066,7 +2082,7 @@ err_free:
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
-    ucp_worker_destroy_ep_configs(worker);
+    ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
 }
@@ -2229,7 +2245,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
-    ucp_worker_destroy_ep_configs(worker);
+    ucp_worker_destroy_configs(worker);
     ucs_free(worker);
 }
 

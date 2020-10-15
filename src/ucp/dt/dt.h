@@ -8,10 +8,6 @@
 #ifndef UCP_DT_H_
 #define UCP_DT_H_
 
-#include "dt_contig.h"
-#include "dt_iov.h"
-#include "dt_generic.h"
-
 #include <ucp/core/ucp_types.h>
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>

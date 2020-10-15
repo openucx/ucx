@@ -58,10 +58,10 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
-    ssize_t packed_len;
 
-    status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_ATOMIC_REQ, pack_cb,
-                                    &packed_len);
+    req->send.lane = ucp_ep_get_am_lane(req->send.ep);
+    status         = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_ATOMIC_REQ,
+                                            req->send.lane, pack_cb, req, NULL);
     if (((status != UCS_ERR_NO_RESOURCE) && (status != UCS_OK)) ||
         ((status == UCS_OK) && !fetch)) {
         ucp_request_complete_send(req, status);

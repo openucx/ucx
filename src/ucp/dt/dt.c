@@ -9,6 +9,7 @@
 #endif
 
 #include "dt.h"
+#include "dt_iov.h"
 
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.h>

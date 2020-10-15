@@ -926,6 +926,7 @@ ucp_wireup_is_am_required(const ucp_wireup_select_params_t *select_params,
                           const ucp_wireup_select_context_t *select_ctx)
 {
     ucp_ep_h ep            = select_params->ep;
+    ucp_context_h context  = ep->worker->context;
     unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
                                                       select_ctx);
     ucp_lane_index_t lane;
@@ -933,14 +934,30 @@ ucp_wireup_is_am_required(const ucp_wireup_select_params_t *select_params,
     /* Check if we need active messages from the configurations, for wireup.
      * If not, check if am is required due to p2p transports */
 
+    if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
+        /* Memtype ep needs only RMA lanes */
+        return 0;
+    }
+
     if (ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE) {
         return 1;
     }
 
-    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) &&
-        (ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG | 
-                                            UCP_FEATURE_STREAM | 
-                                            UCP_FEATURE_AM))) {
+    if (ucp_ep_get_context_features(ep) & (UCP_FEATURE_TAG |
+                                           UCP_FEATURE_STREAM |
+                                           UCP_FEATURE_AM)) {
+        return 1;
+    }
+
+    /* For new protocols, we need to have active message lane to handle data
+     * transfers by emulation protocol, for memory types which are not supported
+     * natively.
+     * TODO Try to select RMA lanes for all combinations of memory types, and if
+     * some are not available, require AM lane.
+     */
+    if (context->config.ext.proto_enable &&
+        (context->num_mem_type_detect_mds > 0) &&
+        (ucp_ep_get_context_features(ep) & UCP_FEATURE_RMA)) {
         return 1;
     }
 

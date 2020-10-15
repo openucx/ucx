@@ -8,6 +8,9 @@
 #define UCP_DT_INL_
 
 #include "dt.h"
+#include "dt_contig.h"
+#include "dt_generic.h"
+#include "dt_iov.h"
 
 #include <ucp/core/ucp_mm.h>
 #include <ucs/profile/profile.h>
