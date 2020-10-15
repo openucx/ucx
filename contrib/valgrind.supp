@@ -277,3 +277,13 @@
    Memcheck:Cond
    fun:gdr_unmap
 }
+{
+    is_cuda_supported_unint_access
+    Memcheck:Param
+    ioctl(generic)
+    fun:ioctl
+    ...
+    fun:cuDeviceTotalMem_v2
+    ...
+    fun:cudaGetDeviceCount
+}

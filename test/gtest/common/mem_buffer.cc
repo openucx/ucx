@@ -46,7 +46,7 @@
 bool mem_buffer::is_cuda_supported()
 {
 #if HAVE_CUDA
-    int num_gpus;
+    int num_gpus        = 0;
     cudaError_t cudaErr = cudaGetDeviceCount(&num_gpus);
     return (cudaErr == cudaSuccess) && (num_gpus > 0);
 #else
