@@ -139,19 +139,16 @@ uct_cuda_copy_queue_head_ready(ucs_queue_head_t *queue_head)
     cudaError_t result = cudaSuccess;
     uct_cuda_copy_event_desc_t *cuda_event;
 
-    if (ucs_queue_is_empty(queue_head)) {
-        return 0;
-    } else {
+    if (!ucs_queue_is_empty(queue_head)) {
         cuda_event =
-            ucs_queue_head_elem_non_empty(queue_head, uct_cuda_copy_event_desc_t,
-                                          queue);
-        result = cudaEventQuery(cuda_event->event);
-        if (cudaSuccess != result) {
-            return 0;
-        } else {
+            ucs_queue_head_elem_non_empty(queue_head,
+                                          uct_cuda_copy_event_desc_t, queue);
+        if (cudaSuccess == cudaEventQuery(cuda_event->event)) {
             return 1;
         }
     }
+
+    return 0;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
@@ -222,7 +219,7 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
     }
 
     for (i = 0; i < UCT_CUDA_COPY_STREAM_LAST; i++) {
-        if (ucs_queue_length(&iface->outstanding_event_q[i])) {
+        if (!ucs_queue_is_empty(&iface->outstanding_event_q[i])) {
             status =
 #if (__CUDACC_VER_MAJOR__ >= 100000)
                 UCT_CUDADRV_FUNC_LOG_ERR(cuLaunchHostFunc(iface->stream[i],

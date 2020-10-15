@@ -32,8 +32,8 @@ typedef struct uct_cuda_copy_iface {
         unsigned                max_cuda_events;
     } config;
     struct {
-        void                      *event_arg;
-        uct_async_event_cb_t      event_cb;
+        void                    *event_arg;
+        uct_async_event_cb_t    event_cb;
     } async;
 } uct_cuda_copy_iface_t;
 
