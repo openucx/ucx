@@ -796,10 +796,19 @@ public:
     }
 
     void close_uncompleted_servers(const char *reason) {
+        std::vector<size_t> server_idxs;
+        server_idxs.reserve(_active_servers.size());
+
         for (size_t i = 0; i < _active_servers.size(); ++i) {
-            if (get_num_uncompleted(i) > 0) {
-                terminate_connection(_server_info[i].conn, reason);
+            if (get_num_uncompleted(_active_servers[i]) > 0) {
+                server_idxs.push_back(_active_servers[i]);
             }
+        }
+
+        while (!server_idxs.empty()) {
+            size_t i = server_idxs.back();
+            terminate_connection(_server_info[i].conn, reason);
+            server_idxs.pop_back();
         }
     }
 
@@ -867,13 +876,14 @@ public:
     void wait_for_responses(long max_outstanding) {
         struct timeval tv_start = {};
         bool timer_started      = false;
+        bool timer_finished     = false;
         struct timeval tv_curr, tv_diff;
         long count;
 
         count = 0;
         while (((_num_sent - _num_completed) > max_outstanding) &&
                (_status == OK)) {
-            if (count < 1000) {
+            if ((count < 1000) || timer_finished) {
                 progress();
                 ++count;
                 continue;
@@ -895,6 +905,7 @@ public:
                 LOG << "timeout waiting for " << (_num_sent - _num_completed)
                     << " replies";
                 close_uncompleted_servers("timeout for replies");
+                timer_finished = true;
             }
         }
     }
