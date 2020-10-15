@@ -138,16 +138,14 @@ uct_cuda_copy_queue_head_ready(ucs_queue_head_t *queue_head)
 {
     uct_cuda_copy_event_desc_t *cuda_event;
 
-    if (!ucs_queue_is_empty(queue_head)) {
-        cuda_event =
-            ucs_queue_head_elem_non_empty(queue_head,
-                                          uct_cuda_copy_event_desc_t, queue);
-        if (cudaSuccess == cudaEventQuery(cuda_event->event)) {
-            return 1;
-        }
+    if (ucs_queue_is_empty(queue_head)) {
+        return 0;
     }
 
-    return 0;
+    cuda_event = ucs_queue_head_elem_non_empty(queue_head,
+                                               uct_cuda_copy_event_desc_t,
+                                               queue);
+    return (cudaSuccess == cudaEventQuery(cuda_event->event));
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
