@@ -259,7 +259,7 @@ static void uct_ugni_udt_clean_wildcard(uct_ugni_udt_iface_t *iface)
 {
     gni_return_t ugni_rc;
     uint32_t rem_addr, rem_id;
-    gni_post_state_t post_state;
+    gni_post_state_t post_state = 0;
     uct_ugni_cdm_lock(&iface->super.cdm);
     ugni_rc = GNI_EpPostDataCancelById(iface->ep_any, UCT_UGNI_UDT_ANY);
     if (GNI_RC_SUCCESS != ugni_rc) {
