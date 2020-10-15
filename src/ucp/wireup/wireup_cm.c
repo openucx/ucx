@@ -729,6 +729,16 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     const ucp_address_entry_t *address;
     ucp_ep_h ep;
     ucs_status_t status;
+    char client_addr_str[UCS_SOCKADDR_STRING_LEN];
+
+    if (tl_bitmap == 0) {
+        ucs_error("listener %p: got connection request from %s on uninitialized device %s",
+                  conn_request->listener,
+                  ucs_sockaddr_str((struct sockaddr*)&conn_request->client_address,
+                                   client_addr_str, sizeof(client_addr_str)),
+                  conn_request->dev_name);
+        return UCS_ERR_UNREACHABLE;
+    }
 
     ucp_unpacked_address_for_each(address, remote_addr) {
         num_remote_ep_addrs += address->num_ep_addrs;
