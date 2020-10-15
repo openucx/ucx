@@ -24,7 +24,8 @@
 #include <malloc.h>
 #include <dlfcn.h>
 
-#define ALIGNMENT       4096
+#define ALIGNMENT           4096
+#define BUSY_PROGRESS_COUNT 1000
 
 /* IO operation type */
 typedef enum {
@@ -403,9 +404,10 @@ protected:
             _counter(0), _iov(NULL), _pool(pool) {
         }
 
-        void init(BufferIov* iov) {
-            _iov     = iov;
-            _counter = iov->size();
+        void init(BufferIov* iov, long* op_counter) {
+            _op_counter = op_counter;
+            _iov        = iov;
+            _counter    = iov->size();
             assert(_counter > 0);
         }
 
@@ -414,11 +416,16 @@ protected:
                 return;
             }
 
+            if (_op_counter != NULL) {
+                ++(*_op_counter);
+            }
+
             _iov->release();
             _pool.put(this);
         }
 
     private:
+        long*                             _op_counter;
         size_t                            _counter;
         BufferIov*                        _iov;
         MemoryPool<SendCompleteCallback>& _pool;
@@ -523,6 +530,12 @@ protected:
         }
     }
 
+    static double get_time() {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        return tv.tv_sec + (tv.tv_usec * 1e-6);
+    }
+
 protected:
     const options_t                  _test_opts;
     MemoryPool<IoMessage>            _io_msg_pool;
@@ -542,9 +555,10 @@ public:
         }
 
         void init(DemoServer *server, UcxConnection* conn, uint32_t sn,
-                  BufferIov *iov) {
+                  BufferIov *iov, long* op_cnt) {
             _server    = server;
             _conn      = conn;
+            _op_cnt    = op_cnt;
             _sn        = sn;
             _iov       = iov;
             _chunk_cnt = iov->size();
@@ -562,6 +576,9 @@ public:
                 _server->send_io_message(_conn, IO_WRITE_COMP, _sn, 0);
             }
 
+            assert(_op_cnt != NULL);
+            ++(*_op_cnt);
+
             _iov->release();
             _pool.put(this);
         }
@@ -569,14 +586,25 @@ public:
     private:
         DemoServer*                          _server;
         UcxConnection*                       _conn;
+        long*                                _op_cnt;
         uint32_t                             _chunk_cnt;
         uint32_t                             _sn;
         BufferIov*                           _iov;
         MemoryPool<IoWriteResponseCallback>& _pool;
     };
 
+    typedef struct {
+        long    read_count;
+        long    write_count;
+        long    active_conns;
+    } state_t;
+
     DemoServer(const options_t& test_opts) :
         P2pDemoCommon(test_opts), _callback_pool(0) {
+        _curr_state.read_count   = 0;
+        _curr_state.write_count  = 0;
+        _curr_state.active_conns = 0;
+        save_prev_state();
     }
 
     void run() {
@@ -587,9 +615,18 @@ public:
         listen_addr.sin_port        = htons(opts().port_num);
 
         listen((const struct sockaddr*)&listen_addr, sizeof(listen_addr));
-        for (;;) {
+
+        for (double prev_time = 0.0; ;) {
             try {
-                progress();
+                for (size_t i = 0; i < BUSY_PROGRESS_COUNT; ++i) {
+                    progress();
+                }
+
+                double curr_time = get_time();
+                if (curr_time >= (prev_time + opts().print_interval)) {
+                    prev_time = curr_time;
+                    report_state();
+                }
             } catch (const std::exception &e) {
                 std::cerr << e.what();
             }
@@ -606,7 +643,7 @@ public:
 
         iov->init(msg->data_size, _data_chunks_pool, msg->tr.sn,
                   opts().validate);
-        cb->init(iov);
+        cb->init(iov, &_curr_state.read_count);
 
         send_data(conn, *iov, msg->tr.sn, cb);
 
@@ -625,7 +662,7 @@ public:
         IoWriteResponseCallback *w = _callback_pool.get();
 
         iov->init(msg->data_size, _data_chunks_pool, msg->tr.sn, false);
-        w->init(this, conn, msg->tr.sn, iov);
+        w->init(this, conn, msg->tr.sn, iov, &_curr_state.write_count);
 
         recv_data(conn, *iov, msg->tr.sn, w);
     }
@@ -658,7 +695,41 @@ public:
     }
 
 private:
+    virtual bool add_connection(UcxConnection *conn) {
+        bool added = P2pDemoCommon::add_connection(conn);
+        if (added) {
+            ++_curr_state.active_conns;
+        }
+
+        return added;
+    }
+
+    virtual bool remove_connection(UcxConnection *conn) {
+        bool removed = P2pDemoCommon::remove_connection(conn);
+        if (removed) {
+            --_curr_state.active_conns;
+        }
+
+        return removed;
+    }
+
+    void save_prev_state() {
+        _prev_state = _curr_state;
+    }
+
+    void report_state() {
+        LOG << "read:" << _curr_state.read_count -
+                          _prev_state.read_count << " ops, "
+            << "write:" << _curr_state.write_count -
+                           _prev_state.write_count << " ops, "
+            << "active connections:" << _curr_state.active_conns;
+        save_prev_state();
+    }
+
+private:
     MemoryPool<IoWriteResponseCallback> _callback_pool;
+    state_t                             _prev_state;
+    state_t                             _curr_state;
 };
 
 
@@ -787,7 +858,7 @@ public:
         SendCompleteCallback *cb = _send_callback_pool.get();
 
         iov->init(data_size, _data_chunks_pool, sn, opts().validate);
-        cb->init(iov);
+        cb->init(iov, NULL);
 
         VERBOSE_LOG << "sending data " << iov << " size "
                     << data_size << " sn " << sn;
@@ -874,34 +945,29 @@ public:
     }
 
     void wait_for_responses(long max_outstanding) {
-        struct timeval tv_start = {};
-        bool timer_started      = false;
-        bool timer_finished     = false;
-        struct timeval tv_curr, tv_diff;
-        long count;
+        bool timer_started  = false;
+        bool timer_finished = false;
+        double start_time, curr_time, elapsed_time;
+        long count = 0;
 
-        count = 0;
         while (((_num_sent - _num_completed) > max_outstanding) &&
                (_status == OK)) {
-            if ((count < 1000) || timer_finished) {
+            if ((count++ < BUSY_PROGRESS_COUNT) || timer_finished) {
                 progress();
-                ++count;
                 continue;
             }
 
-            count = 0;
-
-            gettimeofday(&tv_curr, NULL);
+            count     = 0;
+            curr_time = get_time();
 
             if (!timer_started) {
-                tv_start      = tv_curr;
+                start_time    = curr_time;
                 timer_started = true;
                 continue;
             }
 
-            timersub(&tv_curr, &tv_start, &tv_diff);
-            double elapsed = tv_diff.tv_sec + (tv_diff.tv_usec * 1e-6);
-            if (elapsed > _test_opts.client_timeout) {
+            elapsed_time = curr_time - start_time;
+            if (elapsed_time > _test_opts.client_timeout) {
                 LOG << "timeout waiting for " << (_num_sent - _num_completed)
                     << " replies";
                 close_uncompleted_servers("timeout for replies");
@@ -939,12 +1005,6 @@ public:
 
         return UcxContext::connect((const struct sockaddr*)&connect_addr,
                                    sizeof(connect_addr));
-    }
-
-    static double get_time() {
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        return tv.tv_sec + (tv.tv_usec * 1e-6);
     }
 
     const std::string server_name(size_t server_index) {

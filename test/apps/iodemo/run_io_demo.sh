@@ -294,6 +294,11 @@ build_server_args_list() {
 			iodemo_server_args+=" $key $value"
 			shift
 			;;
+		-P)
+			value="$2"
+			iodemo_server_args+=" $key $value"
+			shift
+			;;
 		-q)
 			iodemo_server_args+=" $key"
 			;;
@@ -338,7 +343,7 @@ create_mapping_bynode()
 	fi
 
 	# Calculate the index starting which the node will have one process less.
-	# If the maping is balanced, the index will be equal to the number of nodes, 
+	# If the mapping is balanced, the index will be equal to the number of nodes,
 	# which means no node will have one process less.
 	# The expression "(x + N - 1) % N" yields a number in the range 0..N-1 and
 	# then adding 1 yields the equivalent of "x % N" in the range 1..N.
@@ -387,7 +392,7 @@ create_mapping_byslot()
 make_scripts()
 {
 	#
-	# Create process maping
+	# Create process mapping
 	#
 	declare -A num_servers_per_host
 	declare -A num_clients_per_host
