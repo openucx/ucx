@@ -75,7 +75,9 @@ enum {
     UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21),/* DEBUG: Partial worker address was sent
                                                                to the remote peer when starting
                                                                connection establishment on this EP */
-    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22) /* DEBUG: flush_state is valid */
+    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22),/* DEBUG: flush_state is valid */
+    UCP_EP_FLAG_DISCONNECTED_CM_LANE   = UCS_BIT(23) /* DEBUG: CM lane was disconnected, i.e.
+                                                        @uct_ep_disconnect was called for CM EP */
 };
 
 
@@ -116,20 +118,21 @@ enum {
  */
 struct ucp_ep_config_key {
 
-    ucp_lane_index_t         num_lanes;    /* Number of active lanes */
+    ucp_lane_index_t         num_lanes;       /* Number of active lanes */
 
     struct {
-        ucp_rsc_index_t      rsc_index;    /* Resource index */
-        ucp_md_index_t       dst_md_index; /* Destination memory domain index */
-        uint8_t              path_index;   /* Device path index */
-        ucp_lane_type_mask_t lane_types;   /* Which types of operations this lane
-                                              was selected for */
+        ucp_rsc_index_t      rsc_index;       /* Resource index */
+        ucp_rsc_index_t      dst_rsc_index;   /* Destination resource index */
+        ucp_md_index_t       dst_md_index;    /* Destination memory domain index */
+        uint8_t              path_index;      /* Device path index */
+        ucp_lane_type_mask_t lane_types;      /* Which types of operations this lane
+                                                 was selected for */
     } lanes[UCP_MAX_LANES];
 
-    ucp_lane_index_t         am_lane;      /* Lane for AM (can be NULL) */
-    ucp_lane_index_t         tag_lane;     /* Lane for tag matching offload (can be NULL) */
-    ucp_lane_index_t         wireup_lane;  /* Lane for wireup messages (can be NULL) */
-    ucp_lane_index_t         cm_lane;      /* Lane for holding a CM connection (can be NULL) */
+    ucp_lane_index_t         am_lane;         /* Lane for AM (can be NULL) */
+    ucp_lane_index_t         tag_lane;        /* Lane for tag matching offload (can be NULL) */
+    ucp_lane_index_t         wireup_msg_lane; /* Lane for wireup messages (can be NULL) */
+    ucp_lane_index_t         cm_lane;         /* Lane for holding a CM connection (can be NULL) */
 
     /* Lanes for remote memory access, sorted by priority, highest first */
     ucp_lane_index_t         rma_lanes[UCP_MAX_LANES];
@@ -544,9 +547,14 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 
-int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
-                                const ucp_ep_config_key_t *key2,
-                                ucp_lane_index_t lane, int compare_types);
+void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
+                                   const ucp_ep_config_key_t *key2,
+                                   ucp_lane_index_t *lane_map);
+
+ucp_lane_index_t
+ucp_ep_config_find_lane_index(const ucp_ep_config_key_t *key,
+                              ucp_lane_index_t lane,
+                              const ucp_lane_index_t *lane_indexes);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);

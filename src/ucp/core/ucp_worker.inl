@@ -54,7 +54,8 @@ ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
 
     ucs_assert(id != UCP_EP_ID_INVALID);
     ep = (ucp_ep_h)ucs_ptr_map_get(&worker->ptr_map, id);
-    ucs_assertv(ep->worker == worker, "worker=%p ep=%p ep->worker=%p", worker,
+    ucs_assertv((ep == NULL) || (ep->worker == worker),
+                "worker=%p ep=%p ep->worker=%p", worker,
                 ep, ep->worker);
     return ep;
 }

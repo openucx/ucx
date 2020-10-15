@@ -100,6 +100,9 @@ typedef struct ucp_context_config {
     int                                    unified_mode;
     /** Enable cm wireup-and-close protocol for client-server connections */
     ucs_ternary_value_t                    sockaddr_cm_enable;
+    /** Enable cm wireup message exchange to select the best transports
+     *  for all lanes after cm phase is done */
+    int                                    cm_use_all_devices;
     /** Maximal number of pending connection requests for a listener */
     size_t                                 listener_backlog;
     /** Enable new protocol selection logic */

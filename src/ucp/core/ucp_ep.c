@@ -57,7 +57,6 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 };
 #endif
 
-
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 {
     ucp_lane_index_t i;
@@ -70,7 +69,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].dst_md_index = UCP_NULL_RESOURCE;
     }
     key->am_lane          = UCP_NULL_LANE;
-    key->wireup_lane      = UCP_NULL_LANE;
+    key->wireup_msg_lane  = UCP_NULL_LANE;
     key->cm_lane          = UCP_NULL_LANE;
     key->rkey_ptr_lane    = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
@@ -269,7 +268,8 @@ void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
 int ucp_ep_is_sockaddr_stub(ucp_ep_h ep)
 {
     /* Only a sockaddr client-side endpoint may be created as a "stub" */
-    return ucp_ep_get_rsc_index(ep, 0) == UCP_NULL_RESOURCE;
+    return (ucp_ep_get_rsc_index(ep, 0) == UCP_NULL_RESOURCE) &&
+           !ucp_ep_has_cm_lane(ep);
 }
 
 static ucs_status_t
@@ -315,14 +315,15 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 
         status = ucp_address_pack(worker, NULL,
                                   context->mem_type_access_tls[mem_type],
-                                  UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
+                                  UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT, NULL,
                                   &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
 
         status = ucp_address_unpack(worker, address_buffer,
-                                    UCP_ADDRESS_PACK_FLAGS_ALL, &local_address);
+                                    UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT,
+                                    &local_address);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
         }
@@ -372,14 +373,14 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
-    key.num_lanes             = 1;
+    key.num_lanes           = 1;
     /* all operations will use the first lane, which is a stub endpoint before
      * reconfiguration */
-    key.am_lane = 0;
+    key.am_lane             = 0;
     if (ucp_worker_sockaddr_is_cm_proto(ep->worker)) {
-        key.cm_lane = 0;
+        key.cm_lane         = 0;
     } else {
-        key.wireup_lane = 0;
+        key.wireup_msg_lane = 0;
     }
 
     status = ucp_worker_get_ep_config(ep->worker, &key, 0, &ep->cfg_index);
@@ -511,8 +512,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
     }
 
     if (sa_data->addr_mode == UCP_WIREUP_SA_DATA_CM_ADDR) {
-        addr_flags = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                     UCP_ADDRESS_PACK_FLAG_EP_ADDR;
+        addr_flags = UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
     } else {
         addr_flags = UCP_ADDRESS_PACK_FLAGS_ALL;
     }
@@ -642,7 +642,8 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
     status = ucp_address_unpack(worker, params->address,
-                                UCP_ADDRESS_PACK_FLAGS_ALL, &remote_address);
+                                UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT,
+                                &remote_address);
     if (status != UCS_OK) {
         goto out;
     }
@@ -850,9 +851,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED |
                       UCP_EP_FLAG_REMOTE_CONNECTED)) && !force) {
-        /* in case of CM connection ep has to be disconnected */
-        ucs_assert(!ucp_ep_has_cm_lane(ep));
-
         /* Endpoints which have remote connection are destroyed only when the
          * worker is destroyed, to enable remote endpoints keep sending
          * TODO negotiate disconnect.
@@ -1025,15 +1023,85 @@ out:
     return;
 }
 
-int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
-                                const ucp_ep_config_key_t *key2,
-                                ucp_lane_index_t lane, int compare_types)
+static int
+ucp_ep_config_lane_is_dst_rsc_index_equal(const ucp_ep_config_key_t *key1,
+                                          ucp_lane_index_t lane1,
+                                          const ucp_ep_config_key_t *key2,
+                                          ucp_lane_index_t lane2)
 {
-    return (key1->lanes[lane].rsc_index    == key2->lanes[lane].rsc_index)    &&
+    return /* at least one of destination resource index is not specified */
+           (key1->lanes[lane1].dst_rsc_index == UCP_NULL_RESOURCE) ||
+           (key2->lanes[lane2].dst_rsc_index == UCP_NULL_RESOURCE) ||
+           /* both destination resource index are the same */
+           (key1->lanes[lane1].dst_rsc_index == key2->lanes[lane2].dst_rsc_index);
+}
+
+static int
+ucp_ep_config_lane_is_peer_equal(const ucp_ep_config_key_t *key1,
+                                 ucp_lane_index_t lane1,
+                                 const ucp_ep_config_key_t *key2,
+                                 ucp_lane_index_t lane2)
+{
+    return (key1->lanes[lane1].rsc_index  == key2->lanes[lane2].rsc_index) &&
+           ucp_ep_config_lane_is_dst_rsc_index_equal(key1, lane1, key2, lane2) &&
+           (key1->lanes[lane1].path_index == key2->lanes[lane2].path_index) &&
+           (key1->lanes[lane1].dst_md_index  == key2->lanes[lane2].dst_md_index);
+}
+
+static ucp_lane_index_t
+ucp_ep_config_find_match_lane(const ucp_ep_config_key_t *key1,
+                              ucp_lane_index_t lane1,
+                              const ucp_ep_config_key_t *key2)
+{
+    ucp_lane_index_t lane_idx;
+
+    for (lane_idx = 0; lane_idx < key2->num_lanes; ++lane_idx) {
+        if (ucp_ep_config_lane_is_peer_equal(key1, lane1, key2, lane_idx)) {
+            return lane_idx;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
+/* Go through the first configuration and check if the lanes selected
+ * for this configuration could be used for the second configuration */
+void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
+                                   const ucp_ep_config_key_t *key2,
+                                   ucp_lane_index_t *lane_map)
+{
+    ucp_lane_index_t lane1_idx;
+
+    for (lane1_idx = 0; lane1_idx < key1->num_lanes; ++lane1_idx) {
+        lane_map[lane1_idx] = ucp_ep_config_find_match_lane(key1,
+                                                            lane1_idx,
+                                                            key2);
+    }
+}
+
+ucp_lane_index_t
+ucp_ep_config_find_lane_index(const ucp_ep_config_key_t *key,
+                              ucp_lane_index_t lane,
+                              const ucp_lane_index_t *lane_indexes)
+{
+    ucp_lane_index_t lane_idx;
+
+    for (lane_idx = 0; lane_idx < key->num_lanes; ++lane_idx) {
+        if (lane_indexes[lane_idx] == lane) {
+            return lane_idx;
+        }
+    }
+
+    return UCP_NULL_LANE;
+}
+
+static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
+                                       const ucp_ep_config_key_t *key2,
+                                       ucp_lane_index_t lane)
+{
+    return ucp_ep_config_lane_is_peer_equal(key1, lane, key2, lane)           &&
            (key1->lanes[lane].dst_md_index == key2->lanes[lane].dst_md_index) &&
-           (key1->lanes[lane].path_index   == key2->lanes[lane].path_index)   &&
-           ((key1->lanes[lane].lane_types  == key2->lanes[lane].lane_types) ||
-            !compare_types);
+           (key1->lanes[lane].lane_types   == key2->lanes[lane].lane_types);
 }
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
@@ -1051,7 +1119,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->reachable_md_map != key2->reachable_md_map)                         ||
         (key1->am_lane          != key2->am_lane)                                  ||
         (key1->tag_lane         != key2->tag_lane)                                 ||
-        (key1->wireup_lane      != key2->wireup_lane)                              ||
+        (key1->wireup_msg_lane  != key2->wireup_msg_lane)                          ||
         (key1->cm_lane          != key2->cm_lane)                                  ||
         (key1->rkey_ptr_lane    != key2->rkey_ptr_lane)                            ||
         (key1->ep_check_map     != key2->ep_check_map)                             ||
@@ -1062,7 +1130,7 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     }
 
     for (lane = 0; lane < key1->num_lanes; ++lane) {
-        if (!ucp_ep_config_lane_is_equal(key1, key2, lane, 1))
+        if (!ucp_ep_config_lane_is_equal(key1, key2, lane))
         {
             return 0;
         }
@@ -2016,7 +2084,7 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
         p += strlen(p);
     }
 
-    if (key->wireup_lane == lane) {
+    if (key->wireup_msg_lane == lane) {
         snprintf(p, endp - p, " wireup");
         p += strlen(p);
         if (aux_rsc_index != UCP_NULL_RESOURCE) {
@@ -2094,7 +2162,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
     ucp_worker_h    worker  = ep->worker;
     ucp_ep_config_t *config = ucp_ep_config(ep);
     ucp_rsc_index_t aux_rsc_index;
-    ucp_lane_index_t wireup_lane;
+    ucp_lane_index_t wireup_msg_lane;
     uct_ep_h wireup_ep;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -2105,10 +2173,10 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
     fprintf(stream, "#               peer: %s\n", ucp_ep_peer_name(ep));
 
     /* if there is a wireup lane, set aux_rsc_index to the stub ep resource */
-    aux_rsc_index = UCP_NULL_RESOURCE;
-    wireup_lane   = ucp_ep_config(ep)->key.wireup_lane;
-    if (wireup_lane != UCP_NULL_LANE) {
-        wireup_ep = ep->uct_eps[wireup_lane];
+    aux_rsc_index   = UCP_NULL_RESOURCE;
+    wireup_msg_lane = ucp_ep_config(ep)->key.wireup_msg_lane;
+    if (wireup_msg_lane != UCP_NULL_LANE) {
+        wireup_ep   = ep->uct_eps[wireup_msg_lane];
         if (ucp_wireup_ep_test(wireup_ep)) {
             aux_rsc_index = ucp_wireup_ep_get_aux_rsc_index(wireup_ep);
         }
@@ -2168,6 +2236,10 @@ uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
 
     lane = ucp_ep_get_cm_lane(ep);
     if (lane == UCP_NULL_LANE) {
+        return NULL;
+    }
+
+    if (ep->uct_eps[lane] == NULL) {
         return NULL;
     }
 
