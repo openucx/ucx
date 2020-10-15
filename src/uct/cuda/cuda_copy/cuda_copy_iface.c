@@ -136,7 +136,6 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
 static UCS_F_ALWAYS_INLINE unsigned
 uct_cuda_copy_queue_head_ready(ucs_queue_head_t *queue_head)
 {
-    cudaError_t result = cudaSuccess;
     uct_cuda_copy_event_desc_t *cuda_event;
 
     if (!ucs_queue_is_empty(queue_head)) {
