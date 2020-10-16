@@ -207,12 +207,11 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                               rkey_config_key->md_map);
                     continue;
                 }
-            } else {
-                if (md_attr->cap.access_mem_type != rkey_config_key->mem_type) {
-                    ucs_trace("lane[%d]: no access to remote mem type %s", lane,
-                              ucs_memory_type_names[rkey_config_key->mem_type]);
-                    continue;
-                }
+            } else if (!(md_attr->cap.access_mem_types &
+                         UCS_BIT(rkey_config_key->mem_type))) {
+                ucs_trace("lane[%d]: no access to remote mem type %s", lane,
+                          ucs_memory_type_names[rkey_config_key->mem_type]);
+                continue;
             }
         }
 
