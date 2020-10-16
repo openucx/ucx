@@ -161,7 +161,7 @@ KHASH_TYPE(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t
 typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
 
 
-/* Hash set to UCT EPs that are being discarded on UCP Worker */
+/* Hash map of UCT EPs that are being discarded on UCP Worker */
 KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
