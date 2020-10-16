@@ -203,8 +203,8 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
             if (md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
                 if (!(rkey_config_key->md_map &
                     UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) {
-                    ucs_trace("lane[%d]: no support of dst md map 0x%lx", lane,
-                              rkey_config_key->md_map);
+                    ucs_trace("lane[%d]: no support of dst md map 0x%"PRIx64,
+                              lane, rkey_config_key->md_map);
                     continue;
                 }
             } else if (!(md_attr->cap.access_mem_types &
