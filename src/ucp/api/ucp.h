@@ -481,13 +481,16 @@ enum ucp_am_cb_flags {
  * routines.
  */
 enum ucp_send_am_flags {
-    UCP_AM_SEND_REPLY = UCS_BIT(0), /**< Force relevant reply endpoint to be
-                                         passed to the data callback on the
-                                         receiver. */
-    UCP_AM_SEND_EAGER = UCS_BIT(1), /**< Force UCP to use only eager protocol
-                                         for AM sends. */
-    UCP_AM_SEND_RNDV  = UCS_BIT(2)  /**< Force UCP to use only rendezvous protocol
-                                         for AM sends. */
+    UCP_AM_SEND_FLAG_REPLY = UCS_BIT(0),             /**< Force relevant reply
+                                                          endpoint to be passed to
+                                                          the data callback on the
+                                                          receiver. */
+    UCP_AM_SEND_FLAG_EAGER = UCS_BIT(1),             /**< Force UCP to use only
+                                                          eager protocol for AM sends. */
+    UCP_AM_SEND_FLAG_RNDV  = UCS_BIT(2),             /**< Force UCP to use only
+                                                          rendezvous protocol for
+                                                          AM sends. */
+    UCP_AM_SEND_REPLY      = UCP_AM_SEND_FLAG_REPLY  /**< Backward compatibility. */
 };
 
 
