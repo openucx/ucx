@@ -53,6 +53,7 @@ struct ucp_rkey_config_key {
  */
 typedef struct {
     ucp_rkey_config_key_t         key;          /* Configuration key */
+    ucp_proto_select_short_t      put_short;    /* Put-short thresholds */
     ucp_proto_select_t            proto_select; /* Protocol selection data */
 } ucp_rkey_config_t;
 

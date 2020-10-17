@@ -61,6 +61,19 @@ typedef struct {
 } ucp_proto_select_t;
 
 
+/*
+ * Settings for short protocol
+ */
+typedef struct {
+    ssize_t             max_length_host_mem;    /* max length of short protocol for
+                                                   host memory buffer */
+    ssize_t             max_length_unknown_mem; /* max length of short protocol
+                                                   for unknown memory buffer */
+    ucp_lane_index_t    lane;                   /* lane for sending short message */
+    ucp_md_index_t      rkey_index;             /* uct rkey index (for put_short) */
+} ucp_proto_select_short_t;
+
+
 ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
 
 
@@ -92,5 +105,16 @@ ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
 void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
                                 ucs_string_buffer_t *strb);
 
+
+void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short);
+
+
+void
+ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_select,
+                            ucp_worker_cfg_index_t ep_cfg_index,
+                            ucp_worker_cfg_index_t rkey_cfg_index,
+                            ucp_operation_id_t op_id, uint32_t op_attr_mask,
+                            unsigned proto_flags,
+                            ucp_proto_select_short_t *proto_short);
 
 #endif

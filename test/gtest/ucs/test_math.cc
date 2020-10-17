@@ -177,7 +177,7 @@ UCS_TEST_F(test_math, for_each_bit) {
 
     mask = ucs_generate_uuid(0);
 
-    ucs_for_each_bit (idx, mask) {
+    ucs_for_each_bit(idx, mask) {
         EXPECT_EQ(gen_mask & UCS_BIT(idx), 0ull);
         gen_mask |= UCS_BIT(idx);
     }
@@ -201,6 +201,34 @@ UCS_TEST_F(test_math, for_each_bit) {
         gen_mask |= UCS_BIT(idx);
     }
     EXPECT_EQ(UCS_BIT(63), gen_mask);
+}
+
+UCS_TEST_F(test_math, for_each_submask) {
+    /* Generate mask values to test */
+    std::vector<int64_t> masks;
+    masks.push_back(0);
+    masks.push_back(1);
+    masks.push_back(65536);
+    for (int i = 0; i < 100; ++i) {
+        masks.push_back((ucs::rand() % 65536) + 2);
+    }
+
+    for (std::vector<int64_t>::const_iterator iter = masks.begin();
+         iter != masks.end(); ++iter) {
+        int64_t mask         = *iter;
+        int64_t prev_submask = -1;
+        unsigned count       = 0;
+        int64_t submask;
+        ucs_for_each_submask(submask, mask) {
+            EXPECT_GT(submask, prev_submask); /* expect strictly monotonic series */
+            EXPECT_EQ(0u, submask & ~mask);   /* sub-mask contained in the mask */
+            prev_submask = submask;
+            ++count;
+        }
+
+        /* expect to get all possible values */
+        EXPECT_EQ(UCS_BIT(ucs_popcount(mask)), count);
+    }
 }
 
 UCS_TEST_F(test_math, linear_func) {

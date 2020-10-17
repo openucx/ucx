@@ -61,7 +61,6 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
     getreqh->mem_type   = req->send.rma.rkey->mem_type;
     getreqh->req.req_id = ucp_send_request_get_id(req);
-
     ucs_assert(getreqh->req.ep_id != UCP_EP_ID_INVALID);
 
     return sizeof(*getreqh);
@@ -245,6 +244,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
     ucp_ep_h ep                = req->send.ep;
 
     if (ep->worker->context->config.ext.proto_enable) {
+        // TODO use dt_iter.inl unpack
         ucp_dt_contig_unpack(ep->worker,
                              req->send.dt_iter.type.contig.buffer +
                              req->send.dt_iter.offset,

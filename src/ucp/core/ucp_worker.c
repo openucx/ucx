@@ -1777,6 +1777,7 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 {
     ucp_context_h context = worker->context;
     ucp_worker_cfg_index_t ep_cfg_index;
+    ucp_proto_select_short_t tag_short;
     ucp_ep_config_t *ep_config;
     ucs_status_t status;
 
@@ -1802,11 +1803,30 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
         return status;
     }
 
-    ++worker->ep_config_count;
+    if (context->config.ext.proto_enable) {
+        if (context->config.features & UCP_FEATURE_TAG) {
+            /* Set threshold for short send */
+            ucp_proto_select_short_init(worker, &ep_config->proto_select,
+                                        ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+                                        UCP_OP_ID_TAG_SEND, 0,
+                                        UCP_PROTO_FLAG_AM_SHORT, &tag_short);
+            /* short protocol should be either disabled, or use key->am_lane */
+            ucs_assert((tag_short.max_length_host_mem < 0) ||
+                       (tag_short.lane == key->am_lane));
+        } else {
+            ucp_proto_select_short_disable(&tag_short);
+        }
+
+        /* TODO replace ep_config->tag.max_eager_short by this struct */
+        ep_config->tag.max_eager_short.memtype_off = tag_short.max_length_unknown_mem;
+        ep_config->tag.max_eager_short.memtype_on  = tag_short.max_length_host_mem;
+    }
 
     if (print_cfg) {
         ucp_worker_print_used_tls(key, context, ep_cfg_index);
     }
+
+    ++worker->ep_config_count;
 
 out:
     *cfg_index_p = ep_cfg_index;
@@ -1839,6 +1859,17 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     status           = ucp_proto_select_init(&rkey_config->proto_select);
     if (status != UCS_OK) {
         goto err;
+    }
+
+    if (worker->context->config.features & UCP_FEATURE_RMA) {
+       /* Set threshold for short put */
+        ucp_proto_select_short_init(worker, &rkey_config->proto_select,
+                                    key->ep_cfg_index, rkey_cfg_index,
+                                    UCP_OP_ID_PUT, UCP_OP_ATTR_FLAG_FAST_CMPL,
+                                    UCP_PROTO_FLAG_PUT_SHORT,
+                                    &rkey_config->put_short);
+    } else {
+        ucp_proto_select_short_disable(&rkey_config->put_short);
     }
 
     khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,

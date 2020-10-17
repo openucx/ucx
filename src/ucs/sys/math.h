@@ -148,9 +148,35 @@ static inline double ucs_log2(double x)
 #define UCS_CIRCULAR_COMPARE32(__a, __op, __b)  UCS_CIRCULAR_COMPARE(__a, __op, __b, int32_t)
 #define UCS_CIRCULAR_COMPARE64(__a, __op, __b)  UCS_CIRCULAR_COMPARE(__a, __op, __b, int64_t)
 
-#define ucs_for_each_bit(_index, _map)                   \
+
+/**
+ * Enumerate on all bit values in the bitmap '_map'
+ */
+#define ucs_for_each_bit(_index, _map) \
     for ((_index) = ucs_ffs64_safe(_map); (_index) < 64; \
          (_index) = ucs_ffs64_safe((uint64_t)(_map) & (-2ull << (uint64_t)(_index))))
+
+
+/**
+ * Generate all sub-masks of the given mask, from 0 to _mask inclusive.
+ *
+ * @param _submask   Variable to iterate over the sub-masks
+ * @param _mask      Generate sub-masks of this value
+ */
+#define ucs_for_each_submask(_submask, _mask) \
+    for (/* start with 0 */ \
+         (_submask) = 0; \
+         /* end when reaching _mask + 1 */ \
+         (_submask) <= (_mask); \
+         /* Increment _submask by 1. If it became larger than _mask, do nothing \
+          * here, and next condition check will exit the loop. Otherwise, add \
+          * ~mask to fast-forward the carry (from ++ operation) to the next \
+          * valid bit in _mask, and then do "& _mask" to remove any bits which \
+          * are not in the mask. \
+          */ \
+         (_submask)++, \
+         ((_submask) <= (_mask)) ? \
+                 ((_submask) = ((_submask )+ ~(_mask)) & (_mask)) : 0)
 
 
 /*
