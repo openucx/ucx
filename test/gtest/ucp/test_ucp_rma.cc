@@ -72,27 +72,29 @@ public:
     }
 
 protected:
-    void test_mem_types(send_func_t send_func, bool proto_supports_memtype) {
+    static size_t default_max_size() {
+        return (100 * UCS_MBYTE) / ucs::test_time_multiplier();
+    }
+
+    void test_mem_types(send_func_t send_func,
+                        size_t max_size = default_max_size()) {
         std::vector<std::vector<ucs_memory_type_t> > pairs =
                 ucs::supported_mem_type_pairs();
 
         for (size_t i = 0; i < pairs.size(); ++i) {
 
-            // If memtype supporting protocols are not enabled, and memory type
-            // is not accessible from CPU, skip the test.
-            // TODO remove this check after memory types is fully supported by
-            // RMA API
-            if (!(enable_proto() && proto_supports_memtype) &&
+            /* Memory type put/get is fully supported only with new protocols */
+            if (!enable_proto() &&
                 (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(pairs[i][0]) ||
                  !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(pairs[i][1]))) {
                 continue;
             }
 
-            test_message_sizes(send_func, pairs[i][0], pairs[i][1], 0);
+            test_message_sizes(send_func, max_size, pairs[i][0], pairs[i][1], 0);
         }
 
         /* test non-blocking map with host memory */
-        test_message_sizes(send_func, UCS_MEMORY_TYPE_HOST,
+        test_message_sizes(send_func, max_size, UCS_MEMORY_TYPE_HOST,
                            UCS_MEMORY_TYPE_HOST, UCP_MEM_MAP_NONBLOCK);
     }
 
@@ -123,12 +125,10 @@ private:
                            (uintptr_t)target_ptr, rkey, &param);
     }
 
-    void test_message_sizes(send_func_t send_func,
+    void test_message_sizes(send_func_t send_func, size_t max_size,
                             ucs_memory_type_t send_mem_type,
                             ucs_memory_type_t target_mem_type,
                             unsigned mem_map_flags) {
-        static const size_t MAX_SIZE = (100 * UCS_MBYTE) /
-                                       ucs::test_time_multiplier();
         ucs::detail::message_stream ms("INFO");
 
         ms << ucs_memory_type_names[send_mem_type] << "->" <<
@@ -138,11 +138,11 @@ private:
         }
 
         /* Test different random sizes */
-        for (size_t current_max_size = 128; current_max_size < MAX_SIZE;
+        for (size_t current_max_size = 128; current_max_size < max_size;
              current_max_size *= 4) {
 
             size_t size        = ucs::rand() % current_max_size;
-            unsigned num_iters = ucs_min(100, MAX_SIZE / (size + 1));
+            unsigned num_iters = ucs_min(100, max_size / (size + 1));
             num_iters          = ucs_max(1, num_iters / ucs::test_time_multiplier());
 
             ms << num_iters << "x" << size << " ";
@@ -151,6 +151,10 @@ private:
             ucs_memory_type_t mem_types[] = {send_mem_type, target_mem_type};
             test_xfer(send_func, size, num_iters, 1, send_mem_type,
                       target_mem_type, mem_map_flags, is_ep_flush(), mem_types);
+
+            if (HasFailure() || (num_errors() > 0)) {
+                break;
+            }
        }
     }
 
@@ -164,19 +168,25 @@ private:
 };
 
 UCS_TEST_P(test_ucp_rma, put_blocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b), true);
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_b));
 }
 
 UCS_TEST_P(test_ucp_rma, put_nonblocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_nbi), true);
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::put_nbi));
 }
 
 UCS_TEST_P(test_ucp_rma, get_blocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b), false);
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b));
 }
 
 UCS_TEST_P(test_ucp_rma, get_nonblocking) {
-    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi), false);
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi));
+}
+
+UCS_TEST_P(test_ucp_rma, get_blocking_zcopy, "ZCOPY_THRESH=0") {
+    /* test get_zcopy minimal message length is respected */
+    test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_b),
+                   64 * UCS_KBYTE);
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_rma)

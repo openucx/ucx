@@ -305,9 +305,11 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param)
 {
+    ucp_worker_h worker = ep->worker;
     ucp_ep_rma_config_t *rma_config;
-    ucs_status_ptr_t ptr_status;
+    ucs_status_ptr_t ret;
     ucs_status_t status;
+    ucp_request_t *req;
 
     UCP_RMA_CHECK_CONTIG1(param);
 
@@ -315,27 +317,43 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
         return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
     }
 
-    UCP_RMA_CHECK_PTR(ep->worker->context, buffer, count);
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+    UCP_RMA_CHECK_PTR(worker->context, buffer, count);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     ucs_trace_req("get_nbx buffer %p count %zu remote_addr %"PRIx64" rkey %p from %s cb %p",
                    buffer, count, remote_addr, rkey, ucp_ep_peer_name(ep),
                    (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
                    param->cb.send : NULL);
 
-    status = UCP_RKEY_RESOLVE(rkey, ep, rma);
-    if (status != UCS_OK) {
-        ptr_status = UCS_STATUS_PTR(status);
-        goto out_unlock;
+    if (worker->context->config.ext.proto_enable) {
+        req = ucp_request_get_param(worker, param,
+                                    {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                    goto out_unlock;});
+
+        req->send.rma.rkey        = rkey;
+        req->send.rma.remote_addr = remote_addr;
+
+        ret = ucp_proto_request_send_op(ep,
+                                        &ucp_rkey_config(worker, rkey)->proto_select,
+                                        rkey->cfg_index, req, UCP_OP_ID_GET,
+                                        buffer, count, ucp_dt_make_contig(1),
+                                        count, param);
+    } else {
+        status = UCP_RKEY_RESOLVE(rkey, ep, rma);
+        if (status != UCS_OK) {
+            ret = UCS_STATUS_PTR(status);
+            goto out_unlock;
+        }
+
+        rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
+        ret        = ucp_rma_nonblocking(ep, buffer, count, remote_addr, rkey,
+                                         rkey->cache.rma_proto->progress_get,
+                                         rma_config->get_zcopy_thresh, param);
     }
 
-    rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
-    ptr_status = ucp_rma_nonblocking(ep, buffer, count, remote_addr, rkey,
-                                     rkey->cache.rma_proto->progress_get,
-                                     rma_config->get_zcopy_thresh, param);
 out_unlock:
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
-    return ptr_status;
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+    return ret;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_put, (ep, buffer, length, remote_addr, rkey),

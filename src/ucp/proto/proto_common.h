@@ -11,14 +11,30 @@
 #include "proto_select.h"
 
 
+/* Constant for "undefined"/"not-applicable" structure offset */
+#define UCP_PROTO_COMMON_OFFSET_INVALID          PTRDIFF_MAX
+
+
 typedef enum {
-    UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY    = UCS_BIT(0), /* Send buffer is used by
-                                                              zero-copy operations */
-    UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    = UCS_BIT(1), /* Receive side is not
-                                                              doing memory copy */
-    UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS = UCS_BIT(2), /* One-sided remote access */
-    UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE      = UCS_BIT(3)  /* Protocol supports
-                                                              non-host buffers */
+    /* Send buffer is used by zero-copy operations */
+    UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY    = UCS_BIT(0),
+
+    /* Receive side is not doing memory copy */
+    UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY    = UCS_BIT(1),
+
+    /* One-sided remote access (implies RECV_ZCOPY) */
+    UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS = UCS_BIT(2),
+
+    /* Protocol supports non-host buffers */
+    UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE      = UCS_BIT(3),
+
+    /* Only the header is sent from initiator side to target side, the data
+     * (without headers) arrives back from target to initiator side, and only
+     * then the operation is considered completed  */
+    UCP_PROTO_COMMON_INIT_FLAG_RESPONSE      = UCS_BIT(4),
+
+    /* Limit the protocol message size range by maximal fragment size */
+    UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG      = UCS_BIT(5)
 } ucp_proto_common_init_flags_t;
 
 
@@ -30,8 +46,10 @@ typedef struct {
     double                  overhead;      /* protocol overhead */
     size_t                  cfg_thresh;    /* user-configured threshold */
     unsigned                cfg_priority;  /* user configuration priority */
-    size_t                  fragsz_offset; /* offset of maximal fragment
-                                              size in uct_iface_attr_t */
+    ptrdiff_t               min_frag_offs; /* offset in uct_iface_attr_t of the
+                                              minimal size of a single fragment */
+    ptrdiff_t               max_frag_offs; /* offset in uct_iface_attr_t of the
+                                              maximal size of a single fragment */
     size_t                  hdr_size;      /* header size on first lane */
     unsigned                flags;         /* see ucp_proto_common_init_flags_t */
 } ucp_proto_common_init_params_t;
@@ -45,8 +63,6 @@ typedef struct {
     ucp_lane_index_t        lane0;         /* The lane which is used to send the
                                               first fragment, to detect fragment
                                               size and performance ranges */
-    int                     is_multi;      /* Whether the protocol can send
-                                              multiple fragments */
 } ucp_proto_common_perf_params_t;
 
 
@@ -82,7 +98,7 @@ ucp_proto_common_get_iface_attr(const ucp_proto_init_params_t *params,
 
 
 size_t ucp_proto_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
-                                      ptrdiff_t field_offset);
+                                      ptrdiff_t field_offset, size_t dfl_value);
 
 
 double

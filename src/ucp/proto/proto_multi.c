@@ -60,7 +60,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
     perf_params.lane_map   = 0;
     perf_params.reg_md_map = mpriv->reg_md_map;
     perf_params.lane0      = lanes[0];
-    perf_params.is_multi   = 1;
 
     /* Collect information from all lanes */
     total_bandwidth = 0;
@@ -75,7 +74,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
         total_bandwidth      += lanes_bandwidth[i];
 
         lpriv->max_frag       = ucp_proto_get_iface_attr_field(iface_attr,
-                                               params->super.fragsz_offset);
+                                         params->super.max_frag_offs, SIZE_MAX);
 
         ucp_proto_common_lane_priv_init(&params->super, mpriv->reg_md_map,
                                         lanes[i], &lpriv->super);

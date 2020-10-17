@@ -47,7 +47,6 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
     perf_params.lane_map   = UCS_BIT(lane);
     perf_params.reg_md_map = reg_md_map;
     perf_params.lane0      = lane;
-    perf_params.is_multi   = 0;
     ucp_proto_common_calc_perf(&params->super, &perf_params);
 
     return UCS_OK;

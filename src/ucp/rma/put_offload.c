@@ -69,17 +69,18 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
+        .super.latency       = 0,
+        .super.overhead      = 10e-9,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
+        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.put.max_bcopy),
+        .super.hdr_size      = 0,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
-        .super.overhead      = 10e-9,
-        .super.latency       = 0,
         .max_lanes           = 1,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_PUT_BCOPY,
-        .super.fragsz_offset = ucs_offsetof(uct_iface_attr_t, cap.put.max_bcopy),
         .first.lane_type     = UCP_LANE_TYPE_RMA,
-        .super.hdr_size      = 0,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_PUT_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA,
     };

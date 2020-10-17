@@ -61,9 +61,10 @@ ucp_proto_eager_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
+        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.flags         = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
-        .super.fragsz_offset = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
     };
 
@@ -156,9 +157,10 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 30,
+        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
-        .super.fragsz_offset = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY,
     };
 
