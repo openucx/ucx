@@ -73,7 +73,7 @@
       <profile>
         <id>jdk9</id>
         <activation>
-          <jdk>[1.9,)</jdk>
+          <jdk>1.9</jdk>
         </activation>
         <build>
           <plugins>
@@ -86,6 +86,29 @@
           </plugins>
         </build>
       </profile>
+      <profile>
+        <id>jdk10+</id>
+        <activation>
+          <jdk>[1.10,)</jdk>
+        </activation>
+        <build>
+          <plugins>
+            <plugin>
+              <artifactId>maven-compiler-plugin</artifactId>
+              <configuration>
+		<source>1.9</source>
+                <target>1.9</target>
+                <compilerArgs>
+                  <arg>-h</arg>
+                  <arg>${native.dir}</arg>
+                  <arg>--add-exports</arg><arg>java.base/sun.nio.ch=ALL-UNNAMED</arg>
+                </compilerArgs>
+              </configuration>
+            </plugin>
+          </plugins>
+        </build>
+      </profile>
+
     </profiles>
 
   <issueManagement>
