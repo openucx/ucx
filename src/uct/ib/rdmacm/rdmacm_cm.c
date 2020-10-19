@@ -413,7 +413,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
     case RDMA_CM_EVENT_ROUTE_ERROR:
     case RDMA_CM_EVENT_CONNECT_ERROR:
         status    = UCS_ERR_UNREACHABLE;
-        log_level = UCS_LOG_LEVEL_DEBUG;
+        log_level = uct_rdmacm_cm_ep_get_cm(cep)->super.config.failure_level;
         break;
     default:
         status    = UCS_ERR_IO_ERROR;
@@ -589,7 +589,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_rdmacm_cm_ops,
-                              &uct_rdmacm_cm_iface_ops, worker, component);
+                              &uct_rdmacm_cm_iface_ops, worker, component,
+                              config);
 
     self->ev_ch  = rdma_create_event_channel();
     if (self->ev_ch == NULL) {

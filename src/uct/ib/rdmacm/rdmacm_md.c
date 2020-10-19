@@ -251,7 +251,7 @@ uct_component_t uct_rdmacm_component = {
     },
     .cm_config          = {
         .name           = "RDMA-CM connection manager",
-        .prefix         = "RDMACM_",
+        .prefix         = "RDMA_CM_",
         .table          = uct_cm_config_table,
         .size           = sizeof(uct_cm_config_t),
     },
