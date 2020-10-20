@@ -114,6 +114,10 @@ public:
         _free_stack.push_back(item);
     }
 
+    inline size_t allocated() const {
+        return _num_allocated;
+    }
+
 private:
     inline T* get_free() {
         T* item;
@@ -722,7 +726,8 @@ private:
                           _prev_state.read_count << " ops, "
             << "write:" << _curr_state.write_count -
                            _prev_state.write_count << " ops, "
-            << "active connections:" << _curr_state.active_conns;
+            << "active connections:" << _curr_state.active_conns
+            << ", buffers:" << _data_buffers_pool.allocated();
         save_prev_state();
     }
 
@@ -1264,11 +1269,13 @@ private:
             op_info[op_id].num_iters = 0;
         }
 
-        log << ", active: " << _active_servers.size();
+        log << ", active:" << _active_servers.size();
 
         if (opts().window_size == 1) {
-            log << ", latency: " << latency_usec << " usec";
+            log << ", latency:" << latency_usec << " usec";
         }
+
+        log << ", buffers:" << _data_buffers_pool.allocated();
     }
 
 private:
