@@ -25,11 +25,10 @@ ucp_cm_ep_init_flags(const ucp_worker_h worker, const ucp_ep_params_t *params)
     }
 
     if (params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR) {
-        return UCP_EP_INIT_CM_WIREUP_CLIENT;
+        return UCP_EP_INIT_CM_WIREUP_CLIENT | UCP_EP_INIT_CM_PHASE;
     }
-
     if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
-        return UCP_EP_INIT_CM_WIREUP_SERVER;
+        return UCP_EP_INIT_CM_WIREUP_SERVER | UCP_EP_INIT_CM_PHASE;
     }
 
     return 0;
@@ -1012,6 +1011,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     ucp_ep_h ep;
     ucs_status_t status;
     char client_addr_str[UCS_SOCKADDR_STRING_LEN];
+
+    ep_init_flags |= UCP_EP_INIT_CM_WIREUP_SERVER | UCP_EP_INIT_CM_PHASE;
 
     if (tl_bitmap == 0) {
         ucs_error("listener %p: got connection request from %s on a device %s "
