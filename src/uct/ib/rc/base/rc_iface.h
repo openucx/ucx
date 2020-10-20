@@ -204,7 +204,7 @@ struct uct_rc_iface {
         ucs_mpool_t             mp;         /* pool for send descriptors */
         ucs_mpool_t             pending_mp; /* pool for FC grant and keepalive
                                                pending requests */
-        ucs_mpool_t             flush_mp;   /* pool for flush completions */
+        ucs_mpool_t             send_op_mp; /* pool for send_op completions */
         /* Credits for completions.
          * May be negative in case mlx5 because we take "num_bb" credits per
          * post to be able to calculate credits of outstanding ops on failure.

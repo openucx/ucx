@@ -196,9 +196,10 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_rc_mlx5_ep_t   *ep     = ucs_derived_of(uct_rc_iface_lookup_ep(iface,
                                                                        qp_num),
                                                 uct_rc_mlx5_ep_t);
-    ucs_log_level_t    log_lvl = UCS_LOG_LEVEL_FATAL;
+    ucs_log_level_t    log_lvl;
     uct_ib_mlx5_txwq_t txwq_copy;
     size_t             txwq_size;
+    ucs_status_t       err_handler_status;
 
     if (!ep) {
         return;
@@ -214,9 +215,11 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         txwq_copy.qend = UCS_PTR_BYTE_OFFSET(txwq_copy.qstart, txwq_size);
     }
 
-    if (uct_rc_mlx5_ep_handle_failure(ep, status, ep->tx.wq.sw_pi) == UCS_OK) {
-        log_lvl = ib_iface->super.config.failure_level;
-    }
+    err_handler_status = uct_rc_mlx5_ep_handle_failure(ep, status,
+                                                       ep->tx.wq.sw_pi);
+    log_lvl            = uct_ib_iface_failure_log_level(ib_iface,
+                                                        err_handler_status,
+                                                        status);
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg,
                                     txwq_copy.qstart ? &txwq_copy : NULL,

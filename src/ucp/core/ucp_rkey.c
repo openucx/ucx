@@ -281,11 +281,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
      */
     ucs_assert((rkey_index > 0) || (rkey->md_map == 0));
 
-    /* TODO remove ucp_rkey_resolve_inner() and replace its functionality by
-     * ucp_worker_get_rkey_config().
-     */
-    ucp_rkey_resolve_inner(rkey, ep);
-
     if (worker->context->config.ext.proto_enable) {
         rkey_config_key.ep_cfg_index = ep->cfg_index;
         rkey_config_key.md_map       = rkey->md_map;
@@ -297,6 +292,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
         if (status != UCS_OK) {
             goto err_destroy;
         }
+
+        /* Avoid calling ucp_ep_resolve_remote_id() from rkey_unpack, and let
+         * the APIs which are not yet using new protocols resolve the remote key
+         * on-demand.
+         */
+        rkey->cache.ep_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+    } else {
+        ucp_rkey_resolve_inner(rkey, ep);
     }
 
     *rkey_p = rkey;
@@ -423,7 +426,7 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
             (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY)))
         {
             /* Lane does not need rkey, can use the lane with invalid rkey  */
-            if (!rkey || ((mem_type == md_attr->cap.access_mem_type) &&
+            if (!rkey || ((md_attr->cap.access_mem_types & UCS_BIT(mem_type)) &&
                           (mem_type == rkey->mem_type))) {
                 *uct_rkey_p = UCT_INVALID_RKEY;
                 return lane;
@@ -451,19 +454,20 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 {
     ucp_context_h context   = ep->worker->context;
     ucp_ep_config_t *config = ucp_ep_config(ep);
+    int rma_sw              = 0;
+    int amo_sw              = 0;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
-    int rma_sw, amo_sw;
 
     rkey->cache.rma_lane = ucp_rkey_find_rma_lane(context, config,
                                                   UCS_MEMORY_TYPE_HOST,
                                                   config->key.rma_lanes, rkey,
                                                   0, &uct_rkey);
-    rma_sw = (rkey->cache.rma_lane == UCP_NULL_LANE);
-    if (rma_sw) {
+    if (rkey->cache.rma_lane == UCP_NULL_LANE) {
         rkey->cache.rma_proto     = &ucp_rma_sw_proto;
         rkey->cache.rma_rkey      = UCT_INVALID_RKEY;
         rkey->cache.max_put_short = 0;
+        rma_sw                    = !!(context->config.features & UCP_FEATURE_RMA);
     } else {
         rkey->cache.rma_proto     = &ucp_rma_basic_proto;
         rkey->cache.rma_rkey      = uct_rkey;
@@ -475,10 +479,11 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
                                                   UCS_MEMORY_TYPE_HOST,
                                                   config->key.amo_lanes, rkey,
                                                   0, &uct_rkey);
-    amo_sw = (rkey->cache.amo_lane == UCP_NULL_LANE);
-    if (amo_sw) {
+    if (rkey->cache.amo_lane == UCP_NULL_LANE) {
         rkey->cache.amo_proto     = &ucp_amo_sw_proto;
         rkey->cache.amo_rkey      = UCT_INVALID_RKEY;
+        amo_sw                    = !!(context->config.features &
+                                       (UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64));
     } else {
         rkey->cache.amo_proto     = &ucp_amo_basic_proto;
         rkey->cache.amo_rkey      = uct_rkey;

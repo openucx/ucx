@@ -15,7 +15,7 @@
 
 
 ucs_config_field_t uct_tcp_sockcm_config_table[] = {
-  {"", "", NULL,
+  {"TCP_CM_", "", NULL,
    ucs_offsetof(uct_tcp_sockcm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
 
   {"PRIV_DATA_LEN", "2048",
@@ -174,7 +174,8 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
                                                         uct_tcp_sockcm_config_t);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_tcp_sockcm_ops,
-                              &uct_tcp_sockcm_iface_ops, worker, component);
+                              &uct_tcp_sockcm_iface_ops, worker, component,
+                              config);
 
     self->priv_data_len    = cm_config->priv_data_len -
                              sizeof(uct_tcp_sockcm_priv_data_hdr_t);

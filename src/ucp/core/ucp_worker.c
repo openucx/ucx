@@ -491,8 +491,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     }
 
     ucp_stream_ep_cleanup(ucp_ep);
-
-    if (ucp_ep->flags & UCP_EP_FLAG_USED) {
+    if (ucp_ep->flags & UCP_EP_FLAG_USED) {   
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
             ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
             /* Promote close operation to CANCEL in case of transport error,
@@ -620,16 +619,13 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     ucs_status_t ret_status;
     ucp_ep_ext_gen_t *ep_ext;
     ucp_ep_h ucp_ep;
-    khiter_t iter;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
     ucs_debug("worker %p: error handler called for UCT EP %p: %s",
               worker, uct_ep, ucs_status_string(status));
 
-    iter = kh_get(ucp_worker_discard_uct_ep_hash,
-                  &worker->discard_uct_ep_hash, uct_ep);
-    if (iter != kh_end(&worker->discard_uct_ep_hash)) {
+    if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
                   uct_ep, worker);
         ret_status = UCS_OK;
@@ -1287,6 +1283,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 {
     ucp_context_h context            = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
+    uint8_t mem_type_index;
     ucs_status_t status;
 
     ucs_assert(wiface != NULL);
@@ -1331,8 +1328,12 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         }
     }
 
-    context->mem_type_access_tls[context->tl_mds[resource->md_index].
-                                 attr.cap.access_mem_type] |= UCS_BIT(tl_id);
+    ucs_for_each_bit(mem_type_index,
+        context->tl_mds[resource->md_index].attr.cap.access_mem_types) {
+        ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
+        context->mem_type_access_tls[mem_type_index] |= UCS_BIT(tl_id);
+    }
+
     return UCS_OK;
 
 err_unset_handler:
@@ -1818,6 +1819,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
 {
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t *rkey_config;
+    ucs_status_t status;
     khiter_t khiter;
     int khret;
 
@@ -1826,18 +1828,24 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     if (worker->rkey_config_count >= UCP_WORKER_MAX_RKEY_CONFIG) {
         ucs_error("too many rkey configurations: %d (max: %d)",
                   worker->rkey_config_count, UCP_WORKER_MAX_RKEY_CONFIG);
-        return UCS_ERR_EXCEEDS_LIMIT;
+        status = UCS_ERR_EXCEEDS_LIMIT;
+        goto err;
     }
 
     /* initialize rkey configuration */
     rkey_cfg_index   = worker->rkey_config_count;
     rkey_config      = &worker->rkey_config[rkey_cfg_index];
     rkey_config->key = *key;
+    status           = ucp_proto_select_init(&rkey_config->proto_select);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
                     &khret);
     if (khret == UCS_KH_PUT_FAILED) {
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err_proto_cleanup;
     }
 
     /* we should not get into this function if key already exists */
@@ -1848,6 +1856,11 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     ++worker->rkey_config_count;
     *cfg_index_p = rkey_cfg_index;
     return UCS_OK;
+
+err_proto_cleanup:
+    ucp_proto_select_cleanup(&rkey_config->proto_select);
+err:
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
@@ -1855,15 +1868,19 @@ static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
     worker->keepalive.iter = &worker->all_eps;
 }
 
-static void ucp_worker_destroy_ep_configs(ucp_worker_h worker)
+static void ucp_worker_destroy_configs(ucp_worker_h worker)
 {
     unsigned i;
 
     for (i = 0; i < worker->ep_config_count; ++i) {
         ucp_ep_config_cleanup(worker, &worker->ep_config[i]);
     }
-
     worker->ep_config_count = 0;
+
+    for (i = 0; i < worker->rkey_config_count; ++i) {
+        ucp_proto_select_cleanup(&worker->rkey_config[i].proto_select);
+    }
+    worker->rkey_config_count = 0;
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context,
@@ -1912,6 +1929,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->rkey_ptr_cb_id       = UCS_CALLBACKQ_ID_NULL;
     worker->keepalive.cb_id      = UCS_CALLBACKQ_ID_NULL;
     worker->keepalive.last_round = 0;
+    worker->keepalive.lane_map   = 0;
+    worker->keepalive.ep_count   = 0;
     ucp_worker_keepalive_reset(worker);
     ucs_queue_head_init(&worker->rkey_ptr_reqs);
     ucs_list_head_init(&worker->arm_ifaces);
@@ -2063,7 +2082,7 @@ err_free:
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
-    ucp_worker_destroy_ep_configs(worker);
+    ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
 }
@@ -2226,7 +2245,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
-    ucp_worker_destroy_ep_configs(worker);
+    ucp_worker_destroy_configs(worker);
     ucs_free(worker);
 }
 
@@ -2263,8 +2282,8 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
         }
 
         status = ucp_address_pack(worker, NULL, tl_bitmap,
-                                  UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
-                                  &attr->address_length,
+                                  UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT,
+                                  NULL, &attr->address_length,
                                   (void**)&attr->address);
     }
 
@@ -2488,7 +2507,7 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     status = ucp_address_pack(worker, NULL, UINT64_MAX,
-                              UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
+                              UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT, NULL,
                               address_length_p, (void**)address_p);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
@@ -2551,45 +2570,80 @@ static int ucp_worker_keepalive_is_enabled(ucp_worker_h worker)
            (worker->context->config.ext.keepalive_num_eps != 0);
 }
 
+static UCS_F_ALWAYS_INLINE ucp_ep_h
+ucp_worker_keepalive_current_ep(ucp_worker_h worker)
+{
+    ucp_ep_ext_gen_t *ep_ext = ucs_container_of(worker->keepalive.iter,
+                                                ucp_ep_ext_gen_t, ep_list);
+    return ucp_ep_from_ext_gen(ep_ext);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_worker_keepalive_next_ep(ucp_worker_h worker)
+{
+    ucp_ep_h ep;
+
+    worker->keepalive.iter = worker->keepalive.iter->next;
+    if (worker->keepalive.iter == &worker->all_eps) {
+        /* if next list item points to all_eps then step one more time */
+        worker->keepalive.iter = worker->keepalive.iter->next;
+    }
+
+    ucs_assert(worker->keepalive.iter != &worker->all_eps);
+    ep                         = ucp_worker_keepalive_current_ep(worker);
+    worker->keepalive.lane_map = ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
+                                  !(ep->flags & UCP_EP_FLAG_FAILED)) ?
+                                 ucp_ep_config(ep)->key.ep_check_map : 0;
+}
+
 static unsigned ucp_worker_keepalive_progress(void *arg)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
     ucs_time_t now      = ucs_get_time();
-    unsigned ep_keepalive_count;
-    ucp_ep_ext_gen_t *ep_ext;
     ucs_list_link_t *iter_begin;
+    ucp_ep_h ep;
 
     if (ucs_likely((now - worker->keepalive.last_round) <
                    worker->context->config.ext.keepalive_timeout)) {
         return 0;
     }
 
-    worker->keepalive.last_round = now;
-    ep_keepalive_count           = 0;
-    iter_begin                   = worker->keepalive.iter;
+    if (ucs_unlikely(ucs_list_is_empty(&worker->all_eps))) {
+        ucs_assert(worker->keepalive.iter == &worker->all_eps);
+        uct_worker_progress_unregister_safe(worker->uct,
+                                            &worker->keepalive.cb_id);
+        return 0;
+    }
+
+    if (ucs_unlikely(worker->keepalive.iter == &worker->all_eps)) {
+        ucp_worker_keepalive_next_ep(worker);
+    }
+
+    iter_begin = worker->keepalive.iter;
     /* use own loop for elements because standard for_each skips
      * head element */
     /* TODO: use more optimal algo to enumerate EPs to keepalive
      * (linked list) */
     do {
-        ep_ext = ucs_list_next(worker->keepalive.iter,
-                               ucp_ep_ext_gen_t, ep_list);
-        worker->keepalive.iter = &ep_ext->ep_list;
-        if (worker->keepalive.iter == &worker->all_eps) {
-            continue;
+        ep = ucp_worker_keepalive_current_ep(worker);
+        ucp_ep_do_keepalive(ep, &worker->keepalive.lane_map);
+        if (worker->keepalive.lane_map != 0) {
+            /* in case if EP has no resources to send keepalive message
+             * then just return without update of last_round timestamp,
+             * on next progress iteration we will continue from this point */
+            goto out_no_resources;
         }
 
-        ep_keepalive_count += ucp_ep_do_keepalive(ucp_ep_from_ext_gen(ep_ext));
-    } while ((iter_begin != &ep_ext->ep_list) &&
-             (ep_keepalive_count < worker->context->config.ext.keepalive_num_eps));
+        worker->keepalive.ep_count++;
+        ucp_worker_keepalive_next_ep(worker);
+    } while ((iter_begin != worker->keepalive.iter) &&
+             (worker->keepalive.ep_count < worker->context->config.ext.keepalive_num_eps));
 
-    if (ep_keepalive_count == 0) {
-        /* remove keepalive progress if no relevant endpoints remaine */
-        uct_worker_progress_unregister_safe(worker->uct,
-                                            &worker->keepalive.cb_id);
-    }
+    worker->keepalive.last_round = now;
+    worker->keepalive.ep_count   = 0;
 
-    return ep_keepalive_count;
+out_no_resources:
+    return worker->keepalive.ep_count;
 }
 
 void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
@@ -2613,18 +2667,21 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
-    ucp_ep_ext_gen_t *ep_ext;
 
     if (!ucp_worker_keepalive_is_enabled(worker)) {
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
         return;
     }
 
-    /* EP is removed from worker all_eps, so we can't use list->next value */
-    if (worker->keepalive.iter == &ucp_ep_ext_gen(ep)->ep_list) {
-        ep_ext = ucs_list_next(worker->keepalive.iter,
-                               ucp_ep_ext_gen_t, ep_list);
-        worker->keepalive.iter = &ep_ext->ep_list;
+    ucs_assert(!ucs_list_is_empty(&worker->all_eps));
+
+    if (ucs_list_is_only(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list)) {
+        /* this is the last EP in worker */
+        worker->keepalive.iter = &worker->all_eps;
+    } else if (worker->keepalive.iter == &ucp_ep_ext_gen(ep)->ep_list) {
+        /* if iterator points into EP to be removed - then
+         * step to next EP */
+        ucp_worker_keepalive_next_ep(worker);
     }
 }
 
@@ -2670,6 +2727,26 @@ ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
                                       &cb_id);    
 }
 
+static void
+ucp_worker_discard_wireup_uct_ep(ucp_worker_h worker,
+                                 ucp_wireup_ep_t *wireup_ep,
+                                 unsigned ep_flush_flags,
+                                 uct_ep_h uct_ep)
+{
+    if (uct_ep == NULL) {
+        return;
+    }
+
+    ucp_wireup_ep_disown(&wireup_ep->super.super, uct_ep);
+    /* discard the WIREUP EP's UCT EP */
+    ucp_worker_discard_uct_ep(worker, uct_ep, ep_flush_flags,
+                              /* make sure that there are no WIREUP MSGs
+                               * anymore that are scheduled on the UCT EP, i.e.
+                               * the purge callback hasn't be invoked here */
+                              (uct_pending_purge_callback_t)
+                              ucs_empty_function_do_assert, NULL);
+}
+
 static uct_ep_h
 ucp_worker_discard_wireup_ep(ucp_worker_h worker,
                              ucp_wireup_ep_t *wireup_ep,
@@ -2682,19 +2759,10 @@ ucp_worker_discard_wireup_ep(ucp_worker_h worker,
 
     ucs_assert(wireup_ep != NULL);
 
-    if (wireup_ep->aux_ep != NULL) {
-        /* make sure that there are no WIREUP MSGs anymore that are scheduled
-         * on AUX EP, i.e. the purge callback hasn't be invoked here */
-        uct_ep_pending_purge(wireup_ep->aux_ep,
-                             (uct_pending_purge_callback_t)
-                             ucs_empty_function_do_assert,
-                             NULL);
-
-        /* discard the WIREUP EP's auxiliary EP */
-        ucp_worker_discard_tl_uct_ep(worker, wireup_ep->aux_ep,
-                                     ep_flush_flags);
-        ucp_wireup_ep_disown(&wireup_ep->super.super, wireup_ep->aux_ep);
-    }
+    ucp_worker_discard_wireup_uct_ep(worker, wireup_ep, ep_flush_flags,
+                                     wireup_ep->aux_ep);
+    ucp_worker_discard_wireup_uct_ep(worker, wireup_ep, ep_flush_flags,
+                                     wireup_ep->sockaddr_ep);
 
     is_owner = wireup_ep->super.is_owner;
     uct_ep   = ucp_wireup_ep_extract_next_ep(&wireup_ep->super.super);
@@ -2706,6 +2774,14 @@ ucp_worker_discard_wireup_ep(ucp_worker_h worker,
 
     /* do nothing, if this wireup EP is not an owner for UCT EP */
     return is_owner ? uct_ep : NULL;
+}
+
+/* must be called with async lock held */
+int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep)
+{
+    return kh_get(ucp_worker_discard_uct_ep_hash,
+                  &worker->discard_uct_ep_hash, uct_ep) !=
+           kh_end(&worker->discard_uct_ep_hash);
 }
 
 /* must be called with async lock held */

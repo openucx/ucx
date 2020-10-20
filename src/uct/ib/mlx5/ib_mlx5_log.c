@@ -103,9 +103,11 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
         break;
     case MLX5_CQE_SYNDROME_REMOTE_ACCESS_ERR:
         snprintf(err_info, sizeof(err_info), "Remote access");
+        status = UCS_ERR_CONNECTION_RESET;
         break;
     case MLX5_CQE_SYNDROME_REMOTE_OP_ERR:
         snprintf(err_info, sizeof(err_info), "Remote QP");
+        status = UCS_ERR_CONNECTION_RESET;
         break;
     case MLX5_CQE_SYNDROME_TRANSPORT_RETRY_EXC_ERR:
         snprintf(err_info, sizeof(err_info), "Transport retry count exceeded");

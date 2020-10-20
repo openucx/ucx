@@ -291,6 +291,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "require out of band synchronization before destroying UCP resources.",
    ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
 
+  {"CM_USE_ALL_DEVICES", "y",
+   "When creating client/server endpoints, use all available devices.\n"
+   "If disabled, use only the one device on which the connection\n"
+   "establishment is done\n",
+   ucs_offsetof(ucp_config_t, ctx.cm_use_all_devices), UCS_CONFIG_TYPE_BOOL},
+
   {"LISTENER_BACKLOG", "auto",
    "'auto' means that each transport would use its maximal allowed value.\n"
    "If a value larger than what a transport supports is set, the backlog value\n"

@@ -306,9 +306,12 @@ ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep)
                                 &sent_length);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
         if (status != UCS_ERR_CONNECTION_RESET) { /* UCS_ERR_NOT_CONNECTED cannot return from send() */
-            ucs_error("ep %p failed to send %s's data (len=%zu offset=%zu status=%s)",
-                      cep, (cep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
-                      cep->comm_ctx.length, cep->comm_ctx.offset, ucs_status_string(status));
+            uct_cm_ep_peer_error(&cep->super, "ep %p failed to send %s's data "
+                                "(len=%zu offset=%zu status=%s)", cep,
+                                (cep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ?
+                                "server" : "client",
+                                cep->comm_ctx.length, cep->comm_ctx.offset,
+                                ucs_status_string(status));
         }
 
         /* treat all send errors as if they are disconnect from the remote peer -
@@ -631,9 +634,10 @@ static ucs_status_t uct_tcp_sockcm_ep_recv_nb(uct_tcp_sockcm_ep_t *cep)
                                 &recv_length);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
         if (status != UCS_ERR_NOT_CONNECTED) {  /* ECONNRESET cannot return from recv() */
-            ucs_error("ep %p (fd=%d) failed to recv client's data "
-                      "(offset=%zu status=%s)", cep, cep->fd, cep->comm_ctx.offset,
-                      ucs_status_string(status));
+            uct_cm_ep_peer_error(&cep->super,
+                                 "ep %p (fd=%d) failed to recv client's data "
+                                 "(offset=%zu status=%s)", cep, cep->fd,
+                                 cep->comm_ctx.offset, ucs_status_string(status));
         }
 
         /* treat all recv errors as if they are disconnect/reject from the remote peer -

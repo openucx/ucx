@@ -13,20 +13,6 @@
 #include <ucs/arch/bitops.h>
 
 
-static UCS_F_ALWAYS_INLINE
-uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
-{
-    /* return the rdmacm connection manager this ep is using */
-    return ucs_container_of(cep->super.super.super.iface, uct_rdmacm_cm_t,
-                            super.iface);
-}
-
-static UCS_F_ALWAYS_INLINE
-ucs_async_context_t *uct_rdmacm_cm_ep_get_async(uct_rdmacm_cm_ep_t *cep)
-{
-    return uct_rdmacm_cm_get_async(uct_rdmacm_cm_ep_get_cm(cep));
-}
-
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
                                  size_t max_len)
 {
@@ -127,9 +113,10 @@ ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 
     if (rdma_establish(cep->id)) {
-        ucs_error("rdma_establish on ep %p (to server addr=%s) failed: %m",
-                  cep, ucs_sockaddr_str(remote_addr, ip_port_str,
-                                        UCS_SOCKADDR_STRING_LEN));
+        uct_cm_ep_peer_error(&cep->super,
+                             "rdma_establish on ep %p (to server addr=%s) failed: %m",
+                             cep, ucs_sockaddr_str(remote_addr, ip_port_str,
+                                                   UCS_SOCKADDR_STRING_LEN));
         UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
         cep->status = UCS_ERR_IO_ERROR;
         cep->flags |= UCT_RDMACM_CM_EP_FAILED;
@@ -380,7 +367,8 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
               event->id);
 
     if (rdma_accept(event->id, &conn_param)) {
-        ucs_error("rdma_accept(on id=%p) failed: %m", event->id);
+        uct_cm_ep_peer_error(&cep->super, "rdma_accept(on id=%p) failed: %m",
+                             event->id);
         uct_rdmacm_cm_ep_destroy_dummy_cq_qp(cep);
         status = UCS_ERR_IO_ERROR;
         goto err;
@@ -410,11 +398,10 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
 
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
     if (ucs_unlikely(cep->flags & UCT_RDMACM_CM_EP_FAILED)) {
-        ucs_error("%s: id=%p to peer %s",
-                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-                  cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id),
-                                            ip_port_str,
-                                            UCS_SOCKADDR_STRING_LEN));
+        uct_cm_ep_peer_error(&cep->super, "%s: id=%p to peer %s",
+                             uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+                             cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id),
+                                                       ip_port_str, UCS_SOCKADDR_STRING_LEN));
         status = cep->status;
         goto out;
     }

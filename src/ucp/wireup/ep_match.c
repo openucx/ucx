@@ -77,6 +77,8 @@ void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
     ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
                               UCP_EP_FLAG_FLUSH_STATE_VALID |
                               UCP_EP_FLAG_LISTENER)));
+    /* EP matching is not used in CM flow */
+    ucs_assert(!ucp_ep_has_cm_lane(ep));
     ep->flags                             |= UCP_EP_FLAG_ON_MATCH_CTX;
     ucp_ep_ext_gen(ep)->ep_match.dest_uuid = dest_uuid;
 
@@ -108,6 +110,8 @@ ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
     ep = ucp_ep_from_ext_gen(ucs_container_of(conn_match, ucp_ep_ext_gen_t,
                                               ep_match.conn_match));
 
+    /* EP matching is not used in CM flow */
+    ucs_assert(!ucp_ep_has_cm_lane(ep));
     ucs_assertv(ucs_test_all_flags(ep->flags, exp_ep_flags),
                 "ep=%p flags=0x%x exp_flags=0x%x", ep, ep->flags,
                 exp_ep_flags);

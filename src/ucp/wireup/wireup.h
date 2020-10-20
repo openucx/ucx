@@ -95,6 +95,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane);
 
 ucs_status_t
 ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
+                                uint64_t tl_bitmap,
                                 const ucp_unpacked_address_t *remote_address,
                                 ucp_wireup_select_info_t *select_info);
 
@@ -128,11 +129,8 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags, uint64_t tl_bitmap,
 void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
                             const char *info);
 
-ucs_status_t
-ucp_wireup_connect_lane(ucp_ep_h ep, unsigned ep_init_flags,
-                        ucp_lane_index_t lane, unsigned path_index,
-                        const ucp_unpacked_address_t *remote_address,
-                        unsigned addr_index);
+void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
+                                        ucs_queue_head_t *tmp_pending_queue);
 
 void ucp_wireup_remote_connected(ucp_ep_h ep);
 

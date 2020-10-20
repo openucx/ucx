@@ -49,6 +49,7 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_rc_iface_t    *iface   = ucs_derived_of(ib_iface, uct_rc_iface_t);
     ucs_log_level_t    log_lvl = UCS_LOG_LEVEL_FATAL;
     uct_rc_verbs_ep_t *ep;
+    ucs_status_t       err_handler_status;
 
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface, wc->qp_num),
                         uct_rc_verbs_ep_t);
@@ -56,9 +57,9 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         return;
     }
 
-    if (uct_rc_verbs_ep_handle_failure(ep, status) == UCS_OK) {
-        log_lvl = iface->super.super.config.failure_level;
-    }
+    err_handler_status = uct_rc_verbs_ep_handle_failure(ep, status);
+    log_lvl            = uct_ib_iface_failure_log_level(ib_iface,
+                                                        err_handler_status, status);
 
     ucs_log(log_lvl,
             "send completion with error: %s qpn 0x%x wrid 0x%lx vendor_err 0x%x",

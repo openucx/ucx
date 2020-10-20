@@ -269,22 +269,43 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
 }
 
 UCS_TEST_P(test_md, mem_type_detect_mds) {
-
+    const size_t buffer_size = 1024;
     ucs_status_t status;
-    ucs_memory_type_t mem_type;
-    int mem_type_id;
+    int alloc_mem_type;
     void *address;
 
     if (!md_attr().cap.detect_mem_types) {
         UCS_TEST_SKIP_R("MD can't detect any memory types");
     }
 
-    ucs_for_each_bit(mem_type_id, md_attr().cap.detect_mem_types) {
-        alloc_memory(&address, UCS_KBYTE, NULL,
-                     static_cast<ucs_memory_type_t>(mem_type_id));
-        status = uct_md_detect_memory_type(md(), address, 1024, &mem_type);
+    ucs_for_each_bit(alloc_mem_type, md_attr().cap.detect_mem_types) {
+        ucs_assert(alloc_mem_type < UCS_MEMORY_TYPE_LAST); /* for coverity */
+
+        alloc_memory(&address, buffer_size, NULL,
+                     static_cast<ucs_memory_type_t>(alloc_mem_type));
+
+        /* test legacy detect_memory_type API */
+        ucs_memory_type_t detected_mem_type;
+        status = uct_md_detect_memory_type(md(), address, buffer_size,
+                                           &detected_mem_type);
         ASSERT_UCS_OK(status);
-        EXPECT_TRUE(mem_type == mem_type_id);
+        EXPECT_EQ(alloc_mem_type, detected_mem_type);
+
+        /* test mem_query API */
+        uct_md_mem_attr_t mem_attr;
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+        status = uct_md_mem_query(md(), address, buffer_size, &mem_attr);
+        ASSERT_UCS_OK(status);
+        EXPECT_EQ(alloc_mem_type, mem_attr.mem_type);
+
+        /* print memory type and dev name */
+        char sys_dev_name[128];
+        ucs_topo_sys_device_bdf_name(mem_attr.sys_dev, sys_dev_name,
+                                     sizeof(sys_dev_name));
+        UCS_TEST_MESSAGE << ucs_memory_type_names[alloc_mem_type] << ": "
+                         << "sys_dev[" << mem_attr.sys_dev << "] "
+                         << "(" << sys_dev_name << ")";
     }
 }
 

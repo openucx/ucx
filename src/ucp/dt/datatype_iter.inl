@@ -132,12 +132,7 @@ ucp_datatype_iter_next_pack(const ucp_datatype_iter_t *dt_iter,
         length = ucs_min(dt_iter->length - dt_iter->offset, max_length);
         src    = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer,
                                      dt_iter->offset);
-        if (ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(dt_iter->mem_type))) {
-            UCS_PROFILE_CALL(ucs_memcpy_relaxed, dest, src, length);
-        } else {
-            UCS_PROFILE_CALL(ucp_mem_type_pack, worker, dest, src, length,
-                             dt_iter->mem_type);
-        }
+        ucp_dt_contig_pack(worker, dest, src, length, dt_iter->mem_type);
         break;
     case UCP_DATATYPE_IOV:
         length = ucs_min(dt_iter->length - dt_iter->offset, max_length);
@@ -185,12 +180,7 @@ ucp_datatype_iter_next_unpack(const ucp_datatype_iter_t *dt_iter,
     case UCP_DATATYPE_CONTIG:
         ucs_assert(dt_iter->mem_type < UCS_MEMORY_TYPE_LAST);
         dest = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer, dt_iter->offset);
-        if (ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(dt_iter->mem_type))) {
-            UCS_PROFILE_CALL(ucs_memcpy_relaxed, dest, src, length);
-        } else {
-            UCS_PROFILE_CALL(ucp_mem_type_unpack, worker, dest, src, length,
-                             dt_iter->mem_type);
-        }
+        ucp_dt_contig_unpack(worker, dest, src, length, dt_iter->mem_type);
         status = UCS_OK;
         break;
     case UCP_DATATYPE_IOV:

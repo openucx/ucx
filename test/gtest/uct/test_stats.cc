@@ -92,8 +92,13 @@ public:
     void init_bufs(size_t min, size_t max)
     {
         size_t size = ucs_max(min, ucs_min(64ul, max));
-        lbuf = new mapped_buffer(size, 0, sender(), 0, sender().md_attr().cap.access_mem_type);
-        rbuf = new mapped_buffer(size, 0, receiver(), 0, sender().md_attr().cap.access_mem_type);
+        uint8_t mem_type_index;
+
+        ucs_assert(sender().md_attr().cap.access_mem_types != 0);
+        mem_type_index = ucs_ffs64(sender().md_attr().cap.access_mem_types);
+
+        lbuf = new mapped_buffer(size, 0, sender(), 0, (ucs_memory_type_t)mem_type_index);
+        rbuf = new mapped_buffer(size, 0, receiver(), 0, (ucs_memory_type_t)mem_type_index);
     }
 
     virtual void cleanup() {

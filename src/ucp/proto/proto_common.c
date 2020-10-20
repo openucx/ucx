@@ -104,6 +104,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
 {
     ucp_context_h context                        = params->super.worker->context;
     const ucp_ep_config_key_t *ep_config_key     = params->super.ep_config_key;
+    const ucp_rkey_config_key_t *rkey_config_key = params->super.rkey_config_key;
     const ucp_proto_select_param_t *select_param = params->super.select_param;
     const uct_iface_attr_t *iface_attr;
     ucp_lane_index_t lane, num_lanes;
@@ -128,7 +129,8 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                       ucp_datatype_class_names[select_param->dt_class]);
             return 0;
         }
-    } else if ((select_param->dt_class != UCP_DATATYPE_GENERIC) &&
+    } else if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE) &&
+               (select_param->dt_class != UCP_DATATYPE_GENERIC) &&
                !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(select_param->mem_type)) {
         /* If zero-copy is off, the memory must be host-accessible for
          * non-generic type (for generic type there is no buffer to access) */
@@ -187,11 +189,29 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                  * copy operation must be able to access the relevant memory type
                  * TODO UCT should expose a bitmap of accessible memory types
                  */
-                if (md_attr->cap.access_mem_type != select_param->mem_type) {
+                if (!(md_attr->cap.access_mem_types & UCS_BIT(select_param->mem_type))) {
                     ucs_trace("lane[%d]: no access to mem type %s", lane,
                               ucs_memory_type_names[select_param->mem_type]);
                     continue;
                 }
+            }
+        }
+
+        /* Check remote access capabilities */
+        if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
+            ucs_assert(rkey_config_key != NULL);
+            if (md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
+                if (!(rkey_config_key->md_map &
+                    UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) {
+                    ucs_trace("lane[%d]: no support of dst md map 0x%"PRIx64,
+                              lane, rkey_config_key->md_map);
+                    continue;
+                }
+            } else if (!(md_attr->cap.access_mem_types &
+                         UCS_BIT(rkey_config_key->mem_type))) {
+                ucs_trace("lane[%d]: no access to remote mem type %s", lane,
+                          ucs_memory_type_names[rkey_config_key->mem_type]);
+                continue;
             }
         }
 
@@ -208,8 +228,10 @@ ucp_proto_common_recv_time(const ucp_proto_common_init_params_t *params,
 {
     ucs_linear_func_t recv_time = ucs_linear_func_make(0, 0);
 
-    /* latency measure: add remote-side processing time */
-    recv_time.c = tl_overhead;
+    if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS)) {
+        /* latency measure: add remote-side processing time */
+        recv_time.c = tl_overhead;
+    }
 
     if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY)) {
         recv_time.m = pack_time.m;
@@ -348,7 +370,12 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
     uint32_t op_attr_mask;
     size_t frag_size;
 
-    /* TODO
+    /* Remote access implies zero copy on receiver */
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
+        ucs_assert(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY);
+    }
+
+   /* TODO
      * - consider remote/local system device
      * - consider memory type for pack/unpack
      */

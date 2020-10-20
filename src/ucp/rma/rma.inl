@@ -97,21 +97,24 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
     }
 }
 
-static inline ucs_status_t ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id,
-                                                  uct_pack_callback_t pack_cb,
-                                                  ssize_t *packed_len_p)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id, ucp_lane_index_t lane,
+                       uct_pack_callback_t pack_cb, void *pack_arg,
+                       ssize_t *packed_len_p)
 {
     ucp_ep_t *ep = req->send.ep;
+    ssize_t packed_len;
 
     /* make an asuumption here that EP was able to send the AM, since there
      * are transports (e.g. SELF - it does send-recv in the AM function) that is
      * able to complete the remote request operation inside uct_ep_am_bcopy()
      * and decrement the flush_ops_count before it was incremented */
     ucp_worker_flush_ops_count_inc(ep->worker);
-    req->send.lane = ucp_ep_get_am_lane(ep);
-    *packed_len_p  = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], id, pack_cb,
-                                     req, 0);
-    if (*packed_len_p > 0) {
+    packed_len = uct_ep_am_bcopy(ep->uct_eps[lane], id, pack_cb, pack_arg, 0);
+    if (packed_len > 0) {
+        if (packed_len_p != NULL) {
+            *packed_len_p = packed_len;
+        }
         ucp_ep_rma_remote_request_sent(ep);
         return UCS_OK;
     }
@@ -120,7 +123,14 @@ static inline ucs_status_t ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id
      * completed with error */
     ucp_worker_flush_ops_count_dec(ep->worker);
 
-    return (ucs_status_t)*packed_len_p;
+    return (ucs_status_t)packed_len;
+}
+
+static UCS_F_ALWAYS_INLINE uct_rkey_t
+ucp_rma_request_get_tl_rkey(ucp_request_t *req, ucp_md_index_t rkey_index)
+{
+    ucs_assert(rkey_index != UCP_NULL_RESOURCE);
+    return req->send.rma.rkey->tl_rkey[rkey_index].rkey.rkey;
 }
 
 #endif

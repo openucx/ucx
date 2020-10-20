@@ -161,7 +161,7 @@ KHASH_TYPE(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t
 typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
 
 
-/* Hash set to UCT EPs that are being discarded on UCP Worker */
+/* Hash map of UCT EPs that are being discarded on UCP Worker */
 KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
@@ -264,6 +264,8 @@ typedef struct ucp_worker {
         uct_worker_cb_id_t           cb_id;               /* Keepalive callback id */
         ucs_time_t                   last_round;          /* Last round timespamp */
         ucs_list_link_t              *iter;               /* Last EP processed keepalive */
+        ucp_lane_map_t               lane_map;            /* Lane map used to retry after no-resources */
+        unsigned                     ep_count;            /* Number if EPs processed in current time slot */
     } keepalive;
 } ucp_worker_t;
 
@@ -313,6 +315,9 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h );
 
 /* EP should be removed from worker all_eps prior to call this function */
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep);
+
+/* must be called with async lock held */
+int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 
 /* must be called with async lock held */
 void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,

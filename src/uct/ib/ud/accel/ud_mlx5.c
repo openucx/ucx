@@ -687,6 +687,7 @@ static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
 
+    ucs_assert(status != UCS_ERR_ENDPOINT_TIMEOUT);
     /* Local side failure - treat as fatal */
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.wq,
                                     UCS_LOG_LEVEL_FATAL);

@@ -42,7 +42,7 @@ ucs_status_t uct_rdmacm_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_SOCKADDR;
     md_attr->cap.reg_mem_types    = 0;
-    md_attr->cap.access_mem_type  = UCS_MEMORY_TYPE_HOST;
+    md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = 0;
@@ -251,7 +251,7 @@ uct_component_t uct_rdmacm_component = {
     },
     .cm_config          = {
         .name           = "RDMA-CM connection manager",
-        .prefix         = "RDMACM_",
+        .prefix         = "RDMA_CM_",
         .table          = uct_cm_config_table,
         .size           = sizeof(uct_cm_config_t),
     },

@@ -41,11 +41,12 @@ enum {
 
 
 enum {
-    UCP_ADDRESS_PACK_FLAG_WORKER_UUID = UCS_BIT(0), /* Add worker UUID */
-    UCP_ADDRESS_PACK_FLAG_WORKER_NAME = UCS_BIT(1), /* Pack worker name */
-    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR = UCS_BIT(2), /* Pack device addresses */
-    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  = UCS_BIT(3), /* Pack interface addresses */
-    UCP_ADDRESS_PACK_FLAG_EP_ADDR     = UCS_BIT(4), /* Pack endpoint addresses */
+    UCP_ADDRESS_PACK_FLAG_WORKER_UUID     = UCS_BIT(0), /* Add worker UUID */
+    UCP_ADDRESS_PACK_FLAG_WORKER_NAME     = UCS_BIT(1), /* Pack worker name */
+    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR     = UCS_BIT(2), /* Pack device addresses */
+    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR      = UCS_BIT(3), /* Pack interface addresses */
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR         = UCS_BIT(4), /* Pack endpoint addresses */
+    UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX      = UCS_BIT(5), /* Pack TL resource index */
 
     UCP_ADDRESS_PACK_FLAG_LAST,
 
@@ -53,9 +54,16 @@ enum {
      * so UCP_ADDRESS_PACK_FLAG_LAST<<1 is the next bit plus 2. If we subtract 3
      * we get the next bit minus 1.
      */
-    UCP_ADDRESS_PACK_FLAGS_ALL        = (UCP_ADDRESS_PACK_FLAG_LAST << 1) - 3,
+    UCP_ADDRESS_PACK_FLAGS_ALL            = (UCP_ADDRESS_PACK_FLAG_LAST << 1) - 3,
 
-    UCP_ADDRESS_PACK_FLAG_NO_TRACE    = UCS_BIT(16) /* Suppress debug tracing */
+    UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT = UCP_ADDRESS_PACK_FLAGS_ALL &
+                                            ~UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX,
+
+    UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT     = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                                            UCP_ADDRESS_PACK_FLAG_EP_ADDR    |
+                                            UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX,
+
+    UCP_ADDRESS_PACK_FLAG_NO_TRACE        = UCS_BIT(16) /* Suppress debug tracing */
 };
 
 
@@ -69,6 +77,7 @@ struct ucp_address_iface_attr {
     uct_ppn_bandwidth_t         bandwidth;    /* Interface performance - bandwidth */
     int                         priority;     /* Priority of device */
     double                      lat_ovh;      /* Latency overhead */
+    ucp_rsc_index_t             dst_rsc_index;/* Destination resource index */
     ucp_tl_iface_atomic_flags_t atomic;       /* Atomic operations */
 };
 

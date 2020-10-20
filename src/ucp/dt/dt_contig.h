@@ -8,8 +8,12 @@
 #ifndef UCP_DT_CONTIG_H_
 #define UCP_DT_CONTIG_H_
 
-#include <ucp/api/ucp.h>
+#include "dt.h"
+
+#include <ucp/core/ucp_mm.h>
+#include <ucs/arch/cpu.h>
 #include <ucs/debug/assert.h>
+#include <ucs/profile/profile.h>
 
 
 /**
@@ -36,6 +40,30 @@ static inline size_t ucp_contig_dt_length(ucp_datatype_t datatype, size_t count)
 {
     ucs_assert(UCP_DT_IS_CONTIG(datatype));
     return count * ucp_contig_dt_elem_size(datatype);
+}
+
+static inline void
+ucp_dt_contig_pack(ucp_worker_h worker, void *dest, const void *src,
+                   size_t length, ucs_memory_type_t mem_type)
+{
+    if (ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type))) {
+        UCS_PROFILE_CALL(ucs_memcpy_relaxed, dest, src, length);
+    } else {
+        UCS_PROFILE_CALL(ucp_mem_type_pack, worker, dest, src, length,
+                         mem_type);
+    }
+}
+
+static inline void
+ucp_dt_contig_unpack(ucp_worker_h worker, void *dest, const void *src,
+                     size_t length, ucs_memory_type_t mem_type)
+{
+    if (ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type))) {
+        UCS_PROFILE_CALL(ucs_memcpy_relaxed, dest, src, length);
+    } else {
+        UCS_PROFILE_CALL(ucp_mem_type_unpack, worker, dest, src, length,
+                         mem_type);
+    }
 }
 
 #endif
