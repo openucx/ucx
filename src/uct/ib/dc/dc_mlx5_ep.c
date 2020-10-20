@@ -1298,49 +1298,54 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uint8_t dci                = ep->dci;
     uct_ib_iface_t *ib_iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci].txqp;
-    uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci].txwq;
+    uct_rc_txqp_t *txqp;
+    uct_ib_mlx5_txwq_t *txwq;
     int16_t outstanding;
     ucs_status_t status;
     ucs_log_level_t log_lvl;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
-    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, 0);
-
-    /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
-       is not updated for the error cqe and all outstanding wqes*/
-    outstanding = (int16_t)iface->super.super.config.tx_qp_len -
-                  uct_rc_txqp_available(txqp);
-    iface->super.super.tx.cq_available += outstanding;
-    uct_rc_txqp_available_set(txqp, (int16_t)iface->super.super.config.tx_qp_len);
-
-    /* since we removed all outstanding ops on the dci, it should be released */
-    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-    uct_dc_mlx5_iface_dci_put(iface, dci);
-    ucs_assert_always(ep->dci == UCT_DC_MLX5_EP_NO_DCI);
-
     if (uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
         /* No need to wait for grant on this ep anymore */
         uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
     }
 
+    if (dci != UCT_DC_MLX5_EP_NO_DCI) {
+        txqp = &iface->tx.dcis[dci].txqp;
+        txwq = &iface->tx.dcis[dci].txwq;
+        uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, 0);
+
+        /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
+           is not updated for the error cqe and all outstanding wqes*/
+        outstanding = (int16_t)iface->super.super.config.tx_qp_len -
+                      uct_rc_txqp_available(txqp);
+        iface->super.super.tx.cq_available += outstanding;
+        uct_rc_txqp_available_set(txqp, (int16_t)iface->super.super.config.tx_qp_len);
+
+        /* since we removed all outstanding ops on the dci, it should be released */
+        uct_dc_mlx5_iface_dci_put(iface, dci);
+        ucs_assert_always(ep->dci == UCT_DC_MLX5_EP_NO_DCI);
+    }
+
     if (ep == iface->tx.fc_ep) {
         ucs_assert(ep_status != UCS_ERR_CANCELED);
         /* Cannot handle errors on flow-control endpoint.
-         * Or shall we ignore them?
-         */
+         * Or shall we ignore them? */
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(ep_status));
     } else {
-        status  = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
-                                               ep_status);
-        log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
-
-        if (ep_status != UCS_ERR_CANCELED) {
+        status = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super, ep_status);
+        if ((ep_status != UCS_ERR_CANCELED) && (dci != UCT_DC_MLX5_EP_NO_DCI)) {
+            log_lvl = uct_ib_iface_failure_log_level(ib_iface, status,
+                                                     ep_status);
             uct_ib_mlx5_completion_with_err(ib_iface, arg,
                                             &iface->tx.dcis[dci].txwq, log_lvl);
         }
+    }
+
+    if (dci == UCT_DC_MLX5_EP_NO_DCI) {
+        return;
     }
 
     status = uct_dc_mlx5_iface_reset_dci(iface, &iface->tx.dcis[dci]);
