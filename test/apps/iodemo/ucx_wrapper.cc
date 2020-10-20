@@ -342,14 +342,25 @@ void UcxContext::recv_io_message()
     _iomsg_recv_request = reinterpret_cast<ucx_request*>(status_ptr);
 }
 
-void UcxContext::add_connection(UcxConnection *conn)
+bool UcxContext::add_connection(UcxConnection *conn)
 {
-    _conns[conn->id()] = conn;
+    if (_conns.find(conn->id()) == _conns.end()) {
+        _conns[conn->id()] = conn;
+        return true;
+    } else {
+        return false;
+    }
 }
 
-void UcxContext::remove_connection(UcxConnection *conn)
+bool UcxContext::remove_connection(UcxConnection *conn)
 {
-    _conns.erase(conn->id());
+    conn_map_t::iterator i = _conns.find(conn->id());
+    if (i == _conns.end()) {
+        return false;
+    } else {
+        _conns.erase(i);
+        return true;
+    }
 }
 
 void UcxContext::handle_connection_error(UcxConnection *conn)
@@ -368,8 +379,8 @@ void UcxContext::destroy_connections()
 
     for (conn_map_t::iterator iter = _conns.begin(); iter != _conns.end(); ++iter) {
         delete iter->second;
-
     }
+
     _conns.clear();
 }
 

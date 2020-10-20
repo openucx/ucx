@@ -94,6 +94,10 @@ protected:
     // Called when there is a fatal failure on the connection
     virtual void dispatch_connection_error(UcxConnection* conn) = 0;
 
+    virtual bool add_connection(UcxConnection *conn);
+
+    virtual bool remove_connection(UcxConnection *conn);
+
 private:
     typedef enum {
         WAIT_STATUS_OK,
@@ -134,10 +138,6 @@ private:
 
     void recv_io_message();
 
-    void add_connection(UcxConnection *conn);
-
-    void remove_connection(UcxConnection *conn);
-
     void handle_connection_error(UcxConnection *conn);
 
     void destroy_connections();
@@ -152,10 +152,10 @@ private:
     ucp_worker_h                   _worker;
     ucp_listener_h                 _listener;
     conn_map_t                     _conns;
-    ucx_request*                   _iomsg_recv_request;
-    std::string                    _iomsg_buffer;
     std::deque<ucp_conn_request_h> _conn_requests;
     std::deque<UcxConnection *>    _failed_conns;
+    ucx_request*                   _iomsg_recv_request;
+    std::string                    _iomsg_buffer;
 };
 
 
