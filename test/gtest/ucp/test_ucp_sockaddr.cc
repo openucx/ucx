@@ -1094,31 +1094,51 @@ protected:
         ASSERT_UCS_OK(status);
     }
 
-    void test_am_send_recv(size_t size)
+    void test_am_send_recv(size_t size, size_t hdr_size = 0ul)
     {
         std::string sb(size, 'x');
+        std::string hdr(hdr_size, 'x');
 
         bool am_received = false;
-        ucp_worker_set_am_handler(receiver().worker(), 0,
-                                  rx_am_msg_cb, &am_received, 0);
 
-        ucs_status_ptr_t sreq = ucp_am_send_nb(sender().ep(), 0, &sb[0], size,
-                                               ucp_dt_make_contig(1),
-                                               scomplete_cb, 0);
+        set_am_data_handler(receiver(), 0, rx_am_msg_cb, &am_received);
+
+        ucp_request_param_t param = {};
+        ucs_status_ptr_t sreq     = ucp_am_send_nbx(sender().ep(), 0, &hdr[0],
+                                                    hdr_size, &sb[0], size,
+                                                    &param);
         request_wait(sreq);
         wait_for_flag(&am_received);
         EXPECT_TRUE(am_received);
 
-        ucp_worker_set_am_handler(receiver().worker(), 0, NULL, NULL, 0);
+        set_am_data_handler(receiver(), 0, NULL, NULL);
     }
 
 private:
-    static ucs_status_t rx_am_msg_cb(void *arg, void *data, size_t length,
-                                     ucp_ep_h reply_ep, unsigned flags) {
+    static ucs_status_t rx_am_msg_cb(void *arg, const void *header,
+                                     size_t header_length, void *data,
+                                     size_t length,
+                                     const ucp_am_recv_param_t *param)
+    {
         volatile bool *am_rx = reinterpret_cast<volatile bool*>(arg);
         EXPECT_FALSE(*am_rx);
         *am_rx = true;
         return UCS_OK;
+    }
+
+    void set_am_data_handler(entity &e, uint16_t am_id,
+                             ucp_am_recv_callback_t cb, void *arg)
+    {
+        ucp_am_handler_param_t param;
+
+        /* Initialize Active Message data handler */
+        param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                           UCP_AM_HANDLER_PARAM_FIELD_CB |
+                           UCP_AM_HANDLER_PARAM_FIELD_ARG;
+        param.id         = am_id;
+        param.cb         = cb;
+        param.arg        = arg;
+        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
     }
 };
 
@@ -1258,22 +1278,35 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, am_short)
     test_am_send_recv(1);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_1k, "ZCOPY_THRESH=inf")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_header_only)
+{
+    ucp_worker_attr_t attr;
+    attr.field_mask = UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER;
+
+    ASSERT_UCS_OK(ucp_worker_query(sender().worker(), &attr));
+    test_am_send_recv(0, attr.max_am_header);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_1k,
+           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_am_send_recv(1 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_64k, "ZCOPY_THRESH=inf")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_bcopy_64k,
+           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
 {
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_1k, "ZCOPY_THRESH=512")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_1k,
+           "ZCOPY_THRESH=512", "RNDV_THRESH=inf")
 {
     test_am_send_recv(1 * UCS_KBYTE);
 }
 
-UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_64k, "ZCOPY_THRESH=512")
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_64k,
+           "ZCOPY_THRESH=512", "RNDV_THRESH=inf")
 {
     test_am_send_recv(64 * UCS_KBYTE);
 }

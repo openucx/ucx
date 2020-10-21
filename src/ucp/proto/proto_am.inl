@@ -110,7 +110,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             ucs_assertv(req->send.state.dt.offset <= req->send.length,
                         "offset=%zd length=%zu",
                         req->send.state.dt.offset, req->send.length);
-            ucs_assert(state.offset < req->send.state.dt.offset);
+
             /* If the last segment was sent, return UCS_OK,
              * otherwise - UCS_INPROGRESS */
             if (enable_am_bw) {
