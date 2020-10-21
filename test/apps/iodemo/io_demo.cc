@@ -53,6 +53,7 @@ typedef struct {
     unsigned                 random_seed;
     size_t                   num_buffers;
     bool                     verbose;
+    bool                     use_am;
 } options_t;
 
 #define LOG         UcxLog("[DEMO]", true)
@@ -133,7 +134,7 @@ const unsigned IoDemoRandom::_C = 12345U;
 const unsigned IoDemoRandom::_M = 0x7fffffffU;
 
 class P2pDemoCommon : public UcxContext {
-protected:
+public:
 
     /* IO request header */
     typedef struct {
@@ -183,8 +184,9 @@ protected:
     };
 
     P2pDemoCommon(const options_t& test_opts) :
-        UcxContext(test_opts.iomsg_size), _test_opts(test_opts),
-        _io_msg_pool(opts().iomsg_size), _cur_buffer_idx(0), _padding(0) {
+        UcxContext(test_opts.iomsg_size, test_opts.use_am),
+        _io_msg_pool(test_opts.iomsg_size), _test_opts(test_opts),
+        _cur_buffer_idx(0), _padding(0) {
 
         _data_buffers.resize(opts().num_buffers);
         for (size_t i = 0; i < _data_buffers.size(); ++i) {
@@ -265,9 +267,10 @@ protected:
         recv_data_as_chunks(conn, data_size, sn, callback);
     }
 
+    MemoryPool<IoMessage>    _io_msg_pool;
+
 protected:
     const options_t          _test_opts;
-    MemoryPool<IoMessage>    _io_msg_pool;
 
 private:
     std::vector<std::string> _data_buffers;
@@ -281,11 +284,8 @@ public:
     // sends an IO response when done
     class IoWriteResponseCallback : public UcxCallback {
     public:
-        IoWriteResponseCallback(size_t buffer_size,
-            MemoryPool<IoWriteResponseCallback>* pool) :
-            _server(NULL), _conn(NULL), _sn(0), _data_size(0), _chunk_cnt(0) {
-            _pool = pool;
-        }
+        IoWriteResponseCallback(size_t buffer_size) :
+            _server(NULL), _conn(NULL), _sn(0), _data_size(0), _chunk_cnt(0) {}
 
         void init(DemoServer *server, UcxConnection* conn, uint32_t sn,
                   size_t data_size, uint32_t chunk_cnt = 1) {
@@ -296,28 +296,17 @@ public:
              _chunk_cnt = chunk_cnt;
         }
 
-        virtual void operator()(ucs_status_t status) {
-            if (--_chunk_cnt > 0) {
-                return;
-            }
-            if (status == UCS_OK) {
-                _server->send_io_message(_conn, IO_COMP, _sn, _data_size);
-            }
-            _pool->put(this);
-        }
-
-    private:
+    protected:
         DemoServer*                          _server;
         UcxConnection*                       _conn;
         uint32_t                             _sn;
         size_t                               _data_size;
         uint32_t                             _chunk_cnt;
-        MemoryPool<IoWriteResponseCallback>* _pool;
     };
 
-    DemoServer(const options_t& test_opts) :
-        P2pDemoCommon(test_opts), _callback_pool(0) {
-    }
+    DemoServer(const options_t& test_opts) : P2pDemoCommon(test_opts) {}
+
+    virtual ~DemoServer() {}
 
     void run() {
         struct sockaddr_in listen_addr;
@@ -336,34 +325,11 @@ public:
         }
     }
 
-    void handle_io_read_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
-        // send data
-        VERBOSE_LOG << "sending IO read data";
-        assert(opts().max_data_size >= hdr->data_size);
+    virtual void handle_io_read_request(UcxConnection* conn,
+                                        const iomsg_hdr_t *hdr) = 0;
 
-        send_data(conn, hdr->data_size, hdr->sn);
-        
-        // send response as data
-        VERBOSE_LOG << "sending IO read response";
-        IoMessage *response = _io_msg_pool.get();
-        response->init(IO_COMP, hdr->sn, 0);
-        conn->send_data(response->buffer(), opts().iomsg_size, hdr->sn,
-                        response);
-
-        next_buffer();
-    }
-
-    void handle_io_write_request(UcxConnection* conn, const iomsg_hdr_t *hdr) {
-        VERBOSE_LOG << "receiving IO write data";
-        assert(opts().max_data_size >= hdr->data_size);
-        assert(hdr->data_size != 0);
-
-        IoWriteResponseCallback *w = _callback_pool.get();
-        w->init(this, conn, hdr->sn, hdr->data_size, get_chunk_cnt(hdr->data_size));
-        recv_data(conn, hdr->data_size, hdr->sn, w);
-
-        next_buffer();
-    }
+    virtual void handle_io_write_request(UcxConnection* conn,
+                                         const iomsg_hdr_t *hdr) = 0;
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
         LOG << "deleting connection " << conn;
@@ -386,63 +352,135 @@ public:
             LOG << "Invalid opcode: " << hdr->op;
         }
     }
-protected:
-    MemoryPool<IoWriteResponseCallback> _callback_pool;    
 };
 
-
-class DemoClient : public P2pDemoCommon {
+class DemoServerTag : public DemoServer {
 public:
-    class IoReadResponseCallback : public UcxCallback {
+    class IoWriteTagResponseCallback : public IoWriteResponseCallback {
     public:
-        IoReadResponseCallback(size_t buffer_size,
-            MemoryPool<IoReadResponseCallback>* pool) :
-            _counter(0), _io_counter(0), _chunk_cnt(0) {
-            _buffer = malloc(buffer_size);
-            _pool   = pool;
-        }
-        
-        void init(long *counter, uint32_t chunk_cnt = 1) {
-            _counter    = 0;
-            _io_counter = counter;
-            _chunk_cnt  = chunk_cnt;
-        }
-
-        ~IoReadResponseCallback() {
-            free(_buffer);
-        }
+        IoWriteTagResponseCallback(size_t buffer_size,
+                                   MemoryPool<IoWriteTagResponseCallback>* pool) :
+            IoWriteResponseCallback(buffer_size), _pool(pool) {}
 
         virtual void operator()(ucs_status_t status) {
-            /* wait data and response completion */
-            if (++_counter < (1 + _chunk_cnt)) {
+            if (--_chunk_cnt > 0) {
                 return;
             }
-
-            ++(*_io_counter);
+            if (status == UCS_OK) {
+                _server->send_io_message(_conn, IO_COMP, _sn, _data_size);
+            }
             _pool->put(this);
         }
 
-        void* buffer() {
-            return _buffer;
-        }
-
-    private:
-        long                                _counter;
-        long*                               _io_counter;
-        uint32_t                            _chunk_cnt;
-        void*                               _buffer;
-        MemoryPool<IoReadResponseCallback>* _pool;
+    protected:
+        MemoryPool<IoWriteTagResponseCallback>* _pool;
     };
 
+    DemoServerTag(const options_t& test_opts) :
+        DemoServer(test_opts), _callback_pool(0) {}
+
+    virtual void handle_io_read_request(UcxConnection* conn,
+                                        const iomsg_hdr_t *hdr) {
+        // send data
+        VERBOSE_LOG << "sending IO read data";
+        assert(opts().max_data_size >= hdr->data_size);
+
+        send_data(conn, hdr->data_size, hdr->sn);
+
+        // send response as data
+        VERBOSE_LOG << "sending IO read response";
+        IoMessage *response = _io_msg_pool.get();
+        response->init(IO_COMP, hdr->sn, 0);
+        conn->send_data(response->buffer(), opts().iomsg_size, hdr->sn,
+                        response);
+
+        next_buffer();
+    }
+
+    virtual void handle_io_write_request(UcxConnection* conn,
+                                         const iomsg_hdr_t *hdr) {
+        VERBOSE_LOG << "receiving IO write data";
+        assert(opts().max_data_size >= hdr->data_size);
+        assert(hdr->data_size != 0);
+
+        IoWriteTagResponseCallback *w = _callback_pool.get();
+        w->init(this, conn, hdr->sn, hdr->data_size, get_chunk_cnt(hdr->data_size));
+        recv_data(conn, hdr->data_size, hdr->sn, w);
+
+        next_buffer();
+    }
+
+protected:
+    MemoryPool<IoWriteTagResponseCallback> _callback_pool;
+};
+
+class DemoServerAM : public DemoServer {
+public:
+    class IoWriteAMResponseCallback : public IoWriteResponseCallback {
+    public:
+        IoWriteAMResponseCallback(size_t buffer_size,
+                                  MemoryPool<IoWriteAMResponseCallback>* pool) :
+            IoWriteResponseCallback(buffer_size), _pool(pool) {}
+
+        virtual void operator()(ucs_status_t status) {
+            if (status == UCS_OK) {
+                IoMessage *m = _server->_io_msg_pool.get();
+                m->init(IO_COMP, _sn, _data_size);
+                _conn->send_am(m->buffer(), _server->opts().iomsg_size, NULL, 0ul, m);
+            }
+            _pool->put(this);
+        }
+    protected:
+        MemoryPool<IoWriteAMResponseCallback>* _pool;
+    };
+
+    DemoServerAM(const options_t& test_opts) :
+        DemoServer(test_opts), _callback_pool(0) {}
+
+    virtual void handle_io_read_request(UcxConnection* conn,
+                                        const iomsg_hdr_t *hdr) {
+        VERBOSE_LOG << "sending IO read data";
+        IoMessage *m = _io_msg_pool.get();
+        // Send response with IO_READ op, for client to distinguish it with
+        // IO_WRITE completion
+        m->init(IO_READ, hdr->sn, hdr->data_size);
+        conn->send_am(m->buffer(), opts().iomsg_size, buffer(),
+                      hdr->data_size, m);
+
+        next_buffer();
+    }
+
+    virtual void handle_io_write_request(UcxConnection* conn,
+                                         const iomsg_hdr_t *hdr) {
+        assert(opts().max_data_size >= hdr->data_size);
+        assert(hdr->data_size != 0);
+
+        VERBOSE_LOG << "receiving IO write data";
+
+        IoWriteAMResponseCallback *w = _callback_pool.get();
+        w->init(this, conn, hdr->sn, hdr->data_size,
+                get_chunk_cnt(hdr->data_size));
+        conn->recv_am_data(buffer(), hdr->data_size, w);
+
+        next_buffer();
+    }
+
+protected:
+    MemoryPool<IoWriteAMResponseCallback> _callback_pool;
+};
+
+class DemoClient : public P2pDemoCommon {
+public:
     DemoClient(const options_t& test_opts) :
-        P2pDemoCommon(test_opts),
-        _num_sent(0), _num_completed(0), _status(OK), _start_time(get_time()),
-        _retry(0), _callback_pool(opts().iomsg_size) {
+        P2pDemoCommon(test_opts), _num_sent(0), _num_completed(0),
+        _status(OK), _start_time(get_time()), _retry(0) {
         _status_str[OK]                    = "ok";
         _status_str[ERROR]                 = "error";
         _status_str[RUNTIME_EXCEEDED]      = "run-time exceeded";
         _status_str[CONN_RETRIES_EXCEEDED] = "connection retries exceeded";
     }
+
+    virtual ~DemoClient() {}
 
     typedef enum {
         OK,
@@ -451,38 +489,13 @@ public:
         CONN_RETRIES_EXCEEDED
     } status_t;
 
-    size_t do_io_read(UcxConnection *conn, uint32_t sn) {
-        size_t data_size = get_data_size();
+    virtual size_t do_io_read(UcxConnection *conn, uint32_t sn) = 0;
 
-        if (!send_io_message(conn, IO_READ, sn, data_size)) {
-            return data_size;
-        }
+    virtual size_t do_io_write(UcxConnection *conn, uint32_t sn) = 0;
 
-        ++_num_sent;
-        IoReadResponseCallback *r = _callback_pool.get();
-        r->init(&_num_completed, get_chunk_cnt(data_size));
-        recv_data(conn, data_size, sn, r);
-        conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
-        next_buffer();
-
-        return data_size;
-    }
-
-    size_t do_io_write(UcxConnection *conn, uint32_t sn) {
-        size_t data_size = get_data_size();
-
-        if (!send_io_message(conn, IO_WRITE, sn, data_size)) {
-            return data_size;
-        }
-
-        ++_num_sent;
-        VERBOSE_LOG << "sending data " << buffer() << " size "
-                    << data_size << " sn " << sn;
-        send_data(conn, data_size, sn);
-        next_buffer();
-
-        return data_size;
-    }
+    virtual void handle_io_read_response(UcxConnection *conn,
+                                         const iomsg_hdr_t *hdr)
+    {}
 
     virtual void dispatch_io_message(UcxConnection* conn, const void *buffer,
                                      size_t length) {
@@ -494,7 +507,9 @@ public:
 
         if (hdr->op == IO_COMP) {
             ++_num_completed;
-        }
+        } else if (hdr->op == IO_READ) {
+            handle_io_read_response(conn, hdr);
+         }
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
@@ -768,15 +783,179 @@ private:
         }
     }
 
-private:
+protected:
     long                               _num_sent;
     long                               _num_completed;
+
+private:
     status_t                           _status;
     std::map<status_t, std::string>    _status_str;
     double                             _start_time;
     unsigned                           _retry;
-protected:    
+};
+
+class DemoClientTag : public DemoClient {
+public:
+    class IoReadResponseCallback : public UcxCallback {
+    public:
+        IoReadResponseCallback(size_t buffer_size,
+            MemoryPool<IoReadResponseCallback>* pool) :
+            _counter(0), _io_counter(0), _chunk_cnt(0) {
+            _buffer = malloc(buffer_size);
+            _pool   = pool;
+        }
+
+        void init(long *counter, uint32_t chunk_cnt = 1) {
+            _counter    = 0;
+            _io_counter = counter;
+            _chunk_cnt  = chunk_cnt;
+        }
+
+        ~IoReadResponseCallback() {
+            free(_buffer);
+        }
+
+        virtual void operator()(ucs_status_t status) {
+            /* wait data and response completion */
+            if (++_counter < (1 + _chunk_cnt)) {
+                return;
+            }
+
+            ++(*_io_counter);
+            _pool->put(this);
+        }
+
+        void* buffer() {
+            return _buffer;
+        }
+
+    private:
+        long                                _counter;
+        long*                               _io_counter;
+        uint32_t                            _chunk_cnt;
+        void*                               _buffer;
+        MemoryPool<IoReadResponseCallback>* _pool;
+    };
+
+    DemoClientTag(const options_t& test_opts) :
+        DemoClient(test_opts), _callback_pool(opts().iomsg_size) {}
+
+    virtual size_t do_io_read(UcxConnection *conn, uint32_t sn) {
+        size_t data_size = get_data_size();
+
+        if (!send_io_message(conn, IO_READ, sn, data_size)) {
+            return data_size;
+        }
+
+        ++_num_sent;
+        IoReadResponseCallback *r = _callback_pool.get();
+        r->init(&_num_completed, get_chunk_cnt(data_size));
+        recv_data(conn, data_size, sn, r);
+        conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
+        next_buffer();
+
+        return data_size;
+    }
+
+    virtual size_t do_io_write(UcxConnection *conn, uint32_t sn) {
+        size_t data_size = get_data_size();
+
+        if (!send_io_message(conn, IO_WRITE, sn, data_size)) {
+            return data_size;
+        }
+
+        ++_num_sent;
+        VERBOSE_LOG << "sending data " << buffer() << " size "
+                    << data_size << " sn " << sn;
+        send_data(conn, data_size, sn);
+        next_buffer();
+
+        return data_size;
+    }
+
+private:
     MemoryPool<IoReadResponseCallback> _callback_pool;
+};
+
+class DemoClientAM : public DemoClient {
+public:
+    class IoReadCallback : public UcxCallback {
+    public:
+        IoReadCallback(size_t buffer_size,
+            MemoryPool<IoReadCallback>* pool) :
+             _counter(0) {
+            _buffer = malloc(buffer_size);
+            _pool   = pool;
+        }
+
+        void init(long *counter) {
+            _counter = counter;
+        }
+
+        ~IoReadCallback() {
+            free(_buffer);
+        }
+
+        virtual void operator()(ucs_status_t status) {
+            ++(*_counter);
+            _pool->put(this);
+        }
+
+        void* buffer() {
+            return _buffer;
+        }
+
+    private:
+        long*                               _counter;
+        void*                               _buffer;
+        MemoryPool<IoReadCallback>* _pool;
+    };
+
+    DemoClientAM(const options_t& test_opts) :
+        DemoClient(test_opts), _callback_pool(0) {}
+
+    virtual size_t do_io_write(UcxConnection *conn, uint32_t sn) {
+        size_t data_size = get_data_size();
+
+        IoMessage *m = _io_msg_pool.get();
+        m->init(IO_WRITE, sn, data_size);
+
+        ++_num_sent;
+        VERBOSE_LOG << "sending data " << buffer() << " size "
+                    << data_size << " sn " << sn;
+        conn->send_am(m->buffer(), opts().iomsg_size, buffer(),
+                      data_size, m);
+        next_buffer();
+
+        return data_size;
+    }
+
+    virtual size_t do_io_read(UcxConnection *conn, uint32_t sn) {
+        size_t data_size = get_data_size();
+
+        IoMessage *m = _io_msg_pool.get();
+        m->init(IO_READ, sn, data_size);
+
+        conn->send_am(m->buffer(), opts().iomsg_size, NULL, 0, m);
+        ++_num_sent;
+
+        return data_size;
+    }
+    virtual void handle_io_read_response(UcxConnection *conn,
+                                         const iomsg_hdr_t *hdr) {
+        VERBOSE_LOG << "AM receiving IO write data";
+        assert(opts().max_data_size >= hdr->data_size);
+        assert(hdr->data_size != 0);
+
+        IoReadCallback *r = _callback_pool.get();
+        r->init(&_num_completed);
+        conn->recv_am_data(buffer(), hdr->data_size, r);
+
+        next_buffer();
+    }
+
+private:
+    MemoryPool<IoReadCallback> _callback_pool;
 };
 
 static int set_data_size(char *str, options_t *test_opts)
@@ -868,8 +1047,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->window_size          = 1;
     test_opts->random_seed          = std::time(NULL);
     test_opts->verbose              = false;
+    test_opts->use_am               = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:va")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -956,6 +1136,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'v':
             test_opts->verbose = true;
             break;
+        case 'a':
+            test_opts->use_am = true;
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -980,6 +1163,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "                             Examples: -l 17.5s; -l 10m; 15.5h" << std::endl;
             std::cout << "  -s <random seed>           Random seed to use for randomizing" << std::endl;
             std::cout << "  -v                         Set verbose mode" << std::endl;
+            std::cout << "  -a                         Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
             std::cout << "" << std::endl;
             return -1;
         }
@@ -998,13 +1182,25 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
 
 static int do_server(const options_t& test_opts)
 {
-    DemoServer server(test_opts);
-    if (!server.init()) {
-        return -1;
+    int ret = 0;
+    DemoServer *server;
+
+    if (test_opts.use_am) {
+        server = new DemoServerAM(test_opts);
+    } else {
+        server = new DemoServerTag(test_opts);
     }
 
-    server.run();
-    return 0;
+    if (!server->init()) {
+        ret = -1;
+        goto out;
+    }
+
+    server->run();
+
+out:
+    delete server;
+    return ret;
 }
 
 static int do_client(const options_t& test_opts)
@@ -1012,26 +1208,39 @@ static int do_client(const options_t& test_opts)
     IoDemoRandom::srand(test_opts.random_seed);
     LOG << "random seed: " << test_opts.random_seed;
 
-    DemoClient client(test_opts);
-    if (!client.init()) {
-        return -1;
+    DemoClient *client;
+    int ret;
+
+    if (test_opts.use_am) {
+        client = new DemoClientAM(test_opts);
+    } else {
+        client = new DemoClientTag(test_opts);
+    }
+
+    DemoClient::status_t status = client->get_status();
+
+    if (!client->init()) {
+        ret = -1;
+        goto out;
     }
 
     for (;;) {
-        if (client.run()) {
+        if (client->run()) {
             /* successful run */
             break;
         }
 
-        if (client.update_retry()) {
+        if (client->update_retry()) {
             break;
         }
     }
 
-    DemoClient::status_t status = client.get_status();
-    LOG << "client exit with \"" << client.get_status_str() << "\" status";
-    return ((status == DemoClient::OK) ||
-            (status == DemoClient::RUNTIME_EXCEEDED)) ? 0 : -1;
+    LOG << "client exit with \"" << client->get_status_str() << "\" status";
+    ret = ((status == DemoClient::OK) ||
+           (status == DemoClient::RUNTIME_EXCEEDED)) ? 0 : -1;
+out:
+    delete client;
+    return ret;
 }
 
 int main(int argc, char **argv)

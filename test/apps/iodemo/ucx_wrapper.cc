@@ -15,6 +15,9 @@
 #include <limits>
 
 
+#define AM_MSG_ID 0
+
+
 struct ucx_request {
     UcxCallback                  *callback;
     UcxConnection                *conn;
@@ -55,9 +58,9 @@ UcxLog::~UcxLog()
 
 #define UCX_LOG UcxLog("[UCX]", true)
 
-UcxContext::UcxContext(size_t iomsg_size) :
+UcxContext::UcxContext(size_t iomsg_size, bool use_am) :
     _context(NULL), _worker(NULL), _listener(NULL), _iomsg_recv_request(NULL),
-    _iomsg_buffer(iomsg_size, '\0')
+    _iomsg_buffer(iomsg_size, '\0'), _use_am(use_am)
 {
 }
 
@@ -83,8 +86,9 @@ bool UcxContext::init()
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
                               UCP_PARAM_FIELD_REQUEST_INIT |
                               UCP_PARAM_FIELD_REQUEST_SIZE;
-    ucp_params.features     = UCP_FEATURE_TAG |
-                              UCP_FEATURE_STREAM;
+    ucp_params.features     = _use_am ? UCP_FEATURE_AM :
+                                        UCP_FEATURE_TAG |
+                                        UCP_FEATURE_STREAM;
     ucp_params.request_init = request_init;
     ucp_params.request_size = sizeof(ucx_request);
     ucs_status_t status = ucp_init(&ucp_params, NULL, &_context);
@@ -93,7 +97,8 @@ bool UcxContext::init()
         return false;
     }
 
-    UCX_LOG << "created context " << _context;
+    UCX_LOG << "created context " << _context << " with "
+            << (_use_am ? "AM" : "TAG");
 
     /* Create worker */
     ucp_worker_params_t worker_params;
@@ -109,7 +114,12 @@ bool UcxContext::init()
 
     UCX_LOG << "created worker " << _worker;
 
-    recv_io_message();
+    if (_use_am) {
+        set_am_handler(am_recv_callback, this);
+    } else {
+        recv_io_message();
+    }
+
     return true;
 }
 
@@ -138,7 +148,7 @@ bool UcxContext::listen(const struct sockaddr* saddr, size_t addrlen)
 
 UcxConnection* UcxContext::connect(const struct sockaddr* saddr, size_t addrlen)
 {
-    UcxConnection *conn = new UcxConnection(*this, get_next_conn_id());
+    UcxConnection *conn = new UcxConnection(*this, get_next_conn_id(), _use_am);
     if (!conn->connect(saddr, addrlen)) {
         delete conn;
         return NULL;
@@ -245,7 +255,7 @@ ucp_worker_h UcxContext::worker() const
 void UcxContext::progress_conn_requests()
 {
     while (!_conn_requests.empty()) {
-        UcxConnection *conn = new UcxConnection(*this, get_next_conn_id());
+        UcxConnection *conn = new UcxConnection(*this, get_next_conn_id(), _use_am);
         if (conn->accept(_conn_requests.front())) {
             add_connection(conn);
             dispatch_new_connection(conn);
@@ -258,7 +268,7 @@ void UcxContext::progress_conn_requests()
 
 void UcxContext::progress_io_message()
 {
-    if (!_iomsg_recv_request->completed) {
+    if (_use_am || !_iomsg_recv_request->completed) {
         return;
     }
 
@@ -376,14 +386,52 @@ void UcxContext::destroy_worker()
     ucp_worker_destroy(_worker);
 }
 
+ucs_status_t UcxContext::am_recv_callback(void *arg, const void *header,
+                                          size_t header_length,
+                                          void *data, size_t length,
+                                          const ucp_am_recv_param_t *param)
+{
+    UcxContext *self = reinterpret_cast<UcxContext*>(arg);
+
+    assert(param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP);
+
+    uint64_t id = reinterpret_cast<uint64_t>(param->reply_ep);
+    conn_map_t::iterator iter = self->_conns.find(id);
+    if (iter == self->_conns.end()) {
+        UCX_LOG << "could not find connection with ep " << param->reply_ep
+                << "(" << id << ")";
+        return UCS_OK;
+    }
+    UcxConnection *conn = iter->second;
+
+    conn->set_am_desc(data, param);
+
+    self->dispatch_io_message(conn, header, header_length);
+
+    return UCS_OK;
+}
+
+void UcxContext::set_am_handler(ucp_am_recv_callback_t cb, void *arg)
+{
+    ucp_am_handler_param_t param;
+
+    /* Initialize Active Message data handler */
+    param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                       UCP_AM_HANDLER_PARAM_FIELD_CB |
+                       UCP_AM_HANDLER_PARAM_FIELD_ARG;
+    param.id         = AM_MSG_ID;
+    param.cb         = cb;
+    param.arg        = arg;
+    ucp_worker_set_am_recv_handler(_worker, &param);
+}
 
 #define UCX_CONN_LOG UcxLog(_log_prefix, true)
 
 unsigned UcxConnection::_num_instances = 0;
 
-UcxConnection::UcxConnection(UcxContext &context, uint32_t conn_id) :
+UcxConnection::UcxConnection(UcxContext &context, uint32_t conn_id, bool _use_am) :
     _context(context), _conn_id(conn_id), _remote_conn_id(0),
-    _ep(0), _close_request(NULL)
+    _ep(0), _close_request(NULL), _use_am(_use_am)
 {
     ++_num_instances;
     struct sockaddr_in in_addr = {0};
@@ -481,6 +529,47 @@ bool UcxConnection::recv_data(void *buffer, size_t length, uint32_t sn,
     return process_request("ucp_tag_recv_nb", ptr_status, callback);
 }
 
+bool UcxConnection::send_am(const void *meta, size_t meta_length,
+                            const void *buffer, size_t length,
+                            UcxCallback* callback)
+{
+    if (_ep == NULL) {
+        return false;
+    }
+
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                         UCP_OP_ATTR_FIELD_FLAGS;
+    param.cb.send      = common_request_callback_nbx;
+    param.flags        = UCP_AM_SEND_REPLY;
+
+    ucs_status_ptr_t sptr = ucp_am_send_nbx(_ep, AM_MSG_ID, meta, meta_length,
+                                            buffer, length, &param);
+    return process_request("ucp_am_send_nbx", sptr, callback);
+}
+
+bool UcxConnection::recv_am_data(void *buffer, size_t length,
+                                 UcxCallback* callback)
+{
+    if (_ep == NULL) {
+        return false;
+    }
+
+    if (!(_am_desc.recv_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV)) {
+        memcpy(buffer, _am_desc.data, length);
+        (*callback)(UCS_OK);
+        return true;
+    }
+
+    ucp_request_param_t params;
+    params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    params.cb.recv_am   = am_data_recv_callback;
+    ucs_status_ptr_t sp = ucp_am_recv_data_nbx(_context.worker(), _am_desc.data,
+                                               buffer, length, &params);
+    return process_request("ucp_am_recv_data_nbx", sp, callback);
+}
+
 void UcxConnection::cancel_all()
 {
     if (ucs_list_is_empty(&_all_requests)) {
@@ -532,9 +621,21 @@ void UcxConnection::common_request_callback(void *request, ucs_status_t status)
         r->status    = status;
     }
 }
+void UcxConnection::common_request_callback_nbx(void *request,
+                                                ucs_status_t status,
+                                                void *user_data)
+{
+    common_request_callback(request, status);
+}
 
 void UcxConnection::data_recv_callback(void *request, ucs_status_t status,
                                        ucp_tag_recv_info *info)
+{
+    common_request_callback(request, status);
+}
+
+void UcxConnection::am_data_recv_callback(void *request, ucs_status_t status,
+                                          size_t length, void *user_data)
 {
     common_request_callback(request, status);
 }
@@ -573,6 +674,15 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     if (status != UCS_OK) {
         UCX_LOG << "ucp_ep_create() failed: " << ucs_status_string(status);
         return false;
+    }
+
+    if (_use_am) {
+        // With AM use ep as a connection ID. AM receive callback provides
+        // reply ep, which can be used for finding a proper connection.
+        _conn_id = reinterpret_cast<uint64_t>(_ep);
+        UCX_CONN_LOG << "created endpoint " << _ep << ", connection id "
+                     << _conn_id;
+        return true;
     }
 
     UCX_CONN_LOG << "created endpoint " << _ep << ", exchanging connection id";
