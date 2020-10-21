@@ -136,3 +136,59 @@ To reference the UCX website:
 * [x86_64](https://en.wikipedia.org/wiki/X86-64)
 * [Power8/9](https://www.ibm.com/support/knowledgecenter/en/POWER9/p9hdx/POWER9welcome.htm)
 * [Arm v8](https://www.arm.com/products/silicon-ip-cpu)
+
+## Huawei Optimization Introduction
+
+Based on performance consideration, UCX **DO NOT** provide the functionalities related to transmission security.
+
+There are three optimized collective operations:
+
+- MPI_Allreduce
+- MPI_Bcast
+- MPI_Barrier
+
+New algorithms are as follows:
+
+- Binomial tree
+- Ring
+- Recursive
+- Topo-aware Binomial tree
+- Topo-aware K-nomial tree
+- Topo-aware Recursive + Binomial(intra)
+- Topo-aware Recursive + K-nomial(intra)
+
+Select specific algorithm with parameters which is showed in the table below.
+
+Bcast:
+
+|  UCX_BUILTIN_BCAST_ALGORITHM   | Algorithm  |
+| ---- | ---- |
+| 1  | Binomial tree |
+| 2  | Topo-aware Binomial tree |
+| 3  | Topo-aware K-nomial tree |
+| 4  | Topo-aware K-nomial tree + Binomial tree(intra) |
+
+Allreduce:
+
+|  UCX_BUILTIN_ALLREDUCE_ALGORITHM   | Algorithm  |
+|  ----  | ----  |
+| 1  | Recursive |
+| 2  | Topo-aware Recursive + Binomial(intra)(Node) |
+| 3  | Topo-aware Recursive + Binomial(intra)(Socket) |
+| 4  | Ring |
+| 5  | Topo-aware Recursive + K-nomial (intra)(Node) |
+| 6  | Topo-aware Recursive + K-nomial (intra)(Socket) |
+| 7  | Topo-aware K-nomial(Node) |
+| 8  | Topo-aware K-nomial(Socket) |
+
+Barrier:
+
+|  UCX_BUILTIN_BARRIER_ALGORITHM   | Algorithm  |
+|  ----  | ----  |
+| 1  | Recursive |
+| 2  | Topo-aware Recursive + Binomial(intra)(Node) |
+| 3  | Topo-aware Recursive + Binomial(intra)(Socket) |
+| 4  | Topo-aware Recursive + K-nomial (intra)(Node) |
+| 5  | Topo-aware Recursive + K-nomial (intra)(Socket) |
+| 6  | Topo-aware K-nomial(Node) |
+| 7  | Topo-aware K-nomial(Socket) |

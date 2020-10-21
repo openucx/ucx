@@ -2,6 +2,7 @@
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2018.  ALL RIGHTS RESERVED.
+# Copyright (C) Huawei Technologies Co.,Ltd. 2020. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -280,6 +281,13 @@ AS_IF([test "x$with_avx" != xyes],
                        [#include <popcntintrin.h>
                         int main() { return _mm_popcnt_u32(0x101) - 2; }])
       ])
+
+
+#
+# CLWB
+#
+#COMPILER_OPTION([clwb], [CLWB], [-mclwb], [$enable_optimizations],
+#                [int main() { int* a; asm volatile("clwb %0" :: "m" (a)); return 0; }])
 
 
 DETECT_UARCH()

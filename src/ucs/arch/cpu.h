@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -43,7 +44,8 @@ typedef enum ucs_cpu_flag {
     UCS_CPU_FLAG_SSE41      = UCS_BIT(7),
     UCS_CPU_FLAG_SSE42      = UCS_BIT(8),
     UCS_CPU_FLAG_AVX        = UCS_BIT(9),
-    UCS_CPU_FLAG_AVX2       = UCS_BIT(10)
+    UCS_CPU_FLAG_AVX2       = UCS_BIT(10),
+    UCS_CPU_FLAG_CLWB       = UCS_BIT(11)
 } ucs_cpu_flag_t;
 
 
@@ -52,6 +54,7 @@ typedef enum ucs_cpu_flag {
 #define UCS_SYS_PARAGRAPH_SIZE     16
 #define UCS_SYS_PCI_MAX_PAYLOAD    512
 
+static inline void ucs_clear_cache(void *start, void *end);
 
 #if defined(__x86_64__)
 #  include "x86_64/cpu.h"
@@ -87,4 +90,16 @@ static inline void ucs_clear_cache(void *start, void *end)
     ucs_arch_clear_cache(start, end);
 #endif
 }
+
+/**
+ * Initiate write-back of caches, intended for NUMA shared-memory communication.
+ *
+ * @start start of region to write-back cache, including address
+ * @end   end of region to write-back cache, excluding address
+ */
+static inline void ucs_writeback_cache(void *start, void *end)
+{
+    ucs_arch_writeback_cache(start, end);
+}
+
 #endif

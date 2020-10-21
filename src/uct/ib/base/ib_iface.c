@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -70,7 +71,11 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Max number of receive completions to pick during TX poll",
    ucs_offsetof(uct_ib_iface_config_t, tx.max_poll), UCS_CONFIG_TYPE_UINT},
 
+#if HAVE_HNS_ROCE
+  {"TX_MIN_INLINE", "32",
+#else
   {"TX_MIN_INLINE", "64",
+#endif
    "Bytes to reserve in send WQE for inline data. Messages which are small\n"
    "enough will be sent inline.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_inline), UCS_CONFIG_TYPE_MEMUNITS},

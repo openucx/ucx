@@ -2,6 +2,7 @@
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED.
+# Copyright (C) Huawei Technologies Co.,Ltd. 2020. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -33,7 +34,7 @@ test_ucp_dlopen_LDADD    = -ldl
 test_link_map_SOURCES  = test_link_map.c
 test_link_map_CPPFLAGS = $(BASE_CPPFLAGS)
 test_link_map_CFLAGS   = $(BASE_CFLAGS)
-test_link_map_LDADD    = -ldl $(top_builddir)/src/ucp/libucp.la
+test_link_map_LDADD    = -ldl $(top_builddir)/src/ucs/libucs.la $(top_builddir)/src/ucp/libucp.la
 
 test_dlopen_cfg_print_SOURCES  = test_dlopen_cfg_print.c
 test_dlopen_cfg_print_CPPFLAGS = $(BASE_CPPFLAGS) -g \

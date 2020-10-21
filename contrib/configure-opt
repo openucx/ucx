@@ -1,6 +1,7 @@
 #!/bin/sh
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+# Copyright (C) Huawei Technologies Co.,Ltd. 2020.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -13,5 +14,6 @@
 basedir=$(cd $(dirname $0) && pwd)
 $basedir/configure-release \
 	--with-avx \
+	--with-clwb \
 	--with-sse41 \
 	"$@"

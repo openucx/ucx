@@ -2,6 +2,8 @@
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 #
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+#
+# Copyright (C) Huawei Technologies Co.,Ltd. 2020. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -26,8 +28,10 @@ AS_IF([test "x$with_mpi" = xyes],
         [
         AC_ARG_VAR(MPICC,[MPI C compiler command])
         AC_PATH_PROGS(MPICC,mpicc mpiicc,"",$mpi_path)
+        AC_PATH_PROGS(MPICXX,mpicxx mpiicxx,"",$mpi_path)
         AC_ARG_VAR(MPIRUN,[MPI launch command])
         AC_PATH_PROGS(MPIRUN,mpirun mpiexec aprun orterun,"",$mpi_path)
+        AC_SUBST([OMPI_COLL_UCX], ["$mpi_path/../lib/openmpi/mca_coll_ucx.la"])
         AS_IF([test -z "$MPIRUN"],
               AC_MSG_ERROR([--with-mpi was requested but MPI was not found in the PATH in $mpi_path]),[:])
         ],[:])
@@ -36,6 +40,8 @@ AS_IF([test -n "$MPICC"],
       [AC_DEFINE([HAVE_MPI], [1], [MPI support])
        mpi_enable=Disabled],
       [mpi_enable=Enabled])
-AM_CONDITIONAL([HAVE_MPI],    [test -n "$MPIRUN"])
-AM_CONDITIONAL([HAVE_MPICC],  [test -n "$MPICC"])
-AM_CONDITIONAL([HAVE_MPIRUN], [test -n "$MPIRUN"])
+AM_CONDITIONAL([HAVE_MPI],      [test -n "$MPIRUN"])
+AM_CONDITIONAL([HAVE_MPICC],    [test -n "$MPICC"])
+AM_CONDITIONAL([HAVE_MPIRUN],   [test -n "$MPIRUN"])
+AM_CONDITIONAL([HAVE_OMPI],     [test -n "$OMPI_COLL_UCX"])
+AM_CONDITIONAL([HAVE_OMPI_SRC], [test ! -z "$with_ompi_src"])

@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -12,6 +13,7 @@
 #include <ucs/arch/generic/cpu.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/config/types.h>
+#include <ucs/sys/math.h>
 #include <stdint.h>
 
 #ifdef __SSE4_1__
@@ -84,6 +86,15 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
     }
 }
 #endif
+
+static inline void ucs_arch_writeback_cache(void *start, void *end)
+{
+#if __CLWB__
+    for (; start < end; start++) {
+        _mm_clwb(start);
+    }
+#endif
+}
 
 END_C_DECLS
 

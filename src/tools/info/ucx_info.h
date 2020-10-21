@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -19,8 +20,9 @@ enum {
     PRINT_DEVICES        = UCS_BIT(4),
     PRINT_UCP_CONTEXT    = UCS_BIT(5),
     PRINT_UCP_WORKER     = UCS_BIT(6),
-    PRINT_UCP_EP         = UCS_BIT(7)
-
+    PRINT_UCP_EP         = UCS_BIT(7),
+    PRINT_UCG            = UCS_BIT(8),
+    PRINT_UCG_TOPO       = UCS_BIT(9)
 };
 
 

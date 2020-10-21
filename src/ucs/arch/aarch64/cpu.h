@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -159,6 +160,29 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 #endif
 }
 #endif
+
+static inline void ucs_arch_clear_cache(void *start, void *end)
+{
+    uintptr_t ptr;
+    unsigned ctr_el0, dcache;
+    asm volatile ("mrs\t%0, ctr_el0":"=r" (ctr_el0));
+    dcache = sizeof(int) << ((ctr_el0 >> 16) & 0xf);
+
+    for (ptr = ucs_align_down((uintptr_t)start, dcache); ptr < (uintptr_t)end; ptr += dcache) {
+        asm volatile ("dc cvac, %0" :: "r" (ptr) : "memory");
+    }
+    asm volatile ("dsb ish" ::: "memory");
+}
+// copy from ucs/arch/x86_64/cpu.h for compiling successfully.
+static inline void ucs_arch_writeback_cache(void *start, void *end)
+{
+#if __CLWB__
+    for (; start < end; start++) {
+        _mm_clwb(start);
+    }
+#endif
+}
+
 
 END_C_DECLS
 

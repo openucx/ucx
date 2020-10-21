@@ -2,6 +2,7 @@
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -136,6 +137,14 @@ typedef struct ucp_tl_md {
 } ucp_tl_md_t;
 
 
+typedef struct ucp_context_extenstion {
+    ucs_list_link_t list;
+    size_t worker_offset;
+    ucp_extension_init_f init;
+    ucp_extension_cleanup_f cleanup;
+} ucp_context_extension_t;
+
+
 /**
  * UCP context
  */
@@ -158,6 +167,10 @@ typedef struct ucp_context {
     uint64_t                      mem_type_tls[UCT_MD_MEM_TYPE_LAST];
 
     ucs_mpool_t                   rkey_mp;    /* Pool for memory keys */
+
+    ucs_list_link_t               extensions;     /* List of registered extensions */
+    size_t                        extension_size; /* Total size of worker extension */
+    unsigned                      last_am_id;     /* Last used AM ID */
 
     struct {
 
@@ -308,6 +321,8 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
 
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
+
+size_t ucp_worker_base_size(ucp_context_h context, unsigned *config_max);
 
 static UCS_F_ALWAYS_INLINE double
 ucp_tl_iface_latency(ucp_context_h context, const uct_iface_attr_t *iface_attr)

@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -67,7 +68,7 @@ int main(int argc, char **argv)
     ucp_num_eps              = 1;
     dev_type_bitmap          = -1;
     ucp_ep_params.field_mask = 0;
-    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbswpegt:n:u:D:P:T:C:I:R:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -122,6 +123,9 @@ int main(int argc, char **argv)
                     break;
                 case 'w':
                     ucp_features |= UCP_FEATURE_WAKEUP;
+                    break;
+                case 'g':
+                    ucp_features |= UCP_FEATURE_GROUPS | UCP_FEATURE_TAG;
                     break;
                 case 'e':
                     ucp_ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
@@ -188,9 +192,10 @@ int main(int argc, char **argv)
         ucs_config_parser_print_all_opts(stdout, print_flags);
     }
 
-    if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP)) {
+    if (print_opts & (PRINT_UCP_CONTEXT | PRINT_UCP_WORKER | PRINT_UCP_EP |
+                      PRINT_UCG | PRINT_UCG_TOPO)) {
         if (ucp_features == 0) {
-            printf("Please select UCP features using -u switch: a|r|t|w\n");
+            printf("Please select UCP features using -u switch: a|r|t|w|g\n");
             usage();
             return -1;
         }

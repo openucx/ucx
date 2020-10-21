@@ -1,5 +1,6 @@
 /*
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -10,6 +11,7 @@
 #include "types.h"
 
 #include <ucs/datastruct/list.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 #include <stdio.h>
 

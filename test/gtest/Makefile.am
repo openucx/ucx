@@ -2,6 +2,7 @@
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and the University of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+# Copyright (C) Huawei Technologies Co.,Ltd. 2020. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -44,6 +45,7 @@ gtest_LDADD = \
 	$(top_builddir)/src/uct/libuct.la \
 	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la \
+	$(top_builddir)/src/ucg/libucg.la \
 	$(top_builddir)/src/tools/perf/lib/libucxperf.la \
 	$(OPENMP_CFLAGS) \
 	$(GTEST_LIBS)
@@ -155,7 +157,18 @@ gtest_SOURCES = \
 	ucs/test_twheel.cc \
 	ucs/test_frag_list.cc \
 	ucs/test_type.cc \
-	ucs/test_log.cc
+	ucs/test_log.cc \
+	ucg/ucg_test.cc \
+	ucg/test_plan.cc \
+	ucg/test_topo_info.cc \
+	ucg/test_group.cc \
+	ucg/test_collective.cc \
+	ucg/test_coll_algorithm.cc \
+	ucg/test_step.cc \
+	ucg/test_op.cc \
+	ucg/test_ucg_context.cc \
+	ucg/test_builtin.cc \
+	ucg/test_cb.cc
 
 if HAVE_IB
 gtest_SOURCES += \
@@ -221,7 +234,10 @@ noinst_HEADERS = \
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \
 	ucp/ucp_test.h \
-	ucp/ucp_datatype.h
+	ucp/ucp_datatype.h \
+	ucg/ucg_test.h \
+	ucg/ucg_plan_test.h \
+	ucg/test_op.h
 
 .PHONY: test test gdb valgrind fix_rpath ucx
 

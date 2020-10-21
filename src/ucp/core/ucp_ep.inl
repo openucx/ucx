@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -70,6 +71,11 @@ static inline uct_iface_attr_t *ucp_ep_get_iface_attr(ucp_ep_h ep, ucp_lane_inde
     return ucp_worker_iface_get_attr(ep->worker, ucp_ep_get_rsc_index(ep, lane));
 }
 
+static inline uct_iface_attr_t *ucp_ep_get_am_iface_attr(ucp_ep_h ep)
+{
+    return ucp_ep_get_iface_attr(ep, ucp_ep_get_am_lane(ep));
+}
+
 static inline size_t ucp_ep_get_max_bcopy(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     return ucp_ep_get_iface_attr(ep, lane)->cap.am.max_bcopy;
@@ -110,6 +116,22 @@ static inline const uct_md_attr_t* ucp_ep_md_attr(ucp_ep_h ep, ucp_lane_index_t 
 {
     ucp_context_h context = ep->worker->context;
     return &context->tl_mds[ucp_ep_md_index(ep, lane)].attr;
+}
+
+static inline uct_md_h ucp_ep_md(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    ucp_context_h context = ep->worker->context;
+    return context->tl_mds[ucp_ep_md_index(ep, lane)].md;
+}
+
+static inline uct_md_h ucp_ep_get_am_uct_md(ucp_ep_h ep)
+{
+    return ucp_ep_md(ep, ucp_ep_get_am_lane(ep));
+}
+
+static inline const uct_md_attr_t* ucp_ep_get_am_uct_md_attr(ucp_ep_h ep)
+{
+    return ucp_ep_md_attr(ep, ucp_ep_get_am_lane(ep));
 }
 
 static UCS_F_ALWAYS_INLINE ucp_ep_ext_gen_t* ucp_ep_ext_gen(ucp_ep_h ep)

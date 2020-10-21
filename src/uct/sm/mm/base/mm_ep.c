@@ -2,6 +2,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -195,6 +196,8 @@ static inline ucs_status_t uct_mm_ep_get_remote_elem(uct_mm_ep_t *ep, uint64_t h
         return UCS_ERR_NO_RESOURCE;
     }
 
+    ucs_writeback_cache(ucs_unaligned_ptr(&ep->fifo_ctl->head),
+                        ucs_unaligned_ptr(&ep->fifo_ctl->head + 1));
     return UCS_OK;
 }
 

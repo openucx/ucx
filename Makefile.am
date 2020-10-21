@@ -3,6 +3,7 @@
 # Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
+# Copyright (C) Huawei Technologies Co.,Ltd. 2020. ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -30,7 +31,13 @@ SUBDIRS = \
 	src/ucm \
 	src/ucs \
 	src/uct \
-	src/ucp \
+	src/ucp
+
+if HAVE_UCG
+SUBDIRS += src/ucg
+endif
+
+SUBDIRS += \
 	src/tools/info \
 	src/tools/perf \
 	src/tools/profile \

@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -570,6 +571,7 @@ static void ucs_stats_free_recurs(ucs_stats_node_t *node)
     }
     ucs_list_for_each_safe(child, tmp, &node->children[UCS_STATS_INACTIVE_CHILDREN], list) {
         ucs_stats_free_recurs(child);
+        free(child->cls);
         free(child);
     }
 }
@@ -582,5 +584,6 @@ void ucs_stats_free(ucs_stats_node_t *root)
     ucs_stats_free_recurs(&s->node);
     ucs_stats_free_classes(s->classes, s->num_classes);
     free(s);
+    s = NULL;
 }
 

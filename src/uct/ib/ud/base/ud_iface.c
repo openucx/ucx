@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -267,7 +268,11 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
         return status;
     }
 
+#if HAVE_HNS_ROCE
+    self->config.max_inline = 0;
+#else
     self->config.max_inline = qp_init_attr.cap.max_inline_data;
+#endif
     uct_ib_iface_set_max_iov(&self->super, qp_init_attr.cap.max_send_sge);
 
     memset(&qp_attr, 0, sizeof(qp_attr));

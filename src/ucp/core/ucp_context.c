@@ -1,6 +1,7 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
  * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -23,7 +24,7 @@
 
 #define UCP_RSC_CONFIG_ALL    "all"
 
-ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
+ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_MAX] = {{0}};
 
 static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_CPU]    = "cpu",
@@ -666,6 +667,8 @@ static const char* ucp_feature_flag_str(unsigned feature_flag)
         return "UCP_FEATURE_WAKEUP";
     case UCP_FEATURE_STREAM:
         return "UCP_FEATURE_STREAM";
+    case UCP_FEATURE_GROUPS:
+        return "UCP_FEATURE_GROUPS";
     default:
         ucs_fatal("Unknown feature flag value %u", feature_flag);
     }
@@ -1238,6 +1241,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
+    context->last_am_id = UCP_AM_ID_LAST;
+    ucs_list_head_init(&context->extensions);
     ucs_debug("created ucp context %p [%d mds %d tls] features 0x%lx tl bitmap 0x%lx",
               context, context->num_mds, context->num_tls,
               context->config.features, context->tl_bitmap);
@@ -1259,8 +1264,33 @@ err:
     return status;
 }
 
+ucs_status_t ucp_extend(ucp_context_h context, size_t extension_ctx_length,
+                        ucp_extension_init_f init, ucp_extension_cleanup_f cleanup,
+                        size_t *extension_ctx_offset_in_worker, unsigned *am_id)
+{
+    if (context->last_am_id == UCP_AM_ID_MAX) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    unsigned dummy;
+    size_t base_worker_size         = ucp_worker_base_size(context, &dummy);
+    ucp_context_extension_t *ext    = UCS_ALLOC_CHECK(sizeof(*ext), "context extension");
+    ext->init                       = init;
+    ext->cleanup                    = cleanup;
+    ext->worker_offset              = base_worker_size + context->extension_size;
+    context->extension_size        += extension_ctx_length;
+    *extension_ctx_offset_in_worker = ext->worker_offset;
+    *am_id                          = context->last_am_id++;
+
+    ucs_list_add_tail(&context->extensions, &ext->list);
+    return UCS_OK;
+}
+
 void ucp_cleanup(ucp_context_h context)
 {
+    while (!ucs_list_is_empty(&context->extensions)) {
+        ucs_free(ucs_list_extract_head(&context->extensions, ucp_context_extension_t, list));
+    }
     ucs_mpool_cleanup(&context->rkey_mp, 1);
     ucp_free_resources(context);
     ucp_free_config(context);

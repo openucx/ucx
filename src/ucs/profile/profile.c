@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2019-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -304,16 +305,7 @@ off:
 
 static void ucs_profile_reset_locations()
 {
-    ucs_profile_location_t *loc;
-
     pthread_mutex_lock(&ucs_profile_ctx.mutex);
-    for (loc = ucs_profile_ctx.locations;
-         loc < ucs_profile_ctx.locations + ucs_profile_ctx.num_locations;
-         ++loc)
-    {
-        *loc->loc_id_p = -1;
-    }
-
     ucs_profile_ctx.num_locations = 0;
     ucs_profile_ctx.max_locations = 0;
     ucs_free(ucs_profile_ctx.locations);
