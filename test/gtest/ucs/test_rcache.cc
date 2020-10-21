@@ -16,6 +16,22 @@ extern "C" {
 }
 #include <set>
 
+static ucs_rcache_params_t
+get_default_rcache_params(void *context, const ucs_rcache_ops_t *ops)
+{
+    ucs_rcache_params_t params = {sizeof(ucs_rcache_region_t),
+                                  UCS_PGT_ADDR_ALIGN,
+                                  ucs_get_page_size(),
+                                  UCM_EVENT_VM_UNMAPPED,
+                                  1000,
+                                  ops,
+                                  context,
+                                  0,
+                                  ULONG_MAX,
+                                  SIZE_MAX};
+
+    return params;
+}
 
 class test_rcache_basic : public ucs::test {
 };
@@ -24,16 +40,9 @@ UCS_TEST_F(test_rcache_basic, create_fail) {
     static const ucs_rcache_ops_t ops = {
         NULL, NULL, NULL
     };
-    ucs_rcache_params_t params = {
-        sizeof(ucs_rcache_region_t),
-        UCS_PGT_ADDR_ALIGN,
-        ucs_get_page_size(),
-        UCS_BIT(30), /* non-existing event */
-        1000,
-        &ops,
-        NULL,
-        0
-    };
+    ucs_rcache_params_t params        = get_default_rcache_params(this, &ops);
+    params.ucm_events                 = UCS_BIT(30); /* non-existing event */
+    params.context                    = NULL;
 
     ucs_rcache_t *rcache;
     ucs_status_t status = ucs_rcache_create(&params, "test",
@@ -59,21 +68,7 @@ protected:
 
     virtual void init() {
         ucs::test::init();
-        static const ucs_rcache_ops_t ops = {
-            mem_reg_cb,
-            mem_dereg_cb,
-            dump_region_cb
-        };
-        ucs_rcache_params_t params = {
-            sizeof(region),
-            UCS_PGT_ADDR_ALIGN,
-            ucs_get_page_size(),
-            UCM_EVENT_VM_UNMAPPED,
-            1000,
-            &ops,
-            reinterpret_cast<void*>(this),
-            0
-        };
+        ucs_rcache_params params = rcache_params();
         UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucs_rcache_t*, m_rcache, ucs_rcache_destroy,
                                             ucs_rcache_create, &params, "test", ucs_stats_get_root());
     }
@@ -82,6 +77,15 @@ protected:
         m_rcache.reset();
         EXPECT_EQ(0u, m_reg_count);
         ucs::test::cleanup();
+    }
+
+    virtual ucs_rcache_params_t rcache_params()
+    {
+        static const ucs_rcache_ops_t ops = {mem_reg_cb, mem_dereg_cb,
+                                             dump_region_cb};
+        ucs_rcache_params_t params        = get_default_rcache_params(this, &ops);
+        params.region_struct_size         = sizeof(region);
+        return params;
     }
 
     region *get(void *address, size_t length, int prot = PROT_READ|PROT_WRITE) {
@@ -638,6 +642,101 @@ UCS_MT_TEST_F(test_rcache_no_register, merge_invalid_prot_slow, 5)
     EXPECT_EQ(0u, m_reg_count);
 
     munmap(mem, size1+size2);
+}
+
+class test_rcache_with_limit : public test_rcache {
+protected:
+    virtual ucs_rcache_params_t rcache_params()
+    {
+        ucs_rcache_params_t params = test_rcache::rcache_params();
+        params.max_regions         = 2;
+        params.max_size            = 1000;
+        params.alignment           = 16;
+        return params;
+    }
+
+    uint32_t get_put(void *ptr, size_t size)
+    {
+        region *region = get(ptr, size);
+        uint32_t id    = region->id;
+        put(region);
+        return id;
+    }
+};
+
+UCS_TEST_F(test_rcache_with_limit, by_count) {
+    static const size_t size = 32;
+
+    /* First region will be added */
+    void *ptr1          = malloc(size);
+    uint32_t region1_id = get_put(ptr1, size);
+    EXPECT_EQ(1, m_rcache.get()->num_regions);
+
+    /* Second region will be added as well */
+    void *ptr2          = malloc(size);
+    uint32_t region2_id = get_put(ptr2, size);
+    EXPECT_EQ(2, m_rcache.get()->num_regions);
+
+    /* This time, something must be removed */
+    void *ptr3          = malloc(size);
+    uint32_t region3_id = get_put(ptr3, size);
+    EXPECT_EQ(2, m_rcache.get()->num_regions);
+
+    /* Second region should be kept by lru policy */
+    uint32_t region2_new_id = get_put(ptr2, size);
+    EXPECT_EQ(region2_id, region2_new_id);
+    EXPECT_EQ(2, m_rcache.get()->num_regions);
+
+    /* Third region should be also kept limit policy */
+    uint32_t region3_new_id = get_put(ptr3, size);
+    EXPECT_EQ(region3_new_id, region3_id);
+    EXPECT_EQ(2, m_rcache.get()->num_regions);
+
+    /* First region should be removed by lru policy */
+    uint32_t region1_new_id = get_put(ptr1, size);
+    EXPECT_NE(region1_new_id, region1_id);
+    EXPECT_EQ(2, m_rcache.get()->num_regions);
+
+    free(ptr3);
+    free(ptr2);
+    free(ptr1);
+}
+
+UCS_TEST_F(test_rcache_with_limit, by_size) {
+    static const size_t size = 600;
+
+    /* First region will be added */
+    void *ptr1 = malloc(size);
+    get_put(ptr1, size);
+    EXPECT_EQ(1, m_rcache.get()->num_regions);
+
+    /* Second region will cause removing of first region */
+    void *ptr2 = malloc(size);
+    get_put(ptr2, size);
+    EXPECT_EQ(1, m_rcache.get()->num_regions);
+
+    free(ptr2);
+    free(ptr1);
+}
+
+UCS_TEST_F(test_rcache_with_limit, by_size_inuse) {
+    static const size_t size = 600;
+
+    /* First region will be added */
+    void *ptr1      = malloc(size);
+    region *region1 = get(ptr1, size);
+    EXPECT_EQ(1, m_rcache.get()->num_regions);
+
+    /* Second region will NOT cause removing of first region since it's still in
+     * use */
+    void *ptr2 = malloc(size);
+    get_put(ptr2, size);
+    EXPECT_EQ(2, m_rcache.get()->num_regions);
+
+    put(region1);
+
+    free(ptr2);
+    free(ptr1);
 }
 
 #ifdef ENABLE_STATS

@@ -16,6 +16,7 @@
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/memory/rcache.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
@@ -36,8 +37,17 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
 
     {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
      "Registration cache address alignment, must be power of 2\n"
-     "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
+     "between " UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN) "and system page size",
      ucs_offsetof(uct_md_rcache_config_t, alignment), UCS_CONFIG_TYPE_UINT},
+
+    {"RCACHE_MAX_REGIONS", "inf",
+     "Maximal number of regions in the registration cache",
+     ucs_offsetof(uct_md_rcache_config_t, max_regions),
+     UCS_CONFIG_TYPE_ULUNITS},
+
+    {"RCACHE_MAX_SIZE", "inf",
+     "Maximal total size of registration cache regions",
+     ucs_offsetof(uct_md_rcache_config_t, max_size), UCS_CONFIG_TYPE_MEMUNITS},
 
     {NULL}
 };
@@ -488,4 +498,13 @@ ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr, size_t len
                                        ucs_memory_type_t *mem_type_p)
 {
     return md->ops->detect_memory_type(md, addr, length, mem_type_p);
+}
+
+void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
+                              const uct_md_rcache_config_t *rcache_config)
+{
+    rcache_params->alignment          = rcache_config->alignment;
+    rcache_params->ucm_event_priority = rcache_config->event_prio;
+    rcache_params->max_regions        = rcache_config->max_regions;
+    rcache_params->max_size           = rcache_config->max_size;
 }
