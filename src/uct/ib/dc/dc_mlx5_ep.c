@@ -1298,8 +1298,8 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uint8_t dci                = ep->dci;
     uct_ib_iface_t *ib_iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    uct_ib_mlx5_txwq_t *txwq   = NULL; /* suppress compilation warning */
     uct_rc_txqp_t *txqp;
-    uct_ib_mlx5_txwq_t *txwq;
     int16_t outstanding;
     ucs_status_t status;
     ucs_log_level_t log_lvl;
