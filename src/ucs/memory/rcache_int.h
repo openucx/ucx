@@ -7,7 +7,9 @@
 #ifndef UCS_REG_CACHE_INT_H_
 #define UCS_REG_CACHE_INT_H_
 
+#include <ucs/datastruct/list.h>
 #include <ucs/type/spinlock.h>
+
 
 /* Names of rcache stats counters */
 enum {
@@ -42,7 +44,20 @@ struct ucs_rcache {
                                             since we cannot use regulat malloc().
                                             The backing storage is original mmap()
                                             which does not generate memory events */
-    char                     *name;
+    unsigned long            num_regions;/**< Total number of managed regions */
+    size_t                   total_size; /**< Total size of registered memory */
+
+    struct {
+        ucs_spinlock_t       lock;     /**< Lock for this structure */
+        ucs_list_link_t      list;     /**< List of regions, sorted by usage:
+                                            The head of the list is the least
+                                            recently used region, and the tail
+                                            is the most recently used region. */
+        unsigned long        count;    /**< Number of regions on list */
+    } lru;
+
+    char                     *name;    /**< Name for debug purposes */
+
     UCS_STATS_NODE_DECLARE(stats)
 };
 

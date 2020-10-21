@@ -22,6 +22,8 @@ typedef struct uct_md_rcache_config {
     size_t               alignment;    /**< Force address alignment */
     unsigned             event_prio;   /**< Memory events priority */
     double               overhead;     /**< Lookup overhead estimation */
+    unsigned long        max_regions;  /**< Maximal number of rcache regions */
+    size_t               max_size;     /**< Maximal size of mapped memory */
 } uct_md_rcache_config_t;
 
 
@@ -150,6 +152,8 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
                                      const void *rkey_buffer, uct_rkey_t *rkey_p,
                                      void **handle_p);
+
+void uct_md_set_rcache_params();
 
 extern ucs_config_field_t uct_md_config_table[];
 
