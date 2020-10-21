@@ -89,3 +89,6 @@ Tag and push release images:
 ./buildlib/push-release-images.sh
 ```
 
+# Move workers to new machines
+
+TBD
