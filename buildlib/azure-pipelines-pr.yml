@@ -164,11 +164,6 @@ stages:
         test_perf: 0
     - template: tests.yml
       parameters:
-        name: legacy
-        demands: ucx_legacy -equals yes
-        test_perf: 1
-    - template: tests.yml
-      parameters:
         name: gpu
         demands: ucx_gpu -equals yes
         test_perf: 1
