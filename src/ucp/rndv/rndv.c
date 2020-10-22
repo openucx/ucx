@@ -357,6 +357,7 @@ ucp_rndv_recv_req_complete(ucp_request_t *req, ucs_status_t status)
     if (req->flags & UCP_REQUEST_FLAG_RECV_AM) {
         ucp_request_complete_am_recv(req, status);
     } else {
+        ucs_assert(req->flags & UCP_REQUEST_FLAG_RECV_TAG);
         ucp_request_complete_tag_recv(req, status);
     }
 }
@@ -1769,7 +1770,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     size_t recv_len;
 
     rreq = ucp_worker_get_request_by_id(worker, rndv_data_hdr->rreq_id);
-    ucs_assert(!(rreq->flags & UCP_REQUEST_FLAG_RNDV_FRAG));
+    ucs_assert(!(rreq->flags & UCP_REQUEST_FLAG_RNDV_FRAG) &&
+               (rreq->flags & (UCP_REQUEST_FLAG_RECV_AM |
+                               UCP_REQUEST_FLAG_RECV_TAG)));
 
     recv_len = length - sizeof(*rndv_data_hdr);
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_data_recv", recv_len);
