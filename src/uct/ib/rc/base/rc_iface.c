@@ -132,7 +132,7 @@ static ucs_stats_class_t uct_rc_iface_stats_class = {
 #endif /* ENABLE_STATS */
 
 
-static ucs_mpool_ops_t uct_rc_fc_pending_mpool_ops = {
+static ucs_mpool_ops_t uct_rc_pending_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
@@ -630,8 +630,16 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
         goto err_destroy_stats;
     }
 
-    self->config.fc_enabled      = config->fc.enable;
+    /* Create mempool for pending requests */
+    ucs_assert(init_attr->fc_req_size >= sizeof(uct_rc_pending_req_t));
+    status = ucs_mpool_init(&self->tx.pending_mp, 0, init_attr->fc_req_size,
+                            0, 1, 128, UINT_MAX, &uct_rc_pending_mpool_ops,
+                            "pending-ops");
+    if (status != UCS_OK) {
+        goto err_cleanup_rx;
+    }
 
+    self->config.fc_enabled = config->fc.enable;
     if (self->config.fc_enabled) {
         /* Assume that number of recv buffers is the same on all peers.
          * Then FC window size is the same for all endpoints as well.
@@ -641,20 +649,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
                                                config->super.rx.queue_len);
         self->config.fc_hard_thresh  = ucs_max((int)(self->config.fc_wnd_size *
                                                config->fc.hard_thresh), 1);
-
-        /* Create mempool for pending requests for FC grant */
-        status = ucs_mpool_init(&self->tx.pending_mp,
-                                0,
-                                init_attr->fc_req_size,
-                                0,
-                                1,
-                                128,
-                                UINT_MAX,
-                                &uct_rc_fc_pending_mpool_ops,
-                                "pending-fc-grants-only");
-        if (status != UCS_OK) {
-            goto err_cleanup_rx;
-        }
     } else {
         self->config.fc_wnd_size     = INT16_MAX;
         self->config.fc_hard_thresh  = 0;
@@ -698,9 +692,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     uct_rc_iface_tx_ops_cleanup(self);
     ucs_mpool_cleanup(&self->tx.mp, 1);
     ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */
-    if (self->config.fc_enabled) {
-        ucs_mpool_cleanup(&self->tx.pending_mp, 1);
-    }
+    ucs_mpool_cleanup(&self->tx.pending_mp, 1);
 }
 
 UCS_CLASS_DEFINE(uct_rc_iface_t, uct_ib_iface_t);
@@ -897,4 +889,3 @@ ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
     UCT_TL_IFACE_STAT_FENCE(&iface->super.super);
     return UCS_OK;
 }
-
