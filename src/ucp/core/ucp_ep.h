@@ -547,14 +547,14 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 
+int ucp_ep_config_lane_is_peer_equal(const ucp_ep_config_key_t *key1,
+                                     ucp_lane_index_t lane1,
+                                     const ucp_ep_config_key_t *key2,
+                                     ucp_lane_index_t lane2);
+
 void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
                                    const ucp_ep_config_key_t *key2,
                                    ucp_lane_index_t *lane_map);
-
-ucp_lane_index_t
-ucp_ep_config_find_lane_index(const ucp_ep_config_key_t *key,
-                              ucp_lane_index_t lane,
-                              const ucp_lane_index_t *lane_indexes);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
                            const ucp_ep_config_key_t *key2);

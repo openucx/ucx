@@ -1036,11 +1036,10 @@ ucp_ep_config_lane_is_dst_rsc_index_equal(const ucp_ep_config_key_t *key1,
            (key1->lanes[lane1].dst_rsc_index == key2->lanes[lane2].dst_rsc_index);
 }
 
-static int
-ucp_ep_config_lane_is_peer_equal(const ucp_ep_config_key_t *key1,
-                                 ucp_lane_index_t lane1,
-                                 const ucp_ep_config_key_t *key2,
-                                 ucp_lane_index_t lane2)
+int ucp_ep_config_lane_is_peer_equal(const ucp_ep_config_key_t *key1,
+                                     ucp_lane_index_t lane1,
+                                     const ucp_ep_config_key_t *key2,
+                                     ucp_lane_index_t lane2)
 {
     return (key1->lanes[lane1].rsc_index  == key2->lanes[lane2].rsc_index) &&
            ucp_ep_config_lane_is_dst_rsc_index_equal(key1, lane1, key2, lane2) &&
@@ -1077,22 +1076,6 @@ void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
                                                             lane1_idx,
                                                             key2);
     }
-}
-
-ucp_lane_index_t
-ucp_ep_config_find_lane_index(const ucp_ep_config_key_t *key,
-                              ucp_lane_index_t lane,
-                              const ucp_lane_index_t *lane_indexes)
-{
-    ucp_lane_index_t lane_idx;
-
-    for (lane_idx = 0; lane_idx < key->num_lanes; ++lane_idx) {
-        if (lane_indexes[lane_idx] == lane) {
-            return lane_idx;
-        }
-    }
-
-    return UCP_NULL_LANE;
 }
 
 static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,

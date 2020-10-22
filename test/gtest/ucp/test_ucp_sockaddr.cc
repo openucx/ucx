@@ -15,6 +15,11 @@
 
 extern "C" {
 #include <ucp/core/ucp_listener.h>
+#include <ucp/core/ucp_ep.h>
+#include <ucp/core/ucp_ep.inl>
+#include <ucp/wireup/wireup_cm.h>
+/* TODO: remove when it is not needed anymore */
+#include <uct/tcp/tcp_sockcm_ep.h>
 }
 
 #define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
@@ -579,6 +584,13 @@ protected:
     bool no_close_protocol() const {
         return !(GetParam().variant & TEST_MODIFIER_CM);
     }
+
+    static void cmp_cfg_lanes(ucp_ep_config_key_t *key1, ucp_lane_index_t lane1,
+                              ucp_ep_config_key_t *key2, ucp_lane_index_t lane2) {
+        EXPECT_TRUE(((lane1 == UCP_NULL_LANE) && (lane2 == UCP_NULL_LANE)) ||
+                    ((lane1 != UCP_NULL_LANE) && (lane2 != UCP_NULL_LANE) &&
+                     ucp_ep_config_lane_is_peer_equal(key1, lane1, key2, lane2)));
+    }
 };
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listen, no_close_protocol()) {
@@ -721,6 +733,86 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle) {
     }
 
     EXPECT_EQ(1u, sender().get_err_num());
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, compare_cm_and_wireup_configs,
+                     no_close_protocol()) {
+    ucp_worker_cfg_index_t cm_ep_cfg_index, wireup_ep_cfg_index;
+    ucp_ep_config_key_t *cm_ep_cfg_key, *wireup_ep_cfg_key;
+
+    /* get configuration index for EP created through CM */
+    listen_and_communicate(false, SEND_DIRECTION_C2S);
+    cm_ep_cfg_index = sender().ep()->cfg_index;
+    cm_ep_cfg_key   = &ucp_ep_config(sender().ep())->key;
+    /* TODO: remove the SKIP below and include for <uct/tcp/tcp_sockcm_ep.h>
+     *       header file, when CONNECT_TO_EP support is added for TCP */
+    if (sender().ep()->uct_eps[ucp_ep_get_cm_lane(sender().ep())]
+        ->iface->ops.ep_disconnect == uct_tcp_sockcm_ep_disconnect) {
+        UCS_TEST_SKIP_R("don't test TCP SOCKCM");
+    }
+    EXPECT_NE(UCP_NULL_LANE, ucp_ep_get_cm_lane(sender().ep()));
+    disconnect(sender());
+    disconnect(receiver());
+
+    /* get configuration index for EP created through WIREUP */
+    sender().connect(&receiver(), get_ep_params());
+    ucp_ep_params_t params = get_ep_params();
+    /* initialize user data for STREAM API testing */
+    params.field_mask     |= UCP_EP_PARAM_FIELD_USER_DATA;
+    params.user_data       = &receiver();
+    receiver().connect(&sender(), params);
+    send_recv(sender(), receiver(), send_recv_type(), 0, cb_type());
+    wireup_ep_cfg_index = sender().ep()->cfg_index;
+    wireup_ep_cfg_key   = &ucp_ep_config(sender().ep())->key;
+    EXPECT_EQ(UCP_NULL_LANE, ucp_ep_get_cm_lane(sender().ep()));
+
+    /* EP config indexes must be different because one has CM lane and
+     * the other doesn't */
+    EXPECT_NE(cm_ep_cfg_index, wireup_ep_cfg_index);
+
+    /* EP config RMA BW must be equal */
+    EXPECT_EQ(cm_ep_cfg_key->rma_bw_md_map,
+              wireup_ep_cfg_key->rma_bw_md_map);
+
+    /* compare AM lanes */
+    cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->am_lane,
+                  wireup_ep_cfg_key, wireup_ep_cfg_key->am_lane);
+
+    /* compare TAG lanes */
+    cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->tag_lane,
+                  wireup_ep_cfg_key, wireup_ep_cfg_key->tag_lane);
+
+    /* compare RMA lanes */
+    for (ucp_lane_index_t lane = 0;
+         cm_ep_cfg_key->rma_lanes[lane] != UCP_NULL_LANE; ++lane) {
+        cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->rma_lanes[lane],
+                      wireup_ep_cfg_key, wireup_ep_cfg_key->rma_lanes[lane]);
+    }
+
+    /* compare RMA BW lanes */
+    for (ucp_lane_index_t lane = 0;
+         cm_ep_cfg_key->rma_bw_lanes[lane] != UCP_NULL_LANE; ++lane) {
+        cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->rma_bw_lanes[lane],
+                      wireup_ep_cfg_key, wireup_ep_cfg_key->rma_bw_lanes[lane]);
+    }
+
+    /* compare RKEY PTR lanes */
+    cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->rkey_ptr_lane,
+                  wireup_ep_cfg_key, wireup_ep_cfg_key->rkey_ptr_lane);
+
+    /* compare AMO lanes */
+    for (ucp_lane_index_t lane = 0;
+         cm_ep_cfg_key->amo_lanes[lane] != UCP_NULL_LANE; ++lane) {
+        cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->amo_lanes[lane],
+                      wireup_ep_cfg_key, wireup_ep_cfg_key->amo_lanes[lane]);
+    }
+
+    /* compare AM BW lanes */
+    for (ucp_lane_index_t lane = 0;
+         cm_ep_cfg_key->am_bw_lanes[lane] != UCP_NULL_LANE; ++lane) {
+        cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->am_bw_lanes[lane],
+                      wireup_ep_cfg_key, wireup_ep_cfg_key->am_bw_lanes[lane]);
+    }
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
