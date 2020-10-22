@@ -960,6 +960,30 @@ static int uct_rc_mlx5_ep_clean_rx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
     return 0;
 }
 
+static unsigned uct_rc_mlx5_iface_arbiter_dispatch(void *arg)
+{
+    uct_rc_mlx5_iface_common_t *iface = arg;
+
+    /* Deferred update of iface resources */
+    uct_rc_iface_update_reads(&iface->super);
+    iface->super.tx.cq_available += iface->super.tx.cq_free;
+    iface->super.tx.cq_free       = 0;
+
+    /* Progress pending queue to avoid reordering w.r.t send operations */
+    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending,
+                         NULL);
+    iface->super.tx.arb_cbq_id = UCS_CALLBACKQ_ID_NULL;
+    return 0;
+}
+
+static void uct_rc_mlx5_iface_sched_progress(uct_rc_mlx5_iface_common_t *iface)
+{
+    uct_worker_progress_register_safe(&iface->super.super.super.worker->super,
+                                      uct_rc_mlx5_iface_arbiter_dispatch,
+                                      iface, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &iface->super.tx.arb_cbq_id);
+}
+
 static void uct_rc_mlx5_ep_clean_qp(uct_rc_mlx5_ep_t *ep, uct_ib_mlx5_qp_t *qp,
                                     uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq)
 {
@@ -1014,16 +1038,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_ib_mlx5_verbs_srq_cleanup(&iface->rx.srq, iface->rx.srq.verbs.srq);
     uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
     uct_ib_mlx5_destroy_qp(&self->tx.wq.super);
-}
-
-static unsigned uct_rc_mlx5_iface_arbiter_dispatch(void *arg)
-{
-    uct_rc_mlx5_iface_common_t *iface = arg;
-
-    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending,
-                         NULL);
-    iface->super.tx.arb_cbq_id = UCS_CALLBACKQ_ID_NULL;
-    return 0;
+    uct_rc_mlx5_iface_sched_progress(iface);
 }
 
 ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
@@ -1048,10 +1063,7 @@ ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
      * if we don't get any send completions)
      */
     if (iface_res_released) {
-        uct_worker_progress_register_safe(&iface->super.super.super.worker->super,
-                                          uct_rc_mlx5_iface_arbiter_dispatch,
-                                          iface, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                          &iface->super.tx.arb_cbq_id);
+        uct_rc_mlx5_iface_sched_progress(iface);
     }
 
     return iface->super.super.ops->set_ep_failed(&iface->super.super,

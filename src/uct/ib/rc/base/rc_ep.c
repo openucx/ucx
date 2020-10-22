@@ -367,11 +367,9 @@ int uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
             if ((op->handler == uct_rc_ep_get_bcopy_handler) ||
                 (op->handler == uct_rc_ep_get_bcopy_handler_no_completion)) {
                 uct_rc_op_release_iface_resources(op, 0);
-                uct_rc_iface_update_reads(iface);
                 iface_resources_released = 1;
             } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
                 uct_rc_op_release_iface_resources(op, 1);
-                uct_rc_iface_update_reads(iface);
                 iface_resources_released = 1;
             }
         }
