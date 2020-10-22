@@ -498,17 +498,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
         self->async.tick = ucs_time_from_sec(config->event_timer_tick);
     }
 
-    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB) {
-        self->async.event_cb = params->async_event_cb;
-    } else {
-        self->async.event_cb = NULL;
-    }
-
-    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG) {
-        self->async.event_arg = params->async_event_arg;
-    } else {
-        self->async.event_arg = NULL;
-    }
+    uct_iface_set_async_event_params(params, &self->async.event_cb,
+                                     &self->async.event_arg);
 
     self->async.timer_id = 0;
 

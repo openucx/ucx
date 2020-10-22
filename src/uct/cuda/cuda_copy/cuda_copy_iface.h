@@ -8,23 +8,33 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <pthread.h>
 
 
 typedef uint64_t uct_cuda_copy_iface_addr_t;
+
+
+typedef enum uct_cuda_copy_stream {
+    UCT_CUDA_COPY_STREAM_H2D,
+    UCT_CUDA_COPY_STREAM_D2H,
+    UCT_CUDA_COPY_STREAM_LAST
+} uct_cuda_copy_stream_t;
 
 
 typedef struct uct_cuda_copy_iface {
     uct_base_iface_t            super;
     uct_cuda_copy_iface_addr_t  id;
     ucs_mpool_t                 cuda_event_desc;
-    ucs_queue_head_t            outstanding_d2h_cuda_event_q;
-    ucs_queue_head_t            outstanding_h2d_cuda_event_q;
-    cudaStream_t                stream_d2h;
-    cudaStream_t                stream_h2d;
+    ucs_queue_head_t            outstanding_event_q[UCT_CUDA_COPY_STREAM_LAST];
+    cudaStream_t                stream[UCT_CUDA_COPY_STREAM_LAST];
     struct {
         unsigned                max_poll;
         unsigned                max_cuda_events;
     } config;
+    struct {
+        void                    *event_arg;
+        uct_async_event_cb_t    event_cb;
+    } async;
 } uct_cuda_copy_iface_t;
 
 

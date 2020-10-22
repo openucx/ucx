@@ -41,10 +41,10 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
      ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                     (_rkey))
 
-#define UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(_strm) \
-    if ((_strm) == 0) { \
+#define UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(_iface, _id) \
+    if ((_iface)->stream[_id] == 0) { \
         ucs_status_t __status; \
-        __status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(&(_strm), \
+        __status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(&(_iface)->stream[_id], \
                                                                    cudaStreamNonBlocking)); \
         if (UCS_OK != __status) { \
             return UCS_ERR_IO_ERROR; \
@@ -53,8 +53,8 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t length,
-                                   enum cudaMemcpyKind direction, cudaStream_t stream,
-                                   ucs_queue_head_t *outstanding_queue,
+                                   enum cudaMemcpyKind direction,
+                                   uct_cuda_copy_stream_t id,
                                    uct_completion_t *comp)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
@@ -71,17 +71,20 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
         return UCS_ERR_NO_MEMORY;
     }
 
+    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface, id);
+
     status = UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(dst, src, length, direction,
-                                                   stream));
+                                                   iface->stream[id]));
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaEventRecord(cuda_event->event, stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaEventRecord(cuda_event->event,
+                                                   iface->stream[id]));
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
-    ucs_queue_push(outstanding_queue, &cuda_event->queue);
+    ucs_queue_push(&iface->outstanding_event_q[id], &cuda_event->queue);
     cuda_event->comp = comp;
 
     ucs_trace("cuda async issued :%p dst:%p, src:%p  len:%ld",
@@ -95,15 +98,12 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_zcopy,
                  uint64_t remote_addr, uct_rkey_t rkey,
                  uct_completion_t *comp)
 {
-    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
 
-    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_d2h);
 
     status = uct_cuda_copy_post_cuda_async_copy(tl_ep, iov[0].buffer, (void *)remote_addr,
                                                 iov[0].length, cudaMemcpyDeviceToHost,
-                                                iface->stream_d2h,
-                                                &iface->outstanding_d2h_cuda_event_q, comp);
+                                                UCT_CUDA_COPY_STREAM_D2H, comp);
     if (!UCS_STATUS_IS_ERR(status)) {
         VALGRIND_MAKE_MEM_DEFINED(iov[0].buffer, iov[0].length);
     }
@@ -122,15 +122,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_zcopy,
                  uct_completion_t *comp)
 {
 
-    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
-
-    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_h2d);
 
     status = uct_cuda_copy_post_cuda_async_copy(tl_ep, (void *)remote_addr,  iov[0].buffer,
                                                 iov[0].length, cudaMemcpyHostToDevice,
-                                                iface->stream_h2d,
-                                                &iface->outstanding_h2d_cuda_event_q, comp);
+                                                UCT_CUDA_COPY_STREAM_H2D, comp);
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
@@ -146,13 +142,15 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
                  uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
+    uct_cuda_copy_stream_t idx   = UCT_CUDA_COPY_STREAM_H2D;
     ucs_status_t status;
 
-    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_h2d);
+    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface, idx);
 
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync((void*)remote_addr, buffer, length,
-                                          cudaMemcpyHostToDevice, iface->stream_h2d));
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(iface->stream_h2d));
+                                          cudaMemcpyHostToDevice,
+                                          iface->stream[idx]));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(iface->stream[idx]));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
@@ -166,14 +164,15 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
                  uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
+    uct_cuda_copy_stream_t idx   = UCT_CUDA_COPY_STREAM_D2H;
     ucs_status_t status;
 
-    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface->stream_d2h);
+    UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(iface, idx);
 
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(buffer, (void*)remote_addr, length,
                                           cudaMemcpyDeviceToHost,
-                                          iface->stream_d2h));
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(iface->stream_d2h));
+                                          iface->stream[idx]));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(iface->stream[idx]));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",
