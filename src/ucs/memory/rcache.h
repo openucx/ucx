@@ -113,17 +113,21 @@ struct ucs_rcache_params {
     const ucs_rcache_ops_t *ops;                /**< Memory operations functions */
     void                   *context;            /**< User-defined context that will
                                                      be passed to mem_reg/mem_dereg */
+    unsigned long          max_regions;         /**< Maximal number of regions */
+    size_t                 max_size;            /**< Maximal total size of regions */
 };
 
 
 struct ucs_rcache_region {
     ucs_pgt_region_t       super;    /**< Base class - page table region */
-    ucs_list_link_t        list;     /**< List element */
+    ucs_list_link_t        lru_list; /**< LRU list element */
+    ucs_list_link_t        tmp_list; /**< Temp list element */
     volatile uint32_t      refcount; /**< Reference count, including +1 if it's
                                           in the page table */
     ucs_status_t           status;   /**< Current status code */
     uint8_t                prot;     /**< Protection bits */
-    uint16_t               flags;    /**< Status flags. Protected by page table lock. */
+    uint8_t                flags;    /**< Status flags. Protected by page table lock. */
+    uint8_t                lru_flag;
     uint64_t               priv;     /**< Used internally */
 };
 
