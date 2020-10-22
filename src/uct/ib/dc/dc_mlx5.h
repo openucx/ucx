@@ -113,7 +113,24 @@ typedef struct uct_dc_mlx5_iface_config {
 } uct_dc_mlx5_iface_config_t;
 
 
+typedef void (*uct_dc_dci_handle_failure_func_t)(uct_dc_mlx5_iface_t *iface,
+                                                 struct mlx5_cqe64 *cqe,
+                                                 uint8_t dci,
+                                                 ucs_status_t status);
+
+
+/**
+ * DCI QP-specific operations.
+ */
+typedef struct uct_dc_dci_ops {
+    uct_dc_dci_handle_failure_func_t handle_failure; /* callback for handling
+                                                      * completion with error
+                                                      * on the DCI */
+} uct_dc_dci_ops_t;
+
+
 typedef struct uct_dc_dci {
+    uct_dc_dci_ops_t              *ops; /* DCI operations */
     uct_rc_txqp_t                 txqp; /* DCI qp */
     uct_ib_mlx5_txwq_t            txwq; /* DCI mlx5 wq */
     union {
