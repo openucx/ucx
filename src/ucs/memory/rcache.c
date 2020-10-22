@@ -228,26 +228,6 @@ ucs_rcache_region_lru_remove(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
     region->lru_flag = 0;
 }
 
-/* Lock must be held in write mode */
-static inline void
-ucs_rcache_region_lru_track(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
-{
-    ++rcache->num_regions;
-    rcache->total_size += region->super.end - region->super.start;
-}
-
-/* Lock must be held in write mode */
-static inline void
-ucs_rcache_region_lru_untrack(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
-{
-    --rcache->num_regions;
-    rcache->total_size -= region->super.end - region->super.start;
-
-    ucs_spin_lock(&rcache->lru.lock);
-    ucs_rcache_region_lru_remove(rcache, region);
-    ucs_spin_unlock(&rcache->lru.lock);
-}
-
 static void ucs_rcache_region_lru_get(ucs_rcache_t *rcache,
                                       ucs_rcache_region_t *region)
 {
@@ -282,7 +262,13 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
         }
     }
 
-    ucs_rcache_region_lru_untrack(rcache, region);
+    ucs_spin_lock(&rcache->lru.lock);
+    ucs_rcache_region_lru_remove(rcache, region);
+    ucs_spin_unlock(&rcache->lru.lock);
+
+    --rcache->num_regions;
+    rcache->total_size -= region->super.end - region->super.start;
+
     ucs_free(region);
 }
 
@@ -650,7 +636,9 @@ retry:
     region->lru_flag = 0;
     region->refcount = 1;
     region->status   = UCS_INPROGRESS;
-    ucs_rcache_region_lru_track(rcache, region);
+
+    ++rcache->num_regions;
+    rcache->total_size += region->super.end - region->super.start;
 
     region->status = status =
         UCS_PROFILE_NAMED_CALL("mem_reg", rcache->params.ops->mem_reg,
