@@ -255,6 +255,7 @@ noinst_HEADERS = \
 	uct/uct_p2p_test.h \
 	uct/uct_test.h \
 	uct/test_md.h \
+	uct/test_peer_failure.h \
 	\
 	ucp/test_ucp_memheap.h \
 	ucp/test_ucp_tag.h \

@@ -531,15 +531,17 @@ ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
     return uct_rc_ep_fence(tl_ep, &ep->tx.wq.fi, 1);
 }
 
-ucs_status_t
-uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+static ucs_status_t uct_rc_mlx5_ep_check_internal(uct_ep_h tl_ep)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     /* use this variable as dummy buffer to suppress compiler warning */ 
     uint64_t dummy = 0;
 
-    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
-    UCT_RC_CHECK_TX_CQ_RES(&iface->super, &ep->super);
+    /* in case if no TX resources are available then there is at least
+     * one signaled operation which provides actual peer status, in this case
+     * just return without any actions */
+    UCT_RC_CHECK_TXQP_RET(&iface->super, &ep->super, UCS_OK);
+    UCT_RC_CHECK_CQE_RET(&iface->super, &ep->super, UCS_ERR_NO_RESOURCE);
 
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
@@ -548,6 +550,63 @@ uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
                                  0, 0,
                                  NULL, NULL, 0, 0,
                                  INT_MAX);
+    return UCS_OK;
+}
+
+static ucs_status_t uct_rc_mlx5_ep_check_progress(uct_pending_req_t *self)
+{
+    uct_rc_pending_req_t *req = ucs_derived_of(self, uct_rc_pending_req_t);
+    uct_rc_mlx5_ep_t *ep      = ucs_derived_of(req->ep, uct_rc_mlx5_ep_t);
+    ucs_status_t status;
+
+    ucs_assert(ep->super.flags & UCT_RC_EP_FLAG_KEEPALIVE_PENDING);
+
+    status = uct_rc_mlx5_ep_check_internal(req->ep);
+    if (status == UCS_OK) {
+        ep->super.flags &= ~UCT_RC_EP_FLAG_KEEPALIVE_PENDING;
+        ucs_mpool_put(req);
+    } else {
+        ucs_assert(status == UCS_ERR_NO_RESOURCE);
+    }
+
+    return status;
+}
+
+ucs_status_t
+uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_rc_pending_req_t *req;
+    ucs_status_t status;
+
+    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
+    UCT_CHECK_PARAM(flags == 0, "Unsupported flags: %x", flags);
+
+    if (ep->super.flags & UCT_RC_EP_FLAG_KEEPALIVE_PENDING) {
+        /* keepalive request is in pending queue and will be
+         * processed when resources are available */
+        return UCS_OK;
+    }
+
+    status = uct_rc_mlx5_ep_check_internal(tl_ep);
+    if (status != UCS_ERR_NO_RESOURCE) {
+        ucs_assert(status == UCS_OK);
+        return status;
+    }
+
+    /* there are no iface resources, add pending request */
+
+    req = ucs_mpool_get(&iface->super.tx.pending_mp);
+    if (req == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    req->ep          = &ep->super.super.super;
+    req->super.func  = uct_rc_mlx5_ep_check_progress;
+    status           = uct_ep_pending_add(tl_ep, &req->super, 0);
+    ep->super.flags |= UCT_RC_EP_FLAG_KEEPALIVE_PENDING;
+    ucs_assert_always(status == UCS_OK);
+
     return UCS_OK;
 }
 
@@ -1064,6 +1123,35 @@ ucs_status_t uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
 {
     return uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_mlx5_ep_t), ep,
                              &iface->super.super, status);
+}
+
+static ucs_arbiter_cb_result_t
+uct_rc_mlx5_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
+                                ucs_arbiter_group_t *group,
+                                ucs_arbiter_elem_t *elem,
+                                void *arg)
+{
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+
+    /* process internal EP_CHECK message */
+    if (req->func == uct_rc_mlx5_ep_check_progress) {
+        ucs_mpool_put(req);
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
+    return uct_rc_ep_arbiter_purge_cb(arbiter, group, elem, arg);
+}
+
+void uct_rc_mlx5_ep_pending_purge(uct_ep_h tl_ep,
+                                  uct_pending_purge_callback_t cb,
+                                  void *arg)
+{
+    uct_rc_iface_t *iface     = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    uct_rc_ep_t *ep           = ucs_derived_of(tl_ep, uct_rc_ep_t);
+    uct_purge_cb_args_t  args = {cb, arg};
+
+    ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->arb_group,
+                            uct_rc_mlx5_ep_arbiter_purge_cb, &args);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);
