@@ -560,7 +560,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         uct_ep_pending_purge(&ep->super.super.super, NULL, 0);
-        uct_rc_mlx5_ep_handle_failure(ep, UCS_ERR_CANCELED);
+        uct_rc_mlx5_ep_handle_failure(ep, UCS_ERR_CANCELED, ep->tx.wq.sw_pi);
         return UCS_OK;
     }
 
@@ -1014,6 +1014,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
     uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
                                                        uct_ib_mlx5_md_t);
 
+    /* TODO should be removed by flush */
+    uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
+                                  UCS_ERR_CANCELED, self->tx.wq.sw_pi, 1);
     uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
     uct_rc_mlx5_ep_clean_qp(self, &self->tx.wq.super);
 #if IBV_HW_TM
@@ -1044,19 +1047,19 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 }
 
 ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
-                                           ucs_status_t status)
+                                           ucs_status_t status, uint16_t pi)
 {
-    uct_ib_iface_t *ib_iface = ucs_derived_of(ep->super.super.super.iface,
-                                              uct_ib_iface_t);
-    uct_rc_iface_t *rc_iface = ucs_derived_of(ib_iface, uct_rc_iface_t);
+    uct_rc_iface_t *rc_iface = ucs_derived_of(ep->super.super.super.iface,
+                                              uct_rc_iface_t);
 
-    uct_rc_txqp_purge_outstanding(rc_iface, &ep->super.txqp, status, 0);
+    uct_rc_txqp_purge_outstanding(rc_iface, &ep->super.txqp, status, pi, 0);
     /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
        is not updated for the error cqe and all outstanding wqes*/
     rc_iface->tx.cq_available += ep->tx.wq.bb_max -
                                  uct_rc_txqp_available(&ep->super.txqp);
-    return ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super.super,
-                                        status);
+    return rc_iface->super.ops->set_ep_failed(&rc_iface->super,
+                                              &ep->super.super.super,
+                                              status);
 }
 
 ucs_status_t uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,

@@ -957,13 +957,11 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);
 
-    /* we can handle it but well behaving app should not do this */
-    ucs_debug("ep (%p) is destroyed with %d outstanding ops",
-              self, (int16_t)iface->super.super.config.tx_qp_len -
-              uct_rc_txqp_available(&iface->tx.dcis[self->dci].txqp));
+    /* TODO should be removed by flush */
     uct_rc_txqp_purge_outstanding(&iface->super.super,
-                                  &iface->tx.dcis[self->dci].txqp,
-                                  UCS_ERR_CANCELED, 1);
+                                  &iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED,
+                                  iface->tx.dcis[self->dci].txwq.sw_pi, 1);
+    ucs_assert(ucs_queue_is_empty(&iface->tx.dcis[self->dci].txqp.outstanding));
     iface->tx.dcis[self->dci].ep = NULL;
 }
 
@@ -1306,7 +1304,8 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
-    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, 0);
+    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status,
+                                  txwq->sw_pi, 0);
 
     /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
        is not updated for the error cqe and all outstanding wqes*/

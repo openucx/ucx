@@ -215,7 +215,8 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         txwq_copy.qend = UCS_PTR_BYTE_OFFSET(txwq_copy.qstart, txwq_size);
     }
 
-    err_handler_status = uct_rc_mlx5_ep_handle_failure(ep, status);
+    err_handler_status = uct_rc_mlx5_ep_handle_failure(ep, status,
+                                                       ep->tx.wq.sw_pi);
     log_lvl            = uct_ib_iface_failure_log_level(ib_iface,
                                                         err_handler_status,
                                                         status);

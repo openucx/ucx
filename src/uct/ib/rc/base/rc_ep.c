@@ -60,7 +60,7 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
 
 void uct_rc_txqp_cleanup(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp)
 {
-    uct_rc_txqp_purge_outstanding(iface, txqp, UCS_ERR_CANCELED, 1);
+    ucs_assert(ucs_queue_is_empty(&txqp->outstanding));
     UCS_STATS_NODE_FREE(txqp->stats);
 }
 
@@ -382,14 +382,15 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
 }
 
 void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
-                                   ucs_status_t status, int is_log)
+                                   ucs_status_t status, uint16_t sn, int warn)
 {
     uct_rc_iface_send_op_t *op;
     uct_rc_iface_send_desc_t *desc;
 
-    ucs_queue_for_each_extract(op, &txqp->outstanding, queue, 1) {
+    ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
+                               UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
-            if (is_log != 0) {
+            if (warn) {
                 ucs_warn("destroying rc ep %p with uncompleted operation %p",
                          txqp, op);
             }
