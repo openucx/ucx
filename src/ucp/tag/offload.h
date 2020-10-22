@@ -14,8 +14,7 @@
 
 
 enum {
-    UCP_TAG_OFFLOAD_CANCEL_FORCE = UCS_BIT(0),
-    UCP_TAG_OFFLOAD_CANCEL_DEREG = UCS_BIT(1)
+    UCP_TAG_OFFLOAD_CANCEL_FORCE = UCS_BIT(0)
 };
 
 /**
@@ -68,7 +67,8 @@ ucs_status_t ucp_tag_offload_unexp_rndv(void *arg, unsigned flags, uint64_t stag
                                         uint64_t remote_addr, size_t length,
                                         const void *rkey_buf);
 
-void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned mode);
+void ucp_tag_offload_cancel(ucp_worker_t *worker, ucp_request_t *req,
+                            unsigned mode);
 
 int ucp_tag_offload_post(ucp_request_t *req, ucp_request_queue_t *req_queue);
 
@@ -98,7 +98,8 @@ ucp_tag_offload_try_post(ucp_worker_t *worker, ucp_request_t *req,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_try_cancel(ucp_worker_t *worker, ucp_request_t *req, unsigned mode)
+ucp_tag_offload_try_cancel(ucp_worker_t *worker, ucp_request_t *req,
+                           unsigned mode)
 {
     if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_OFFLOADED)) {
         ucp_tag_offload_cancel(worker, req, mode);

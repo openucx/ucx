@@ -57,12 +57,13 @@ public:
         return req1;
     }
 
-    void send_recv(entity &se, ucp_tag_t tag, size_t length)
+    void send_recv(entity &se, ucp_tag_t tag, size_t length,
+                   ucp_datatype_t rx_dt = DATATYPE)
     {
         std::vector<uint8_t> sendbuf(length);
         std::vector<uint8_t> recvbuf(length);
 
-        request *rreq = recv_nb_exp(&recvbuf[0], length, DATATYPE, tag,
+        request *rreq = recv_nb_exp(&recvbuf[0], length, rx_dt, tag,
                                     UCP_TAG_MASK_FULL);
 
         request *sreq = (request*)ucp_tag_send_nb(se.ep(), &sendbuf[0], length,
@@ -323,6 +324,21 @@ UCS_TEST_P(test_ucp_tag_offload, small_sw_rndv, "RNDV_THRESH=0", "TM_THRESH=0",
     activate_offload(sender());
     send_recv(sender(), 0x11ul, 0ul);
     send_recv(sender(), 0x11ul, 1ul);
+}
+
+UCS_TEST_P(test_ucp_tag_offload, sw_rndv_rx_generic, "RNDV_THRESH=0",
+                                                     "TM_THRESH=0",
+                                                     "TM_SW_RNDV=y")
+{
+    activate_offload(sender());
+
+    ucp_datatype_t ucp_dt;
+    ASSERT_UCS_OK(ucp_dt_create_generic(&ucp::test_dt_copy_ops, NULL,
+                                        &ucp_dt));
+
+    send_recv(sender(), 0x11ul, 4 * UCS_KBYTE, ucp_dt);
+
+    ucp_dt_destroy(ucp_dt);
 }
 
 UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload)

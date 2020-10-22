@@ -35,9 +35,7 @@ ucp_eager_expected_handler(ucp_worker_t *worker, ucp_request_t *req,
      * because it arrived either:
      * 1) via SW TM (e. g. peer doesn't support offload)
      * 2) as unexpected via HW TM */
-    ucp_tag_offload_try_cancel(worker, req,
-                               UCP_TAG_OFFLOAD_CANCEL_FORCE |
-                               UCP_TAG_OFFLOAD_CANCEL_DEREG);
+    ucp_tag_offload_try_cancel(worker, req, UCP_TAG_OFFLOAD_CANCEL_FORCE);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
