@@ -123,6 +123,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 %files
 %{_libdir}/lib*.so.*
 %{_bindir}/uc*
+%{_bindir}/io_demo
 %{_datadir}/ucx
 %exclude %{_datadir}/ucx/examples
 %doc README AUTHORS NEWS
