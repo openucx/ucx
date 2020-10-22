@@ -579,6 +579,11 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
      * messages are bundled with AM. */
     ucs_assert(op == UCT_RC_EP_FC_PURE_GRANT);
 
+    if (ucs_unlikely(ep->tx.wq.super.verbs.qp->state != IBV_QPS_RTS)) {
+        return (ep->tx.wq.super.verbs.qp->state == IBV_QPS_INIT) ? UCS_OK :
+               UCS_ERR_CONNECTION_RESET;
+    }
+
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
