@@ -93,6 +93,15 @@ ucs_config_field_t uct_dc_mlx5_iface_config_table[] = {
     {NULL}
 };
 
+static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
+                                           struct mlx5_cqe64 *cqe,
+                                           uint8_t dci,
+                                           ucs_status_t status);
+
+static uct_dc_dci_ops_t uct_dc_mlx5_dci_ops = {
+    .handle_failure = uct_dc_mlx5_dci_handle_failure
+};
+
 
 static ucs_status_t
 uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
@@ -777,10 +786,12 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
 }
 
 static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
+                                                 uct_dc_dci_ops_t *ops,
                                                  uct_dc_dci_t *dci)
 {
     struct ibv_qp_cap cap = {};
 
+    dci->ops = ops;
     return uct_dc_mlx5_iface_create_qp(iface, &cap, dci);
 }
 
@@ -794,7 +805,8 @@ static ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
 
     iface->tx.stack_top = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
-        status = uct_dc_mlx5_iface_create_dci(iface, &iface->tx.dcis[i]);
+        status = uct_dc_mlx5_iface_create_dci(iface, &uct_dc_mlx5_dci_ops,
+                                              &iface->tx.dcis[i]);
         if (status != UCS_OK) {
             goto err;
         }
@@ -1058,33 +1070,43 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
     return UCS_OK;
 }
 
-static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
-                                             void *arg, ucs_status_t status)
+static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
+                                           struct mlx5_cqe64 *cqe,
+                                           uint8_t dci,
+                                           ucs_status_t status)
 {
-    uct_dc_mlx5_iface_t  *iface  = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
-    struct mlx5_cqe64    *cqe    = arg;
-    uint32_t             qp_num  = ntohl(cqe->sop_drop_qpn) &
-                                   UCS_MASK(UCT_IB_QPN_ORDER);
-    uint8_t              dci     = uct_dc_mlx5_iface_dci_find(iface, qp_num);
-    uct_dc_mlx5_ep_t     *ep;
-    ucs_log_level_t      level;
+    uct_dc_mlx5_ep_t *ep;
+    ucs_log_level_t  level;
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         ep    = NULL;
         level = UCS_LOG_LEVEL_FATAL; /* error handling is not supported with rand dci */
     } else {
         ep    = uct_dc_mlx5_ep_from_dci(iface, dci);
-        level = ib_iface->super.config.failure_level;
+        level = iface->super.super.super.super.config.failure_level;
     }
 
     if (ep == NULL) {
-        uct_ib_mlx5_completion_with_err(ib_iface, arg, &iface->tx.dcis[dci].txwq,
-                                        level);
+        uct_ib_mlx5_completion_with_err(&iface->super.super.super,
+                                        (uct_ib_mlx5_err_cqe_t*)cqe,
+                                        &iface->tx.dcis[dci].txwq, level);
         return;
     }
 
     ep = uct_dc_mlx5_ep_from_dci(iface, dci);
-    uct_dc_mlx5_ep_handle_failure(ep, arg, status);
+    uct_dc_mlx5_ep_handle_failure(ep, cqe, status);
+}
+
+static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
+                                             void *arg, ucs_status_t status)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+    struct mlx5_cqe64   *cqe   = arg;
+    uint32_t            qp_num = ntohl(cqe->sop_drop_qpn) &
+                                 UCS_MASK(UCT_IB_QPN_ORDER);
+    uint8_t             dci    = uct_dc_mlx5_iface_dci_find(iface, qp_num);
+
+    iface->tx.dcis[dci].ops->handle_failure(iface, cqe, dci, status);
 }
 
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
