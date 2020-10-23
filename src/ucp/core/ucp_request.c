@@ -45,7 +45,7 @@ ucs_status_t ucp_tag_recv_request_test(void *request, ucp_tag_recv_info_t *info)
     ucs_status_t  status = ucp_request_check_status(request);
 
     if (status != UCS_INPROGRESS) {
-        ucs_assert(req->flags & UCP_REQUEST_FLAG_RECV);
+        ucs_assert(req->flags & UCP_REQUEST_FLAG_RECV_TAG);
         *info = req->recv.tag.info;
     }
 
@@ -312,7 +312,7 @@ ucs_status_t ucp_request_test(void *request, ucp_tag_recv_info_t *info)
     ucp_request_t *req = (ucp_request_t*)request - 1;
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        if (req->flags & UCP_REQUEST_FLAG_RECV) {
+        if (req->flags & UCP_REQUEST_FLAG_RECV_TAG) {
             *info = req->recv.tag.info;
         }
         ucs_assert(req->status != UCS_INPROGRESS);

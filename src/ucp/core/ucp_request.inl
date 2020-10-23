@@ -30,7 +30,8 @@
     (((_flags) & UCP_REQUEST_FLAG_EXPECTED)        ? 'e' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_LOCAL_COMPLETED) ? 'L' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_CALLBACK)        ? 'c' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_RECV)            ? 'r' : '-'), \
+    (((_flags) & (UCP_REQUEST_FLAG_RECV_TAG | \
+                  UCP_REQUEST_FLAG_RECV_AM))       ? 'r' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_SYNC)            ? 's' : '-')
 
 #define UCP_RECV_DESC_FMT \
