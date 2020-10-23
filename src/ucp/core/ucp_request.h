@@ -121,7 +121,6 @@ struct ucp_request {
             void                    *buffer;    /* Send buffer */
             ucp_datatype_t          datatype;   /* Send type */
             size_t                  length;     /* Total length, in bytes */
-            ucs_memory_type_t       mem_type;   /* Memory type */
             ucp_send_nbx_callback_t cb;         /* Completion callback */
 
             const ucp_proto_config_t *proto_config; /* Selected protocol for the request */
@@ -274,6 +273,7 @@ struct ucp_request {
                 uct_completion_t  uct_comp; /* UCT completion */
             } state;
 
+            ucs_memory_type_t     mem_type;       /* Memory type */
             ucp_lane_index_t      pending_lane;   /* Lane on which request was moved
                                                    * to pending state */
             ucp_lane_index_t      lane;           /* Lane on which this request is being sent */
