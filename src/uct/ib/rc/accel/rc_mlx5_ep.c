@@ -582,6 +582,8 @@ uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
     UCT_CHECK_PARAM(flags == 0, "Unsupported flags: %x", flags);
 
+    ucs_assert(ep->super.flags & UCT_RC_EP_FLAG_CONNECTED);
+
     if (ep->super.flags & UCT_RC_EP_FLAG_KEEPALIVE_PENDING) {
         /* keepalive request is in pending queue and will be
          * processed when resources are available */
@@ -782,6 +784,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     }
 
     ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
+    ep->super.flags           |= UCT_RC_EP_FLAG_CONNECTED;
 
     return UCS_OK;
 }

@@ -327,6 +327,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     static uct_iface_ops_t ops = {
         .ep_connect_to_ep    = ucp_wireup_ep_connect_to_ep,
         .ep_flush            = ucp_wireup_ep_flush,
+        .ep_check            = ucs_empty_function_return_success,
         .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t),
         .ep_pending_add      = ucp_wireup_ep_pending_add,
         .ep_pending_purge    = ucp_wireup_ep_pending_purge,
