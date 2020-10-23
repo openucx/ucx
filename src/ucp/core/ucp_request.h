@@ -110,7 +110,11 @@ enum {
 struct ucp_request {
     ucs_status_t                  status;     /* Operation status */
     uint32_t                      flags;      /* Request flags */
-    void                          *user_data; /* Completion user data */
+    union {
+        void                      *user_data; /* Completion user data */
+        ucp_request_t             *super_req; /* Super request that is used
+                                                 by protocols */
+    };
 
     union {
 
@@ -130,7 +134,6 @@ struct ucp_request {
                 ucp_wireup_msg_t  wireup;
 
                 struct {
-                    ucp_lane_index_t       am_bw_index; /* AM BW lane index */
                     uint64_t               message_id;  /* used to identify matching parts
                                                            of a large message */
                     ucs_ptr_map_key_t      rreq_id;     /* receive request ID on the
@@ -164,8 +167,6 @@ struct ucp_request {
                 struct {
                     ucs_ptr_map_key_t      remote_req_id; /* send request ID on
                                                              receiver side */
-                    ucp_request_t          *sreq;      /* original send request
-                                                          of frag put */
                     uint8_t                am_id;
                     ucs_status_t           status;
                     ucp_tag_t              sender_tag; /* Sender tag, which is
@@ -182,9 +183,7 @@ struct ucp_request {
                 struct {
                     uint64_t             remote_address;  /* address of the sender's data buffer */
                     ucs_ptr_map_key_t    remote_req_id;   /* the sender's request ID */
-                    ucp_request_t        *rreq;           /* receive request on the recv side */
                     ucp_rkey_h           rkey;            /* key for remote send buffer */
-                    ucp_lane_map_t       lanes_map_avail; /* used lanes map */
                     ucp_lane_map_t       lanes_map_all;   /* actual lanes map */
                     uint8_t              lanes_count;     /* actual lanes count */
                     uint8_t              rkey_index[UCP_MAX_LANES];
@@ -193,7 +192,6 @@ struct ucp_request {
                 struct {
                     uint64_t             remote_address; /* address of the receiver's data buffer */
                     ucs_ptr_map_key_t    rreq_remote_id; /* receiver's receive request ID */
-                    ucp_request_t        *sreq;          /* send request on the send side */
                     ucp_rkey_h           rkey;           /* key for remote receive buffer */
                     uct_rkey_t           uct_rkey;       /* UCT remote key */
                 } rndv_put;
@@ -201,13 +199,11 @@ struct ucp_request {
                 struct {
                     ucs_queue_elem_t     queue_elem;
                     ucs_ptr_map_key_t    req_id;         /* sender's request ID */
-                    ucp_request_t        *rreq;          /* receive request on the recv side */
                     ucp_rkey_h           rkey;           /* key for remote send buffer */
                 } rkey_ptr;
 
                 struct {
                     ucs_ptr_map_key_t req_id;         /* the send request ID on receiver side */
-                    ucp_request_t     *rreq;          /* pointer to the receive request */
                     size_t            length;         /* the length of the data that should be fetched
                                                        * from sender side */
                     size_t            offset;         /* offset in recv buffer */
@@ -215,7 +211,6 @@ struct ucp_request {
 
                 struct {
                     ucp_request_callback_t flushed_cb;/* Called when flushed */
-                    ucp_request_t          *worker_req;
                     ucs_queue_elem_t       queue;     /* Queue element in proto_status */
                     unsigned               uct_flags; /* Flags to pass to @ref uct_ep_flush */
                     uct_worker_cb_id_t     prog_id;   /* Progress callback ID */
@@ -273,13 +268,16 @@ struct ucp_request {
                 uct_completion_t  uct_comp; /* UCT completion */
             } state;
 
-            ucs_memory_type_t     mem_type;       /* Memory type */
-            ucp_lane_index_t      pending_lane;   /* Lane on which request was moved
-                                                   * to pending state */
-            ucp_lane_index_t      lane;           /* Lane on which this request is being sent */
-            ucp_lane_index_t      multi_lane_idx; /* Index of the lane with multi-send */
-
-            uct_pending_req_t     uct;      /* UCT pending request */
+            union {
+                ucp_lane_index_t  am_bw_index;     /* AM BW lane index */
+                ucp_lane_map_t    lanes_map_avail; /* Used lanes map */
+            };
+            uint8_t               mem_type;        /* Memory type */
+            ucp_lane_index_t      pending_lane;    /* Lane on which request was moved
+                                                    * to pending state */
+            ucp_lane_index_t      lane;            /* Lane on which this request is being sent */
+            ucp_lane_index_t      multi_lane_idx;  /* Index of the lane with multi-send */
+            uct_pending_req_t     uct;             /* UCT pending request */
             ucp_mem_desc_t        *mdesc;
         } send;
 
@@ -319,7 +317,6 @@ struct ucp_request {
                 } tag;
 
                 struct {
-                    ucp_request_t           *rreq;    /* recv request on recv side */
                     size_t                  offset;   /* offset in recv buffer */
                 } frag;
 
