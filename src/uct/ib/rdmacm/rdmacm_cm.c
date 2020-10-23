@@ -97,7 +97,8 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
     uct_cm_remote_data_t   remote_data;
     ucs_status_t           status;
     struct rdma_conn_param conn_param;
-    char                   ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char                   remote_ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char                   client_ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
 
     ucs_assert(event->id == cep->id);
@@ -113,13 +114,15 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
         return;
     }
 
-    ucs_trace("%s: rdma_connect, cm_id %p",
-              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN), cep->id);
+    ucs_trace("%s: rdma_connect, cm_id %p, from address %s",
+              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN), cep->id,
+              ucs_sockaddr_str(rdma_get_local_addr(event->id), client_ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN));
 
     if (rdma_connect(cep->id, &conn_param)) {
         ucs_error("%s: rdma_connect(to addr=%s) failed: %m",
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-                  ucs_sockaddr_str(remote_addr, ip_port_str,
+                  ucs_sockaddr_str(remote_addr, remote_ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
         remote_data.field_mask = 0;
         uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
@@ -285,13 +288,21 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
     uct_rdmacm_priv_data_hdr_t *hdr         = (uct_rdmacm_priv_data_hdr_t *)
                                               event->param.conn.private_data;
     uct_rdmacm_cm_ep_t         *cep         = event->id->context;
-    char                       ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char                       remote_ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char                       client_ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char                       ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_device_addr_t          *dev_addr;
     size_t                     addr_length;
     uct_cm_remote_data_t       remote_data;
     ucs_status_t               status;
 
     ucs_assert(event->id == cep->id);
+    ucs_trace("%s: client %s received connect_response from server %s",
+              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+              ucs_sockaddr_str(rdma_get_local_addr(event->id), client_ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN),
+              ucs_sockaddr_str(remote_addr, remote_ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN));
 
     /* Do not notify user on disconnected EP, RDMACM out of order case */
     if (cep->flags & UCT_RDMACM_CM_EP_GOT_DISCONNECT) {
@@ -307,7 +318,7 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
     if (status != UCS_OK) {
         ucs_error("client (ep=%p id=%p) failed to process a connect response "
                   "from server %s.", cep, event->id,
-                  ucs_sockaddr_str(remote_addr, ip_port_str,
+                  ucs_sockaddr_str(remote_addr, remote_ip_port_str,
                                    UCS_SOCKADDR_STRING_LEN));
         uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
         /* notify remote side about local error */

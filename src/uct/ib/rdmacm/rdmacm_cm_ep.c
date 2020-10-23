@@ -308,6 +308,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     struct rdma_conn_param conn_param;
     ucs_status_t           status;
     char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
+    char                   ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     cep->flags |= UCT_RDMACM_CM_EP_ON_SERVER;
 
@@ -345,7 +346,10 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
               event->id);
 
     if (rdma_accept(event->id, &conn_param)) {
-        ucs_error("rdma_accept(on id=%p) failed: %m", event->id);
+        ucs_error("%s: rdma_accept(id=%p client_address=%s) failed: %m",
+                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+                  event->id, ucs_sockaddr_str(rdma_get_peer_addr(event->id),
+                                              ip_port_str, UCS_SOCKADDR_STRING_LEN));
         uct_rdmacm_cm_ep_destroy_dummy_cq_qp(cep);
         status = UCS_ERR_IO_ERROR;
         goto err;
