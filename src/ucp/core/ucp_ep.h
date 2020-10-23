@@ -102,8 +102,10 @@ enum {
                                                            client side */
     UCP_EP_INIT_CM_WIREUP_SERVER       = UCS_BIT(3),  /**< Endpoint wireup protocol is based on CM,
                                                            server side */
-    UCP_EP_INIT_ERR_MODE_PEER_FAILURE  = UCS_BIT(4)   /**< Endpoint requires an
+    UCP_EP_INIT_ERR_MODE_PEER_FAILURE  = UCS_BIT(4),  /**< Endpoint requires an
                                                            @ref UCP_ERR_HANDLING_MODE_PEER */
+    UCP_EP_INIT_CM_PHASE               = UCS_BIT(5)   /**< Endpoint connection to a peer is on
+                                                           CM phase */
 };
 
 
