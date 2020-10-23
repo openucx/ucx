@@ -283,7 +283,7 @@ struct ucp_request {
             ucp_mem_desc_t        *mdesc;
         } send;
 
-        /* "receive" part - used for tag_recv and stream_recv operations */
+        /* "receive" part - used for tag_recv, am_recv and stream_recv operations */
         struct {
             ucs_queue_elem_t      queue;    /* Expected queue element */
             void                  *buffer;  /* Buffer to receive data to */
