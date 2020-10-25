@@ -586,7 +586,7 @@ make_scripts()
 		cat >>${command_file} <<-EOF
 			set_env_vars() {
 			EOF
-		env | grep -P '^UCX_.*=|^PATH=|^LD_LIBRARY_PATH=' | \
+		env | grep -P '^UCX_.*=|^PATH=|^LD_PRELOAD=|^LD_LIBRARY_PATH=' | \
 			xargs -L 1 echo "     export" >>${command_file}
 		cat >>${command_file} <<-EOF
 			    cd $PWD
