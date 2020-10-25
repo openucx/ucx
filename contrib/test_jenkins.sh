@@ -691,7 +691,7 @@ check_config_h() {
 	# Check if all .c files include config.h
 	echo "==== Checking for config.h files in directory $srcdir ===="
 
-	missing=`find $srcdir -name \*.c -o -name \*.cc | xargs grep -LP '\#\s*include\s+"config.h"'`
+	missing=`find $srcdir \( -name "*.c" -o -name "*.cc" \) -type f -exec grep -LP '\#\s*include\s+"config.h"' {} \;`
 
 	if [ `echo $missing | wc -w` -eq 0 ]
 	then
