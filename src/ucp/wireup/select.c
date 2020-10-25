@@ -620,17 +620,15 @@ static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_add_memaccess_lanes(const ucp_wireup_select_params_t *select_params,
                                const ucp_wireup_criteria_t *criteria,
                                uint64_t tl_bitmap, ucp_lane_type_t lane_type,
-                               ucp_wireup_select_context_t *select_ctx,
-                               unsigned ep_init_flags)
+                               ucp_wireup_select_context_t *select_ctx)
 {
     ucp_wireup_criteria_t mem_criteria   = *criteria;
     ucp_wireup_select_info_t select_info = {0};
     int show_error                       = !select_params->allow_am;
-    double reg_score;
+    double reg_score                     = 0;
     uint64_t remote_md_map;
     ucs_status_t status;
     char title[64];
-    int has_reg_lane = 0;
 
     remote_md_map = UINT64_MAX;
 
@@ -643,26 +641,25 @@ ucp_wireup_add_memaccess_lanes(const ucp_wireup_select_params_t *select_params,
                                          UINT64_MAX, UINT64_MAX,
                                          show_error, &select_info);
     if (status == UCS_OK) {
-        reg_score = select_info.score;
-
-        /* Add to the list of lanes and remove all occurrences of the remote md
-         * from the address list, to avoid selecting the same remote md again. */
+        /* Add to the list of lanes */
         status = ucp_wireup_add_lane(select_params, &select_info, lane_type,
                                      select_ctx);
-        if (status != UCS_OK) {
-            goto out;
+        if (status == UCS_OK) {
+            /* Remove all occurrences of the remote md from the address list,
+             * to avoid selecting the same remote md again. */
+            ucp_wireup_unset_tl_by_md(select_params, &select_info, &tl_bitmap,
+                                      &remote_md_map);
+            reg_score = select_info.score;
         }
-
-        ucp_wireup_unset_tl_by_md(select_params, &select_info, &tl_bitmap,
-                                  &remote_md_map);
-        has_reg_lane = 1;
-    } else {
-        has_reg_lane = 0;
-        reg_score    = 0;
     }
 
-    if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
-        goto out;
+    /* If could not find registered memory access lane, try to use emulation */
+    if (status != UCS_OK) {
+        if (!select_params->allow_am) {
+            return status;
+        }
+
+        select_ctx->ucp_ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     }
 
     /* Select additional transports which can access allocated memory, but
@@ -693,23 +690,14 @@ ucp_wireup_add_memaccess_lanes(const ucp_wireup_select_params_t *select_params,
         status = ucp_wireup_add_lane(select_params, &select_info, lane_type,
                                      select_ctx);
         if (status != UCS_OK) {
-            goto out;
+            break;
         }
 
         ucp_wireup_unset_tl_by_md(select_params, &select_info, &tl_bitmap,
                                   &remote_md_map);
     }
 
-    status = UCS_OK;
-
-out:
-    if ((status != UCS_OK) && !has_reg_lane && select_params->allow_am) {
-        /* using emulation over active messages */
-        select_ctx->ucp_ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
-        return UCS_OK;
-    } else {
-        return status;
-    }
+    return UCS_OK;
 }
 
 static uint64_t ucp_ep_get_context_features(const ucp_ep_h ep)
@@ -846,8 +834,7 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
     return ucp_wireup_add_memaccess_lanes(select_params, &criteria, UINT64_MAX,
-                                          UCP_LANE_TYPE_RMA, select_ctx,
-                                          ep_init_flags);
+                                          UCP_LANE_TYPE_RMA, select_ctx);
 }
 
 double ucp_wireup_amo_score_func(ucp_context_h context,
@@ -901,8 +888,7 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     return ucp_wireup_add_memaccess_lanes(select_params, &criteria, tl_bitmap,
-                                          UCP_LANE_TYPE_AMO, select_ctx,
-                                          ep_init_flags);
+                                          UCP_LANE_TYPE_AMO, select_ctx);
 }
 
 static double ucp_wireup_am_score_func(ucp_context_h context,

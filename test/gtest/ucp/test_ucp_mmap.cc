@@ -46,8 +46,10 @@ public:
     }
 
     bool is_tl_rdma() {
-        /* if we have both shared memory and rdma options, it's possible that
-         * only shared memory is actually used
+        /* Return true if the selected transport is expected to have remote
+         * registered memory access capabilities. If we have both shared memory
+         * and rdma options, it's possible that only shared memory is actually
+         * used, so can't assume it.
          */
         return (has_transport("dc_x") || has_transport("rc_x") ||
                 has_transport("rc_v") || has_transport("ib")) &&
