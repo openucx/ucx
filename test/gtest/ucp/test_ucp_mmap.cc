@@ -45,12 +45,26 @@ public:
         return GetParam().variant;
     }
 
+    bool is_tl_rdma() {
+        /* if we have both shared memory and rdma options, it's possible that
+         * only shared memory is actually used
+         */
+        return (has_transport("dc_x") || has_transport("rc_x") ||
+                has_transport("rc_v") || has_transport("ib")) &&
+               !is_tl_shm();
+    }
+
+    bool is_tl_shm() {
+        return has_transport("shm");
+    }
+
 protected:
     bool resolve_rma(entity *e, ucp_rkey_h rkey);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);
     bool resolve_rma_bw(entity *e, ucp_rkey_h rkey);
     void test_length0(unsigned flags);
-    void test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy);
+    void test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy,
+                              bool expect_rma_offload);
 };
 
 bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
@@ -109,7 +123,8 @@ bool test_ucp_mmap::resolve_rma_bw(entity *e, ucp_rkey_h rkey)
     }
 }
 
-void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy)
+void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
+                                         bool is_dummy, bool expect_rma_offload)
 {
     size_t rkey_size;
     void *rkey_buffer;
@@ -157,6 +172,10 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh, bool is_dumm
         }
     }
 
+    if (expect_rma_offload && is_dummy) {
+        EXPECT_NE(&ucp_rma_sw_proto, rkey->cache.rma_proto);
+    }
+
     /* Test obtaining direct-access pointer */
     void *ptr;
     status = ucp_rkey_ptr(rkey, (uint64_t)memh->address, &ptr);
@@ -194,7 +213,8 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
         ASSERT_UCS_OK(status);
 
         is_dummy = (size == 0);
-        test_rkey_management(&sender(), memh, is_dummy);
+        test_rkey_management(&sender(), memh, is_dummy,
+                             is_tl_rdma() || is_tl_shm());
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -228,7 +248,7 @@ UCS_TEST_P(test_ucp_mmap, reg) {
         ASSERT_UCS_OK(status);
 
         is_dummy = (size == 0);
-        test_rkey_management(&sender(), memh, is_dummy);
+        test_rkey_management(&sender(), memh, is_dummy, is_tl_rdma());
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -268,7 +288,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
         ASSERT_UCS_OK(status);
 
         is_dummy = (size == 0);
-        test_rkey_management(&sender(), memh, is_dummy);
+        test_rkey_management(&sender(), memh, is_dummy, is_tl_rdma());
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -304,7 +324,7 @@ void test_ucp_mmap::test_length0(unsigned flags)
     ASSERT_UCS_OK(status);
 
     for (i = 0; i < buf_num; i++) {
-        test_rkey_management(&sender(), memh[i], true);
+        test_rkey_management(&sender(), memh[i], true, false);
         status = ucp_mem_unmap(sender().ucph(), memh[i]);
         ASSERT_UCS_OK(status);
     }
@@ -356,7 +376,7 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
     ASSERT_UCS_OK(status);
 
     is_dummy = (size == 0);
-    test_rkey_management(&sender(), memh, is_dummy);
+    test_rkey_management(&sender(), memh, is_dummy, is_tl_rdma() || is_tl_shm());
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -402,7 +422,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     status = ucp_mem_advise(sender().ucph(), memh, &advise_params); 
     ASSERT_UCS_OK(status);
     is_dummy = (size == 0);
-    test_rkey_management(&sender(), memh, is_dummy);
+    test_rkey_management(&sender(), memh, is_dummy, is_tl_rdma());
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -436,7 +456,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
         EXPECT_GE(memh->length, size);
 
         is_dummy = (size == 0);
-        test_rkey_management(&sender(), memh, is_dummy);
+        test_rkey_management(&sender(), memh, is_dummy, is_tl_rdma());
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);

@@ -408,6 +408,7 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
     ucp_lane_index_t lane;
     ucp_md_index_t md_index;
     uct_md_attr_t *md_attr;
+    uint64_t mem_types;
     uint8_t rkey_index;
     int prio;
 
@@ -433,8 +434,8 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
             }
         }
 
-        if ((md_index != UCP_NULL_RESOURCE) &&
-            (!(md_attr->cap.reg_mem_types & UCS_BIT(mem_type)))) {
+        mem_types = md_attr->cap.reg_mem_types | md_attr->cap.alloc_mem_types;
+        if ((md_index != UCP_NULL_RESOURCE) && !(mem_types & UCS_BIT(mem_type))) {
             continue;
         }
 
