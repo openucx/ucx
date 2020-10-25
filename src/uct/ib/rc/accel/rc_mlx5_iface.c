@@ -697,6 +697,7 @@ cleanup_stats:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 {
+    uct_rc_iface_cleanup_eps(&self->super);
 #if HAVE_DEVX
     uct_rc_mlx5_devx_iface_free_events(self);
 #endif
@@ -821,6 +822,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .cleanup_rx               = uct_rc_mlx5_iface_cleanup_rx,
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler,
+    .cleanup_qp               = uct_rc_mlx5_ep_cleanup_qp,
 };
 
 static ucs_status_t

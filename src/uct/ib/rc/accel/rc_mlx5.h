@@ -123,6 +123,11 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_txwq_t *txwq,
                                          uct_ib_mlx5_qp_attr_t *attr);
 
+ucs_status_t
+uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
+                          uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
+                          struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu);
+
 ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
                                           const uct_device_addr_t *dev_addr,
                                           const uct_ep_addr_t *ep_addr);
@@ -165,5 +170,7 @@ ucs_status_t uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
 void uct_rc_mlx5_ep_pending_purge(uct_ep_h tl_ep,
                                   uct_pending_purge_callback_t cb,
                                   void *arg);
+
+void uct_rc_mlx5_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx);
 
 #endif

@@ -212,6 +212,15 @@ struct uct_rc_ep {
     uint8_t             flags;
 };
 
+
+/* EP QP TX cleanup context */
+typedef struct {
+    uct_ib_async_event_wait_t super;      /* LAST_WQE event callback */
+    ucs_list_link_t           list;       /* entry in interface ep_gc_list */
+    uct_rc_iface_t            *iface;     /* interface */
+} uct_rc_ep_cleanup_ctx_t;
+
+
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*);
 
 
@@ -263,6 +272,12 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                              unsigned flags);
+
+void uct_rc_ep_cleanup_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
+                          uct_rc_ep_cleanup_ctx_t *cleanup_ctx, uint32_t qp_num);
+
+void uct_rc_ep_cleanup_qp_done(uct_rc_ep_cleanup_ctx_t *cleanup_ctx,
+                               uint32_t qp_num);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op,
                                                    const void *resp);

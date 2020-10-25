@@ -354,6 +354,11 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
     ucs_assert(iface->config.fc_enabled);
 
+    if (ep == NULL) {
+        /* We get fc for ep which is being removed so should ignore it */
+        goto out;
+    }
+
     if (fc_hdr & UCT_RC_EP_FLAG_FC_GRANT) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_GRANT, 1);
 
@@ -413,6 +418,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         }
     }
 
+out:
     return uct_iface_invoke_am(&iface->super.super,
                                (hdr->am_id & ~UCT_RC_EP_FC_MASK),
                                hdr + 1, length, flags);
@@ -571,6 +577,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
+    ucs_list_head_init(&self->ep_gc_list);
 
     /* Check FC parameters correctness */
     if ((config->fc.hard_thresh <= 0) || (config->fc.hard_thresh >= 1)) {
@@ -668,6 +675,18 @@ err_destroy_rx_mp:
     ucs_mpool_cleanup(&self->rx.mp, 1);
 err:
     return status;
+}
+
+void uct_rc_iface_cleanup_eps(uct_rc_iface_t *iface)
+{
+    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
+    uct_rc_ep_cleanup_ctx_t *cleanup_ctx, *tmp;
+
+    ucs_list_for_each_safe(cleanup_ctx, tmp, &iface->ep_gc_list, list) {
+        ops->cleanup_qp(&cleanup_ctx->super);
+    }
+
+    ucs_assert(ucs_list_is_empty(&iface->ep_gc_list));
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
