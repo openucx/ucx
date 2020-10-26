@@ -553,7 +553,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               &config->super, init_attr);
 
-    self->tx.cq_available           = init_attr->tx_cq_len - 1;
+    self->tx.cq_available           = init_attr->tx_cq_len - 2; /* reserve for nop */
     self->tx.cq_free                = 0;
     self->rx.srq.available          = 0;
     self->rx.srq.quota              = 0;

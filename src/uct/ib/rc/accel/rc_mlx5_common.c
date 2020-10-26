@@ -1148,6 +1148,8 @@ static int uct_rc_mlx5_common_clean_tx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_rc_mlx5_common_clean_tx_cq_ctx_t *ctx = arg;
 
+    ucs_assert(iface->super.tx.cq_available >= -1);
+
     if (cqe != NULL) {
         uct_rc_mlx5_common_free_tx_res(&iface->super, ctx->txwq, ctx->txqp,
                                        htons(cqe->wqe_counter));
@@ -1160,9 +1162,11 @@ static int uct_rc_mlx5_common_clean_tx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
     /* If not posted NOP already, and have the resources, post it to flush
      * any unsignaled sends
      */
-    if (ctx->post_nop && (iface->super.tx.cq_available > 0) &&
-        (uct_rc_txqp_available(ctx->txqp) > 0))
-    {
+    if (ctx->post_nop && (uct_rc_txqp_available(ctx->txqp) > 0)) {
+        /* We reserved one CQ credit for NOP operation, so the lowest value
+         * cq_available can reach is -1 (after posting the nop)
+         */
+        ucs_assert(iface->super.tx.cq_available >= 0);
         ucs_trace("qp 0x%x: posted NOP", ctx->txwq->super.qp_num);
         uct_rc_mlx5_common_post_nop(iface, ctx->txqp, ctx->txwq);
         ucs_assert(uct_rc_txqp_unsignaled(ctx->txqp) == 0);
@@ -1183,6 +1187,11 @@ void uct_rc_mlx5_iface_commom_cq_clean_tx(uct_rc_mlx5_iface_common_t *iface,
     };
     uct_rc_mlx5_iface_commom_cq_clean(iface, UCT_IB_DIR_TX, txwq->super.qp_num,
                                       uct_rc_mlx5_common_clean_tx_cq_cb, &ctx);
+
+    /* If NOP was posted and cq_available became -1, it must also be completed
+     * and restore cq_available to 0
+     */
+    ucs_assert(iface->super.tx.cq_available >= 0);
 }
 
 void uct_rc_mlx5_iface_print(uct_rc_mlx5_iface_common_t *mlx5_iface,
