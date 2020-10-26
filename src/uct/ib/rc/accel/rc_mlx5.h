@@ -34,6 +34,7 @@ typedef struct uct_rc_mlx5_ep {
     uct_ib_mlx5_qp_t         tm_qp;
     uct_rc_mlx5_mp_context_t mp;
     uint16_t                 atomic_mr_offset;
+    uint8_t                  connected;
 } uct_rc_mlx5_ep_t;
 
 typedef struct uct_rc_mlx5_ep_address {
