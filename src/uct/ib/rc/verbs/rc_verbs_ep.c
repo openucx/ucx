@@ -594,11 +594,9 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
         goto err_qp_cleanup;
     }
 
-    status = uct_ib_device_async_event_register(
-            &md->dev,
-            IBV_EVENT_QP_LAST_WQE_REACHED,
-            self->qp->qp_num,
-            &iface->super.super.super.worker->super.progress_q);
+    status = uct_ib_device_async_event_register(&md->dev,
+                                                IBV_EVENT_QP_LAST_WQE_REACHED,
+                                                self->qp->qp_num);
     if (status != UCS_OK) {
         goto err_qp_cleanup;
     }
@@ -616,11 +614,30 @@ err:
     return status;
 }
 
-static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
+typedef struct {
+    uct_rc_ep_cleanup_ctx_t    super;
+    struct ibv_qp              *qp;
+} uct_rc_verbs_ep_cleanup_ctx_t;
+
+void uct_rc_verbs_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx)
+{
+    uct_rc_verbs_ep_cleanup_ctx_t *ep_cleanup_ctx
+                    = ucs_derived_of(wait_ctx, uct_rc_verbs_ep_cleanup_ctx_t);
+    uint32_t qp_num = ep_cleanup_ctx->qp->qp_num;
+
+    uct_ib_destroy_qp(ep_cleanup_ctx->qp);
+    uct_rc_ep_cleanup_qp_done(&ep_cleanup_ctx->super, qp_num);
+}
+
+UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
-    uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
+    uct_rc_verbs_ep_cleanup_ctx_t *ep_cleanup_ctx;
+
+    ep_cleanup_ctx = ucs_malloc(sizeof(*ep_cleanup_ctx), "ep_cleanup_ctx");
+    ucs_assert_always(ep_cleanup_ctx != NULL);
+    ep_cleanup_ctx->qp = self->qp;
 
     /* TODO should be removed by flush */
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
@@ -634,11 +651,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     ucs_assert(self->txcnt.pi >= self->txcnt.ci);
     iface->super.tx.cq_available += self->txcnt.pi - self->txcnt.ci;
     ucs_assert(iface->super.tx.cq_available < iface->super.config.tx_ops_count);
-    uct_ib_device_async_event_unregister(&md->dev,
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         self->qp->qp_num);
-    uct_rc_iface_remove_qp(&iface->super, self->qp->qp_num);
-    uct_ib_destroy_qp(self->qp);
+    uct_ib_modify_qp(self->qp, IBV_QPS_ERR);
+    uct_rc_ep_cleanup_qp(&iface->super, &self->super, &ep_cleanup_ctx->super,
+                         self->qp->qp_num);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);

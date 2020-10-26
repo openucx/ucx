@@ -173,14 +173,23 @@ typedef struct uct_ib_async_event {
 
 
 /**
+ * IB async event waiting context.
+ */
+typedef struct uct_ib_async_event_wait {
+    void                (*cb)(struct uct_ib_async_event_wait*); /* Callback */
+    ucs_callbackq_t     *cbq;                   /* Async queue for callback */
+    int                 cb_id;                  /* Scheduled callback ID */
+} uct_ib_async_event_wait_t;
+
+
+/**
  * IB async event state.
  */
 typedef struct {
-    unsigned            flag;                   /* Event happened */
-    ucs_callback_t      cb;                     /* To be called upon event */
-    ucs_callbackq_t     *cbq;                   /* Async queue for callback */
-    void                *arg;                   /* User data */
+    unsigned                  flag;             /* Event happened */
+    uct_ib_async_event_wait_t *wait_ctx;        /* Waiting context */
 } uct_ib_async_event_val_t;
+
 
 KHASH_TYPE(uct_ib_async_event, uct_ib_async_event_t, uct_ib_async_event_val_t);
 
@@ -391,14 +400,13 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
 ucs_status_t
 uct_ib_device_async_event_register(uct_ib_device_t *dev,
                                    enum ibv_event_type event_type,
-                                   uint32_t resource_id,
-                                   ucs_callbackq_t *cbq);
+                                   uint32_t resource_id);
 
 ucs_status_t
 uct_ib_device_async_event_wait(uct_ib_device_t *dev,
                                enum ibv_event_type event_type,
                                uint32_t resource_id,
-                               ucs_callback_t cb, void *arg);
+                               uct_ib_async_event_wait_t *wait_ctx);
 
 void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
                                           enum ibv_event_type event_type,

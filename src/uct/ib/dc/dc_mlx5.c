@@ -562,7 +562,8 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
         if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
             ucs_arbiter_group_cleanup(&iface->tx.dcis[i].arb_group);
         }
-        uct_ib_mlx5_txwq_cleanup(&iface->tx.dcis[i].txwq);
+        uct_ib_mlx5_qp_mmio_cleanup(&iface->tx.dcis[i].txwq.super,
+                                    iface->tx.dcis[i].txwq.reg);
     }
 }
 

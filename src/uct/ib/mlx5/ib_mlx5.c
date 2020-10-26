@@ -519,21 +519,22 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
     return UCS_OK;
 }
 
-void uct_ib_mlx5_txwq_cleanup(uct_ib_mlx5_txwq_t* txwq)
+void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
+                                 uct_ib_mlx5_mmio_reg_t *reg)
 {
-    uct_ib_mlx5_devx_uar_t *uar = ucs_derived_of(txwq->reg,
-                                                 uct_ib_mlx5_devx_uar_t);
-    switch (txwq->super.type) {
+    uct_ib_mlx5_devx_uar_t *uar = ucs_derived_of(reg, uct_ib_mlx5_devx_uar_t);
+
+    switch (qp->type) {
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
         break;
     case UCT_IB_MLX5_OBJ_TYPE_VERBS:
-        uct_ib_mlx5_iface_put_res_domain(&txwq->super);
-        uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+        uct_ib_mlx5_iface_put_res_domain(qp);
+        uct_worker_tl_data_put(reg, uct_ib_mlx5_mmio_cleanup);
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
-        if (txwq->reg != NULL) {
-            uct_worker_tl_data_put(txwq->reg, uct_ib_mlx5_mmio_cleanup);
+        if (reg != NULL) {
+            uct_worker_tl_data_put(reg, uct_ib_mlx5_mmio_cleanup);
         }
     }
 }
@@ -647,27 +648,6 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     }
 }
 
-void uct_ib_mlx5_verbs_srq_cleanup(uct_ib_mlx5_srq_t *srq,
-                                   struct ibv_srq *verbs_srq)
-{
-    uct_ib_mlx5dv_srq_t srq_info = {};
-    uct_ib_mlx5dv_t obj = {};
-    ucs_status_t status;
-
-    if (srq->type != UCT_IB_MLX5_OBJ_TYPE_VERBS) {
-        return;
-    }
-
-    /* check if mlx5 driver didn't modified SRQ */
-    obj.dv.srq.in = verbs_srq;
-    obj.dv.srq.out = &srq_info.dv;
-
-    status = uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_SRQ);
-    ucs_assert_always(status == UCS_OK);
-    ucs_assertv_always(srq->tail == srq_info.dv.tail, "srq->tail=%d srq_info.tail=%d",
-                       srq->tail, srq_info.dv.tail);
-}
-
 ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md,
                                          uct_ib_mlx5_qp_t *qp,
                                          enum ibv_qp_state state)
@@ -707,3 +687,16 @@ unsupported:
     return UCS_ERR_UNSUPPORTED;
 }
 
+void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
+{
+    switch (qp->type) {
+    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
+        uct_ib_destroy_qp(qp->verbs.qp);
+        break;
+    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
+        uct_ib_mlx5_devx_destroy_qp(md, qp);
+        break;
+    case UCT_IB_MLX5_OBJ_TYPE_LAST:
+        break;
+    }
+}

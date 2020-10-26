@@ -87,6 +87,47 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
     UCS_STATS_NODE_FREE(fc->stats);
 }
 
+void uct_rc_ep_cleanup_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
+                          uct_rc_ep_cleanup_ctx_t *cleanup_ctx, uint32_t qp_num)
+{
+    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
+    uct_ib_md_t *md         = uct_ib_iface_md(&iface->super);
+    ucs_status_t status;
+
+    cleanup_ctx->iface     = iface;
+    cleanup_ctx->super.cbq = &iface->super.super.worker->super.progress_q;
+    cleanup_ctx->super.cb  = ops->cleanup_qp;
+
+    ucs_list_del(&ep->list);
+    ucs_list_add_tail(&iface->ep_gc_list, &cleanup_ctx->list);
+
+    uct_rc_iface_remove_qp(iface, qp_num);
+
+    status = uct_ib_device_async_event_wait(&md->dev,
+                                            IBV_EVENT_QP_LAST_WQE_REACHED,
+                                            qp_num, &cleanup_ctx->super);
+    if (status == UCS_OK) {
+        /* event already arrived, finish cleaning up */
+        ops->cleanup_qp(&cleanup_ctx->super);
+    } else {
+        /* deferred cleanup callback was scheduled */
+        ucs_assert(status == UCS_INPROGRESS);
+    }
+}
+
+void uct_rc_ep_cleanup_qp_done(uct_rc_ep_cleanup_ctx_t *cleanup_ctx,
+                               uint32_t qp_num)
+{
+    uct_ib_md_t *md = ucs_derived_of(cleanup_ctx->iface->super.super.md,
+                                     uct_ib_md_t);
+
+    uct_ib_device_async_event_unregister(&md->dev,
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         qp_num);
+    ucs_list_del(&cleanup_ctx->list);
+    ucs_free(cleanup_ctx);
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
                     const uct_ep_params_t *params)
 {
@@ -130,7 +171,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     ucs_debug("destroy rc ep %p", self);
 
-    ucs_list_del(&self->list);
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(iface, &self->txqp);

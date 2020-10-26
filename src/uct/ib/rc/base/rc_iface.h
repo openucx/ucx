@@ -188,6 +188,7 @@ typedef struct uct_rc_iface_ops {
                                        uct_rc_hdr_t *hdr, unsigned length,
                                        uint32_t imm_data, uint16_t lid,
                                        unsigned flags);
+    void                 (*cleanup_qp)(uct_ib_async_event_wait_t *cleanup_ctx);
 } uct_rc_iface_ops_t;
 
 
@@ -269,6 +270,7 @@ struct uct_rc_iface {
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;
+    ucs_list_link_t          ep_gc_list;
 
     /* Progress function (either regular or TM aware) */
     ucs_callback_t           progress;
@@ -338,6 +340,8 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
 void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh);
 
 void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
+
+void uct_rc_iface_cleanup_eps(uct_rc_iface_t *iface);
 
 /**
  * Creates an RC or DCI QP

@@ -412,6 +412,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
     uct_base_iface_progress_disable(&self->super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
+    uct_rc_iface_cleanup_eps(&self->super);
+
     if (self->flush_mr != NULL) {
         uct_ib_dereg_mr(self->flush_mr);
         ucs_assert(self->flush_mem != NULL);
@@ -476,7 +478,8 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .init_rx                  = uct_rc_iface_verbs_init_rx,
     .cleanup_rx               = uct_rc_iface_verbs_cleanup_rx,
     .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl,
-    .fc_handler               = uct_rc_iface_fc_handler
+    .fc_handler               = uct_rc_iface_fc_handler,
+    .cleanup_qp               = uct_rc_verbs_ep_cleanup_qp,
 };
 
 static ucs_status_t

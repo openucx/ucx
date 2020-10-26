@@ -815,7 +815,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
     ucs_trace_func("");
     uct_ud_iface_remove_async_handlers(&self->super);
     uct_ud_enter(&self->super);
-    uct_ib_mlx5_txwq_cleanup(&self->tx.wq);
+    uct_ib_mlx5_qp_mmio_cleanup(&self->tx.wq.super, self->tx.wq.reg);
     uct_ud_leave(&self->super);
 }
 
