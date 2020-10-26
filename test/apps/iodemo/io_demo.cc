@@ -671,9 +671,14 @@ public:
         recv_data(conn, *iov, msg->tr.sn, w);
     }
 
+    virtual void dispatch_connection_accepted(UcxConnection* conn) {
+        ++_curr_state.active_conns;
+    }
+
     virtual void dispatch_connection_error(UcxConnection *conn) {
         LOG << "deleting connection with status "
             << ucs_status_string(conn->ucx_status());
+        --_curr_state.active_conns;
         delete conn;
     }
 
@@ -699,24 +704,6 @@ public:
     }
 
 private:
-    virtual bool add_connection(UcxConnection *conn) {
-        bool added = P2pDemoCommon::add_connection(conn);
-        if (added) {
-            ++_curr_state.active_conns;
-        }
-
-        return added;
-    }
-
-    virtual bool remove_connection(UcxConnection *conn) {
-        bool removed = P2pDemoCommon::remove_connection(conn);
-        if (removed) {
-            --_curr_state.active_conns;
-        }
-
-        return removed;
-    }
-
     void save_prev_state() {
         _prev_state = _curr_state;
     }

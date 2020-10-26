@@ -256,6 +256,7 @@ void UcxContext::progress_conn_requests()
         UcxConnection *conn = new UcxConnection(*this, get_next_conn_id());
         if (conn->accept(_conn_requests.front())) {
             add_connection(conn);
+            dispatch_connection_accepted(conn);
         } else {
             delete conn;
         }
@@ -342,25 +343,22 @@ void UcxContext::recv_io_message()
     _iomsg_recv_request = reinterpret_cast<ucx_request*>(status_ptr);
 }
 
-bool UcxContext::add_connection(UcxConnection *conn)
+void UcxContext::add_connection(UcxConnection *conn)
 {
-    if (_conns.find(conn->id()) == _conns.end()) {
-        _conns[conn->id()] = conn;
-        return true;
-    } else {
-        return false;
+    assert(_conns.find(conn->id()) == _conns.end());
+    _conns[conn->id()] = conn;
+}
+
+void UcxContext::remove_connection(UcxConnection *conn)
+{
+    conn_map_t::iterator i = _conns.find(conn->id());
+    if (i != _conns.end()) {
+        _conns.erase(i);
     }
 }
 
-bool UcxContext::remove_connection(UcxConnection *conn)
+void UcxContext::dispatch_connection_accepted(UcxConnection* conn)
 {
-    conn_map_t::iterator i = _conns.find(conn->id());
-    if (i == _conns.end()) {
-        return false;
-    } else {
-        _conns.erase(i);
-        return true;
-    }
 }
 
 void UcxContext::handle_connection_error(UcxConnection *conn)
@@ -718,7 +716,7 @@ bool UcxConnection::process_request(const char *what,
         return true;
     } else if (UCS_PTR_IS_ERR(ptr_status)) {
         status = UCS_PTR_STATUS(ptr_status);
-        UCX_CONN_LOG << what << "failed with status: "
+        UCX_CONN_LOG << what << " failed with status: "
                      << ucs_status_string(status);
         (*callback)(status);
         return false;
