@@ -15,12 +15,7 @@
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 
 #define UCT_DC_MLX5_IFACE_TXQP_GET(_iface, _ep, _txqp, _txwq) \
-{ \
-    uint8_t dci; \
-    dci = (_ep)->dci; \
-    _txqp = &(_iface)->tx.dcis[dci].txqp; \
-    _txwq = &(_iface)->tx.dcis[dci].txwq; \
-}
+    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, (_ep)->dci, _txqp, _txwq)
 
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
@@ -914,6 +909,28 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     return UCS_OK;
 }
 
+static void uct_dc_mlx5_ep_keepalive_cleanup(uct_dc_mlx5_ep_t *ep)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    uct_rc_iface_send_op_t *op;
+    ucs_queue_iter_t iter;
+    uct_rc_txqp_t *txqp;
+
+    if (!(ep->flags & UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED)) {
+        return;
+    }
+
+    /* clean keepalive requests */
+    txqp = &iface->tx.dcis[iface->tx.ndci].txqp;
+    ucs_queue_for_each_safe(op, iter, &txqp->outstanding, queue) {
+        if (op->ep == &ep->super.super) {
+            ucs_queue_del_iter(&txqp->outstanding, iter);
+            ucs_mpool_put(op);
+            break;
+        }
+    }
+}
 
 UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
                     const uct_dc_mlx5_iface_addr_t *if_addr,
@@ -943,6 +960,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     uct_rc_fc_cleanup(&self->fc);
 
     ucs_assert_always(self->flags & UCT_DC_MLX5_EP_FLAG_VALID);
+    uct_dc_mlx5_ep_keepalive_cleanup(self);
 
     if ((self->dci == UCT_DC_MLX5_EP_NO_DCI) ||
         uct_dc_mlx5_iface_is_dci_rand(iface)) {
@@ -1294,25 +1312,11 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 {
     uct_iface_h tl_iface       = ep->super.super.iface;
     uint8_t dci                = ep->dci;
-    uct_ib_iface_t *ib_iface   = ucs_derived_of(tl_iface, uct_ib_iface_t);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci].txqp;
     uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci].txwq;
-    int16_t outstanding;
-    ucs_status_t status;
-    ucs_log_level_t log_lvl;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
-
-    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status,
-                                  txwq->sw_pi, 0);
-
-    /* poll_cqe for mlx5 returns NULL in case of failure and the cq_avaialble
-       is not updated for the error cqe and all outstanding wqes*/
-    outstanding = (int16_t)iface->super.super.config.tx_qp_len -
-                  uct_rc_txqp_available(txqp);
-    iface->super.super.tx.cq_available += outstanding;
-    uct_rc_txqp_available_set(txqp, (int16_t)iface->super.super.config.tx_qp_len);
+    uct_dc_mlx5_iface_reset_dci(iface, dci, ep_status);
 
     /* since we removed all outstanding ops on the dci, it should be released */
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
@@ -1332,25 +1336,63 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(ep_status));
     } else {
-        status  = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
-                                               ep_status);
-        log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
+        uct_dc_mlx5_iface_set_ep_failed(iface, ep, (struct mlx5_cqe64*)arg,
+                                        txwq, ep_status);
+    }
+}
 
-        if (ep_status != UCS_ERR_CANCELED) {
-            uct_ib_mlx5_completion_with_err(ib_iface, arg,
-                                            &iface->tx.dcis[dci].txwq, log_lvl);
-        }
+static void
+uct_dc_mlx5_ep_check_send_completion(uct_rc_iface_send_op_t *op, const void *resp)
+{
+    uct_dc_mlx5_ep_t *ep = ucs_derived_of(op->ep, uct_dc_mlx5_ep_t);
+
+    ucs_assert(ep->flags & UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED);
+    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED;
+    ucs_mpool_put(op);
+}
+
+ucs_status_t
+uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    uint64_t dummy             = 0;
+    ucs_status_t status;
+    uct_rc_iface_send_op_t *op;
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
+
+    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
+    UCT_CHECK_PARAM(flags == 0, "Unsupported flags: %x", flags);
+
+    if ((ep->dci != UCT_DC_MLX5_EP_NO_DCI) ||
+        (ep->flags & UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED)) {
+        /* in case if EP has DCI and some TX resources are involved in
+         * communications, then keepalive operation is not needed */
+        return UCS_OK;
     }
 
-    status = uct_dc_mlx5_iface_reset_dci(iface, &iface->tx.dcis[dci]);
+    status = uct_dc_mlx5_iface_keepalive_init(iface);
     if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to reset dci[%d] qpn 0x%x: %s",
-                  iface, dci, txwq->super.qp_num, ucs_status_string(status));
+        ucs_error("failed to initialize keepalive dci: %s",
+                  ucs_status_string(status));
+        return status;
     }
 
-    status = uct_dc_mlx5_iface_dci_connect(iface, &iface->tx.dcis[dci]);
-    if (status != UCS_OK) {
-        ucs_fatal("iface %p failed to connect dci[%d] qpn 0x%x: %s",
-                  iface, dci, txwq->super.qp_num, ucs_status_string(status));
+    op = ucs_mpool_get(&iface->super.super.tx.send_op_mp);
+    if (ucs_unlikely(op == NULL)) {
+        ucs_error("failed to allocate keepalive op");
+        return UCS_ERR_NO_MEMORY;
     }
+
+    uct_rc_ep_init_send_op(op, 0, NULL, uct_dc_mlx5_ep_check_send_completion);
+    op->ep = tl_ep;
+    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, iface->tx.ndci, txqp, txwq);
+    uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
+                                 txqp, txwq, MLX5_OPCODE_RDMA_WRITE,
+                                 &dummy, 0, 0, 0, 0, 0, 0,
+                                 &ep->av, uct_dc_mlx5_ep_get_grh(ep),
+                                 uct_ib_mlx5_wqe_av_size(&ep->av), 0, INT_MAX);
+    uct_rc_txqp_add_send_op_sn(txqp, op, txwq->sig_pi);
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED;
+    return UCS_OK;
 }

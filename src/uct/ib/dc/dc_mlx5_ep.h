@@ -28,7 +28,11 @@ enum uct_dc_mlx5_ep_flags {
      * It is needed to avoid the following cases:
      * 1) Grant arrives for the recently deleted ep.
      * 2) QP resources are available, but there are some pending requests. */
-    UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT = UCS_BIT(3)
+    UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT = UCS_BIT(3),
+    /* Keepalive Request scheduled: indicates that keepalive request
+     * is scheduled in outstanding queue and no more keepalive actions
+     * are needed */
+    UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED  = UCS_BIT(4)
 };
 
 
@@ -204,6 +208,10 @@ void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls);
 
 void uct_dc_mlx5_ep_release(uct_dc_mlx5_ep_t *ep);
 
+ucs_status_t
+uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+
+
 static UCS_F_ALWAYS_INLINE uct_dc_mlx5_pending_req_priv_t *
 uct_dc_mlx5_pending_req_priv(uct_pending_req_t *req)
 {
@@ -346,11 +354,12 @@ static UCS_F_ALWAYS_INLINE void
 }
 
 static UCS_F_ALWAYS_INLINE void
- uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 {
     uct_dc_mlx5_ep_t *ep;
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+    if (uct_dc_mlx5_iface_is_dci_rand(iface) ||
+        ucs_unlikely(dci >= iface->tx.ndci)) {
         return;
     }
 

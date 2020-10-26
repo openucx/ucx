@@ -534,8 +534,9 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     /* flush all outstanding ops to allow keepalive to run */
     flush_worker(sender());
 
-    /* kill EPs */
+    /* kill EPs & ifaces */
     failing_receiver().close_all_eps(*this, 0, UCP_EP_CLOSE_MODE_FORCE);
+    failing_receiver().destroy_worker(0);
     wait_for_flag(&m_err_count);
 
     /* dump warnings */
