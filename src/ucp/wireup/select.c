@@ -625,7 +625,7 @@ ucp_wireup_add_memaccess_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_criteria_t mem_criteria   = *criteria;
     ucp_wireup_select_info_t select_info = {0};
     int show_error                       = !select_params->allow_am;
-    double reg_score;
+    double reg_score                     = 0;
     uint64_t remote_md_map;
     ucs_status_t status;
     char title[64];
@@ -640,22 +640,27 @@ ucp_wireup_add_memaccess_lanes(const ucp_wireup_select_params_t *select_params,
                                          tl_bitmap, remote_md_map,
                                          UINT64_MAX, UINT64_MAX,
                                          show_error, &select_info);
-    if (status != UCS_OK) {
-        goto out;
+    if (status == UCS_OK) {
+        /* Add to the list of lanes */
+        status = ucp_wireup_add_lane(select_params, &select_info, lane_type,
+                                     select_ctx);
+        if (status == UCS_OK) {
+            /* Remove all occurrences of the remote md from the address list,
+             * to avoid selecting the same remote md again. */
+            ucp_wireup_unset_tl_by_md(select_params, &select_info, &tl_bitmap,
+                                      &remote_md_map);
+            reg_score = select_info.score;
+        }
     }
 
-    reg_score = select_info.score;
-
-    /* Add to the list of lanes and remove all occurrences of the remote md
-     * from the address list, to avoid selecting the same remote md again. */
-    status = ucp_wireup_add_lane(select_params, &select_info, lane_type,
-                                 select_ctx);
+    /* If could not find registered memory access lane, try to use emulation */
     if (status != UCS_OK) {
-        goto out;
-    }
+        if (!select_params->allow_am) {
+            return status;
+        }
 
-    ucp_wireup_unset_tl_by_md(select_params, &select_info, &tl_bitmap,
-                              &remote_md_map);
+        select_ctx->ucp_ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
+    }
 
     /* Select additional transports which can access allocated memory, but
      * only if their scores are better. We need this because a remote memory
@@ -685,23 +690,14 @@ ucp_wireup_add_memaccess_lanes(const ucp_wireup_select_params_t *select_params,
         status = ucp_wireup_add_lane(select_params, &select_info, lane_type,
                                      select_ctx);
         if (status != UCS_OK) {
-            goto out;
+            break;
         }
 
         ucp_wireup_unset_tl_by_md(select_params, &select_info, &tl_bitmap,
                                   &remote_md_map);
     }
 
-    status = UCS_OK;
-
-out:
-    if ((status != UCS_OK) && select_params->allow_am) {
-        /* using emulation over active messages */
-        select_ctx->ucp_ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
-        status                         = UCS_OK;
-    }
-
-    return status;
+    return UCS_OK;
 }
 
 static uint64_t ucp_ep_get_context_features(const ucp_ep_h ep)
