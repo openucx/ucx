@@ -1021,7 +1021,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                   ucs_sockaddr_str((struct sockaddr*)&conn_request->client_address,
                                    client_addr_str, sizeof(client_addr_str)),
                   conn_request->dev_name);
-        return UCS_ERR_UNREACHABLE;
+        status = UCS_ERR_UNREACHABLE;
+        goto out;
     }
 
     /* Create and connect TL part */
@@ -1029,10 +1030,9 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                                           ep_init_flags,
                                           "conn_request on uct_listener", &ep);
     if (status != UCS_OK) {
-        ucs_warn("server ep %p failed to connect to worker address on "
+        ucs_warn("failed to create server ep and connect to worker address on "
                  "device %s, tl_bitmap 0x%"PRIx64", status %s",
-                 ep, conn_request->dev_name, tl_bitmap,
-                 ucs_status_string(status));
+                 conn_request->dev_name, tl_bitmap, ucs_status_string(status));
         uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
         goto out;
     }
@@ -1044,8 +1044,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                  ep, conn_request->dev_name, tl_bitmap,
                  ucs_status_string(status));
         uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
-        ucp_ep_destroy_internal(ep);
-        goto out;
+        goto err_destroy_ep;
     }
 
     status = ucp_ep_cm_connect_server_lane(ep, conn_request->uct.listener,
@@ -1056,8 +1055,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                  "tl_bitmap 0x%"PRIx64", status %s",
                  ep, conn_request->dev_name, tl_bitmap,
                  ucs_status_string(status));
-        ucp_ep_destroy_internal(ep);
-        goto out;
+        goto err_destroy_ep;
     }
 
     ep->flags                   |= UCP_EP_FLAG_LISTENER;
@@ -1071,6 +1069,10 @@ out:
     ucs_free(conn_request);
 
     return status;
+
+err_destroy_ep:
+    ucp_ep_destroy_internal(ep);
+    goto out;
 }
 
 static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
