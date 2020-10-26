@@ -699,21 +699,21 @@ ucp_send_request_get_am_bw_lane(ucp_request_t *req)
     ucp_lane_index_t lane;
 
     lane = ucp_ep_config(req->send.ep)->
-           key.am_bw_lanes[req->send.msg_proto.am_bw_index];
-    ucs_assertv(lane != UCP_NULL_LANE, "req->send.msg_proto.am_bw_index=%d",
-                req->send.msg_proto.am_bw_index);
+           key.am_bw_lanes[req->send.am_bw_index];
+    ucs_assertv(lane != UCP_NULL_LANE, "req->send.am_bw_index=%d",
+                req->send.am_bw_index);
     return lane;
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_send_request_next_am_bw_lane(ucp_request_t *req)
 {
-    ucp_lane_index_t am_bw_index = ++req->send.msg_proto.am_bw_index;
+    ucp_lane_index_t am_bw_index = ++req->send.am_bw_index;
     ucp_ep_config_t *config      = ucp_ep_config(req->send.ep);
 
     if ((am_bw_index >= UCP_MAX_LANES) ||
         (config->key.am_bw_lanes[am_bw_index] == UCP_NULL_LANE)) {
-        req->send.msg_proto.am_bw_index = 0;
+        req->send.am_bw_index = 0;
     }
 }
 
