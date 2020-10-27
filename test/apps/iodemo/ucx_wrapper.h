@@ -94,9 +94,8 @@ protected:
     // Called when there is a fatal failure on the connection
     virtual void dispatch_connection_error(UcxConnection* conn) = 0;
 
-    virtual bool add_connection(UcxConnection *conn);
-
-    virtual bool remove_connection(UcxConnection *conn);
+    // Called when new server connection is accepted
+    virtual void dispatch_connection_accepted(UcxConnection* conn);
 
 private:
     typedef enum {
@@ -137,6 +136,10 @@ private:
                                   double timeout = 1e6);
 
     void recv_io_message();
+
+    void add_connection(UcxConnection *conn);
+
+    void remove_connection(UcxConnection *conn);
 
     void handle_connection_error(UcxConnection *conn);
 

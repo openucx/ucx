@@ -74,8 +74,8 @@ typedef struct {
 template<class T, bool use_offcache = false>
 class MemoryPool {
 public:
-    MemoryPool(size_t buffer_size, size_t offcache = 0) :
-        _num_allocated(0), _buffer_size(buffer_size) {
+    MemoryPool(size_t buffer_size, const std::string& name, size_t offcache = 0) :
+        _num_allocated(0), _buffer_size(buffer_size), _name(name) {
 
         for (size_t i = 0; i < offcache; ++i) {
             _offcache_queue.push(get_free());
@@ -89,8 +89,8 @@ public:
         }
 
         if (_num_allocated != _free_stack.size()) {
-            LOG << "Some items were not freed. Total:" << _num_allocated
-                << ", current:" << _free_stack.size() << ".";
+            LOG << (_num_allocated - _free_stack.size())
+                << " buffers were not released from " << _name;
         }
 
         for (size_t i = 0; i < _free_stack.size(); i++) {
@@ -137,6 +137,7 @@ private:
     std::queue<T*>  _offcache_queue;
     uint32_t        _num_allocated;
     size_t          _buffer_size;
+    std::string     _name;
 };
 
 /**
@@ -438,11 +439,12 @@ protected:
     P2pDemoCommon(const options_t& test_opts) :
         UcxContext(test_opts.iomsg_size),
         _test_opts(test_opts),
-        _io_msg_pool(test_opts.iomsg_size),
-        _send_callback_pool(0),
+        _io_msg_pool(test_opts.iomsg_size, "io messages"),
+        _send_callback_pool(0, "send callbacks"),
         _data_buffers_pool(get_chunk_cnt(test_opts.max_data_size,
-                                         test_opts.chunk_size)),
-        _data_chunks_pool(test_opts.chunk_size, test_opts.num_offcache_buffers) {
+                                         test_opts.chunk_size), "data iovs"),
+        _data_chunks_pool(test_opts.chunk_size, "data chunks",
+                          test_opts.num_offcache_buffers) {
     }
 
     const options_t& opts() const {
@@ -604,7 +606,7 @@ public:
     } state_t;
 
     DemoServer(const options_t& test_opts) :
-        P2pDemoCommon(test_opts), _callback_pool(0) {
+        P2pDemoCommon(test_opts), _callback_pool(0, "callbacks") {
         _curr_state.read_count   = 0;
         _curr_state.write_count  = 0;
         _curr_state.active_conns = 0;
@@ -671,9 +673,14 @@ public:
         recv_data(conn, *iov, msg->tr.sn, w);
     }
 
+    virtual void dispatch_connection_accepted(UcxConnection* conn) {
+        ++_curr_state.active_conns;
+    }
+
     virtual void dispatch_connection_error(UcxConnection *conn) {
         LOG << "deleting connection with status "
             << ucs_status_string(conn->ucx_status());
+        --_curr_state.active_conns;
         delete conn;
     }
 
@@ -699,24 +706,6 @@ public:
     }
 
 private:
-    virtual bool add_connection(UcxConnection *conn) {
-        bool added = P2pDemoCommon::add_connection(conn);
-        if (added) {
-            ++_curr_state.active_conns;
-        }
-
-        return added;
-    }
-
-    virtual bool remove_connection(UcxConnection *conn) {
-        bool removed = P2pDemoCommon::remove_connection(conn);
-        if (removed) {
-            --_curr_state.active_conns;
-        }
-
-        return removed;
-    }
-
     void save_prev_state() {
         _prev_state = _curr_state;
     }
@@ -812,7 +801,7 @@ public:
         P2pDemoCommon(test_opts), _prev_connect_time(0),
         _num_sent(0), _num_completed(0),
         _status(OK), _start_time(get_time()),
-        _retry(0), _read_callback_pool(opts().iomsg_size) {
+        _retry(0), _read_callback_pool(opts().iomsg_size, "read callbacks") {
     }
 
     typedef enum {
@@ -927,12 +916,14 @@ public:
         size_t server_index        = get_server_index(conn);
         server_info_t& server_info = _server_info[server_index];
 
-        // Don't wait from completions on this connection
-        _num_sent -= get_num_uncompleted(server_index);
-
         // Remove connection pointer
         _server_index_lookup.erase(conn);
+
+        // Destroying the connection will complete its outstanding operations
         delete conn;
+
+        // Don't wait for any more completions on this connection
+        _num_sent -= get_num_uncompleted(server_index);
 
         // Replace in _active_servers by the last element in the vector
         size_t active_index = server_info.active_index;

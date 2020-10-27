@@ -579,9 +579,8 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
      * messages are bundled with AM. */
     ucs_assert(op == UCT_RC_EP_FC_PURE_GRANT);
 
-    if (ucs_unlikely(ep->tx.wq.super.verbs.qp->state != IBV_QPS_RTS)) {
-        return (ep->tx.wq.super.verbs.qp->state == IBV_QPS_INIT) ? UCS_OK :
-               UCS_ERR_CONNECTION_RESET;
+    if (!ep->connected) {
+        return UCS_OK;
     }
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
@@ -703,6 +702,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     }
 
     ep->atomic_mr_offset = uct_ib_md_atomic_offset(rc_addr->atomic_mr_id);
+    ep->connected        = 1;
 
     return UCS_OK;
 }
@@ -927,6 +927,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
     self->mp.free      = 1;
+    self->connected    = 0;
+
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     return UCS_OK;
 
