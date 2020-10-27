@@ -584,15 +584,20 @@ ucs_status_t uct_ib_verbs_create_cq(struct ibv_context *context, int cqe,
 #if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
     struct ibv_cq_init_attr_ex cq_attr = {};
 
-    cq_attr.cqe = cqe;
-    cq_attr.channel = channel;
-    cq_attr.comp_vector = comp_vector;
-    if (ignore_overrun) {
-        cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
-        cq_attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
-    }
+    if (uct_ib_device_is_hns(context->device)) {
+        *inl = 0;
+        cq = ibv_create_cq(context, cqe, NULL, channel, comp_vector);
+    } else {
+        cq_attr.cqe = cqe;
+        cq_attr.channel = channel;
+        cq_attr.comp_vector = comp_vector;
+        if (ignore_overrun) {
+            cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
+            cq_attr.flags = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
+        }
 
-    cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(context, &cq_attr));
+        cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(context, &cq_attr));
+    }
     if (!cq && (errno == ENOSYS))
 #endif
     {

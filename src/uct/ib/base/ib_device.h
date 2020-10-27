@@ -203,6 +203,21 @@ const char *uct_ib_device_name(uct_ib_device_t *dev);
 
 
 /**
+ * @return true if device name begins with "hns".
+ */
+static inline int uct_ib_device_is_hns(struct ibv_device *device)
+{
+#if HAVE_HNS_ROCE
+#define UCT_IB_DEVICE_HNS "hns"
+#define UCT_IB_DEVICE_HNS_LEN 3
+    return !strncmp(ibv_get_device_name(device), UCT_IB_DEVICE_HNS, UCT_IB_DEVICE_HNS_LEN);
+#else
+    return 0;
+#endif
+}
+
+
+/**
  * @return whether the port is InfiniBand
  */
 int uct_ib_device_is_port_ib(uct_ib_device_t *dev, uint8_t port_num);
