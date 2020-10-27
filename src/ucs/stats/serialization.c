@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -51,9 +52,10 @@ typedef struct ucs_stats_data_header {
 /* Class id record */
 typedef struct ucs_stats_clsid         ucs_stats_clsid_t;
 struct ucs_stats_clsid {
-    uint8_t              clsid;
-    ucs_stats_class_t    *cls;
-    ucs_stats_clsid_t    *next;
+    uint8_t                 clsid;
+    ucs_stats_class_t       *cls;
+    ucs_stats_filter_node_t *filter_node;
+    ucs_stats_clsid_t       *next;
 };
 
 
@@ -101,6 +103,7 @@ static unsigned ucs_stats_get_all_classes_recurs(ucs_stats_node_t *node,
     if (!sglib_hashed_ucs_stats_clsid_t_find_member(cls_hash, &search)) {
         elem = malloc(sizeof *elem);
         elem->cls = node->cls;
+        elem->filter_node = node->filter_node;
         sglib_hashed_ucs_stats_clsid_t_add(cls_hash, elem);
         count = 1;
     } else {
@@ -228,9 +231,14 @@ ucs_stats_serialize_binary_recurs(FILE *stream, ucs_stats_node_t *node,
                                   ucs_stats_children_sel_t sel,
                                   ucs_stats_clsid_t **cls_hash)
 {
+    ucs_stats_counter_t filtered_counters[64] = {};
+    ucs_stats_filter_node_t *filter_node      = node->filter_node;
+    uint32_t filtered_counter_index           = 0;
     ucs_stats_class_t *cls = node->cls;
     ucs_stats_clsid_t *elem, search;
+    ucs_stats_node_t *temp_node;
     ucs_stats_node_t *child;
+    uint32_t counter_index;
     uint8_t sentinel;
 
     /* Search the class */
@@ -244,8 +252,16 @@ ucs_stats_serialize_binary_recurs(FILE *stream, ucs_stats_node_t *node,
     /* Name */
     ucs_stats_write_str(node->name, stream);
 
-    /* Counters */
-    ucs_stats_write_counters(node->counters, cls->num_counters, stream);
+    /* Filter output */
+    ucs_for_each_bit(counter_index, filter_node->counters_bitmask) {
+        ucs_list_for_each(temp_node, &filter_node->type_list_head, type_list) {
+            filtered_counters[filtered_counter_index] += temp_node->counters[counter_index];
+        }
+        filtered_counter_index++;
+    }
+
+    /* Write counters */
+    ucs_stats_write_counters(filtered_counters, filtered_counter_index, stream);
 
     /* Children */
     ucs_list_for_each(child, &node->children[sel], list) {
@@ -283,11 +299,18 @@ ucs_stats_serialize_binary(FILE *stream, ucs_stats_node_t *root,
     for (elem = sglib_hashed_ucs_stats_clsid_t_it_init(&it, cls_hash);
          elem != NULL; elem = sglib_hashed_ucs_stats_clsid_t_it_next(&it))
     {
+        ucs_stats_filter_node_t *filter_node;
+        unsigned num_counters_filtered;
+
         cls = elem->cls;
         ucs_stats_write_str(cls->name, stream);
-        FWRITE_ONE(&cls->num_counters, stream);
-        for (counter = 0; counter < cls->num_counters; ++counter) {
-            ucs_stats_write_str(cls->counter_names[counter], stream);
+
+        filter_node           = elem->filter_node;
+        num_counters_filtered = ucs_popcount(elem->filter_node->counters_bitmask);
+        FWRITE_ONE(&num_counters_filtered, stream);
+
+        ucs_for_each_bit(counter, filter_node->counters_bitmask) {
+           ucs_stats_write_str(cls->counter_names[counter], stream);
         }
         elem->clsid = idx++;
     }
