@@ -10,7 +10,6 @@
 #endif
 
 #include "ucp_am.h"
-#include "ucp_am.inl"
 
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
@@ -22,6 +21,10 @@
 #include <ucp/dt/dt.inl>
 
 #include <ucs/datastruct/array.inl>
+
+
+#define UCP_AM_SHORT_REPLY_MAX_SIZE  (UCS_ALLOCA_MAX_SIZE - \
+                                      sizeof(ucs_ptr_map_key_t))
 
 
 UCS_ARRAY_IMPL(ucp_am_cbs, unsigned, ucp_am_entry_t, static)
@@ -278,6 +281,16 @@ ucp_am_fill_first_header(ucp_am_first_hdr_t *hdr, ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_am_fill_short_header(ucp_am_hdr_t *hdr, uint16_t id, uint16_t flags,
+                         uint16_t header_length)
+{
+    UCS_STATIC_ASSERT(sizeof(*hdr) == sizeof(uint64_t));
+    hdr->am_id         = id;
+    hdr->flags         = flags;
+    hdr->header_length = header_length;
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
 {
     ucp_dt_state_t hdr_state;
@@ -458,15 +471,53 @@ ucp_am_send_short(ucp_ep_h ep, uint16_t id, uint16_t flags, const void *header,
      */
     ucs_assert((length == 0ul) || (header_length == 0));
     ucs_assert(!(flags & UCP_AM_SEND_REPLY));
-    UCS_STATIC_ASSERT(sizeof(ucp_am_hdr_t) == sizeof(uint64_t));
-    hdr.am_id         = id;
-    hdr.flags         = flags;
-    hdr.header_length = header_length;
+    ucp_am_fill_short_header(&hdr, id, flags, header_length);
 
     sbuf = (header_length != 0) ? (void*)header : (void*)payload;
 
     return uct_ep_am_short(am_ep, UCP_AM_ID_SINGLE, hdr.u64, sbuf,
                            length + header_length);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_send_short_reply(ucp_ep_h ep, uint16_t id, uint16_t flags,
+                        const void *header, size_t header_length,
+                        const void *payload, size_t length)
+{
+    uct_ep_h am_ep   = ucp_ep_get_am_uct_ep(ep);
+    size_t tx_length;
+    ucp_am_hdr_t hdr;
+    const void *data;
+    void *tx_buffer;
+    ucs_status_t status;
+
+    ucs_assert(flags & UCP_AM_SEND_REPLY);
+    ucs_assert((length == 0ul) || (header_length == 0));
+
+    status = ucp_ep_resolve_remote_id(ep, ep->am_lane);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    if (header_length != 0) {
+        tx_length = header_length;
+        data      = header;
+    } else {
+        tx_length = length;
+        data      = payload;
+    }
+
+    tx_buffer = ucs_alloca(tx_length + sizeof(ucs_ptr_map_key_t));
+
+    *((ucs_ptr_map_key_t*)tx_buffer) = ucp_ep_remote_id(ep);
+
+    ucp_am_fill_short_header(&hdr, id, flags, header_length);
+
+    memcpy(UCS_PTR_BYTE_OFFSET(tx_buffer, sizeof(ucs_ptr_map_key_t)),
+           data, tx_length);
+
+    return uct_ep_am_short(am_ep, UCP_AM_ID_SINGLE_REPLY, hdr.u64, tx_buffer,
+                           tx_length + sizeof(ucs_ptr_map_key_t));
 }
 
 static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
@@ -481,6 +532,25 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
                                        req->send.msg_proto.am.header,
                                        req->send.msg_proto.am.header_length,
                                        req->send.buffer, req->send.length);
+    if (ucs_likely(status == UCS_OK)) {
+        ucp_request_complete_send(req, UCS_OK);
+    }
+
+    return status;
+}
+
+static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_ep_t *ep       = req->send.ep;
+    ucs_status_t status;
+
+    req->send.lane = ucp_ep_get_am_lane(ep);
+    status         = ucp_am_send_short_reply(ep, req->send.msg_proto.am.am_id,
+                                             req->send.msg_proto.am.flags,
+                                             req->send.msg_proto.am.header,
+                                             req->send.msg_proto.am.header_length,
+                                             req->send.buffer, req->send.length);
     if (ucs_likely(status == UCS_OK)) {
         ucp_request_complete_send(req, UCS_OK);
     }
@@ -682,14 +752,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_am_send_req(ucp_request_t *req, size_t count,
                 const ucp_ep_msg_config_t *msg_config,
                 const ucp_request_param_t *param,
-                const ucp_request_send_proto_t *proto)
+                const ucp_request_send_proto_t *proto, ssize_t max_short)
 {
     unsigned user_header_length = req->send.msg_proto.am.header_length;
     ucp_context_t *context      = req->send.ep->worker->context;
     ucp_ep_config_t *ep_config  = ucp_ep_config(req->send.ep);
     size_t rndv_rma_thresh, rndv_am_thresh, rndv_thresh;
     size_t zcopy_thresh;
-    ssize_t max_short;
     ucs_status_t status;
 
     if (ucs_unlikely((count != 0) && (user_header_length != 0))) {
@@ -698,7 +767,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
          */
         max_short = -1;
     } else {
-        max_short = ucp_am_get_short_max(req, msg_config);
+        max_short = ucp_proto_get_short_max(req, max_short);
     }
 
     /* TODO: Add support for UCP_AM_SEND_EAGER/RNDV flags */
@@ -771,14 +840,21 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
                       const void *header, size_t header_length,
                       const void *buffer, size_t length)
 {
-    if (ucs_likely(!(flags & UCP_AM_SEND_REPLY) &&
-                   ((length == 0) || (header_length == 0)) &&
-                   ((ssize_t)(length + header_length) <=
-                    ucp_ep_config(ep)->am.max_short))) {
-        return ucp_am_send_short(ep, id, flags, header, header_length,
-                                 buffer, length);
+    if (ucs_unlikely(((length != 0) && (header_length != 0)) ||
+                     ((ssize_t)(length + header_length) >
+                      ucp_ep_config(ep)->am.max_short))) {
+        goto out;
     }
 
+    if (!(flags & UCP_AM_SEND_REPLY)) {
+        return ucp_am_send_short(ep, id, flags, header, header_length,
+                                 buffer, length);
+    } else if ((length + header_length) < UCP_AM_SHORT_REPLY_MAX_SIZE) {
+        return ucp_am_send_short_reply(ep, id, flags, header, header_length,
+                                       buffer, length);
+    }
+
+out:
     return UCS_ERR_NO_RESOURCE;
 }
 
@@ -842,10 +918,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
 
     if (flags & UCP_AM_SEND_REPLY) {
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
-                              ucp_ep_config(ep)->am_u.reply_proto);
+                              ucp_ep_config(ep)->am_u.reply_proto,
+                              ucs_min(ucp_ep_config(ep)->am.max_short,
+                                      UCP_AM_SHORT_REPLY_MAX_SIZE));
     } else {
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
-                              ucp_ep_config(ep)->am_u.proto);
+                              ucp_ep_config(ep)->am_u.proto,
+                              ucp_ep_config(ep)->am.max_short);
     }
 
 out:
@@ -1327,7 +1406,7 @@ const ucp_request_send_proto_t ucp_am_proto = {
 };
 
 const ucp_request_send_proto_t ucp_am_reply_proto = {
-    .contig_short           = NULL,
+    .contig_short           = ucp_am_contig_short_reply,
     .bcopy_single           = ucp_am_bcopy_single_reply,
     .bcopy_multi            = ucp_am_bcopy_multi,
     .zcopy_single           = ucp_am_zcopy_single_reply,

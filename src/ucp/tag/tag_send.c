@@ -52,7 +52,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                  const ucp_request_param_t *param,
                  const ucp_request_send_proto_t *proto)
 {
-    ssize_t max_short          = ucp_proto_get_short_max(req, msg_config);
+    ssize_t max_short          = ucp_proto_get_short_max(req,
+                                                         msg_config->max_short);
     ucp_ep_config_t *ep_config = ucp_ep_config(req->send.ep);
     ucs_status_t status;
     size_t zcopy_thresh;
