@@ -176,7 +176,7 @@ public:
 
     void wait_for_completion(ucs_status_t status) {
 
-        EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
+        EXPECT_FALSE(UCS_STATUS_IS_ERR(status));
         if (status == UCS_OK) {
             --m_comp.count;
         }
@@ -311,7 +311,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, put_zcopy,
     UCT_TEST_CALL_AND_TRY_AGAIN(
         uct_ep_put_zcopy(sender_ep(), iov, iovcnt, rbuf->addr(),
                          rbuf->rkey(), 0), status);
-    EXPECT_TRUE(UCS_INPROGRESS == status || UCS_OK == status);
+    EXPECT_FALSE(UCS_STATUS_IS_ERR(status));
 
     EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_PUT, 1UL);
     EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_ZCOPY,
@@ -592,8 +592,7 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, pending_add,
                                            UCT_CB_FLAG_ASYNC));
 
     // Check that counter is not increased if pending_add returns NOT_OK
-    EXPECT_EQ(uct_ep_pending_add(sender().ep(0), &p_reqs[0], 0),
-              UCS_ERR_BUSY);
+    EXPECT_EQ(UCS_ERR_BUSY, uct_ep_pending_add(sender().ep(0), &p_reqs[0], 0));
     EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_PENDING, 0UL);
 
     // Check that counter gets increased on every successfull pending_add returns NOT_OK
