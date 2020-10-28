@@ -385,39 +385,38 @@ typedef struct {
 
 
 /**
- * Local and remote EP IDs
+ * Endpoint extension for control data path
  */
 typedef struct {
-    ucs_ptr_map_key_t             local;         /* Local EP ID */
-    ucs_ptr_map_key_t             remote;        /* Remote EP ID */
-} ucp_ep_ids_t;
+    ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
+    ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
+    ucp_err_handler_cb_t          err_cb;        /* Error handler */
+    union {
+        ucp_listener_h            listener;      /* Listener that may be associated with ep */
+        ucp_ep_close_proto_req_t  close_req;     /* Close protocol request */
+    };
+} ucp_ep_ext_control_t;
 
 
-/*
+/**
  * Endpoint extension for generic non fast-path data
  */
 typedef struct {
-    ucp_ep_ids_t                  *ids;          /* Local and remote IDS, TODO:
-                                                    remove indirect pointer after
-                                                    stride allocator improvement */
     void                          *user_data;    /* User data associated with ep */
     ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
-    ucp_err_handler_cb_t          err_cb;        /* Error handler */
-
     /* Endpoint match context and remote completion status are mutually exclusive,
      * since remote completions are counted only after the endpoint is already
      * matched to a remote peer.
      */
     union {
         ucp_ep_match_elem_t       ep_match;      /* Matching with remote endpoints */
-        ucp_ep_flush_state_t      flush_state;   /* Remove completion status */
-        ucp_listener_h            listener;      /* Listener that may be associated with ep */
-        ucp_ep_close_proto_req_t  close_req;     /* Close protocol request */
+        ucp_ep_flush_state_t      flush_state;   /* Remote completion status */
     };
+    ucp_ep_ext_control_t          *control_ext;  /* Control data path extension */
 } ucp_ep_ext_gen_t;
 
 
-/*
+/**
  * Endpoint extension for specific protocols
  */
 typedef struct {

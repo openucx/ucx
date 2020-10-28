@@ -665,7 +665,8 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
     if (ucs_test_all_flags(ucp_ep->flags, UCP_EP_FLAG_CLOSED |
                                           UCP_EP_FLAG_CLOSE_REQ_VALID)) {
-        ucp_request_complete_send(ucp_ep_ext_gen(ucp_ep)->close_req.req, UCS_OK);
+        ucp_request_complete_send(ucp_ep_ext_control(ucp_ep)->close_req.req,
+                                  UCS_OK);
         return 1;
     }
 
@@ -744,7 +745,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
         /* if the EP is not local connected, the EP has been closed and flushed,
            CM lane is disconnected, complete close request and destroy EP */
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
-        close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
+        close_req = ucp_ep_ext_control(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
     } else {
         ucs_warn("ep %p: unexpected state on disconnect, flags: 0x%u",
@@ -1058,8 +1059,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_destroy_ep;
     }
 
-    ep->flags                   |= UCP_EP_FLAG_LISTENER;
-    ucp_ep_ext_gen(ep)->listener = conn_request->listener;
+    ep->flags                       |= UCP_EP_FLAG_LISTENER;
+    ucp_ep_ext_control(ep)->listener = conn_request->listener;
     ucp_ep_update_remote_id(ep, conn_request->sa_data.ep_id);
     ucp_listener_schedule_accept_cb(ep);
     *ep_p = ep;
