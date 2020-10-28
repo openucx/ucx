@@ -469,7 +469,7 @@ ucp_am_send_short(ucp_ep_h ep, uint16_t id, uint16_t flags, const void *header,
      * TODO: enable short protocol for such cases when uct_am_short_iov is
      * defined in UCT
      */
-    ucs_assert((length == 0ul) || (header_length == 0));
+    ucs_assert((length == 0ul) || (header_length == 0ul));
     ucs_assert(!(flags & UCP_AM_SEND_REPLY));
     ucp_am_fill_short_header(&hdr, id, flags, header_length);
 
@@ -484,7 +484,7 @@ ucp_am_send_short_reply(ucp_ep_h ep, uint16_t id, uint16_t flags,
                         const void *header, size_t header_length,
                         const void *payload, size_t length)
 {
-    uct_ep_h am_ep   = ucp_ep_get_am_uct_ep(ep);
+    uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
     size_t tx_length;
     ucp_am_hdr_t hdr;
     const void *data;
@@ -492,7 +492,7 @@ ucp_am_send_short_reply(ucp_ep_h ep, uint16_t id, uint16_t flags,
     ucs_status_t status;
 
     ucs_assert(flags & UCP_AM_SEND_REPLY);
-    ucs_assert((length == 0ul) || (header_length == 0));
+    ucs_assert((length == 0ul) || (header_length == 0ul));
 
     status = ucp_ep_resolve_remote_id(ep, ep->am_lane);
     if (ucs_unlikely(status != UCS_OK)) {
