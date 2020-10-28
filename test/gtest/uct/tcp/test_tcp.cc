@@ -29,9 +29,14 @@ public:
         size_t num = 0;
         uct_tcp_ep_t *ep;
 
+        // go through all EPs on iface with lock held, since EPs are created
+        // and inserted to the EP list from async thread during accepting a
+        // connection
+        UCS_ASYNC_BLOCK(m_tcp_iface->super.worker->async);
         ucs_list_for_each(ep, &m_tcp_iface->ep_list, list) {
             num += (ep->conn_state == UCT_TCP_EP_CONN_STATE_RECV_MAGIC_NUMBER);
         }
+        UCS_ASYNC_UNBLOCK(m_tcp_iface->super.worker->async);
 
         return num;
     }
