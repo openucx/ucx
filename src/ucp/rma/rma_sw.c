@@ -14,6 +14,8 @@
 #include <ucs/profile/profile.h>
 #include <ucp/core/ucp_request.inl>
 
+#include <ucp/proto/proto_common.inl>
+
 
 static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
 {
@@ -57,6 +59,7 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
     getreqh->address    = req->send.rma.remote_addr;
     getreqh->length     = req->send.length;
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
+    getreqh->mem_type   = req->send.rma.rkey->mem_type;
     getreqh->req.req_id = ucp_send_request_get_id(req);
 
     ucs_assert(getreqh->req.ep_id != UCP_EP_ID_INVALID);
@@ -168,7 +171,8 @@ static size_t ucp_rma_sw_pack_get_reply(void *dest, void *arg)
                           ucp_ep_config(req->send.ep)->am.max_bcopy -
                           sizeof(*hdr));
     hdr->req_id = req->send.get_reply.req_id;
-    memcpy(hdr + 1, req->send.buffer, length);
+    ucp_dt_contig_pack(req->send.ep->worker, hdr + 1, req->send.buffer, length,
+                       req->send.mem_type);
 
     return sizeof(*hdr) + length;
 }
@@ -220,6 +224,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
     req->send.length           = getreqh->length;
     req->send.get_reply.req_id = getreqh->req.req_id;
     req->send.uct.func         = ucp_progress_get_reply;
+    if (ep->worker->context->config.ext.proto_enable) {
+        req->send.mem_type     = getreqh->mem_type;
+    } else {
+        req->send.mem_type     = UCS_MEMORY_TYPE_HOST;
+    }
 
     ucp_request_send(req, 0);
     return UCS_OK;
@@ -235,12 +244,25 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
                                                               getreph->req_id);
     ucp_ep_h ep                = req->send.ep;
 
-    memcpy(req->send.buffer, getreph + 1, frag_length);
+    if (ep->worker->context->config.ext.proto_enable) {
+        ucp_dt_contig_unpack(ep->worker,
+                             req->send.dt_iter.type.contig.buffer +
+                             req->send.dt_iter.offset,
+                             getreph + 1, frag_length,
+                             req->send.dt_iter.mem_type);
+        req->send.dt_iter.offset += frag_length;
+        if (req->send.dt_iter.offset == req->send.dt_iter.length) {
+            ucp_proto_request_bcopy_complete(req, UCS_OK);
+            ucp_ep_rma_remote_request_completed(ep);
+        }
+    } else {
+        memcpy(req->send.buffer, getreph + 1, frag_length);
 
-    /* complete get request on last fragment of the reply */
-    if (ucp_rma_request_advance(req, frag_length, UCS_OK) == UCS_OK) {
-        ucp_worker_del_request_id(worker, getreph->req_id);
-        ucp_ep_rma_remote_request_completed(ep);
+        /* complete get request on last fragment of the reply */
+        if (ucp_rma_request_advance(req, frag_length, UCS_OK) == UCS_OK) {
+            ucp_worker_del_request_id(worker, getreph->req_id);
+            ucp_ep_rma_remote_request_completed(ep);
+        }
     }
 
     return UCS_OK;
@@ -268,8 +290,9 @@ static void ucp_rma_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
     case UCP_AM_ID_GET_REQ:
         geth = data;
         snprintf(buffer, max, "GET_REQ [addr 0x%"PRIx64" len %"PRIu64
-                 " req_id 0x%"PRIx64" ep_id 0x%"PRIx64"]", geth->address,
-                 geth->length, geth->req.req_id, geth->req.ep_id);
+                 " req_id 0x%"PRIx64" ep_id 0x%"PRIx64" %s]", geth->address,
+                 geth->length, geth->req.req_id, geth->req.ep_id,
+                 ucs_memory_type_names[geth->mem_type]);
         return;
     case UCP_AM_ID_GET_REP:
         reph = data;

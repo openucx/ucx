@@ -111,6 +111,8 @@ libucp_la_SOURCES = \
 	rma/amo_basic.c \
 	rma/amo_send.c \
 	rma/amo_sw.c \
+	rma/get_am.c \
+	rma/get_offload.c \
 	rma/put_am.c \
 	rma/put_offload.c \
 	rma/rma_basic.c \

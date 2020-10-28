@@ -127,7 +127,10 @@ ucp_proto_multi_zcopy_progress(uct_pending_req_t *uct_req,
         }
 
         ucp_proto_multi_request_init(req);
-        init_func(req);
+        if (init_func != NULL) {
+            init_func(req);
+        }
+
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 

@@ -83,9 +83,10 @@ ucp_proto_common_get_iface_attr(const ucp_proto_init_params_t *params,
 }
 
 size_t ucp_proto_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
-                                      ptrdiff_t field_offset)
+                                      ptrdiff_t field_offset, size_t dfl_value)
 {
-    return *(const size_t*)UCS_PTR_BYTE_OFFSET(iface_attr, field_offset);
+    return (field_offset == UCP_PROTO_COMMON_OFFSET_INVALID) ? dfl_value :
+           *(const size_t*)UCS_PTR_BYTE_OFFSET(iface_attr, field_offset);
 }
 
 double
@@ -113,6 +114,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
     ucs_string_buffer_t strb;
     ucp_md_index_t md_index;
     ucp_lane_map_t lane_map;
+    size_t frag_size;
 
     ucp_proto_select_param_str(select_param, &strb);
     ucs_trace("selecting %d out of %d lanes for %s %s", max_lanes,
@@ -215,6 +217,15 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
             }
         }
 
+        /* Max fragment size should be larger than header size */
+        frag_size = ucp_proto_get_iface_attr_field(iface_attr,
+                                                   params->max_frag_offs, SIZE_MAX);
+        if (frag_size <= params->hdr_size) {
+            ucs_trace("lane[%d]: max fragment is too small %zu, need > %zu",
+                      lane, frag_size, params->hdr_size);
+            continue;
+        }
+
         lanes[num_lanes++] = lane;
     }
 
@@ -251,26 +262,24 @@ static void ucp_proto_common_add_perf(const ucp_proto_init_params_t *params,
     }
 }
 
-static void
-ucp_proto_common_add_overheads(const ucp_proto_common_init_params_t *params,
-                               double tl_overhead, ucp_md_map_t reg_md_map)
+static ucs_linear_func_t
+ucp_proto_common_get_reg_cost(const ucp_proto_common_init_params_t *params,
+                              ucp_md_map_t reg_md_map)
 {
-    ucp_context_h context = params->super.worker->context;
-    ucs_linear_func_t send_overheads;
+    ucp_context_h context      = params->super.worker->context;
+    ucs_linear_func_t reg_cost = ucs_linear_func_make(0, 0);
     const uct_md_attr_t *md_attr;
     ucp_md_index_t md_index;
-
-    send_overheads = ucs_linear_func_make(tl_overhead + params->overhead, 0.0);
 
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
         /* Go over all memory domains */
         ucs_for_each_bit(md_index, reg_md_map) {
             md_attr = &context->tl_mds[md_index].attr;
-            ucs_linear_func_add_inplace(&send_overheads, md_attr->reg_cost);
+            ucs_linear_func_add_inplace(&reg_cost, md_attr->reg_cost);
         }
     }
 
-    ucp_proto_common_add_perf(&params->super, send_overheads);
+    return reg_cost;
 }
 
 static void
@@ -283,12 +292,10 @@ ucp_proto_common_calc_completion(const ucp_proto_common_init_params_t *params,
     ucp_proto_perf_range_t *range =
             &params->super.caps->ranges[params->super.caps->num_ranges++];
 
-    if (perf_params->is_multi) {
-        /* Multi fragment protocol has no limit */
-        range->max_length = SIZE_MAX;
-    } else {
-        /* Single fragment protocol can send only one fragment */
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG) {
         range->max_length = frag_size;
+    } else {
+        range->max_length = SIZE_MAX;
     }
 
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
@@ -305,12 +312,13 @@ ucp_proto_common_calc_latency(const ucp_proto_common_init_params_t *params,
                               const ucp_proto_common_perf_params_t *perf_params,
                               ucs_linear_func_t pack_time,
                               ucs_linear_func_t uct_time,
-                              size_t frag_size, double overhead)
+                              size_t frag_size, double recv_overhead)
 {
     ucs_linear_func_t piped_size, piped_send_cost, recv_time;
     ucp_proto_perf_range_t *range;
 
-    recv_time         = ucp_proto_common_recv_time(params, overhead, pack_time);
+    recv_time         = ucp_proto_common_recv_time(params, recv_overhead,
+                                                   pack_time);
 
     /* Performance for 0...frag_size */
     range             = &params->super.caps->ranges[params->super.caps->num_ranges++];
@@ -320,10 +328,11 @@ ucp_proto_common_calc_latency(const ucp_proto_common_init_params_t *params,
         ucs_linear_func_add_inplace(&range->perf, pack_time);
     }
 
-    /* If the 1st range already covers up to SIZE_MAX, or the protocol does not
-     * support multi-fragment - no more ranges are created.
+    /* If the 1st range already covers up to SIZE_MAX, or the protocol should be
+     * limited by single fragment - no more ranges are created
      */
-    if ((range->max_length == SIZE_MAX) || !perf_params->is_multi) {
+    if ((range->max_length == SIZE_MAX) ||
+        (params->flags & UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG)) {
         return;
     }
 
@@ -364,6 +373,7 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
     ucp_proto_caps_t *caps = params->super.caps;
     double bandwidth, overhead, latency;
     const uct_iface_attr_t *iface_attr;
+    ucs_linear_func_t extra_time;
     ucs_linear_func_t pack_time;
     ucs_linear_func_t uct_time;
     ucp_lane_index_t lane;
@@ -394,34 +404,46 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
     }
 
     /* Take fragment size from first lane */
-    iface_attr       = ucp_proto_common_get_iface_attr(&params->super,
-                                                       perf_params->lane0);
-    frag_size        = ucp_proto_get_iface_attr_field(iface_attr,
-                                                       params->fragsz_offset) -
-                       params->hdr_size;
+    iface_attr = ucp_proto_common_get_iface_attr(&params->super,
+                                                 perf_params->lane0);
+    frag_size  = ucp_proto_get_iface_attr_field(iface_attr,
+                                                params->max_frag_offs, SIZE_MAX);
+    if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE)) {
+        /* if the data returns as a response, no need to subtract header size */
+        frag_size -= params->hdr_size;
+    }
 
     caps->cfg_thresh   = params->cfg_thresh;
     caps->cfg_priority = params->cfg_priority;
-    caps->min_length   = 0;
+    caps->min_length   = ucp_proto_get_iface_attr_field(iface_attr,
+                                                        params->min_frag_offs,
+                                                        0);
     caps->num_ranges   = 0;
 
-    op_attr_mask = ucp_proto_select_op_attr_from_flags(
+    op_attr_mask  = ucp_proto_select_op_attr_from_flags(
                             params->super.select_param->op_flags);
-    uct_time     = ucs_linear_func_make(latency, 1.0 / bandwidth);
-    pack_time    = ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
+    uct_time      = ucs_linear_func_make(latency, 1.0 / bandwidth);
+    pack_time     = ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
+    extra_time    = ucp_proto_common_get_reg_cost(params, perf_params->reg_md_map);
+    extra_time.c += overhead + params->overhead;
 
-    if (op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {
+    if ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
+        !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE)) {
         /* Calculate time to complete the send operation locally */
         ucp_proto_common_calc_completion(params, perf_params, pack_time,
                                          uct_time, frag_size, latency);
     } else {
-        /* Calculate the time it takes for the message to be received on the
-         * remote side */
+        /* Calculate the time for message data transfer */
         ucp_proto_common_calc_latency(params, perf_params, pack_time, uct_time,
                                       frag_size, overhead);
+
+        /* If we wait for response, add latency of sending the request */
+        if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE) {
+            extra_time.c += latency;
+        }
     }
 
-    ucp_proto_common_add_overheads(params, overhead, perf_params->reg_md_map);
+    ucp_proto_common_add_perf(&params->super, extra_time);
 }
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self)

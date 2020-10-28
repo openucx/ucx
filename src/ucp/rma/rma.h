@@ -59,6 +59,7 @@ typedef struct {
     uint64_t                  address;
     uint64_t                  length;
     ucp_request_hdr_t         req;
+    ucs_memory_type_t         mem_type;
 } UCS_S_PACKED ucp_get_req_hdr_t;
 
 
