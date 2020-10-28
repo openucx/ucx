@@ -1937,7 +1937,12 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 #if HAVE_DECL_IBV_EXP_QUERY_DEVICE
     ret = ibv_exp_query_device(dev->ibv_context, &dev->dev_attr);
 #elif HAVE_DECL_IBV_QUERY_DEVICE_EX
-    ret = ibv_query_device_ex(dev->ibv_context, NULL, &dev->dev_attr);
+    if (uct_ib_device_is_hns(ibv_device)) {
+        memset(&dev->dev_attr, 0, sizeof(dev->dev_attr));
+        ret = ibv_query_device(dev->ibv_context, &dev->dev_attr.orig_attr);
+    } else {
+        ret = ibv_query_device_ex(dev->ibv_context, NULL, &dev->dev_attr);
+    }
 #else
     ret = ibv_query_device(dev->ibv_context, &dev->dev_attr);
 #endif

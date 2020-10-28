@@ -368,9 +368,9 @@ AS_IF([test "x$with_ib" = "xyes"],
            ])
 
        # Hns RoCE support
-       AC_CHECK_FILE(/usr/lib64/libibverbs/libhns-rdmav17.so,
+       AC_CHECK_FILE(/usr/lib64/libibverbs/libhns-rdmav25.so,
        [
-            AC_CHECK_FILE(/usr/lib/modules/$(uname --release)/updates/drivers/infiniband/hw/hns/hns-roce.ko,
+            AC_CHECK_FILE(/usr/lib/modules/$(uname --release)/updates/drivers/infiniband/hw/hns/hns-roce-cae.ko,
             [
                 AC_CHECK_FILE(/usr/lib/modules/$(uname --release)/updates/drivers/infiniband/hw/hns/hns-roce-hw-v2.ko,
                 [
