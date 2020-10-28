@@ -859,7 +859,8 @@ class test_ucp_sockaddr_with_rma_atomic : public test_ucp_sockaddr {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_STREAM |
-                UCP_FEATURE_RMA | UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64;
+                            UCP_FEATURE_RMA | UCP_FEATURE_AMO32 |
+                            UCP_FEATURE_AMO64;
         test_ucp_sockaddr::get_test_variants(variants, features);
     }
 };
@@ -902,7 +903,7 @@ public:
         uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_STREAM |
                             UCP_FEATURE_RMA | UCP_FEATURE_AM;
         test_ucp_sockaddr::get_test_variants_mt(variants, features,
-                                             TEST_MODIFIER_CM, "");
+                                                TEST_MODIFIER_CM, "");
     }
 
     virtual void init() {

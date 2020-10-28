@@ -75,7 +75,7 @@ public:
         add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_RNDV_PUT_ZCOPY, "rndv_put_zcopy");
         add_variant_with_value(variants, get_ctx_params(),
-                               VARIANT_RNDV_GET_ZCOPY, "get_ctx_params()");
+                               VARIANT_RNDV_GET_ZCOPY, "rndv_get_zcopy");
         add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_RNDV_AUTO, "rndv_auto");
         add_variant_with_value(variants, get_ctx_params(),

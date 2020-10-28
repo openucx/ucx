@@ -27,12 +27,13 @@ static std::ostream& operator<<(std::ostream& os,
                                 const std::vector<std::string>& str_vector)
 {
     for (std::vector<std::string>::const_iterator iter = str_vector.begin();
-          iter != str_vector.end(); ++iter) {
-         if (iter != str_vector.begin()) {
-             os << ",";
-         }
-         os << *iter;
+         iter != str_vector.end(); ++iter) {
+        if (iter != str_vector.begin()) {
+            os << ",";
+        }
+        os << *iter;
     }
+
     return os;
 }
 
@@ -443,6 +444,7 @@ bool ucp_test::check_tls(const std::string& tls)
         ctx_params.features   = UCP_FEATURE_TAG |
                                 UCP_FEATURE_RMA |
                                 UCP_FEATURE_STREAM |
+                                UCP_FEATURE_AM |
                                 UCP_FEATURE_AMO32 |
                                 UCP_FEATURE_AMO64;
         status = ucp_init(&ctx_params, config, &ucph);

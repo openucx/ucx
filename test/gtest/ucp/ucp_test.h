@@ -35,6 +35,7 @@ namespace ucp {
 extern const uint32_t MAGIC;
 }
 
+
 struct ucp_test_variant_value {
     int                                 value;  /* User-defined value */
     std::string                         name;   /* Variant description */
@@ -261,7 +262,7 @@ protected:
                        get_variants_func_t generator, int value,
                        const std::string& name = "");
 
-    // Add test variants based on existing generator a bit-set of values
+    // Add test variants based on existing generator and a bit-set of values
     static void
     add_variant_values(std::vector<ucp_test_variant>& variants,
                        get_variants_func_t generator, uint64_t bitmap,
