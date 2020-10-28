@@ -1142,13 +1142,19 @@ typedef struct {
     int                post_nop;
 } uct_rc_mlx5_common_clean_tx_cq_ctx_t;
 
+static int
+uct_rc_mlx5_common_iface_cq_available_total(uct_rc_mlx5_iface_common_t *iface)
+{
+    return iface->super.tx.cq_available + iface->super.tx.cq_free;
+}
+
 static int uct_rc_mlx5_common_clean_tx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
                                              const struct mlx5_cqe64 *cqe,
                                              void *arg)
 {
     uct_rc_mlx5_common_clean_tx_cq_ctx_t *ctx = arg;
 
-    ucs_assert(iface->super.tx.cq_available >= -1);
+    ucs_assert(uct_rc_mlx5_common_iface_cq_available_total(iface) >= -1);
 
     if (cqe != NULL) {
         uct_rc_mlx5_common_free_tx_res(&iface->super, ctx->txwq, ctx->txqp,
@@ -1166,7 +1172,7 @@ static int uct_rc_mlx5_common_clean_tx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
         /* We reserved one CQ credit for NOP operation, so the lowest value
          * cq_available can reach is -1 (after posting the nop)
          */
-        ucs_assert(iface->super.tx.cq_available >= 0);
+        ucs_assert(uct_rc_mlx5_common_iface_cq_available_total(iface) >= 0);
         ucs_trace("qp 0x%x: posted NOP", ctx->txwq->super.qp_num);
         uct_rc_mlx5_common_post_nop(iface, ctx->txqp, ctx->txwq);
         ucs_assert(uct_rc_txqp_unsignaled(ctx->txqp) == 0);
@@ -1191,7 +1197,7 @@ void uct_rc_mlx5_iface_commom_cq_clean_tx(uct_rc_mlx5_iface_common_t *iface,
     /* If NOP was posted and cq_available became -1, it must also be completed
      * and restore cq_available to 0
      */
-    ucs_assert(iface->super.tx.cq_available >= 0);
+    ucs_assert(uct_rc_mlx5_common_iface_cq_available_total(iface) >= 0);
 }
 
 void uct_rc_mlx5_iface_print(uct_rc_mlx5_iface_common_t *mlx5_iface,
