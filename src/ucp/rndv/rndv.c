@@ -392,6 +392,7 @@ static void ucp_rndv_complete_rma_get_zcopy(ucp_request_t *rndv_req,
         ucp_request_put(rndv_req);
     }
 
+    ucs_assert(rreq->recv.state.dt.contig.md_map == 0);
     ucp_rndv_recv_req_complete(rreq, status);
 }
 
