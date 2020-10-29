@@ -1142,10 +1142,16 @@ typedef struct {
     int                post_nop;
 } uct_rc_mlx5_common_clean_tx_cq_ctx_t;
 
-static int
-uct_rc_mlx5_common_iface_cq_available_total(uct_rc_mlx5_iface_common_t *iface)
+static void
+uct_rc_mlx5_common_iface_cq_available_check(uct_rc_mlx5_iface_common_t *iface)
 {
-    return iface->super.tx.cq_available + iface->super.tx.cq_free;
+    /* The last posted WQE where cq_available was >0 could reduce it to at most
+     * -UCT_IB_MLX5_MAX_BB + 1
+     */
+    ucs_assertv((iface->super.tx.cq_available + iface->super.tx.cq_free) >
+                -UCT_IB_MLX5_MAX_BB,
+                "cq_available=%d cq_free=%d", iface->super.tx.cq_available,
+                iface->super.tx.cq_free);
 }
 
 static int uct_rc_mlx5_common_clean_tx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
@@ -1153,8 +1159,6 @@ static int uct_rc_mlx5_common_clean_tx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
                                              void *arg)
 {
     uct_rc_mlx5_common_clean_tx_cq_ctx_t *ctx = arg;
-
-    ucs_assert(uct_rc_mlx5_common_iface_cq_available_total(iface) >= -1);
 
     if (cqe != NULL) {
         uct_rc_mlx5_common_free_tx_res(&iface->super, ctx->txwq, ctx->txqp,
@@ -1169,10 +1173,7 @@ static int uct_rc_mlx5_common_clean_tx_cq_cb(uct_rc_mlx5_iface_common_t *iface,
      * any unsignaled sends
      */
     if (ctx->post_nop && (uct_rc_txqp_available(ctx->txqp) > 0)) {
-        /* We reserved one CQ credit for NOP operation, so the lowest value
-         * cq_available can reach is -1 (after posting the nop)
-         */
-        ucs_assert(uct_rc_mlx5_common_iface_cq_available_total(iface) >= 0);
+        uct_rc_mlx5_common_iface_cq_available_check(iface);
         ucs_trace("qp 0x%x: posted NOP", ctx->txwq->super.qp_num);
         uct_rc_mlx5_common_post_nop(iface, ctx->txqp, ctx->txwq);
         ucs_assert(uct_rc_txqp_unsignaled(ctx->txqp) == 0);
@@ -1191,13 +1192,14 @@ void uct_rc_mlx5_iface_commom_cq_clean_tx(uct_rc_mlx5_iface_common_t *iface,
         .txwq     = txwq,
         .post_nop = (uct_rc_txqp_unsignaled(txqp) > 0)
     };
+
+    uct_rc_mlx5_common_iface_cq_available_check(iface);
+
     uct_rc_mlx5_iface_commom_cq_clean(iface, UCT_IB_DIR_TX, txwq->super.qp_num,
                                       uct_rc_mlx5_common_clean_tx_cq_cb, &ctx);
 
-    /* If NOP was posted and cq_available became -1, it must also be completed
-     * and restore cq_available to 0
-     */
-    ucs_assert(uct_rc_mlx5_common_iface_cq_available_total(iface) >= 0);
+    /* check that cq_available was restored */
+    uct_rc_mlx5_common_iface_cq_available_check(iface);
 }
 
 void uct_rc_mlx5_iface_print(uct_rc_mlx5_iface_common_t *mlx5_iface,
