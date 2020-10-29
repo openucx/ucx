@@ -71,7 +71,7 @@ private:
  */
 class UcxContext {
 public:
-    UcxContext(size_t iomsg_size);
+    UcxContext(size_t iomsg_size, double connect_timeout);
 
     virtual ~UcxContext();
 
@@ -124,6 +124,8 @@ private:
 
     ucp_worker_h worker() const;
 
+    double connect_timeout() const;
+
     void progress_conn_requests();
 
     void progress_io_message();
@@ -157,6 +159,7 @@ private:
     std::string                    _iomsg_buffer;
     std::deque<ucp_conn_request_h> _conn_requests;
     std::deque<UcxConnection *>    _failed_conns;
+    double                         _connect_timeout;
 };
 
 

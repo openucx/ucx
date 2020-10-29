@@ -55,9 +55,9 @@ UcxLog::~UcxLog()
 
 #define UCX_LOG UcxLog("[UCX]", true)
 
-UcxContext::UcxContext(size_t iomsg_size) :
+UcxContext::UcxContext(size_t iomsg_size, double connect_timeout) :
     _context(NULL), _worker(NULL), _listener(NULL), _iomsg_recv_request(NULL),
-    _iomsg_buffer(iomsg_size, '\0')
+    _iomsg_buffer(iomsg_size, '\0'), _connect_timeout(connect_timeout)
 {
 }
 
@@ -240,6 +240,11 @@ const std::string UcxContext::sockaddr_str(const struct sockaddr* saddr,
 ucp_worker_h UcxContext::worker() const
 {
     return _worker;
+}
+
+double UcxContext::connect_timeout() const
+{
+    return _connect_timeout;
 }
 
 void UcxContext::progress_conn_requests()
@@ -561,6 +566,7 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 {
     UcxContext::wait_status_t wait_status;
+    double connect_timeout = _context.connect_timeout();
 
     // create endpoint
     ep_params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLER |
@@ -588,7 +594,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     // send local connection id
     void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
                                     stream_send_callback, 0);
-    wait_status = _context.wait_completion(sreq, 5);
+    wait_status = _context.wait_completion(sreq, connect_timeout);
     if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to send remote connection id";
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
@@ -601,7 +607,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     }
 
     // wait to complete receiving remote connection id
-    wait_status = _context.wait_completion(rreq, 5);
+    wait_status = _context.wait_completion(rreq, connect_timeout);
     if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to receive remote connection id";
         ep_close(UCP_EP_CLOSE_MODE_FORCE);

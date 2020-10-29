@@ -40,6 +40,7 @@ static const char *io_op_names[] = {
 typedef struct {
     std::vector<const char*> servers;
     int                      port_num;
+    double                   connect_timeout;
     long                     client_retries;
     double                   client_timeout;
     double                   client_runtime_limit;
@@ -183,7 +184,8 @@ protected:
     };
 
     P2pDemoCommon(const options_t& test_opts) :
-        UcxContext(test_opts.iomsg_size), _test_opts(test_opts),
+        UcxContext(test_opts.iomsg_size, test_opts.connect_timeout),
+        _test_opts(test_opts),
         _io_msg_pool(opts().iomsg_size), _cur_buffer_idx(0), _padding(0) {
 
         _data_buffers.resize(opts().num_buffers);
@@ -856,6 +858,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     int c;
 
     test_opts->port_num             = 1337;
+    test_opts->connect_timeout      = 20.0;
     test_opts->client_retries       = std::numeric_limits<long>::max();
     test_opts->client_timeout       = 1.0;
     test_opts->client_runtime_limit = std::numeric_limits<double>::max();
@@ -869,7 +872,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->random_seed          = std::time(NULL);
     test_opts->verbose              = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:l:s:v")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:n:l:s:v")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -938,6 +941,12 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
                 return -1;
             }
             break;
+        case 'n':
+            if (set_time(optarg, &test_opts->connect_timeout) != 0) {
+                std::cout << "invalid '" << optarg << "' value for connect timeout" << std::endl;
+                return -1;
+            }
+            break;
         case 't':
             if (set_time(optarg, &test_opts->client_timeout) != 0) {
                 std::cout << "invalid '" << optarg << "' value for client timeout" << std::endl;
@@ -963,6 +972,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "" << std::endl;
             std::cout << "Supported options are:" << std::endl;
             std::cout << "  -p <port>                  TCP port number to use" << std::endl;
+            std::cout << "  -n <connect timeout>       Timeout for connecting to the peer (or \"inf\")" << std::endl;
             std::cout << "  -o <op1,op2,...,opN>       Comma-separated string of IO operations [read|write]" << std::endl;
             std::cout << "                             NOTE: if using several IO operations, performance" << std::endl;
             std::cout << "                                   measurments may be inaccurate" << std::endl;
