@@ -75,7 +75,7 @@ ucs_status_t ucm_bistro_patch(const char *symbol, void *hook,
 
     UCM_LOOKUP_SYMBOL(func, symbol);
 
-    status = ucm_bistro_create_restore_point(func, rp);
+    status = ucm_bistro_create_restore_point(func, sizeof(patch), rp);
     if (UCS_STATUS_IS_ERR(status)) {
         return status;
     }
