@@ -68,11 +68,11 @@ ucp_tag_offload_iface(ucp_worker_t *worker, ucp_tag_t tag)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_release_buf(ucp_request_t *req, int dereg)
+ucp_tag_offload_release_buf(ucp_request_t *req)
 {
     if (req->recv.tag.rdesc != NULL) {
         ucs_mpool_put_inline(req->recv.tag.rdesc);
-    } else if (dereg) {
+    } else {
         ucp_request_recv_buffer_dereg(req);
     }
 }
@@ -101,7 +101,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
     req->recv.tag.info.length     = length;
 
     if (ucs_unlikely(status != UCS_OK)) {
-        ucp_tag_offload_release_buf(req, 1);
+        ucp_tag_offload_release_buf(req);
         goto out;
     }
 
@@ -145,9 +145,8 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
 
     --req->recv.tag.wiface->post_count;
     if (ucs_unlikely(status != UCS_OK)) {
-        ucp_tag_offload_release_buf(req, 1);
         ucp_request_complete_tag_recv(req, status);
-        return;
+        goto out;
     }
 
     ucs_assert(header_length >= sizeof(ucp_rndv_rts_hdr_t));
@@ -164,7 +163,8 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
         ucp_tag_rndv_matched(req->recv.worker, req, header_host_copy);
     }
 
-    ucp_tag_offload_release_buf(req, 0);
+out:
+    ucp_tag_offload_release_buf(req);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
@@ -246,7 +246,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_cancel, (worker, req, mode),
 
     /* if cancel is not forced, need to wait its completion */
     if (mode & UCP_TAG_OFFLOAD_CANCEL_FORCE) {
-        ucp_tag_offload_release_buf(req, mode & UCP_TAG_OFFLOAD_CANCEL_DEREG);
+        ucp_tag_offload_release_buf(req);
         --wiface->post_count;
     }
 }
@@ -327,7 +327,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
                    (status == UCS_ERR_ALREADY_EXISTS));
         /* No more matching entries in the transport.
          * TODO keep registration in case SW RNDV protocol will be used */
-        ucp_tag_offload_release_buf(req, 1);
+        ucp_tag_offload_release_buf(req);
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, BLOCK_TAG_EXCEED);
         return status;
     }
