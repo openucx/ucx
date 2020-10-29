@@ -255,6 +255,14 @@ ucp_am_send_req_total_size(ucp_request_t *req)
     return req->send.length + req->send.msg_proto.am.header_length;
 }
 
+static UCS_F_ALWAYS_INLINE ssize_t
+ucp_am_get_short_max(const ucp_request_t *req, ssize_t max_short)
+{
+    return (UCP_DT_IS_CONTIG(req->send.datatype) &&
+            UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type)) ?
+            max_short : -1;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_am_fill_header(ucp_am_hdr_t *hdr, ucp_request_t *req)
 {
@@ -506,6 +514,13 @@ ucp_am_send_short_reply(ucp_ep_h ep, uint16_t id, uint16_t flags,
         tx_length = length;
         data      = payload;
     }
+
+    /* Reply protocol carries ep_id in its header in addition to AM short
+     * header. UCT AM short protocol accepts only 8 bytes header, so add ep_id
+     * right before the data.
+     * TODO: Use uct_ep_am_short_iov instead, when it is defined in UCT
+     */
+    UCS_STATIC_ASSERT(ucs_offsetof(ucp_am_reply_hdr_t, ep_id) == sizeof(hdr));
 
     tx_buffer = ucs_alloca(tx_length + sizeof(ucs_ptr_map_key_t));
 
@@ -767,7 +782,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
          */
         max_short = -1;
     } else {
-        max_short = ucp_proto_get_short_max(req, max_short);
+        max_short = ucp_am_get_short_max(req, max_short);
     }
 
     /* TODO: Add support for UCP_AM_SEND_EAGER/RNDV flags */
