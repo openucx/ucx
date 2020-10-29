@@ -83,10 +83,13 @@ static void
 uct_rc_mlx5_iface_common_send_keepalive(uct_rc_mlx5_iface_common_t *iface)
 {
      uct_rc_mlx5_ep_t *ep;
+
+     ucs_spin_lock(&iface->super.ep_list_lock);
      ucs_list_for_each(ep, &iface->super.ep_list, super.list) {
          ucs_trace("send keepalive grant on ep %p", ep);
          uct_rc_ep_fc_send_grant(&ep->super);
      }
+     ucs_spin_unlock(&iface->super.ep_list_lock);
 
      uct_rc_mlx5_iface_print(iface, "keepalive");
 

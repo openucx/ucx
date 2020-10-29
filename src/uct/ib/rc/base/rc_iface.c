@@ -298,14 +298,17 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     }
 
     count = 0;
+    ucs_spin_lock(&iface->ep_list_lock);
     ucs_list_for_each(ep, &iface->ep_list, list) {
         status = uct_ep_flush(&ep->super.super, 0, NULL);
         if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
             ++count;
         } else if (status != UCS_OK) {
+            ucs_spin_unlock(&iface->ep_list_lock);
             return status;
         }
     }
+    ucs_spin_unlock(&iface->ep_list_lock);
 
     if (count != 0) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
@@ -606,6 +609,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
+    ucs_spinlock_init(&self->ep_list_lock, 0);
 
     /* Check FC parameters correctness */
     if ((config->fc.hard_thresh <= 0) || (config->fc.hard_thresh >= 1)) {
@@ -728,6 +732,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
         ucs_warn("some eps were not destroyed");
     }
 
+    ucs_spinlock_destroy(&self->ep_list_lock);
     ucs_arbiter_cleanup(&self->tx.arbiter);
 
     UCS_STATS_NODE_FREE(self->stats);

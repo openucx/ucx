@@ -117,7 +117,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
 
     ucs_arbiter_group_init(&self->arb_group);
 
+    ucs_spin_lock(&iface->ep_list_lock);
     ucs_list_add_head(&iface->ep_list, &self->list);
+    ucs_spin_unlock(&iface->ep_list_lock);
+
     ucs_debug("created rc ep %p", self);
 
     return UCS_OK;
@@ -133,7 +136,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
                                            uct_rc_iface_t);
     ucs_debug("destroy rc ep %p", self);
 
+    ucs_spin_lock(&iface->ep_list_lock);
     ucs_list_del(&self->list);
+    ucs_spin_unlock(&iface->ep_list_lock);
+
     uct_rc_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(iface, &self->txqp);
