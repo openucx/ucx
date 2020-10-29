@@ -38,6 +38,7 @@ VALGRIND_ARGS = \
 	--error-exitcode=1 \
 	--child-silent-after-fork=yes \
 	--suppressions=$(top_srcdir)/contrib/valgrind.supp \
+	--gen-suppressions=yes \
 	$(VALGRIND_EXTRA_ARGS)
 
 noinst_PROGRAMS = gtest
