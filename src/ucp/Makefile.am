@@ -22,7 +22,6 @@ nobase_dist_libucp_la_HEADERS = \
 
 noinst_HEADERS = \
 	core/ucp_am.h \
-	core/ucp_am.inl \
 	core/ucp_context.h \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
