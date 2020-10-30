@@ -603,7 +603,6 @@ public:
         long*                                _op_cnt;
         uint32_t                             _chunk_cnt;
         uint32_t                             _sn;
-        bool                                 _validate;
         BufferIov*                           _iov;
         MemoryPool<IoWriteResponseCallback>& _pool;
     };
@@ -810,7 +809,7 @@ public:
         P2pDemoCommon(test_opts), _prev_connect_time(0),
         _num_sent(0), _num_completed(0),
         _status(OK), _start_time(get_time()),
-        _retry(0), _read_callback_pool(opts().iomsg_size, "read callbacks") {
+        _read_callback_pool(opts().iomsg_size, "read callbacks") {
     }
 
     typedef enum {
@@ -1289,7 +1288,6 @@ private:
     long                                    _num_completed;
     status_t                                _status;
     double                                  _start_time;
-    unsigned                                _retry;
     MemoryPool<IoReadResponseCallback>      _read_callback_pool;
 };
 
