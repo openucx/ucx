@@ -76,7 +76,7 @@ ucg_plan_t *ucg_op_test::create_plan(unsigned phs_cnt, ucg_collective_params_t *
 }
 
 ucg_builtin_plan_t *ucg_op_test::create_method_plan(ucg_builtin_plan_method_type method) const {
-    ucg_builtin_plan_t *builtin_plan = new ucg_builtin_plan_t + sizeof(ucg_builtin_plan_phase_t);
+    ucg_builtin_plan_t *builtin_plan = new ucg_builtin_plan_t;
     builtin_plan->phss[0] = *create_phase(method);
 
     return builtin_plan;
