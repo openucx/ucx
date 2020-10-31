@@ -156,9 +156,9 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p)
     */
     while (fgets(str, sizeof(str), f) != NULL) {
         ret = sscanf(str, "%s %*x %*x %*d %*d %*d %*d %x", name, &netmask);
-        if ((ret == 3) && !strcmp(name, if_name) && (netmask == 0)) {
+        if ((ret == 2) && !strcmp(name, if_name) && (netmask == 0)) {
             *result_p = 1;
-            break;
+            goto out;
         }
 
         /* Skip rest of the line */
@@ -166,6 +166,7 @@ ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p)
     }
 
     *result_p = 0;
+out:
     fclose(f);
     return UCS_OK;
 }
