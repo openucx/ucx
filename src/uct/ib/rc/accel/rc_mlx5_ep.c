@@ -886,6 +886,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 
     uct_rc_mlx5_iface_print(iface, "ep_create");
 
+    self->connected = 0;
+
     /* Need to create QP before super constructor to get QP number */
     uct_rc_mlx5_iface_fill_attr(iface, &attr, iface->super.config.tx_qp_len,
                                 &iface->rx.srq);
@@ -927,7 +929,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
 
     self->tx.wq.bb_max = ucs_min(self->tx.wq.bb_max, iface->tx.bb_max);
     self->mp.free      = 1;
-    self->connected    = 0;
 
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     return UCS_OK;
