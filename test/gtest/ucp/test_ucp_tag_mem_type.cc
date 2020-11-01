@@ -21,9 +21,9 @@ extern "C" {
 class test_ucp_tag_mem_type: public test_ucp_tag {
 public:
     enum {
-            VARIANT_GDR_OFF     = UCS_BIT(0),
-            VARIANT_TAG_OFFLOAD = UCS_BIT(1),
-            VARIANT_MAX         = UCS_BIT(2)
+        VARIANT_GDR_OFF     = UCS_BIT(0),
+        VARIANT_TAG_OFFLOAD = UCS_BIT(1),
+        VARIANT_MAX         = UCS_BIT(2)
     };
 
     void init() {

@@ -281,8 +281,8 @@ ucp_test_variant& ucp_test::add_variant(std::vector<ucp_test_variant>& variants,
                                         uint64_t ctx_features, int thread_type)
 {
     ucp_params_t ctx_params = {};
-    ctx_params.field_mask = UCP_PARAM_FIELD_FEATURES;
-    ctx_params.features   = ctx_features;
+    ctx_params.field_mask   = UCP_PARAM_FIELD_FEATURES;
+    ctx_params.features     = ctx_features;
     return add_variant(variants, ctx_params, thread_type);
 }
 
@@ -440,13 +440,13 @@ bool ucp_test::check_tls(const std::string& tls)
     {
         scoped_log_handler slh(hide_errors_logger);
         ucp_params_t ctx_params = {};
-        ctx_params.field_mask = UCP_PARAM_FIELD_FEATURES;
-        ctx_params.features   = UCP_FEATURE_TAG |
-                                UCP_FEATURE_RMA |
-                                UCP_FEATURE_STREAM |
-                                UCP_FEATURE_AM |
-                                UCP_FEATURE_AMO32 |
-                                UCP_FEATURE_AMO64;
+        ctx_params.field_mask   = UCP_PARAM_FIELD_FEATURES;
+        ctx_params.features     = UCP_FEATURE_TAG |
+                                  UCP_FEATURE_RMA |
+                                  UCP_FEATURE_STREAM |
+                                  UCP_FEATURE_AM |
+                                  UCP_FEATURE_AMO32 |
+                                  UCP_FEATURE_AMO64;
         status = ucp_init(&ctx_params, config, &ucph);
     }
     if (status == UCS_OK) {
@@ -467,7 +467,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               const ucp_test_base *test_owner)
     : m_err_cntr(0), m_rejected_cntr(0)
 {
-    ucp_test_variant entity_param = test_param.variant;
+    ucp_test_variant entity_param           = test_param.variant;
     ucp_worker_params_t local_worker_params = worker_params;
     int num_workers;
 

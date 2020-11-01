@@ -322,8 +322,7 @@ public:
         } else if (dt == UCP_DATATYPE_IOV) {
            return ucp_dt_make_iov();
         } else {
-            EXPECT_EQ(UCP_DATATYPE_GENERIC, dt);
-
+            ucs_assert(UCP_DATATYPE_GENERIC == dt);
             ucp_datatype_t ucp_dt;
             ASSERT_UCS_OK(ucp_dt_create_generic(&ucp::test_dt_copy_ops, NULL,
                                                 &ucp_dt));
