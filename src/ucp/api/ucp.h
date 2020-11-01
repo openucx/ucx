@@ -369,6 +369,19 @@ enum ucp_conn_request_attr_field {
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP endpoint attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_ep_attr_t are
+ * present. It is used to enable backward compatibility support.
+ */
+enum ucp_ep_attr_field {
+    UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(0), /**< Sockaddr used by the endpoint */
+    UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1)  /**< Sockaddr the endpoint is connected to */
+};
+
+
+/**
  * @ingroup UCP_DATATYPE
  * @brief UCP data type classification
  *
@@ -997,6 +1010,34 @@ typedef struct ucp_conn_request_attr {
      */
     struct sockaddr_storage client_address;
 } ucp_conn_request_attr_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP endpoint attributes.
+ *
+ * The structure defines the attributes which characterize
+ * the particular endpoint.
+ */
+typedef struct ucp_ep_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_ep_attr_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * The local sockaddr that this ep is using.
+     */
+    struct sockaddr_storage local_sockaddr;
+
+    /**
+     * The remote sockaddr this ep is connected to.
+     */
+    struct sockaddr_storage remote_sockaddr;
+} ucp_ep_attr_t;
 
 
 /**
@@ -1839,6 +1880,20 @@ ucs_status_t ucp_listener_query(ucp_listener_h listener, ucp_listener_attr_t *at
  */
 ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
                                     ucp_conn_request_attr_t *attr);
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Get attributes of a given endpoint.
+ *
+ * This routine fetches information about the endpoint.
+ *
+ * @param [in]  ep         Endpoint object to query.
+ * @param [out] attr       Filled with attributes of the endpoint.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr);
 
 
 /**
