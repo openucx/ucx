@@ -342,6 +342,10 @@ protected:
             return _npos;
         }
 
+        inline size_t npos() const {
+            return _npos;
+        }
+
     private:
         size_t init_chunk(size_t i, Buffer *chunk, size_t remaining) {
             _iov[i] = chunk;
@@ -355,10 +359,7 @@ protected:
             }
         }
 
-    public:
-        static const size_t    _npos = SIZE_MAX;
-
-    private:
+        static const size_t    _npos = static_cast<size_t>(-1);
         std::vector<Buffer*>   _iov;
         MemoryPool<BufferIov>& _pool;
     };
@@ -414,7 +415,7 @@ protected:
     public:
         SendCompleteCallback(size_t buffer_size,
                              MemoryPool<SendCompleteCallback>& pool) :
-            _counter(0), _iov(NULL), _pool(pool) {
+            _op_counter(NULL), _counter(0), _iov(NULL), _pool(pool) {
         }
 
         void init(BufferIov* iov, long* op_counter) {
@@ -501,7 +502,7 @@ protected:
         assert(iov.size() != 0);
 
         size_t err_pos = iov.validate(seed);
-        if (err_pos != iov._npos) {
+        if (err_pos != iov.npos()) {
             LOG << "ERROR: iov data corruption at " << err_pos << " position";
             abort();
         }
@@ -564,7 +565,8 @@ public:
     public:
         IoWriteResponseCallback(size_t buffer_size,
             MemoryPool<IoWriteResponseCallback>& pool) :
-            _server(NULL), _conn(NULL), _sn(0), _iov(NULL), _pool(pool) {
+            _server(NULL), _conn(NULL), _op_cnt(NULL), _chunk_cnt(0), _sn(0),
+            _iov(NULL), _pool(pool) {
         }
 
         void init(DemoServer *server, UcxConnection* conn, uint32_t sn,
@@ -749,7 +751,7 @@ public:
         IoReadResponseCallback(size_t buffer_size,
             MemoryPool<IoReadResponseCallback>& pool) :
             _comp_counter(0), _io_counter(NULL), _server_io_counter(NULL),
-            _sn(0), _iov(NULL), _buffer(malloc(buffer_size)),
+            _sn(0), _validate(false), _iov(NULL), _buffer(malloc(buffer_size)),
             _buffer_size(buffer_size), _pool(pool) {
 
             if (_buffer == NULL) {
@@ -953,7 +955,8 @@ public:
     void wait_for_responses(long max_outstanding) {
         bool timer_started  = false;
         bool timer_finished = false;
-        double start_time, curr_time, elapsed_time;
+        double start_time   = 0.; // avoid compile error
+        double curr_time, elapsed_time;
         long count = 0;
 
         while (((_num_sent - _num_completed) > max_outstanding) &&
