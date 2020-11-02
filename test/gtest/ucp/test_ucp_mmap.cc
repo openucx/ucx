@@ -17,23 +17,12 @@ extern "C" {
 
 class test_ucp_mmap : public ucp_test {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_RMA;
-        return params;
-    }
-
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
-                     const std::string& test_case_name, const std::string& tls)
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        std::vector<ucp_test_param> result;
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name, tls, 0, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name + "/map_nb",
-                                     tls, UCP_MEM_MAP_NONBLOCK, result);
-        return result;
+        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, UCP_MEM_MAP_NONBLOCK,
+                               "map_nb");
     }
 
     virtual void init() {
@@ -42,7 +31,7 @@ public:
     }
 
     unsigned mem_map_flags() const {
-        return GetParam().variant;
+        return get_variant_value();
     }
 
     bool is_tl_rdma() {

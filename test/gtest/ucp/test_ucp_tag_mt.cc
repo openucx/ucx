@@ -18,37 +18,22 @@ using namespace ucs; /* For vector<char> serialization */
 
 class test_ucp_tag_mt : public test_ucp_tag {
 public:
-    virtual void init()
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        test_ucp_tag::init();
-        ucp_test_param param = GetParam();
-    }
+        add_variant_with_value(variants, get_ctx_params(), RECV_REQ_INTERNAL,
+                               "req_int,mt_context", MULTI_THREAD_CONTEXT);
+        add_variant_with_value(variants, get_ctx_params(), RECV_REQ_EXTERNAL,
+                               "req_ext,mt_context", MULTI_THREAD_CONTEXT);
 
-    static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
-                                                        const std::string& name,
-                                                        const std::string& test_case_name,
-                                                        const std::string& tls)
-    {
-        std::vector<ucp_test_param> result;
-
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name, tls, RECV_REQ_INTERNAL,
-                                     result, MULTI_THREAD_CONTEXT);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name, tls, RECV_REQ_EXTERNAL,
-                                     result, MULTI_THREAD_CONTEXT);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name, tls, RECV_REQ_INTERNAL,
-                                     result, MULTI_THREAD_WORKER);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name, tls, RECV_REQ_EXTERNAL,
-                                     result, MULTI_THREAD_WORKER);
-        return result;
+        add_variant_with_value(variants, get_ctx_params(), RECV_REQ_INTERNAL,
+                               "req_int,mt_worker", MULTI_THREAD_WORKER);
+        add_variant_with_value(variants, get_ctx_params(), RECV_REQ_EXTERNAL,
+                               "req_ext,mt_worker", MULTI_THREAD_WORKER);
     }
 
     virtual bool is_external_request()
     {
-        return GetParam().variant == RECV_REQ_EXTERNAL;
+        return get_variant_value() == RECV_REQ_EXTERNAL;
     }
 };
 
@@ -68,7 +53,7 @@ UCS_TEST_P(test_ucp_tag_mt, send_recv) {
         ucs_status_t status;
         int worker_index = 0;
 
-        if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
+        if (get_variant_thread_type() == MULTI_THREAD_CONTEXT) {
             worker_index = i;
         }
 

@@ -29,11 +29,8 @@ extern "C" {
 
 class test_ucp_am_base : public ucp_test {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_AM;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_AM);
     }
 
     virtual void init() {
@@ -298,14 +295,6 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
 
 class test_ucp_am_nbx : public test_ucp_am_base {
 public:
-    enum {
-        DT_CONTIG  = UCS_BIT(0),
-        DT_IOV     = UCS_BIT(1),
-        DT_GENERIC = UCS_BIT(2),
-        DT_NUM     = 3,
-        REPLY_FLAG = UCS_BIT(3)
-    };
-
     test_ucp_am_nbx()
     {
         m_dt          = ucp_dt_make_contig(1);
@@ -328,13 +317,12 @@ public:
 
     ucp_datatype_t make_dt(int dt)
     {
-        if (dt & DT_CONTIG) {
+        if (dt == UCP_DATATYPE_CONTIG) {
            return ucp_dt_make_contig(1);
-        } else if (dt & DT_IOV) {
+        } else if (dt == UCP_DATATYPE_IOV) {
            return ucp_dt_make_iov();
         } else {
-            EXPECT_TRUE(dt & DT_GENERIC);
-
+            ucs_assert(UCP_DATATYPE_GENERIC == dt);
             ucp_datatype_t ucp_dt;
             ASSERT_UCS_OK(ucp_dt_create_generic(&ucp::test_dt_copy_ops, NULL,
                                                 &ucp_dt));
@@ -525,44 +513,39 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx {
 public:
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls)
+    static const uint64_t dts_bitmap = UCS_BIT(UCP_DATATYPE_CONTIG) |
+                                       UCS_BIT(UCP_DATATYPE_IOV) |
+                                       UCS_BIT(UCP_DATATYPE_GENERIC);
+
+    static void get_test_dts(std::vector<ucp_test_variant>& variants)
     {
-        std::vector<ucp_test_param> result;
-        int dt_bit_idx;
+        /* coverity[overrun-buffer-val] */
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           dts_bitmap, ucp_datatype_class_names);
+    }
 
-        ucs_for_each_bit(dt_bit_idx, UCS_MASK(DT_NUM)) {
-            EXPECT_FALSE(UCS_BIT(dt_bit_idx) & REPLY_FLAG);
-            generate_test_params_variant(ctx_params, name, test_case_name,
-                                         tls, UCS_BIT(dt_bit_idx), result);
-            generate_test_params_variant(ctx_params, name, test_case_name,
-                                         tls, UCS_BIT(dt_bit_idx) | REPLY_FLAG,
-                                         result);
-        }
-
-        return result;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant_values(variants, get_test_dts, 0);
+        add_variant_values(variants, get_test_dts, UCP_AM_SEND_REPLY, "reply");
     }
 
     void init()
     {
         test_ucp_am_nbx::init();
 
-        m_dt = make_dt(GetParam().variant);
+        m_dt = make_dt(get_variant_value());
     }
 
     void cleanup()
     {
         destroy_dt(m_dt);
-
         test_ucp_am_nbx::cleanup();
     }
 
-    unsigned get_send_flag()
+    virtual unsigned get_send_flag()
     {
-        return (GetParam().variant & REPLY_FLAG) ? UCP_AM_SEND_REPLY : 0;
+        return get_variant_value(1);
     }
 };
 
@@ -752,12 +735,21 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv)
 
 class test_ucp_am_nbx_rndv_dts: public test_ucp_am_nbx_rndv {
 public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        /* push variant for the receive type, on top of existing dts variants */
+        /* coverity[overrun-buffer-val] */
+        add_variant_values(variants, test_ucp_am_nbx_dts::get_test_dts,
+                           test_ucp_am_nbx_dts::dts_bitmap,
+                           ucp_datatype_class_names);
+    }
+
     void init()
     {
         test_ucp_am_nbx::init();
 
-        m_dt    = make_dt(dt_pairs()[GetParam().variant][0]);
-        m_rx_dt = make_dt(dt_pairs()[GetParam().variant][1]);
+        m_dt    = make_dt(get_variant_value(0));
+        m_rx_dt = make_dt(get_variant_value(1));
     }
 
     void cleanup()
@@ -766,36 +758,6 @@ public:
         destroy_dt(m_rx_dt);
 
         test_ucp_am_nbx::cleanup();
-    }
-
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls)
-    {
-        std::vector<ucp_test_param> result;
-
-        for (int i = 0; i < dt_pairs().size(); ++i) {
-            generate_test_params_variant(ctx_params, name, test_case_name,
-                                         tls, i, result);
-        }
-
-        return result;
-    }
-
-    static std::vector<std::vector<int> > &dt_pairs()
-    {
-        static std::vector<std::vector<int> > res;
-
-        if (res.empty()) {
-            int dt_arr[] = {DT_CONTIG, DT_IOV, DT_GENERIC};
-            std::vector<int> dts(dt_arr, dt_arr + ucs_static_array_size(dt_arr));
-
-            res = ucs::make_pairs(dts);
-        }
-
-        return res;
     }
 };
 

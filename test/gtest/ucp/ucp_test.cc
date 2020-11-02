@@ -23,16 +23,31 @@ namespace ucp {
 const uint32_t MAGIC = 0xd7d7d7d7U;
 }
 
-std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
+static std::ostream& operator<<(std::ostream& os,
+                                const std::vector<std::string>& str_vector)
 {
-    std::vector<std::string>::const_iterator iter;
-    const std::vector<std::string>& transports = test_param.transports;
-    for (iter = transports.begin(); iter != transports.end(); ++iter) {
-        if (iter != transports.begin()) {
+    for (std::vector<std::string>::const_iterator iter = str_vector.begin();
+         iter != str_vector.end(); ++iter) {
+        if (iter != str_vector.begin()) {
             os << ",";
         }
         os << *iter;
     }
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param)
+{
+    os << test_param.transports;
+
+    for (size_t i = 0; i < test_param.variant.values.size(); ++i) {
+        const std::string& name = test_param.variant.values[i].name;
+        if (!name.empty()) {
+            os << "/" << name;
+        }
+    }
+
     return os;
 }
 
@@ -116,13 +131,6 @@ ucp_test::create_entity(bool add_in_front, const ucp_test_param &test_param) {
         m_entities.push_back(e);
     }
     return e;
-}
-
-ucp_params_t ucp_test::get_ctx_params() {
-    ucp_params_t params;
-    memset(&params, 0, sizeof(params));
-    params.field_mask |= UCP_PARAM_FIELD_FEATURES;
-    return params;
 }
 
 ucp_worker_params_t ucp_test::get_worker_params() {
@@ -237,10 +245,6 @@ void ucp_test::request_release(void *req)
     request_process(req, 0, false);
 }
 
-void ucp_test::set_ucp_config(ucp_config_t *config) {
-    set_ucp_config(config, GetParam());
-}
-
 int ucp_test::max_connections() {
     if (has_transport("tcp")) {
         return ucs::max_tcp_connections();
@@ -249,61 +253,139 @@ int ucp_test::max_connections() {
     }
 }
 
+void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
+{
+    ucs_status_t status;
+
+    status = ucp_config_modify(config, "TLS", tls.c_str());
+    if (status != UCS_OK) {
+        UCS_TEST_ABORT("Failed to set UCX transports");
+    }
+    status = ucp_config_modify(config, "WARN_INVALID_CONFIG", "n");
+    if (status != UCS_OK) {
+        UCS_TEST_ABORT("Failed to set UCX to ignore invalid configuration");
+    }
+}
+
+ucp_test_variant& ucp_test::add_variant(std::vector<ucp_test_variant>& variants,
+                                        const ucp_params_t& ctx_params,
+                                        int thread_type) {
+    variants.push_back(ucp_test_variant());
+    ucp_test_variant& variant = variants.back();
+    variant.ctx_params        = ctx_params;
+    variant.thread_type       = thread_type;
+    return variant;
+}
+
+ucp_test_variant& ucp_test::add_variant(std::vector<ucp_test_variant>& variants,
+                                        uint64_t ctx_features, int thread_type)
+{
+    ucp_params_t ctx_params = {};
+    ctx_params.field_mask   = UCP_PARAM_FIELD_FEATURES;
+    ctx_params.features     = ctx_features;
+    return add_variant(variants, ctx_params, thread_type);
+}
+
+int ucp_test::get_variant_value(unsigned index) const {
+    if (GetParam().variant.values.empty()) {
+        return DEFAULT_PARAM_VARIANT;
+    }
+    return GetParam().variant.values.at(index).value;
+}
+
+const ucp_params_t& ucp_test::get_variant_ctx_params() const {
+    return GetParam().variant.ctx_params;
+}
+
+int ucp_test::get_variant_thread_type() const {
+    return GetParam().variant.thread_type;
+}
+
+void ucp_test::add_variant_value(std::vector<ucp_test_variant_value>& values,
+                                 int value, std::string name)
+{
+    ucp_test_variant_value entry = {value, name};
+    values.push_back(entry);
+}
+
+void ucp_test::add_variant_with_value(std::vector<ucp_test_variant>& variants,
+                                      uint64_t ctx_features, int value,
+                                      const std::string& name, int thread_type)
+{
+    add_variant_value(add_variant(variants, ctx_features, thread_type).values,
+                      value, name);
+}
+
+void ucp_test::add_variant_with_value(std::vector<ucp_test_variant>& variants,
+                                      const ucp_params_t& ctx_params, int value,
+                                      const std::string& name, int thread_type)
+{
+    add_variant_value(add_variant(variants, ctx_params, thread_type).values,
+                      value, name);
+}
+
+void ucp_test::add_variant_values(std::vector<ucp_test_variant>& variants,
+                                  get_variants_func_t generator, int value,
+                                  const std::string& name)
+{
+    std::vector<ucp_test_variant> tmp_variants;
+    generator(tmp_variants);
+    for (std::vector<ucp_test_variant>::const_iterator iter = tmp_variants.begin();
+         iter != tmp_variants.end(); ++iter) {
+        variants.push_back(*iter);
+        add_variant_value(variants.back().values, value, name);
+    }
+}
+
+void ucp_test::add_variant_values(std::vector<ucp_test_variant>& variants,
+                                  get_variants_func_t generator, uint64_t bitmap,
+                                  const char **names)
+{
+    int value;
+    ucs_for_each_bit(value, bitmap) {
+        add_variant_values(variants, generator, value, names[value]);
+    }
+}
+
+void ucp_test::add_variant_memtypes(std::vector<ucp_test_variant>& variants,
+                                    get_variants_func_t generator,
+                                    uint64_t mem_types_mask)
+{
+    std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
+    for (size_t i = 0; i < mem_types.size(); ++i) {
+        if (UCS_BIT(mem_types[i]) & mem_types_mask) {
+            add_variant_values(variants, generator, mem_types[i],
+                               ucs_memory_type_names[mem_types[i]]);
+        }
+    }
+}
+
 std::vector<ucp_test_param>
-ucp_test::enum_test_params(const ucp_params_t& ctx_params,
-                           const std::string& name,
-                           const std::string& test_case_name,
-                           const std::string& tls)
-{
-    ucp_test_param test_param;
-    std::stringstream ss(tls);
+ucp_test::enum_test_params(const std::vector<ucp_test_variant>& variants,
+                           const std::string& tls) {
+    std::vector<ucp_test_param> result;
 
-    test_param.ctx_params    = ctx_params;
-    test_param.variant       = DEFAULT_PARAM_VARIANT;
-    test_param.thread_type   = SINGLE_THREAD;
-
-    while (ss.good()) {
-        std::string tl_name;
-        std::getline(ss, tl_name, ',');
-        test_param.transports.push_back(tl_name);
+    if (!check_tls(tls)) {
+        goto out;
     }
 
-    if (check_test_param(name, test_case_name, test_param)) {
-        return std::vector<ucp_test_param>(1, test_param);
-    } else {
-        return std::vector<ucp_test_param>();
+    for (std::vector<ucp_test_variant>::const_iterator iter = variants.begin();
+         iter != variants.end(); ++iter) {
+
+        result.push_back(ucp_test_param());
+        result.back().variant = *iter;
+
+        /* split transports to a vector */
+        std::stringstream ss(tls);
+        while (ss.good()) {
+            std::string tl_name;
+            std::getline(ss, tl_name, ',');
+            result.back().transports.push_back(tl_name);
+        }
     }
-}
 
-void ucp_test::generate_test_params_variant(const ucp_params_t& ctx_params,
-                                            const std::string& name,
-                                            const std::string& test_case_name,
-                                            const std::string& tls,
-                                            int variant,
-                                            std::vector<ucp_test_param>& test_params,
-                                            int thread_type)
-{
-    std::vector<ucp_test_param> tmp_test_params;
-
-    tmp_test_params = ucp_test::enum_test_params(ctx_params,name,
-                                                 test_case_name, tls);
-    for (std::vector<ucp_test_param>::iterator iter = tmp_test_params.begin();
-         iter != tmp_test_params.end(); ++iter)
-    {
-        iter->variant = variant;
-        iter->thread_type = thread_type;
-        test_params.push_back(*iter);
-    }
-}
-
-void ucp_test::set_ucp_config(ucp_config_t *config,
-                              const ucp_test_param& test_param)
-{
-    std::stringstream ss;
-    ss << test_param;
-    ucp_config_modify(config, "TLS", ss.str().c_str());
-    /* prevent configuration warnings in the UCP testing */
-    ucp_config_modify(config, "WARN_INVALID_CONFIG", "no");
+out:
+    return result;
 }
 
 void ucp_test::modify_config(const std::string& name, const std::string& value,
@@ -338,19 +420,12 @@ void ucp_test::stats_restore()
     ucs_stats_init();
 }
 
-
-bool ucp_test::check_test_param(const std::string& name,
-                                const std::string& test_case_name,
-                                const ucp_test_param& test_param)
+bool ucp_test::check_tls(const std::string& tls)
 {
     typedef std::map<std::string, bool> cache_t;
     static cache_t cache;
 
-    if (test_param.transports.empty()) {
-        return false;
-    }
-
-    cache_t::iterator iter = cache.find(name);
+    cache_t::iterator iter = cache.find(tls);
     if (iter != cache.end()) {
         return iter->second;
     }
@@ -358,29 +433,32 @@ bool ucp_test::check_test_param(const std::string& name,
     ucs::handle<ucp_config_t*> config;
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,
                            ucp_config_read, NULL, NULL);
-    set_ucp_config(config, test_param);
+    set_ucp_config(config, tls);
 
     ucp_context_h ucph;
     ucs_status_t status;
     {
         scoped_log_handler slh(hide_errors_logger);
-        status = ucp_init(&test_param.ctx_params, config, &ucph);
+        ucp_params_t ctx_params = {};
+        ctx_params.field_mask   = UCP_PARAM_FIELD_FEATURES;
+        ctx_params.features     = UCP_FEATURE_TAG |
+                                  UCP_FEATURE_RMA |
+                                  UCP_FEATURE_STREAM |
+                                  UCP_FEATURE_AM |
+                                  UCP_FEATURE_AMO32 |
+                                  UCP_FEATURE_AMO64;
+        status = ucp_init(&ctx_params, config, &ucph);
     }
-
-    bool result;
     if (status == UCS_OK) {
         ucp_cleanup(ucph);
-        result = true;
     } else if (status == UCS_ERR_NO_DEVICE) {
-        result = false;
+        UCS_TEST_MESSAGE << tls << " is not available";
     } else {
-        UCS_TEST_ABORT("Failed to create context (" << test_case_name << "): "
+        UCS_TEST_ABORT("Failed to create context (TLS=" << tls << "): "
                        << ucs_status_string(status));
     }
 
-    UCS_TEST_MESSAGE << "checking " << name << ": " << (result ? "yes" : "no");
-    cache[name] = result;
-    return result;
+    return cache[tls] = (status == UCS_OK);
 }
 
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
@@ -389,15 +467,15 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               const ucp_test_base *test_owner)
     : m_err_cntr(0), m_rejected_cntr(0)
 {
-    ucp_test_param entity_param = test_param;
+    ucp_test_variant entity_param           = test_param.variant;
     ucp_worker_params_t local_worker_params = worker_params;
     int num_workers;
 
-    if (test_param.thread_type == MULTI_THREAD_CONTEXT) {
+    if (entity_param.thread_type == MULTI_THREAD_CONTEXT) {
         num_workers = MT_TEST_NUM_THREADS;
         entity_param.ctx_params.mt_workers_shared = 1;
         local_worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
-    } else if (test_param.thread_type == MULTI_THREAD_WORKER) {
+    } else if (entity_param.thread_type == MULTI_THREAD_WORKER) {
         num_workers = 1;
         entity_param.ctx_params.mt_workers_shared = 0;
         local_worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
@@ -410,7 +488,10 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     entity_param.ctx_params.field_mask |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
     local_worker_params.field_mask     |= UCP_WORKER_PARAM_FIELD_THREAD_MODE;
 
-    ucp_test::set_ucp_config(ucp_config, entity_param);
+    /* Set transports configuration */
+    std::stringstream ss;
+    ss << test_param.transports;
+    ucp_test::set_ucp_config(ucp_config, ss.str());
 
     {
         scoped_log_handler slh(hide_errors_logger);

@@ -36,18 +36,11 @@ extern "C" {
 
 class test_ucp_sockaddr : public ucp_test {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features     = UCP_FEATURE_TAG | UCP_FEATURE_STREAM;
-        return params;
-    }
-
     enum {
-        CONN_REQ_TAG = DEFAULT_PARAM_VARIANT + 1,     /* Accepting by ucp_conn_request_h,
-                                                         send/recv by TAG API */
-        CONN_REQ_STREAM                               /* Accepting by ucp_conn_request_h,
-                                                         send/recv by STREAM API */
+        CONN_REQ_TAG  =  1, /* Accepting by ucp_conn_request_h,
+                               send/recv by TAG API */
+        CONN_REQ_STREAM     /* Accepting by ucp_conn_request_h,
+                               send/recv by STREAM API */
     };
 
     enum {
@@ -70,7 +63,7 @@ public:
     ucs::sock_addr_storage m_test_addr;
 
     void init() {
-        if (GetParam().variant & TEST_MODIFIER_CM) {
+        if (get_variant_value() & TEST_MODIFIER_CM) {
             modify_config("SOCKADDR_CM_ENABLE", "yes");
         }
         get_sockaddr();
@@ -79,38 +72,22 @@ public:
     }
 
     static void
-    enum_test_params_with_modifier(const ucp_params_t& ctx_params,
-                                      const std::string& name,
-                                      const std::string& test_case_name,
-                                      const std::string& tls,
-                                      std::vector<ucp_test_param> &result,
-                                      unsigned modifier)
-    {
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     modifier, result, SINGLE_THREAD);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     modifier | TEST_MODIFIER_MT, result,
-                                     MULTI_THREAD_WORKER);
+    get_test_variants_mt(std::vector<ucp_test_variant>& variants, uint64_t features,
+                         int modifier, const std::string& name) {
+        add_variant_with_value(variants, features, modifier, name);
+        add_variant_with_value(variants, features, modifier | TEST_MODIFIER_MT,
+                               name + ",mt", MULTI_THREAD_WORKER);
     }
 
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params,
-                     const std::string& name,
-                     const std::string& test_case_name,
-                     const std::string& tls)
-    {
-        std::vector<ucp_test_param> result =
-            ucp_test::enum_test_params(ctx_params, name, test_case_name, tls);
-
-        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
-                                       result, CONN_REQ_TAG);
-        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
-                                       result, CONN_REQ_TAG | TEST_MODIFIER_CM);
-        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
-                                       result, CONN_REQ_STREAM);
-        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
-                                       result, CONN_REQ_STREAM | TEST_MODIFIER_CM);
-        return result;
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants,
+                      uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_STREAM) {
+        get_test_variants_mt(variants, features, CONN_REQ_TAG, "tag");
+        get_test_variants_mt(variants, features, CONN_REQ_STREAM, "stream");
+        get_test_variants_mt(variants, features, CONN_REQ_TAG | TEST_MODIFIER_CM,
+                          "tag,cm");
+        get_test_variants_mt(variants, features, CONN_REQ_STREAM | TEST_MODIFIER_CM,
+                          "stream,cm");
     }
 
     static ucs_log_func_rc_t
@@ -154,7 +131,7 @@ public:
              * isn't as such, we continue to the next one. */
             skip = 1;
         } else if (!ucs::is_rdmacm_netdev(ifa->ifa_name) &&
-                   !(GetParam().variant & TEST_MODIFIER_CM)) {
+                   !(get_variant_value() & TEST_MODIFIER_CM)) {
             /* old client-server API (without CM) ran only with
              * IPoIB/RoCE interface */
             skip = 1;
@@ -558,7 +535,7 @@ public:
 
 protected:
     ucp_test_base::entity::listen_cb_type_t cb_type() const {
-        const int variant = (GetParam().variant & TEST_MODIFIER_MASK);
+        const int variant = (get_variant_value() & TEST_MODIFIER_MASK);
         if ((variant == CONN_REQ_TAG) || (variant == CONN_REQ_STREAM)) {
             return ucp_test_base::entity::LISTEN_CB_CONN;
         }
@@ -566,7 +543,7 @@ protected:
     }
 
     send_recv_type_t send_recv_type() const {
-        switch (GetParam().variant & TEST_MODIFIER_MASK) {
+        switch (get_variant_value() & TEST_MODIFIER_MASK) {
         case CONN_REQ_STREAM:
             return SEND_RECV_STREAM;
         case CONN_REQ_TAG:
@@ -577,12 +554,12 @@ protected:
     }
 
     bool nonparameterized_test() const {
-        return (GetParam().variant != DEFAULT_PARAM_VARIANT) &&
-               (GetParam().variant != (CONN_REQ_TAG | TEST_MODIFIER_CM));
+        return (get_variant_value() != DEFAULT_PARAM_VARIANT) &&
+               (get_variant_value() != (CONN_REQ_TAG | TEST_MODIFIER_CM));
     }
 
     bool no_close_protocol() const {
-        return !(GetParam().variant & TEST_MODIFIER_CM);
+        return !(get_variant_value() & TEST_MODIFIER_CM);
     }
 
     static void cmp_cfg_lanes(ucp_ep_config_key_t *key1, ucp_lane_index_t lane1,
@@ -937,10 +914,10 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_destroy_ep_on_err)
 
 class test_ucp_sockaddr_with_wakeup : public test_ucp_sockaddr {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
-        params.features    |= UCP_FEATURE_WAKEUP;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        test_ucp_sockaddr::get_test_variants(variants, UCP_FEATURE_TAG |
+                                             UCP_FEATURE_STREAM |
+                                             UCP_FEATURE_WAKEUP);
     }
 };
 
@@ -972,14 +949,11 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_wakeup)
 
 class test_ucp_sockaddr_with_rma_atomic : public test_ucp_sockaddr {
 public:
-
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features    |= UCP_FEATURE_RMA   |
-                              UCP_FEATURE_AMO32 |
-                              UCP_FEATURE_AMO64;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_STREAM |
+                            UCP_FEATURE_RMA | UCP_FEATURE_AMO32 |
+                            UCP_FEATURE_AMO64;
+        test_ucp_sockaddr::get_test_variants(variants, features);
     }
 };
 
@@ -1014,26 +988,14 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_rma_atomic)
 
 class test_ucp_sockaddr_protocols : public test_ucp_sockaddr {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_sockaddr::get_ctx_params();
-        params.field_mask  |= UCP_PARAM_FIELD_FEATURES;
-        params.features    |= UCP_FEATURE_RMA | UCP_FEATURE_AM;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         /* Atomics not supported for now because need to emulate the case
          * of using different device than the one selected by default on the
          * worker for atomic operations */
-        return params;
-    }
-
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params,
-                     const std::string& name,
-                     const std::string& test_case_name,
-                     const std::string& tls)
-    {
-        std::vector<ucp_test_param> result;
-        enum_test_params_with_modifier(ctx_params, name, test_case_name, tls,
-                                       result, TEST_MODIFIER_CM);
-        return result;
+        uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_STREAM |
+                            UCP_FEATURE_RMA | UCP_FEATURE_AM;
+        test_ucp_sockaddr::get_test_variants_mt(variants, features,
+                                                TEST_MODIFIER_CM, "");
     }
 
     virtual void init() {

@@ -21,15 +21,14 @@ extern "C" {
 class test_ucp_tag_mem_type: public test_ucp_tag {
 public:
     enum {
-            VARIANT_DEFAULT     = UCS_BIT(0),
-            VARIANT_GDR_OFF     = UCS_BIT(1),
-            VARIANT_TAG_OFFLOAD = UCS_BIT(2),
-            VARIANT_MAX         = UCS_BIT(3)
+        VARIANT_GDR_OFF     = UCS_BIT(0),
+        VARIANT_TAG_OFFLOAD = UCS_BIT(1),
+        VARIANT_MAX         = UCS_BIT(2)
     };
 
     void init() {
-        int mem_type_pair_index = GetParam().variant % mem_type_pairs.size();
-        int varient_index       = GetParam().variant / mem_type_pairs.size();
+        int mem_type_pair_index = get_variant_value() % mem_type_pairs.size();
+        int varient_index       = get_variant_value() / mem_type_pairs.size();
 
         if (varient_index & VARIANT_GDR_OFF) {
             m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
@@ -57,26 +56,24 @@ public:
         test_ucp_tag::cleanup();
     }
 
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls) {
-
-        std::vector<ucp_test_param> result;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         int count = 0;
-
         for (int i = 0; i < VARIANT_MAX; i++) {
             for (std::vector<std::vector<ucs_memory_type_t> >::const_iterator iter =
                  mem_type_pairs.begin(); iter != mem_type_pairs.end(); ++iter) {
-                generate_test_params_variant(ctx_params, name, test_case_name + "/" +
-                                             std::string(ucs_memory_type_names[(*iter)[0]]) +
-                                             "<->" + std::string(ucs_memory_type_names[(*iter)[1]]),
-                                             tls, count++, result);
+                std::string name =
+                        std::string(ucs_memory_type_names[(*iter)[0]]) + ":" +
+                        std::string(ucs_memory_type_names[(*iter)[1]]);
+                if (i & VARIANT_GDR_OFF) {
+                    name += ",nogdr";
+                }
+                if (i & VARIANT_TAG_OFFLOAD) {
+                    name += ",offload";
+                }
+                add_variant_with_value(variants, get_ctx_params(), count, name);
+                ++count;
             }
         }
-
-        return result;
     }
 
     static std::vector<std::vector<ucs_memory_type_t> > mem_type_pairs;

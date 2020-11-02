@@ -17,12 +17,6 @@ using namespace ucs; /* For vector<char> serialization */
 
 class test_ucp_rma_mt : public ucp_test {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features     = UCP_FEATURE_RMA;
-        return params;
-    }
-
     void init()
     {
         ucp_test::init();
@@ -37,18 +31,9 @@ public:
     {
     }
 
-    static std::vector<ucp_test_param> enum_test_params(const ucp_params_t& ctx_params,
-                                                        const std::string& name,
-                                                        const std::string& test_case_name,
-                                                        const std::string& tls)
-    {
-        std::vector<ucp_test_param> result;
-
-        generate_test_params_variant(ctx_params, name, test_case_name, tls, 0,
-                                     result, MULTI_THREAD_CONTEXT);
-        generate_test_params_variant(ctx_params, name, test_case_name, tls, 0,
-                                     result, MULTI_THREAD_WORKER);
-        return result;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_RMA, MULTI_THREAD_CONTEXT);
+        add_variant(variants, UCP_FEATURE_RMA, MULTI_THREAD_WORKER);
     }
 };
 
@@ -66,7 +51,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
                         UCP_MEM_MAP_PARAM_FIELD_FLAGS;
     params.address    = memheap;
     params.length     = sizeof(uint64_t) * MT_TEST_NUM_THREADS;
-    params.flags      = GetParam().variant;
+    params.flags      = get_variant_value();
 
     st = ucp_mem_map(receiver().ucph(), &params, &memh);
     ASSERT_UCS_OK(st);
@@ -85,7 +70,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
 #pragma omp parallel for
     for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         int worker_index = 0;
-        if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
+        if (get_variant_thread_type() == MULTI_THREAD_CONTEXT) {
             worker_index = i;
         }
         ucs_status_t status = ucp_ep_rkey_unpack(sender().ep(worker_index),
@@ -108,7 +93,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
     for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         int worker_index = 0;
 
-        if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
+        if (get_variant_thread_type() == MULTI_THREAD_CONTEXT) {
             worker_index = i;
         }
 
@@ -136,7 +121,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
         ucs_status_t status;
         int worker_index = 0;
 
-        if (GetParam().thread_type == MULTI_THREAD_CONTEXT)
+        if (get_variant_thread_type() == MULTI_THREAD_CONTEXT)
             worker_index = i;
 
         status = ucp_put_nbi(sender().ep(worker_index), &orig_data[i], sizeof(uint64_t),
@@ -161,7 +146,7 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
     for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
         int worker_index = 0;
 
-        if (GetParam().thread_type == MULTI_THREAD_CONTEXT) {
+        if (get_variant_thread_type() == MULTI_THREAD_CONTEXT) {
             worker_index = i;
         }
 
@@ -189,8 +174,9 @@ UCS_TEST_P(test_ucp_rma_mt, put_get) {
         ucs_status_t status;
         int worker_index = 0;
 
-        if (GetParam().thread_type == MULTI_THREAD_CONTEXT)
+        if (get_variant_thread_type() == MULTI_THREAD_CONTEXT) {
             worker_index = i;
+        }
 
         status = ucp_get_nbi(sender().ep(worker_index), &orig_data[i], sizeof(uint64_t),
                              (uintptr_t)((uint64_t *)memheap + i), rkey[i]);

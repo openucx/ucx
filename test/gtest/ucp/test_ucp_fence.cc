@@ -135,20 +135,12 @@ protected:
         disconnect(sender());
         disconnect(receiver());
     }
-
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_RMA;
-        return params;
-    }
 };
 
 class test_ucp_fence32 : public test_ucp_fence {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_fence::get_ctx_params();
-        params.features |= UCP_FEATURE_AMO32;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_AMO32);
     }
 };
 
@@ -161,10 +153,8 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_fence32)
 
 class test_ucp_fence64 : public test_ucp_fence {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = test_ucp_fence::get_ctx_params();
-        params.features |= UCP_FEATURE_AMO64;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_AMO64);
     }
 };
 

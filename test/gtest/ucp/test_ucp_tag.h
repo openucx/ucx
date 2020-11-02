@@ -13,7 +13,7 @@
 
 class test_ucp_tag : public ucp_test {
 public:
-    static ucp_params_t get_ctx_params();
+    static void get_test_variants(std::vector<ucp_test_variant>& variants);
 
     enum send_type_t {
         SEND_NB,
@@ -43,6 +43,8 @@ protected:
         ucs_status_t        status;
         ucp_tag_recv_info_t info;
     };
+
+    static ucp_params_t get_ctx_params();
 
     virtual void init();
 

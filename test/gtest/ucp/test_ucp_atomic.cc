@@ -14,18 +14,13 @@ extern "C" {
 template <typename T>
 class test_ucp_atomic : public test_ucp_memheap {
 public:
-    static std::vector<ucp_test_param>
-    enum_test_params(const ucp_params_t& ctx_params, const std::string& name,
-                     const std::string& test_case_name, const std::string& tls)
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        std::vector<ucp_test_param> result;
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name, tls, UCP_ATOMIC_MODE_CPU, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name, tls, UCP_ATOMIC_MODE_DEVICE, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name, tls, UCP_ATOMIC_MODE_GUESS, result);
-        return result;
+        uint64_t features = (sizeof(T) == sizeof(uint32_t)) ?
+                            UCP_FEATURE_AMO32 : UCP_FEATURE_AMO64;
+        add_variant_with_value(variants, features, UCP_ATOMIC_MODE_CPU, "cpu");
+        add_variant_with_value(variants, features, UCP_ATOMIC_MODE_DEVICE, "device");
+        add_variant_with_value(variants, features, UCP_ATOMIC_MODE_GUESS, "guess");
     }
 
     void post(size_t size, void *target_ptr, ucp_rkey_h rkey,
@@ -87,9 +82,9 @@ protected:
 
     virtual void init() {
         const char *atomic_mode =
-                        (GetParam().variant == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
-                        (GetParam().variant == UCP_ATOMIC_MODE_DEVICE) ? "device" :
-                        (GetParam().variant == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
+                        (get_variant_value() == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
+                        (get_variant_value() == UCP_ATOMIC_MODE_DEVICE) ? "device" :
+                        (get_variant_value() == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
                         "";
         modify_config("ATOMIC_MODE", atomic_mode);
         test_ucp_memheap::init();
@@ -174,12 +169,6 @@ private:
 };
 
 class test_ucp_atomic32 : public test_ucp_atomic<uint32_t> {
-public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_AMO32;
-        return params;
-    }
 };
 
 UCS_TEST_P(test_ucp_atomic32, post) {
@@ -193,12 +182,6 @@ UCS_TEST_P(test_ucp_atomic32, fetch) {
 UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic32)
 
 class test_ucp_atomic64 : public test_ucp_atomic<uint64_t> {
-public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_AMO64;
-        return params;
-    }
 };
 
 UCS_TEST_P(test_ucp_atomic64, post) {

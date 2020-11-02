@@ -347,12 +347,12 @@ UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload)
 class test_ucp_tag_offload_multi : public test_ucp_tag_offload {
 public:
 
-    static ucp_params_t get_ctx_params()
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         ucp_params_t params    = test_ucp_tag::get_ctx_params();
         params.field_mask     |= UCP_PARAM_FIELD_TAG_SENDER_MASK;
         params.tag_sender_mask = TAG_SENDER;
-        return params;
+        add_variant(variants, params);
     }
 
     void init()
@@ -531,25 +531,15 @@ public:
         modify_config("RNDV_THRESH", "1024");
     }
 
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls)
-    {
-        std::vector<ucp_test_param> result;
-
-        generate_test_params_variant(ctx_params, name, test_case_name,
-                                     tls, UCS_MEMORY_TYPE_CUDA, result);
-        generate_test_params_variant(ctx_params, name, test_case_name,
-                                     tls, UCS_MEMORY_TYPE_ROCM, result);
-
-        return result;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants, test_ucp_tag::get_test_variants,
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                             UCS_BIT(UCS_MEMORY_TYPE_ROCM));
     }
 
 protected:
     ucs_memory_type_t mem_type() const {
-        return static_cast<ucs_memory_type_t>(GetParam().variant);
+        return static_cast<ucs_memory_type_t>(get_variant_value());
     }
 };
 
@@ -603,12 +593,10 @@ public:
         m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_ENABLE", "y"));
     }
 
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         // Do not pass UCP_FEATURE_TAG feature to check that UCT will not
         // initialize tag offload infrastructure in this case.
-        params.features     = UCP_FEATURE_RMA;
-        return params;
+        add_variant(variants, UCP_FEATURE_RMA);
     }
 };
 
@@ -816,25 +804,16 @@ public:
         m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
     }
 
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls)
-    {
-        std::vector<ucp_test_param> result;
-
-        generate_test_params_variant(ctx_params, name, test_case_name,
-                                     tls, UCS_MEMORY_TYPE_CUDA, result);
-        generate_test_params_variant(ctx_params, name, test_case_name,
-                                     tls, UCS_MEMORY_TYPE_ROCM, result);
-
-        return result;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant_memtypes(variants,
+                             test_ucp_tag_offload_stats::get_test_variants,
+                             UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                             UCS_BIT(UCS_MEMORY_TYPE_ROCM));
     }
 
 protected:
     ucs_memory_type_t mem_type() const {
-        return static_cast<ucs_memory_type_t>(GetParam().variant);
+        return static_cast<ucs_memory_type_t>(get_variant_value());
     }
 };
 

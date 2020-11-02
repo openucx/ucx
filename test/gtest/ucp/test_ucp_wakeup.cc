@@ -13,10 +13,8 @@
 
 class test_ucp_wakeup : public ucp_test {
 public:
-    static ucp_params_t get_ctx_params() {
-        ucp_params_t params = ucp_test::get_ctx_params();
-        params.features |= UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP;
-        return params;
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP);
     }
 
 protected:

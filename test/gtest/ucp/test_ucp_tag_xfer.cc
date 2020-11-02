@@ -45,11 +45,11 @@ public:
     }
 
     virtual void init() {
-        if (GetParam().variant == VARIANT_RNDV_PUT_ZCOPY) {
+        if (get_variant_value() == VARIANT_RNDV_PUT_ZCOPY) {
             modify_config("RNDV_SCHEME", "put_zcopy");
-        } else if (GetParam().variant == VARIANT_RNDV_GET_ZCOPY) {
+        } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {
             modify_config("RNDV_SCHEME", "get_zcopy");
-        } else if (GetParam().variant == VARIANT_RNDV_AUTO) {
+        } else if (get_variant_value() == VARIANT_RNDV_AUTO) {
             modify_config("RNDV_SCHEME", "auto");
         }
         modify_config("MAX_EAGER_LANES", "2");
@@ -67,36 +67,24 @@ public:
 #endif
     }
 
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls)
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        std::vector<ucp_test_param> result;
-        generate_test_params_variant(ctx_params, name, test_case_name, tls,
-                                     VARIANT_DEFAULT, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name + "/err_handling_mode_peer",
-                                     tls, VARIANT_ERR_HANDLING, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name + "/rndv_put_zcopy", tls,
-                                     VARIANT_RNDV_PUT_ZCOPY, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name + "/rndv_get_zcopy", tls,
-                                     VARIANT_RNDV_GET_ZCOPY, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name + "/rndv_auto", tls,
-                                     VARIANT_RNDV_AUTO, result);
-        generate_test_params_variant(ctx_params, name,
-                                     test_case_name + "/send_nbr", tls,
-                                     VARIANT_SEND_NBR, result);
-        return result;
+        add_variant_with_value(variants, get_ctx_params(), VARIANT_DEFAULT, "");
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_ERR_HANDLING, "err_handling");
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_RNDV_PUT_ZCOPY, "rndv_put_zcopy");
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_RNDV_GET_ZCOPY, "rndv_get_zcopy");
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_RNDV_AUTO, "rndv_auto");
+        add_variant_with_value(variants, get_ctx_params(),
+                               VARIANT_SEND_NBR, "send_nbr");
     }
 
     virtual ucp_ep_params_t get_ep_params() {
         ucp_ep_params_t ep_params = test_ucp_tag::get_ep_params();
-        if (GetParam().variant == VARIANT_ERR_HANDLING) {
+        if (get_variant_value() == VARIANT_ERR_HANDLING) {
             ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
             ep_params.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
         }
@@ -104,7 +92,7 @@ public:
     }
 
     bool is_err_handling() const {
-        return GetParam().variant == VARIANT_ERR_HANDLING;
+        return get_variant_value() == VARIANT_ERR_HANDLING;
     }
 
     void skip_err_handling() const {
@@ -465,7 +453,7 @@ test_ucp_tag_xfer::do_send(const void *sendbuf, size_t count, ucp_datatype_t dt,
     if (sync) {
         return send_sync_nb(sendbuf, count, dt, SENDER_TAG);
     } else {
-        if (GetParam().variant == VARIANT_SEND_NBR) {
+        if (get_variant_value() == VARIANT_SEND_NBR) {
             return send_nbr(sendbuf, count, dt, SENDER_TAG);
         }
         return send_nb(sendbuf, count, dt, SENDER_TAG);
@@ -1034,15 +1022,7 @@ public:
         stats_restore();
     }
 
-    std::vector<ucp_test_param>
-    static enum_test_params(const ucp_params_t& ctx_params,
-                            const std::string& name,
-                            const std::string& test_case_name,
-                            const std::string& tls) {
-
-        return ucp_test::enum_test_params(ctx_params, name,
-                                          test_case_name, tls);
-    }
+    using test_ucp_tag::get_test_variants;
 
     ucs_stats_node_t* ep_stats(entity &e) {
         return e.ep()->stats;

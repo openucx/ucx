@@ -13,6 +13,11 @@
 #define MB   pow(1024.0, -2)
 #define UCP_ARM_PERF_TEST_MULTIPLIER 2
 class test_ucp_perf : public ucp_test, public test_perf {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, 0);
+    }
+
 protected:
     virtual void init() {
         test_base::init(); /* Skip entities creation in ucp_test */
