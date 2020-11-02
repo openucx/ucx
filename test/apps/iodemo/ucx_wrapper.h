@@ -8,6 +8,7 @@
 #define IODEMO_UCX_WRAPPER_H_
 
 #include <ucp/api/ucp.h>
+#include <ucs/algorithm/crc.h>
 #include <deque>
 #include <exception>
 #include <iostream>
@@ -49,8 +50,9 @@ public:
  */
 class UcxLog {
 public:
-    UcxLog(const char* prefix, bool enable);
+    static bool use_human_time;
 
+    UcxLog(const char* prefix, bool enable = true);
     ~UcxLog();
 
     template<typename T>
@@ -71,7 +73,7 @@ private:
  */
 class UcxContext {
 public:
-    UcxContext(size_t iomsg_size);
+    UcxContext(size_t iomsg_size, double connect_timeout);
 
     virtual ~UcxContext();
 
@@ -85,15 +87,15 @@ public:
 
 protected:
 
-    // Called when new connection is created on server side
-    virtual void dispatch_new_connection(UcxConnection *conn);
-
     // Called when new IO message is received
     virtual void dispatch_io_message(UcxConnection* conn, const void *buffer,
-                                     size_t length);
+                                     size_t length) = 0;
 
     // Called when there is a fatal failure on the connection
-    virtual void dispatch_connection_error(UcxConnection* conn);
+    virtual void dispatch_connection_error(UcxConnection* conn) = 0;
+
+    // Called when new server connection is accepted
+    virtual void dispatch_connection_accepted(UcxConnection* conn);
 
 private:
     typedef enum {
@@ -124,13 +126,15 @@ private:
 
     ucp_worker_h worker() const;
 
+    double connect_timeout() const;
+
     void progress_conn_requests();
 
     void progress_io_message();
 
     void progress_failed_connections();
 
-    wait_status_t wait_completion(ucs_status_ptr_t status_ptr,
+    wait_status_t wait_completion(ucs_status_ptr_t status_ptr, const char *title,
                                   double timeout = 1e6);
 
     void recv_io_message();
@@ -153,10 +157,11 @@ private:
     ucp_worker_h                   _worker;
     ucp_listener_h                 _listener;
     conn_map_t                     _conns;
-    ucx_request*                   _iomsg_recv_request;
-    std::string                    _iomsg_buffer;
     std::deque<ucp_conn_request_h> _conn_requests;
     std::deque<UcxConnection *>    _failed_conns;
+    ucx_request*                   _iomsg_recv_request;
+    std::string                    _iomsg_buffer;
+    double                         _connect_timeout;
 };
 
 
@@ -183,6 +188,10 @@ public:
 
     uint32_t id() const {
         return _conn_id;
+    }
+
+    ucs_status_t ucx_status() const {
+        return _ucx_status;
     }
 
 private:
@@ -231,6 +240,7 @@ private:
     ucp_ep_h           _ep;
     void*              _close_request;
     ucs_list_link_t    _all_requests;
+    ucs_status_t       _ucx_status;
 };
 
 #endif
