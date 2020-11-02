@@ -570,6 +570,7 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
         ep->super.atomic_mr_offset = 0;
     }
 
+    ep->super.flags |= UCT_RC_EP_FLAG_CONNECTED;
     return UCS_OK;
 }
 

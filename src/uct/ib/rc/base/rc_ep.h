@@ -44,6 +44,9 @@ enum {
      * are needed */
     UCT_RC_EP_FLAG_KEEPALIVE_PENDING = UCS_BIT(0),
 
+    /* EP is connected to peer */
+    UCT_RC_EP_FLAG_CONNECTED         = UCS_BIT(1),
+
     /* Soft Credit Request: indicates that peer needs to piggy-back credits
      * grant to counter AM (if any). Can be bundled with
      * UCT_RC_EP_FLAG_FC_GRANT  */
@@ -124,6 +127,7 @@ enum {
  * therefore need to block even AM sends, until all resources are available.
  */
 #define UCT_RC_CHECK_RES(_iface, _ep) \
+    ucs_assert((_ep)->flags & UCT_RC_EP_FLAG_CONNECTED); \
     UCT_RC_CHECK_TX_CQ_RES(_iface, _ep) \
     UCT_RC_CHECK_NUM_RDMA_READ_RET(_iface, UCS_ERR_NO_RESOURCE)
 
