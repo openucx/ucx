@@ -61,11 +61,13 @@ ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len)
 
 #if defined(__x86_64__) || defined (__aarch64__)
 struct ucm_bistro_restore_point {
-    void               *addr; /* address of function to restore */
-    ucm_bistro_patch_t patch; /* original function body */
+    void               *addr;     /* address of function to restore */
+    size_t             patch_len; /* patch length */
+    char               orig[0];   /* orig func code */
 };
 
-ucs_status_t ucm_bistro_create_restore_point(void *addr, ucm_bistro_restore_point_t **rp)
+ucs_status_t ucm_bistro_create_restore_point(void *addr, size_t len,
+                                             ucm_bistro_restore_point_t **rp)
 {
     ucm_bistro_restore_point_t *point;
 
@@ -74,14 +76,16 @@ ucs_status_t ucm_bistro_create_restore_point(void *addr, ucm_bistro_restore_poin
         return UCS_OK;
     }
 
-    point = malloc(sizeof(*point));
-    if (!point) {
+    point = malloc(sizeof(*point) + len);
+    if (point == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    point->addr  = addr;
-    point->patch = *(ucm_bistro_patch_t*)addr;
-    *rp          = point;
+    *rp              = point;
+    point->addr      = addr;
+    point->patch_len = len;
+    memcpy(point->orig, addr, len);
+
     return UCS_OK;
 }
 
@@ -89,7 +93,7 @@ ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp)
 {
     ucs_status_t status;
 
-    status = ucm_bistro_apply_patch(rp->addr, &rp->patch, sizeof(rp->patch));
+    status = ucm_bistro_apply_patch(rp->addr, rp->orig, rp->patch_len);
     if (!UCS_STATUS_IS_ERR(status)) {
         ucm_bistro_remove_restore_point(rp);
     }
