@@ -16,7 +16,11 @@
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
                                  size_t max_len)
 {
+    struct sockaddr* local_addr  = rdma_get_local_addr(cep->id);
+    struct sockaddr* remote_addr = rdma_get_peer_addr(cep->id);
     char flags_buf[UCT_RDMACM_EP_FLAGS_STRING_LEN];
+    char local_ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char remote_ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     static const char *ep_flag_to_str[] = {
         [ucs_ilog2(UCT_RDMACM_CM_EP_ON_CLIENT)]                = "client",
@@ -29,9 +33,22 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
         NULL
     };
 
+    if (ucs_sockaddr_is_known_af(local_addr)) {
+        ucs_sockaddr_str(local_addr, local_ip_port_str, UCS_SOCKADDR_STRING_LEN);
+    } else {
+        ucs_strncpy_safe(local_ip_port_str, "<not set>", UCS_SOCKADDR_STRING_LEN);
+    }
+
+    if (ucs_sockaddr_is_known_af(remote_addr)) {
+        ucs_sockaddr_str(remote_addr, remote_ip_port_str, UCS_SOCKADDR_STRING_LEN);
+    } else {
+        ucs_strncpy_safe(remote_ip_port_str, "<not set>", UCS_SOCKADDR_STRING_LEN);
+    }
+
     ucs_flags_str(flags_buf, sizeof(flags_buf), cep->flags, ep_flag_to_str);
-    ucs_snprintf_safe(str, max_len, "rdmacm_ep %p, ep status %s, flags %s",
-                      cep, ucs_status_string(cep->status), flags_buf);
+    ucs_snprintf_safe(str, max_len, "[cep %p %s->%s %s %s]",
+                      cep, local_ip_port_str, remote_ip_port_str, flags_buf,
+                      ucs_status_string(cep->status));
     return str;
 }
 
@@ -100,7 +117,7 @@ ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    ucs_trace("%s: rdma_establish on client (cm_id %p, rdmacm %p, event_channel=%p)",
+    ucs_trace("%s rdma_establish on client (cm_id %p, rdmacm %p, event_channel=%p)",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               cep->id, rdmacm_cm, rdmacm_cm->ev_ch);
 
@@ -275,15 +292,15 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
         goto err;
     }
 
-    ucs_trace("%s: rdma_create_id on client (rdmacm %p, event_channel=%p)",
-              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-              rdmacm_cm, rdmacm_cm->ev_ch);
-
     if (rdma_create_id(rdmacm_cm->ev_ch, &cep->id, cep, RDMA_PS_TCP)) {
         ucs_error("rdma_create_id() failed: %m");
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
+
+    ucs_trace("%s rdma_create_id on client (rdmacm %p, event_channel=%p)",
+              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+              rdmacm_cm, rdmacm_cm->ev_ch);
 
     /* rdma_resolve_addr needs to be called last in the ep_create flow to
      * prevent a race where there are uninitialized fields used when the
@@ -331,7 +348,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
             goto err_reject;
         }
 
-        ucs_debug("%s: migrated id %p from event_channel=%p to "
+        ucs_debug("%s migrated id %p from event_channel=%p to "
                   "new cm %p (event_channel=%p)",
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
                   event->id, event->listen_id->channel, cm, cm->ev_ch);
@@ -398,7 +415,7 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
 
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
     if (ucs_unlikely(cep->flags & UCT_RDMACM_CM_EP_FAILED)) {
-        uct_cm_ep_peer_error(&cep->super, "%s: id=%p to peer %s",
+        uct_cm_ep_peer_error(&cep->super, "%s id=%p to peer %s",
                              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
                              cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id),
                                                        ip_port_str, UCS_SOCKADDR_STRING_LEN));
@@ -408,7 +425,7 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
 
     if (ucs_unlikely(cep->flags & UCT_RDMACM_CM_EP_DISCONNECTING)) {
         if (cep->flags & UCT_RDMACM_CM_EP_GOT_DISCONNECT) {
-            ucs_error("%s: duplicate call of uct_ep_disconnect on a "
+            ucs_error("%s duplicate call of uct_ep_disconnect on a "
                       "disconnected ep (id=%p to peer %s)",
                       uct_rdmacm_cm_ep_str(cep, ep_str,
                                            UCT_RDMACM_EP_STRING_LEN),
@@ -484,7 +501,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     }
 
     if (status == UCS_OK) {
-        ucs_debug("%s: created an endpoint on rdmacm %p id: %p",
+        ucs_debug("%s created an endpoint on rdmacm %p id: %p",
                   uct_rdmacm_cm_ep_str(self, ep_str, UCT_RDMACM_EP_STRING_LEN),
                   uct_rdmacm_cm_ep_get_cm(self), self->id);
     }
@@ -499,7 +516,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_ep_t)
                                                     uct_priv_worker_t);
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
 
-    ucs_trace("%s: destroy ep on cm %p (worker_priv=%p)",
+    ucs_trace("%s destroy ep on cm %p (worker_priv=%p)",
               uct_rdmacm_cm_ep_str(self, ep_str, UCT_RDMACM_EP_STRING_LEN),
               rdmacm_cm, worker_priv);
 

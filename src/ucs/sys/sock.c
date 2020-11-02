@@ -637,7 +637,7 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
     }
 }
 
-static unsigned ucs_sockaddr_is_known_af(const struct sockaddr *sa)
+int ucs_sockaddr_is_known_af(const struct sockaddr *sa)
 {
     return ((sa->sa_family == AF_INET) ||
             (sa->sa_family == AF_INET6));
