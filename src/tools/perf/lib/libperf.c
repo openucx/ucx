@@ -938,7 +938,7 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 }
 
 static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
-                                               ucp_params_t *ucp_params)
+                                              ucp_params_t *ucp_params)
 {
     ucs_status_t status;
     size_t message_size;
@@ -977,6 +977,10 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
             ucs_error("Invalid test command");
         }
         return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (params->flags & UCX_PERF_TEST_FLAG_WAKEUP) {
+        ucp_params->features |= UCP_FEATURE_WAKEUP;
     }
 
     status = ucx_perf_test_check_params(params);

@@ -40,7 +40,7 @@
 #define MAX_BATCH_FILES         32
 #define MAX_CPUS                1024
 #define TL_RESOURCE_NAME_NONE   "<none>"
-#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCqM:r:T:d:x:A:BUm:"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:T:d:x:A:BUm:"
 #define TEST_ID_UNDEFINED       -1
 
 enum {
@@ -474,6 +474,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -r <mode>      receive mode for stream tests (recv)\n");
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
+    printf("     -I             create context with wakeup feature enabled\n");
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
     printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
@@ -705,6 +706,9 @@ static ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         return UCS_OK;
     case 'U':
         params->super.flags |= UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE;
+        return UCS_OK;
+    case 'I':
+        params->super.flags |= UCX_PERF_TEST_FLAG_WAKEUP;
         return UCS_OK;
     case 'M':
         if (!strcmp(opt_arg, "single")) {
