@@ -799,7 +799,7 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *rndv_req,
                                 size_t length, size_t offset)
 {
 
-    ucs_assert_always(!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(rreq->recv.mem_type));
+    ucs_assert_always(!UCP_MEM_IS_HOST(rreq->recv.mem_type));
 
     /* PUT on memtype endpoint to stage from
      * frag recv buffer to memtype recv buffer
@@ -1579,7 +1579,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
         length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_frag_size, 0,
                                               rndv_size, offset, rndv_size - offset);
 
-        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(sreq->send.mem_type)) {
+        if (UCP_MEM_IS_HOST(sreq->send.mem_type)) {
             /* sbuf is in host, directly do put */
             freq = ucp_request_get(worker);
             if (ucs_unlikely(freq == NULL)) {
@@ -1679,7 +1679,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                       ucp_ep_peer_name(ep), ucs_status_string(status));
         }
 
-        is_pipeline_rndv = ((!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(sreq->send.mem_type) ||
+        is_pipeline_rndv = ((!UCP_MEM_IS_HOST(sreq->send.mem_type) ||
                              (sreq->send.length != rndv_rtr_hdr->size)) &&
                             (context->config.ext.rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY));
 

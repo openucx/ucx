@@ -1217,6 +1217,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucs_memory_type_t mem_type;
     size_t added_lanes;
     uint64_t md_reg_flag;
+    uint64_t tl_bitmap;
     uint8_t i;
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
@@ -1294,6 +1295,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
         bw_info.criteria.local_iface_flags  |= iface_rma_flags;
 
         added_lanes = 0;
+        tl_bitmap   = 0;
 
         for (mem_type = UCS_MEMORY_TYPE_HOST;
              mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
@@ -1302,8 +1304,10 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
             }
 
             added_lanes += ucp_wireup_add_bw_lanes(select_params, &bw_info,
-                                                   context->mem_type_access_tls[mem_type],
+                                                   (~tl_bitmap &
+                                                    context->mem_type_access_tls[mem_type]),
                                                    UCP_NULL_LANE, select_ctx);
+            tl_bitmap   |= context->mem_type_access_tls[mem_type];
         }
 
         if (added_lanes /* There are selected lanes */ ||

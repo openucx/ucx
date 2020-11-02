@@ -1143,7 +1143,7 @@ uct_rc_mlx5_iface_handle_tm_list_op(uct_rc_mlx5_iface_common_t *iface, int opcod
         ctx  = op->tag->ctx;
         priv = uct_rc_mlx5_ctx_priv(ctx);
         uct_rc_mlx5_iface_tag_del_from_hash(iface, priv->buffer);
-        ctx->completed_cb(ctx, priv->tag, 0, priv->length, UCS_ERR_CANCELED);
+        ctx->completed_cb(ctx, priv->tag, 0, priv->length, NULL, UCS_ERR_CANCELED);
     }
 }
 
@@ -1174,6 +1174,7 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5_cqe64 *cqe,
                                   uint64_t tag, uint32_t app_ctx)
 {
+    int is_inline = cqe->op_own & MLX5_INLINE_SCATTER_64;
     uint64_t imm_data;
     uct_rc_mlx5_tag_entry_t *tag_entry;
     uct_tag_context_t *ctx;
@@ -1190,9 +1191,8 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5
     uct_rc_mlx5_release_tag_entry(iface, tag_entry);
     uct_rc_mlx5_iface_tag_del_from_hash(iface, priv->buffer);
 
-    if (cqe->op_own & MLX5_INLINE_SCATTER_64) {
+    if (is_inline) {
         ucs_assert(byte_len <= priv->length);
-        memcpy(priv->buffer, cqe - 1, byte_len);
     } else {
         VALGRIND_MAKE_MEM_DEFINED(priv->buffer, byte_len);
     }
@@ -1202,10 +1202,12 @@ uct_rc_mlx5_iface_handle_expected(uct_rc_mlx5_iface_common_t *iface, struct mlx5
                                                MLX5_CQE_RESP_SEND_IMM);
 
     if (UCT_RC_MLX5_TM_IS_SW_RNDV(cqe, imm_data)) {
-        ctx->rndv_cb(ctx, tag, priv->buffer, byte_len, UCS_OK);
+        ctx->rndv_cb(ctx, tag, is_inline ? (cqe - 1) : priv->buffer, byte_len,
+                     UCS_OK, is_inline ? UCT_TAG_RECV_CB_INLINE_DATA : 0);
         UCT_RC_MLX5_TM_STAT(iface, RX_RNDV_REQ_EXP);
     } else {
-        ctx->completed_cb(ctx, tag, imm_data, byte_len, UCS_OK);
+        ctx->completed_cb(ctx, tag, imm_data, byte_len,
+                          (is_inline) ? (cqe - 1) : NULL, UCS_OK);
         UCT_RC_MLX5_TM_STAT(iface, RX_EXP);
     }
 }
