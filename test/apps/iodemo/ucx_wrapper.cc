@@ -206,13 +206,14 @@ void UcxContext::connect_callback(ucp_conn_request_h conn_req, void *arg)
     conn_req_attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
     ucs_status_t status = ucp_conn_request_query(conn_req, &conn_req_attr);
     if (status == UCS_OK) {
-        UCX_LOG << "got new connection request "<< conn_req << " from client "
+        UCX_LOG << "got new connection request " << conn_req << " from client "
                 << UcxContext::sockaddr_str((const struct sockaddr*)
                                             &conn_req_attr.client_address,
                                             sizeof(conn_req_attr.client_address));
     } else {
-        UCX_LOG << "ucp_conn_request_query() failed: " << ucs_status_string(status);
-        UCX_LOG << "got new connection request " << conn_req;
+        UCX_LOG << "got new connection request " << conn_req
+                << ", ucp_conn_request_query() failed ("
+                << ucs_status_string(status) << ")";
     }
 
     self->_conn_requests.push_back(conn_req);

@@ -1887,6 +1887,8 @@ ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
  * @brief Get attributes of a given endpoint.
  *
  * This routine fetches information about the endpoint.
+ * It should be called only if the endpoint was created with the
+ * UCP_EP_PARAM_FIELD_SOCK_ADDR or UCP_EP_PARAM_FIELD_CONN_REQUEST flags.
  *
  * @param [in]  ep         Endpoint object to query.
  * @param [out] attr       Filled with attributes of the endpoint.

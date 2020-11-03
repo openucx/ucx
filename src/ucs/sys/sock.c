@@ -736,7 +736,6 @@ void ucp_sockaddr_copy_always(struct sockaddr *dst_addr,
     }
 }
 
-
 ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen)
 {
     ucs_status_t status = UCS_ERR_NO_DEVICE;

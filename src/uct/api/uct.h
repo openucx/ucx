@@ -3229,7 +3229,10 @@ ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep);
 
 /**
  * @ingroup UCT_RESOURCE
- * @brief Get client ep's attributes.
+ * @brief Get ep's attributes.
+ *
+ * This routine should be called only if the endpoint was created with the
+ * UCT_EP_PARAM_FIELD_SOCKADDR or UCT_EP_PARAM_FIELD_CONN_REQUEST flags.
  *
  * @param [in]  ep         Endpoint to query.
  * @param [out] ep_attr    Filled with endpoint attributes.
