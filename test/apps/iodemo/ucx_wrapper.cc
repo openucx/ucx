@@ -201,7 +201,21 @@ void UcxContext::request_release(void *request)
 void UcxContext::connect_callback(ucp_conn_request_h conn_req, void *arg)
 {
     UcxContext *self = reinterpret_cast<UcxContext*>(arg);
-    UCX_LOG << "got new connection request " << conn_req;
+    ucp_conn_request_attr_t conn_req_attr;
+
+    conn_req_attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+    ucs_status_t status = ucp_conn_request_query(conn_req, &conn_req_attr);
+    if (status == UCS_OK) {
+        UCX_LOG << "got new connection request " << conn_req << " from client "
+                << UcxContext::sockaddr_str((const struct sockaddr*)
+                                            &conn_req_attr.client_address,
+                                            sizeof(conn_req_attr.client_address));
+    } else {
+        UCX_LOG << "got new connection request " << conn_req
+                << ", ucp_conn_request_query() failed ("
+                << ucs_status_string(status) << ")";
+    }
+
     self->_conn_requests.push_back(conn_req);
 }
 
@@ -428,6 +442,7 @@ UcxConnection::UcxConnection(UcxContext &context, uint32_t conn_id) :
 UcxConnection::~UcxConnection()
 {
     UCX_CONN_LOG << "destroying, ep is " << _ep;
+    print_addresses();
 
     // if _ep is NULL, connection was closed and removed by error handler
     if (_ep != NULL) {
@@ -592,6 +607,28 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
     memcpy(_log_prefix, ss.str().c_str(), length);
 }
 
+void UcxConnection::print_addresses()
+{
+    ucp_ep_attr_t ep_attr;
+
+    ep_attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                         UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+
+    ucs_status_t status = ucp_ep_query(_ep, &ep_attr);
+    if (status == UCS_OK) {
+        UCX_CONN_LOG << "endpoint " << _ep << ", local address "
+                     << UcxContext::sockaddr_str(
+                                     (const struct sockaddr*)&ep_attr.local_sockaddr,
+                                     sizeof(ep_attr.local_sockaddr))
+                     << " remote address "
+                     << UcxContext::sockaddr_str(
+                                     (const struct sockaddr*)&ep_attr.remote_sockaddr,
+                                     sizeof(ep_attr.remote_sockaddr));
+    } else {
+        UCX_CONN_LOG << "ucp_ep_query() failed: " << ucs_status_string(status);
+    }
+}
+
 bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 {
     UcxContext::wait_status_t wait_status;
@@ -630,6 +667,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     wait_status = _context.wait_completion(sreq, sreq_title, connect_timeout);
     if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to send remote connection id";
+        print_addresses();
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
         if (wait_status == UcxContext::WAIT_STATUS_TIMED_OUT) {
             _context.wait_completion(sreq, sreq_title);
@@ -643,6 +681,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     wait_status = _context.wait_completion(rreq, rreq_title, connect_timeout);
     if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to receive remote connection id";
+        print_addresses();
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
         if (wait_status == UcxContext::WAIT_STATUS_TIMED_OUT) {
             _context.wait_completion(rreq, rreq_title);
@@ -650,6 +689,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
         return false;
     }
 
+    print_addresses();
     UCX_CONN_LOG << "remote id is " << _remote_conn_id;
     return true;
 }
@@ -681,6 +721,7 @@ void UcxConnection::request_completed(ucx_request *r)
 void UcxConnection::handle_connection_error(ucs_status_t status)
 {
     UCX_CONN_LOG << "detected error: " << ucs_status_string(status);
+    print_addresses();
     _ucx_status = status;
 
     if (_remote_conn_id != 0) {

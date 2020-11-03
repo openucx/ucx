@@ -213,6 +213,8 @@ private:
 
     void set_log_prefix(const struct sockaddr* saddr, socklen_t addrlen);
 
+    void print_addresses();
+
     bool connect_common(ucp_ep_params_t& ep_params);
 
     bool send_common(const void *buffer, size_t length, ucp_tag_t tag,
