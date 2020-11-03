@@ -608,8 +608,11 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 
 void UcxConnection::print_addresses()
 {
-    ucp_ep_attr_t ep_attr;
+    if (_ep == NULL) {
+        return;
+    }
 
+    ucp_ep_attr_t ep_attr;
     ep_attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR |
                          UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
 
