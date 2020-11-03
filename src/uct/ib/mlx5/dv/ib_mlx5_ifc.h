@@ -74,7 +74,8 @@ enum {
     UCT_IB_MLX5_CMD_OP_CREATE_DCT              = 0x710,
     UCT_IB_MLX5_CMD_OP_DRAIN_DCT               = 0x712,
     UCT_IB_MLX5_CMD_OP_CREATE_XRQ              = 0x717,
-    UCT_IB_MLX5_CMD_OP_SET_XRQ_DC_PARAMS_ENTRY = 0x726
+    UCT_IB_MLX5_CMD_OP_SET_XRQ_DC_PARAMS_ENTRY = 0x726,
+    UCT_IB_MLX5_CMD_OP_QUERY_HCA_VPORT_CONTEXT = 0x762
 };
 
 enum {
@@ -129,7 +130,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
 
     uint8_t    reserved_at_120[0xa];
     uint8_t    log_max_ra_req_dc[0x6];
-    uint8_t    reserved_at_130[0xa];
+    uint8_t    reserved_at_130[0x8];
+    uint8_t    ooo_sl_mask[0x1];
+    uint8_t    reserved_at_139[0x1];
     uint8_t    log_max_ra_res_dc[0x6];
 
     uint8_t    reserved_at_140[0xa];
@@ -488,6 +491,85 @@ struct uct_ib_mlx5_query_hca_cap_in_bits {
     uint8_t    op_mod[0x10];
 
     uint8_t    reserved_at_40[0x40];
+};
+
+struct uct_ib_mlx5_hca_vport_context_bits {
+    uint8_t    field_select[0x20];
+
+    uint8_t    reserved_at_20[0xe0];
+
+    uint8_t    sm_virt_aware[0x1];
+    uint8_t    has_smi[0x1];
+    uint8_t    has_raw[0x1];
+    uint8_t    grh_required[0x1];
+    uint8_t    reserved_at_104[0xc];
+    uint8_t    port_physical_state[0x4];
+    uint8_t    vport_state_policy[0x4];
+    uint8_t    port_state[0x4];
+    uint8_t    vport_state[0x4];
+
+    uint8_t    reserved_at_120[0x20];
+
+    uint8_t    system_image_guid[0x40];
+
+    uint8_t    port_guid[0x40];
+
+    uint8_t    node_guid[0x40];
+
+    uint8_t    cap_mask1[0x20];
+
+    uint8_t    cap_mask1_field_select[0x20];
+
+    uint8_t    cap_mask2[0x20];
+
+    uint8_t    cap_mask2_field_select[0x20];
+
+    uint8_t    reserved_at_280[0x10];
+
+    uint8_t    ooo_sl_mask[0x10];
+
+    uint8_t    reserved_at_296[0x40];
+
+    uint8_t    lid[0x10];
+    uint8_t    reserved_at_310[0x4];
+    uint8_t    init_type_reply[0x4];
+    uint8_t    lmc[0x3];
+    uint8_t    subnet_timeout[0x5];
+
+    uint8_t    sm_lid[0x10];
+    uint8_t    sm_sl[0x4];
+    uint8_t    reserved_at_334[0xc];
+
+    uint8_t    qkey_violation_counter[0x10];
+    uint8_t    pkey_violation_counter[0x10];
+
+    uint8_t    reserved_at_360[0xca0];
+};
+
+struct uct_ib_mlx5_query_hca_vport_context_out_bits {
+    uint8_t    status[0x8];
+    uint8_t    reserved_at_8[0x18];
+
+    uint8_t    syndrome[0x20];
+
+    uint8_t    reserved_at_40[0x40];
+
+    struct uct_ib_mlx5_hca_vport_context_bits hca_vport_context;
+};
+
+struct uct_ib_mlx5_query_hca_vport_context_in_bits {
+    uint8_t    opcode[0x10];
+    uint8_t    reserved_at_10[0x10];
+
+    uint8_t    reserved_at_20[0x10];
+    uint8_t    op_mod[0x10];
+
+    uint8_t    other_vport[0x1];
+    uint8_t    reserved_at_41[0xb];
+    uint8_t    port_num[0x4];
+    uint8_t    vport_number[0x10];
+
+    uint8_t    reserved_at_60[0x20];
 };
 
 enum {

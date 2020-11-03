@@ -16,6 +16,8 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/datastruct/string_buffer.h>
+
 
 #define UCT_IB_MAX_IOV                     8UL
 #define UCT_IB_IFACE_NULL_RES_DOMAIN_KEY   0u
@@ -24,6 +26,8 @@
 #define UCT_IB_ADDRESS_INVALID_PATH_MTU    ((enum ibv_mtu)0)
 #define UCT_IB_ADDRESS_INVALID_PKEY        0
 #define UCT_IB_ADDRESS_DEFAULT_PKEY        0xffff
+#define UCT_IB_SL_MAX                      15
+#define UCT_IB_SL_INVALID                  (UCT_IB_SL_MAX + 1)
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -136,8 +140,8 @@ struct uct_ib_iface_config {
     /* Force global routing */
     int                     is_global;
 
-    /* IB SL to use */
-    unsigned                sl;
+    /* IB SL to use (default: AUTO) */
+    unsigned long           sl;
 
     /* IB Traffic Class to use */
     unsigned long           traffic_class;
@@ -528,6 +532,8 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
 
 void uct_ib_iface_fill_attr(uct_ib_iface_t *iface,
                             uct_ib_qp_attr_t *attr);
+
+uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
 
 
 #define UCT_IB_IFACE_FMT \

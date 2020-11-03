@@ -249,18 +249,19 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 {
     uct_rc_verbs_iface_config_t *config =
                     ucs_derived_of(tl_config, uct_rc_verbs_iface_config_t);
+    uct_ib_iface_config_t *ib_config    = &config->super.super.super;
+    uct_ib_iface_init_attr_t init_attr  = {};
+    uct_ib_qp_attr_t attr               = {};
     ucs_status_t status;
-    uct_ib_iface_init_attr_t init_attr = {};
-    uct_ib_qp_attr_t attr = {};
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
 
     init_attr.fc_req_size            = sizeof(uct_rc_pending_req_t);
     init_attr.rx_hdr_len             = sizeof(uct_rc_hdr_t);
     init_attr.qp_type                = IBV_QPT_RC;
-    init_attr.cq_len[UCT_IB_DIR_RX]  = config->super.super.super.rx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_RX]  = ib_config->rx.queue_len;
     init_attr.cq_len[UCT_IB_DIR_TX]  = config->super.tx_cq_len;
-    init_attr.seg_size               = config->super.super.super.seg_size;
+    init_attr.seg_size               = ib_config->seg_size;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, tl_md,
                               worker, params, &config->super.super, &init_attr);
@@ -271,6 +272,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                                                self->config.tx_max_wr / 4);
     self->super.config.fence_mode    = (uct_rc_fence_mode_t)config->super.super.fence_mode;
     self->super.progress             = uct_rc_verbs_iface_progress;
+    self->super.super.config.sl      = uct_ib_iface_config_select_sl(ib_config);
     self->flush_mem                  = NULL;
     self->flush_mr                   = NULL;
 
@@ -301,7 +303,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                                       self->config.short_desc_size,
                                   sizeof(uct_rc_iface_send_desc_t),
                                   UCS_SYS_CACHE_LINE_SIZE,
-                                  &config->super.super.super.tx.mp,
+                                  &ib_config->tx.mp,
                                   self->super.config.tx_qp_len,
                                   uct_rc_iface_send_desc_init,
                                   "rc_verbs_short_desc");

@@ -12,6 +12,15 @@ extern "C" {
 }
 
 class test_string : public ucs::test {
+protected:
+    void check_mask_str(uint64_t mask, const std::string &exp_str) const {
+        ucs_string_buffer_t mask_str;
+        ucs_string_buffer_init(&mask_str);
+        EXPECT_EQ(exp_str,
+                  static_cast<std::string>(
+                      ucs_mask_str(mask, &mask_str)));
+        ucs_string_buffer_cleanup(&mask_str);
+    }
 };
 
 UCS_TEST_F(test_string, trim) {
@@ -33,6 +42,25 @@ UCS_TEST_F(test_string, snprintf_safe) {
 
     ucs_snprintf_safe(buf, sizeof(buf), "1234");
     EXPECT_EQ(std::string("123"), buf);
+}
+
+UCS_TEST_F(test_string, mask_str) {
+    const uint64_t empty_mask = 0;
+
+    check_mask_str(empty_mask, "<none>");
+
+    uint64_t mask = empty_mask;
+    std::string exp_str;
+    for (int i = 0; i < 64; ++i) {
+        mask |= UCS_BIT(i);
+
+        if (!exp_str.empty()) {
+            exp_str += ", ";
+        }
+        exp_str     += ucs::to_string(i);
+
+        check_mask_str(mask, exp_str);
+    }
 }
 
 class test_string_buffer : public ucs::test {

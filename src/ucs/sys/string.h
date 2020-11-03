@@ -10,6 +10,7 @@
 #include "compiler_def.h"
 #include <ucs/type/status.h>
 #include <ucs/sys/math.h>
+#include <ucs/datastruct/string_buffer.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -227,6 +228,17 @@ const char* ucs_flags_str(char *str, size_t max,
  *         is returned; otherwise in between
  */
 ssize_t ucs_path_calc_distance(const char *path1, const char *path2);
+
+
+/**
+ * Convert a bitmask to a string buffer that represents it.
+ *
+ * @param mask    Bitmask.
+ * @param strb    String buffer.
+ *
+ * @return C-style string representing a bitmask filled in a string buffer.
+ */
+const char* ucs_mask_str(uint64_t mask, ucs_string_buffer_t *strb);
 
 
 /** Quantifier suffixes for memory units ("K", "M", "G", etc) */
