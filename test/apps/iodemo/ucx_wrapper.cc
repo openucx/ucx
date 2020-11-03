@@ -14,7 +14,6 @@
 
 #include <limits>
 
-
 struct ucx_request {
     UcxCallback                  *callback;
     UcxConnection                *conn;
@@ -631,8 +630,11 @@ void UcxConnection::print_addresses()
 
 bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 {
+    const ucp_datatype_t dt_int = ucp_dt_make_contig(sizeof(uint32_t));
+    double connect_timeout      = _context.connect_timeout();
     UcxContext::wait_status_t wait_status;
-    double connect_timeout = _context.connect_timeout();
+    uint32_t remote_conn_id;
+    size_t recv_len;
 
     // create endpoint
     ep_params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLER |
@@ -650,11 +652,8 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 
     UCX_CONN_LOG << "created endpoint " << _ep << ", exchanging connection id";
 
-    const ucp_datatype_t dt_int = ucp_dt_make_contig(sizeof(uint32_t));
-
     // receive remote connection id
-    size_t recv_len;
-    void *rreq             = ucp_stream_recv_nb(_ep, &_remote_conn_id, 1, dt_int,
+    void *rreq             = ucp_stream_recv_nb(_ep, &remote_conn_id, 1, dt_int,
                                                 stream_recv_callback, &recv_len,
                                                 UCP_STREAM_RECV_FLAG_WAITALL);
     const char *rreq_title = "conn_id receive";
@@ -690,6 +689,10 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
     }
 
     print_addresses();
+
+    // initialize last since it's used in error handling to protect
+    // failed connections queue
+    _remote_conn_id = remote_conn_id;
     UCX_CONN_LOG << "remote id is " << _remote_conn_id;
     return true;
 }
