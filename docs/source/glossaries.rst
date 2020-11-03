@@ -15,11 +15,11 @@ Bistro      Binary Instrumentation
 BTL         Open MPI's Byte Transfer Layer
 CM          Connection Manager
 CMA         Linux Kernel Cross Memory Attach
-CQ          Completion Queue(InfiniBand)
-CQE         Completion Queue Entry(InfiniBand)
+CQ          Completion Queue (InfiniBand)
+CQE         Completion Queue Entry (InfiniBand)
 csmock      static analysis tools
-CUDA        Compute Unified Device Architecture(NVIDIA)
-DC          Dynamically Connected transport(Mellanox/Nvidia InfiniBand)
+CUDA        Compute Unified Device Architecture (NVIDIA)
+DC          Dynamically Connected transport (Mellanox/Nvidia InfiniBand)
 DPM         Direct Packet Mode
 EP          EndPoint
 FC          Flow Control
@@ -32,7 +32,7 @@ IB          InfiniBand
 iface       Interaface
 IPC         Inter Process Communication
 JUCX        Java API over UCP
-KLM         A new sophisticated way of creating memory regions(Mellanox)
+KLM         A new sophisticated way of creating memory regions (Mellanox)
 KNEM        Inria's Kernel module for process to process zero copy (https://knem.gitlabpages.inria.fr)
 LDPM        Legacy DPM
 LLNL        Lawrence Livermore National Laboratory
@@ -47,6 +47,9 @@ MPI         Message Passing INterface
 MPICH       ANL MPI Implementation
 MTT         The MPI Testing Tool
 NAK         Negative Acknowledge
+NB          Non blocking operations
+NBI         Non blocking implicit
+NBX         Non blocking extended
 ODP         OnDemand Paging
 OFA         OpenFabrics Alliance
 OMPI        OpenMPI
@@ -61,21 +64,22 @@ PGAS        Partitioned Global Address Space
 POSIX       Portable operating system interface
 ppn         processes per node
 PR          Pull Request
-QP          Queue Pair(InfiniBand)
+QP          Queue Pair (InfiniBand)
 RC          Reliable Connection (InfiniBand)
 rcache      Registration Cache
 RDMA        Remote Direct Memory Access
 REQ         Request
 rkey        Remote KEY
 RMA         Remote Memory Access
+RNDV        Rendezvous protocol
 RnR         Receiver Not Ready
 RoCE        RDMA over Converged Ethernet
-ROCm        Radeon Open Compute platform(AMD)
+ROCm        Radeon Open Compute platform (AMD)
 RTE         Run Time Environment
 RX          Receive
 skb         Socket Buffer
 SM          Shared Memory
-SM          Subnet Manager(InfiniBand)
+SM          Subnet Manager (InfiniBand)
 SockCM      Socket Connection Manager
 SRQ         Shared Receive Queue
 SysV        UNIX System V
@@ -85,6 +89,7 @@ TM          Tag Matching
 TX          Transmit
 UC          Unreliable Connection (InfiniBand)
 UCC         Unified Collective Communications
+UCD         Unified Communication Datatypes
 UCF         Unified Communication Framework
 UCM         Unified Communication Memory
 UCP         Unified Communication Protocols Higher level API
@@ -92,15 +97,16 @@ UCS         Unified Communication Service Common utilities
 UCT         Unified Communication Transport Lower level API
 UCX         Unified Communication X
 UD          Unreliable Datagram (InfiniBand)
-uGNI        user level generic network interface(Cray)
+uGNI        user level generic network interface (Cray)
 UMR         User mode memory registration
 VPI         Virtual Protocol Interconnect
+WFE         Wait for event
 WIP-DNM     Work-in-Progress-Do-Not-Merge
-WQ          Work Queue(InfiniBand)
+WQ          Work Queue (InfiniBand)
 WQE         Work Queue Elements (pronounce WOOKIE)
 WR          Work Request
 XPMEM       `XPMEM <https://github.com/hjelmn/xpmem>`_ Linux kernel module originally developed by SGI implementing cross process memory mapping with zero copy
-XRC         eXtended Reliable Connection(InfiniBand)
+XRC         eXtended Reliable Connection (InfiniBand)
 XRCD        XRC Domains
 XRQ         Mellanox Shared Receive Queue
 Zcopy       Zero Copy
