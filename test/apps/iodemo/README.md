@@ -15,7 +15,7 @@ Launch configuration:
                   map_by : 'node'
              num_clients : '5'
              num_servers : '5'
-              iodemo_exe : '/labhome/miked/workspace/git/forks/ucx/test/apps/iodemo/io_demo'
+              iodemo_exe : 'io_demo'
       iodemo_client_args : ''
                   net_if : 'eth0'
            base_port_num : '20000'
@@ -23,8 +23,8 @@ Launch configuration:
         client_wait_time : '2'
                 launcher : 'pdsh -b -w'
                  dry_run : '1'
-                   node1 : /labhome/miked/workspace/git/forks/ucx/test/apps/iodemo/iodemo_commands_node1.sh
-                   node2 : /labhome/miked/workspace/git/forks/ucx/test/apps/iodemo/iodemo_commands_node2.sh
+                   node1 : iodemo_commands_node1.sh
+                   node2 : iodemo_commands_node2.sh
 
 ```
 
