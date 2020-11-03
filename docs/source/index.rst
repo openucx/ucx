@@ -58,7 +58,7 @@ and run a simple client/server example:
 
     $ gcc examples/ucp_client_server.c -lucp -lucs -o ucp_client_server \
           -Iinstall/include -Linstall/lib
-    $ export LD_LIBRARY_PATH=$PWD/instal/lib
+    $ export LD_LIBRARY_PATH=$PWD/install/lib
     $ ./ucp_client_server &
     $ ./ucp_client_server -a <ip-addr>   # <ip-addr>: IP address of a local RoCE or IPoIB interface
     ...
