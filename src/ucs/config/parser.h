@@ -99,23 +99,23 @@ typedef struct ucs_config_bw_spec {
     }
 
 
-#define UCS_CONFIG_REGISTER_TABLE_ENTRY(_entry) \
+#define UCS_CONFIG_REGISTER_TABLE_ENTRY(_entry, _list) \
     UCS_STATIC_INIT { \
-        ucs_list_add_tail(&ucs_config_global_list, &(_entry)->list); \
+        ucs_list_add_tail(_list, &(_entry)->list); \
     } \
     \
     UCS_STATIC_CLEANUP { \
         ucs_list_del(&(_entry)->list); \
     }
 
-#define UCS_CONFIG_REGISTER_TABLE(_table, _name, _prefix, _type) \
+#define UCS_CONFIG_REGISTER_TABLE(_table, _name, _prefix, _type, _list) \
     static ucs_config_global_list_entry_t _table##_config_entry = { \
         .table  = _table, \
         .name   = _name, \
         .prefix = _prefix, \
         .size   = sizeof(_type) \
     }; \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&_table##_config_entry);
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&_table##_config_entry, _list);
 
 extern ucs_list_link_t ucs_config_global_list;
 
@@ -411,9 +411,11 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
  * @param stream         Output stream to print to.
  * @param prefix         Prefix to add to all environment variables.
  * @param flags          Flags which control the output.
+ * @param config_list    List of config tables
  */
 void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
-                                      ucs_config_print_flags_t flags);
+                                      ucs_config_print_flags_t flags,
+                                      ucs_list_link_t *config_list);
 
 /**
  * Read a value from options structure.

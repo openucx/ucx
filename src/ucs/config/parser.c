@@ -1552,14 +1552,15 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
 }
 
 void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
-                                      ucs_config_print_flags_t flags)
+                                      ucs_config_print_flags_t flags,
+                                      ucs_list_link_t *config_list)
 {
     const ucs_config_global_list_entry_t *entry;
     ucs_status_t status;
     char title[64];
     void *opts;
 
-    ucs_list_for_each(entry, &ucs_config_global_list, list) {
+    ucs_list_for_each(entry, config_list, list) {
         if ((entry->table == NULL) ||
             (ucs_config_field_is_last(&entry->table[0]))) {
             /* don't print title for an empty configuration table */
