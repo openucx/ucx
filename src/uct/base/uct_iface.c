@@ -367,6 +367,7 @@ ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
     ops->ep_fence            = (uct_ep_fence_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucs_empty_function_return_ep_timeout;
+    ops->ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_ep_timeout;
     ops->ep_destroy          = uct_ep_failed_destroy;
     ops->ep_get_address      = (uct_ep_get_address_func_t)ucs_empty_function_return_ep_timeout;
 
