@@ -71,6 +71,11 @@ ucs_status_t ucs_empty_function_return_busy()
     return UCS_ERR_BUSY;
 }
 
+ucs_status_t ucs_empty_function_return_not_connected()
+{
+    return UCS_ERR_NOT_CONNECTED;
+}
+
 int ucs_empty_function_do_assert()
 {
     ucs_assert_always(0);
