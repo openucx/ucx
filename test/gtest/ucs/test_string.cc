@@ -22,6 +22,19 @@ UCS_TEST_F(test_string, trim) {
     EXPECT_EQ("foo foo", std::string(ucs_strtrim(str2)));
 }
 
+UCS_TEST_F(test_string, snprintf_safe) {
+    char buf[4];
+
+    ucs_snprintf_safe(buf, sizeof(buf), "12");
+    EXPECT_EQ(std::string("12"), buf);
+
+    ucs_snprintf_safe(buf, sizeof(buf), "123");
+    EXPECT_EQ(std::string("123"), buf);
+
+    ucs_snprintf_safe(buf, sizeof(buf), "1234");
+    EXPECT_EQ(std::string("123"), buf);
+}
+
 class test_string_buffer : public ucs::test {
 };
 

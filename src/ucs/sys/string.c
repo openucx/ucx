@@ -208,7 +208,7 @@ void ucs_snprintf_safe(char *buf, size_t size, const char *fmt, ...)
     }
 
     va_start(ap, fmt);
-    vsnprintf(buf, size - 1, fmt, ap);
+    vsnprintf(buf, size, fmt, ap);
     buf[size - 1] = '\0';
     va_end(ap);
 }
