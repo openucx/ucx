@@ -58,6 +58,9 @@
         <activation>
           <jdk>1.8</jdk>
         </activation>
+	<properties>
+          <javadocExecutable>${java.home}/../bin/javadoc</javadocExecutable>
+        </properties>
         <build>
           <plugins>
             <plugin>
@@ -75,6 +78,9 @@
         <activation>
           <jdk>1.9</jdk>
         </activation>
+	<properties>
+          <javadocExecutable>${java.home}/../bin/javadoc</javadocExecutable>
+        </properties>
         <build>
           <plugins>
             <plugin>
@@ -91,6 +97,9 @@
         <activation>
           <jdk>[1.10,)</jdk>
         </activation>
+        <properties>
+          <javadocExecutable>${java.home}/bin/javadoc</javadocExecutable>
+        </properties>
         <build>
           <plugins>
             <plugin>
@@ -386,7 +395,6 @@
         <artifactId>maven-javadoc-plugin</artifactId>
         <version>3.2.0</version>
         <configuration>
-          <javadocExecutable>${java.home}/../bin/javadoc</javadocExecutable>
           <quiet>true</quiet>
           <doclint>all,-missing</doclint>
         </configuration>
