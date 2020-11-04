@@ -79,7 +79,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
                  uct_md_mem_attr_t *mem_attr)
 {
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 3
-    CUmemorytype cuda_mem_mype = (CUmemorytype)0;
+    CUmemorytype cuda_mem_type = (CUmemorytype)0;
     uint32_t is_managed        = 0;
     unsigned value             = 1;
     CUdevice cuda_device       = -1;
@@ -102,7 +102,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
         }
     } else {
         attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
-        attr_data[0] = &cuda_mem_mype;
+        attr_data[0] = &cuda_mem_type;
         attr_type[1] = CU_POINTER_ATTRIBUTE_IS_MANAGED;
         attr_data[1] = &is_managed;
         attr_type[2] = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
@@ -112,13 +112,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
                                         attr_type, attr_data,
                                         (CUdeviceptr)address);
         if ((cu_err != CUDA_SUCCESS) ||
-            ((cuda_mem_mype != CU_MEMORYTYPE_DEVICE) &&
-             (cuda_mem_mype != CU_MEMORYTYPE_HOST))) {
+            ((cuda_mem_type != CU_MEMORYTYPE_DEVICE) &&
+             (cuda_mem_type != CU_MEMORYTYPE_HOST))) {
             /* pointer not recognized */
             return UCS_ERR_INVALID_ADDR;
         }
 
-        if (cuda_mem_mtype == CU_MEMORYTYPE_HOST) {
+        if (cuda_mem_type == CU_MEMORYTYPE_HOST) {
             mem_type = UCS_MEMORY_TYPE_CUDA_HOST;
         } else if (is_managed) {
             mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
