@@ -378,6 +378,16 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 
 
 /**
+ * Check if the address family of the given sockaddr is IPv4 or IPv6
+ *
+ * @param [in] sa       Pointer to sockaddr structure.
+ *
+ * @return Return whether the address family of the given sockaddr is IPv4 or IPv6.
+ */
+int ucs_sockaddr_is_known_af(const struct sockaddr *sa);
+
+
+/**
  * Extract the IP address from a given socket fd and return it as a string.
  *
  * @param [in]   fd          Socket fd.
