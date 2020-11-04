@@ -51,7 +51,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
         goto err;
     }
 
-    if (rdma_bind_addr(self->id, (struct sockaddr *)saddr)) {
+    if (rdma_bind_addr(self->id, (struct sockaddr*)saddr)) {
         status = ((errno == EADDRINUSE) || (errno == EADDRNOTAVAIL)) ?
                  UCS_ERR_BUSY : UCS_ERR_IO_ERROR;
         ucs_error("rdma_bind_addr(addr=%s) failed: %m",
@@ -92,7 +92,7 @@ ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
                                         uct_conn_request_h conn_request)
 {
     uct_rdmacm_listener_t *rdmacm_listener = ucs_derived_of(listener, uct_rdmacm_listener_t);
-    struct rdma_cm_event *event            = (struct rdma_cm_event *)conn_request;
+    struct rdma_cm_event *event            = (struct rdma_cm_event*)conn_request;
 
     ucs_assert_always(rdmacm_listener->id == event->listen_id);
 
@@ -118,7 +118,7 @@ ucs_status_t uct_rdmacm_listener_query(uct_listener_h listener,
 
     if (listener_attr->field_mask & UCT_LISTENER_ATTR_FIELD_SOCKADDR) {
         addr   = rdma_get_local_addr(rdmacm_listener->id);
-        status = ucs_sockaddr_copy((struct sockaddr *)&listener_attr->sockaddr,
+        status = ucs_sockaddr_copy((struct sockaddr*)&listener_attr->sockaddr,
                                    addr);
         if (status != UCS_OK) {
             return status;

@@ -73,7 +73,7 @@ static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 
 static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event)
 {
-    uct_rdmacm_cm_ep_t *cep = (uct_rdmacm_cm_ep_t *)event->id->context;
+    uct_rdmacm_cm_ep_t *cep = (uct_rdmacm_cm_ep_t*)event->id->context;
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
 
@@ -93,7 +93,7 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
 
 static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *event)
 {
-    uct_rdmacm_cm_ep_t     *cep = (uct_rdmacm_cm_ep_t *)event->id->context;
+    uct_rdmacm_cm_ep_t     *cep = (uct_rdmacm_cm_ep_t*)event->id->context;
     uct_cm_remote_data_t   remote_data;
     ucs_status_t           status;
     struct rdma_conn_param conn_param;
@@ -219,14 +219,14 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(struct rdma_cm_id *cm_id,
 
     uct_ib_address_pack(&params, dev_addr);
 
-    *dev_addr_p     = (uct_device_addr_t *)dev_addr;
+    *dev_addr_p     = (uct_device_addr_t*)dev_addr;
     *dev_addr_len_p = addr_length;
     return UCS_OK;
 }
 
 static void uct_rdmacm_cm_handle_event_connect_request(struct rdma_cm_event *event)
 {
-    uct_rdmacm_priv_data_hdr_t          *hdr      = (uct_rdmacm_priv_data_hdr_t *)
+    uct_rdmacm_priv_data_hdr_t          *hdr      = (uct_rdmacm_priv_data_hdr_t*)
                                                     event->param.conn.private_data;
     uct_rdmacm_listener_t               *listener = event->listen_id->context;
     char                                dev_name[UCT_DEVICE_NAME_MAX];
@@ -290,9 +290,9 @@ err:
 
 static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *event)
 {
-    uct_rdmacm_priv_data_hdr_t *hdr         = (uct_rdmacm_priv_data_hdr_t *)
-                                              event->param.conn.private_data;
-    uct_rdmacm_cm_ep_t         *cep         = event->id->context;
+    uct_rdmacm_priv_data_hdr_t *hdr = (uct_rdmacm_priv_data_hdr_t*)
+                                       event->param.conn.private_data;
+    uct_rdmacm_cm_ep_t         *cep = event->id->context;
     char                       ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_device_addr_t          *dev_addr;
     size_t                     addr_length;
@@ -379,7 +379,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
             status = UCS_ERR_CONNECTION_RESET;
         } else {
             ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT);
-            hdr = (const uct_rdmacm_priv_data_hdr_t *)event->param.conn.private_data;
+            hdr = (const uct_rdmacm_priv_data_hdr_t*)event->param.conn.private_data;
 
             if ((hdr != NULL) && (event->param.conn.private_data_len > 0) &&
                 ((ucs_status_t)hdr->status == UCS_ERR_REJECTED)) {
@@ -499,7 +499,7 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
 static void uct_rdmacm_cm_event_handler(int fd, ucs_event_set_types_t events,
                                         void *arg)
 {
-    uct_rdmacm_cm_t      *cm = (uct_rdmacm_cm_t *)arg;
+    uct_rdmacm_cm_t      *cm = (uct_rdmacm_cm_t*)arg;
     struct rdma_cm_event *event;
     int                  ret;
 
