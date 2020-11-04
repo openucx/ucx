@@ -111,12 +111,17 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
         cu_err = cuPointerGetAttributes(ucs_static_array_size(attr_data),
                                         attr_type, attr_data,
                                         (CUdeviceptr)address);
-        if ((cu_err != CUDA_SUCCESS) || (cuda_mem_mype != CU_MEMORYTYPE_DEVICE)) {
+        if ((cu_err != CUDA_SUCCESS) ||
+            ((cuda_mem_mype != CU_MEMORYTYPE_DEVICE) &&
+             (cuda_mem_mype != CU_MEMORYTYPE_HOST))) {
             /* pointer not recognized */
             return UCS_ERR_INVALID_ADDR;
         }
 
-        if (is_managed) {
+        if (cuda_mem_mtype == CU_MEMORYTYPE_HOST) {
+            mem_type = UCS_MEMORY_TYPE_CUDA_HOST;
+        }
+        else if (is_managed) {
             mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
         } else {
             mem_type = UCS_MEMORY_TYPE_CUDA;
