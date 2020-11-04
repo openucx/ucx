@@ -120,8 +120,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
 
         if (cuda_mem_mtype == CU_MEMORYTYPE_HOST) {
             mem_type = UCS_MEMORY_TYPE_CUDA_HOST;
-        }
-        else if (is_managed) {
+        } else if (is_managed) {
             mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
         } else {
             mem_type = UCS_MEMORY_TYPE_CUDA;
