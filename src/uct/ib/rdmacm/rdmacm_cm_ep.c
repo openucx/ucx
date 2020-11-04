@@ -36,13 +36,13 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
     if (ucs_sockaddr_is_known_af(local_addr)) {
         ucs_sockaddr_str(local_addr, local_ip_port_str, UCS_SOCKADDR_STRING_LEN);
     } else {
-        ucs_strncpy_safe(local_ip_port_str, "<not set>", UCS_SOCKADDR_STRING_LEN);
+        ucs_strncpy_safe(local_ip_port_str, "<invalid>", UCS_SOCKADDR_STRING_LEN);
     }
 
     if (ucs_sockaddr_is_known_af(remote_addr)) {
         ucs_sockaddr_str(remote_addr, remote_ip_port_str, UCS_SOCKADDR_STRING_LEN);
     } else {
-        ucs_strncpy_safe(remote_ip_port_str, "<not set>", UCS_SOCKADDR_STRING_LEN);
+        ucs_strncpy_safe(remote_ip_port_str, "<invalid>", UCS_SOCKADDR_STRING_LEN);
     }
 
     ucs_flags_str(flags_buf, sizeof(flags_buf), cep->flags, ep_flag_to_str);
