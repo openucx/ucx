@@ -983,6 +983,7 @@ public:
                 close_uncompleted_servers("timeout for replies");
                 timer_finished = true;
             }
+            check_time_limit(curr_time);
         }
     }
 
