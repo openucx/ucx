@@ -1,5 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) The University of Tennessee and The University
+*               of Tennessee Research Foundation. 2020. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -395,8 +397,8 @@ static ucs_status_t ucs_stats_node_add(ucs_stats_node_t *node,
 ucs_status_t ucs_stats_node_alloc(ucs_stats_node_t** p_node, ucs_stats_class_t *cls,
                                  ucs_stats_node_t *parent, const char *name, ...)
 {
+    ucs_stats_filter_node_t *filter_node = NULL;
     ucs_stats_node_t *node;
-    ucs_stats_filter_node_t *filter_node;
     ucs_status_t status;
     va_list ap;
 
