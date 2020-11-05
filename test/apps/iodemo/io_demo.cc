@@ -65,6 +65,7 @@ typedef struct {
     size_t                   num_offcache_buffers;
     bool                     verbose;
     bool                     validate;
+    bool                     use_am;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
@@ -415,13 +416,15 @@ protected:
     public:
         SendCompleteCallback(size_t buffer_size,
                              MemoryPool<SendCompleteCallback>& pool) :
-            _op_counter(NULL), _counter(0), _iov(NULL), _pool(pool) {
+            _op_counter(NULL), _counter(0), _iov(NULL), _io_msg(NULL),
+            _pool(pool) {
         }
 
-        void init(BufferIov* iov, long* op_counter) {
+        void init(BufferIov* iov, long* op_counter, IoMessage *io_msg = NULL) {
             _op_counter = op_counter;
             _counter    = iov->size();
             _iov        = iov;
+            _io_msg     = io_msg;
             assert(_counter > 0);
         }
 
@@ -434,6 +437,10 @@ protected:
                 ++(*_op_counter);
             }
 
+            if (_io_msg != NULL) {
+                (*_io_msg)(status);
+            }
+
             _iov->release();
             _pool.put(this);
         }
@@ -442,11 +449,12 @@ protected:
         long*                             _op_counter;
         size_t                            _counter;
         BufferIov*                        _iov;
+        IoMessage*                        _io_msg;
         MemoryPool<SendCompleteCallback>& _pool;
     };
 
     P2pDemoCommon(const options_t& test_opts) :
-        UcxContext(test_opts.iomsg_size, test_opts.connect_timeout),
+        UcxContext(test_opts.iomsg_size, test_opts.connect_timeout, test_opts.use_am),
         _test_opts(test_opts),
         _io_msg_pool(test_opts.iomsg_size, "io messages"),
         _send_callback_pool(0, "send callbacks"),
@@ -585,8 +593,15 @@ public:
             }
 
             if (status == UCS_OK) {
-                _server->send_io_message(_conn, IO_WRITE_COMP, _sn, 0,
-                                         _server->opts().validate);
+                if (_server->opts().use_am) {
+                    IoMessage *m = _server->_io_msg_pool.get();
+                    m->init(IO_WRITE_COMP, _sn, 0, _server->opts().validate);
+                    _conn->send_am(m->buffer(), _server->opts().iomsg_size,
+                                   NULL, 0ul, m);
+                } else {
+                    _server->send_io_message(_conn, IO_WRITE_COMP, _sn, 0,
+                                             _server->opts().validate);
+                }
                 if (_server->opts().validate) {
                     validate(*_iov, _sn);
                 }
@@ -667,6 +682,27 @@ public:
         send_io_message(conn, IO_READ_COMP, msg->sn, 0, opts().validate);
     }
 
+    void handle_io_am_read_request(UcxConnection* conn, const iomsg_t *msg) {
+        VERBOSE_LOG << "sending AM IO read data";
+        assert(opts().max_data_size >= msg->data_size);
+
+        IoMessage *m = _io_msg_pool.get();
+        m->init(IO_READ_COMP, msg->sn, msg->data_size, opts().validate);
+
+        BufferIov *iov = _data_buffers_pool.get();
+        iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+
+        SendCompleteCallback *cb = _send_callback_pool.get();
+        cb->init(iov, &_curr_state.read_count, m);
+
+        assert(iov->size() == 1);
+
+        // Send IO_READ_COMP as AM header and first iov element as payload
+        // (note that multi-iov send is not supported for IODEMO with AM yet)
+        conn->send_am(m->buffer(), opts().iomsg_size, (*iov)[0].buffer(),
+                      (*iov)[0].size(), cb);
+    }
+
     void handle_io_write_request(UcxConnection* conn, const iomsg_t *msg) {
         VERBOSE_LOG << "receiving IO write data";
         assert(msg->data_size != 0);
@@ -678,6 +714,22 @@ public:
         w->init(this, conn, msg->sn, iov, &_curr_state.write_count);
 
         recv_data(conn, *iov, msg->sn, w);
+    }
+
+    void handle_io_am_write_request(UcxConnection* conn, const iomsg_t *msg,
+                                    const UcxAmDesc &data_desc) {
+        VERBOSE_LOG << "receiving AM IO write data";
+        assert(msg->data_size != 0);
+
+        BufferIov *iov             = _data_buffers_pool.get();
+        IoWriteResponseCallback *w = _callback_pool.get();
+
+        iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+        w->init(this, conn, msg->sn, iov, &_curr_state.write_count);
+
+        assert(iov->size() == 1);
+
+        conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(), data_desc, w);
     }
 
     virtual void dispatch_connection_accepted(UcxConnection* conn) {
@@ -708,6 +760,29 @@ public:
             handle_io_read_request(conn, msg);
         } else if (msg->op == IO_WRITE) {
             handle_io_write_request(conn, msg);
+        } else {
+            LOG << "Invalid opcode: " << msg->op;
+        }
+    }
+
+    virtual void dispatch_am_message(UcxConnection* conn, const void *buffer,
+                                     size_t length,
+                                     const UcxAmDesc &data_desc) {
+        iomsg_t const *msg = reinterpret_cast<const iomsg_t*>(buffer);
+
+        VERBOSE_LOG << "got io (AM) message " << io_op_names[msg->op] << " sn "
+                    << msg->sn << " data size " << msg->data_size
+                    << " conn " << conn;
+
+        if (opts().validate) {
+            assert(length == opts().iomsg_size);
+            validate(msg, length);
+        }
+
+        if (msg->op == IO_READ) {
+            handle_io_am_read_request(conn, msg);
+        } else if (msg->op == IO_WRITE) {
+            handle_io_am_write_request(conn, msg, data_desc);
         } else {
             LOG << "Invalid opcode: " << msg->op;
         }
@@ -752,7 +827,7 @@ public:
             MemoryPool<IoReadResponseCallback>& pool) :
             _comp_counter(0), _io_counter(NULL), _server_io_counter(NULL),
             _sn(0), _validate(false), _iov(NULL), _buffer(malloc(buffer_size)),
-            _buffer_size(buffer_size), _pool(pool) {
+            _buffer_size(buffer_size), _meta_comp_counter(0), _pool(pool) {
 
             if (_buffer == NULL) {
                 throw std::bad_alloc();
@@ -760,14 +835,16 @@ public:
         }
 
         void init(long *io_counter, long *conn_io_counter,
-                  uint32_t sn, bool validate, BufferIov *iov) {
+                  uint32_t sn, bool validate, BufferIov *iov,
+                  int meta_comp_counter = 1) {
             /* wait for all data chunks and the read response completion */
-            _comp_counter      = iov->size() + 1;
+            _comp_counter      = iov->size() + meta_comp_counter;
             _io_counter        = io_counter;
             _server_io_counter = conn_io_counter;
             _sn                = sn;
             _validate          = validate;
             _iov               = iov;
+            _meta_comp_counter = meta_comp_counter;
         }
 
         ~IoReadResponseCallback() {
@@ -782,9 +859,17 @@ public:
             ++(*_io_counter);
             ++(*_server_io_counter);
             if (_validate && (status == UCS_OK)) {
-                iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
-                validate(msg, _sn, _buffer_size);
                 validate(*_iov, _sn);
+
+                if (_meta_comp_counter != 0) {
+                    // With tag API, we also wait for READ_COMP arrival, so need
+                    // to validate it. With AM API, READ_COMP arrives as AM
+                    // header together with data descriptor, we validate it in
+                    // place to avoid unneeded memory copy to this
+                    // IoReadResponseCallback _buffer.
+                    iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
+                    validate(msg, _sn, _buffer_size);
+                }
             }
 
             _iov->release();
@@ -804,6 +889,7 @@ public:
         BufferIov*                          _iov;
         void*                               _buffer;
         const size_t                        _buffer_size;
+        int                                 _meta_comp_counter;
         MemoryPool<IoReadResponseCallback>& _pool;
     };
 
@@ -848,6 +934,20 @@ public:
         return data_size;
     }
 
+    size_t do_io_read_am(server_info_t& server_info, uint32_t sn) {
+        size_t data_size = get_data_size();
+
+        IoMessage *m = _io_msg_pool.get();
+        m->init(IO_READ, sn, data_size, opts().validate);
+
+        server_info.conn->send_am(m->buffer(), opts().iomsg_size, NULL, 0, m);
+
+        ++server_info.num_sent;
+        ++_num_sent;
+
+        return data_size;
+    }
+
     size_t do_io_write(server_info_t& server_info, uint32_t sn) {
         size_t data_size = get_data_size();
         bool validate    = opts().validate;
@@ -869,6 +969,35 @@ public:
         VERBOSE_LOG << "sending data " << iov << " size "
                     << data_size << " sn " << sn;
         send_data(server_info.conn, *iov, sn, cb);
+        return data_size;
+    }
+
+    size_t do_io_write_am(server_info_t& server_info, uint32_t sn) {
+        size_t data_size = get_data_size();
+        bool validate    = opts().validate;
+
+        IoMessage *m = _io_msg_pool.get();
+        m->init(IO_WRITE, sn, data_size, validate);
+
+        ++server_info.num_sent;
+        ++_num_sent;
+
+        BufferIov *iov = _data_buffers_pool.get();
+        iov->init(data_size, _data_chunks_pool, sn, validate);
+
+        SendCompleteCallback *cb = _send_callback_pool.get();
+        cb->init(iov, NULL, m);
+
+        VERBOSE_LOG << "sending IO_WRITE (AM) data " << iov << " size "
+                    << data_size << " sn " << sn;
+
+        assert(iov->size() == 1);
+
+        // Send IO_WRITE as AM header and first iov element as payload
+        // (note that multi-iov send is not supported for IODEMO with AM yet)
+        server_info.conn->send_am(m->buffer(), opts().iomsg_size,
+                                  (*iov)[0].buffer(), (*iov)[0].size(), cb);
+
         return data_size;
     }
 
@@ -901,6 +1030,42 @@ public:
             assert(msg->op == IO_WRITE_COMP);
             ++_num_completed;
             ++_server_info[get_server_index(conn)].num_completed[IO_WRITE];
+        }
+    }
+
+    virtual void dispatch_am_message(UcxConnection* conn, const void *buffer,
+                                     size_t length,
+                                     const UcxAmDesc &data_desc) {
+        iomsg_t const *msg = reinterpret_cast<const iomsg_t*>(buffer);
+
+        VERBOSE_LOG << "got AM io message " << io_op_names[msg->op] << " sn "
+                    << msg->sn << " data size " << msg->data_size
+                    << " conn " << conn;
+
+        assert(msg->op >= IO_COMP_MIN);
+
+        if (opts().validate) {
+            assert(length == opts().iomsg_size);
+            validate(msg, opts().iomsg_size);
+        }
+
+        // Client can receive IO_WRITE_COMP or IO_READ_COMP only
+        if (msg->op == IO_WRITE_COMP) {
+            assert(msg->op == IO_WRITE_COMP);
+            ++_num_completed;
+            ++_server_info[get_server_index(conn)].num_completed[IO_WRITE];
+        } else if (msg->op == IO_READ_COMP) {
+            BufferIov *iov            = _data_buffers_pool.get();
+            IoReadResponseCallback *r = _read_callback_pool.get();
+
+            iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+            r->init(&_num_completed,
+                    &_server_info[get_server_index(conn)].num_completed[IO_READ],
+                    msg->sn, opts().validate, iov, 0);
+
+            assert(iov->size() == 1);
+
+            conn->recv_am_data((*iov)[0].buffer(), msg->data_size, data_desc, r);
         }
     }
 
@@ -1141,10 +1306,18 @@ public:
             size_t size;
             switch (op) {
             case IO_READ:
-                size = do_io_read(_server_info[server_index], sn);
+                if (opts().use_am) {
+                    size = do_io_read_am(_server_info[server_index], sn);
+                } else {
+                    size = do_io_read(_server_info[server_index], sn);
+                }
                 break;
             case IO_WRITE:
-                size = do_io_write(_server_info[server_index], sn);
+                if (opts().use_am) {
+                    size = do_io_write_am(_server_info[server_index], sn);
+                } else {
+                    size = do_io_write(_server_info[server_index], sn);
+                }
                 break;
             default:
                 abort();
@@ -1369,6 +1542,14 @@ static void adjust_opts(options_t *test_opts) {
         test_opts->operations.push_back(IO_WRITE);
     }
 
+    if (test_opts->use_am &&
+        (test_opts->chunk_size < test_opts->max_data_size)) {
+        std::cout << "ignoring chunk size parameter, because it is not supported"
+                     " with AM API" << std::endl;
+        test_opts->chunk_size = test_opts->max_data_size;
+        return;
+    }
+
     test_opts->chunk_size = std::min(test_opts->chunk_size,
                                      test_opts->max_data_size);
 }
@@ -1396,8 +1577,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->random_seed           = std::time(NULL);
     test_opts->verbose               = false;
     test_opts->validate              = false;
+    test_opts->use_am                = false;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:n:l:s:y:vqHP:")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:k:o:t:n:l:s:y:vqaHP:")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -1500,6 +1682,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'q':
             test_opts->validate = true;
             break;
+        case 'a':
+            test_opts->use_am = true;
+            break;
         case 'H':
             UcxLog::use_human_time = true;
             break;
@@ -1533,6 +1718,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -s <random seed>           Random seed to use for randomizing" << std::endl;
             std::cout << "  -v                         Set verbose mode" << std::endl;
             std::cout << "  -q                         Enable data integrity and transaction check" << std::endl;
+            std::cout << "  -a                         Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
             std::cout << "  -H                         Use human-readable timestamps" << std::endl;
             std::cout << "  -P <interval>              Set report printing interval"  << std::endl;
             std::cout << "" << std::endl;
