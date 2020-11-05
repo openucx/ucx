@@ -487,6 +487,16 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
                                   UCT_FLUSH_FLAG_CANCEL,
                                   ucp_ep_err_pending_purge,
                                   UCS_STATUS_PTR(status));
+        /* UCT CM lane mustn't be scheduled on worker progress when discarding,
+         * since UCP EP will be destroyed due to peer failure and
+         * ucp_cm_disconnect_cb() could be invoked on async thread after UCP EP
+         * is destroyed and before UCT CM EP is destroyed from discarding
+         * functionality. So, UCP EP will passed as a corrupted argument to
+         * ucp_cm_disconnect_cb() */
+        if (lane == ucp_ep_get_cm_lane(ucp_ep)) {
+            ucs_assert(!ucp_worker_is_uct_ep_discarding(worker,
+                                                        ucp_ep->uct_eps[lane]));
+        }
         ucp_ep->uct_eps[lane] = &ucp_failed_tl_ep;
     }
 
@@ -2136,19 +2146,21 @@ ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 static ucs_status_t
 ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
 {
-    ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
-    uct_ep_h uct_ep          = req->send.discard_uct_ep.uct_ep;
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
     ucs_status_t status;
 
     status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
                           &req->send.state.uct_comp);
-    if (status == UCS_INPROGRESS) {
+    if (status == UCS_OK) {
+        ucp_worker_discard_uct_ep_destroy_progress(req);
+        return UCS_OK;
+    } else if (status == UCS_INPROGRESS) {
         return UCS_OK;
     } else if (status == UCS_ERR_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
     }
 
-    /* UCS_OK is handled here as well */
     uct_completion_update_status(&req->send.state.uct_comp, status);
     ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp);
     return UCS_OK;
@@ -2690,7 +2702,6 @@ static void
 ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
                              unsigned ep_flush_flags)
 {
-    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_request_t *req;
     int ret;
     khiter_t iter;
@@ -2722,10 +2733,8 @@ ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
     req->send.discard_uct_ep.ucp_worker     = worker;
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
-    uct_worker_progress_register_safe(worker->uct,
-                                      ucp_worker_discard_uct_ep_progress,
-                                      req, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &cb_id);    
+
+    ucp_worker_discard_uct_ep_progress(req);
 }
 
 static void
