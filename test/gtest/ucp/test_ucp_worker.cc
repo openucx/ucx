@@ -94,6 +94,8 @@ protected:
         ops.ep_destroy       = ep_destroy_func;
         iface.ops            = ops;
 
+        std::vector<uct_ep_h> eps_to_discard;
+
         for (unsigned i = 0; i < ep_count; i++) {
             uct_ep_h discard_ep;
 
@@ -145,7 +147,14 @@ protected:
                                  pending_reqs);
             }
 
+            eps_to_discard.push_back(discard_ep);
+        }
+
+        for (std::vector<uct_ep_h>::iterator iter = eps_to_discard.begin();
+             iter != eps_to_discard.end(); ++iter) {
+            uct_ep_h discard_ep        = *iter;
             unsigned purged_reqs_count = 0;
+
             ucp_worker_discard_uct_ep(sender().worker(), discard_ep,
                                       UCT_FLUSH_FLAG_LOCAL,
                                       ep_pending_purge_count_reqs_cb,
@@ -167,32 +176,38 @@ protected:
 
         void *flush_req = sender().flush_worker_nb(0);
 
-        ASSERT_FALSE(flush_req == NULL);
-        ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
+        if (ep_flush_func != (void*)ucs_empty_function_return_success) {
+            /* If uct_ep_flush() returns UCS_OK from the first call, the request
+             * is not scheduled on a worker progress (it completes in-place) */
+            ASSERT_FALSE(flush_req == NULL);
+            ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
 
-        do {
-            progress();
+            do {
+                progress();
 
-            if (!m_flush_comps.empty()) {
-                uct_completion_t *comp = m_flush_comps.back();
+                if (!m_flush_comps.empty()) {
+                    uct_completion_t *comp = m_flush_comps.back();
 
-                m_flush_comps.pop_back();
-                uct_invoke_completion(comp, UCS_OK);
-            }
-
-            if (!m_pending_reqs.empty()) {
-                uct_pending_req_t *req = m_pending_reqs.back();
-
-                status = req->func(req);
-                if (status == UCS_OK) {
-                    m_pending_reqs.pop_back();
-                } else {
-                    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+                    m_flush_comps.pop_back();
+                    uct_invoke_completion(comp, UCS_OK);
                 }
-            }
-        } while (ucp_request_check_status(flush_req) == UCS_INPROGRESS);
 
-        EXPECT_UCS_OK(ucp_request_check_status(flush_req));
+                if (!m_pending_reqs.empty()) {
+                    uct_pending_req_t *req = m_pending_reqs.back();
+
+                    status = req->func(req);
+                    if (status == UCS_OK) {
+                        m_pending_reqs.pop_back();
+                    } else {
+                        EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
+                    }
+                }
+            } while (ucp_request_check_status(flush_req) == UCS_INPROGRESS);
+
+            EXPECT_UCS_OK(ucp_request_check_status(flush_req));
+            ucp_request_release(flush_req);
+        }
+
         EXPECT_EQ(m_created_ep_count, m_destroyed_ep_count);
         EXPECT_EQ(m_created_ep_count, total_ep_count);
 
@@ -215,8 +230,6 @@ protected:
 
         EXPECT_TRUE(m_flush_comps.empty());
         EXPECT_TRUE(m_pending_reqs.empty());
-
-        ucp_request_release(flush_req);
 
         /* check that uct_ep_destroy() was called for the all EPs that
          * were created in the test */

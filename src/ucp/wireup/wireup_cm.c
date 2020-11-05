@@ -761,37 +761,20 @@ static void ucp_cm_disconnect_cb(uct_ep_h uct_cm_ep, void *arg)
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
     ucp_worker_h worker        = ucp_ep->worker;
     uct_ep_h uct_ep;
-    int discard_uct_ep;
 
     ucs_trace("ep %p: CM remote disconnect callback invoked, flags 0x%x",
               ucp_ep, ucp_ep->flags);
 
     uct_ep = ucp_ep_get_cm_uct_ep(ucp_ep);
-    if (uct_ep == NULL) {
-        UCS_ASYNC_BLOCK(&worker->async);
-        discard_uct_ep = ucp_worker_is_uct_ep_discarding(worker, uct_cm_ep);
-        UCS_ASYNC_UNBLOCK(&worker->async);
-
-        if (discard_uct_ep) {
-            /* The CM lane couldn't exist if the error was detected on the
-             * transport lane and all UCT lanes have already been discraded */
-            ucs_diag("ep %p: UCT EP %p for CM lane doesn't exist, it"
-                     " has already been discarded", ucp_ep, uct_cm_ep);
-            return;
-        }
-
-        ucs_fatal("ep %p: UCT EP for CM lane doesn't exist", ucp_ep);
-    }
-
     ucs_assertv_always(uct_cm_ep == uct_ep,
                        "%p: uct_cm_ep=%p vs found_uct_ep=%p",
                        ucp_ep, uct_cm_ep, uct_ep);
 
-    uct_worker_progress_register_safe(ucp_ep->worker->uct,
+    uct_worker_progress_register_safe(worker->uct,
                                       ucp_ep_cm_disconnect_progress,
                                       ucp_ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &prog_id);
-    ucp_worker_signal_internal(ucp_ep->worker);
+    ucp_worker_signal_internal(worker);
 }
 
 ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep)
