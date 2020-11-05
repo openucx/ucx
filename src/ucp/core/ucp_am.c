@@ -723,8 +723,16 @@ size_t ucp_am_rndv_rts_pack(void *dest, void *arg)
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_am_rndv_rts, (self),
                  uct_pending_req_t *self)
 {
-    return ucp_do_am_bcopy_single(self, UCP_AM_ID_RNDV_RTS,
-                                  ucp_am_rndv_rts_pack);
+    ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
+    size_t max_rts_size;
+
+    /* RTS consists of: AM RTS header, packed rkeys and user header */
+    max_rts_size = sizeof(ucp_am_rndv_rts_hdr_t) +
+                   ucp_ep_config(sreq->send.ep)->rndv.rkey_size +
+                   sreq->send.msg_proto.am.header_length;
+
+    return ucp_do_am_single(self, UCP_AM_ID_RNDV_RTS, ucp_am_rndv_rts_pack,
+                            max_rts_size);
 }
 
 static ucs_status_t ucp_am_send_start_rndv(ucp_request_t *sreq)
