@@ -39,11 +39,25 @@ EmptyCallback* EmptyCallback::get() {
     return &instance;
 }
 
+bool UcxLog::use_human_time = false;
+
 UcxLog::UcxLog(const char* prefix, bool enable) : _enable(enable)
 {
-    if (enable) {
-        std::cout << prefix << " ";
+    if (!enable) {
+        return;
     }
+
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+
+    struct tm tm;
+    char str[32];
+    if (use_human_time) {
+        strftime(str, sizeof(str), "[%a %b %d %T] ", localtime_r(&tv.tv_sec, &tm));
+    } else {
+        snprintf(str, sizeof(str), "[%lu.%06lu] ", tv.tv_sec, tv.tv_usec);
+    }
+    std::cout << str << prefix << " ";
 }
 
 UcxLog::~UcxLog()
@@ -55,9 +69,9 @@ UcxLog::~UcxLog()
 
 #define UCX_LOG UcxLog("[UCX]", true)
 
-UcxContext::UcxContext(size_t iomsg_size) :
+UcxContext::UcxContext(size_t iomsg_size, double connect_timeout) :
     _context(NULL), _worker(NULL), _listener(NULL), _iomsg_recv_request(NULL),
-    _iomsg_buffer(iomsg_size, '\0')
+    _iomsg_buffer(iomsg_size, '\0'), _connect_timeout(connect_timeout)
 {
 }
 
@@ -156,22 +170,6 @@ void UcxContext::progress()
     progress_failed_connections();
 }
 
-void UcxContext::dispatch_new_connection(UcxConnection *conn)
-{
-    // To be implemented in a subclass
-}
-
-void UcxContext::dispatch_io_message(UcxConnection* conn, const void *buffer,
-                                     size_t length)
-{
-    // To be implemented in a subclass
-}
-
-void UcxContext::dispatch_connection_error(UcxConnection* conn)
-{
-    // To be implemented in a subclass
-}
-
 uint32_t UcxContext::get_next_conn_id()
 {
     static uint32_t conn_id = 1;
@@ -228,10 +226,20 @@ const std::string UcxContext::sockaddr_str(const struct sockaddr* saddr,
 
     struct sockaddr_storage addr = {0};
     memcpy(&addr, saddr, addrlen);
-
-    inet_ntop(AF_INET, &((struct sockaddr_in*)&addr)->sin_addr,
-              buf, sizeof(buf));
-    port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
+    switch (addr.ss_family) {
+    case AF_INET:
+        inet_ntop(AF_INET, &((struct sockaddr_in*)&addr)->sin_addr,
+                  buf, sizeof(buf));
+        port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
+        break;
+    case AF_INET6:
+        inet_ntop(AF_INET6, &((struct sockaddr_in6*)&addr)->sin6_addr,
+                  buf, sizeof(buf));
+        port = ntohs(((struct sockaddr_in6*)&addr)->sin6_port);
+        break;
+    default:
+        return "<invalid address>";
+    }
 
     snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), ":%d", port);
     return buf;
@@ -242,13 +250,18 @@ ucp_worker_h UcxContext::worker() const
     return _worker;
 }
 
+double UcxContext::connect_timeout() const
+{
+    return _connect_timeout;
+}
+
 void UcxContext::progress_conn_requests()
 {
     while (!_conn_requests.empty()) {
         UcxConnection *conn = new UcxConnection(*this, get_next_conn_id());
         if (conn->accept(_conn_requests.front())) {
             add_connection(conn);
-            dispatch_new_connection(conn);
+            dispatch_connection_accepted(conn);
         } else {
             delete conn;
         }
@@ -285,7 +298,8 @@ void UcxContext::progress_failed_connections()
 }
 
 UcxContext::wait_status_t
-UcxContext::wait_completion(ucs_status_ptr_t status_ptr, double timeout)
+UcxContext::wait_completion(ucs_status_ptr_t status_ptr, const char *title,
+                            double timeout)
 {
     if (status_ptr == NULL) {
         return WAIT_STATUS_OK;
@@ -299,6 +313,7 @@ UcxContext::wait_completion(ucs_status_ptr_t status_ptr, double timeout)
             gettimeofday(&tv_current, NULL);
             timersub(&tv_current, &tv_start, &elapsed);
             if (elapsed.tv_sec + (elapsed.tv_usec * 1e-6) > timeout) {
+                UCX_LOG << title << " request " << status_ptr << " timed out";
                 return WAIT_STATUS_TIMED_OUT;
             }
 
@@ -306,9 +321,18 @@ UcxContext::wait_completion(ucs_status_ptr_t status_ptr, double timeout)
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
         request_release(request);
-        return (status == UCS_OK) ? WAIT_STATUS_OK : WAIT_STATUS_FAILED;
+
+        if (status != UCS_OK) {
+            UCX_LOG << title << " request " << status_ptr << " failed: " <<
+                    ucs_status_string(status);
+            return WAIT_STATUS_FAILED;
+        } else {
+            return WAIT_STATUS_OK;
+        }
     } else {
         assert(UCS_PTR_IS_ERR(status_ptr));
+        UCX_LOG << title << " operation failed: " <<
+                ucs_status_string(UCS_PTR_STATUS(status_ptr));
         return WAIT_STATUS_FAILED;
     }
 }
@@ -326,12 +350,20 @@ void UcxContext::recv_io_message()
 
 void UcxContext::add_connection(UcxConnection *conn)
 {
+    assert(_conns.find(conn->id()) == _conns.end());
     _conns[conn->id()] = conn;
 }
 
 void UcxContext::remove_connection(UcxConnection *conn)
 {
-    _conns.erase(conn->id());
+    conn_map_t::iterator i = _conns.find(conn->id());
+    if (i != _conns.end()) {
+        _conns.erase(i);
+    }
+}
+
+void UcxContext::dispatch_connection_accepted(UcxConnection* conn)
+{
 }
 
 void UcxContext::handle_connection_error(UcxConnection *conn)
@@ -350,8 +382,8 @@ void UcxContext::destroy_connections()
 
     for (conn_map_t::iterator iter = _conns.begin(); iter != _conns.end(); ++iter) {
         delete iter->second;
-
     }
+
     _conns.clear();
 }
 
@@ -370,7 +402,7 @@ void UcxContext::destroy_worker()
 
     if (_iomsg_recv_request != NULL) {
         ucp_request_cancel(_worker, _iomsg_recv_request);
-        wait_completion(_iomsg_recv_request);
+        wait_completion(_iomsg_recv_request, "iomsg receive");
     }
 
     ucp_worker_destroy(_worker);
@@ -383,25 +415,27 @@ unsigned UcxConnection::_num_instances = 0;
 
 UcxConnection::UcxConnection(UcxContext &context, uint32_t conn_id) :
     _context(context), _conn_id(conn_id), _remote_conn_id(0),
-    _ep(0), _close_request(NULL)
+    _ep(NULL), _close_request(NULL), _ucx_status(UCS_OK)
 {
     ++_num_instances;
     struct sockaddr_in in_addr = {0};
     in_addr.sin_family = AF_INET;
     set_log_prefix((const struct sockaddr*)&in_addr, sizeof(in_addr));
     ucs_list_head_init(&_all_requests);
-    UCX_CONN_LOG << "created new connection, total: " << _num_instances;
+    UCX_CONN_LOG << "created new connection " << this << " total: " << _num_instances;
 }
 
 UcxConnection::~UcxConnection()
 {
+    UCX_CONN_LOG << "destroying, ep is " << _ep;
+
     // if _ep is NULL, connection was closed and removed by error handler
     if (_ep != NULL) {
         disconnect(UCP_EP_CLOSE_MODE_FORCE);
     }
 
     if (_close_request) {
-        _context.wait_completion(_close_request);
+        _context.wait_completion(_close_request, "ep close");
     }
 
     // wait until all requests are completed
@@ -522,7 +556,7 @@ void UcxConnection::common_request_callback(void *request, ucs_status_t status)
 
     assert(!r->completed);
     if (r->callback) {
-        // already processed by send function
+        // already processed by send/recv function
         (*r->callback)(status);
         r->conn->request_completed(r);
         UcxContext::request_release(r);
@@ -561,6 +595,7 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 {
     UcxContext::wait_status_t wait_status;
+    double connect_timeout = _context.connect_timeout();
 
     // create endpoint
     ep_params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLER |
@@ -571,6 +606,7 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 
     ucs_status_t status = ucp_ep_create(_context.worker(), &ep_params, &_ep);
     if (status != UCS_OK) {
+        assert(_ep == NULL);
         UCX_LOG << "ucp_ep_create() failed: " << ucs_status_string(status);
         return false;
     }
@@ -581,32 +617,35 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 
     // receive remote connection id
     size_t recv_len;
-    void *rreq = ucp_stream_recv_nb(_ep, &_remote_conn_id, 1, dt_int,
-                                    stream_recv_callback, &recv_len,
-                                    UCP_STREAM_RECV_FLAG_WAITALL);
+    void *rreq             = ucp_stream_recv_nb(_ep, &_remote_conn_id, 1, dt_int,
+                                                stream_recv_callback, &recv_len,
+                                                UCP_STREAM_RECV_FLAG_WAITALL);
+    const char *rreq_title = "conn_id receive";
 
     // send local connection id
-    void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
-                                    stream_send_callback, 0);
-    wait_status = _context.wait_completion(sreq, 5);
+    void *sreq             = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
+                                                stream_send_callback, 0);
+    const char *sreq_title = "conn_id send";
+
+    wait_status = _context.wait_completion(sreq, sreq_title, connect_timeout);
     if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to send remote connection id";
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
         if (wait_status == UcxContext::WAIT_STATUS_TIMED_OUT) {
-            _context.wait_completion(sreq);
+            _context.wait_completion(sreq, sreq_title);
         }
         // wait for receive request as well, which should be canceled by ep close
-        _context.wait_completion(rreq);
+        _context.wait_completion(rreq, rreq_title);
         return false;
     }
 
     // wait to complete receiving remote connection id
-    wait_status = _context.wait_completion(rreq, 5);
+    wait_status = _context.wait_completion(rreq, rreq_title, connect_timeout);
     if (wait_status != UcxContext::WAIT_STATUS_OK) {
         UCX_CONN_LOG << "failed to receive remote connection id";
         ep_close(UCP_EP_CLOSE_MODE_FORCE);
         if (wait_status == UcxContext::WAIT_STATUS_TIMED_OUT) {
-            _context.wait_completion(rreq);
+            _context.wait_completion(rreq, rreq_title);
         }
         return false;
     }
@@ -642,9 +681,10 @@ void UcxConnection::request_completed(ucx_request *r)
 void UcxConnection::handle_connection_error(ucs_status_t status)
 {
     UCX_CONN_LOG << "detected error: " << ucs_status_string(status);
+    _ucx_status = status;
 
-    if (_remote_conn_id) {
-        disconnect(UCP_EP_CLOSE_MODE_FORCE);
+    if (_remote_conn_id != 0) {
+        /* the upper layer should close the connection */
         _context.handle_connection_error(this);
     }
 }
@@ -682,7 +722,7 @@ bool UcxConnection::process_request(const char *what,
         return true;
     } else if (UCS_PTR_IS_ERR(ptr_status)) {
         status = UCS_PTR_STATUS(ptr_status);
-        UCX_CONN_LOG << what << "failed with status: "
+        UCX_CONN_LOG << what << " failed with status: "
                      << ucs_status_string(status);
         (*callback)(status);
         return false;
@@ -691,6 +731,7 @@ bool UcxConnection::process_request(const char *what,
         ucx_request *r = reinterpret_cast<ucx_request*>(ptr_status);
         if (r->completed) {
             // already completed by callback
+            assert(ucp_request_is_completed(r));
             status = r->status;
             (*callback)(status);
             UcxContext::request_release(r);
@@ -704,5 +745,3 @@ bool UcxConnection::process_request(const char *what,
         }
     }
 }
-
-
