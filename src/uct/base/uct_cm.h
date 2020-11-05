@@ -20,8 +20,7 @@ UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
  * Specific CMs extend this structure.
  */
 struct uct_cm_config {
-    /* C standard prohibits empty structures */
-    char  __dummy;
+    int allow_addr_inuse;
 };
 
 /**
@@ -47,6 +46,10 @@ struct uct_cm {
     uct_cm_ops_t     *ops;
     uct_component_h  component;
     uct_base_iface_t iface;
+
+    struct {
+        int          allow_addr_inuse;
+    } config;
 };
 
 
@@ -88,7 +91,7 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_base_ep_t, uct_base_ep_t);
 extern ucs_config_field_t uct_cm_config_table[];
 
 UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
-                  uct_component_h);
+                  uct_component_h, const uct_cm_config_t*);
 
 ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params);
 

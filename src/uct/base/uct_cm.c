@@ -16,6 +16,10 @@
 
 
 ucs_config_field_t uct_cm_config_table[] = {
+  {"ALLOW_ADDR_INUSE", "no",
+   "Allow using an address that is already in use.",
+   ucs_offsetof(uct_cm_config_t, allow_addr_inuse), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -213,7 +217,8 @@ static ucs_stats_class_t uct_cm_stats_class = {
 #endif
 
 UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
-                    uct_worker_h worker, uct_component_h component)
+                    uct_worker_h worker, uct_component_h component,
+                    const uct_cm_config_t* config)
 {
     self->ops                     = ops;
     self->component               = component;
@@ -233,6 +238,8 @@ UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
     self->iface.prog.refcount     = 0;
     self->iface.progress_flags    = 0;
 
+    self->config.allow_addr_inuse = config->allow_addr_inuse;
+
     return UCS_STATS_NODE_ALLOC(&self->iface.stats, &uct_cm_stats_class,
                                 ucs_stats_get_root(), "%s-%p", "iface",
                                 self->iface);
@@ -245,5 +252,5 @@ UCS_CLASS_CLEANUP_FUNC(uct_cm_t)
 
 UCS_CLASS_DEFINE(uct_cm_t, void);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_t, void, uct_cm_ops_t*, uct_iface_ops_t*,
-                          uct_worker_h, uct_component_h);
+                          uct_worker_h, uct_component_h, const uct_cm_config_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_t, void);
