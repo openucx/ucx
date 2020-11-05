@@ -11,6 +11,10 @@
 #define _QUOTE(x) #x
 #define QUOTE(x) _QUOTE(x)
 
+typedef struct ucs_list_link {
+    struct ucs_list_link *prev;
+    struct ucs_list_link *next;
+} ucs_list_link_t;
 
 static void* do_dlopen_or_exit(const char *filename)
 {
@@ -30,11 +34,13 @@ static void* do_dlopen_or_exit(const char *filename)
 
 int main(int argc, char **argv)
 {
-    typedef void (*print_all_opts_func_t)(FILE*, const char *, int);
+    typedef void (*print_all_opts_func_t)(FILE*, const char *, int,
+                                          ucs_list_link_t *);
 
     const char *ucs_filename = QUOTE(UCS_LIB_PATH);
     const char *uct_filename = QUOTE(UCT_LIB_PATH);
     void *ucs_handle, *uct_handle;
+    ucs_list_link_t *config_list;
     int i;
 
     /* unload and reload uct while ucs is loaded
@@ -48,7 +54,8 @@ int main(int argc, char **argv)
     /* print all config table, to force going over the global list in ucs */
     print_all_opts_func_t print_all_opts =
         (print_all_opts_func_t)dlsym(ucs_handle, "ucs_config_parser_print_all_opts");
-    print_all_opts(stdout, "TEST_", 0);
+    config_list = (ucs_list_link_t*)dlsym(ucs_handle, "ucs_config_global_list");
+    print_all_opts(stdout, "TEST_", 0, config_list);
     dlclose(ucs_handle);
 
     printf("done\n");

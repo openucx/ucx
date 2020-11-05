@@ -305,7 +305,7 @@ typedef struct uct_tl {
             .size           = sizeof(_cfg_struct), \
          } \
     }; \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(uct_##_name##_tl).config); \
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(uct_##_name##_tl).config, &ucs_config_global_list); \
     UCS_STATIC_INIT { \
         ucs_list_add_tail(&(_component)->tl_list, &(uct_##_name##_tl).list); \
     }
