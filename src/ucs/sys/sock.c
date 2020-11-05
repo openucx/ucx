@@ -726,7 +726,7 @@ ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
 void ucp_sockaddr_copy_always(struct sockaddr *dst_addr,
                               const struct sockaddr *src_addr)
 {
-    ucs_status_t status;
+    ucs_status_t UCS_V_UNUSED status;
 
     if (!ucs_sockaddr_is_known_af(src_addr)) {
         memset(dst_addr, 0, sizeof(*dst_addr));
