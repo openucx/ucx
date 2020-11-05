@@ -23,7 +23,7 @@
 static unsigned ucp_listener_accept_cb_progress(void *arg)
 {
     ucp_ep_h       ep       = arg;
-    ucp_listener_h listener = ucp_ep_ext_gen(ep)->listener;
+    ucp_listener_h listener = ucp_ep_ext_control(ep)->listener;
 
     /* NOTE: protect union */
     ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
@@ -88,7 +88,7 @@ static unsigned ucp_listener_conn_request_progress(void *arg)
     if (listener->accept_cb != NULL) {
         if (ep->flags & UCP_EP_FLAG_LISTENER) {
             ucs_assert(!(ep->flags & UCP_EP_FLAG_USED));
-            ucp_ep_ext_gen(ep)->listener = listener;
+            ucp_ep_ext_control(ep)->listener = listener;
         } else {
             ep->flags |= UCP_EP_FLAG_USED;
             listener->accept_cb(ep, listener->arg);

@@ -496,7 +496,8 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
             ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
             /* Promote close operation to CANCEL in case of transport error,
              * since the disconnect event may never arrive. */
-            close_req = ucp_ep_ext_gen(ucp_ep)->close_req.req;
+            close_req                        = ucp_ep_ext_control(ucp_ep)->
+                                               close_req.req;
             close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
             ucp_ep_local_disconnect_progress(close_req);
         } else {
@@ -576,7 +577,7 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
                                       err_handle_arg, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &prog_id);
 
-    if ((ucp_ep_ext_gen(ucp_ep)->err_cb == NULL) &&
+    if ((ucp_ep_ext_control(ucp_ep)->err_cb == NULL) &&
         (ucp_ep->flags & UCP_EP_FLAG_USED)) {
         /* do not print error if connection reset by remote peer since it can
          * be part of user level close protocol  */

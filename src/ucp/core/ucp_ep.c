@@ -99,26 +99,25 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err;
     }
 
-    ep->cfg_index                 = UCP_WORKER_CFG_INDEX_NULL;
-    ep->worker                    = worker;
-    ep->am_lane                   = UCP_NULL_LANE;
-    ep->flags                     = 0;
-    ep->conn_sn                   = UCP_EP_MATCH_CONN_SN_MAX;
-    ucp_ep_ext_gen(ep)->user_data = NULL;
-    ucp_ep_ext_gen(ep)->err_cb    = NULL;
-    ucp_ep_ext_gen(ep)->ids       = ucs_malloc(sizeof(ucp_ep_ids_t),
-                                               "ep_ids");
-    if (ucp_ep_ext_gen(ep)->ids == NULL) {
-        ucs_error("Failed to allocate ep keys");
+    ucp_ep_ext_gen(ep)->control_ext = ucs_calloc(1,
+                                                 sizeof(ucp_ep_ext_control_t),
+                                                 "ep_control_ext");
+    if (ucp_ep_ext_gen(ep)->control_ext == NULL) {
+        ucs_error("Failed to allocate ep control extension");
         status = UCS_ERR_NO_MEMORY;
         goto err_free_ep;
     }
 
-    ucp_ep_ext_gen(ep)->ids->local  = UCP_EP_ID_INVALID;
-    ucp_ep_ext_gen(ep)->ids->remote = UCP_EP_ID_INVALID;
+    ep->cfg_index                        = UCP_WORKER_CFG_INDEX_NULL;
+    ep->worker                           = worker;
+    ep->am_lane                          = UCP_NULL_LANE;
+    ep->flags                            = 0;
+    ep->conn_sn                          = UCP_EP_MATCH_CONN_SN_MAX;
+    ucp_ep_ext_gen(ep)->user_data        = NULL;
+    ucp_ep_ext_control(ep)->err_cb       = NULL;
+    ucp_ep_ext_control(ep)->local_ep_id  =
+    ucp_ep_ext_control(ep)->remote_ep_id = UCP_EP_ID_INVALID;
 
-    UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
-                      sizeof(ucp_ep_ext_gen(ep)->listener));
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
                       sizeof(ucp_ep_ext_gen(ep)->flush_state));
     memset(&ucp_ep_ext_gen(ep)->ep_match, 0,
@@ -139,7 +138,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     status = UCS_STATS_NODE_ALLOC(&ep->stats, &ucp_ep_stats_class,
                                   worker->stats, "-%p", ep);
     if (status != UCS_OK) {
-        goto err_free_keys;
+        goto err_free_ep_control_ext;
     }
 
     ucs_list_head_init(&ucp_ep_ext_gen(ep)->ep_list);
@@ -148,8 +147,8 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
     return UCS_OK;
 
-err_free_keys:
-    ucs_free(ucp_ep_ext_gen(ep)->ids);
+err_free_ep_control_ext:
+    ucs_free(ucp_ep_ext_control(ep));
 err_free_ep:
     ucs_strided_alloc_put(&worker->ep_alloc, ep);
 err:
@@ -159,7 +158,7 @@ err:
 void ucp_ep_destroy_base(ucp_ep_h ep)
 {
     UCS_STATS_NODE_FREE(ep->stats);
-    ucs_free(ucp_ep_ext_gen(ep)->ids);
+    ucs_free(ucp_ep_ext_control(ep));
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
 }
 
@@ -184,7 +183,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
 
     status = ucs_ptr_map_put(&worker->ptr_map, ep,
                              !!(ep->flags & UCP_EP_FLAG_INDIRECT_ID),
-                             &ucp_ep_ext_gen(ep)->ids->local);
+                             &ucp_ep_ext_control(ep)->local_ep_id);
     if (status != UCS_OK) {
         goto err_destroy_ep_base;
     }
@@ -211,7 +210,6 @@ void ucp_ep_delete(ucp_ep_h ep)
                             ucp_wireup_msg_ack_cb_pred, ep);
     ucp_worker_keepalive_remove_ep(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-    ucs_assert(ucp_ep_ext_gen(ep)->ids->local != UCP_EP_ID_INVALID);
     status = ucs_ptr_map_del(&ep->worker->ptr_map, ucp_ep_local_id(ep));
     if (status != UCS_OK) {
         ucs_warn("ep %p local id 0x%"PRIxPTR": ucs_ptr_map_del failed with status %s",
@@ -286,8 +284,8 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     }
 
     if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLER) {
-        ucp_ep_ext_gen(ep)->user_data = params->err_handler.arg;
-        ucp_ep_ext_gen(ep)->err_cb    = params->err_handler.cb;
+        ucp_ep_ext_gen(ep)->user_data  = params->err_handler.arg;
+        ucp_ep_ext_control(ep)->err_cb = params->err_handler.cb;
     }
 
     if (params->field_mask & UCP_EP_PARAM_FIELD_USER_DATA) {
@@ -792,7 +790,7 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
     ucp_ep_cleanup_lanes(ep);
     if (ep->flags & UCP_EP_FLAG_TEMPORARY) {
         /* it's failed tmp ep of main ep */
-        ucs_assert(ucp_ep_ext_gen(ep)->ids->local == UCP_EP_ID_INVALID);
+        ucs_assert(ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID);
         ucp_ep_destroy_base(ep);
     } else {
         ucp_ep_delete(ep);
@@ -888,8 +886,8 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
     ucs_trace("ep %p: setting close request %p, %s", ep, request, debug_msg);
 
     ucp_ep_flush_state_invalidate(ep);
-    ucp_ep_ext_gen(ep)->close_req.req = request;
-    ep->flags                        |= UCP_EP_FLAG_CLOSE_REQ_VALID;
+    ucp_ep_ext_control(ep)->close_req.req = request;
+    ep->flags                            |= UCP_EP_FLAG_CLOSE_REQ_VALID;
 }
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
@@ -2260,7 +2258,7 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
     /* Do not invoke error handler if it's not enabled */
     if ((ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
         /* error callback is not set */
-        (ucp_ep_ext_gen(ep)->err_cb == NULL) ||
+        (ucp_ep_ext_control(ep)->err_cb == NULL) ||
         /* the EP has been closed by user, or error callback already called */
         (ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_ERR_HANDLER_INVOKED))) {
         return;
@@ -2268,10 +2266,10 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
 
     ucs_assert(ep->flags & UCP_EP_FLAG_USED);
     ucs_debug("ep %p: calling user error callback %p with arg %p and status %s",
-              ep, ucp_ep_ext_gen(ep)->err_cb, ucp_ep_ext_gen(ep)->user_data,
+              ep, ucp_ep_ext_control(ep)->err_cb, ucp_ep_ext_gen(ep)->user_data,
               ucs_status_string(status));
     ep->flags |= UCP_EP_FLAG_ERR_HANDLER_INVOKED;
-    ucp_ep_ext_gen(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
+    ucp_ep_ext_control(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
 }
 
 int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)

@@ -150,6 +150,12 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
     return &ucp_ep_ext_gen(ep)->flush_state;
 }
 
+static UCS_F_ALWAYS_INLINE ucp_ep_ext_control_t* ucp_ep_ext_control(ucp_ep_h ep)
+{
+    ucs_assert(ucp_ep_ext_gen(ep)->control_ext != NULL);
+    return ucp_ep_ext_gen(ep)->control_ext;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_remote_id(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT
@@ -158,13 +164,13 @@ static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_remote_id(ucp_ep_h ep)
         return UCP_EP_ID_INVALID;
     }
 #endif
-    return ucp_ep_ext_gen(ep)->ids->remote;
+    return ucp_ep_ext_control(ep)->remote_ep_id;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_local_id(ucp_ep_h ep)
 {
-    ucs_assert(ucp_ep_ext_gen(ep)->ids->local != UCP_EP_ID_INVALID);
-    return ucp_ep_ext_gen(ep)->ids->local;
+    ucs_assert(ucp_ep_ext_control(ep)->local_ep_id != UCP_EP_ID_INVALID);
+    return ucp_ep_ext_control(ep)->local_ep_id;
 }
 
 /*
@@ -185,15 +191,15 @@ static inline void ucp_ep_update_remote_id(ucp_ep_h ep,
                                            ucs_ptr_map_key_t remote_id)
 {
     if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
-        ucs_assertv(remote_id == ucp_ep_ext_gen(ep)->ids->remote,
+        ucs_assertv(remote_id == ucp_ep_ext_control(ep)->remote_ep_id,
                     "ep=%p rkey=0x%" PRIxPTR " ep->remote_id=0x%" PRIxPTR,
-                    ep, remote_id, ucp_ep_ext_gen(ep)->ids->remote);
+                    ep, remote_id, ucp_ep_ext_control(ep)->remote_ep_id);
     }
 
     ucs_assert(remote_id != UCP_EP_ID_INVALID);
     ucs_trace("ep %p: set remote_id to 0x%" PRIxPTR, ep, remote_id);
-    ep->flags                      |= UCP_EP_FLAG_REMOTE_ID;
-    ucp_ep_ext_gen(ep)->ids->remote = remote_id;
+    ep->flags                           |= UCP_EP_FLAG_REMOTE_ID;
+    ucp_ep_ext_control(ep)->remote_ep_id = remote_id;
 }
 
 static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
