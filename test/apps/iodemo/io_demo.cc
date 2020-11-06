@@ -816,7 +816,8 @@ public:
 
     typedef enum {
         OK,
-        CONN_RETRIES_EXCEEDED
+        CONN_RETRIES_EXCEEDED,
+        RUNTIME_EXCEEDED
     } status_t;
 
     size_t get_server_index(const UcxConnection *conn) {
@@ -982,6 +983,7 @@ public:
                 close_uncompleted_servers("timeout for replies");
                 timer_finished = true;
             }
+            check_time_limit(curr_time);
         }
     }
 
@@ -1166,6 +1168,8 @@ public:
                                        curr_time - prev_time, op_info);
                     total_prev_iter = total_iter;
                     prev_time       = curr_time;
+
+                    check_time_limit(curr_time);
                 }
             }
 
@@ -1202,6 +1206,8 @@ public:
             return "OK";
         case CONN_RETRIES_EXCEEDED:
             return "connection retries exceeded";
+        case RUNTIME_EXCEEDED:
+            return "run-time exceeded";
         default:
             return "invalid status";
         }
@@ -1281,6 +1287,14 @@ private:
 
         log << ", buffers:" << _data_buffers_pool.allocated();
     }
+
+    inline void check_time_limit(double current_time) {
+        if ((_status == OK) &&
+            ((current_time - _start_time) >= opts().client_runtime_limit)) {
+            _status = RUNTIME_EXCEEDED;
+        }
+    }
+
 
 private:
     std::vector<server_info_t>              _server_info;
@@ -1572,7 +1586,8 @@ static int do_client(const options_t& test_opts)
 
     DemoClient::status_t status = client.run();
     LOG << "Client exit with status '" << DemoClient::get_status_str(status) << "'";
-    return (status == DemoClient::OK) ? 0 : -1;
+    return ((status == DemoClient::OK) ||
+            (status == DemoClient::RUNTIME_EXCEEDED)) ? 0 : -1;
 }
 
 static void print_info(int argc, char **argv)

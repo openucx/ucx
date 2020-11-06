@@ -72,6 +72,6 @@ timeout="$(( duration - 1 ))m"
 echo "Client connecting to server at IP $server_ip"
 echo "Timeout is $timeout"
 
-if ! "${workspace}/../test/apps/iodemo/io_demo" -l $timeout -i 100000 "$server_ip"; then
+if ! "${workspace}/../test/apps/iodemo/io_demo" -l $timeout -i 10000000 "$server_ip"; then
     error "Failed to start client"
 fi
