@@ -2806,10 +2806,10 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  * @param [in]  param      Operation parameters, see @ref ucp_request_param_t.
  *
  * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
- * @return otherwise            - Operation was scheduled for send and can be
+ * @return otherwise            - Receive operation was scheduled and can be
  *                                completed at any point in time. The request
  *                                handle is returned to the application in order
- *                                to track progress of the message. If user
+ *                                to track operation progress. If user
  *                                request was not provided in @a param->request,
  *                                the application is responsible for releasing
  *                                the handle using @ref ucp_request_free routine.
