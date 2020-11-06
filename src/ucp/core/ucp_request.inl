@@ -647,7 +647,13 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.length, ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
-    ucp_recv_desc_release(req->recv.am.desc);
+
+    if (req->recv.am.desc->flags & UCP_RECV_DESC_FLAG_RNDV) {
+        ucp_recv_desc_release(req->recv.am.desc);
+    } else {
+        req->recv.am.desc->flags |= UCP_RECV_DESC_FLAG_COMPLETED;
+    }
+
     ucp_request_complete(req, recv.am.cb, status, req->recv.length,
                          req->user_data);
 }

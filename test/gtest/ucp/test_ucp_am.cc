@@ -372,7 +372,7 @@ public:
     }
 
     void test_am_send_recv(size_t size, size_t header_size = 0ul,
-                           unsigned flags = 0, bool hold_desc = false)
+                           unsigned flags = 0)
     {
         std::string sbuf(size, 'd');
         std::string hbuf(header_size, 'h');
@@ -382,7 +382,7 @@ public:
 
         ucp::data_type_desc_t sdt_desc(m_dt, &sbuf[0], size);
 
-        ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag(),
+        ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag() | flags,
                                         hbuf.c_str(), header_size);
 
         wait_for_flag(&m_am_received);
@@ -390,15 +390,15 @@ public:
         EXPECT_TRUE(m_am_received);
     }
 
-    void test_am(size_t size)
+    void test_am(size_t size, unsigned flags = 0)
     {
         size_t small_hdr_size = 8;
 
-        test_am_send_recv(size, small_hdr_size);
-        test_am_send_recv(size, 0);
+        test_am_send_recv(size, small_hdr_size, flags);
+        test_am_send_recv(size, 0, flags);
 
         if (max_am_hdr() > small_hdr_size) {
-            test_am_send_recv(size, max_am_hdr());
+            test_am_send_recv(size, max_am_hdr(), flags);
         }
     }
 
@@ -578,6 +578,11 @@ UCS_TEST_P(test_ucp_am_nbx_dts, long_zcopy_send, "ZCOPY_THRESH=1",
     test_am(64 * UCS_KBYTE);
 }
 
+UCS_TEST_P(test_ucp_am_nbx_dts, send_eager_flag, "RNDV_THRESH=128")
+{
+    test_am(64 * UCS_KBYTE, UCP_AM_SEND_FLAG_EAGER);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_dts)
 
 
@@ -677,6 +682,16 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_get, "RNDV_SCHEME=get_zcopy")
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_put, "RNDV_SCHEME=put_zcopy")
 {
     test_am_send_recv(64 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_flag_zero_send, "RNDV_THRESH=inf")
+{
+    test_am_send_recv(0, 0, UCP_AM_SEND_FLAG_RNDV);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_flag_send, "RNDV_THRESH=inf")
+{
+    test_am_send_recv(64 * UCS_KBYTE, 0, UCP_AM_SEND_FLAG_RNDV);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, reject_rndv)

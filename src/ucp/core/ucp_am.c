@@ -771,16 +771,37 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
                                      req->send.buffer, &req->send.state.dt);
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_am_rndv_thresh(ucp_request_t *req, const ucp_request_param_t *param,
+                   ucp_ep_config_t *ep_config, uint32_t flags,
+                   ssize_t *max_short)
+{
+    size_t rndv_rma_thresh, rndv_am_thresh;
+
+    if (flags & UCP_AM_SEND_FLAG_EAGER) {
+        return SIZE_MAX;
+    } else if (flags & UCP_AM_SEND_FLAG_RNDV) {
+        *max_short = -1; /* disable short, rndv is explicitly requested */
+        return 0;
+    } else {
+        ucp_request_param_rndv_thresh(req, param, &ep_config->rndv.rma_thresh,
+                                      &ep_config->rndv.am_thresh,
+                                      &rndv_rma_thresh, &rndv_am_thresh);
+        return ucs_min(rndv_rma_thresh, rndv_am_thresh);
+    }
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_am_send_req(ucp_request_t *req, size_t count,
                 const ucp_ep_msg_config_t *msg_config,
                 const ucp_request_param_t *param,
-                const ucp_request_send_proto_t *proto, ssize_t max_short)
+                const ucp_request_send_proto_t *proto, ssize_t max_short,
+                uint32_t flags)
 {
     unsigned user_header_length = req->send.msg_proto.am.header_length;
     ucp_context_t *context      = req->send.ep->worker->context;
     ucp_ep_config_t *ep_config  = ucp_ep_config(req->send.ep);
-    size_t rndv_rma_thresh, rndv_am_thresh, rndv_thresh;
+    size_t rndv_thresh;
     size_t zcopy_thresh;
     ucs_status_t status;
 
@@ -793,11 +814,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
         max_short = ucp_am_get_short_max(req, max_short);
     }
 
-    /* TODO: Add support for UCP_AM_SEND_EAGER/RNDV flags */
-    ucp_request_param_rndv_thresh(req, param, &ep_config->rndv.rma_thresh,
-                                  &ep_config->rndv.am_thresh, &rndv_rma_thresh,
-                                  &rndv_am_thresh);
-    rndv_thresh = ucs_min(rndv_rma_thresh, rndv_am_thresh);
+    rndv_thresh = ucp_am_rndv_thresh(req, param, ep_config, flags, &max_short);
 
     if ((user_header_length != 0) &&
         (((user_header_length + sizeof(ucp_am_first_hdr_t) + 1) >
@@ -865,7 +882,8 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
 {
     if (ucs_unlikely(((length != 0) && (header_length != 0)) ||
                      ((ssize_t)(length + header_length) >
-                      ucp_ep_config(ep)->am.max_short))) {
+                      ucp_ep_config(ep)->am.max_short)) ||
+                     (flags & UCP_AM_SEND_FLAG_RNDV)) {
         goto out;
     }
 
@@ -943,11 +961,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->am_u.reply_proto,
                               ucs_min(ucp_ep_config(ep)->am.max_short,
-                                      UCP_AM_SHORT_REPLY_MAX_SIZE));
+                                      UCP_AM_SHORT_REPLY_MAX_SIZE), flags);
     } else {
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->am_u.proto,
-                              ucp_ep_config(ep)->am.max_short);
+                              ucp_ep_config(ep)->am.max_short, flags);
     }
 
 out:
@@ -987,12 +1005,17 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     ucs_assert(rts->super.flags & UCP_RNDV_RTS_FLAG_AM);
-    ucs_assert(desc->flags & UCP_RECV_DESC_FLAG_RNDV);
 
     if (ucs_unlikely(desc->flags & UCP_RECV_DESC_FLAG_RNDV_STARTED)) {
         ucs_error("ucp_am_recv_data_nbx was already called for desc %p",
                   data_desc);
         ret = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+        goto out;
+    }
+
+    if ((count == 0ul) &&
+        !(param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL)) {
+        ret = NULL;
         goto out;
     }
 
@@ -1022,7 +1045,15 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
                 "rx buffer too small %zu, need %zu",
                 req->recv.length, rts->super.size);
 
-    ucp_rndv_receive(worker, req, &rts->super, rts + 1);
+    if (count > 0ul) {
+        ucp_rndv_receive(worker, req, &rts->super, rts + 1);
+    } else {
+        /* Nothing to receive, send ack to sender to complete its request */
+        ucp_am_rndv_send_ats(worker, rts, UCS_OK);
+        ucp_request_complete_am_recv(req, UCS_OK);
+        desc->flags |= UCP_RECV_DESC_FLAG_COMPLETED;
+    }
+
     ret = req + 1;
 
 out:
@@ -1371,8 +1402,8 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
         hdr = NULL;
     }
 
-    desc_status = ucp_recv_desc_init(worker, data, length, 0, tl_flags, 0,
-                                     UCP_RECV_DESC_FLAG_RNDV, 0, &desc);
+    desc_status = ucp_recv_desc_init(worker, data, length, 0, tl_flags, 0, 0,
+                                     0, &desc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(desc_status))) {
         ucs_error("worker %p could not allocate descriptor for active"
                   " message RTS on callback %u", worker, am_id);
@@ -1389,9 +1420,21 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
                                 desc + 1, rts->super.size, &param);
     if ((status == UCS_INPROGRESS) ||
         (desc->flags & UCP_RECV_DESC_FLAG_RNDV_STARTED)) {
+        if (desc->flags & UCP_RECV_DESC_FLAG_COMPLETED) {
+            /* User initiated rendezvous receive in the callback and it is
+             * already completed. No need to save the descriptor for further use
+             */
+            goto out;
+        }
+
         /* User either wants to save descriptor for later use or initiated
          * rendezvous receive (by ucp_am_recv_data_nbx) in the callback. */
         ucs_assert(!UCS_STATUS_IS_ERR(status));
+
+        /* Set this flag after the callback invocation to distiguish the cases
+         * when ucp_am_recv_data_nbx is called inside the callback or not.
+         */
+        desc->flags |= UCP_RECV_DESC_FLAG_RNDV;
         return desc_status;
     }
 
@@ -1402,6 +1445,7 @@ out_send_ats:
      * sender to complete its send request. */
     ucp_am_rndv_send_ats(worker, rts, status);
 
+out:
     if ((desc != NULL) && !(desc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
         /* Release descriptor if it was allocated on UCP mpool, otherwise it
          * will be freed by UCT, when UCS_OK is returned from this func. */
