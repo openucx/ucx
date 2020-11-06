@@ -1121,6 +1121,10 @@ public:
             VERBOSE_LOG << " <<<< iteration " << total_iter << " >>>>";
 
             wait_for_responses(opts().window_size - 1);
+            if (_status != OK) {
+                break;
+            }
+
             connect_all(is_control_iter(total_iter));
             if (_status != OK) {
                 break;
