@@ -1134,6 +1134,7 @@ public:
                 LOG << "All remote servers are down, reconnecting in "
                     << opts().client_retry_interval << " seconds";
                 sleep(opts().client_retry_interval);
+                check_time_limit(get_time());
                 continue;
             }
 
