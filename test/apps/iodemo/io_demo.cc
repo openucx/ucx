@@ -1121,6 +1121,10 @@ public:
             VERBOSE_LOG << " <<<< iteration " << total_iter << " >>>>";
 
             wait_for_responses(opts().window_size - 1);
+            if (_status != OK) {
+                break;
+            }
+
             connect_all(is_control_iter(total_iter));
             if (_status != OK) {
                 break;
@@ -1130,6 +1134,7 @@ public:
                 LOG << "All remote servers are down, reconnecting in "
                     << opts().client_retry_interval << " seconds";
                 sleep(opts().client_retry_interval);
+                check_time_limit(get_time());
                 continue;
             }
 
