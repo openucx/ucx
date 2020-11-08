@@ -586,6 +586,23 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     ucs_ptr_array_cleanup(&pa);
 }
 
+UCS_TEST_F(test_datatype, ptr_array_set_first) {
+    ucs_ptr_array_t pa;
+    int a = 1;
+
+    ucs_ptr_array_init(&pa, "ptr_array set-first test");
+
+    EXPECT_EQ(0u, pa.size);
+
+    ucs_ptr_array_set(&pa, 0, &a);
+
+    EXPECT_GT(pa.size, 0u);
+
+    ucs_ptr_array_remove(&pa, 0);
+
+    ucs_ptr_array_cleanup(&pa);
+}
+
 UCS_TEST_F(test_datatype, ptr_array_random) {
     const unsigned count = 10000 / ucs::test_time_multiplier();
     ucs_ptr_array_t pa;
