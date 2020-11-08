@@ -599,7 +599,6 @@ accept_conn:
         uct_tcp_cm_insert_ep(iface, ep);
     }
 
-out_connect_ep:
     uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CONNECTED);
     return 1;
 
