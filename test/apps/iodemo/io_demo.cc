@@ -1269,10 +1269,14 @@ private:
                 server_info_t& server_info = _server_info[server_index];
                 long delta_completed = server_info.num_completed[op_id] -
                                        server_info.prev_completed[op_id];
-                if (delta_completed < delta_min) {
-                    delta_min = delta_completed;
+                if ((delta_completed < delta_min) ||
+                    ((delta_completed == delta_min) &&
+                     (server_info.retry_count >
+                      _server_info[min_index].retry_count))) {
                     min_index = server_index;
                 }
+
+                delta_min = std::min(delta_completed, delta_min);
                 delta_max = std::max(delta_completed, delta_max);
 
                 server_info.prev_completed[op_id] =
