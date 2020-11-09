@@ -44,6 +44,8 @@ ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event)
 ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id)
 {
     uct_rdmacm_priv_data_hdr_t hdr;
+    char remote_ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char local_ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     hdr.length = 0;
     hdr.status = (uint8_t)UCS_ERR_REJECTED;
@@ -51,7 +53,12 @@ ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id)
     ucs_trace("reject on cm_id %p", id);
 
     if (rdma_reject(id, &hdr, sizeof(hdr))) {
-        ucs_error("rdma_reject (id=%p) failed with error: %m", id);
+        ucs_error("rdma_reject (id=%p local addr=%s remote addr=%s) failed "
+                  "with error: %m", id,
+                  ucs_sockaddr_str(rdma_get_local_addr(id), local_ip_port_str,
+                                   UCS_SOCKADDR_STRING_LEN),
+                  ucs_sockaddr_str(rdma_get_peer_addr(id), remote_ip_port_str,
+                                   UCS_SOCKADDR_STRING_LEN));
         return UCS_ERR_IO_ERROR;
     }
 
