@@ -209,7 +209,7 @@ void ucs_ptr_array_set(ucs_ptr_array_t *ptr_array, unsigned element_index,
     ucs_ptr_array_elem_t *elem;
     unsigned next, free_iter, free_ahead, new_size;
 
-    if (ucs_unlikely(element_index > ptr_array->size)) {
+    if (ucs_unlikely(element_index >= ptr_array->size)) {
         new_size = ucs_max(ptr_array->size * 2, element_index + 1);
         ucs_ptr_array_grow(ptr_array, new_size UCS_MEMTRACK_NAME(ptr_array->name));
     } else if (!__ucs_ptr_array_is_free(ptr_array->start[element_index])) {
