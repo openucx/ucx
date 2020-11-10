@@ -744,11 +744,10 @@ static void ucp_report_unavailable(const ucs_config_names_array_t* cfg,
                                    const char *title2,
                                    const ucs_string_set_t *avail_names)
 {
-    ucs_string_buffer_t avail_strb, unavail_strb;
+    UCS_STRING_BUFFER_ONSTACK(avail_strb,   256);
+    UCS_STRING_BUFFER_ONSTACK(unavail_strb, 256);
     unsigned i;
     int found;
-
-    ucs_string_buffer_init(&unavail_strb);
 
     found = 0;
     for (i = 0; i < cfg->count; i++) {
@@ -761,7 +760,6 @@ static void ucp_report_unavailable(const ucs_config_names_array_t* cfg,
     }
 
     if (found) {
-        ucs_string_buffer_init(&avail_strb);
         ucs_string_set_print_sorted(avail_names, &avail_strb, ", ");
         ucs_warn("%s%s%s %s %s not available, please use one or more of: %s",
                  title1, title2,
@@ -769,10 +767,7 @@ static void ucp_report_unavailable(const ucs_config_names_array_t* cfg,
                  ucs_string_buffer_cstr(&unavail_strb),
                  (found > 1) ? "are" : "is",
                  ucs_string_buffer_cstr(&avail_strb));
-        ucs_string_buffer_cleanup(&avail_strb);
     }
-
-    ucs_string_buffer_cleanup(&unavail_strb);
 }
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum)

@@ -314,12 +314,10 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
                                             int silent)
 {
     ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
-    ucs_string_buffer_t msg;
+    UCS_STRING_BUFFER_ONSTACK(msg, 256);
     struct rlimit limit_info;
     size_t page_size;
     size_t unused;
-
-    ucs_string_buffer_init(&msg);
 
     ucs_string_buffer_appendf(&msg,
                               "%s(address=%p, length=%zu, access=0x%lx) failed: %m",
@@ -347,7 +345,6 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
     }
 
     ucs_log(level, "%s", ucs_string_buffer_cstr(&msg));
-    ucs_string_buffer_cleanup(&msg);
 }
 
 void *uct_ib_md_mem_handle_thread_func(void *arg)

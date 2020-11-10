@@ -1806,16 +1806,14 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     const ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
     const ucp_rndv_data_hdr_t *rndv_data   = data;
     const ucp_reply_hdr_t *rep_hdr         = data;
+    UCS_STRING_BUFFER_ONSTACK(rts_info, 64);
     ucp_tag_rndv_rts_hdr_t *tag_rts;
     ucp_am_rndv_rts_hdr_t *am_rts;
-    ucs_string_buffer_t rts_info;
     void *rkey_buf;
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
         ucs_assert(rndv_rts_hdr->sreq.ep_id != UCP_EP_ID_INVALID);
-
-        ucs_string_buffer_init(&rts_info);
 
         if (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_AM) {
             am_rts   = ucs_derived_of(rndv_rts_hdr, ucp_am_rndv_rts_hdr_t);
@@ -1842,8 +1840,6 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
             ucp_rndv_dump_rkey(rkey_buf, buffer + strlen(buffer),
                                max - strlen(buffer));
         }
-
-        ucs_string_buffer_cleanup(&rts_info);
         break;
     case UCP_AM_ID_RNDV_ATS:
         snprintf(buffer, max, "RNDV_ATS sreq_id 0x%"PRIx64" status '%s'",
