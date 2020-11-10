@@ -712,6 +712,12 @@ bool UcxConnection::connect_common(ucp_ep_params_t& ep_params)
 
     print_addresses();
 
+    if (_ucx_status != UCS_OK) {
+        // close the endpoint in case the error handling callback was called
+        ep_close(UCP_EP_CLOSE_MODE_FORCE);
+        return false;
+    }
+
     // initialize last since it's used in error handling to protect
     // failed connections queue
     _remote_conn_id = remote_conn_id;
