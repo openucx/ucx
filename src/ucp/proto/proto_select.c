@@ -10,6 +10,7 @@
 
 #include "proto_select.h"
 #include "proto_select.inl"
+#include "proto_single.h"
 
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_worker.h>
@@ -891,4 +892,84 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     if (op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {
         ucs_string_buffer_appendf(strb, " and fast completion");
     }
+}
+
+void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short)
+{
+    proto_short->max_length_unknown_mem = -1;
+    proto_short->max_length_host_mem    = -1;
+    proto_short->lane                   = UCP_NULL_LANE;
+    proto_short->rkey_index             = UCP_NULL_RESOURCE;
+}
+
+void
+ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_select,
+                            ucp_worker_cfg_index_t ep_cfg_index,
+                            ucp_worker_cfg_index_t rkey_cfg_index,
+                            ucp_operation_id_t op_id, uint32_t op_attr_mask,
+                            unsigned proto_flags,
+                            ucp_proto_select_short_t *proto_short)
+{
+    ucp_context_h context    = worker->context;
+    const ucp_proto_t *proto = NULL;
+    const ucp_proto_threshold_elem_t *thresh;
+    ucp_proto_select_param_t select_param;
+    const ucp_proto_single_priv_t *spriv;
+    uint32_t op_attr;
+
+    /*
+     * Find the minimal threshold among all protocols for all possible
+     * combinations of bits in 'op_attr_mask'. For example, we are allowed to
+     * use fast-path short protocol only if the message size fits short protocol
+     * in both regular mode and UCP_OP_ATTR_FLAG_FAST_CMPL mode.
+     */
+    ucs_for_each_submask(op_attr, op_attr_mask) {
+        ucp_proto_select_param_init(&select_param, op_id, op_attr,
+                                    UCP_DATATYPE_CONTIG, UCS_MEMORY_TYPE_HOST, 1);
+        thresh = ucp_proto_select_lookup(worker, proto_select, ep_cfg_index,
+                                         rkey_cfg_index, &select_param, 0);
+        if (thresh == NULL) {
+            /* no protocol for contig/host */
+            goto out_disable;
+        }
+
+        ucs_assert(thresh->proto_config.proto != NULL);
+        if (!ucs_test_all_flags(thresh->proto_config.proto->flags, proto_flags)) {
+            /* the protocol for smallest messages is not short */
+            goto out_disable;
+        }
+
+        /* Assume short protocol uses 'ucp_proto_single_priv_t' */
+        spriv = thresh->proto_config.priv;
+
+        if (proto == NULL) {
+            proto                            = thresh->proto_config.proto;
+            proto_short->max_length_host_mem = thresh->max_msg_length;
+            proto_short->lane                = spriv->super.lane;
+            proto_short->rkey_index          = spriv->super.rkey_index;
+        } else {
+            if ((proto != thresh->proto_config.proto) ||
+                (proto_short->lane != spriv->super.lane) ||
+                (proto_short->rkey_index != spriv->super.rkey_index)) {
+                /* not all op_attr options have same configuration */
+                goto out_disable;
+            }
+
+            /* Fast-path threshold is the minimal of all op_attr options */
+            proto_short->max_length_host_mem = ucs_min(
+                    proto_short->max_length_host_mem, thresh->max_msg_length);
+        }
+    }
+
+    /* If we support only host memory, set max short for unknown memory type to
+     * be same as for host memory type. Otherwise, disable short if memory type
+     * is unknown.
+     */
+    ucs_assert(proto_short->max_length_host_mem >= 0);
+    proto_short->max_length_unknown_mem = (context->num_mem_type_detect_mds > 0) ?
+                                          -1 : proto_short->max_length_host_mem;
+    return;
+
+out_disable:
+    ucp_proto_select_short_disable(proto_short);
 }
