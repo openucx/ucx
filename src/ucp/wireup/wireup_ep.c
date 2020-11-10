@@ -207,9 +207,9 @@ out:
     return status;
 }
 
-static void
-ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
-                            void *arg)
+void ucp_wireup_ep_pending_queue_purge(uct_ep_h uct_ep,
+                                       uct_pending_purge_callback_t cb,
+                                       void *arg)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
     ucp_worker_h worker        = wireup_ep->super.ucp_ep->worker;
@@ -223,6 +223,15 @@ ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
         UCS_ASYNC_UNBLOCK(&worker->async);
         cb(&ucp_req->send.uct, arg);
     }
+}
+
+static void
+ucp_wireup_ep_pending_purge(uct_ep_h uct_ep, uct_pending_purge_callback_t cb,
+                            void *arg)
+{
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+
+    ucp_wireup_ep_pending_queue_purge(uct_ep, cb, arg);
 
     if (wireup_ep->pending_count > 0) {
         uct_ep_pending_purge(ucp_wireup_ep_get_msg_ep(wireup_ep),
@@ -721,6 +730,19 @@ int ucp_wireup_ep_test(uct_ep_h uct_ep)
                     UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t);
 }
 
+int ucp_wireup_aux_ep_is_owner(ucp_wireup_ep_t *wireup_ep, uct_ep_h owned_ep)
+{
+    ucp_ep_h ucp_ep              = wireup_ep->super.ucp_ep;
+    ucp_lane_index_t cm_lane_idx = ucp_ep_get_cm_lane(ucp_ep);
+
+    return (wireup_ep->aux_ep == owned_ep) ||
+           /* Auxilliary EP can be WIREUP EP in case of it is on CM lane */
+           ((wireup_ep->aux_ep != NULL) &&
+            (cm_lane_idx != UCP_NULL_LANE) &&
+            (ucp_ep->uct_eps[cm_lane_idx] == &wireup_ep->super.super) &&
+            ucp_wireup_ep_is_owner(wireup_ep->aux_ep, owned_ep));
+}
+
 int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
@@ -729,7 +751,7 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
         return 0;
     }
 
-    return (wireup_ep->aux_ep == owned_ep) ||
+    return (ucp_wireup_aux_ep_is_owner(wireup_ep, owned_ep)) ||
            (wireup_ep->sockaddr_ep == owned_ep) ||
            (wireup_ep->super.uct_ep == owned_ep);
 }

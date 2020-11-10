@@ -623,6 +623,46 @@ out:
 }
 
 static ucs_status_t
+ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                       uct_ep_h uct_ep, ucs_status_t status)
+{
+    ucp_worker_h worker = ucp_ep->worker;
+    ucp_wireup_ep_t *wireup_ep;
+    ucs_queue_head_t tmp_pending_queue;
+    uct_ep_h aux_uct_ep;
+
+    /* If the failure happened on AUX EP of CM lane on a server EP,
+     * it means that client closed its CM_WIREUP_EP/AUX_EP and it
+     * was detected before receiving WIREUP_MSG/ACK from a client or
+     * marking a server's EP as REMOTE_CONNECTED was scheduled on a
+     * progress, but not completed yet (CM_WIREUP_EP/AUX_EP is
+     * closed when moving am EP to REMOTE_CONNECTED state) */
+    wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
+    if ((lane == ucp_ep_get_cm_lane(ucp_ep))         &&
+        (lane == ucp_ep_get_wireup_msg_lane(ucp_ep)) &&
+        (wireup_ep != NULL)                          &&
+        ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep)) {
+        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED);
+
+        /* No need to invoke the error handling flow, just flush and
+         * destroy CM_WIREUP/AUX_EP */
+        aux_uct_ep = wireup_ep->aux_ep;
+        ucs_assert(ucp_wireup_ep_test(aux_uct_ep));
+
+        ucs_queue_head_init(&tmp_pending_queue);
+        ucp_wireup_ep_disown(ucp_ep->uct_eps[lane], aux_uct_ep);
+        ucp_worker_discard_uct_ep(ucp_ep->worker, aux_uct_ep,
+                                  UCT_FLUSH_FLAG_CANCEL,
+                                  (uct_pending_purge_callback_t)
+                                  ucs_empty_function_do_assert,
+                                  NULL);
+        return UCS_OK;
+    }
+
+    return ucp_worker_set_ep_failed(worker, ucp_ep, uct_ep, lane, status);
+}
+
+static ucs_status_t
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
@@ -649,8 +689,10 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
             if ((uct_ep == ucp_ep->uct_eps[lane]) ||
                 ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
-                ret_status = ucp_worker_set_ep_failed(worker, ucp_ep, uct_ep,
-                                                      lane, status);
+                ret_status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep,
+                                                                    lane,
+                                                                    uct_ep,
+                                                                    status);
                 goto out;
             }
         }

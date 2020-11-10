@@ -18,8 +18,6 @@ extern "C" {
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/wireup/wireup_cm.h>
-/* TODO: remove when it is not needed anymore */
-#include <uct/tcp/tcp_sockcm_ep.h>
 }
 
 #define UCP_INSTANTIATE_ALL_TEST_CASE(_test_case) \
@@ -721,12 +719,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, compare_cm_and_wireup_configs,
     listen_and_communicate(false, SEND_DIRECTION_C2S);
     cm_ep_cfg_index = sender().ep()->cfg_index;
     cm_ep_cfg_key   = &ucp_ep_config(sender().ep())->key;
-    /* TODO: remove the SKIP below and include for <uct/tcp/tcp_sockcm_ep.h>
-     *       header file, when CONNECT_TO_EP support is added for TCP */
-    if (sender().ep()->uct_eps[ucp_ep_get_cm_lane(sender().ep())]
-        ->iface->ops.ep_disconnect == uct_tcp_sockcm_ep_disconnect) {
-        UCS_TEST_SKIP_R("don't test TCP SOCKCM");
-    }
     EXPECT_NE(UCP_NULL_LANE, ucp_ep_get_cm_lane(sender().ep()));
     disconnect(sender());
     disconnect(receiver());

@@ -40,19 +40,6 @@ int ucp_ep_init_flags_has_cm(unsigned ep_init_flags)
                                UCP_EP_INIT_CM_WIREUP_SERVER));
 }
 
-static int ucp_cm_ep_should_use_wireup_msg(ucp_ep_h ucp_ep)
-{
-    ucp_context_t *context        = ucp_ep->worker->context;
-    ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
-
-    return context->config.ext.cm_use_all_devices &&
-           /* TCP doesn't have CONNECT_TO_EP support and has internal connection
-            * matching that could lead to unexpected behavior when connections
-            * are accepted in the reverse order.
-            * TODO: remove it, when CONNECT_TO_EP support is added to TCP */
-           strcmp(ucp_context_cm_name(context, cm_wireup_ep->cm_idx), "tcp");
-}
-
 /*
  * The main thread progress part of attempting connecting the client to the server
  * through the next available cm.
@@ -494,7 +481,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         goto out_free_addr;
     }
 
-    if (!ucp_cm_ep_should_use_wireup_msg(ucp_ep)) {
+    if (!context->config.ext.cm_use_all_devices) {
         ucp_wireup_remote_connected(ucp_ep);
     }
 
@@ -1123,7 +1110,7 @@ static unsigned ucp_cm_server_conn_notify_progress(void *arg)
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
-    if (!ucp_cm_ep_should_use_wireup_msg(ucp_ep)) {
+    if (!ucp_ep->worker->context->config.ext.cm_use_all_devices) {
         ucp_wireup_remote_connected(ucp_ep);
     } else {
         status = ucp_wireup_send_pre_request(ucp_ep);

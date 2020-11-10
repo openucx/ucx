@@ -84,6 +84,10 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
 ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
                                                const ucp_ep_params_t *params);
 
+void ucp_wireup_ep_pending_queue_purge(uct_ep_h uct_ep,
+                                       uct_pending_purge_callback_t cb,
+                                       void *arg);
+
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
                            ucp_rsc_index_t rsc_index);
 
@@ -100,6 +104,8 @@ void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep);
 void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep);
 
 int ucp_wireup_ep_test(uct_ep_h uct_ep);
+
+int ucp_wireup_aux_ep_is_owner(ucp_wireup_ep_t *wireup_ep, uct_ep_h owned_ep);
 
 int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
