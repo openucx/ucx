@@ -409,7 +409,7 @@ build_release_pkg() {
 #
 build_icc() {
 	echo 1..1 > build_icc.tap
-	if module_load intel/ics && icc -v
+	if module_load intel/ics-19.1.1 && icc -v
 	then
 		echo "==== Build with Intel compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
@@ -426,7 +426,7 @@ build_icc() {
 		echo "==== Not building with Intel compiler ===="
 		echo "ok 1 - # SKIP because Intel compiler not installed" >> build_icc.tap
 	fi
-	module_unload intel/ics
+	module_unload intel/ics-19.1.1
 }
 
 #
