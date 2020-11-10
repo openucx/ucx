@@ -788,10 +788,10 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_atomic64_fetch        = uct_rc_mlx5_ep_atomic64_fetch,
     .ep_atomic32_fetch        = uct_rc_mlx5_ep_atomic32_fetch,
     .ep_pending_add           = uct_rc_ep_pending_add,
-    .ep_pending_purge         = uct_rc_mlx5_ep_pending_purge,
+    .ep_pending_purge         = uct_rc_ep_pending_purge,
     .ep_flush                 = uct_rc_mlx5_ep_flush,
     .ep_fence                 = uct_rc_mlx5_ep_fence,
-    .ep_check                 = uct_rc_mlx5_ep_check,
+    .ep_check                 = uct_rc_ep_check,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rc_mlx5_ep_t),
     .ep_get_address           = uct_rc_mlx5_ep_get_address,
@@ -830,6 +830,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
     .fc_handler               = uct_rc_iface_fc_handler,
     .cleanup_qp               = uct_rc_mlx5_ep_cleanup_qp,
+    .ep_post_check            = uct_rc_mlx5_ep_post_check
 };
 
 static ucs_status_t

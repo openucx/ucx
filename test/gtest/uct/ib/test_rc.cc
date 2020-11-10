@@ -871,11 +871,6 @@ UCS_TEST_SKIP_COND_P(test_rc_keepalive, pending,
 {
     ucs_status_t status;
 
-    /* for now rc_mlx5 transport supported only */
-    if (!has_transport("rc_mlx5")) {
-        UCS_TEST_SKIP_R("Unsupported");
-    }
-
     scoped_log_handler slh(wrap_errors_logger);
     flush();
     /* ensure that everything works as expected */
