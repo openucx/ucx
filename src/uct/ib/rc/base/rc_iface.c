@@ -139,21 +139,10 @@ static ucs_mpool_ops_t uct_rc_pending_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
-static void
-uct_rc_iface_flush_comp_init(ucs_mpool_t *mp, void *obj, void *chunk)
-{
-    uct_rc_iface_t *iface      = ucs_container_of(mp, uct_rc_iface_t, tx.send_op_mp);
-    uct_rc_iface_send_op_t *op = obj;
-
-    op->handler = uct_rc_ep_flush_op_completion_handler;
-    op->flags   = 0;
-    op->iface   = iface;
-}
-
 static ucs_mpool_ops_t uct_rc_send_op_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
-    .obj_init      = uct_rc_iface_flush_comp_init,
+    .obj_init      = NULL,
     .obj_cleanup   = NULL
 };
 
@@ -450,7 +439,7 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
     status = ucs_mpool_init(&iface->tx.send_op_mp, 0, sizeof(*op), 0,
                             UCS_SYS_CACHE_LINE_SIZE, 256,
                             UINT_MAX, &uct_rc_send_op_mpool_ops,
-                            "flush-comps-only");
+                            "send-ops-mpool");
 
     return status;
 }

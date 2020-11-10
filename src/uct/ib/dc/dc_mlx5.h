@@ -36,10 +36,19 @@ struct ibv_ravh {
 #  define UCT_DC_RNDV_HDR_LEN   0
 #endif
 
-#define UCT_DC_MLX5_IFACE_MAX_DCIS   16
+#define UCT_DC_MLX5_IFACE_MAX_USER_DCIS 15
+#define UCT_DC_MLX5_KEEPALIVE_NUM_DCIS  1
+#define UCT_DC_MLX5_IFACE_MAX_DCIS      (UCT_DC_MLX5_IFACE_MAX_USER_DCIS + \
+                                         UCT_DC_MLX5_KEEPALIVE_NUM_DCIS)
 
 #define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
     (!!((_addr)->flags & UCT_DC_MLX5_IFACE_ADDR_HW_TM))
+
+#define UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, _dci, _txqp, _txwq) \
+    { \
+        _txqp = &(_iface)->tx.dcis[_dci].txqp; \
+        _txwq = &(_iface)->tx.dcis[_dci].txwq; \
+    }
 
 typedef struct uct_dc_mlx5_ep     uct_dc_mlx5_ep_t;
 typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
@@ -52,6 +61,11 @@ typedef enum {
     UCT_DC_MLX5_IFACE_ADDR_DC_VERS = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
                                      UCT_DC_MLX5_IFACE_ADDR_DC_V2
 } uct_dc_mlx5_iface_addr_flags_t;
+
+
+typedef enum {
+    UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE = UCS_BIT(0) /**< keepalive dci is created */
+} uct_dc_mlx5_iface_flags_t;
 
 
 typedef struct uct_dc_mlx5_iface_addr {
@@ -119,18 +133,7 @@ typedef void (*uct_dc_dci_handle_failure_func_t)(uct_dc_mlx5_iface_t *iface,
                                                  ucs_status_t status);
 
 
-/**
- * DCI QP-specific operations.
- */
-typedef struct uct_dc_dci_ops {
-    uct_dc_dci_handle_failure_func_t handle_failure; /* callback for handling
-                                                      * completion with error
-                                                      * on the DCI */
-} uct_dc_dci_ops_t;
-
-
 typedef struct uct_dc_dci {
-    uct_dc_dci_ops_t              *ops; /* DCI operations */
     uct_rc_txqp_t                 txqp; /* DCI qp */
     uct_ib_mlx5_txwq_t            txwq; /* DCI mlx5 wq */
     union {
@@ -206,6 +209,9 @@ struct uct_dc_mlx5_iface {
 
     uint8_t                       version_flag;
 
+    /* iface flags, see uct_dc_mlx5_iface_flags_t */
+    uint8_t                       flags;
+
     uct_ud_mlx5_iface_common_t    ud_common;
 };
 
@@ -238,13 +244,22 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 
-ucs_status_t uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
-                                         uct_dc_dci_t *dci);
-
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci);
 
 void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
+
+ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface);
+
+void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
+                                     uct_dc_mlx5_ep_t *ep,
+                                     struct mlx5_cqe64 *cqe,
+                                     uct_ib_mlx5_txwq_t *txwq,
+                                     ucs_status_t ep_status);
+
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
+                                 uint8_t dci,
+                                 ucs_status_t ep_status);
 
 #if HAVE_DEVX
 
@@ -288,6 +303,13 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 }
 #endif
 
+static inline uint8_t
+uct_dc_mlx5_iface_total_ndci(uct_dc_mlx5_iface_t *iface)
+{
+    return iface->tx.ndci + ((iface->flags & UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE) ?
+                             UCT_DC_MLX5_KEEPALIVE_NUM_DCIS : 0);
+}
+
 /* TODO:
  * use a better seach algorithm (perfect hash, bsearch, hash) ???
  *
@@ -297,13 +319,14 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, uint32_t qp_num)
 {
     uct_dc_dci_t *dcis = iface->tx.dcis;
-    int i, ndci = iface->tx.ndci;
+    int i, ndci = uct_dc_mlx5_iface_total_ndci(iface);
 
     for (i = 0; i < ndci; i++) {
         if (dcis[i].txwq.super.qp_num == qp_num) {
             return i;
         }
     }
+
     ucs_fatal("DCI (qpnum=%d) does not exist", qp_num);
 }
 
@@ -352,6 +375,14 @@ static inline ucs_status_t uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *ifac
     ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci].txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
+}
+
+static inline int
+uct_dc_mlx5_iface_is_dci_keepalive(uct_dc_mlx5_iface_t *iface, int dci)
+{
+    ucs_assert(dci < uct_dc_mlx5_iface_total_ndci(iface));
+
+    return dci == iface->tx.ndci;
 }
 
 #endif

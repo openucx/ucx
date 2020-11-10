@@ -294,6 +294,7 @@ struct uct_rc_iface_send_op {
         void                      *unpack_arg; /* get_bcopy / desc */
         uct_rc_iface_t            *iface;      /* should not be used with
                                                   get_bcopy completions */
+        uct_ep_h                  ep;          /* ep on which we sent ep_check */
     };
     uct_completion_t              *user_comp;
 #ifndef NVALGRIND
