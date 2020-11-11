@@ -691,7 +691,6 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
     rndv_req->send.length                  = rndv_rts_hdr->size;
     rndv_req->send.rndv_get.remote_req_id  = rndv_rts_hdr->sreq.req_id;
     rndv_req->send.rndv_get.remote_address = rndv_rts_hdr->address;
-    rndv_req->send.datatype                = rreq->recv.datatype;
 
     status = ucp_ep_rkey_unpack(ep, rkey_buf, &rndv_req->send.rndv_get.rkey);
     if (status != UCS_OK) {
