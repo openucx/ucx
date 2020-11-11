@@ -222,6 +222,7 @@ uct_self_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
 {
     return uct_single_device_resource(md, UCT_SM_DEVICE_NAME,
                                       UCT_DEVICE_TYPE_SELF,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN,
                                       tl_devices_p, num_tl_devices_p);
 }
 
