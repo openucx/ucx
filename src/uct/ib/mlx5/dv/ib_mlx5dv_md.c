@@ -768,7 +768,7 @@ err:
     return status;
 }
 
-void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
+static void uct_ib_mlx5_devx_md_cleanup(uct_ib_md_t *ibmd)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
 
