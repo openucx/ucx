@@ -1295,6 +1295,9 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
             ucs_assert(hdr->length == sizeof(uint32_t));
             uct_tcp_ep_handle_put_ack(ep, (uct_tcp_ep_put_ack_hdr_t*)(hdr + 1));
             handled++;
+        } else if (hdr->am_id == UCT_TCP_EP_KEEPALIVE_AM_ID) {
+            /* just ignore keepalive requests */
+            handled++;
         } else {
             ucs_assert(hdr->am_id == UCT_TCP_EP_CM_AM_ID);
             handled += 1 + uct_tcp_cm_handle_conn_pkt(&ep, hdr + 1, hdr->length);
@@ -1920,3 +1923,23 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
     return UCS_OK;
 }
 
+ucs_status_t
+uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_tcp_ep_t *ep       = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_tcp_iface_t);
+    uct_tcp_am_hdr_t *hdr  = NULL; /* init to suppress build warning */
+    ucs_status_t status;
+
+    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
+    UCT_CHECK_PARAM(flags == 0, "Unsupported flags: %x", flags);
+
+    status = uct_tcp_ep_am_prepare(iface, ep, UCT_TCP_EP_KEEPALIVE_AM_ID, &hdr);
+    if (status != UCS_OK) {
+        return (status == UCS_ERR_NO_RESOURCE) ? UCS_OK : status;
+    }
+
+    ucs_assert(hdr != NULL);
+    hdr->length = 0;
+    return uct_tcp_ep_am_send(ep, hdr);
+}

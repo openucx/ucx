@@ -205,11 +205,13 @@ typedef struct uct_tcp_am_hdr {
  */
 typedef enum uct_tcp_ep_am_id {
     /* AM ID reserved for TCP internal Connection Manager messages */
-    UCT_TCP_EP_CM_AM_ID      = UCT_AM_ID_MAX,
+    UCT_TCP_EP_CM_AM_ID        = UCT_AM_ID_MAX,
     /* AM ID reserved for TCP internal PUT REQ message */
-    UCT_TCP_EP_PUT_REQ_AM_ID = UCT_AM_ID_MAX + 1,
+    UCT_TCP_EP_PUT_REQ_AM_ID   = UCT_AM_ID_MAX + 1,
     /* AM ID reserved for TCP internal PUT ACK message */
-    UCT_TCP_EP_PUT_ACK_AM_ID = UCT_AM_ID_MAX + 2
+    UCT_TCP_EP_PUT_ACK_AM_ID   = UCT_AM_ID_MAX + 2,
+    /* AM ID reserved for TCP internal PUT ACK message */
+    UCT_TCP_EP_KEEPALIVE_AM_ID = UCT_AM_ID_MAX + 3
 } uct_tcp_ep_am_id_t;
 
 
@@ -512,6 +514,9 @@ void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 
 ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
                               uct_completion_t *comp);
+
+ucs_status_t
+uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
 ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
                                    uct_tcp_cm_conn_event_t event,
