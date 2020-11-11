@@ -17,12 +17,14 @@ UCS_PROFILE_FUNC(double, calc_pi, (count), int count) {
     pi_d_4 = 0.0;
 
     /* Profile a block of code */
-    UCS_PROFILE_CODE("leibnitz") {
-        for (n = 0; n < count; ++n) {
-            pi_d_4 += pow(-1.0, n) / (2 * n + 1);
+    {
+        UCS_PROFILE_CODE("leibnitz") {
+            for (n = 0; n < count; ++n) {
+                pi_d_4 += pow(-1.0, n) / (2 * n + 1);
 
-            /* create a timestamp for each step */
-            UCS_PROFILE_SAMPLE("step");
+                /* create a timestamp for each step */
+                UCS_PROFILE_SAMPLE("step");
+            }
         }
     }
 

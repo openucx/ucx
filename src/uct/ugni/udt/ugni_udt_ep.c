@@ -84,12 +84,17 @@ void uct_ugni_udt_ep_pending_purge(uct_ep_h tl_ep,
 
 static UCS_CLASS_INIT_FUNC(uct_ugni_udt_ep_t, const uct_ep_params_t *params)
 {
+    ucs_status_t rc;
+    uct_ugni_iface_t *iface;
+    const uct_sockaddr_ugni_t *iface_addr;
+    const uct_devaddr_ugni_t *ugni_dev_addr;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, params);
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
-    uct_ugni_iface_t *iface = ucs_derived_of(params->iface, uct_ugni_iface_t);
-    const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)params->iface_addr;
-    const uct_devaddr_ugni_t *ugni_dev_addr = (const uct_devaddr_ugni_t *)params->dev_addr;
-    ucs_status_t rc;
+
+    iface = ucs_derived_of(params->iface, uct_ugni_iface_t);
+    iface_addr = (const uct_sockaddr_ugni_t*)params->iface_addr;
+    ugni_dev_addr = (const uct_devaddr_ugni_t *)params->dev_addr;
 
     ucs_debug("Connecting UDT ep %p", self);
     rc = ugni_connect_ep(&self->super, iface, iface_addr, ugni_dev_addr);
@@ -224,6 +229,7 @@ ucs_status_t uct_ugni_udt_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t heade
 {
     uct_ugni_udt_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_udt_iface_t);
     uct_ugni_udt_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_udt_ep_t);
+    ucs_status_t status;
 
     UCS_ASYNC_BLOCK(iface->super.super.worker->async);
 
@@ -231,8 +237,8 @@ ucs_status_t uct_ugni_udt_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t heade
                      iface->config.udt_seg_size - sizeof(header) - sizeof(uct_ugni_udt_header_t), "am_short");
     ucs_trace_data("AM_SHORT [%p] am_id: %d buf=%p length=%u",
                    iface, id, payload, length);
-    ucs_status_t status = uct_ugni_udt_ep_am_common_send(UCT_UGNI_UDT_AM_SHORT, ep, iface, id, length,
-                                                         header, payload, NULL, NULL);
+    status = uct_ugni_udt_ep_am_common_send(UCT_UGNI_UDT_AM_SHORT, ep, iface, id, length,
+                                            header, payload, NULL, NULL);
 
     UCS_ASYNC_UNBLOCK(iface->super.super.worker->async);
 
@@ -245,13 +251,14 @@ ssize_t uct_ugni_udt_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 {
     uct_ugni_udt_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_udt_iface_t);
     uct_ugni_udt_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_udt_ep_t);
+    ucs_status_t status;
 
     UCS_ASYNC_BLOCK(iface->super.super.worker->async);
 
     ucs_trace_data("AM_BCOPY [%p] am_id: %d buf=%p",
                    iface, id, arg );
-    ucs_status_t status = uct_ugni_udt_ep_am_common_send(UCT_UGNI_UDT_AM_BCOPY, ep, iface, id, 0,
-                                                         0, NULL, pack_cb, arg);
+    status = uct_ugni_udt_ep_am_common_send(UCT_UGNI_UDT_AM_BCOPY, ep, iface, id, 0,
+                                            0, NULL, pack_cb, arg);
     UCS_ASYNC_UNBLOCK(iface->super.super.worker->async);
 
     return status;

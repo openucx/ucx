@@ -42,6 +42,7 @@ int main(int argc, char **argv)
     void *ucs_handle, *uct_handle;
     ucs_list_link_t *config_list;
     int i;
+    print_all_opts_func_t print_all_opts;
 
     /* unload and reload uct while ucs is loaded
      * would fail if uct global vars are kept on global lists in ucs */
@@ -52,7 +53,7 @@ int main(int argc, char **argv)
     }
 
     /* print all config table, to force going over the global list in ucs */
-    print_all_opts_func_t print_all_opts =
+    print_all_opts =
         (print_all_opts_func_t)dlsym(ucs_handle, "ucs_config_parser_print_all_opts");
     config_list = (ucs_list_link_t*)dlsym(ucs_handle, "ucs_config_global_list");
     print_all_opts(stdout, "TEST_", 0, config_list);

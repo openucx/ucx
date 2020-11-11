@@ -536,9 +536,12 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
     { \
         UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
                                        UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
-        ucs_status_t status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
-        if (ucs_unlikely(status != UCS_OK)) { \
-            return UCS_STATUS_PTR(status); \
+        { \
+            ucs_status_t status = \
+                uct_dc_mlx5_iface_dci_get(_iface, _ep); \
+            if (ucs_unlikely(status != UCS_OK)) { \
+                return UCS_STATUS_PTR(status); \
+            } \
         } \
     }
 

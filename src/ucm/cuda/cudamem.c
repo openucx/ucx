@@ -66,14 +66,14 @@ UCM_OVERRIDE_FUNC(cudaHostUnregister,        cudaError_t)
 
 static void ucm_cuda_set_ptr_attr(CUdeviceptr dptr)
 {
+    unsigned int value = 1;
+    CUresult ret;
+    const char *cu_err_str;
+
     if ((void*)dptr == NULL) {
         ucm_trace("skipping cuPointerSetAttribute for null pointer");
         return;
     }
-
-    unsigned int value = 1;
-    CUresult ret;
-    const char *cu_err_str;
 
     ret = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, dptr);
     if (ret != CUDA_SUCCESS) {

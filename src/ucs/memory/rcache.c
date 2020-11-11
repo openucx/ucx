@@ -300,8 +300,11 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
 
     if (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) {
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_DEREGS, 1);
-        UCS_PROFILE_CODE("mem_dereg") {
-            rcache->params.ops->mem_dereg(rcache->params.context, rcache, region);
+        {
+            UCS_PROFILE_CODE("mem_dereg") {
+                rcache->params.ops->mem_dereg(rcache->params.context, rcache,
+                region);
+            }
         }
     }
 

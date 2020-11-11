@@ -13,10 +13,14 @@
 #include <uct/ugni/base/ugni_device.h>
 
 #define UCT_CHECK_PARAM_IOV(_iov, _iovcnt, _buffer, _length, _memh) \
+    void     *_buffer; \
+    size_t    _length; \
+    uct_mem_h _memh; \
+    \
     UCT_CHECK_PARAM(1 == _iovcnt, "iov[iovcnt] has to be 1 at this time"); \
-    void     *_buffer = _iov[0].buffer; \
-    size_t    _length = _iov[0].length; \
-    uct_mem_h _memh   = _iov[0].memh;
+    _buffer = _iov[0].buffer; \
+    _length = _iov[0].length; \
+    _memh   = _iov[0].memh;
 
 /* Endpoint operations */
 static inline void uct_ugni_invoke_orig_comp(uct_ugni_rdma_fetch_desc_t *fma_desc, ucs_status_t status)
@@ -759,14 +763,17 @@ ucs_status_t uct_ugni_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov, size_t 
 
 UCS_CLASS_INIT_FUNC(uct_ugni_rdma_ep_t, const uct_ep_params_t *params)
 {
+    ucs_status_t rc;
+    uct_ugni_iface_t *iface;
+    const uct_sockaddr_ugni_t *iface_addr;
+    const uct_devaddr_ugni_t *ugni_dev_addr;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_ugni_ep_t, params);
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
-    ucs_status_t rc;
 
-    uct_ugni_iface_t *iface = ucs_derived_of(params->iface, uct_ugni_iface_t);
-    const uct_sockaddr_ugni_t *iface_addr = (const uct_sockaddr_ugni_t*)params->iface_addr;
-    const uct_devaddr_ugni_t *ugni_dev_addr = (const uct_devaddr_ugni_t *)params->dev_addr;
-
+    iface = ucs_derived_of(params->iface, uct_ugni_iface_t);
+    iface_addr = (const uct_sockaddr_ugni_t*)params->iface_addr;
+    ugni_dev_addr = (const uct_devaddr_ugni_t *)params->dev_addr;
     ucs_debug("Connecting RDMA ep %p", self);
     rc = ugni_connect_ep(&self->super, iface, iface_addr, ugni_dev_addr);
 
