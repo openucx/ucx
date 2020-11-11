@@ -101,9 +101,6 @@ TEST_F(ucg_cb_test, test_op_cb_init) {
     params->send.buf = MPI_IN_PLACE;
     ucg_builtin_init_reduce((ucg_builtin_op_t *)op);
     ASSERT_EQ(recv_buf[0], recv_buf[0]);
-
-    ucg_builtin_component.destroy(group);
-    delete group;
 }
 
 TEST_F(ucg_cb_test, test_op_cb_final) {
@@ -688,7 +685,4 @@ TEST_F(ucg_cb_test, test_op_consider_optimization) {
     ret = ucg_builtin_op_consider_optimization((ucg_builtin_op_t*)op,
                                                (ucg_builtin_config_t*)plan->planner->plan_config);
     ASSERT_EQ(UCS_OK, ret);
-
-    ucg_builtin_component.destroy(group);
-    delete group;
 }

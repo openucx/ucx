@@ -303,6 +303,8 @@ TEST_F(ucg_step_test, test_step_execute_short) {
     step->flags |= UCG_BUILTIN_OP_STEP_FLAG_FRAGMENTED;
     step->fragment_length = sizeof(int);
     ret = ucg_builtin_step_execute(&slot->req, NULL);
+    delete iface;
+    step->uct_iface = NULL;
     ASSERT_EQ(UCS_OK, ret);
 }
 
@@ -334,6 +336,8 @@ TEST_F(ucg_step_test, test_step_execute_bcopy) {
     step->flags |= UCG_BUILTIN_OP_STEP_FLAG_FRAGMENTED;
     step->fragment_length = sizeof(int);
     ret = ucg_builtin_step_execute(&slot->req, NULL);
+    delete iface;
+    step->uct_iface = NULL;
     ASSERT_EQ(UCS_OK, ret);
 }
 
@@ -377,6 +381,8 @@ TEST_F(ucg_step_test, test_step_execute_zcopy) {
     step->zcopy.num_store = 0;
 
     ret = ucg_builtin_step_execute(&slot->req, NULL);
+    delete iface;
+    step->uct_iface = NULL;
     ASSERT_EQ(UCS_OK, ret);
     ASSERT_EQ((unsigned)0, step->zcopy.num_store);
 }

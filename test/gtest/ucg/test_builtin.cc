@@ -10,7 +10,50 @@ extern "C" {
 #include "ucg_plan_test.h"
 
 
-TEST_F(ucg_plan_test, ucg_plan_1_test) {
+ucg_plan_test::ucg_plan_test()
+{
+    m_builtin_ctx = NULL;
+    m_planc = NULL;
+    m_group_params = NULL;
+    m_coll_params = NULL;
+    m_group = NULL;
+    m_all_rank_infos.clear();
+}
+
+ucg_plan_test::ucg_plan_test(size_t node_cnt, size_t ppn, unsigned myrank)
+{
+    m_planc = NULL;
+    m_all_rank_infos.clear();
+    m_resource_factory->create_balanced_rank_info(m_all_rank_infos, node_cnt, ppn);
+    m_group_params = m_resource_factory->create_group_params(m_all_rank_infos[myrank], m_all_rank_infos);
+    m_group = m_resource_factory->create_group(m_group_params, m_ucg_worker);
+    m_coll_params = m_resource_factory->create_collective_params(UCG_GROUP_COLLECTIVE_MODIFIER_SINGLE_SOURCE,
+                                                                 0, NULL, 1, NULL, 4, NULL, NULL);
+    m_coll_type.modifiers = UCG_GROUP_COLLECTIVE_MODIFIER_AGGREGATE;
+    m_coll_type.root = 0;
+    ucg_plan_select(m_group, NULL, m_coll_params, &m_planc);
+    m_builtin_ctx = (ucg_builtin_group_ctx_t *)UCG_GROUP_TO_COMPONENT_CTX(ucg_builtin_component, m_group);
+}
+
+ucg_plan_test::~ucg_plan_test()
+{
+    if (m_coll_params != NULL) {
+        delete m_coll_params;
+        m_coll_params = NULL;
+    }
+
+    ucg_group_destroy(m_group);
+
+    if (m_group_params != NULL) {
+        delete m_group_params;
+        m_group_params = NULL;
+    }
+
+    m_all_rank_infos.clear();
+}
+
+
+TEST(ucg_plan_test, ucg_plan_1_test) {
     ucg_plan_test example(4, 8, 0);
     size_t msg_size = UCG_GROUP_MED_MSG_SIZE - 1024;
 
@@ -24,7 +67,7 @@ TEST_F(ucg_plan_test, ucg_plan_1_test) {
 
 }
 
-TEST_F(ucg_plan_test, ucg_plan_2_test) {
+TEST(ucg_plan_test, ucg_plan_2_test) {
     ucg_plan_test example(4, 8, 0);
     size_t msg_size = UCG_GROUP_MED_MSG_SIZE + 1024;
 
@@ -37,7 +80,7 @@ TEST_F(ucg_plan_test, ucg_plan_2_test) {
     EXPECT_EQ(UCS_OK, ret);
 }
 
-TEST_F(ucg_plan_test, ucg_plan_3_test) {
+TEST(ucg_plan_test, ucg_plan_3_test) {
     ucg_plan_test example(4, 8, 0);
     size_t msg_size = UCG_GROUP_MED_MSG_SIZE - 1024;
 
@@ -50,7 +93,7 @@ TEST_F(ucg_plan_test, ucg_plan_3_test) {
     EXPECT_EQ(UCS_OK, ret);
 }
 /*
-TEST_F(ucg_plan_test, ucg_plan_4_test) {
+TEST(ucg_plan_test, ucg_plan_4_test) {
     ucg_plan_test example(4, 8, 0);
     size_t msg_size = UCG_GROUP_MED_MSG_SIZE + 1024;
 
@@ -63,7 +106,7 @@ TEST_F(ucg_plan_test, ucg_plan_4_test) {
     EXPECT_EQ(UCS_OK, ret);
 }
 */
-TEST_F(ucg_plan_test, algorithm_selection) {
+TEST(ucg_plan_test, algorithm_selection) {
     ucs_status_t ret;
     unsigned idx;
     for (idx = 0; idx < UCG_ALGORITHM_ALLREDUCE_LAST; idx++) {
@@ -83,7 +126,7 @@ TEST_F(ucg_plan_test, algorithm_selection) {
 
 }
 
-TEST_F(ucg_plan_test, topo_level) {
+TEST(ucg_plan_test, topo_level) {
     ucs_status_t ret;
     ucg_algo.topo_level = UCG_GROUP_HIERARCHY_LEVEL_NODE;
     enum ucg_group_member_distance domain_distance = UCG_GROUP_MEMBER_DISTANCE_SELF;
@@ -97,7 +140,7 @@ TEST_F(ucg_plan_test, topo_level) {
     ASSERT_EQ(UCS_OK, ret);
 }
 
-TEST_F(ucg_plan_test, check_continus_number) {
+TEST(ucg_plan_test, check_continus_number) {
     ucg_group_params_t group_params;
     group_params.member_count = 4;
     group_params.topo_map = (char **)malloc(sizeof(char *) * group_params.member_count);
@@ -120,7 +163,7 @@ TEST_F(ucg_plan_test, check_continus_number) {
     ASSERT_EQ(1u, discount);
 }
 
-TEST_F(ucg_plan_test, choose_type) {
+TEST(ucg_plan_test, choose_type) {
 
     enum ucg_collective_modifiers flags[] = \
             { UCG_GROUP_COLLECTIVE_MODIFIER_SINGLE_SOURCE, UCG_GROUP_COLLECTIVE_MODIFIER_SINGLE_DESTINATION, \
@@ -166,7 +209,7 @@ TEST_F(ucg_plan_test, choose_type) {
 
 /* TODO: add verification to below functions */
 /*
-TEST_F(ucg_plan_test, plan_decision_in_discontinuous_case) {
+TEST(ucg_plan_test, plan_decision_in_discontinuous_case) {
     ucg_plan_test example(2, 2, 0);
     unsigned op_num = 3;
     enum ucg_collective_modifiers modifiers[op_num] = { (enum ucg_collective_modifiers ) (UCG_GROUP_COLLECTIVE_MODIFIER_BROADCAST | UCG_GROUP_COLLECTIVE_MODIFIER_SINGLE_SOURCE), \
@@ -181,7 +224,7 @@ TEST_F(ucg_plan_test, plan_decision_in_discontinuous_case) {
     }
 }
 */
-TEST_F(ucg_plan_test, plan_decision_fixed) {
+TEST(ucg_plan_test, plan_decision_fixed) {
     ucg_plan_test example(2, 2, 0);
     unsigned op_num = 3;
     enum ucg_collective_modifiers modifiers[op_num] = { (enum ucg_collective_modifiers ) (UCG_GROUP_COLLECTIVE_MODIFIER_BROADCAST | UCG_GROUP_COLLECTIVE_MODIFIER_SINGLE_SOURCE), \
@@ -204,7 +247,7 @@ TEST_F(ucg_plan_test, plan_decision_fixed) {
     }
 }
 
-TEST_F(ucg_plan_test, plan_chooose_ops) {
+TEST(ucg_plan_test, plan_chooose_ops) {
     ucg_plan_test example(2, 2, 0);
     unsigned op_num = 3;
     enum ucg_collective_modifiers modifiers[op_num] = { (enum ucg_collective_modifiers ) (UCG_GROUP_COLLECTIVE_MODIFIER_BROADCAST | UCG_GROUP_COLLECTIVE_MODIFIER_SINGLE_SOURCE), \
@@ -216,7 +259,7 @@ TEST_F(ucg_plan_test, plan_chooose_ops) {
     }
 }
 
-TEST_F(ucg_plan_test, test_algorithm_decision) {
+TEST(ucg_plan_test, test_algorithm_decision) {
     ucg_plan_test example(2, 2, 0);
     ucs_status_t ret = ucg_builtin_algorithm_decision(&(example.m_coll_type), 1024, example.m_group_params, example.m_coll_params, example.m_planc);
     ASSERT_EQ(UCS_OK, ret);
