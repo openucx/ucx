@@ -29,7 +29,10 @@ static const char* cpu_model_names[] = {
     [UCS_CPU_MODEL_INTEL_SKYLAKE]     = "Skylake",
     [UCS_CPU_MODEL_ARM_AARCH64]       = "ARM 64-bit",
     [UCS_CPU_MODEL_AMD_NAPLES]        = "Naples",
-    [UCS_CPU_MODEL_AMD_ROME]          = "Rome"
+    [UCS_CPU_MODEL_AMD_ROME]          = "Rome",
+    [UCS_CPU_MODEL_ZHAOXIN_Zhangjiang]= "Zhangjiang",
+    [UCS_CPU_MODEL_ZHAOXIN_Wudaokou]  = "Wudaokou",
+    [UCS_CPU_MODEL_ZHAOXIN_Lujiazui]  = "Lujiazui"
 };
 
 static const char* cpu_vendor_names[] = {
@@ -38,7 +41,8 @@ static const char* cpu_vendor_names[] = {
     [UCS_CPU_VENDOR_AMD]              = "AMD",
     [UCS_CPU_VENDOR_GENERIC_ARM]      = "Generic ARM",
     [UCS_CPU_VENDOR_GENERIC_PPC]      = "Generic PPC",
-    [UCS_CPU_VENDOR_FUJITSU_ARM]      = "Fujitsu ARM"
+    [UCS_CPU_VENDOR_FUJITSU_ARM]      = "Fujitsu ARM",
+    [UCS_CPU_VENDOR_ZHAOXIN]          = "Zhaoxin"
 };
 
 static double measure_memcpy_bandwidth(size_t size)

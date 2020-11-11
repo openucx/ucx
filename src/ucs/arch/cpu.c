@@ -63,6 +63,10 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_FUJITSU_ARM] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_ZHAOXIN] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
     }
 };
 

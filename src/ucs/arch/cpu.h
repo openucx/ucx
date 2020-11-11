@@ -30,6 +30,9 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_ARM_AARCH64,
     UCS_CPU_MODEL_AMD_NAPLES,
     UCS_CPU_MODEL_AMD_ROME,
+    UCS_CPU_MODEL_ZHAOXIN_Zhangjiang,
+    UCS_CPU_MODEL_ZHAOXIN_Wudaokou,
+    UCS_CPU_MODEL_ZHAOXIN_Lujiazui,
     UCS_CPU_MODEL_LAST
 } ucs_cpu_model_t;
 
@@ -59,6 +62,7 @@ typedef enum ucs_cpu_vendor {
     UCS_CPU_VENDOR_GENERIC_ARM,
     UCS_CPU_VENDOR_GENERIC_PPC,
     UCS_CPU_VENDOR_FUJITSU_ARM,
+    UCS_CPU_VENDOR_ZHAOXIN,
     UCS_CPU_VENDOR_LAST
 } ucs_cpu_vendor_t;
 
