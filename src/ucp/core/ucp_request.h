@@ -89,9 +89,10 @@ enum {
     UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(6), /* Rendezvous request */
     UCP_RECV_DESC_FLAG_RNDV_STARTED   = UCS_BIT(7), /* Rendezvous receive was initiated
                                                        (in AM API) */
-    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(8)  /* Descriptor was allocated with malloc
+    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(8), /* Descriptor was allocated with malloc
                                                        and must be freed, not returned to the
                                                        memory pool or UCT */
+    UCP_RECV_DESC_FLAG_COMPLETED      = UCS_BIT(9)  /* Descriptor is no longer needed */
 };
 
 
