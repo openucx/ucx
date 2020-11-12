@@ -7,10 +7,28 @@
 
 using namespace std;
 
-ucg_builtin_plan_phase_t *ucg_op_test::create_phase(ucg_builtin_plan_method_type method) const {
+ucg_op_test::ucg_op_test()
+{
+    num_procs = 4;
+};
+
+ucg_op_test::~ucg_op_test()
+{
+};
+
+ucg_builtin_plan_phase_t *ucg_op_test::create_phase(ucg_builtin_plan_method_type method)
+{
     ucg_builtin_plan_phase_t *phase = new ucg_builtin_plan_phase_t();
 
+    init_phase(method, phase);
+
+    return phase;
+}
+
+void ucg_op_test::init_phase(ucg_builtin_plan_method_type method, ucg_builtin_plan_phase_t *phase)
+{
     uct_md_attr_t *md_attr = new uct_md_attr_t();
+
     md_attr->cap.max_reg = 8128;
     phase->md_attr = md_attr;
 
@@ -34,28 +52,37 @@ ucg_builtin_plan_phase_t *ucg_op_test::create_phase(ucg_builtin_plan_method_type
     phase->recv_thresh.max_bcopy_max = phase->send_thresh.max_bcopy_max;
     phase->recv_thresh.max_zcopy_one = phase->send_thresh.max_zcopy_one;
     phase->recv_thresh.md_attr_cap_max_reg = 8128;
-
-    return phase;
 }
 
-ucg_plan_t *ucg_op_test::create_plan(unsigned phs_cnt, ucg_collective_params_t *params, ucg_group_h group) const {
-    ucg_plan_t *plan = new ucg_plan_t();
+void ucg_op_test::destroy_phase(ucg_builtin_plan_phase_t *phase)
+{
+    if (phase != NULL) {
+        if (phase->md_attr != NULL) {
+            delete phase->md_attr;
+            phase->md_attr = NULL;
+        }
+
+        delete phase;
+    }
+}
+
+ucg_plan_t *ucg_op_test::create_plan(unsigned phs_cnt, ucg_collective_params_t *params, ucg_group_h group)
+{
+    ucg_builtin_plan_t *builtin_plan = (ucg_builtin_plan_t *)malloc(sizeof(ucg_builtin_plan_t) +
+                                                                    phs_cnt * sizeof(ucg_builtin_plan_phase_t));
+    ucg_plan_t *plan = &builtin_plan->super;
+    ucg_plan_component_t *planc = NULL;
+
     plan->group_id = 1;
     plan->my_index = 0;
     plan->group = group;
-
-    ucg_plan_component_t *planc = NULL;
     ucg_plan_select(group, NULL, params, &planc);
     plan->planner = planc;
-
-    size_t alloc_size = sizeof(ucg_builtin_plan_t) +
-                        (phs_cnt * sizeof(ucg_builtin_plan_phase_t));
-    ucg_builtin_plan_t *builtin_plan = (ucg_builtin_plan_t*)malloc(alloc_size);
-    builtin_plan->super = *plan;
     builtin_plan->am_id = 1;
     builtin_plan->resend = NULL;
     builtin_plan->slots = NULL;
     builtin_plan->phs_cnt = phs_cnt;
+
     ucs_mpool_ops_t ops = {
             ucs_mpool_chunk_malloc,
             ucs_mpool_chunk_free,
@@ -63,44 +90,52 @@ ucg_plan_t *ucg_op_test::create_plan(unsigned phs_cnt, ucg_collective_params_t *
             NULL
     };
     size_t op_size = sizeof(ucg_builtin_op_t) + builtin_plan->phs_cnt * sizeof(ucg_builtin_op_step_t);
+
     ucs_mpool_init(&builtin_plan->op_mp, 0, op_size, 0, UCS_SYS_CACHE_LINE_SIZE,
                    1, UINT_MAX, &ops, "ucg_builtin_plan_mp");
     ucs_mpool_grow(&builtin_plan->op_mp, 1);
 
     for (unsigned i = 0; i < phs_cnt; i++) {
-        ucg_builtin_plan_phase_t *phase = create_phase(UCG_PLAN_METHOD_RECV_TERMINAL);
-        builtin_plan->phss[i] = *phase;
+        init_phase(UCG_PLAN_METHOD_RECV_TERMINAL, &builtin_plan->phss[i]);
     }
 
-    return (ucg_plan_t *) builtin_plan;
+    return (ucg_plan_t *)builtin_plan;
 }
 
-ucg_builtin_plan_t *ucg_op_test::create_method_plan(ucg_builtin_plan_method_type method) const {
-    ucg_builtin_plan_t *builtin_plan = new ucg_builtin_plan_t;
-    builtin_plan->phss[0] = *create_phase(method);
+ucg_builtin_plan_t *ucg_op_test::create_method_plan(ucg_builtin_plan_method_type method)
+{
+    ucg_builtin_plan_t *builtin_plan = (ucg_builtin_plan_t *)malloc(sizeof(ucg_builtin_plan_t) +
+                                                                    sizeof(ucg_builtin_plan_phase_t));
+
+    init_phase(method, &builtin_plan->phss[0]);
 
     return builtin_plan;
 }
 
-ucg_group_h ucg_op_test::create_group() const {
+ucg_group_h ucg_op_test::create_group()
+{
     ucg_rank_info my_rank_info = {.rank = 0, .nodex_idx = 0, .socket_idx = 0};
     ucg_rank_info other_rank_info = {.rank = 1, .nodex_idx = 0, .socket_idx = 0};
 
     vector<ucg_rank_info> all_rank_infos;
     all_rank_infos.push_back(my_rank_info);
     all_rank_infos.push_back(other_rank_info);
+    ucg_group_params_t *group_params = m_resource_factory->create_group_params(my_rank_info, all_rank_infos);
 
-    return m_resource_factory->create_group(my_rank_info, all_rank_infos, m_ucg_worker);
+    return m_resource_factory->create_group(group_params, m_ucg_worker);
 }
 
-static ucs_status_t mem_reg_mock(uct_md_h md, void *address, size_t length, unsigned flags, uct_mem_h *memh_p) {
+ucs_status_t mem_reg_mock(uct_md_h md, void *address, size_t length, unsigned flags, uct_mem_h *memh_p)
+{
     // do nothing
     return UCS_OK;
 }
 
-uct_md_h ucg_op_test::create_md() const {
+uct_md_h ucg_op_test::create_md()
+{
     uct_md_h md = new uct_md;
     uct_md_ops_t *ops = new uct_md_ops_t;
+
     ops->mem_reg = mem_reg_mock;
     md->ops = ops;
     return md;

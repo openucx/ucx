@@ -10,22 +10,38 @@
 
 using namespace std;
 
-ucg_test::ucg_test() {
+static class ucg_resource_factory g_ucg_resource_factory;
+
+ucg_resource_factory *ucg_test::m_resource_factory = &g_ucg_resource_factory;
+
+ucg_test::ucg_test()
+{
+    m_ucg_context = NULL;
+    m_ucg_worker = NULL;
+
     init_ucg_component();
-
-    m_resource_factory = new ucg_resource_factory();
 }
 
-ucg_test::~ucg_test() {
-    delete m_resource_factory;
+ucg_test::~ucg_test()
+{
+    if (m_ucg_worker != NULL) {
+        ucg_worker_destroy(m_ucg_worker);
+        m_ucg_worker = NULL;
+    }
+
+    if (m_ucg_context != NULL) {
+        ucg_cleanup(m_ucg_context);
+        m_ucg_context = NULL;
+    }
 }
 
-void ucg_test::init_ucg_component() {
+void ucg_test::init_ucg_component()
+{
     ucg_params_t params;
     ucg_config_t *config = NULL;
 
     /* Read options */
-    (void) ucg_config_read("MPI", NULL, &config);
+    (void)ucg_config_read("MPI", NULL, &config);
 
     /* Initialize UCX context */
     params.field_mask = UCP_PARAM_FIELD_FEATURES |
@@ -47,8 +63,7 @@ void ucg_test::init_ucg_component() {
                                      since it will be protected by worker */
     params.estimated_num_eps = 0;
 
-    ucg_context_h ucg_context;
-    (void) ucg_init(&params, config, &ucg_context);
+    (void)ucg_init(&params, config, &m_ucg_context);
 
     ucg_worker_params_t work_params;
 
@@ -57,8 +72,7 @@ void ucg_test::init_ucg_component() {
     work_params.thread_mode = UCS_THREAD_MODE_SINGLE;
     work_params.thread_mode = UCS_THREAD_MODE_SINGLE;
 
-    (void) ucg_worker_create(ucg_context, &work_params,
-                             &m_ucg_worker);
+    (void)ucg_worker_create(m_ucg_context, &work_params, &m_ucg_worker);
 }
 
 ucg_collective_type_t ucg_test::create_allreduce_coll_type() const {
@@ -115,8 +129,9 @@ ucg_collective_params_t *ucg_test::create_bcast_params() const {
                                                         0, send_buf, count, recv_buf, sizeof(int), NULL, NULL);
 }
 
-ucg_builtin_config_t *
-ucg_resource_factory::create_config(unsigned bcast_alg, unsigned allreduce_alg, unsigned barrier_alg) const {
+ucg_builtin_config_t *ucg_resource_factory::create_config(
+    unsigned bcast_alg, unsigned allreduce_alg, unsigned barrier_alg)
+{
     ucg_builtin_config_t *config = new ucg_builtin_config_t;
     config->super.ft = UCG_PLAN_FT_IGNORE;
 
@@ -141,14 +156,16 @@ ucg_resource_factory::create_config(unsigned bcast_alg, unsigned allreduce_alg, 
     return config;
 }
 
-ucs_status_t
-resolve_address_callback(void *cb_group_obj, ucg_group_member_index_t index, ucg_address_t **addr, size_t *addr_len) {
+ucs_status_t resolve_address_callback(void *cb_group_obj, ucg_group_member_index_t index,
+                                      ucg_address_t **addr, size_t *addr_len)
+{
     *addr_len = 0;
     return UCS_OK;
 }
 
-ucg_group_params_t *ucg_resource_factory::create_group_params(const ucg_rank_info my_rank_info,
-                                                              const std::vector<ucg_rank_info> &rank_infos) const {
+ucg_group_params_t *ucg_resource_factory::create_group_params(
+    ucg_rank_info my_rank_info, const std::vector<ucg_rank_info> &rank_infos)
+{
     ucg_group_params_t *args = new ucg_group_params_t();
     args->member_count = rank_infos.size();
     args->cid = 0;
@@ -179,22 +196,17 @@ ucg_group_params_t *ucg_resource_factory::create_group_params(const ucg_rank_inf
     return args;
 }
 
-ucg_group_h
-ucg_resource_factory::create_group(const ucg_rank_info my_rank_info, const std::vector<ucg_rank_info> &rank_infos,
-                                   ucg_worker_h ucg_worker) const {
-    ucg_group_params_t *params = create_group_params(my_rank_info, rank_infos);
-
+ucg_group_h ucg_resource_factory::create_group(const ucg_group_params_t *params, ucg_worker_h ucg_worker)
+{
     ucg_group_h group;
     ucg_group_create(ucg_worker, params, &group);
     return group;
 }
 
-ucg_collective_params_t *ucg_resource_factory::create_collective_params(const ucg_collective_modifiers modifiers,
-                                                                        const ucg_group_member_index_t root,
-                                                                        void *send_buffer, const int count,
-                                                                        void *recv_buffer,
-                                                                        const size_t dt_len, void *dt_ext,
-                                                                        void *op_ext) const {
+ucg_collective_params_t *ucg_resource_factory::create_collective_params(
+    ucg_collective_modifiers modifiers, ucg_group_member_index_t root,
+    void *send_buffer, int count, void *recv_buffer, size_t dt_len, void *dt_ext, void *op_ext)
+{
     ucg_collective_params_t *params = new ucg_collective_params_t();
     params->type.modifiers = modifiers;
     params->type.root = root;
@@ -213,13 +225,14 @@ ucg_collective_params_t *ucg_resource_factory::create_collective_params(const uc
     return params;
 }
 
-std::vector<ucg_rank_info>
-ucg_resource_factory::create_balanced_rank_info(const size_t nodes, const size_t ppn, const bool map_by_socket) const {
-    vector<ucg_rank_info> ret;
+void ucg_resource_factory::create_balanced_rank_info(std::vector<ucg_rank_info> &rank_infos,
+                                                     size_t nodes, size_t ppn, bool map_by_socket)
+{
     int rank = 0;
+    ucg_rank_info info;
+
     for (size_t i = 0; i < nodes; i++) {
         for (size_t j = 0; j < ppn; j++) {
-            ucg_rank_info info;
             info.rank = rank++;
             info.nodex_idx = i;
             if (map_by_socket) {
@@ -228,14 +241,12 @@ ucg_resource_factory::create_balanced_rank_info(const size_t nodes, const size_t
                 info.socket_idx = 0;
             }
 
-            ret.push_back(info);
+            rank_infos.push_back(info);
         }
     }
-
-    return ret;
 }
 
-
-int ucg_resource_factory::ompi_op_is_commute(void *op) {
+int ompi_op_is_commute(void *op)
+{
     return (int) ((ucg_ompi_op *) op)->commutative;
 }

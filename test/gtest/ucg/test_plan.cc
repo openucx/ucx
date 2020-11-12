@@ -9,19 +9,24 @@
 using namespace std;
 
 TEST_F(ucg_test, select_plan_component) {
-    vector<ucg_rank_info> all_rank_infos = m_resource_factory->create_balanced_rank_info(4, 8);
-    ucg_group_h group = m_resource_factory->create_group(all_rank_infos[0], all_rank_infos, m_ucg_worker);
+    vector<ucg_rank_info> all_rank_infos;
+
+    m_resource_factory->create_balanced_rank_info(all_rank_infos, 4, 8);
+    ucg_group_params_t *group_params = m_resource_factory->create_group_params(all_rank_infos[0], all_rank_infos);
+    ucg_group_h group = m_resource_factory->create_group(group_params, m_ucg_worker);
     ucg_collective_params_t *params = m_resource_factory->create_collective_params(
-            UCG_GROUP_COLLECTIVE_MODIFIER_SINGLE_SOURCE,
-            0, NULL, 1, NULL, 4, NULL, NULL);
-    ucg_plan_component_t *planc;
+                                                UCG_GROUP_COLLECTIVE_MODIFIER_SINGLE_SOURCE,
+                                                0, NULL, 1, NULL, 4, NULL, NULL);
+    ucg_plan_component_t *planc = NULL;
     ucs_status_t ret = ucg_plan_select(group, NULL, params, &planc);
 
     ASSERT_EQ(UCS_OK, ret);
     ASSERT_TRUE(planc != NULL);
 
     delete params;
-    delete group;
+    ucg_group_destroy(group);
+    delete group_params;
+    all_rank_infos.clear();
 }
 
 TEST_F(ucg_test, create_plan) {
@@ -39,38 +44,51 @@ TEST_F(ucg_test, create_plan) {
 }
 
 TEST_F(ucg_test, create_plan_component) {
-    vector<ucg_rank_info> all_rank_infos = m_resource_factory->create_balanced_rank_info(4, 8);
-    ucg_group_h group = m_resource_factory->create_group(all_rank_infos[0], all_rank_infos, m_ucg_worker);
+    vector<ucg_rank_info> all_rank_infos;
+
+    m_resource_factory->create_balanced_rank_info(all_rank_infos, 4, 8);
+    ucg_group_params_t *group_params = m_resource_factory->create_group_params(all_rank_infos[0], all_rank_infos);
+    ucg_group_h group = m_resource_factory->create_group(group_params, m_ucg_worker);
     unsigned base_am_id = 23;
     ucg_group_id_t group_id = 0;
-    ucg_group_params_t *group_params = m_resource_factory->create_group_params(all_rank_infos[0], all_rank_infos);
 
-    ucs_status_t ret = ucg_builtin_component.create(&ucg_builtin_component, m_ucg_worker, group, base_am_id, group_id,
-                                                    NULL, group_params);
+    ucs_status_t ret = ucg_builtin_component.create(&ucg_builtin_component, m_ucg_worker, group,
+                                                    base_am_id, group_id, NULL, group_params);
     ASSERT_EQ(UCS_OK, ret);
 
-    delete group;
+    ucg_group_destroy(group);
     delete group_params;
+    all_rank_infos.clear();
 }
 
 TEST_F(ucg_test, destroy_group) {
-    vector<ucg_rank_info> all_rank_infos = m_resource_factory->create_balanced_rank_info(4, 8);
-    ucg_group_h group = m_resource_factory->create_group(all_rank_infos[0], all_rank_infos, m_ucg_worker);
-    ucg_builtin_component.destroy(group);
+    vector<ucg_rank_info> all_rank_infos;
 
+    m_resource_factory->create_balanced_rank_info(all_rank_infos, 4, 8);
+    ucg_group_params_t *group_params = m_resource_factory->create_group_params(all_rank_infos[0], all_rank_infos);
+    ucg_group_h group = m_resource_factory->create_group(group_params, m_ucg_worker);
+    ucg_builtin_component.destroy(group);
     ASSERT_TRUE(true);
-    delete group;
+
+    ucg_group_destroy(group);
+    delete group_params;
+    all_rank_infos.clear();
 }
 
 TEST_F(ucg_test, progress_group) {
-    vector<ucg_rank_info> all_rank_infos = m_resource_factory->create_balanced_rank_info(4, 8);
-    ucg_group_h group = m_resource_factory->create_group(all_rank_infos[0], all_rank_infos, m_ucg_worker);
+    vector<ucg_rank_info> all_rank_infos;
+
+    m_resource_factory->create_balanced_rank_info(all_rank_infos, 4, 8);
+    ucg_group_params_t *group_params = m_resource_factory->create_group_params(all_rank_infos[0], all_rank_infos);
+    ucg_group_h group = m_resource_factory->create_group(group_params, m_ucg_worker);
 
     unsigned ret = ucg_builtin_component.progress(group);
     //TODO how to judge progress result?
     cout << "ucg_builtin_component.progress return: " << ret << endl;
 
-    delete group;
+    ucg_group_destroy(group);
+    delete group_params;
+    all_rank_infos.clear();
 }
 
 TEST_F(ucg_test, query_plan) {

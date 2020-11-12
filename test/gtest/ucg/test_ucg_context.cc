@@ -24,7 +24,7 @@ protected:
     }
 };
 
-TEST_F(ucg_context_test, minimal_field_mask) {
+TEST(ucg_context_test, minimal_field_mask) {
     ucs::handle<ucg_config_t *> config;
     UCS_TEST_CREATE_HANDLE(ucg_config_t *, config, ucg_config_release,
                            ucg_config_read, NULL, NULL);
@@ -37,7 +37,7 @@ TEST_F(ucg_context_test, minimal_field_mask) {
         ucg_params_t params;
         VALGRIND_MAKE_MEM_UNDEFINED(&params, sizeof(params));
         params.field_mask = UCS_BIT(0);
-        params.features = get_ctx_params().features;
+        params.features = ucg_context_test::get_ctx_params().features;
 
         UCS_TEST_CREATE_HANDLE(ucg_context_h, ucgh, ucg_cleanup,
                                ucg_init, &params, config.get());

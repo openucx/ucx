@@ -12,22 +12,24 @@
 
 class ucg_op_test : public ucg_test {
 public:
-    ucg_op_test() {
-        num_procs = 4;
-    };
+    ucg_op_test();
 
-    ~ucg_op_test() {};
+    virtual ~ucg_op_test();
 
 protected:
-    ucg_builtin_plan_phase_t *create_phase(ucg_builtin_plan_method_type method) const;
+    ucg_builtin_plan_phase_t *create_phase(ucg_builtin_plan_method_type method);
 
-    ucg_group_h create_group() const;
+    void init_phase(ucg_builtin_plan_method_type method, ucg_builtin_plan_phase_t *phase);
 
-    ucg_plan_t *create_plan(unsigned phs_cnt, ucg_collective_params_t *params, ucg_group_h group) const;
+    void destroy_phase(ucg_builtin_plan_phase_t *phase);
 
-    ucg_builtin_plan_t *create_method_plan(ucg_builtin_plan_method_type method) const;
+    ucg_group_h create_group();
 
-    uct_md_h create_md() const;
+    ucg_plan_t *create_plan(unsigned phs_cnt, ucg_collective_params_t *params, ucg_group_h group);
+
+    ucg_builtin_plan_t *create_method_plan(ucg_builtin_plan_method_type method);
+
+    uct_md_h create_md();
 };
 
 #endif

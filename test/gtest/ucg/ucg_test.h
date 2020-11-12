@@ -30,13 +30,13 @@ class ucg_test : public ::testing::Test {
 public:
     ucg_test();
 
-    ~ucg_test();
+    virtual ~ucg_test();
 
+    ucg_context_h m_ucg_context;
     ucg_worker_h m_ucg_worker;
 
 protected:
     void SetUp() override {
-        //init_ucg_component();
     }
 
     void TearDown() override {
@@ -54,7 +54,7 @@ protected:
 
     ucg_collective_params_t *create_bcast_params() const;
 
-    ucg_resource_factory *m_resource_factory;
+    static ucg_resource_factory *m_resource_factory;
 };
 
 struct ucg_rank_info {
@@ -69,27 +69,23 @@ struct ucg_ompi_op {
 
 class ucg_resource_factory {
 public:
-    ucg_builtin_config_t *create_config(unsigned bcast_alg, unsigned allreduce_alg, unsigned barrier_alg) const;
+    ucg_builtin_config_t *create_config(unsigned bcast_alg, unsigned allreduce_alg, unsigned barrier_alg);
 
-    ucg_group_h create_group(const ucg_rank_info my_rank_info, const std::vector<ucg_rank_info> &rank_infos,
-                             ucg_worker_h ucg_worker) const;
+    ucg_group_h create_group(const ucg_group_params_t *params, ucg_worker_h ucg_worker);
 
-    ucg_group_params_t *
-    create_group_params(const ucg_rank_info my_rank_info, const std::vector<ucg_rank_info> &rank_infos) const;
+    ucg_group_params_t *create_group_params(ucg_rank_info my_rank_info, const std::vector<ucg_rank_info> &rank_infos);
 
-    ucg_collective_params_t *
-    create_collective_params(const ucg_collective_modifiers modifiers, const ucg_group_member_index_t root,
-                             void *send_buffer, const int count, void *recv_buffer, const size_t dt_len, void *dt_ext,
-                             void *op_ext) const;
+    ucg_collective_params_t *create_collective_params(ucg_collective_modifiers modifiers,
+                                                      ucg_group_member_index_t root,
+                                                      void *send_buffer, int count,
+                                                      void *recv_buffer, size_t dt_len,
+                                                      void *dt_ext, void *op_ext);
 
-    std::vector<ucg_rank_info>
-    create_balanced_rank_info(const size_t nodes, const size_t ppn, const bool map_by_socket = false) const;
-
-private:
-    static int ompi_op_is_commute(void *op);
+    void create_balanced_rank_info(std::vector<ucg_rank_info> &rank_infos,
+                                   size_t nodes, size_t ppn, bool map_by_socket = false);
 };
+
+int ompi_op_is_commute(void *op);
 
 
 #endif
-
-

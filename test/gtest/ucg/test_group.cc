@@ -8,16 +8,23 @@
 using namespace std;
 
 class ucg_group_test : public ucg_test {
-protected:
+public:
     ucg_group_test() {
-        vector<ucg_rank_info> all_rank_infos = m_resource_factory->create_balanced_rank_info(2, 2);
-
-        m_params = m_resource_factory->create_group_params(all_rank_infos[0], all_rank_infos);
+        m_all_rank_infos.clear();
+        m_resource_factory->create_balanced_rank_info(m_all_rank_infos, 2, 2);
+        m_params = m_resource_factory->create_group_params(m_all_rank_infos[0], m_all_rank_infos);
     }
 
-    ~ucg_group_test() {}
+    ~ucg_group_test() {
+        if (m_params != NULL) {
+            delete m_params;
+            m_params = NULL;
+        }
+        m_all_rank_infos.clear();
+    }
 
 protected:
+    vector<ucg_rank_info> m_all_rank_infos;
     ucg_group_params_t *m_params;
 };
 
