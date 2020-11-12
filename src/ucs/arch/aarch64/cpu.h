@@ -142,10 +142,11 @@ static inline void ucs_cpu_init()
 static inline void ucs_arch_wait_mem(void *address)
 {
     unsigned long tmp;
-    asm volatile ("ldxrb %w0, %1 \n"
+    asm volatile ("ldaxrb %w0, [%1] \n"
                   "wfe           \n"
                   : "=&r"(tmp)
-                  : "Q"(address));
+                  : "r"(address)
+                  : "memory");
 }
 
 #if !HAVE___CLEAR_CACHE

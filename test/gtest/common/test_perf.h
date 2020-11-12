@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -34,8 +35,9 @@ protected:
 
     static std::vector<int> get_affinity();
 
-    void run_test(const test_spec& test, unsigned flags, bool check_perf,
-                  const std::string &tl_name, const std::string &dev_name);
+    void run_test(const test_spec& test, unsigned flags, bool check_perf, const
+                  std::string &tl_name, const std::string &dev_name, double
+                  *perf_value = NULL);
 
 private:
     class rte_comm {
