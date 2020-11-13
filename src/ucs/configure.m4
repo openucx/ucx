@@ -5,6 +5,10 @@
 # See file LICENSE for terms.
 #
 
+ucs_modules=""
+m4_include([src/ucs/vfs/sock/configure.m4])
+m4_include([src/ucs/vfs/fuse/configure.m4])
+AC_DEFINE_UNQUOTED([ucs_MODULES], ["${ucs_modules}"], [UCS loadable modules])
 
 #
 # Internal profiling support.
@@ -240,3 +244,6 @@ AS_IF([test "x$enable_builtin_memcpy" != xno],
 
 AC_CHECK_FUNCS([__clear_cache], [], [])
 AC_CHECK_FUNCS([__aarch64_sync_cache_range], [], [])
+
+
+AC_CONFIG_FILES([src/ucs/Makefile])

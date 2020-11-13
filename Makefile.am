@@ -37,6 +37,7 @@ SUBDIRS += $(UCG_SUBDIR)
 endif
 
 SUBDIRS += \
+	src/tools/vfs \
 	src/tools/info \
 	src/tools/perf \
 	src/tools/profile \
