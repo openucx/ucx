@@ -45,7 +45,7 @@ ucp_worker_get_name(ucp_worker_h worker)
 }
 
 /**
- * @return endpoint by a pointer received from remote side
+ * @return endpoint by a key received from remote side
  */
 static UCS_F_ALWAYS_INLINE ucp_ep_h
 ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
@@ -247,5 +247,17 @@ ucp_worker_get_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     return ucp_worker_add_rkey_config(worker, key, cfg_index_p);
 }
 
+#define UCP_WORKER_GET_EP_BY_ID(_worker, _ep_id, _str, _action) \
+    ({ \
+         ucp_ep_h _ep = ucp_worker_get_ep_by_id(_worker, _ep_id); \
+         if (ucs_unlikely((_ep == NULL) || \
+                          ((_ep)->flags & (UCP_EP_FLAG_CLOSED | \
+                                           UCP_EP_FLAG_FAILED)))) { \
+             ucs_trace_data("worker %p: drop %s on closed/failed ep %p", \
+                            _worker, _str, _ep); \
+             _action; \
+         } \
+         _ep; \
+    })
 
 #endif
