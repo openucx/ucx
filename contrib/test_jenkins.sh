@@ -802,14 +802,14 @@ run_hello() {
 	fi
 
 	# set smaller timeouts so the test will complete faster
-	if [[ ${test_args} == *"-e"* ]]
+	if [[ ${test_args} =~ "-e" ]]
 	then
 		export UCX_UD_TIMEOUT=15s
 		export UCX_RC_TIMEOUT=1ms
 		export UCX_RC_RETRY_COUNT=4
 	fi
 
-	if [[ ${test_args} == *"-e"* ]]
+	if [[ ${test_args} =~ "-e" ]]
 	then
 		error_emulation=1
 	else
@@ -842,7 +842,10 @@ run_ucp_hello() {
 		mem_types_list+="cuda cuda-managed "
 	fi
 
-	for test_mode in -w -f -b -e
+	export UCX_KEEPALIVE_TIMEOUT=1s
+	export UCX_KEEPALIVE_NUM_EPS=10
+
+	for test_mode in -w -f -b -erecv -esend -ekeepalive
 	do
 		for mem_type in $mem_types_list
 		do
@@ -851,6 +854,9 @@ run_ucp_hello() {
 		done
 	done
 	rm -f ./ucp_hello_world
+
+	unset UCX_KEEPALIVE_TIMEOUT
+	unset UCX_KEEPALIVE_NUM_EPS
 }
 
 #
