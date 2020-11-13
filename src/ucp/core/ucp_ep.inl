@@ -145,7 +145,6 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 {
     ucs_assert(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_LISTENER));
     ucs_assert(!(ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
     return &ucp_ep_ext_gen(ep)->flush_state;
 }
@@ -215,8 +214,7 @@ static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
 {
     ucp_ep_flush_state_t *flush_state = &ucp_ep_ext_gen(ep)->flush_state;
 
-    ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                              UCP_EP_FLAG_LISTENER)));
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
                ((flush_state->send_sn == 0) &&
                 (flush_state->cmpl_sn == 0) &&

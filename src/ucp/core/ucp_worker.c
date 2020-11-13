@@ -1402,7 +1402,7 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
     ucp_rsc_index_t cmpt_index, cm_cmpt_index, i;
     ucs_status_t    status;
 
-    if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
+    if (ucp_worker_num_cm_cmpts(worker) == 0) {
         worker->cms = NULL;
         return UCS_OK;
     }

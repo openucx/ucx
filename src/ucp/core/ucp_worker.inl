@@ -184,15 +184,6 @@ ucp_worker_num_cm_cmpts(const ucp_worker_h worker)
 }
 
 /**
- * @return whether the worker should be using connection manager mode
- */
-static UCS_F_ALWAYS_INLINE int
-ucp_worker_sockaddr_is_cm_proto(const ucp_worker_h worker)
-{
-    return !!ucp_worker_num_cm_cmpts(worker);
-}
-
-/**
  * Check if interface with @a iface_attr supports point-to-point connections.
  *
  * @param [in]  iface_attr   iface attributes.
