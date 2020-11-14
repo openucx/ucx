@@ -329,7 +329,7 @@ UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,
 
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
-  { "mm",    { "posix", "sysv", "xpmem" } }, /* for backward compatibility */
+  { "mm",    { "posix", "sysv", "xpmem", NULL } }, /* for backward compatibility */
   { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", NULL } },
   { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", NULL } },
   { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
