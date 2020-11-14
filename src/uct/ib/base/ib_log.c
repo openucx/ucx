@@ -47,7 +47,7 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
 {
     char data[256];
     size_t total_len       = 0;
-    size_t total_valid_len = 0;;
+    size_t total_valid_len = 0;
     char *s    = buf;
     char *ends = buf + max;
     void *md   = data;

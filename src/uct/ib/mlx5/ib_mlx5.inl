@@ -285,10 +285,22 @@ uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
                          uint8_t opcode, uint8_t opmod, uint32_t qp_num,
                          uint8_t fm_ce_se, unsigned wqe_size)
 {
-    uint8_t ds;
+    uint8_t ds = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
+#if defined(__ARM_NEON)
+    uint8x16_t table = {1,               /* opmod */
+                        5,  4,           /* sw_pi in BE */
+                        2,               /* opcode */
+                        14, 13, 12,      /* QP num */
+                        8,               /* data size */
+                        16,              /* signature (set 0) */
+                        16, 16,          /* reserved (set 0) */
+                        0,               /* signal/fence_mode */
+                        16, 16, 16, 16}; /* immediate (set to 0)*/
+    uint32x4_t data = {(opcode << 16) | (opmod << 8) | (uint32_t)fm_ce_se,
+                       pi, ds, qp_num};
+#endif
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
-    ds = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
 #if defined(__SSE4_2__)
     *(__m128i *) ctrl = _mm_shuffle_epi8(
                     _mm_set_epi32(qp_num, ds, pi,
@@ -304,17 +316,6 @@ uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
                                  1           /* opmod */
                                  ));
 #elif defined(__ARM_NEON)
-    uint8x16_t table = {1,               /* opmod */
-                        5,  4,           /* sw_pi in BE */
-                        2,               /* opcode */
-                        14, 13, 12,      /* QP num */
-                        8,               /* data size */
-                        16,              /* signature (set 0) */
-                        16, 16,          /* reserved (set 0) */
-                        0,               /* signal/fence_mode */
-                        16, 16, 16, 16}; /* immediate (set to 0)*/
-    uint32x4_t data = {(opcode << 16) | (opmod << 8) | (uint32_t)fm_ce_se,
-                       pi, ds, qp_num};
     *(uint8x16_t *)ctrl = vqtbl1q_u8((uint8x16_t)data, table);
 #else
     ctrl->opmod_idx_opcode = (opcode << 24) | (htons(pi) << 8) | opmod;
@@ -329,10 +330,23 @@ uct_ib_mlx5_set_ctrl_seg_with_imm(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
                                   uint8_t opcode, uint8_t opmod, uint32_t qp_num,
                                   uint8_t fm_ce_se, unsigned wqe_size, uint32_t imm)
 {
-    uint8_t ds;
+    uint8_t ds = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
+#if defined(__ARM_NEON)
+    uint8x16_t table = {1,               /* opmod */
+                        5,  4,           /* sw_pi in BE */
+                        2,               /* opcode */
+                        14, 13, 12,      /* QP num */
+                        6,               /* data size */
+                        16,              /* signature (set 0) */
+                        16, 16,          /* reserved (set 0) */
+                        0,               /* signal/fence_mode */
+                        8, 9, 10, 11}; /* immediate (set to 0)*/
+    uint32x4_t data = {(opcode << 16) | (opmod << 8) | (uint32_t)fm_ce_se,
+                       (ds << 16) | pi, imm,  qp_num};
+#endif
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
-    ds = ucs_div_round_up(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
+    
 #if defined(__SSE4_2__)
     *(__m128i *) ctrl = _mm_shuffle_epi8(
                     _mm_set_epi32(qp_num, imm, (ds << 16) | pi,
@@ -348,17 +362,6 @@ uct_ib_mlx5_set_ctrl_seg_with_imm(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
                                  1             /* opmod */
                                  ));
 #elif defined(__ARM_NEON)
-    uint8x16_t table = {1,               /* opmod */
-                        5,  4,           /* sw_pi in BE */
-                        2,               /* opcode */
-                        14, 13, 12,      /* QP num */
-                        6,               /* data size */
-                        16,              /* signature (set 0) */
-                        16, 16,          /* reserved (set 0) */
-                        0,               /* signal/fence_mode */
-                        8, 9, 10, 11}; /* immediate (set to 0)*/
-    uint32x4_t data = {(opcode << 16) | (opmod << 8) | (uint32_t)fm_ce_se,
-                       (ds << 16) | pi, imm,  qp_num};
     *(uint8x16_t *)ctrl = vqtbl1q_u8((uint8x16_t)data, table);
 #else
     ctrl->opmod_idx_opcode = (opcode << 24) | (htons(pi) << 8) | opmod;

@@ -570,16 +570,14 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     size_t max_iov     = ucp_ep_config(ep)->tag.eager.max_iov;
     uct_iov_t *iov     = ucs_alloca(max_iov * sizeof(uct_iov_t));
     size_t iovcnt      = 0;
-    ucp_md_index_t md_index;
     ucp_dt_state_t dt_state;
     void *rndv_op;
 
-    md_index = ucp_ep_md_index(ep, req->send.lane);
 
     ucp_tag_offload_unexp_rndv_hdr_t rndv_hdr = {
         .ep_id    = ucp_send_request_get_ep_remote_id(req),
         .req_id   = ucp_send_request_get_id(req),
-        .md_index = md_index
+        .md_index = ucp_ep_md_index(ep, req->send.lane)
     };
 
     dt_state = req->send.state.dt;

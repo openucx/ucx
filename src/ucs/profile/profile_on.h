@@ -116,8 +116,8 @@ BEGIN_C_DECLS
     static UCS_F_ALWAYS_INLINE _ret_type _name##_inner(__VA_ARGS__); \
     \
     _ret_type _name(__VA_ARGS__) { \
-        UCS_PROFILE_SCOPE_BEGIN(); \
         _ret_type _ret = _name##_inner _arglist; \
+        UCS_PROFILE_SCOPE_BEGIN(); \
         UCS_PROFILE_SCOPE_END(#_name); \
         return _ret; \
     } \

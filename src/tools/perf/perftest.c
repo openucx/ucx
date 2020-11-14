@@ -1433,8 +1433,6 @@ static ucx_perf_rte_t ext_rte = {
 
 static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
 {
-    ucs_trace_func("");
-
 #if defined (HAVE_MPI)
     static ucx_perf_rte_t mpi_rte = {
         .group_size    = mpi_rte_group_size,
@@ -1447,6 +1445,8 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     };
 
     int size, rank;
+
+    ucs_trace_func("");
 
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     if (size != 2) {
@@ -1463,6 +1463,8 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->params.super.rte        = &mpi_rte;
     ctx->params.super.report_arg = ctx;
 #elif defined (HAVE_RTE)
+    ucs_trace_func("");
+    
     ctx->params.rte_group         = NULL;
     ctx->params.rte               = &mpi_rte;
     ctx->params.report_arg        = ctx;

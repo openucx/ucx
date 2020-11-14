@@ -346,7 +346,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   void *arg)
 {
     uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_rc_ep_t *ep        = ucs_container_of(group, uct_rc_ep_t, arb_group);;
+    uct_rc_ep_t *ep        = ucs_container_of(group, uct_rc_ep_t, arb_group);
     uct_rc_iface_t *iface  = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
     ucs_status_t status;
 
