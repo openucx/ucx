@@ -141,6 +141,12 @@ void test_md::free_memory(void *address, ucs_memory_type_t mem_type)
     mem_buffer::release(address, mem_type);
 }
 
+bool test_md::is_device_detected(ucs_memory_type_t mem_type)
+{
+    return (mem_type != UCS_MEMORY_TYPE_ROCM) &&
+           (mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED);
+}
+
 UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
                      !check_caps(UCT_MD_FLAG_ALLOC |
                                  UCT_MD_FLAG_RKEY_PTR)) {
@@ -325,7 +331,9 @@ UCS_TEST_P(test_md, mem_query) {
                                                mem_buf.size(), &mem_attr);
         ASSERT_UCS_OK(status);
         EXPECT_EQ(mem_type, mem_attr.mem_type);
-        EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
+        if (is_device_detected(mem_attr.mem_type)) {
+            EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
+        }
 
         char bdf_buf[32];
         UCS_TEST_MESSAGE << ucs_memory_type_names[mem_type] << ": "

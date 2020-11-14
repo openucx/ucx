@@ -42,8 +42,9 @@ protected:
     void check_memory(void *address, void *expect, size_t size,
                       ucs_memory_type_t mem_type);
     void free_memory(void *address, ucs_memory_type_t mem_type);
-
     void test_registration();
+    static bool is_device_detected(ucs_memory_type_t mem_type);
+    static void* alloc_thread(void *arg);
 
     uct_md_h md() const {
         return m_md;
@@ -52,9 +53,6 @@ protected:
     const uct_md_attr_t& md_attr() const {
         return m_md_attr;
     }
-
-
-    static void* alloc_thread(void *arg);
 
 private:
     ucs::handle<uct_md_config_t*> m_md_config;
