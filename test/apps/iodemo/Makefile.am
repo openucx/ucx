@@ -13,6 +13,7 @@ io_demo_CXXFLAGS = \
 	$(BASE_CXXFLAGS)
 
 io_demo_CPPFLAGS = $(BASE_CPPFLAGS)
+io_demo_LDFLAGS  = -ldl
 
 io_demo_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
