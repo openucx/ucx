@@ -116,6 +116,7 @@ static uct_md_ops_t md_ops = {
     .mkey_pack           = uct_rocm_gdr_mkey_pack,
     .mem_reg             = uct_rocm_gdr_mem_reg,
     .mem_dereg           = uct_rocm_gdr_mem_dereg,
+    .mem_query           = ucs_empty_function_return_unsupported,
     .detect_memory_type  = ucs_empty_function_return_unsupported,
 };
 
