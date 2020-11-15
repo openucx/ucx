@@ -2150,6 +2150,14 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     return 1;
 }
 
+static void ucp_worker_put_flush_req(ucp_request_t *req)
+{
+    ucp_worker_h worker = req->send.discard_uct_ep.ucp_worker;
+
+    ucp_worker_flush_ops_count_dec(worker);
+    ucp_request_put(req);
+}
+
 static void
 ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 {
@@ -2160,6 +2168,12 @@ ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 
     ucp_trace_req(req, "discard_uct_ep flush completion status %s",
                   ucs_status_string(self->status));
+
+    if (self->status == UCS_ERR_CANCELED) {
+        /* we run from EP cleanup - just release request */
+        ucp_worker_put_flush_req(req);
+        return;
+    }
 
     /* don't destroy UCT EP from the flush completion callback, schedule
      * a progress callback on the main thread to destroy UCT EP */
@@ -2221,18 +2235,24 @@ static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
 static int ucp_worker_discard_remove_filter(const ucs_callbackq_elem_t *elem,
                                             void *arg)
 {
-    return (elem->cb == ucp_worker_discard_uct_ep_progress) ||
-           (elem->cb == ucp_worker_discard_uct_ep_destroy_progress);
+    if ((elem->cb != ucp_worker_discard_uct_ep_destroy_progress) &&
+        (elem->cb != ucp_worker_discard_uct_ep_progress)) {
+        return 0;
+    }
+
+    ucp_worker_put_flush_req((ucp_request_t*)elem->arg);
+    return 1;
 }
 
 static void ucp_worker_discarded_uct_eps_cleanup(ucp_worker_h worker)
 {
     uct_ep_h uct_ep;
-    ucp_request_t *req;
 
-    kh_foreach(&worker->discard_uct_ep_hash, uct_ep, req, {
-        ucp_worker_flush_ops_count_dec(worker);
-        ucp_request_put(req);
+    /* if ep owns the discard operation ep_destroy will cancel it.
+     * we are after uct_worker_progress_unregister_safe and
+     * ucp_worker_discard_remove_filter, so either we canceled req
+     * or it was finished and removed from kh before */
+    kh_foreach_key(&worker->discard_uct_ep_hash, uct_ep, {
         uct_ep_destroy(uct_ep);
     })
 }

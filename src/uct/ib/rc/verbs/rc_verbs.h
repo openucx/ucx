@@ -153,9 +153,6 @@ void uct_rc_verbs_ep_post_check(uct_ep_h tl_ep);
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_pending_req_t *req);
 
-ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
-                                            ucs_status_t status);
-
 ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,

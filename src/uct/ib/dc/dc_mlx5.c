@@ -1402,13 +1402,14 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
     ucs_status_t status;
     ucs_log_level_t log_lvl;
 
-    status  = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
-                                           ep_status);
-    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
-
-    if (ep_status != UCS_ERR_CANCELED) {
-        uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
-                                        txwq, log_lvl);
+    if (ep_status == UCS_ERR_CANCELED) {
+        return;
     }
+
+    status  = uct_iface_handle_ep_err(&ib_iface->super.super,
+                                      &ep->super.super, ep_status);
+    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
+    uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
+                                    txwq, log_lvl);
 }
 

@@ -17,7 +17,7 @@
 static unsigned uct_tcp_ep_progress_data_tx(void *arg);
 static unsigned uct_tcp_ep_progress_data_rx(void *arg);
 static unsigned uct_tcp_ep_progress_magic_number_rx(void *arg);
-static unsigned uct_tcp_ep_failed_progress(void *arg);
+static unsigned uct_tcp_ep_destroy_progress(void *arg);
 
 const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     [UCT_TCP_EP_CONN_STATE_CLOSED] = {
@@ -137,8 +137,6 @@ int uct_tcp_ep_is_self(const uct_tcp_ep_t *ep)
 
 static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
 {
-    uct_tcp_ep_addr_cleanup(&ep->peer_addr);
-
     if (ep->tx.buf != NULL) {
         uct_tcp_ep_ctx_reset(&ep->tx);
     }
@@ -284,7 +282,7 @@ uct_tcp_ep_failed_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
     uct_tcp_ep_t *ep = (uct_tcp_ep_t*)arg;
 
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_FAILED);
-    return (elem->cb == uct_tcp_ep_failed_progress) && (elem->arg == ep);
+    return (elem->cb == uct_tcp_ep_destroy_progress) && (elem->arg == ep);
 }
 
 static int
@@ -329,8 +327,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
     ucs_callbackq_remove_if(&iface->super.worker->super.progress_q,
                             uct_tcp_ep_progress_rx_remove_filter, self);
 
-    uct_tcp_cm_change_conn_state(self, UCT_TCP_EP_CONN_STATE_CLOSED);
     uct_tcp_ep_cleanup(self);
+    uct_tcp_cm_change_conn_state(self, UCT_TCP_EP_CONN_STATE_CLOSED);
+    uct_tcp_ep_addr_cleanup(&self->peer_addr);
 
     ucs_debug("tcp_ep %p: destroyed on iface %p", self, iface);
 }
@@ -364,22 +363,15 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
     }
 }
 
-static unsigned uct_tcp_ep_failed_progress(void *arg)
+static unsigned uct_tcp_ep_destroy_progress(void *arg)
 {
     uct_tcp_ep_t *ep = (uct_tcp_ep_t*)arg;
 
+    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX));
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_FAILED);
     /* Reset FAILED flag to not remove callback in the EP destructor */
     ep->flags &= ~UCT_TCP_EP_FLAG_FAILED;
-
-    if (ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) {
-        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
-        uct_iface_handle_ep_err(ep->super.super.iface, &ep->super.super,
-                                UCS_ERR_ENDPOINT_TIMEOUT);
-    } else {
-        uct_tcp_ep_destroy_internal(&ep->super.super);
-    }
-
+    uct_tcp_ep_destroy_internal(&ep->super.super);
     return 1;
 }
 
@@ -399,10 +391,17 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
     }
 
     uct_tcp_ep_mod_events(ep, 0, ep->events);
-    ep->flags |= UCT_TCP_EP_FLAG_FAILED;
-    uct_worker_progress_register_safe(&iface->super.worker->super,
-                                      uct_tcp_ep_failed_progress, ep,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+
+    if (ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) {
+        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
+        uct_iface_handle_ep_err(ep->super.super.iface, &ep->super.super,
+                                UCS_ERR_ENDPOINT_TIMEOUT);
+    } else {
+        ep->flags |= UCT_TCP_EP_FLAG_FAILED;
+        uct_worker_progress_register_safe(&iface->super.worker->super,
+                                          uct_tcp_ep_destroy_progress, ep,
+                                          UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+    }
 }
 
 static inline void uct_tcp_ep_ctx_move(uct_tcp_ep_ctx_t *to_ctx,

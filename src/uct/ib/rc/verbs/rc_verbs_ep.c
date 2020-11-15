@@ -417,12 +417,6 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     ucs_status_t status;
 
-    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        uct_ep_pending_purge(&ep->super.super.super, NULL, 0);
-        uct_rc_verbs_ep_handle_failure(ep, UCS_ERR_CANCELED);
-        return UCS_OK;
-    }
-
     status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, flags);
     if (status != UCS_INPROGRESS) {
         return status;
@@ -431,6 +425,13 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
         UCT_RC_CHECK_RES(&iface->super, &ep->super);
         uct_rc_verbs_ep_post_flush(ep, IBV_SEND_SIGNALED);
+    }
+
+    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        status = uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
@@ -492,21 +493,6 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
     uct_rc_verbs_ep_post_send(iface, ep, &fc_wr, flags, INT_MAX);
     return UCS_OK;
-}
-
-ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
-                                            ucs_status_t status)
-{
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                           uct_rc_iface_t);
-
-    iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
-    /* Reset CI to prevent cq_available overrun on ep_destroy */
-    ep->txcnt.ci = ep->txcnt.pi;
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, ep->txcnt.pi, 0);
-
-    return uct_iface_handle_ep_err(&iface->super.super.super,
-                                   &ep->super.super.super, status);
 }
 
 ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
@@ -642,7 +628,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     ucs_assert_always(ep_cleanup_ctx != NULL);
     ep_cleanup_ctx->qp = self->qp;
 
-    /* TODO should be removed by flush */
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
                                   UCS_ERR_CANCELED, self->txcnt.pi, 1);
     /* NOTE: usually, ci == pi here, but if user calls

@@ -94,7 +94,7 @@ ucs_status_t test_uct_peer_failure::err_cb(void *arg, uct_ep_h ep,
         return UCS_OK;
     default:
         EXPECT_TRUE(false) << "unexpected error status: "
-            << ucs_status_string(status);
+                           << ucs_status_string(status);
         return status;
     }
 }
@@ -252,8 +252,6 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
                      !check_caps(m_required_caps))
 {
-    ucs_status_t status;
-
     set_am_handlers();
 
     send_recv_am(0);
@@ -265,6 +263,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
 
     {
         scoped_log_handler slh(wrap_errors_logger);
+        ucs_status_t status;
 
         fill_resources(false, loop_end_limit);
         kill_receiver();
@@ -354,32 +353,6 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send_after,
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure)
-
-class test_uct_peer_failure_cb : public test_uct_peer_failure {
-public:
-    virtual uct_error_handler_t get_err_handler() const {
-        return err_cb_ep_destroy;
-    }
-
-    static ucs_status_t err_cb_ep_destroy(void *arg, uct_ep_h ep, ucs_status_t status) {
-        test_uct_peer_failure_cb *self(reinterpret_cast<test_uct_peer_failure_cb*>(arg));
-        EXPECT_EQ(self->ep0(), ep);
-        self->m_sender->destroy_ep(0);
-        return UCS_OK;
-    }
-};
-
-UCS_TEST_SKIP_COND_P(test_uct_peer_failure_cb, desproy_ep_cb,
-                     !check_caps(UCT_IFACE_FLAG_PUT_SHORT |
-                                 m_required_caps))
-{
-    scoped_log_handler slh(wrap_errors_logger);
-    kill_receiver();
-    EXPECT_EQ(uct_ep_put_short(ep0(), NULL, 0, 0, 0), UCS_OK);
-    flush();
-}
-
-UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_cb)
 
 class test_uct_peer_failure_multiple : public test_uct_peer_failure
 {

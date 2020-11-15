@@ -311,16 +311,10 @@ ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
 
     if (base_iface->err_handler) {
         return base_iface->err_handler(base_iface->err_handler_arg, ep, status);
-    } else if (status == UCS_ERR_CANCELED) {
-        ucs_debug("error %s was suppressed for ep %p",
-                  ucs_status_string(UCS_ERR_CANCELED), ep);
-        /* Suppress this since the cancellation is initiated by user. */
-        status = UCS_OK;
-    } else {
-        ucs_debug("error %s was not handled for ep %p",
-                  ucs_status_string(status), ep);
     }
 
+    ucs_assert(status != UCS_ERR_CANCELED);
+    ucs_debug("error %s was not handled for ep %p", ucs_status_string(status), ep);
     return status;
 }
 
