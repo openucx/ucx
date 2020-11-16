@@ -59,6 +59,24 @@ static ucs_memory_type_t test_mem_type = UCS_MEMORY_TYPE_HOST;
 
 void print_common_help(void);
 
+void mem_type_init_ctx(int ordinal)
+{
+    switch (test_mem_type) {
+    case UCS_MEMORY_TYPE_HOST:
+        /* Do nothing */
+        break;
+#ifdef HAVE_CUDA
+    case UCS_MEMORY_TYPE_CUDA:
+    case UCS_MEMORY_TYPE_CUDA_MANAGED:
+        CUDA_FUNC(cudaSetDevice(ordinal));
+        break;
+#endif
+    default:
+        fprintf(stderr, "Unsupported memory type: %d\n", test_mem_type);
+        break;
+    }
+}
+
 void *mem_type_malloc(size_t length)
 {
     void *ptr;
