@@ -50,6 +50,21 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      ucs_offsetof(uct_ib_mlx5_iface_config_t, mmio_mode),
      UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_mmio_modes)},
 
+    {"AR_ENABLE", "try",
+     "Enable Adaptive Routing (out of order) feature on SL that supports it.\n"
+     "SLs are selected as follows:\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+     "+                                         + UCX_IB_AR=yes         + UCX_IB_AR=no          + UCX_IB_AR=try         +\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+     "+ UCX_IB_SL=auto + AR enabled on some SLs + Use 1st SL with AR    + Use 1st SL without AR + Use 1st SL with AR    +\n"
+     "+                + AR enabled on all SLs  + Use SL=0              + Failure               + Use SL=0              +\n"
+     "+                + AR disabled on all SLs + Failure               + Use SL=0              + Use SL=0              +\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+     "+ UCX_IB_SL=<sl> + AR enabled on <sl>     + Use SL=<sl>           + Failure               + Use SL=<sl>           +\n"
+     "+                + AR disabled on <sl>    + Failure               + Use SL=<sl>           + Use SL=<sl>           +\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable), UCS_CONFIG_TYPE_TERNARY},
+
     {NULL}
 };
 
@@ -699,4 +714,113 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
     }
+}
+
+/* Keep the function as a separate to test SL selection */
+ucs_status_t
+uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
+                      ucs_ternary_value_t ar_enable,
+                      uint16_t hw_sl_mask, int have_sl_mask_cap,
+                      const char *dev_name, uint8_t port_num,
+                      uint8_t *sl_p)
+{
+    ucs_status_t status = UCS_OK;
+    const char UCS_V_UNUSED *sl_ar_support_str;
+    uint16_t sl_allow_mask, sls_with_ar, sls_without_ar;
+    ucs_string_buffer_t sls_with_ar_str, sls_without_ar_str;
+    char sl_str[8];
+    char ar_enable_str[8];
+    uint8_t sl;
+
+    ucs_assert(have_sl_mask_cap || (hw_sl_mask == 0));
+
+    /* which SLs are allowed by user config */
+    sl_allow_mask = (ib_config->sl == UCS_ULUNITS_AUTO) ?
+                    UCS_MASK(UCT_IB_SL_MAX) : UCS_BIT(ib_config->sl);
+
+    if (have_sl_mask_cap) {
+        sls_with_ar    = sl_allow_mask & hw_sl_mask;
+        sls_without_ar = sl_allow_mask & ~hw_sl_mask;
+    } else {
+        sls_with_ar    =
+        sls_without_ar = 0;
+    }
+
+    ucs_string_buffer_init(&sls_with_ar_str);
+    ucs_string_buffer_init(&sls_without_ar_str);
+
+    if (((ar_enable == UCS_YES) || (ar_enable == UCS_TRY)) &&
+        (sls_with_ar != 0)) {
+        /* have SLs with AR, and AR is YES/TRY */
+        sl                = ucs_ffs64(sls_with_ar);
+        sl_ar_support_str = "yes";
+    } else if (((ar_enable == UCS_NO) || (ar_enable == UCS_TRY)) &&
+               (sls_without_ar != 0)) {
+        /* have SLs without AR, and AR is NO/TRY */
+        sl                = ucs_ffs64(sls_without_ar);
+        sl_ar_support_str = "no";
+    } else if (ar_enable == UCS_TRY) {
+        ucs_assert(!have_sl_mask_cap);
+        sl                = ucs_ffs64(sl_allow_mask);
+        sl_ar_support_str = "unknown"; /* we don't know which SLs support AR */
+    } else {
+        sl_ar_support_str = (ar_enable == UCS_YES) ? "with" : "without";
+        goto err;
+    }
+
+    *sl_p = sl;
+    ucs_debug("SL=%u (AR support - %s) was selected on %s:%u,"
+              " SLs with AR support = { %s }, SLs without AR support = { %s }",
+              sl, sl_ar_support_str, dev_name, port_num,
+              ucs_mask_str(sls_with_ar, &sls_with_ar_str),
+              ucs_mask_str(sls_without_ar, &sls_without_ar_str));
+out_str_buf_clean:
+    ucs_string_buffer_cleanup(&sls_with_ar_str);
+    ucs_string_buffer_cleanup(&sls_without_ar_str);
+    return status;
+
+err:
+    ucs_assert(ar_enable != UCS_TRY);
+    ucs_config_sprintf_ulunits(sl_str, sizeof(sl_str), &ib_config->sl, NULL);
+    ucs_config_sprintf_ternary(ar_enable_str, sizeof(ar_enable_str), &ar_enable,
+                               NULL);
+    ucs_error("AR=%s was requested for SL=%s, but %s %s AR on %s:%u,"
+              " SLs with AR support = { %s }, SLs without AR support = { %s }",
+              ar_enable_str, sl_str,
+              have_sl_mask_cap ? "could not select SL" :
+              "could not detect AR mask for SLs. Please, set SL manually",
+              sl_ar_support_str, dev_name, port_num,
+              ucs_mask_str(sls_with_ar, &sls_with_ar_str),
+              ucs_mask_str(sls_without_ar, &sls_without_ar_str));
+    status = UCS_ERR_UNSUPPORTED;
+    goto out_str_buf_clean;
+}
+
+ucs_status_t
+uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
+                            const uct_ib_mlx5_iface_config_t *ib_mlx5_config,
+                            const uct_ib_iface_config_t *ib_config)
+{
+#if HAVE_DEVX
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
+#endif
+    uint16_t ooo_sl_mask = 0;
+    ucs_status_t status;
+
+    ucs_assert(iface->config.sl == UCT_IB_SL_INVALID);
+
+#if HAVE_DEVX
+    status = uct_ib_mlx5_devx_query_ooo_sl_mask(md, iface->config.port_num,
+                                                &ooo_sl_mask);
+    if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+        return status;
+    }
+#else
+    status = UCS_ERR_UNSUPPORTED;
+#endif
+
+    return uct_ib_mlx5_select_sl(ib_config, ib_mlx5_config->ar_enable,
+                                 ooo_sl_mask, status == UCS_OK,
+                                 UCT_IB_IFACE_ARG(iface),
+                                 &iface->config.sl);
 }

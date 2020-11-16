@@ -5,6 +5,12 @@
 */
 
 #include <uct/ib/test_ib.h>
+#ifdef HAVE_MLX5_HW
+extern "C" {
+#include <uct/ib/mlx5/ib_mlx5.h>
+}
+#endif
+
 
 test_uct_ib::test_uct_ib() : m_e1(NULL), m_e2(NULL) { }
 
@@ -369,6 +375,7 @@ UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "GID_INDEX=1") {
 
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_gid_idx);
 
+
 class test_uct_ib_utils : public ucs::test {
 };
 
@@ -453,6 +460,181 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
     rnr_val = uct_ib_to_rnr_fabric_time(1.);
     EXPECT_EQ(0, rnr_val);
 }
+
+
+#if HAVE_DEVX
+class test_uct_ib_sl_utils : public test_uct_ib_utils {
+protected:
+    ucs_status_t ib_select_sl(ucs_ternary_value_t ar_enable,
+                              uint64_t test_ooo_sl_mask,
+                              const uct_ib_iface_config_t &config,
+                              uint8_t &sl) const {
+        uint16_t ooo_sl_mask = (test_ooo_sl_mask !=
+                                m_ooo_sl_mask_not_detected) ?
+                               static_cast<uint16_t>(test_ooo_sl_mask) : 0;
+        return uct_ib_mlx5_select_sl(&config, ar_enable, ooo_sl_mask,
+                                     (test_ooo_sl_mask !=
+                                      m_ooo_sl_mask_not_detected),
+                                     "mlx5_0", 1, &sl);
+    }
+
+    ucs_status_t select_sl_ok(ucs_ternary_value_t ar_enable,
+                              unsigned long config_sl,
+                              uint64_t ooo_sl_mask,
+                              const uct_ib_iface_config_t &config) const {
+        ucs_status_t status;
+        uint8_t sl;
+
+        status = ib_select_sl(ar_enable, ooo_sl_mask, config, sl); 
+        if ((ooo_sl_mask == 0) || (ar_enable == UCS_NO)) {
+            if (config_sl == UCS_ULUNITS_AUTO) {
+                if (sl != 0) {
+                    return status;
+                }
+                EXPECT_EQ(0 /* the default SL value */, sl);
+            } else {
+                EXPECT_EQ(static_cast<uint8_t>(config_sl), sl);
+            }
+        } else if (config_sl == UCS_ULUNITS_AUTO) {
+            EXPECT_EQ(ucs_ffs64_safe(ooo_sl_mask), sl);
+        } else {
+            EXPECT_EQ(static_cast<uint8_t>(config_sl), sl);
+        }
+
+        return status;
+    }
+
+    ucs_status_t select_sl_nok(ucs_ternary_value_t ar_enable,
+                               uint64_t ooo_sl_mask,
+                               const uct_ib_iface_config_t &config) const {
+        scoped_log_handler slh(wrap_errors_logger);
+        uint8_t sl;
+
+        return ib_select_sl(ar_enable, ooo_sl_mask, config, sl);
+    }
+
+    void select_sl(ucs_ternary_value_t ar_enable, unsigned long config_sl,
+                   uint64_t ooo_sl_mask, ucs_status_t exp_status) const {
+        uct_ib_iface_config_t config = {};
+        ucs_status_t status;
+
+        config.sl = config_sl;
+
+        if (exp_status == UCS_OK) {
+            status = select_sl_ok(ar_enable, config_sl, ooo_sl_mask, config);
+        } else {
+            status = select_sl_nok(ar_enable, ooo_sl_mask, config);
+        }
+        EXPECT_EQ(exp_status, status);
+    }
+
+protected:
+    const static uint64_t m_ooo_sl_mask_not_detected;
+};
+
+const uint64_t test_uct_ib_sl_utils::m_ooo_sl_mask_not_detected =
+                                     std::numeric_limits<uint64_t>::max();
+
+
+UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
+    const ucs_status_t err_status = UCS_ERR_UNSUPPORTED;
+
+    for (unsigned i = 0; i < static_cast<unsigned>(UCS_TERNARY_LAST); i++) {
+        ucs_ternary_value_t ar_enable = static_cast<ucs_ternary_value_t>(i);
+
+        /* select the default SL, with empty OOO SL mask */
+        select_sl(ar_enable, UCS_ULUNITS_AUTO, 0,
+                  (ar_enable == UCS_YES) ? err_status : UCS_OK);
+
+        /* select the default SL, without OOO SL mask (not detected) */
+        select_sl(ar_enable, UCS_ULUNITS_AUTO, m_ooo_sl_mask_not_detected,
+                  (ar_enable != UCS_TRY) ? err_status : UCS_OK);
+
+        /* select the default SL, with OOO SL mask { 4 } */
+        select_sl(ar_enable, UCS_ULUNITS_AUTO, UCS_BIT(4), UCS_OK);
+
+        /* select SL=8, with empty OOO SL mask */
+        select_sl(ar_enable, 8, 0,
+                  (ar_enable == UCS_YES) ? err_status : UCS_OK);
+
+        /* select SL=8, without OOO SL mask (not detected) */
+        select_sl(ar_enable, 8, m_ooo_sl_mask_not_detected,
+                  (ar_enable != UCS_TRY) ? err_status : UCS_OK);
+
+        /* select SL=8, with OOO SL mask { 8 } */
+        select_sl(ar_enable, 8, UCS_BIT(8),
+                  (ar_enable == UCS_NO) ? err_status : UCS_OK);
+
+        /* select SL=8, with OOO SL mask { 0 } */
+        select_sl(ar_enable, 8, UCS_BIT(0),
+                  (ar_enable == UCS_YES) ? err_status : UCS_OK);
+
+        /* select SL=8, with OOO SL mask { 0, 4, 8 } */
+        select_sl(ar_enable, 8, UCS_BIT(0) | UCS_BIT(4) | UCS_BIT(8),
+                  (ar_enable == UCS_NO) ? err_status : UCS_OK);
+
+        /* select SL=8, with OOO SL mask { 0, 8, 11 } */
+        select_sl(ar_enable, 8, UCS_BIT(0) | UCS_BIT(4) | UCS_BIT(11),
+                  (ar_enable == UCS_YES) ? err_status : UCS_OK);
+    }
+}
+
+UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
+    int num_devices;
+    struct ibv_device **ib_device_list;
+    ucs_status_t status;
+
+    ib_device_list = ibv_get_device_list(&num_devices);
+    ASSERT_TRUE(ib_device_list != NULL);
+
+    for (int i = 0; i < num_devices; ++i) {
+        const char *dev_name = ibv_get_device_name(ib_device_list[i]);
+        uct_md_config_t *md_config;
+        uct_ib_mlx5_md_t *ib_mlx5_md;
+        uct_ib_device_t *dev;
+        uct_md_h md;
+
+        status = uct_md_config_read(&uct_ib_component, NULL, NULL, &md_config);
+        EXPECT_UCS_OK(status);
+        if (status != UCS_OK) {
+            continue;
+        }
+
+        status = uct_ib_md_open(&uct_ib_component, dev_name, md_config, &md);
+        EXPECT_UCS_OK(status);
+        if (status != UCS_OK) {
+            goto out_md_config_release;
+        }
+
+        ib_mlx5_md = ucs_derived_of(md, uct_ib_mlx5_md_t);
+        dev        = &ib_mlx5_md->super.dev;
+
+        for (uint8_t port_num = dev->first_port;
+             port_num <= dev->num_ports; ++port_num) {
+            uint16_t ooo_sl_mask = 0;
+            ucs_string_buffer_t strb;
+
+            status = uct_ib_mlx5_devx_query_ooo_sl_mask(ib_mlx5_md, port_num,
+                                                        &ooo_sl_mask);
+            EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_UNSUPPORTED));
+            if ((status != UCS_OK) && (status != UCS_ERR_UNSUPPORTED)) {
+                continue;
+            }
+
+            ucs_string_buffer_init(&strb);
+            UCS_TEST_MESSAGE << "OOO SL mask for " << dev_name << " - { "
+                             << ucs_mask_str(ooo_sl_mask, &strb) << " }";
+            ucs_string_buffer_cleanup(&strb);
+        }
+
+        uct_ib_md_close(md);
+out_md_config_release:
+        uct_config_release(md_config);
+    }
+
+    ibv_free_device_list(ib_device_list);
+}
+#endif
 
 
 class test_uct_event_ib : public test_uct_ib {

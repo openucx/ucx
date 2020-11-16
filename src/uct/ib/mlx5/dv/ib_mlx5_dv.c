@@ -264,6 +264,41 @@ void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
     uct_ib_mlx5_put_dbrec(qp->devx.dbrec);
     uct_ib_mlx5_md_buf_free(md, qp->devx.wq_buf, &qp->devx.mem);
 }
+
+ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
+                                                uint8_t port_num,
+                                                uint16_t *ooo_sl_mask_p)
+{
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_vport_context_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_vport_context_out)] = {};
+    void *ctx;
+    int ret;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    UCT_IB_MLX5DV_SET(query_hca_vport_context_in, in, opcode,
+                      UCT_IB_MLX5_CMD_OP_QUERY_HCA_VPORT_CONTEXT);
+    UCT_IB_MLX5DV_SET(query_hca_vport_context_in, in, port_num, port_num);
+
+    ret = mlx5dv_devx_general_cmd(md->super.dev.ibv_context, in, sizeof(in),
+                                  out, sizeof(out));
+    if (ret != 0) {
+        ucs_error("mlx5dv_devx_general_cmd(QUERY_HCA_VPORT_CONTEXT) failed,"
+                  " syndrome %x: %m",
+                  UCT_IB_MLX5DV_GET(query_hca_vport_context_out, out,
+                                    syndrome));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ctx = UCT_IB_MLX5DV_ADDR_OF(query_hca_vport_context_out, out,
+                                hca_vport_context);
+
+    *ooo_sl_mask_p = UCT_IB_MLX5DV_GET(hca_vport_context, ctx, ooo_sl_mask);
+
+    return UCS_OK;
+}
 #endif
 
 ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)

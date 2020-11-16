@@ -335,3 +335,22 @@ ssize_t ucs_path_calc_distance(const char *path1, const char *path2)
 
     return distance;
 }
+
+const char* ucs_mask_str(uint64_t mask, ucs_string_buffer_t *strb)
+{
+    uint8_t bit;
+
+    if (mask == 0) {
+        ucs_string_buffer_appendf(strb, "<none>");
+        goto out;
+    }
+
+    ucs_for_each_bit(bit, mask) {
+        ucs_string_buffer_appendf(strb, "%u, ", bit);
+    }
+
+    ucs_string_buffer_rtrim(strb, ", ");
+
+out:
+    return ucs_string_buffer_cstr(strb);
+}

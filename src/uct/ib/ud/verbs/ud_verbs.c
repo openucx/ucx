@@ -624,18 +624,20 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    uct_ud_iface_config_t *config = ucs_derived_of(tl_config,
-                                                   uct_ud_iface_config_t);
+    uct_ud_iface_config_t *config      = ucs_derived_of(tl_config,
+                                                        uct_ud_iface_config_t);
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
 
     ucs_trace_func("");
 
-    init_attr.cq_len[UCT_IB_DIR_TX]   = config->super.tx.queue_len;
-    init_attr.cq_len[UCT_IB_DIR_RX]   = config->super.rx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.rx.queue_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, md,
                               worker, params, config, &init_attr);
+
+    self->super.super.config.sl       = uct_ib_iface_config_select_sl(&config->super);
 
     memset(&self->tx.wr_inl, 0, sizeof(self->tx.wr_inl));
     self->tx.wr_inl.opcode            = IBV_WR_SEND;

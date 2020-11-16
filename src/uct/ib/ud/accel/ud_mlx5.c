@@ -762,6 +762,13 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     self->super.config.max_inline = uct_ud_mlx5_max_inline();
 
+    status = uct_ib_mlx5_iface_select_sl(&self->super.super,
+                                         &config->mlx5_common,
+                                         &config->super.super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX], &self->cq[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         return status;

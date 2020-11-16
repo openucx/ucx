@@ -148,9 +148,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Force interface to use global routing.",
    ucs_offsetof(uct_ib_iface_config_t, is_global), UCS_CONFIG_TYPE_BOOL},
 
-  {"SL", "0",
-   "IB Service Level / RoCEv2 Ethernet Priority.\n",
-   ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_UINT},
+  {"SL", "auto",
+   "InfiniBand: Service level. 'auto' will select a value matching UCX_IB_AR configuration.\n"
+   "RoCEv2: Ethernet Priority. 'auto' will select 0 by default.",
+   ucs_offsetof(uct_ib_iface_config_t, sl), UCS_CONFIG_TYPE_ULUNITS},
 
   {"TRAFFIC_CLASS", "auto",
    "IB Traffic Class / RoCEv2 Differentiated Services Code Point (DSCP).\n"
@@ -645,6 +646,8 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
     char buf[128];
 
     memset(ah_attr, 0, sizeof(*ah_attr));
+
+    ucs_assert(iface->config.sl != UCT_IB_SL_INVALID);
 
     ah_attr->sl                = iface->config.sl;
     ah_attr->port_num          = iface->config.port_num;
@@ -1173,6 +1176,13 @@ static void uct_ib_iface_set_path_mtu(uct_ib_iface_t *iface,
     }
 }
 
+uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config)
+{
+    ucs_assert((ib_config->sl <= UCT_IB_SL_MAX) ||
+               (ib_config->sl == UCS_ULUNITS_AUTO));
+    return (ib_config->sl == UCS_ULUNITS_AUTO) ? 0 : (uint8_t)ib_config->sl;
+}
+
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_ib_iface_config_t *config,
@@ -1209,7 +1219,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
                                             dev->stats)
                               UCS_STATS_ARG(params->mode.device.dev_name));
 
-    status = uct_ib_device_find_port(dev, params->mode.device.dev_name, &port_num);
+    status = uct_ib_device_find_port(dev, params->mode.device.dev_name,
+                                     &port_num);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1232,7 +1243,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
                                               config->rx.queue_len / 4);
     self->config.port_num           = port_num;
-    self->config.sl                 = config->sl;
+    self->config.sl                 = UCT_IB_SL_INVALID;
     self->config.hop_limit          = config->hop_limit;
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.enable_res_domain  = config->enable_res_domain;

@@ -362,9 +362,9 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
                                               const uct_iface_params_t *params,
                                               uct_ib_iface_init_attr_t *init_attr)
 {
-    uct_ib_mlx5_md_t *md              = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
 #if IBV_HW_TM
-    uct_ib_device_t UCS_V_UNUSED *dev = &md->super.dev;
+    uct_ib_device_t *dev = &md->super.dev;
     struct ibv_tmh tmh;
     int mtu;
     int tm_params;
@@ -593,6 +593,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
 
     if (!UCT_RC_MLX5_MP_ENABLED(self)) {
         self->tm.am_desc.offset = self->super.super.config.rx_headroom_offset;
+    }
+
+    status = uct_ib_mlx5_iface_select_sl(&self->super.super,
+                                         &mlx5_config->super,
+                                         &rc_config->super);
+    if (status != UCS_OK) {
+        return status;
     }
 
     status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_TX],
