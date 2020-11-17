@@ -84,7 +84,31 @@ jobs:
                   -i 0 \
                   -w 16 \
                   -t 10
-        displayName: Launch with run_io_demo.sh
+        displayName: Launch with run_io_demo.sh (tag)
+        timeoutInMinutes: 2
+
+      - bash: |
+          set -eEx
+          # set UCX environment variables
+          export UCX_SOCKADDR_CM_ENABLE=y
+          # TODO get hostname of 'ucx-roce-client' SSH service endpoint, and run on it
+          $(workspace)/../test/apps/iodemo/run_io_demo.sh \
+              -H swx-rdmz-ucx-roce-01,swx-rdmz-ucx-roce-02 \
+              --tasks-per-node 1 \
+              --duration 60 \
+              -v \
+              --num-clients 1 \
+              --num-servers 1 \
+              --map-by slot \
+              $(workspace)/../test/apps/iodemo/io_demo \
+                  -d 512:524288 \
+                  -o read,write \
+                  -i 0 \
+                  -w 16 \
+                  -t 10 \
+                  -q \
+                  -a
+        displayName: Launch with run_io_demo.sh (am)
         timeoutInMinutes: 2
 
       - bash: |
