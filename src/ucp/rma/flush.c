@@ -40,6 +40,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
     ucs_status_t status;
     uct_ep_h uct_ep;
     int diff;
+    ucp_lane_map_t destroyed_lanes;
 
     /* If the number of lanes changed since flush operation was submitted, adjust
      * the number of expected completions */
@@ -54,10 +55,24 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                           ep, diff);
             req->send.state.uct_comp.count += diff;
         } else {
-            /* If we have less lanes, it means we are in error flow and
-             * ucp_worker_set_ep_failed() was completed, so we should have
-             * completed the flush on all lanes.
+            /* If we have less lanes, it means we are in error flow:
+             * - if count == 0, we have completed the flush on all lanes
+             * - otherwise, flush progress was re-scheduled from flush progress
+             *   pending right after ucp_worker_iface_err_handle_progress(),
+             *   so remove destroyed/failed lanes from started_lanes and count
+             *   them completed.
              */
+            ucs_assert(ep->flags & UCP_EP_FLAG_FAILED);
+            if (req->send.state.uct_comp.count > 0) {
+                destroyed_lanes = req->send.flush.started_lanes & ~all_lanes;
+
+                ucs_debug("req %p: lanes 0x%x were destroyed so reducing comp "
+                          "count by %d", req, destroyed_lanes,
+                          ucs_popcount(destroyed_lanes));
+                req->send.flush.started_lanes  &= ~destroyed_lanes;
+                req->send.state.uct_comp.count -= ucs_popcount(destroyed_lanes);
+            }
+
             ucs_assertv(req->send.state.uct_comp.count == 0,
                         "uct_comp.count=%d num_lanes=%d",
                         req->send.state.uct_comp.count, num_lanes);
