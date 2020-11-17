@@ -26,6 +26,9 @@
 #define UCS_STATIC_ASSERT(_cond) \
      switch(0) {case 0:case (_cond):;}
 
+/* Maximal allocation size for on-stack buffers */
+#define UCS_ALLOCA_MAX_SIZE  1200
+
 /* Aliasing structure */
 #define UCS_S_MAY_ALIAS __attribute__((may_alias))
 

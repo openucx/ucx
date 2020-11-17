@@ -56,8 +56,6 @@
         } \
     }
 
-#define UCS_ALLOCA_MAX_SIZE  1200
-
 /**
  * alloca which makes sure the size is small enough.
  */

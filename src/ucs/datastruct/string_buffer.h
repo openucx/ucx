@@ -19,6 +19,33 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
 
 
 /**
+ * Declare a string buffer which is using an existing string as backing store.
+ * Such string buffer does not allocate additional memory and does not have to
+ * be cleaned-up, and it can also be used to build a string onto existing
+ * C-string buffer passed as a function argument.
+ *
+ * @param _var       String buffer variable name
+ * @param _buffer    Buffer to use as backing store.
+ * @param _capacity  Buffer capacity.
+ *
+ * Example:
+ *
+ * @code{.c}
+ * char * build_my_string(char *buffer, size_t max_length)
+ * {
+ *    UCS_STRING_BUFFER_FIXED(strb, buffer, max_legth);
+ *    ucs_string_buffer_appendf(&strb, "%x%x", 57005, 48879);
+ *    return buffer;
+ * }
+ * @endcode
+ */
+#define UCS_STRING_BUFFER_FIXED(_var, _buffer, _capacity) \
+    ucs_string_buffer_t _var = { \
+        UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity) \
+    }
+
+
+/**
  * Declare a string buffer which is using a static array as backing store.
  * Such string buffer does not allocate additional memory and does not have to
  * be cleaned-up.
@@ -35,10 +62,13 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
  * ucs_string_buffer_appendf(&strb, "%x%x", 57005, 48879);
  * @endcode
  */
-#define UCS_STRING_BUFFER_FIXED(_var, _buffer) \
-    ucs_string_buffer_t _var = { \
-        UCS_ARRAY_FIXED_INITIALIZER((_buffer), ucs_static_array_size(_buffer)) \
-    }
+#define UCS_STRING_BUFFER_STATIC(_var, _buffer) \
+    UCS_STRING_BUFFER_FIXED(_var, _buffer, ucs_static_array_size(_buffer))
+
+
+#define UCS_STRING_BUFFER_ONSTACK(_var, _capacity) \
+    UCS_STRING_BUFFER_FIXED(_var, UCS_ARRAY_ALLOC_ONSTACK(string_buffer, _capacity), \
+                            _capacity) \
 
 
 /**
@@ -56,6 +86,17 @@ typedef struct ucs_string_buffer {
  * @param [out] strb   String buffer to initialize.
  */
 void ucs_string_buffer_init(ucs_string_buffer_t *strb);
+
+
+/**
+ * Initialize a string buffer with fixed-size buffer as backing storage.
+ *
+ * @param [out] strb      String buffer to initialize.
+ * @param [in]  buffer    Buffer to use as backing storage.
+ * @param [in]  capacity  Buffer size.
+ */
+void ucs_string_buffer_init_fixed(ucs_string_buffer_t *strb, char *buffer,
+                                  size_t capacity);
 
 
 /**

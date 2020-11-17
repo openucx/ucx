@@ -27,12 +27,18 @@ UCS_ARRAY_IMPL(string_buffer, size_t, char, static UCS_F_ALWAYS_INLINE)
 
 void ucs_string_buffer_init(ucs_string_buffer_t *strb)
 {
-    ucs_array_init_dynamic(string_buffer, &strb->str);
+    ucs_array_init_dynamic(&strb->str);
+}
+
+void ucs_string_buffer_init_fixed(ucs_string_buffer_t *strb, char *buffer,
+                                  size_t capacity)
+{
+    ucs_array_init_fixed(&strb->str, buffer, capacity);
 }
 
 void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb)
 {
-    ucs_array_cleanup_dynamic(string_buffer, &strb->str);
+    ucs_array_cleanup_dynamic(&strb->str);
 }
 
 size_t ucs_string_buffer_length(ucs_string_buffer_t *strb)
