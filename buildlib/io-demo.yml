@@ -67,6 +67,22 @@ jobs:
 
       - bash: |
           set -eEx
+          source ./buildlib/az-helpers.sh
+          ./buildlib/az-network-corrupter.sh \
+            initial_delay=$(initial_delay) \
+            cycles=$(cycles) \
+            downtime=$(downtime) \
+            uptime=$(uptime) \
+            |& add_timestamp &>corrupter.log &
+          pgrep -u "$USER" -f 'network-corrupter'
+          corrupter_pid=$(pgrep -u "$USER" -f 'network-corrupter')
+          echo "corrupter_pid=$corrupter_pid"
+          azure_set_variable "corrupter_pid" "$corrupter_pid"
+        displayName: Start network corrupter
+        timeoutInMinutes: 5
+
+      - bash: |
+          set -eEx
           # set UCX environment variables
           export UCX_SOCKADDR_CM_ENABLE=y
           # TODO get hostname of 'ucx-roce-client' SSH service endpoint, and run on it
@@ -108,63 +124,8 @@ jobs:
                   -t 10 \
                   -q \
                   -a
-        displayName: Launch with run_io_demo.sh (am)
+        displayName: Launch with run_io_demo.sh (active message)
         timeoutInMinutes: 2
-
-      - bash: |
-          set -eEx
-          source ./buildlib/az-helpers.sh
-          ./buildlib/az-network-corrupter.sh \
-            initial_delay=$(initial_delay) \
-            cycles=$(cycles) \
-            downtime=$(downtime) \
-            uptime=$(uptime) \
-            |& add_timestamp &>corrupter.log &
-
-          pgrep -u "$USER" -f 'network-corrupter'
-          corrupter_pid=$(pgrep -u "$USER" -f 'network-corrupter')
-          echo "corrupter_pid=$corrupter_pid"
-          azure_set_variable "corrupter_pid" "$corrupter_pid"
-        displayName: Start network corrupter
-        timeoutInMinutes: 5
-
-      - bash: |
-          set -eEx
-          source ./buildlib/az-helpers.sh
-          ./buildlib/az-io_demo.sh workspace=$(workspace)
-        displayName: Start server
-        name: server
-        timeoutInMinutes: 5
-
-      - task: SSH@0
-        inputs:
-          sshEndpoint: ucx-roce-client
-          runOptions: inline
-          inline: |
-            set -eEx
-            $(workspace)/az-io_demo.sh \
-                workspace=$(workspace) \
-                server_ip=$(server_ip)
-                duration=${{ parameters.test_duration }}
-          failOnStdErr: false
-        displayName: Test
-        timeoutInMinutes: ${{ parameters.test_duration }}
-
-      - bash: |
-          set -eEx
-          cd $(workspace)
-          pid=$(server_pid)
-          echo "Stopping the server, PID=${pid}"
-          if ! kill ${pid}; then
-            echo "##vso[task.logissue type=error]Can't stop server: process doesn't exist"
-            echo "##vso[task.complete result=Failed;]"
-          else
-            echo "Server stopped successfully"
-          fi
-          cat $(workspace)/server.log
-        displayName: Kill the server
-        condition: always()
-        timeoutInMinutes: 5
 
       - bash: |
           set -eEx
