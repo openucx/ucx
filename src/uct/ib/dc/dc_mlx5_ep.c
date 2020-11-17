@@ -1361,8 +1361,7 @@ uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     uct_rc_iface_send_op_t *op;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
-    UCT_CHECK_PARAM(flags == 0, "Unsupported flags: %x", flags);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
     if ((ep->dci != UCT_DC_MLX5_EP_NO_DCI) ||
         (ep->flags & UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED)) {

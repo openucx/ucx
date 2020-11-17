@@ -277,6 +277,9 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                              unsigned flags);
 
+ucs_status_t
+uct_rc_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+
 void uct_rc_ep_cleanup_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
                           uct_rc_ep_cleanup_ctx_t *cleanup_ctx, uint32_t qp_num);
 

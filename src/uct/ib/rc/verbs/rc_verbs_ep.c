@@ -383,15 +383,13 @@ ucs_status_t uct_rc_verbs_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare, ui
                                   remote_addr, rkey, comp);
 }
 
-static ucs_status_t uct_rc_verbs_ep_post_flush(uct_rc_verbs_ep_t *ep)
+static void uct_rc_verbs_ep_post_flush(uct_rc_verbs_ep_t *ep, int send_flags)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
     struct ibv_send_wr wr;
     struct ibv_sge sge;
     int inl_flag;
-
-    UCT_RC_CHECK_RES(&iface->super, &ep->super);
 
     /*
      * Send small RDMA_WRITE as a flush operation
@@ -409,8 +407,7 @@ static ucs_status_t uct_rc_verbs_ep_post_flush(uct_rc_verbs_ep_t *ep)
     inl_flag               = (iface->config.max_inline >= sge.length) ?
                              IBV_SEND_INLINE : 0;
 
-    uct_rc_verbs_ep_post_send(iface, ep, &wr, inl_flag | IBV_SEND_SIGNALED, 1);
-    return UCS_OK;
+    uct_rc_verbs_ep_post_send(iface, ep, &wr, inl_flag | send_flags, 1);
 }
 
 ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
@@ -432,10 +429,8 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
-        status = uct_rc_verbs_ep_post_flush(ep);
-        if (status != UCS_OK) {
-            return status;
-        }
+        UCT_RC_CHECK_RES(&iface->super, &ep->super);
+        uct_rc_verbs_ep_post_flush(ep, IBV_SEND_SIGNALED);
     }
 
     return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
@@ -447,6 +442,13 @@ ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags)
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
     return uct_rc_ep_fence(tl_ep, &ep->fi, 1);
+}
+
+void uct_rc_verbs_ep_post_check(uct_ep_h tl_ep)
+{
+    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+
+    uct_rc_verbs_ep_post_flush(ep, 0);
 }
 
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,

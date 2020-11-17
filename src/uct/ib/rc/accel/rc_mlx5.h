@@ -111,7 +111,7 @@ ucs_status_t uct_rc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
 
 ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags);
 
-ucs_status_t uct_rc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+void uct_rc_mlx5_ep_post_check(uct_ep_h tl_ep);
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
@@ -166,10 +166,6 @@ ucs_status_t uct_rc_mlx5_ep_handle_failure(uct_rc_mlx5_ep_t *ep,
 
 ucs_status_t uct_rc_mlx5_ep_set_failed(uct_ib_iface_t *iface, uct_ep_h ep,
                                        ucs_status_t status);
-
-void uct_rc_mlx5_ep_pending_purge(uct_ep_h tl_ep,
-                                  uct_pending_purge_callback_t cb,
-                                  void *arg);
 
 void uct_rc_mlx5_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx);
 
