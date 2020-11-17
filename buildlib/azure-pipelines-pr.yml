@@ -177,4 +177,9 @@ stages:
         name: hwi
         demands: ucx_hwi -equals yes
         test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: instinct
+        demands: ucx_instinct -equals yes
+        valgrind_disable: disable
     - template: io-demo.yml
