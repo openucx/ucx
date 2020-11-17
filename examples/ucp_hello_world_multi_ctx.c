@@ -92,11 +92,6 @@ static const ucp_tag_t tag        = 0x1337a880u;
 static const ucp_tag_t tag_mask   = UINT64_MAX;
 static const char *addr_msg_str   = "UCX address message";
 static const char *data_msg_str   = "UCX data message";
-static ucp_address_t *local_addr[MAX_UCP_CTXS];
-static ucp_address_t *peer_addr[MAX_UCP_CTXS];
-
-static size_t local_addr_len[MAX_UCP_CTXS];
-static size_t peer_addr_len[MAX_UCP_CTXS];
 
 static ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name);
 
