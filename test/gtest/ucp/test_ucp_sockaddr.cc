@@ -324,10 +324,10 @@ public:
              * If so, skip the test since a valid error occurred - the one expected
              * from the error handling flow - cases of failure to handle long worker
              * address or transport doesn't support the error handling requirement */
-            UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
-                            "feature or too long worker address or no "
-                            "supported transport to send partial worker "
-                            "address)");
+            UCS_TEST_SKIP_R("Skipping due to an unreachable destination"
+                            " (unsupported feature or too long worker address or"
+                            " no supported transport to send partial worker"
+                            " address)");
         } else if ((send_status == UCS_ERR_REJECTED) &&
                    (cb_type == ucp_test_base::entity::LISTEN_CB_REJECT)) {
             return;
