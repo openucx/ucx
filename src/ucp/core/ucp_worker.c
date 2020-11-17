@@ -1685,6 +1685,7 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     ucp_lane_map_t rma_lanes_map    = 0;
     ucp_lane_map_t amo_lanes_map    = 0;
     ucp_lane_map_t stream_lanes_map = 0;
+    ucp_lane_map_t am_lanes_map     = 0;
     ucp_lane_index_t lane;
     char *p, *endp;
 
@@ -1699,10 +1700,19 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     p += strlen(p);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
-        if (((key->am_lane == lane) || (lane == key->tag_lane) ||
+        if (((key->am_lane == lane) ||
             (ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane) >= 0)  ||
-            (ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane) >= 0)) &&
-            (context->config.features & UCP_FEATURE_TAG)) {
+            (ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane) >= 0))) {
+            if (context->config.features & UCP_FEATURE_TAG) {
+                tag_lanes_map |= UCS_BIT(lane);
+            }
+
+            if (context->config.features & UCP_FEATURE_AM) {
+                am_lanes_map |= UCS_BIT(lane);
+            }
+        }
+
+        if (lane == key->tag_lane) {
             tag_lanes_map |= UCS_BIT(lane);
         }
 
@@ -1725,6 +1735,8 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     p = ucp_worker_add_feature_rsc(context, key, rma_lanes_map, "rma",
                                    p, endp - p);
     p = ucp_worker_add_feature_rsc(context, key, amo_lanes_map, "amo",
+                                   p, endp - p);
+    p = ucp_worker_add_feature_rsc(context, key, am_lanes_map, "am",
                                    p, endp - p);
     ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream",
                                p, endp - p);
