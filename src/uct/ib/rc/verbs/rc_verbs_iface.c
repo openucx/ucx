@@ -134,7 +134,7 @@ static unsigned uct_rc_verbs_iface_progress(void *arg)
     unsigned count;
 
     count = uct_rc_verbs_iface_poll_rx_common(iface);
-    if (count > 0) {
+    if (!uct_rc_iface_poll_tx(&iface->super, count)) {
         return count;
     }
 

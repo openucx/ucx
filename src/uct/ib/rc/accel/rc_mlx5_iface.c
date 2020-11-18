@@ -144,7 +144,7 @@ unsigned uct_rc_mlx5_iface_progress(void *arg)
     unsigned count;
 
     count = uct_rc_mlx5_iface_common_poll_rx(iface, UCT_RC_MLX5_POLL_FLAG_HAS_EP);
-    if (count > 0) {
+    if (!uct_rc_iface_poll_tx(&iface->super, count)) {
         return count;
     }
     return uct_rc_mlx5_iface_poll_tx(iface);
@@ -325,7 +325,7 @@ static UCS_F_MAYBE_UNUSED unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
     count = uct_rc_mlx5_iface_common_poll_rx(iface,
                                              UCT_RC_MLX5_POLL_FLAG_HAS_EP |
                                              UCT_RC_MLX5_POLL_FLAG_TM);
-    if (count > 0) {
+    if (!uct_rc_iface_poll_tx(&iface->super, count)) {
         return count;
     }
     return uct_rc_mlx5_iface_poll_tx(iface);
