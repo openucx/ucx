@@ -12,6 +12,10 @@
 #include <tools/perf/api/libperf.h>
 
 
+#define UCP_ARM_PERF_TEST_MULTIPLIER  2
+#define UCT_ARM_PERF_TEST_MULTIPLIER 15
+#define UCT_PERF_TEST_MULTIPLIER      5
+
 class test_perf {
 protected:
     struct test_spec {
@@ -38,6 +42,23 @@ protected:
     void run_test(const test_spec& test, unsigned flags, bool check_perf, const
                   std::string &tl_name, const std::string &dev_name, double
                   *perf_value = NULL);
+
+    void test_adjust(test_spec &test) {
+        if (test.api == UCX_PERF_API_UCT) {
+            if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
+                test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
+                test.min /= UCT_ARM_PERF_TEST_MULTIPLIER;
+            } else {
+                test.max *= UCT_PERF_TEST_MULTIPLIER;
+                test.min /= UCT_PERF_TEST_MULTIPLIER;
+            }
+        } else {
+            if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
+                test.max *= UCP_ARM_PERF_TEST_MULTIPLIER;
+                test.min /= UCP_ARM_PERF_TEST_MULTIPLIER;
+            }
+        }
+    }
 
 private:
     class rte_comm {

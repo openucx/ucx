@@ -11,7 +11,8 @@
 
 
 #define MB   pow(1024.0, -2)
-#define UCP_ARM_PERF_TEST_MULTIPLIER 2
+
+
 class test_ucp_perf : public ucp_test, public test_perf {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
@@ -190,11 +191,8 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     for (const test_spec *test_iter = tests; test_iter->title != NULL; ++test_iter) {
         test_spec test = *test_iter;
 
-        if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
-            test.max *= UCP_ARM_PERF_TEST_MULTIPLIER;
-            test.min /= UCP_ARM_PERF_TEST_MULTIPLIER;
-        }
         test.iters = ucs_min(test.iters, max_iter);
+        test_adjust(test);
         run_test(test, 0, check_perf, "", "");
     }
 }

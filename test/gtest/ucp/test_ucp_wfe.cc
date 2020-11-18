@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 *
@@ -9,10 +9,6 @@
 #include "ucp_test.h"
 
 #include <gtest/common/test_perf.h>
-
-
-#define MB   pow(1024.0, -2)
-#define UCP_ARM_PERF_TEST_MULTIPLIER 2
 
 
 class test_ucp_wfe : public ucp_test, public test_perf {
@@ -77,29 +73,21 @@ const test_perf::test_spec test_ucp_wfe::tests[] =
 
 UCS_TEST_P(test_ucp_wfe, envelope) {
     double perf_value = 0;
-    int cache_perf_retry_count;
     test_spec test;
 
-    test = tests[UCX_PERF_TEST_LAT_NO_WFE];
-    if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
-        test.max *= UCP_ARM_PERF_TEST_MULTIPLIER;
-        test.min /= UCP_ARM_PERF_TEST_MULTIPLIER;
-    }
     /* Run ping-pong with no WFE and get latency reference values */
+    test = tests[UCX_PERF_TEST_LAT_NO_WFE];
+    test_adjust(test);
     run_test(test, 0, false, "", "", &perf_value);
+
     /* Run ping-pong with WFE while re-using previous run numbers as a min/max
      * boundary. The latency of the WFE run should stay nearly identical with 250
      * percent margin. When WFE does not work as expected the slow down is
      * typically 10x-100x */
-    test                   = tests[UCX_PERF_TEST_LAT_WITH_WFE];
-    test.max               = perf_value * 2.5;
-    test.min               = perf_value * 0.7;
-    cache_perf_retry_count = ucs::perf_retry_count;
-    ucs::perf_retry_count  = 3; /* Have to be set to 1 otherwise the performance
-				                  measurement is ignored */
+    test     = tests[UCX_PERF_TEST_LAT_WITH_WFE];
+    test.max = perf_value * 2.5;
+    test.min = perf_value * 0.7;
     run_test(test, 0, true, "", "");
-    /* restore global value for perf retry */
-    ucs::perf_retry_count = cache_perf_retry_count;
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wfe, shm, "shm,")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wfe, shm, "shm")
