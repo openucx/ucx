@@ -59,14 +59,14 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * This routine explicitly progresses all communication operations on a worker.
      * @return Non-zero if any communication was progressed, zero otherwise.
      */
-    public int progress() {
+    public int progress() throws Exception {
         return progressWorkerNative(getNativeId());
     }
 
     /**
      * Blocking progress for request until it's not completed.
      */
-    public void progressRequest(UcpRequest request) {
+    public void progressRequest(UcpRequest request) throws Exception {
         while (!request.isCompleted()) {
             progress();
         }
@@ -251,7 +251,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
 
     private static native void releaseAddressNative(long workerId, ByteBuffer addressId);
 
-    private static native int progressWorkerNative(long workerId);
+    private static native int progressWorkerNative(long workerId) throws Exception;
 
     private static native UcpRequest flushNonBlockingNative(long workerId, UcxCallback callback);
 

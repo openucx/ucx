@@ -12,7 +12,7 @@ import static org.junit.Assert.*;
 
 public class UcpRequestTest {
     @Test
-    public void testCancelRequest() {
+    public void testCancelRequest() throws Exception {
         UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
         UcpRequest recv = worker.recvTaggedNonBlocking(ByteBuffer.allocateDirect(100), null);

@@ -31,7 +31,7 @@ public class UcpEndpointTest extends UcxTest {
     }
 
     @Test
-    public void testGetNB() {
+    public void testGetNB() throws Exception {
         // Crerate 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
@@ -102,7 +102,7 @@ public class UcpEndpointTest extends UcxTest {
     }
 
     @Test
-    public void testPutNB() {
+    public void testPutNB() throws Exception {
         // Crerate 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
@@ -186,7 +186,7 @@ public class UcpEndpointTest extends UcxTest {
     }
 
     @Test
-    public void testRecvAfterSend() {
+    public void testRecvAfterSend() throws Exception {
         long sendTag = 4L;
         // Crerate 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature().requestTagFeature()
@@ -211,8 +211,13 @@ public class UcpEndpointTest extends UcxTest {
             @Override
             public void run() {
                 while (!isInterrupted()) {
-                    worker1.progress();
-                    worker2.progress();
+                    try {
+                        worker1.progress();
+                        worker2.progress();
+                    } catch (Exception ex) {
+                        System.err.println(ex.getMessage());
+                        ex.printStackTrace();
+                    }
                 }
             }
         };
@@ -263,7 +268,7 @@ public class UcpEndpointTest extends UcxTest {
     }
 
     @Test
-    public void testBufferOffset() {
+    public void testBufferOffset() throws Exception {
         int msgSize = 200;
         int offset = 100;
         // Crerate 2 contexts + 2 workers
@@ -311,7 +316,7 @@ public class UcpEndpointTest extends UcxTest {
     }
 
     @Test
-    public void testFlushEp() {
+    public void testFlushEp() throws Exception {
         int numRequests = 10;
         // Crerate 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature();
@@ -356,7 +361,7 @@ public class UcpEndpointTest extends UcxTest {
     }
 
     @Test
-    public void testRecvSize() {
+    public void testRecvSize() throws Exception {
         UcpContext context1 = new UcpContext(new UcpParams().requestTagFeature());
         UcpContext context2 = new UcpContext(new UcpParams().requestTagFeature());
 
@@ -386,7 +391,7 @@ public class UcpEndpointTest extends UcxTest {
     }
 
     @Test
-    public void testStreamingAPI() {
+    public void testStreamingAPI() throws Exception {
         UcpParams params = new UcpParams().requestStreamFeature().requestRmaFeature();
         UcpContext context1 = new UcpContext(params);
         UcpContext context2 = new UcpContext(params);
@@ -537,7 +542,7 @@ public class UcpEndpointTest extends UcxTest {
     }
 
     @Test
-    public void testEpErrorHandler() {
+    public void testEpErrorHandler() throws Exception {
         // Crerate 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestTagFeature();
         UcpWorkerParams workerParams = new UcpWorkerParams();
