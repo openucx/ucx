@@ -418,6 +418,51 @@ static inline void uct_tcp_ep_ctx_move(uct_tcp_ep_ctx_t *to_ctx,
     memset(from_ctx, 0, sizeof(*from_ctx));
 }
 
+static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
+{
+#ifdef UCT_TCP_EP_KEEPALIVE
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    const int optval       = 1;
+    int idle_sec;
+    int intvl_sec;
+    ucs_status_t status;
+
+    if ((iface->config.keepalive.idle == 0) ||
+        (iface->config.keepalive.cnt == 0) ||
+        (iface->config.keepalive.intvl == 0)) {
+        return UCS_OK;
+    }
+
+    idle_sec  = ucs_max(1, (int)ucs_time_to_sec(iface->config.keepalive.idle));
+    intvl_sec = ucs_max(1, (int)ucs_time_to_sec(iface->config.keepalive.intvl));
+
+    status = ucs_socket_setopt(ep->fd, IPPROTO_TCP, TCP_KEEPINTVL,
+                               &intvl_sec, sizeof(intvl_sec));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_socket_setopt(ep->fd, IPPROTO_TCP, TCP_KEEPCNT,
+                               &iface->config.keepalive.cnt,
+                               sizeof(iface->config.keepalive.cnt));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_socket_setopt(ep->fd, IPPROTO_TCP, TCP_KEEPIDLE,
+                               &idle_sec, sizeof(idle_sec));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucs_socket_setopt(ep->fd, SOL_SOCKET, SO_KEEPALIVE,
+                             &optval, sizeof(optval));
+#else /* UCT_TCP_EP_KEEPALIVE */
+    return UCS_OK;
+#endif /* UCT_TCP_EP_KEEPALIVE */
+}
+
 static ucs_status_t uct_tcp_ep_create_socket_and_connect(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -431,6 +476,11 @@ static ucs_status_t uct_tcp_ep_create_socket_and_connect(uct_tcp_ep_t *ep)
 
     status = uct_tcp_iface_set_sockopt(iface, ep->fd,
                                        iface->config.conn_nb);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = uct_tcp_ep_keepalive_enable(ep);
     if (status != UCS_OK) {
         goto err;
     }

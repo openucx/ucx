@@ -13,3 +13,15 @@ m4_include([src/uct/ugni/configure.m4])
 AC_DEFINE_UNQUOTED([uct_MODULES], ["${uct_modules}"], [UCT loadable modules])
 
 AC_CONFIG_FILES([src/uct/Makefile])
+
+#
+# TCP flags
+#
+AC_CHECK_DECLS([IPPROTO_TCP, SOL_SOCKET, SO_KEEPALIVE,
+                TCP_KEEPCNT, TCP_KEEPIDLE, TCP_KEEPINTVL],
+               [],
+               [tcp_keepalive_happy=no],
+               [[#include <netinet/tcp.h>]
+                [#include <netinet/in.h>]])
+AS_IF([test "x$tcp_keepalive_happy" != "xno"],
+      [AC_DEFINE([UCT_TCP_EP_KEEPALIVE], 1, [Enable TCP keepalive configuration])]);

@@ -81,9 +81,28 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
                                 ucs_offsetof(uct_tcp_iface_config_t, rx_mpool), ""),
 
   {"PORT_RANGE", "0",
-   "Generate a random TCP port number from that range. A value of zero means\n "
+   "Generate a random TCP port number from that range. A value of zero means\n"
    "let the operating system select the port number.",
    ucs_offsetof(uct_tcp_iface_config_t, port_range), UCS_CONFIG_TYPE_RANGE_SPEC},
+
+#ifdef UCT_TCP_EP_KEEPALIVE
+  {"KEEPIDLE", "10s",
+   "The time the connection needs to remain idle before TCP starts sending "
+   "keepalive probes.",
+   ucs_offsetof(uct_tcp_iface_config_t, keepalive.idle),
+                UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"KEEPCNT", "3",
+   "The maximum number of keepalive probes TCP should send before "
+   "dropping the connection.",
+   ucs_offsetof(uct_tcp_iface_config_t, keepalive.cnt),
+                UCS_CONFIG_TYPE_UINT},
+
+  {"KEEPINTVL", "10s",
+   "The time between individual keepalive probes.",
+   ucs_offsetof(uct_tcp_iface_config_t, keepalive.intvl),
+                UCS_CONFIG_TYPE_TIME_UNITS},
+#endif /* UCT_TCP_EP_KEEPALIVE */
 
   {NULL}
 };
@@ -554,6 +573,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
+    self->config.keepalive.idle    = config->keepalive.idle;
+    self->config.keepalive.cnt     = config->keepalive.cnt;
+    self->config.keepalive.intvl   = config->keepalive.intvl;
 
     status = uct_tcp_iface_set_port_range(self, config);
     if (status != UCS_OK) {
