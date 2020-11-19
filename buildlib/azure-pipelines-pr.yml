@@ -156,7 +156,7 @@ stages:
 
   - stage: Logging
     jobs:
-      - job: test log
+      - job: test_log
         displayName: test log
         steps:
           - bash: |
