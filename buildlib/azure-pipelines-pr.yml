@@ -16,6 +16,19 @@ resources:
       endpoint: ucfconsort_registry
 
 stages:
+  - stage: Logging
+    jobs:
+      - job: test_log
+        displayName: test log
+        steps:
+          - bash: |
+              #!/bin/bash
+              echo "##vso[task.logissue type=warning]Found something that could be a problem"
+          - bash: |
+              #!/bin/bash
+              echo "##vso[task.logissue type=error]Something went very wrong."
+              exit 1
+
   - stage: Codestyle
     jobs:
       # Check that commit title matches code style guidelines
@@ -153,19 +166,6 @@ stages:
                 echo "##vso[task.complete result=Failed;]"
               fi
             displayName: Configure source and build RPM
-
-  - stage: Logging
-    jobs:
-      - job: test_log
-        displayName: test log
-        steps:
-          - bash: |
-              #!/bin/bash
-              echo "##vso[task.logissue type=warning]Found something that could be a problem"
-          - bash: |
-              #!/bin/bash
-              echo "##vso[task.logissue type=error]Something went very wrong."
-              exit 1
 
   - stage: Tests
     dependsOn: [Codestyle]
