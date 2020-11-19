@@ -885,15 +885,18 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
 {
     ucs_trace("ep %p: setting close request %p, %s", ep, request, debug_msg);
 
-    ucp_ep_flush_state_invalidate(ep);
     ucp_ep_ext_control(ep)->close_req.req = request;
-    ep->flags                            |= UCP_EP_FLAG_CLOSE_REQ_VALID;
+    /* flush progress id has to be initialized to able to check if a flush
+     * operation is in progress and unregister its progress callback */
+    request->send.flush.prog_id           = UCS_CALLBACKQ_ID_NULL;
 }
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 {
     ucp_ep_h ep                = req->send.ep;
     ucs_async_context_t *async = &ep->worker->async;
+
+    ucs_assert(ep->flags & UCP_EP_FLAG_CLOSED);
 
     /* in case of force close, schedule ucp_ep_local_disconnect_progress to
      * destroy the ep and all its lanes */
@@ -911,9 +914,8 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
          * we have to notify remote side */
         ucp_ep_cm_disconnect_cm_lane(ep);
         if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
-            /* Wait disconnect notification from remote side to complete this
-             * request */
-            ucp_ep_set_close_request(ep, req, "close flushed callback");
+            /* Wait disconnect notification from remote side to complete the
+             * close request */
             UCS_ASYNC_UNBLOCK(async);
             return;
         }
@@ -926,11 +928,24 @@ out:
      * endpoint cannot be released from pending/completion callback context.
      */
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
-    req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
+    req->send.flush.prog_id = UCS_CALLBACKQ_ID_NULL;
     uct_worker_progress_register_safe(ep->worker->uct,
                                       ucp_ep_local_disconnect_progress,
                                       req, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &req->send.disconnect.prog_id);
+                                      &req->send.flush.prog_id);
+}
+
+void ucp_ep_close_req_slow_path_remove(ucp_request_t *close_req)
+{
+    ucp_ep_h ucp_ep = close_req->send.ep;
+
+    /* Need to deschedule @ucp_ep_local_disconnect_progress or
+     * @ucp_ep_flush_resume_slow_path_callback if some of them is
+     * registered on the worker progress. They are registered using
+     * flush::prog_id (they could not be scheduled simultaneously) */
+    uct_worker_progress_unregister_safe(ucp_ep->worker->uct,
+                                        &close_req->send.
+                                        flush.prog_id);
 }
 
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
@@ -980,6 +995,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
         } else {
             ucp_ep_disconnected(ep, force);
         }
+    } else if (!UCS_PTR_IS_ERR(request)) {
+        ucp_ep_set_close_request(ep, (ucp_request_t*)request - 1, "close");
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);

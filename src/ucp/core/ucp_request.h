@@ -224,10 +224,6 @@ struct ucp_request {
                 } flush;
 
                 struct {
-                    uct_worker_cb_id_t        prog_id;/* Slow-path callback */
-                } disconnect;
-
-                struct {
                     ucp_worker_h          ucp_worker;     /* UCP worker where a discard UCT EP
                                                            * operation submitted on */
                     uct_ep_h              uct_ep;         /* UCT EP that should be flushed and

@@ -650,26 +650,14 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) != NULL);
 
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
-    if (ucs_test_all_flags(ucp_ep->flags, UCP_EP_FLAG_CLOSED |
-                                          UCP_EP_FLAG_CLOSE_REQ_VALID)) {
-        ucp_request_complete_send(ucp_ep_ext_control(ucp_ep)->close_req.req,
-                                  UCS_OK);
-        return 1;
-    }
-
     if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
-        /* the ep is closed by API but close req is not valid yet (checked
-         * above), it will be set later from scheduled
-         * @ref ucp_ep_close_flushed_callback */
-        ucs_debug("ep %p: ep closed but request is not set, waiting for"
-                  " the flush callback", ucp_ep);
-        goto err;
+        goto set_ep_failed;
     }
 
     if (!(ucp_ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
         /* CM disconnect happens during WIREUP MSGs exchange phase, when EP
          * is locally connected to the peer */
-        goto err;
+        goto set_ep_failed;
     }
 
     /*
@@ -690,12 +678,12 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
         status = UCS_PTR_STATUS(req);
         ucs_error("ucp_ep_flush_internal completed with error: %s",
                   ucs_status_string(status));
-        goto err;
+        goto set_ep_failed;
     }
 
     return 1;
 
-err:
+set_ep_failed:
     ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
                              ucp_ep_get_cm_uct_ep(ucp_ep),
                              ucp_ep_get_cm_lane(ucp_ep), status);
@@ -723,15 +711,11 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
            - if close req is valid this is ucp_ep_close_nb request and it will
              be completed as the ep is destroyed, i.e. flushed and disconnected
              with any status */
-        if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
-            ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
-        }
     } else if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
         ucp_ep_cm_remote_disconnect_progress(ucp_ep);
-    } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+    } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
         /* if the EP is not local connected, the EP has been closed and flushed,
            CM lane is disconnected, complete close request and destroy EP */
-        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
         close_req = ucp_ep_ext_control(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
     } else {

@@ -502,13 +502,13 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 
     ucp_stream_ep_cleanup(ucp_ep);
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {   
-        if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
-            ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
+        if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
             /* Promote close operation to CANCEL in case of transport error,
              * since the disconnect event may never arrive. */
             close_req                        = ucp_ep_ext_control(ucp_ep)->
                                                close_req.req;
             close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
+            ucp_ep_close_req_slow_path_remove(close_req);
             ucp_ep_local_disconnect_progress(close_req);
         } else {
             ucp_ep_invoke_err_cb(ucp_ep, status);

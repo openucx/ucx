@@ -57,12 +57,10 @@ enum {
                                                         worker address from the client) */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
-                                                        close_req is valid */
-    UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
-    UCP_EP_FLAG_TEMPORARY              = UCS_BIT(13),/* the temporary EP which holds
+    UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(11),/* error handler was called */
+    UCP_EP_FLAG_TEMPORARY              = UCS_BIT(12),/* the temporary EP which holds
                                                         temporary wireup configuration */
-    UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
+    UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(13),/* protocols on this endpoint will send
                                                         indirect endpoint id instead of pointer,
                                                         can be replaced with looking at local ID */
 
@@ -534,6 +532,8 @@ void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
+
+void ucp_ep_close_req_slow_path_remove(ucp_request_t *close_req);
 
 void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
