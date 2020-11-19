@@ -125,7 +125,7 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
      * can be inaccessible remotely. But it should always be possible
      * to pack/unpack a key, even if empty. */
     status = ucp_rkey_pack(e->ucph(), memh, &rkey_buffer, &rkey_size);
-    if (status == UCS_ERR_UNSUPPORTED && !is_dummy) {
+    if ((status == UCS_ERR_UNSUPPORTED) && !is_dummy) {
         return;
     }
     ASSERT_UCS_OK(status);
@@ -135,7 +135,7 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
     /* Unpack remote key buffer */
     ucp_rkey_h rkey;
     status = ucp_ep_rkey_unpack(e->ep(), rkey_buffer, &rkey);
-    if (status == UCS_ERR_UNREACHABLE && !is_dummy) {
+    if ((status == UCS_ERR_UNREACHABLE) && !is_dummy) {
         ucp_rkey_buffer_release(rkey_buffer);
         return;
     }
@@ -163,8 +163,12 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
         }
     }
 
-    if (expect_rma_offload && is_dummy) {
-        EXPECT_NE(&ucp_rma_sw_proto, rkey->cache.rma_proto);
+    if (expect_rma_offload) {
+        if (is_dummy) {
+            EXPECT_EQ(&ucp_rma_sw_proto, rkey->cache.rma_proto);
+        } else {
+            EXPECT_EQ(&ucp_rma_basic_proto, rkey->cache.rma_proto);
+        }
     }
 
     /* Test obtaining direct-access pointer */
@@ -314,8 +318,12 @@ void test_ucp_mmap::test_length0(unsigned flags)
     status = ucp_mem_map(sender().ucph(), &params, &memh[1]);
     ASSERT_UCS_OK(status);
 
+    bool expect_rma_offload = is_tl_rdma() ||
+                              ((flags & UCP_MEM_MAP_ALLOCATE) &&
+                               is_tl_shm());
+
     for (i = 0; i < buf_num; i++) {
-        test_rkey_management(&sender(), memh[i], true, false);
+        test_rkey_management(&sender(), memh[i], true, expect_rma_offload);
         status = ucp_mem_unmap(sender().ucph(), memh[i]);
         ASSERT_UCS_OK(status);
     }
