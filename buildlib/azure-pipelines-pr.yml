@@ -24,7 +24,7 @@ stages:
           - bash: |
               #!/bin/bash
               echo "##vso[task.logissue type=warning]Found something that could be a problem"
-           - bash: |
+          - bash: |
               #!/bin/bash
               echo "##vso[task.logissue type=error]Found something that could be a problem"
 
