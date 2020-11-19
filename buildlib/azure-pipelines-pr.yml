@@ -71,12 +71,12 @@ stages:
               exit 1
 
   - stage: Logging2
-      dependsOn: [Codestyle]
-      jobs:
-        - job: test_log3
-          displayName: test log
-          steps:
-            - bash: |
-                #!/bin/bash
-                echo "##vso[task.logissue type=warning]Found something that could be a problem"
-                exit 0
+    dependsOn: [Codestyle]
+    jobs:
+      - job: test_log3
+        displayName: test log
+        steps:
+          - bash: |
+              #!/bin/bash
+              echo "##vso[task.logissue type=warning]Found something that could be a problem"
+              exit 0
