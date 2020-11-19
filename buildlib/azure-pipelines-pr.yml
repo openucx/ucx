@@ -24,9 +24,6 @@ stages:
           - bash: |
               #!/bin/bash
               echo "##vso[task.logissue type=warning]Found something that could be a problem"
-          - bash: |
-              #!/bin/bash
-              echo "##vso[task.logissue type=error]Found something that could be a problem"
 
 
 
@@ -62,3 +59,24 @@ stages:
               fi
             condition: eq(variables['Build.Reason'], 'PullRequest')
 
+  - stage: Logging1
+    dependsOn: [Logging]
+    jobs:
+      - job: test_log1
+        displayName: test log
+        steps:
+          - bash: |
+              #!/bin/bash
+              echo "##vso[task.logissue type=warning]Found something that could be a problem"
+              exit 1
+
+- stage: Logging2
+    dependsOn: [Codestyle]
+    jobs:
+      - job: test_log3
+        displayName: test log
+        steps:
+          - bash: |
+              #!/bin/bash
+              echo "##vso[task.logissue type=warning]Found something that could be a problem"
+              exit 0
