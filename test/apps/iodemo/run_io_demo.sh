@@ -289,20 +289,12 @@ build_server_args_list() {
 	do
 		key="$1"
 		case $key in
-		-d)
+		-d|-P|-k|-r|-b)
 			value="$2"
 			iodemo_server_args+=" $key $value"
 			shift
 			;;
-		-P)
-			value="$2"
-			iodemo_server_args+=" $key $value"
-			shift
-			;;
-		-q)
-			iodemo_server_args+=" $key"
-			;;
-		-a)
+		-q|-a|-v|-H)
 			iodemo_server_args+=" $key"
 			;;
 		*)
