@@ -25,6 +25,7 @@ URL: http://www.openucx.org
 Source: https://github.com/openucx/%{name}/releases/download/v@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@/ucx-@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@.tar.gz
 
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
+Prefix: %{_prefix}
 
 # UCX currently supports only the following architectures
 ExclusiveArch: aarch64 ppc64le x86_64
@@ -301,6 +302,8 @@ process to map the memory of another process into its virtual address space.
 
 
 %changelog
+* Wed Nov 11 2020 Yossi Itigin <yosefe@mellanox.com> 1.10.0-1
+- Make the RPM relocatable
 * Tue Jul 07 2020 Yossi Itigin <yosefe@mellanox.com> 1.10.0-1
 - Bump version to 1.10.0
 * Mon Feb 10 2020 Yossi Itigin <yosefe@mellanox.com> 1.9.0-1
