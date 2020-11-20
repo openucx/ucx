@@ -537,8 +537,8 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
                                   "stream data");
     ep_ext = ucp_ep_ext_proto(ep);
 
-    if (ucs_unlikely(ep->flags & (UCP_EP_FLAG_CLOSED |
-                                  UCP_EP_FLAG_FAILED))) {
+    if (ucs_unlikely((ep == NULL) ||
+                     (ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_FAILED)))) {
         ucs_trace_data("ep %p: stream is invalid", ep);
         /* drop the data */
         return UCS_OK;
