@@ -316,7 +316,8 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
 
     ucs_debug("%s ep %p", debug_name, ep);
 
-    if (ep->flags & UCP_EP_FLAG_FAILED) {
+    if (ucs_test_all_flags(ep->flags, UCP_EP_FLAG_FAILED |
+                                      UCP_EP_FLAG_ERR_HANDLER_INVOKED)) {
         return NULL;
     }
 
