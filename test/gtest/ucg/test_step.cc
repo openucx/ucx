@@ -346,6 +346,8 @@ TEST_F(ucg_step_test, test_step_execute_bcopy) {
     delete iface;
     step->uct_iface = NULL;
     ASSERT_EQ(UCS_OK, ret);
+    m_ucg_worker = NULL;
+    m_ucg_context = NULL;
 }
 
 TEST_F(ucg_step_test, test_step_execute_zcopy) {
@@ -393,4 +395,6 @@ TEST_F(ucg_step_test, test_step_execute_zcopy) {
     step->uct_iface = NULL;
     ASSERT_EQ(UCS_OK, ret);
     ASSERT_EQ((unsigned)0, step->zcopy.num_store);
+    m_ucg_worker = NULL;
+    m_ucg_context = NULL;
 }
