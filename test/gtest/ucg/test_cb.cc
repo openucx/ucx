@@ -570,11 +570,11 @@ TEST_F(ucg_cb_test, test_step_callback_select_termonal) {
         int nonzero_length = 0;
         int flags = 0;
 
-        ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+        ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
         ASSERT_EQ(UCS_OK, ret);
 
         flags |= UCG_BUILTIN_OP_STEP_FLAG_SINGLE_ENDPOINT;
-        ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+        ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
         ASSERT_EQ(UCS_OK, ret);
     }
 }
@@ -590,15 +590,15 @@ TEST_F(ucg_cb_test, test_step_callback_select_waypoint_fanout) {
         int nonzero_length = 0;
         int flags = 0;
 
-        ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+        ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
         ASSERT_EQ(UCS_OK, ret);
 
         nonzero_length = 1;
-        ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+        ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
         ASSERT_EQ(UCS_OK, ret);
 
         flags |= UCG_BUILTIN_OP_STEP_FLAG_FRAGMENTED;
-        ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+        ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
         ASSERT_EQ(UCS_OK, ret);
     }
 }
@@ -614,11 +614,11 @@ TEST_F(ucg_cb_test, test_step_callback_select_reduce) {
 
         for (int nonzero_length = 0; nonzero_length < 2; nonzero_length++) {
             int flags = 0;
-            ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+            ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
             ASSERT_EQ(UCS_OK, ret);
 
             flags |= UCG_BUILTIN_OP_STEP_FLAG_SINGLE_ENDPOINT;
-            ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+            ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
             ASSERT_EQ(UCS_OK, ret);
         }
     }
@@ -635,7 +635,7 @@ TEST_F(ucg_cb_test, test_step_callback_select_nonzero) {
 
         for (int nonzero_length = 0; nonzero_length < 2; nonzero_length++) {
             int flags = 0;
-            ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+            ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
             ASSERT_EQ(UCS_OK, ret);
         }
     }
@@ -647,11 +647,11 @@ TEST_F(ucg_cb_test, test_step_callback_select_barrier) {
     int nonzero_length = 0;
     int flags = UCG_BUILTIN_OP_STEP_FLAG_LAST_STEP;
 
-    ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+    ucs_status_t ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
     ASSERT_EQ(UCS_OK, ret);
 
     flags |= UCG_BUILTIN_OP_STEP_FLAG_SINGLE_ENDPOINT;
-    ret = ucg_builtin_step_select_callbacks(phase, recv_cb, nonzero_length, flags);
+    ret = ucg_builtin_step_select_callbacks(phase, 1, recv_cb, nonzero_length, flags);
     ASSERT_EQ(UCS_OK, ret);
 }
 
