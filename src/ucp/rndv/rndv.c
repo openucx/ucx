@@ -1260,8 +1260,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
             }
         }
 
-        if ((rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY) ||
-            UCP_MEM_IS_CUDA(rreq->recv.mem_type)) {
+        if (!is_get_zcopy_failed) {
             /* put protocol is allowed - register receive buffer memory for rma */
             ucs_assert(rndv_rts_hdr->size <= rreq->recv.length);
             ucp_request_recv_buffer_reg(rreq, ep_config->key.rma_bw_md_map,
