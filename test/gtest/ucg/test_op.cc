@@ -223,4 +223,6 @@ TEST_F(ucg_op_test, test_op_trigger) {
     ret = ucg_builtin_op_trigger(op, 0, &request);
     ASSERT_EQ(UCS_INPROGRESS, ret);
     ucg_builtin_component.destroy(group);
+    m_ucg_worker = NULL;
+    m_ucg_context = NULL;
 }
