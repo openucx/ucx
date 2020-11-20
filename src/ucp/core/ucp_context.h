@@ -114,6 +114,8 @@ typedef struct ucp_context_config {
     unsigned                               keepalive_num_eps;
     /** Enable indirect IDs to object pointers in wire protocols */
     ucs_on_off_auto_value_t                proto_indirect_id;
+    /** Error handler delay */
+    ucs_time_t                             err_handler_delay;
 } ucp_context_config_t;
 
 

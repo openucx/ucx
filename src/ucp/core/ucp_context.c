@@ -329,6 +329,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "endpoint.",
    ucs_offsetof(ucp_config_t, ctx.proto_indirect_id), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
+  {"ERROR_HANDLER_DELAY", "0us",
+   "Artificial delay between detecting an error and processing it (0 - disabled).\n"
+   "Used for testing purposes",
+   ucs_offsetof(ucp_config_t, ctx.err_handler_delay),
+   UCS_CONFIG_TYPE_TIME_UNITS},
+
    {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,
