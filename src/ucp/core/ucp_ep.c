@@ -304,9 +304,10 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
+    char ep_name[UCP_WORKER_NAME_MAX];
 
     ucs_memory_type_for_each(mem_type) {
-        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type) ||
+        if (UCP_MEM_IS_HOST(mem_type) ||
             !context->mem_type_access_tls[mem_type]) {
             continue;
         }
@@ -326,10 +327,13 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             goto err_free_address_buffer;
         }
 
+        ucs_snprintf_zero(ep_name, UCP_WORKER_NAME_MAX, "mem_type_ep:%s",
+                          ucs_memory_type_names[mem_type]);
+
         status = ucp_ep_create_to_worker_addr(worker, UINT64_MAX,
                                               &local_address,
                                               UCP_EP_INIT_FLAG_MEM_TYPE,
-                                              "mem type",
+                                              ep_name,
                                               &worker->mem_type_ep[mem_type]);
         if (status != UCS_OK) {
             goto err_free_address_list;
@@ -1455,7 +1459,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     }
 
     ucs_memory_type_for_each(mem_type) {
-        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
+        if (UCP_MEM_IS_HOST(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
         } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = 1;

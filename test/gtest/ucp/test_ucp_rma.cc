@@ -71,8 +71,8 @@ protected:
 
             /* Memory type put/get is fully supported only with new protocols */
             if (!enable_proto() &&
-                (!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(pairs[i][0]) ||
-                 !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(pairs[i][1]))) {
+                (!UCP_MEM_IS_HOST(pairs[i][0]) ||
+                 !UCP_MEM_IS_HOST(pairs[i][1]))) {
                 continue;
             }
 

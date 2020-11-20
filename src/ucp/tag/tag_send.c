@@ -68,7 +68,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                                              rndv_rma_thresh, rndv_am_thresh);
 
     if (!(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
-        ucs_unlikely(!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
+        ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
         zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, dt_count,
                                                      rndv_thresh);
     } else {
@@ -76,9 +76,10 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     }
 
     ucs_trace_req("select tag request(%p) progress algorithm datatype=0x%"PRIx64
-                  " buffer=%p length=%zu max_short=%zd rndv_thresh=%zu "
+                  " buffer=%p length=%zu mem_type:%s max_short=%zd rndv_thresh=%zu "
                   "zcopy_thresh=%zu zcopy_enabled=%d",
                   req, req->send.datatype, req->send.buffer, req->send.length,
+                  ucs_memory_type_names[req->send.mem_type],
                   max_short, rndv_thresh, zcopy_thresh,
                   !(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL));
 
