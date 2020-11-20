@@ -501,7 +501,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     }
 
     ucp_stream_ep_cleanup(ucp_ep);
-    if (ucp_ep->flags & UCP_EP_FLAG_USED) {   
+    if (ucp_ep->flags & UCP_EP_FLAG_USED) {
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
             ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
             /* Promote close operation to CANCEL in case of transport error,
