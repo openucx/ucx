@@ -236,6 +236,7 @@ public:
     typedef struct {
         uint32_t    sn;
         uint8_t     op;
+        uint8_t     iov_index; // Used for assembling muti-chunked AM message
         uint64_t    data_size;
     } iomsg_t;
 
@@ -263,8 +264,21 @@ protected:
             _pool.put(this);
         }
 
+        void init_header(io_op_t op, size_t data_size, uint32_t sn,
+                         size_t iov_index) {
+            assert(iov_index < std::numeric_limits<uint8_t>::max());
+            _header.op        = op;
+            _header.data_size = data_size;
+            _header.sn        = sn;
+            _header.iov_index = static_cast<uint8_t>(iov_index);
+        }
+
         inline void *buffer(size_t offset = 0) const {
             return (uint8_t*)_buffer + offset;
+        }
+
+        inline void *header() {
+            return &_header;
         }
 
         inline void resize(size_t size) {
@@ -281,6 +295,8 @@ protected:
 
     private:
         void*                     _buffer;
+        // With AM API need to send a header with every iov element
+        iomsg_t                   _header;
         size_t                    _size;
         MemoryPool<Buffer, true>& _pool;
     };
@@ -296,15 +312,16 @@ protected:
         }
 
         void init(size_t data_size, MemoryPool<Buffer, true> &chunk_pool,
-                  uint32_t sn, bool validate) {
+                  uint32_t sn, bool validate, io_op_t op = IO_OP_MAX) {
             assert(_iov.empty());
 
             Buffer *chunk = chunk_pool.get();
             _iov.resize(get_chunk_cnt(data_size, chunk->_capacity));
 
-            size_t remaining = init_chunk(0, chunk, data_size);
+            size_t remaining = init_chunk(0, op, data_size, sn, chunk, data_size);
             for (size_t i = 1; i < _iov.size(); ++i) {
-                remaining = init_chunk(i, chunk_pool.get(), remaining);
+                remaining = init_chunk(i, op, data_size, sn, chunk_pool.get(),
+                                       remaining);
             }
 
             assert(remaining == 0);
@@ -348,7 +365,9 @@ protected:
         }
 
     private:
-        size_t init_chunk(size_t i, Buffer *chunk, size_t remaining) {
+        size_t init_chunk(size_t i, io_op_t op, size_t data_size, uint32_t sn,
+                          Buffer *chunk, size_t remaining) {
+            chunk->init_header(op, data_size, sn, i);
             _iov[i] = chunk;
             _iov[i]->resize(std::min(_iov[i]->_capacity, remaining));
             return remaining - _iov[i]->size();
@@ -383,6 +402,7 @@ protected:
             m->sn        = sn;
             m->op        = op;
             m->data_size = data_size;
+            m->iov_index = 0;
             if (validate) {
                 void *tail       = reinterpret_cast<void*>(m + 1);
                 size_t tail_size = _io_msg_size - sizeof(*m);
@@ -453,6 +473,22 @@ protected:
         MemoryPool<SendCompleteCallback>& _pool;
     };
 
+    // Holds details of AM message consisting of several chunks
+    struct UcxAmMsg {
+        UcxAmMsg() : _iov(NULL), _cb(NULL), _count(0)
+        {}
+
+        UcxAmMsg(BufferIov *iov, UcxCallback *cb) :
+            _iov(iov), _cb(cb), _count(1) {
+            // Count is initialized to 1, because this struct is created when
+            // the first chunk arrives
+        }
+
+        BufferIov   *_iov;
+        UcxCallback *_cb;
+        unsigned    _count; // number of received fragments
+    };
+
     P2pDemoCommon(const options_t& test_opts) :
         UcxContext(test_opts.iomsg_size, test_opts.connect_timeout, test_opts.use_am),
         _test_opts(test_opts),
@@ -500,6 +536,22 @@ protected:
     void recv_data(UcxConnection* conn, const BufferIov &iov, uint32_t sn,
                    UcxCallback* callback = EmptyCallback::get()) {
         send_recv_data(conn, iov, sn, XFER_TYPE_RECV, callback);
+    }
+
+    void send_am_data(UcxConnection* conn, const BufferIov &iov, IoMessage *m,
+                      SendCompleteCallback *cb) {
+        // Send the whole IO header with first fragment
+        conn->send_am(m->buffer(), opts().iomsg_size, iov[0].buffer(),
+                      iov[0].size(), cb);
+
+        for (size_t i = 1; i < iov.size(); ++i) {
+            // For middle/last fragments send just IOMSG header, because
+            // receiver needs to know sn and iov_index for every fragment.
+            // Also chunks may arrive OOO, therefore every chunk should carry
+            // data_size as well.
+            conn->send_am(iov[i].header(), sizeof(iomsg_t),
+                          iov[i].buffer(), iov[i].size(), cb);
+        }
     }
 
     static uint32_t get_chunk_cnt(size_t data_size, size_t chunk_size) {
@@ -559,11 +611,14 @@ private:
     }
 
 protected:
+    typedef std::map<uint32_t, UcxAmMsg> am_recv_iovs_map_t;
+
     const options_t                  _test_opts;
     MemoryPool<IoMessage>            _io_msg_pool;
     MemoryPool<SendCompleteCallback> _send_callback_pool;
     MemoryPool<BufferIov>            _data_buffers_pool;
     MemoryPool<Buffer, true>         _data_chunks_pool;
+    am_recv_iovs_map_t               _am_recv_iovs;
 };
 
 class DemoServer : public P2pDemoCommon {
@@ -690,17 +745,13 @@ public:
         m->init(IO_READ_COMP, msg->sn, msg->data_size, opts().validate);
 
         BufferIov *iov = _data_buffers_pool.get();
-        iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+        iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate,
+                  IO_READ_COMP);
 
         SendCompleteCallback *cb = _send_callback_pool.get();
         cb->init(iov, &_curr_state.read_count, m);
 
-        assert(iov->size() == 1);
-
-        // Send IO_READ_COMP as AM header and first iov element as payload
-        // (note that multi-iov send is not supported for IODEMO with AM yet)
-        conn->send_am(m->buffer(), opts().iomsg_size, (*iov)[0].buffer(),
-                      (*iov)[0].size(), cb);
+        send_am_data(conn, *iov, m, cb);
     }
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_t *msg) {
@@ -721,15 +772,34 @@ public:
         VERBOSE_LOG << "receiving AM IO write data";
         assert(msg->data_size != 0);
 
-        BufferIov *iov             = _data_buffers_pool.get();
-        IoWriteResponseCallback *w = _callback_pool.get();
+        UcxCallback *cb;
+        BufferIov *iov;
 
-        iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
-        w->init(this, conn, msg->sn, iov, &_curr_state.write_count);
+        am_recv_iovs_map_t::iterator iter = _am_recv_iovs.find(msg->sn);
+        if (iter == _am_recv_iovs.end()) {
+            IoWriteResponseCallback *w = _callback_pool.get();
+            iov                        = _data_buffers_pool.get();
+            cb                         = w;
 
-        assert(iov->size() == 1);
+            iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+            w->init(this, conn, msg->sn, iov, &_curr_state.write_count);
+            if (iov->size() > 1) {
+                UcxAmMsg msg_desc(iov, w);
+                _am_recv_iovs[msg->sn] = msg_desc;
+            }
+        } else {
+            iov = iter->second._iov;
+            cb  = iter->second._cb;
+            ++iter->second._count;
 
-        conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(), data_desc, w);
+            if (iter->second._count == iov->size()) {
+                _am_recv_iovs.erase(iter);
+            }
+        }
+        assert(iov->size() > msg->iov_index);
+
+        conn->recv_am_data((*iov)[msg->iov_index].buffer(),
+                           (*iov)[msg->iov_index].size(), data_desc, cb);
     }
 
     virtual void dispatch_connection_accepted(UcxConnection* conn) {
@@ -775,7 +845,8 @@ public:
                     << " conn " << conn;
 
         if (opts().validate) {
-            assert(length == opts().iomsg_size);
+            assert((length == opts().iomsg_size) ||
+                   (length == sizeof(iomsg_t)));
             validate(msg, length);
         }
 
@@ -984,7 +1055,7 @@ public:
         ++_num_sent;
 
         BufferIov *iov = _data_buffers_pool.get();
-        iov->init(data_size, _data_chunks_pool, sn, validate);
+        iov->init(data_size, _data_chunks_pool, sn, validate, IO_WRITE);
 
         SendCompleteCallback *cb = _send_callback_pool.get();
         cb->init(iov, NULL, m);
@@ -992,12 +1063,7 @@ public:
         VERBOSE_LOG << "sending IO_WRITE (AM) data " << iov << " size "
                     << data_size << " sn " << sn;
 
-        assert(iov->size() == 1);
-
-        // Send IO_WRITE as AM header and first iov element as payload
-        // (note that multi-iov send is not supported for IODEMO with AM yet)
-        server_info.conn->send_am(m->buffer(), opts().iomsg_size,
-                                  (*iov)[0].buffer(), (*iov)[0].size(), cb);
+        send_am_data(server_info.conn, *iov, m, cb);
 
         return data_size;
     }
@@ -1034,6 +1100,40 @@ public:
         }
     }
 
+    void handle_io_am_read_reply(UcxConnection* conn, const iomsg_t *msg,
+                                 const UcxAmDesc &data_desc) {
+        BufferIov *iov;
+        UcxCallback *cb;
+
+        am_recv_iovs_map_t::iterator iter = _am_recv_iovs.find(msg->sn);
+        if (iter == _am_recv_iovs.end()) {
+            IoReadResponseCallback *r = _read_callback_pool.get();
+            iov                       = _data_buffers_pool.get();
+            cb                        = r;
+
+            iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+            r->init(&_num_completed,
+                    &_server_info[get_server_index(conn)].num_completed[IO_READ],
+                    msg->sn, opts().validate, iov, 0);
+            if (iov->size() > 1) {
+                UcxAmMsg msg_desc(iov, r);
+                _am_recv_iovs[msg->sn] = msg_desc;
+            }
+        } else {
+            iov = iter->second._iov;
+            cb  = iter->second._cb;
+            ++iter->second._count;
+
+            if (iter->second._count == iov->size()) {
+                _am_recv_iovs.erase(iter);
+            }
+        }
+        assert(iov->size() > msg->iov_index);
+
+        conn->recv_am_data((*iov)[msg->iov_index].buffer(),
+                           (*iov)[msg->iov_index].size(), data_desc, cb);
+    }
+
     virtual void dispatch_am_message(UcxConnection* conn, const void *buffer,
                                      size_t length,
                                      const UcxAmDesc &data_desc) {
@@ -1046,8 +1146,9 @@ public:
         assert(msg->op >= IO_COMP_MIN);
 
         if (opts().validate) {
-            assert(length == opts().iomsg_size);
-            validate(msg, opts().iomsg_size);
+            assert((length == opts().iomsg_size) ||
+                   (length == sizeof(iomsg_t)));
+            validate(msg, length);
         }
 
         // Client can receive IO_WRITE_COMP or IO_READ_COMP only
@@ -1056,17 +1157,7 @@ public:
             ++_num_completed;
             ++_server_info[get_server_index(conn)].num_completed[IO_WRITE];
         } else if (msg->op == IO_READ_COMP) {
-            BufferIov *iov            = _data_buffers_pool.get();
-            IoReadResponseCallback *r = _read_callback_pool.get();
-
-            iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
-            r->init(&_num_completed,
-                    &_server_info[get_server_index(conn)].num_completed[IO_READ],
-                    msg->sn, opts().validate, iov, 0);
-
-            assert(iov->size() == 1);
-
-            conn->recv_am_data((*iov)[0].buffer(), msg->data_size, data_desc, r);
+            handle_io_am_read_reply(conn, msg, data_desc);
         }
     }
 
@@ -1559,14 +1650,6 @@ static int set_time(char *str, double *dest_p)
 static void adjust_opts(options_t *test_opts) {
     if (test_opts->operations.size() == 0) {
         test_opts->operations.push_back(IO_WRITE);
-    }
-
-    if (test_opts->use_am &&
-        (test_opts->chunk_size < test_opts->max_data_size)) {
-        std::cout << "ignoring chunk size parameter, because it is not supported"
-                     " with AM API" << std::endl;
-        test_opts->chunk_size = test_opts->max_data_size;
-        return;
     }
 
     test_opts->chunk_size = std::min(test_opts->chunk_size,
