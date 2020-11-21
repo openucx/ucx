@@ -71,22 +71,21 @@ const test_perf::test_spec test_ucp_wait_mem::tests[] =
 };
 
 
-#define MAX_ITER 10
-
 UCS_TEST_P(test_ucp_wait_mem, envelope) {
     double perf_avg  = 0;
     double perf_iter = 0;
+    int max_iter     = ucs_max(ucs::perf_retry_count, 1);
     test_spec test;
     int i;
 
     /* Run ping-pong with no WFE and get latency reference values */
     test = tests[UCX_PERF_TEST_LAT_NO_WAIT_MEM];
     test_adjust(test);
-    for (i = 0; i < MAX_ITER; i++) {
+    for (i = 0; i < max_iter; i++) {
         perf_iter = run_test(test, 0, false, "", "");
         perf_avg += perf_iter;
     }
-    perf_avg /= MAX_ITER;
+    perf_avg /= max_iter;
 
     /* Run ping-pong with WFE while re-using previous run numbers as a min/max
      * boundary. The latency of the WFE run should stay nearly identical with 250
