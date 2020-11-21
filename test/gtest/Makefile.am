@@ -123,7 +123,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_mmap.cc \
 	ucp/test_ucp_mem_type.cc \
 	ucp/test_ucp_perf.cc \
-	ucp/test_ucp_wfe.cc \
+	ucp/test_ucp_wait_mem.cc \
 	ucp/test_ucp_proto.cc \
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_rma_mt.cc \

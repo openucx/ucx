@@ -324,7 +324,7 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     double factor;
 
     if ((perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) ||
-        (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG_WFE)) {
+        (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM)) {
         factor = 2.0;
     } else {
         factor = 1.0;

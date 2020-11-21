@@ -11,7 +11,7 @@
 #include <gtest/common/test_perf.h>
 
 
-class test_ucp_wfe : public ucp_test, public test_perf {
+class test_ucp_wait_mem : public ucp_test, public test_perf {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant(variants, 0);
@@ -50,12 +50,12 @@ protected:
 
 
 enum {
-    UCX_PERF_TEST_LAT_NO_WFE,
-    UCX_PERF_TEST_LAT_WITH_WFE
+    UCX_PERF_TEST_LAT_NO_WAIT_MEM,
+    UCX_PERF_TEST_LAT_WITH_WAIT_MEM
 };
 
 
-const test_perf::test_spec test_ucp_wfe::tests[] =
+const test_perf::test_spec test_ucp_wait_mem::tests[] =
 {
     { "put latency", "usec",
       UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
@@ -63,31 +63,39 @@ const test_perf::test_spec test_ucp_wfe::tests[] =
       ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
       0 },
 
-    { "put latency with WFE", "usec",
-      UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG_WFE,
+    { "put latency with ucp_worker_wait_mem()", "usec",
+      UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM,
       UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 1000lu,
       ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
       0 }
 };
 
 
-UCS_TEST_P(test_ucp_wfe, envelope) {
-    double perf_value = 0;
+#define MAX_ITER 10
+
+UCS_TEST_P(test_ucp_wait_mem, envelope) {
+    double perf_avg  = 0;
+    double perf_iter = 0;
     test_spec test;
+    int i;
 
     /* Run ping-pong with no WFE and get latency reference values */
-    test = tests[UCX_PERF_TEST_LAT_NO_WFE];
+    test = tests[UCX_PERF_TEST_LAT_NO_WAIT_MEM];
     test_adjust(test);
-    run_test(test, 0, false, "", "", &perf_value);
+    for (i = 0; i < MAX_ITER; i++) {
+        run_test(test, 0, false, "", "", &perf_iter);
+        perf_avg += perf_iter;
+    }
+    perf_avg /= MAX_ITER;
 
     /* Run ping-pong with WFE while re-using previous run numbers as a min/max
      * boundary. The latency of the WFE run should stay nearly identical with 250
      * percent margin. When WFE does not work as expected the slow down is
      * typically 10x-100x */
-    test     = tests[UCX_PERF_TEST_LAT_WITH_WFE];
-    test.max = perf_value * 2.5;
-    test.min = perf_value * 0.7;
+    test     = tests[UCX_PERF_TEST_LAT_WITH_WAIT_MEM];
+    test.max = perf_avg * 2.5;
+    test.min = perf_avg * 0.7;
     run_test(test, 0, true, "", "");
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wfe, shm, "shm")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wait_mem, shm, "shm")
