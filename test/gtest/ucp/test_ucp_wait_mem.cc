@@ -83,7 +83,7 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
     test = tests[UCX_PERF_TEST_LAT_NO_WAIT_MEM];
     test_adjust(test);
     for (i = 0; i < MAX_ITER; i++) {
-        run_test(test, 0, false, "", "", &perf_iter);
+        perf_iter = run_test(test, 0, false, "", "");
         perf_avg += perf_iter;
     }
     perf_avg /= MAX_ITER;

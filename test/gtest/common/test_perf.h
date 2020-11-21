@@ -39,9 +39,8 @@ protected:
 
     static std::vector<int> get_affinity();
 
-    void run_test(const test_spec& test, unsigned flags, bool check_perf, const
-                  std::string &tl_name, const std::string &dev_name, double
-                  *perf_value = NULL);
+    double run_test(const test_spec& test, unsigned flags, bool check_perf, const
+                    std::string &tl_name, const std::string &dev_name);
 
     void test_adjust(test_spec &test) {
         if (test.api == UCX_PERF_API_UCT) {
