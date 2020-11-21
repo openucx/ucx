@@ -82,6 +82,7 @@ ucg_plan_t *ucg_op_test::create_plan(unsigned phs_cnt, ucg_collective_params_t *
     builtin_plan->resend = NULL;
     builtin_plan->slots = NULL;
     builtin_plan->phs_cnt = phs_cnt;
+    builtin_plan->convert_f = mca_coll_ucg_datatype_convert_for_ut;
 
     ucs_mpool_ops_t ops = {
             ucs_mpool_chunk_malloc,

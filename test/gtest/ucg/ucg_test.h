@@ -67,6 +67,8 @@ struct ucg_ompi_op {
     bool commutative;
 };
 
+int mca_coll_ucg_datatype_convert_for_ut(void *mpi_dt, ucp_datatype_t *ucp_dt);
+
 class ucg_resource_factory {
 public:
     ucg_builtin_config_t *create_config(unsigned bcast_alg, unsigned allreduce_alg, unsigned barrier_alg);
