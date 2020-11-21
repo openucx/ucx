@@ -129,6 +129,16 @@ ucg_collective_params_t *ucg_test::create_bcast_params() const {
                                                         0, send_buf, count, recv_buf, sizeof(int), NULL, NULL);
 }
 
+int mca_coll_ucg_datatype_convert_for_ut(void *mpi_dt, ucp_datatype_t *ucp_dt)
+{
+    if (mpi_dt != NULL) {
+        ucs_info("mca_coll_ucg_datatype_convert_for_ut");
+    }
+
+    *ucp_dt = UCP_DATATYPE_CONTIG;
+    return 0;
+}
+
 ucg_builtin_config_t *ucg_resource_factory::create_config(
     unsigned bcast_alg, unsigned allreduce_alg, unsigned barrier_alg)
 {
@@ -174,6 +184,7 @@ ucg_group_params_t *ucg_resource_factory::create_group_params(
     args->release_address_f = NULL;
     args->cb_group_obj = NULL;
     args->op_is_commute_f = ompi_op_is_commute;
+    args->mpi_dt_convert = mca_coll_ucg_datatype_convert_for_ut;
     args->distance = (ucg_group_member_distance *) malloc(args->member_count * sizeof(*args->distance));
     args->node_index = (uint16_t *) malloc(args->member_count * sizeof(*args->node_index));
 
@@ -217,10 +228,10 @@ ucg_collective_params_t *ucg_resource_factory::create_collective_params(
     params->send.op_ext = op_ext;
 
     params->recv.buf = recv_buffer;
-    params->send.count = count;
-    params->send.dt_len = dt_len;
-    params->send.dt_ext = dt_ext;
-    params->send.op_ext = op_ext;
+    params->recv.count = count;
+    params->recv.dt_len = dt_len;
+    params->recv.dt_ext = dt_ext;
+    params->recv.op_ext = op_ext;
 
     return params;
 }
