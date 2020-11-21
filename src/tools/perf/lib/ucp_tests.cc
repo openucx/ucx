@@ -287,13 +287,13 @@ public:
                     progress_responder();
                 }
                 return UCS_OK;
-       case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
-            ptr = (volatile uint8_t*)buffer + length - 1;
-            while (*ptr != sn) {
-                ucp_worker_wait_mem(worker, (void *)ptr);
-                progress_responder();
-            }
-		return UCS_OK;
+            case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
+                ptr = (volatile uint8_t*)buffer + length - 1;
+                while (*ptr != sn) {
+                    ucp_worker_wait_mem(worker, (void *)ptr);
+                    progress_responder();
+                }
+                return UCS_OK;
             case UCX_PERF_TEST_TYPE_STREAM_UNI:
                 return UCS_OK;
             default:
