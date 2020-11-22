@@ -263,7 +263,7 @@ typedef struct uct_tcp_ep_ctx {
  * buffer from TCP EP context
  */
 typedef struct uct_tcp_ep_zcopy_tx {
-    uct_tcp_am_hdr_t              super;     /* UCT TCP AM header */    
+    uct_tcp_am_hdr_t              super;     /* UCT TCP AM header */
     uct_completion_t              *comp;     /* Local UCT completion object */
     size_t                        iov_index; /* Current IOV index */
     size_t                        iov_cnt;   /* Number of IOVs that should be sent */
