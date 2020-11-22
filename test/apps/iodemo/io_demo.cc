@@ -907,7 +907,12 @@ public:
     } status_t;
 
     size_t get_server_index(const UcxConnection *conn) {
-        return _server_index_lookup[conn];
+        assert(_server_index_lookup.size() == _active_servers.size());
+
+        std::map<const UcxConnection*, size_t>::const_iterator i =
+                                                _server_index_lookup.find(conn);
+        return (i == _server_index_lookup.end()) ? _server_info.size() :
+               i->second;
     }
 
     size_t do_io_read(server_info_t& server_info, uint32_t sn) {
@@ -1013,8 +1018,7 @@ public:
         }
 
         while (!server_idxs.empty()) {
-            size_t i = server_idxs.back();
-            terminate_connection(_server_info[i].conn, reason);
+            close_server(server_idxs.back(), reason);
             server_idxs.pop_back();
         }
     }
@@ -1029,8 +1033,16 @@ public:
 
         if (msg->op >= IO_COMP_MIN) {
             assert(msg->op == IO_WRITE_COMP);
-            ++_num_completed;
-            ++_server_info[get_server_index(conn)].num_completed[IO_WRITE];
+
+            size_t server_index = get_server_index(conn);
+            if (server_index < _server_info.size()) {
+                ++_num_completed;
+                ++_server_info[server_index].num_completed[IO_WRITE];
+            } else {
+                /* do not increment _num_completed here since we decremented
+                 * _num_sent on connection termination */
+                LOG << "got WRITE completion on failed connection";
+            }
         }
     }
 
@@ -1086,19 +1098,23 @@ public:
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
-        terminate_connection(conn, ucs_status_string(conn->ucx_status()));
+        size_t server_index = get_server_index(conn);
+        if (server_index < _server_info.size()) {
+            close_server(server_index, ucs_status_string(conn->ucx_status()));
+        }
     }
 
-    void terminate_connection(UcxConnection *conn, const char *reason) {
-        LOG << "terminate connection " << conn << " due to " << reason;
-        size_t server_index        = get_server_index(conn);
+    void close_server(size_t server_index, const char *reason) {
         server_info_t& server_info = _server_info[server_index];
 
+        LOG << "terminate connection " << server_info.conn << " due to "
+            << reason;
+
         // Remove connection pointer
-        _server_index_lookup.erase(conn);
+        _server_index_lookup.erase(server_info.conn);
 
         // Destroying the connection will complete its outstanding operations
-        delete conn;
+        delete server_info.conn;
 
         // Don't wait for any more completions on this connection
         _num_sent -= get_num_uncompleted(server_index);
@@ -1440,10 +1456,14 @@ private:
                 server_info_t& server_info = _server_info[server_index];
                 long delta_completed = server_info.num_completed[op_id] -
                                        server_info.prev_completed[op_id];
-                if (delta_completed < delta_min) {
-                    delta_min = delta_completed;
+                if ((delta_completed < delta_min) ||
+                    ((delta_completed == delta_min) &&
+                     (server_info.retry_count >
+                      _server_info[min_index].retry_count))) {
                     min_index = server_index;
                 }
+
+                delta_min = std::min(delta_completed, delta_min);
                 delta_max = std::max(delta_completed, delta_max);
 
                 server_info.prev_completed[op_id] =

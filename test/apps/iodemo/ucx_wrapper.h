@@ -111,6 +111,11 @@ private:
         WAIT_STATUS_TIMED_OUT
     } wait_status_t;
 
+    typedef struct {
+        ucp_conn_request_h conn_request;
+        struct timeval     arrival_time;
+    } conn_req_t;
+
     friend class UcxConnection;
 
     static const ucp_tag_t IOMSG_TAG = 1ull << 63;
@@ -140,6 +145,8 @@ private:
     ucp_worker_h worker() const;
 
     double connect_timeout() const;
+
+    int is_timeout_elapsed(struct timeval const *tv_prior, double timeout);
 
     void progress_conn_requests();
 
@@ -172,7 +179,7 @@ private:
     ucp_worker_h                   _worker;
     ucp_listener_h                 _listener;
     conn_map_t                     _conns;
-    std::deque<ucp_conn_request_h> _conn_requests;
+    std::deque<conn_req_t>         _conn_requests;
     std::deque<UcxConnection *>    _failed_conns;
     ucx_request*                   _iomsg_recv_request;
     std::string                    _iomsg_buffer;
