@@ -721,7 +721,7 @@ static inline void uct_tcp_ep_handle_put_ack(uct_tcp_ep_t *ep,
                                (UCS_CIRCULAR_COMPARE32(put_comp->wait_put_sn,
                                                        <=, put_ack->sn))) {
         uct_invoke_completion(put_comp->comp, UCS_OK);
-        ucs_free(put_comp);
+        ucs_mpool_put_inline(put_comp);
     }
 }
 
@@ -1723,12 +1723,38 @@ ucs_status_t uct_tcp_ep_am_zcopy(uct_ep_h uct_ep, uint8_t am_id, const void *hea
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_tcp_ep_put_comp_add(uct_tcp_ep_t *ep, uct_completion_t *comp, int wait_sn)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+    uct_tcp_ep_put_completion_t *put_comp;
+
+    if (comp == NULL) {
+        return UCS_OK;
+    }
+
+    put_comp = ucs_mpool_get_inline(&iface->tx_mpool);
+    if (ucs_unlikely(put_comp == NULL)) {
+        ucs_error("tcp_ep %p: unable to allocate PUT completion from mpool",
+                  ep);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    put_comp->wait_put_sn = ep->tx.put_sn;
+    put_comp->comp        = comp;
+    ucs_queue_push(&ep->put_comp_q, &put_comp->elem);
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
                                   size_t iovcnt, uint64_t remote_addr,
                                   uct_rkey_t rkey, uct_completion_t *comp)
 {
     uct_tcp_ep_t *ep                 = ucs_derived_of(uct_ep, uct_tcp_ep_t);
-    uct_tcp_iface_t *iface           = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
+    uct_tcp_iface_t *iface           = ucs_derived_of(uct_ep->iface,
+                                                      uct_tcp_iface_t);
     uct_tcp_ep_zcopy_tx_t *ctx       = NULL;
     uct_tcp_ep_put_req_hdr_t put_req = {0}; /* Suppress Cppcheck false-positive */
     ucs_status_t status;
@@ -1773,13 +1799,17 @@ ucs_status_t uct_tcp_ep_put_zcopy(uct_ep_h uct_ep, const uct_iov_t *iov,
 
     UCT_TL_EP_STAT_OP(&ep->super, PUT, ZCOPY, put_req.length);
 
-    if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
-        uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, &put_req,
-                                         sizeof(put_req), comp);
-        return UCS_INPROGRESS;
+    status = uct_tcp_ep_put_comp_add(ep, comp, put_req.sn);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
     }
 
-    return UCS_OK;
+    if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
+        uct_tcp_ep_set_outstanding_zcopy(iface, ep, ctx, &put_req,
+                                         sizeof(put_req), NULL);
+    }
+
+    return UCS_INPROGRESS;
 }
 
 ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
@@ -1809,7 +1839,6 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
                               uct_completion_t *comp)
 {
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
-    uct_tcp_ep_put_completion_t *put_comp;
     ucs_status_t status;
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
@@ -1829,15 +1858,9 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (ep->flags & UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK) {
-        if (comp != NULL) {
-            put_comp = ucs_calloc(1, sizeof(*put_comp), "put completion");
-            if (put_comp == NULL) {
-                return UCS_ERR_NO_MEMORY;
-            }
-
-            put_comp->wait_put_sn = ep->tx.put_sn;
-            put_comp->comp        = comp;
-            ucs_queue_push(&ep->put_comp_q, &put_comp->elem);
+        status = uct_tcp_ep_put_comp_add(ep, comp, ep->tx.put_sn);
+        if (status != UCS_OK) {
+            return status;
         }
 
         return UCS_INPROGRESS;
