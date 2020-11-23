@@ -182,6 +182,15 @@ public:
                                sendbuf.length() - sizeof(hdr));
     }
 
+    ucs_status_t am_short_iov(uct_ep_h ep, const mapped_buffer &sendbuf,
+                              const mapped_buffer &recvbuf)
+    {
+        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, (char *)sendbuf.ptr(), sendbuf.length(),
+                                sendbuf.memh(), sender().iface_attr().cap.am.max_iov);
+
+        return uct_ep_am_short_iov(ep, AM_ID, iov, iovcnt);
+    }
+
     ucs_status_t am_bcopy(uct_ep_h ep, const mapped_buffer& sendbuf,
                           const mapped_buffer& recvbuf)
     {
@@ -337,6 +346,11 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_sync,
         blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                       sender_ep(), sendbuf_short, recvbuf, false);
         am_sync_finish(am_count);
+
+        am_count = m_am_count;
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short_iov),
+                      sender_ep(), sendbuf_short, recvbuf, false);
+        am_sync_finish(am_count);
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
@@ -378,6 +392,11 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_async,
                                     SEED1, sender());
         am_count = m_am_count;
         blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                      sender_ep(), sendbuf_short, recvbuf, false);
+        am_async_finish(am_count);
+
+        am_count = m_am_count;
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short_iov),
                       sender_ep(), sendbuf_short, recvbuf, false);
         am_async_finish(am_count);
     }
@@ -511,6 +530,42 @@ public:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
+    void am_max_multi(send_func_t send)
+    {
+        ucs_status_t status;
+
+        mapped_buffer small_sendbuf(sizeof(SEED1), SEED1, sender());
+        mapped_buffer sendbuf(ucs_min(sender().iface_attr().cap.am.max_short, 8192ul),
+                              SEED1, sender());
+        mapped_buffer recvbuf(0, 0, sender()); /* dummy */
+
+        m_am_count = 0;
+        set_keep_data(false);
+
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
+                                          this, UCT_CB_FLAG_ASYNC);
+        ASSERT_UCS_OK(status);
+
+        /* exhaust all resources or time out 1sec */
+        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1.0);
+        do {
+            status = (this->*send)(sender_ep(), sendbuf, recvbuf);
+        } while ((ucs_get_time() < loop_end_limit) && (status == UCS_OK));
+        if (status != UCS_ERR_NO_RESOURCE) {
+            ASSERT_UCS_OK(status);
+        }
+
+        /* should be able to send again after a while */
+        ucs_time_t deadline = ucs_get_time() +
+                              (ucs::test_time_multiplier() *
+                               ucs_time_from_sec(DEFAULT_TIMEOUT_SEC));
+        do {
+            progress();
+            status = (this->*send)(sender_ep(), small_sendbuf, recvbuf);
+        } while ((status == UCS_ERR_NO_RESOURCE) && (ucs_get_time() < deadline));
+        EXPECT_EQ(UCS_OK, status);
+    }
+
     bool m_rx_buf_limit_failed;
 };
 
@@ -530,6 +585,15 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_keep_data,
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
                     sender().iface_attr().cap.am.max_short,
+                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_iov_keep_data,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP))
+{
+    set_keep_data(true);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short_iov),
+                    sizeof(uint64_t), sender().iface_attr().cap.am.max_short,
                     TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
@@ -600,41 +664,15 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs,
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, am_max_short_multi,
-                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    ucs_status_t status;
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    am_max_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short));
+}
 
-    m_am_count = 0;
-    set_keep_data(false);
-
-    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
-                                      this, UCT_CB_FLAG_ASYNC);
-    ASSERT_UCS_OK(status);
-
-    size_t size = ucs_min(sender().iface_attr().cap.am.max_short, 8192ul);
-    std::string sendbuf(size, 0);
-    mem_buffer::pattern_fill(&sendbuf[0], sendbuf.size(), SEED1);
-    ucs_assert(SEED1 == *(uint64_t*)&sendbuf[0]);
-
-    /* exhaust all resources or time out 1sec */
-    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1.0);
-    do {
-        status = uct_ep_am_short(sender_ep(), AM_ID, SEED1,
-                                 ((uint64_t*)&sendbuf[0]) + 1,
-                                 sendbuf.size() - sizeof(uint64_t));
-    } while ((ucs_get_time() < loop_end_limit) && (status == UCS_OK));
-    if (status != UCS_ERR_NO_RESOURCE) {
-        ASSERT_UCS_OK(status);
-    }
-
-    /* should be able to send again after a while */
-    ucs_time_t deadline = ucs_get_time() +
-                    (ucs::test_time_multiplier() *
-                     ucs_time_from_sec(DEFAULT_TIMEOUT_SEC));
-    do {
-        progress();
-        status = uct_ep_am_short(sender_ep(), AM_ID, SEED1, NULL, 0);
-    } while ((status == UCS_ERR_NO_RESOURCE) && (ucs_get_time() < deadline));
-    EXPECT_EQ(UCS_OK, status);
+UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, am_max_short_iov_multi,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    am_max_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short_iov));
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_misc)

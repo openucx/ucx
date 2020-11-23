@@ -75,6 +75,10 @@ typedef ucs_status_t (*uct_ep_am_short_func_t)(uct_ep_h ep,
                                                const void *payload,
                                                unsigned length);
 
+typedef ucs_status_t (*uct_ep_am_short_iov_func_t)(uct_ep_h ep, uint8_t id,
+                                                   const uct_iov_t *iov,
+                                                   size_t iovcnt);
+
 typedef ssize_t      (*uct_ep_am_bcopy_func_t)(uct_ep_h ep,
                                                uint8_t id,
                                                uct_pack_callback_t pack_cb,
@@ -299,6 +303,7 @@ typedef struct uct_iface_ops {
 
     /* endpoint - active message */
     uct_ep_am_short_func_t              ep_am_short;
+    uct_ep_am_short_iov_func_t          ep_am_short_iov;
     uct_ep_am_bcopy_func_t              ep_am_bcopy;
     uct_ep_am_zcopy_func_t              ep_am_zcopy;
 

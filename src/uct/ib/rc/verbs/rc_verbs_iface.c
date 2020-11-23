@@ -456,6 +456,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     {
     {
     .ep_am_short              = uct_rc_verbs_ep_am_short,
+    .ep_am_short_iov          = uct_base_ep_am_short_iov,
     .ep_am_bcopy              = uct_rc_verbs_ep_am_bcopy,
     .ep_am_zcopy              = uct_rc_verbs_ep_am_zcopy,
     .ep_put_short             = uct_rc_verbs_ep_put_short,

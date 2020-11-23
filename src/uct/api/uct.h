@@ -889,8 +889,9 @@ struct uct_iface_attr {
         } get;                           /**< Attributes for GET operations */
 
         struct {
-            size_t           max_short;  /**< Total max. size (incl. the header) */
-            size_t           max_bcopy;  /**< Total max. size (incl. the header) */
+            size_t           max_short;  /**< Total maximum size (incl. the header)
+                                              @anchor uct_iface_attr_cap_am_max_short */
+            size_t           max_bcopy;  /**< Total maximum size (incl. the header) */
             size_t           min_zcopy;  /**< Minimal size for am_zcopy (incl. the
                                               header and total of @ref uct_iov_t::length
                                               of the @a iov parameter) */
@@ -2636,6 +2637,43 @@ UCT_INLINE_API ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t he
                                             const void *payload, unsigned length)
 {
     return ep->iface->ops.ep_am_short(ep, id, header, payload, length);
+}
+
+
+/**
+ * @ingroup UCT_AM
+ * @brief Short io-vector send operation.
+ *
+ * This routine sends a message using @ref uct_short_protocol_desc "short" protocol.
+ * The input data in @a iov array of @ref ::uct_iov_t structures is sent to remote
+ * side to contiguous buffer keeping the order of the data in the array.
+ *
+ * @param [in] ep              Destination endpoint handle.
+ * @param [in] id              Active message id. Must be in range 0..UCT_AM_ID_MAX-1.
+ * @param [in] iov             Points to an array of @ref ::uct_iov_t structures.
+ *                             The @a iov pointer must be a valid address of an array
+ *                             of @ref ::uct_iov_t structures. A particular structure
+ *                             pointer must be a valid address. A NULL terminated
+ *                             array is not required. @a stride and @a count fields in
+ *                             @ref ::uct_iov_t structure are ignored in current
+ *                             implementation. The total size of the data buffers in
+ *                             the array is limited by
+ *                             @ref uct_iface_attr_cap_am_max_short
+ *                             "uct_iface_attr::cap::am::max_short".
+ * @param [in] iovcnt          Size of the @a iov data @ref ::uct_iov_t structures
+ *                             array. If @a iovcnt is zero, the data is considered empty.
+ *                             @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
+ *                             "uct_iface_attr::cap::am::max_iov".
+ *
+ * @return UCS_OK              Operation completed successfully.
+ * @return UCS_ERR_NO_RESOURCE Could not start the operation due to lack of
+ *                             send resources.
+ * @return otherwise           Error code.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_am_short_iov(uct_ep_h ep, uint8_t id,
+                                                const uct_iov_t *iov, size_t iovcnt)
+{
+    return ep->iface->ops.ep_am_short_iov(ep, id, iov, iovcnt);
 }
 
 

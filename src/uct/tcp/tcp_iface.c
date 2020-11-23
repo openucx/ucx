@@ -336,6 +336,7 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_am_short              = uct_tcp_ep_am_short,
+    .ep_am_short_iov          = uct_base_ep_am_short_iov,
     .ep_am_bcopy              = uct_tcp_ep_am_bcopy,
     .ep_am_zcopy              = uct_tcp_ep_am_zcopy,
     .ep_put_zcopy             = uct_tcp_ep_put_zcopy,
