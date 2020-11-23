@@ -236,19 +236,31 @@ int ucs_config_sscanf_ternary(const char *buf, void *dest, const void *arg)
     if (!strcasecmp(buf, "try") || !strcasecmp(buf, "maybe")) {
         *(int*)dest = UCS_TRY;
         return 1;
-    } else {
-        return ucs_config_sscanf_bool(buf, dest, arg);
     }
+
+    return ucs_config_sscanf_bool(buf, dest, arg);
 }
 
-int ucs_config_sprintf_ternary(char *buf, size_t max,
-                               const void *src, const void *arg)
+int ucs_config_sscanf_ternary_auto(const char *buf, void *dest, const void *arg)
 {
-    if (*(int*)src == UCS_TRY) {
-        return snprintf(buf, max, "try");
-    } else {
-        return ucs_config_sprintf_bool(buf, max, src, arg);
+    if (!strcasecmp(buf, UCS_VALUE_AUTO_STR)) {
+        *(int*)dest = UCS_AUTO;
+        return 1;
     }
+
+    return ucs_config_sscanf_ternary(buf, dest, arg);
+}
+
+int ucs_config_sprintf_ternary_auto(char *buf, size_t max,
+                                    const void *src, const void *arg)
+{
+    if (*(int*)src == UCS_AUTO) {
+        return snprintf(buf, max, UCS_VALUE_AUTO_STR);
+    } else if (*(int*)src == UCS_TRY) {
+        return snprintf(buf, max, "try");
+    }
+
+    return ucs_config_sprintf_bool(buf, max, src, arg);
 }
 
 int ucs_config_sscanf_on_off(const char *buf, void *dest, const void *arg)

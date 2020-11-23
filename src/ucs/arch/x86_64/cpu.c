@@ -103,7 +103,7 @@ typedef struct ucs_x86_cpu_cache_size_codes {
 } ucs_x86_cpu_cache_size_codes_t;
 
 
-ucs_ternary_value_t ucs_arch_x86_enable_rdtsc = UCS_TRY;
+ucs_ternary_auto_value_t ucs_arch_x86_enable_rdtsc = UCS_TRY;
 
 static const ucs_x86_cpu_cache_info_t x86_cpu_cache[] = {
     [UCS_CPU_CACHE_L1d] = {.level = 1, .type = X86_CPU_CACHE_TYPE_DATA},

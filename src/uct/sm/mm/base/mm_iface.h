@@ -81,7 +81,7 @@ typedef struct uct_mm_iface_config {
     size_t                   fifo_max_poll;       /* Maximal RX completions to pick
                                                    * during RX poll */
     double                   release_fifo_factor; /* Tail index update frequency */
-    ucs_ternary_value_t      hugetlb_mode;        /* Enable using huge pages for
+    ucs_ternary_auto_value_t hugetlb_mode;        /* Enable using huge pages for
                                                    * shared memory buffers */
     unsigned                 fifo_elem_size;      /* Size of the FIFO element size */
     uct_iface_mpool_config_t mp;

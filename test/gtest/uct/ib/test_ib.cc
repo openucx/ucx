@@ -465,7 +465,7 @@ UCS_TEST_F(test_uct_ib_utils, sec_to_rnr_time) {
 #if HAVE_DEVX
 class test_uct_ib_sl_utils : public test_uct_ib_utils {
 protected:
-    ucs_status_t ib_select_sl(ucs_ternary_value_t ar_enable,
+    ucs_status_t ib_select_sl(ucs_ternary_auto_value_t ar_enable,
                               uint64_t test_ooo_sl_mask,
                               const uct_ib_iface_config_t &config,
                               uint8_t &sl) const {
@@ -478,25 +478,40 @@ protected:
                                      "mlx5_0", 1, &sl);
     }
 
-    ucs_status_t select_sl_ok(ucs_ternary_value_t ar_enable,
+    ucs_status_t select_sl_ok(ucs_ternary_auto_value_t ar_enable,
                               unsigned long config_sl,
                               uint64_t ooo_sl_mask,
                               const uct_ib_iface_config_t &config) const {
+        uint16_t sls_with_ar, sls_without_ar;
         ucs_status_t status;
         uint8_t sl;
 
+        if (ooo_sl_mask != m_ooo_sl_mask_not_detected) {
+            sls_with_ar    = static_cast<uint16_t>(ooo_sl_mask);
+            sls_without_ar = static_cast<uint16_t>(~ooo_sl_mask);
+        } else {
+            sls_with_ar    =
+            sls_without_ar = 0;
+        }
+
         status = ib_select_sl(ar_enable, ooo_sl_mask, config, sl); 
-        if ((ooo_sl_mask == 0) || (ar_enable == UCS_NO)) {
+        if ((ooo_sl_mask == 0) || (ar_enable == UCS_AUTO)) {
             if (config_sl == UCS_ULUNITS_AUTO) {
-                if (sl != 0) {
-                    return status;
-                }
-                EXPECT_EQ(0 /* the default SL value */, sl);
+                EXPECT_EQ(m_default_sl, sl);
             } else {
                 EXPECT_EQ(static_cast<uint8_t>(config_sl), sl);
             }
         } else if (config_sl == UCS_ULUNITS_AUTO) {
-            EXPECT_EQ(ucs_ffs64_safe(ooo_sl_mask), sl);
+            if ((ar_enable == UCS_YES) ||
+                ((ar_enable == UCS_TRY) && (sls_with_ar != 0))) {
+                EXPECT_EQ(ucs_ffs64_safe(sls_with_ar), sl);
+            } else if ((ar_enable == UCS_NO) ||
+                       ((ar_enable == UCS_TRY) && (sls_without_ar != 0))) {
+                EXPECT_EQ(ucs_ffs64_safe(sls_without_ar), sl);
+            } else {
+                EXPECT_EQ(UCS_TRY, ar_enable);
+                EXPECT_EQ(m_default_sl, sl);
+            }
         } else {
             EXPECT_EQ(static_cast<uint8_t>(config_sl), sl);
         }
@@ -504,16 +519,18 @@ protected:
         return status;
     }
 
-    ucs_status_t select_sl_nok(ucs_ternary_value_t ar_enable,
+    ucs_status_t select_sl_nok(ucs_ternary_auto_value_t ar_enable,
                                uint64_t ooo_sl_mask,
                                const uct_ib_iface_config_t &config) const {
         scoped_log_handler slh(wrap_errors_logger);
         uint8_t sl;
 
+        EXPECT_NE(UCS_AUTO, ar_enable);
+
         return ib_select_sl(ar_enable, ooo_sl_mask, config, sl);
     }
 
-    void select_sl(ucs_ternary_value_t ar_enable, unsigned long config_sl,
+    void select_sl(ucs_ternary_auto_value_t ar_enable, unsigned long config_sl,
                    uint64_t ooo_sl_mask, ucs_status_t exp_status) const {
         uct_ib_iface_config_t config = {};
         ucs_status_t status;
@@ -530,17 +547,20 @@ protected:
 
 protected:
     const static uint64_t m_ooo_sl_mask_not_detected;
+    const static uint8_t  m_default_sl;
 };
 
 const uint64_t test_uct_ib_sl_utils::m_ooo_sl_mask_not_detected =
                                      std::numeric_limits<uint64_t>::max();
+const uint8_t  test_uct_ib_sl_utils::m_default_sl               = 0;
 
 
 UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
     const ucs_status_t err_status = UCS_ERR_UNSUPPORTED;
 
     for (unsigned i = 0; i < static_cast<unsigned>(UCS_TERNARY_LAST); i++) {
-        ucs_ternary_value_t ar_enable = static_cast<ucs_ternary_value_t>(i);
+        ucs_ternary_auto_value_t ar_enable =
+            static_cast<ucs_ternary_auto_value_t>(i);
 
         /* select the default SL, with empty OOO SL mask */
         select_sl(ar_enable, UCS_ULUNITS_AUTO, 0,
@@ -548,7 +568,8 @@ UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
 
         /* select the default SL, without OOO SL mask (not detected) */
         select_sl(ar_enable, UCS_ULUNITS_AUTO, m_ooo_sl_mask_not_detected,
-                  (ar_enable != UCS_TRY) ? err_status : UCS_OK);
+                  ((ar_enable != UCS_TRY) && (ar_enable != UCS_AUTO)) ?
+                  err_status : UCS_OK);
 
         /* select the default SL, with OOO SL mask { 4 } */
         select_sl(ar_enable, UCS_ULUNITS_AUTO, UCS_BIT(4), UCS_OK);
@@ -559,7 +580,8 @@ UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
 
         /* select SL=8, without OOO SL mask (not detected) */
         select_sl(ar_enable, 8, m_ooo_sl_mask_not_detected,
-                  (ar_enable != UCS_TRY) ? err_status : UCS_OK);
+                  ((ar_enable != UCS_TRY) && (ar_enable != UCS_AUTO)) ?
+                  err_status : UCS_OK);
 
         /* select SL=8, with OOO SL mask { 8 } */
         select_sl(ar_enable, 8, UCS_BIT(8),

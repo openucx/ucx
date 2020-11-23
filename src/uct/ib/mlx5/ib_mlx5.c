@@ -50,20 +50,20 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      ucs_offsetof(uct_ib_mlx5_iface_config_t, mmio_mode),
      UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_mmio_modes)},
 
-    {"AR_ENABLE", "try",
+    {"AR_ENABLE", "auto",
      "Enable Adaptive Routing (out of order) feature on SL that supports it.\n"
      "SLs are selected as follows:\n"
-     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
-     "+                                         + UCX_IB_AR=yes         + UCX_IB_AR=no          + UCX_IB_AR=try         +\n"
-     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
-     "+ UCX_IB_SL=auto + AR enabled on some SLs + Use 1st SL with AR    + Use 1st SL without AR + Use 1st SL with AR    +\n"
-     "+                + AR enabled on all SLs  + Use SL=0              + Failure               + Use SL=0              +\n"
-     "+                + AR disabled on all SLs + Failure               + Use SL=0              + Use SL=0              +\n"
-     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
-     "+ UCX_IB_SL=<sl> + AR enabled on <sl>     + Use SL=<sl>           + Failure               + Use SL=<sl>           +\n"
-     "+                + AR disabled on <sl>    + Failure               + Use SL=<sl>           + Use SL=<sl>           +\n"
-     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",
-     ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable), UCS_CONFIG_TYPE_TERNARY},
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+     "+                                         + UCX_IB_AR_ENABLE=yes  + UCX_IB_AR_ENABLE=no   + UCX_IB_AR_ENABLE=try  + UCX_IB_AR_ENABLE=auto +\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+     "+ UCX_IB_SL=auto + AR enabled on some SLs + Use 1st SL with AR    + Use 1st SL without AR + Use 1st SL with AR    + Use SL=0              +\n"
+     "+                + AR enabled on all SLs  + Use SL=0              + Failure               + Use SL=0              + Use SL=0              +\n"
+     "+                + AR disabled on all SLs + Failure               + Use SL=0              + Use SL=0              + Use SL=0              +\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+     "+ UCX_IB_SL=<sl> + AR enabled on <sl>     + Use SL=<sl>           + Failure               + Use SL=<sl>           + Use SL=<sl>           +\n"
+     "+                + AR disabled on <sl>    + Failure               + Use SL=<sl>           + Use SL=<sl>           + Use SL=<sl>           +\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable), UCS_CONFIG_TYPE_TERNARY_AUTO},
 
     {NULL}
 };
@@ -719,7 +719,7 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
 /* Keep the function as a separate to test SL selection */
 ucs_status_t
 uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
-                      ucs_ternary_value_t ar_enable,
+                      ucs_ternary_auto_value_t ar_enable,
                       uint16_t hw_sl_mask, int have_sl_mask_cap,
                       const char *dev_name, uint8_t port_num,
                       uint8_t *sl_p)
@@ -749,8 +749,16 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
     ucs_string_buffer_init(&sls_with_ar_str);
     ucs_string_buffer_init(&sls_without_ar_str);
 
-    if (((ar_enable == UCS_YES) || (ar_enable == UCS_TRY)) &&
-        (sls_with_ar != 0)) {
+    if (ar_enable == UCS_AUTO) {
+        /* selects SL requested by a user */
+        sl                    = ucs_ffs64(sl_allow_mask);
+        if (have_sl_mask_cap) {
+            sl_ar_support_str = (sl & sls_with_ar) ? "yes" : "no";
+        } else {
+            sl_ar_support_str = "unknown";
+        }
+    } else if (((ar_enable == UCS_YES) || (ar_enable == UCS_TRY)) &&
+               (sls_with_ar != 0)) {
         /* have SLs with AR, and AR is YES/TRY */
         sl                = ucs_ffs64(sls_with_ar);
         sl_ar_support_str = "yes";
@@ -782,8 +790,8 @@ out_str_buf_clean:
 err:
     ucs_assert(ar_enable != UCS_TRY);
     ucs_config_sprintf_ulunits(sl_str, sizeof(sl_str), &ib_config->sl, NULL);
-    ucs_config_sprintf_ternary(ar_enable_str, sizeof(ar_enable_str), &ar_enable,
-                               NULL);
+    ucs_config_sprintf_ternary_auto(ar_enable_str, sizeof(ar_enable_str),
+                                    &ar_enable, NULL);
     ucs_error("AR=%s was requested for SL=%s, but %s %s AR on %s:%u,"
               " SLs with AR support = { %s }, SLs without AR support = { %s }",
               ar_enable_str, sl_str,
