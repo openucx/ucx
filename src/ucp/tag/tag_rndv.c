@@ -95,9 +95,9 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     ucp_ep_h ep = sreq->send.ep;
     ucs_status_t status;
 
-    ucp_trace_req(sreq, "start_rndv to %s buffer %p length %zu",
+    ucp_trace_req(sreq, "start_rndv to %s buffer %p length %zu mem_type:%s",
                   ucp_ep_peer_name(ep), sreq->send.buffer,
-                  sreq->send.length);
+                  sreq->send.length, ucs_memory_type_names[sreq->send.mem_type]);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
     status = ucp_ep_resolve_remote_id(ep, sreq->send.lane);

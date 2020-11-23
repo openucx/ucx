@@ -64,6 +64,8 @@ UCS_TEST_F(test_string, mask_str) {
 }
 
 class test_string_buffer : public ucs::test {
+protected:
+    void test_fixed(ucs_string_buffer_t *strb, size_t capacity);
 };
 
 
@@ -117,16 +119,34 @@ UCS_TEST_F(test_string_buffer, rtrim) {
     ucs_string_buffer_cleanup(&strb);
 }
 
-UCS_TEST_F(test_string_buffer, fixed) {
+void test_string_buffer::test_fixed(ucs_string_buffer_t *strb, size_t capacity)
+{
+    ucs_string_buffer_appendf(strb, "%s", "im");
+    ucs_string_buffer_appendf(strb, "%s", "mrmeeseeks");
+    ucs_string_buffer_appendf(strb, "%s", "lookatme");
+
+    EXPECT_LE(ucs_string_buffer_length(strb), capacity - 1);
+    EXPECT_EQ(std::string("immrmeeseeksloo"), ucs_string_buffer_cstr(strb));
+}
+
+UCS_TEST_F(test_string_buffer, fixed_static) {
     char buf[17];
-    UCS_STRING_BUFFER_FIXED(strb, buf);
+    UCS_STRING_BUFFER_STATIC(strb, buf);
+    test_fixed(&strb, sizeof(buf));
+}
 
-    ucs_string_buffer_appendf(&strb, "%s", "im");
-    ucs_string_buffer_appendf(&strb, "%s", "mrmeeseeks");
-    ucs_string_buffer_appendf(&strb, "%s", "lookatme");
+UCS_TEST_F(test_string_buffer, fixed_init) {
+    ucs_string_buffer_t strb;
+    char buf[17];
 
-    EXPECT_LE(ucs_string_buffer_length(&strb), sizeof(buf) - 1);
-    EXPECT_EQ(std::string("immrmeeseeksloo"), ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_init_fixed(&strb, buf, sizeof(buf));
+    test_fixed(&strb, sizeof(buf));
+}
+
+UCS_TEST_F(test_string_buffer, fixed_onstack) {
+    const size_t num_elems = 17;
+    UCS_STRING_BUFFER_ONSTACK(strb, num_elems);
+    test_fixed(&strb, num_elems);
 }
 
 class test_string_set : public ucs::test {

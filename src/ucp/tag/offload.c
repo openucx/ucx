@@ -90,9 +90,10 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_tag_consumed, (self),
 
 /* Message is scattered to user buffer by the transport, complete the request */
 UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
-                      (self, stag, imm, length, status),
+                      (self, stag, imm, length, inline_data, status),
                       uct_tag_context_t *self, uct_tag_t stag,
-                      uint64_t imm, size_t length, ucs_status_t status)
+                      uint64_t imm, size_t length, void *inline_data,
+                      ucs_status_t status)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     ucp_eager_sync_hdr_t hdr;
@@ -117,7 +118,10 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
                                     UCP_RECV_DESC_FLAG_EAGER_OFFLOAD);
     }
 
-    if (req->recv.tag.rdesc != NULL) {
+    if (ucs_unlikely(inline_data != NULL)) {
+        status = ucp_request_recv_data_unpack(req, inline_data, length, 0, 1);
+        ucs_mpool_put_inline(req->recv.tag.rdesc);
+    } else if (req->recv.tag.rdesc != NULL) {
         status = ucp_request_recv_data_unpack(req, req->recv.tag.rdesc + 1,
                                               length, 0, 1);
         ucs_mpool_put_inline(req->recv.tag.rdesc);
@@ -133,10 +137,10 @@ out:
 
 /* RNDV request matched by the transport. Need to proceed with SW based RNDV */
 UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
-                      (self, stag, header, header_length, status),
+                      (self, stag, header, header_length, status, flags),
                       uct_tag_context_t *self, uct_tag_t stag,
                       const void *header, unsigned header_length,
-                      ucs_status_t status)
+                      ucs_status_t status, unsigned flags)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, recv.uct_ctx);
     void *header_host_copy;
@@ -151,7 +155,8 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
 
     ucs_assert(header_length >= sizeof(ucp_rndv_rts_hdr_t));
 
-    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->recv.mem_type)) {
+    if (UCP_MEM_IS_HOST(req->recv.mem_type) ||
+        (flags & UCT_TAG_RECV_CB_INLINE_DATA)) {
         ucp_tag_rndv_matched(req->recv.worker, req, header);
     } else {
         /* SW rendezvous request is stored in the user buffer (temporarily)
@@ -274,7 +279,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
     /* Do not use bounce buffer for receives to GPU memory to avoid
      * cost of h2d transfers (i.e. cuda_copy from staging to dest memory). */
     if ((length >= worker->tm.offload.zcopy_thresh) ||
-        !UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->recv.mem_type)) {
+        !UCP_MEM_IS_HOST(req->recv.mem_type)) {
         if (length > wiface->attr.cap.tag.recv.max_zcopy) {
             /* Post maximum allowed length. If sender sends smaller message
              * (which is allowed per MPI standard), max recv should fit it.

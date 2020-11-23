@@ -302,6 +302,9 @@ build_server_args_list() {
 		-q)
 			iodemo_server_args+=" $key"
 			;;
+		-a)
+			iodemo_server_args+=" $key"
+			;;
 		*)
 			;;
 		esac

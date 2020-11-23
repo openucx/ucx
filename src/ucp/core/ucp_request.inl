@@ -770,7 +770,7 @@ ucp_request_param_rndv_thresh(ucp_request_t *req,
                               size_t *rndv_rma_thresh, size_t *rndv_am_thresh)
 {
     if ((param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
-        ucs_likely(UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
+        ucs_likely(UCP_MEM_IS_HOST(req->send.mem_type))) {
         *rndv_rma_thresh = rma_thresh_config->local;
         *rndv_am_thresh  = am_thresh_config->local;
     } else {

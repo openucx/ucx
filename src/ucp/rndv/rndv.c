@@ -799,7 +799,7 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *rndv_req,
                                 size_t length, size_t offset)
 {
 
-    ucs_assert_always(!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(rreq->recv.mem_type));
+    ucs_assert_always(!UCP_MEM_IS_HOST(rreq->recv.mem_type));
 
     /* PUT on memtype endpoint to stage from
      * frag recv buffer to memtype recv buffer
@@ -1260,8 +1260,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
             }
         }
 
-        if ((rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY) ||
-            UCP_MEM_IS_CUDA(rreq->recv.mem_type)) {
+        if (!is_get_zcopy_failed) {
             /* put protocol is allowed - register receive buffer memory for rma */
             ucs_assert(rndv_rts_hdr->size <= rreq->recv.length);
             ucp_request_recv_buffer_reg(rreq, ep_config->key.rma_bw_md_map,
@@ -1579,7 +1578,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
         length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_frag_size, 0,
                                               rndv_size, offset, rndv_size - offset);
 
-        if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(sreq->send.mem_type)) {
+        if (UCP_MEM_IS_HOST(sreq->send.mem_type)) {
             /* sbuf is in host, directly do put */
             freq = ucp_request_get(worker);
             if (ucs_unlikely(freq == NULL)) {
@@ -1679,7 +1678,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                       ucp_ep_peer_name(ep), ucs_status_string(status));
         }
 
-        is_pipeline_rndv = ((!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(sreq->send.mem_type) ||
+        is_pipeline_rndv = ((!UCP_MEM_IS_HOST(sreq->send.mem_type) ||
                              (sreq->send.length != rndv_rtr_hdr->size)) &&
                             (context->config.ext.rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY));
 
@@ -1805,16 +1804,14 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     const ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
     const ucp_rndv_data_hdr_t *rndv_data   = data;
     const ucp_reply_hdr_t *rep_hdr         = data;
+    UCS_STRING_BUFFER_ONSTACK(rts_info, 64);
     ucp_tag_rndv_rts_hdr_t *tag_rts;
     ucp_am_rndv_rts_hdr_t *am_rts;
-    ucs_string_buffer_t rts_info;
     void *rkey_buf;
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
         ucs_assert(rndv_rts_hdr->sreq.ep_id != UCP_EP_ID_INVALID);
-
-        ucs_string_buffer_init(&rts_info);
 
         if (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_AM) {
             am_rts   = ucs_derived_of(rndv_rts_hdr, ucp_am_rndv_rts_hdr_t);
@@ -1841,8 +1838,6 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
             ucp_rndv_dump_rkey(rkey_buf, buffer + strlen(buffer),
                                max - strlen(buffer));
         }
-
-        ucs_string_buffer_cleanup(&rts_info);
         break;
     case UCP_AM_ID_RNDV_ATS:
         snprintf(buffer, max, "RNDV_ATS sreq_id 0x%"PRIx64" status '%s'",

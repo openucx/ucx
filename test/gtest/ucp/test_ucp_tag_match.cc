@@ -795,3 +795,4 @@ UCS_TEST_P(test_ucp_tag_match_rndv, bidir_multi_exp_post, "RNDV_THRESH=0") {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match_rndv)
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_match_rndv, mm_tcp, "posix,sysv,tcp")

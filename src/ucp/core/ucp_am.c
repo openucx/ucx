@@ -35,8 +35,7 @@ ucs_status_t ucp_am_init(ucp_worker_h worker)
         return UCS_OK;
     }
 
-    ucs_array_init_dynamic(ucp_am_cbs, &worker->am);
-
+    ucs_array_init_dynamic(&worker->am);
     return UCS_OK;
 }
 
@@ -46,7 +45,7 @@ void ucp_am_cleanup(ucp_worker_h worker)
         return;
     }
 
-    ucs_array_cleanup_dynamic(ucp_am_cbs, &worker->am);
+    ucs_array_cleanup_dynamic(&worker->am);
 }
 
 void ucp_am_ep_init(ucp_ep_h ep)

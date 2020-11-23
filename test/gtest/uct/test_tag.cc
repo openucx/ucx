@@ -372,7 +372,7 @@ public:
     }
 
     static void completed(uct_tag_context_t *self, uct_tag_t stag, uint64_t imm,
-                          size_t length, ucs_status_t status)
+                          size_t length, void *inline_data, ucs_status_t status)
     {
         recv_ctx *user_ctx = ucs_container_of(self, recv_ctx, uct_ctx);
         user_ctx->comp     = true;
@@ -383,7 +383,7 @@ public:
 
     static void sw_rndv_completed(uct_tag_context_t *self, uct_tag_t stag,
                                   const void *header, unsigned header_length,
-                                  ucs_status_t status)
+                                  ucs_status_t status, unsigned flags)
     {
         recv_ctx *user_ctx = ucs_container_of(self, recv_ctx, uct_ctx);
         user_ctx->sw_rndv  = true;

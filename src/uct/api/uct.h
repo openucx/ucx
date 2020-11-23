@@ -1413,11 +1413,16 @@ struct uct_tag_context {
     /**
      * Tag processing is completed by the transport.
      *
-     * @param [in]  self    Pointer to relevant context structure, which was
-     *                      initially passed to @ref uct_iface_tag_recv_zcopy.
-     * @param [in]  stag    Tag from sender.
-     * @param [in]  imm     Immediate data from sender. For rendezvous, it's always 0.
-     * @param [in]  length  Completed length.
+     * @param [in]  self        Pointer to relevant context structure, which was
+     *                          initially passed to @ref uct_iface_tag_recv_zcopy.
+     * @param [in]  stag        Tag from sender.
+     * @param [in]  imm         Immediate data from sender. For rendezvous, it's always 0.
+     * @param [in]  length      Completed length.
+     * @param [in]  inline_data If non-null, points to a temporary buffer which contains
+                                the received data. In this case the received data was not
+                                placed directly in the receive buffer. This callback routine
+                                is responsible for copy-out the inline data, otherwise it is
+                                released.
      * @param [in]  status  Completion status:
      * (a)   UCS_OK - Success, data placed in provided buffer.
      * (b)   UCS_ERR_TRUNCATED - Sender's length exceed posted
@@ -1425,7 +1430,7 @@ struct uct_tag_context {
      * (c)   UCS_ERR_CANCELED - Canceled by user.
      */
      void (*completed_cb)(uct_tag_context_t *self, uct_tag_t stag, uint64_t imm,
-                          size_t length, ucs_status_t status);
+                          size_t length, void *inline_data, ucs_status_t status);
 
     /**
      * Tag was matched by a rendezvous request, which should be completed by
@@ -1437,12 +1442,23 @@ struct uct_tag_context {
      * @param [in]  header        User defined header.
      * @param [in]  header_length User defined header length in bytes.
      * @param [in]  status        Completion status.
+     * @param [in]  flags         Flags defined by UCT_TAG_RECV_CB_xx.
      */
      void (*rndv_cb)(uct_tag_context_t *self, uct_tag_t stag, const void *header,
-                     unsigned header_length, ucs_status_t status);
+                     unsigned header_length, ucs_status_t status, unsigned flags);
 
      /** A placeholder for the private data used by the transport */
      char priv[UCT_TAG_PRIV_LEN];
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief flags of @ref uct_tag_context.
+ */
+enum {
+    /* If set, header points to inline data, otherwise it is user buffer. */
+    UCT_TAG_RECV_CB_INLINE_DATA = UCS_BIT(0)
 };
 
 
