@@ -18,6 +18,11 @@ extern "C" {
 #include <vector>
 
 
+#define UCP_ARM_PERF_TEST_MULTIPLIER  2
+#define UCT_ARM_PERF_TEST_MULTIPLIER 15
+#define UCT_PERF_TEST_MULTIPLIER      5
+
+
 test_perf::rte_comm::rte_comm() {
     pthread_mutex_init(&m_mutex, NULL);
 }
@@ -253,7 +258,7 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
 }
 
 double test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
-                         const std::string &tl_name, const std::string &dev_name)
+                           const std::string &tl_name, const std::string &dev_name)
 {
     std::vector<int> cpus = get_affinity();
     if (cpus.size() < 2) {
@@ -300,8 +305,26 @@ double test_perf::run_test(const test_spec& test, unsigned flags, bool check_per
         }
     }
 
-    ADD_FAILURE() << "Invalid " << test.title << " performance, expected: " <<
-        std::setprecision(3) << test.min << ".." << test.max;
+    ADD_FAILURE() << "Invalid " << test.title << " performance, expected: "
+                  << std::setprecision(3) << test.min << ".." << test.max;
+
     return 0.0;
 }
 
+void test_perf::test_adjust(test_spec &test)
+{
+    if (test.api == UCX_PERF_API_UCT) {
+        if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
+            test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
+            test.min /= UCT_ARM_PERF_TEST_MULTIPLIER;
+        } else {
+            test.max *= UCT_PERF_TEST_MULTIPLIER;
+            test.min /= UCT_PERF_TEST_MULTIPLIER;
+        }
+    } else {
+        if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
+            test.max *= UCP_ARM_PERF_TEST_MULTIPLIER;
+            test.min /= UCP_ARM_PERF_TEST_MULTIPLIER;
+        }
+    }
+}
