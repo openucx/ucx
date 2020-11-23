@@ -16,17 +16,6 @@ resources:
       endpoint: ucfconsort_registry
 
 stages:
-  - stage: Logging
-    jobs:
-      - job: test_log
-        displayName: test log
-        steps:
-          - bash: |
-              #!/bin/bash
-              echo "##vso[task.logissue type=warning]Found something that could be a problem"
-
-
-
   - stage: Codestyle
     jobs:
       # Check that commit title matches code style guidelines
@@ -59,24 +48,139 @@ stages:
               fi
             condition: eq(variables['Build.Reason'], 'PullRequest')
 
-  - stage: Logging1
-    dependsOn: [Logging]
+  - stage: Build
     jobs:
-      - job: test_log1
-        displayName: test log
+      - job: static_checks
+        displayName: Static checks
+        container: fedora
         steps:
-          - bash: |
-              #!/bin/bash
-              echo "##vso[task.logissue type=warning]Found something that could be a problem"
-              exit 1
+          - checkout: self
+            clean: true
 
-  - stage: Logging2
+          - bash: ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              set -eE
+              mkdir build && cd build
+              clang --version
+              gcc --version
+              cppcheck --version
+              ../contrib/configure-release
+            displayName: Configure
+
+          - bash: |
+              set -eE
+
+              cd build
+
+              export PATH="`csclng --print-path-to-wrap`:`cscppc --print-path-to-wrap`:`cswrap --print-path-to-wrap`:$PATH"
+              make -j`nproc` 2>&1 | tee compile.log
+            displayName: Build
+
+          - bash: |
+              set -eE
+
+              cd build
+
+              cs_errors="cs.err"
+              cslinker --quiet compile.log \
+                | csgrep --mode=json --path $(dirname $PWD) --strip-path-prefix $(dirname $PWD) \
+                | csgrep --mode=json --invert-match --path 'conftest.c' \
+                | csgrep --mode=grep --invert-match --event "internal warning" --prune-events=1 \
+                > $cs_errors
+
+              if [ -s $cs_errors ]; then
+                echo "static checkers found errors:"
+                cat $cs_errors
+                echo "##vso[task.logissue type=error]static checkers found errors"
+                echo "##vso[task.complete result=Failed;]"
+              else
+                echo "No errors reported by static checkers"
+              fi
+            displayName: cstools reports
+
+      # Perform test builds on relevant distributions.
+      - job: Distros
+        displayName: Build for
+        strategy:
+          matrix:
+            centos7:
+              CONTAINER: centos7
+              CONFIGURE_OPTS:
+        container: $[ variables['CONTAINER'] ]
+        steps:
+          - checkout: self
+            clean: true
+
+          - bash: ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              set -eE
+              mkdir build && cd build
+              ../configure $(CONFIGURE_OPTS)
+            displayName: Configure
+
+          - bash: |
+              set -eE
+              cd build
+              gcc -v
+              make -s -j `nproc`
+            displayName: Build for $(CONTAINER)
+
+      # Test RPM build
+      - job: build_rpm
+        displayName: Build tarball and source rpm
+        container: fedora
+        steps:
+          - checkout: self
+            clean: true
+
+          - bash: ./autogen.sh
+            displayName: Setup autotools
+
+          - bash: |
+              set -eE
+              gcc --version
+              ./contrib/configure-release
+              stdbuf -e0 -o0 ./contrib/buildrpm.sh -s -t -b |& tee rpmbuild.log
+              pattern='^warning: '
+              if grep -q "$pattern" rpmbuild.log; then
+                echo "rpm build generated warnings:"
+                grep "$pattern" rpmbuild.log
+                echo "##vso[task.logissue type=error]rpm build generated warnings"
+                echo "##vso[task.complete result=Failed;]"
+              fi
+            displayName: Configure source and build RPM
+
+  - stage: Tests
     dependsOn: [Codestyle]
     jobs:
-      - job: test_log3
-        displayName: test log
-        steps:
-          - bash: |
-              #!/bin/bash
-              echo "##vso[task.logissue type=warning]Found something that could be a problem"
-              exit 0
+    - template: tests.yml
+      parameters:
+        name: althca
+        demands: ucx_althca -equals yes
+        test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: gpu
+        demands: ucx_gpu -equals yes
+        test_perf: 1
+    - template: tests.yml
+      parameters:
+        name: new
+        demands: ucx_new -equals yes
+        test_perf: 1
+    - template: tests.yml
+      parameters:
+        name: hwi
+        demands: ucx_hwi -equals yes
+        test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: instinct
+        demands: ucx_instinct -equals yes
+        test_perf: 0
+        valgrind_disable: yes
+    - template: io-demo.yml
