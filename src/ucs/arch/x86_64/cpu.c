@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -340,20 +341,20 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
         model = (version.ext_model << 4) | model;
     }
 
-    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_ZHAOXIN){
-        if (family == 0x06){
-            switch (model){
+    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_ZHAOXIN) {
+        if (family == 0x06) {
+            switch (model) {
             case 0x0f:
-                return UCS_CPU_MODEL_ZHAOXIN_Zhangjiang;
+                return UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG;
             }
         }
 
         if (family == 0x07) {
             switch (model) {
             case 0x1b:
-                return UCS_CPU_MODEL_ZHAOXIN_Wudaokou;
+                return UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU;
             case 0x3b:
-                return UCS_CPU_MODEL_ZHAOXIN_Lujiazui;
+                return UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI;
             }
         }
     } else {
