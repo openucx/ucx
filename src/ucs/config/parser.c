@@ -433,14 +433,21 @@ int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_time(char *buf, size_t max,
                             const void *src, const void *arg)
 {
-    snprintf(buf, max, "%.2fus", *(double*)src * UCS_USEC_PER_SEC);
-    return 1;
+    return snprintf(buf, max, "%.2fus", *(double*)src * UCS_USEC_PER_SEC);
 }
 
 int ucs_config_sscanf_time_units(const char *buf, void *dest, const void *arg)
 {
     double value;
     int ret;
+
+    if (!strcmp(buf, "inf")) {
+        *(ucs_time_t*)dest = UCS_TIME_INFINITY;
+        return 1;
+    } else if (!strcmp(buf, "auto")) {
+        *(ucs_time_t*)dest = UCS_TIME_AUTO;
+        return 1;
+    }
 
     ret = ucs_config_sscanf_time(buf, &value, arg);
     if (ret == 0) {
@@ -454,8 +461,15 @@ int ucs_config_sscanf_time_units(const char *buf, void *dest, const void *arg)
 int ucs_config_sprintf_time_units(char *buf, size_t max,
                                   const void *src, const void *arg)
 {
-    double value = ucs_time_to_sec(*(ucs_time_t*)src);
+    double value;
 
+    if (*(ucs_time_t*)src == UCS_TIME_INFINITY) {
+        return snprintf(buf, max, "inf");
+    } else if (*(ucs_time_t*)src == UCS_TIME_AUTO) {
+        return snprintf(buf, max, "auto");
+    }
+
+    value = ucs_time_to_sec(*(ucs_time_t*)src);
     return ucs_config_sprintf_time(buf, max, &value, arg);
 }
 

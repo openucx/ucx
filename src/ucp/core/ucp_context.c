@@ -307,8 +307,8 @@ static ucs_config_field_t ucp_config_table[] = {
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
 
-  {"KEEPALIVE_TIMEOUT", "0us",
-   "Time period between keepalive rounds (0 - disabled).",
+  {"KEEPALIVE_TIMEOUT", "inf",
+   "Time period between keepalive rounds (\"inf\" - disabled).",
    ucs_offsetof(ucp_config_t, ctx.keepalive_timeout), UCS_CONFIG_TYPE_TIME_UNITS},
 
   {"KEEPALIVE_NUM_EPS", "0",

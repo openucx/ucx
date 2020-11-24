@@ -87,6 +87,10 @@ typedef struct {
     int             air_conditioning;
     int             abs;
     int             transmission;
+
+    ucs_time_t      time_value;
+    ucs_time_t      time_auto;
+    ucs_time_t      time_inf;
 } car_opts_t;
 
 
@@ -204,6 +208,15 @@ ucs_config_field_t car_opts_table[] = {
 
   {"TRANSMISSION", "auto", "Transmission mode",
    ucs_offsetof(car_opts_t, transmission), UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
+  {"TIME_VAL", "1s", "Time value 1 sec",
+   ucs_offsetof(car_opts_t, time_value), UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"TIME_AUTO", "auto", "Time value \"auto\"",
+   ucs_offsetof(car_opts_t, time_auto), UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"TIME_INF", "inf", "Time value \"inf\"",
+   ucs_offsetof(car_opts_t, time_inf), UCS_CONFIG_TYPE_TIME_UNITS},
 
   {NULL}
 };
@@ -397,6 +410,10 @@ UCS_TEST_F(test_config, parse_default) {
     EXPECT_EQ(UCS_CONFIG_ON, opts->air_conditioning);
     EXPECT_EQ(UCS_CONFIG_OFF, opts->abs);
     EXPECT_EQ(UCS_CONFIG_AUTO, opts->transmission);
+
+    EXPECT_EQ(ucs_time_from_sec(1.0), opts->time_value);
+    EXPECT_EQ(UCS_TIME_AUTO, opts->time_auto);
+    EXPECT_EQ(UCS_TIME_INFINITY, opts->time_inf);
 }
 
 UCS_TEST_F(test_config, clone) {
@@ -523,14 +540,14 @@ UCS_TEST_F(test_config, unused) {
 
 UCS_TEST_F(test_config, dump) {
     /* aliases must not be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 28u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 31u);
 }
 
 UCS_TEST_F(test_config, dump_hidden) {
     /* aliases must be counted here */
     test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
                             UCS_CONFIG_PRINT_HIDDEN),
-                           35u);
+                           38u);
 }
 
 UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
@@ -538,12 +555,12 @@ UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
     test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
                             UCS_CONFIG_PRINT_HIDDEN |
                             UCS_CONFIG_PRINT_DOC),
-                           35u);
+                           38u);
 
     test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
                             UCS_CONFIG_PRINT_HIDDEN |
                             UCS_CONFIG_PRINT_DOC),
-                           35u, "TEST_");
+                           38u, "TEST_");
 }
 
 UCS_TEST_F(test_config, deprecated) {
