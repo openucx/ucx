@@ -724,24 +724,6 @@ out:
     return UCS_OK;
 }
 
-void ucp_wireup_assign_lane(ucp_ep_h ep, ucp_lane_index_t lane, uct_ep_h uct_ep,
-                            const char *info)
-{
-    /* If ep already exists, it's a wireup proxy, and we need to update its
-     * next_ep instead of replacing it.
-     */
-    if (ep->uct_eps[lane] == NULL) {
-        ucs_trace("ep %p: assign uct_ep[%d]=%p%s", ep, lane, uct_ep, info);
-        ep->uct_eps[lane] = uct_ep;
-    } else {
-        ucs_assert(ucp_wireup_ep_test(ep->uct_eps[lane]));
-        ucs_trace("ep %p: wireup uct_ep[%d]=%p next set to %p%s", ep, lane,
-                  ep->uct_eps[lane], uct_ep, info);
-        ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
-        ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
-    }
-}
-
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane)
 {
     uct_ep_h uct_ep = ep->uct_eps[lane];
@@ -772,6 +754,15 @@ void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
     ucs_queue_for_each_extract(uct_req, tmp_pending_queue, priv, 1) {
         ucp_wireup_replay_pending_request(uct_req, ucp_ep);
     }
+}
+
+static void
+ucp_wireup_ep_lane_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
+                               uct_ep_h uct_ep)
+{
+    ucs_trace("ep %p: wireup uct_ep[%d]=%p next set to %p", ep, lane,
+              ep->uct_eps[lane], uct_ep);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
 }
 
 static ucs_status_t
@@ -808,7 +799,42 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
         return status;
     }
 
-    ucp_wireup_assign_lane(ep, lane, uct_ep, "");
+    if (ep->uct_eps[lane] == NULL) {
+        if (ucp_ep_has_cm_lane(ep)) {
+            /* Create wireup EP in case of CM lane is used, since a WIREUP EP is
+             * used to keep user's pending requests and send WIREUP MSGs (if it
+             * is WIREUP MSG lane) until CM and WIREUP_MSG phases are done. The
+             * lane is added during WIREUP_MSG exchange or created as an initial
+             * configuration after a connection request on a server side */
+            status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane]);
+            if (status != UCS_OK) {
+                /* coverity[leaked_storage] */
+                return status;
+            }
+            ucp_wireup_ep_lane_set_next_ep(ep, lane, uct_ep);
+        } else {
+            /* Assign the lane without wireup EP when out-of-band address
+             * exchange is used */
+            ucs_trace("ep %p: assign uct_ep[%d]=%p", ep, lane, uct_ep);
+            ep->uct_eps[lane] = uct_ep;
+        }
+    } else {
+        /* If EP already exists, it's a wireup proxy, and we need to update
+         * its next_ep instead of replacing it. The wireup EP was created
+         * during CM pack_cb() on a client side */
+        ucs_assert(ucp_wireup_ep_test(ep->uct_eps[lane]));
+        ucs_assert(ucp_proxy_ep_extract(ep->uct_eps[lane]) == NULL);
+        ucs_assert(ucp_ep_has_cm_lane(ep) ||
+                   /* TODO: remove when old sockaddr flow will be removed */
+                   (ucp_wireup_ep(ep->uct_eps[0])->sockaddr_ep != NULL));
+        ucp_wireup_ep_lane_set_next_ep(ep, lane, uct_ep);
+
+        /* TODO: remove when old sockaddr flow will be removed */
+        if (ucp_wireup_ep(ep->uct_eps[0])->sockaddr_ep != NULL) {
+            ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
+        }
+    }
+
     ucp_worker_iface_progress_ep(wiface);
     return UCS_OK;
 }
