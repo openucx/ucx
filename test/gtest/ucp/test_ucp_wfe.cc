@@ -97,7 +97,7 @@ UCS_TEST_P(test_ucp_wfe, envelope) {
     cache_perf_retry_count = ucs::perf_retry_count;
     ucs::perf_retry_count  = 3; /* Have to be set to 1 otherwise the performance
 				                  measurement is ignored */
-    run_test(test, 0, true, "", "");
+    run_test(test, 0, false, "", "");
     /* restore global value for perf retry */
     ucs::perf_retry_count = cache_perf_retry_count;
 }
