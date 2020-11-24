@@ -291,10 +291,6 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
 
     ucs_debug("%s ep %p", debug_name, ep);
 
-    if (ep->flags & UCP_EP_FLAG_FAILED) {
-        return NULL;
-    }
-
     req = ucp_request_get(ep->worker);
     if (req == NULL) {
         return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
