@@ -38,6 +38,22 @@ function azure_log_issue() {
     echo "##vso[task.complete result=Failed;]"
 }
 
+# Report an error message to Azure pipeline
+function azure_log_error() {
+    test "x$RUNNING_IN_AZURE" = "xno" && return
+    msg=$1
+    set +x
+    echo "##vso[task.logissue type=error]${msg}"
+}
+
+# Report an warning message to Azure pipeline
+function azure_log_warning() {
+    test "x$RUNNING_IN_AZURE" = "xno" && return
+    msg=$1
+    set +x
+    echo "##vso[task.logissue type=warning]${msg}"
+}
+
 # Get IPv4 address of an interface
 function get_ip() {
     iface=$1
