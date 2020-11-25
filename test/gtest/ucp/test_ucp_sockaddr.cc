@@ -61,6 +61,8 @@ public:
     ucs::sock_addr_storage m_test_addr;
 
     void init() {
+        m_err_count = 0;
+
         if (get_variant_value() & TEST_MODIFIER_CM) {
             modify_config("SOCKADDR_CM_ENABLE", "yes");
         }
@@ -398,14 +400,14 @@ public:
     virtual ucp_ep_params_t get_ep_params()
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
-        ep_params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                     UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                    UCP_EP_PARAM_FIELD_ERR_HANDLER;
         /* The error handling requirement is needed since we need to take
          * care of a case where the client gets an error. In case ucp needs to
          * handle a large worker address but neither ud nor ud_x are present */
-        ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
-        ep_params.err_handler.cb   = err_handler_cb;
-        ep_params.err_handler.arg  = NULL;
+        ep_params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        ep_params.err_handler.cb  = err_handler_cb;
+        ep_params.err_handler.arg = NULL;
         return ep_params;
     }
 
@@ -512,6 +514,8 @@ public:
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         ucp_test::err_handler_cb(arg, ep, status);
 
+        ++m_err_count;
+
         /* The current expected errors are only from the err_handle test
          * and from transports where the worker address is too long but ud/ud_x
          * are not present, or ud/ud_x are present but their addresses are too
@@ -566,7 +570,13 @@ protected:
                     ((lane1 != UCP_NULL_LANE) && (lane2 != UCP_NULL_LANE) &&
                      ucp_ep_config_lane_is_peer_equal(key1, lane1, key2, lane2)));
     }
+
+protected:
+    static unsigned m_err_count;
 };
+
+unsigned test_ucp_sockaddr::m_err_count = 0;
+
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listen, no_close_protocol()) {
     listen_and_communicate(false, 0);
@@ -604,6 +614,16 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect_s2c,
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
     one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect_bidi_wait_err_cb,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
+
+    wait_for_flag(&m_err_count);
+    EXPECT_EQ(1, m_err_count);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect,

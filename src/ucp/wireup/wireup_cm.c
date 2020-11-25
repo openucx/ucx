@@ -638,10 +638,9 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(async);
 }
 
-static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
+static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
 {
     ucs_status_t status = UCS_ERR_CONNECTION_RESET;
-    ucp_ep_h ucp_ep     = arg;
     void *req;
 
     ucs_trace("ep %p: flags 0x%x cm_remote_disconnect_progress", ucp_ep,
@@ -663,14 +662,17 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
          * @ref ucp_ep_close_flushed_callback */
         ucs_debug("ep %p: ep closed but request is not set, waiting for"
                   " the flush callback", ucp_ep);
-        goto err;
+        return 1;
     }
 
     if (!(ucp_ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
         /* CM disconnect happens during WIREUP MSGs exchange phase, when EP
          * is locally connected to the peer */
-        goto err;
+        goto set_ep_failed;
     }
+
+    /* if the EP is local and remote connected, need to flush it from main
+     * thread first */
 
     /*
      * TODO: set the ucp_ep to error state to prevent user from sending more
@@ -689,12 +691,13 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
         status = UCS_PTR_STATUS(req);
         ucs_error("ucp_ep_flush_internal completed with error: %s",
                   ucs_status_string(status));
-        goto err;
+        goto set_ep_failed;
     }
 
+    ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
     return 1;
 
-err:
+set_ep_failed:
     ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
                              ucp_ep_get_cm_uct_ep(ucp_ep),
                              ucp_ep_get_cm_lane(ucp_ep), status);
@@ -713,8 +716,6 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     ucs_trace("ep %p: got remote disconnect, cm_ep %p, flags 0x%x", ucp_ep,
               uct_cm_ep, ucp_ep->flags);
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == uct_cm_ep);
-
-    ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         /* - ignore close event on failed ep, since all lanes are destroyed in
@@ -737,6 +738,8 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
         ucs_warn("ep %p: unexpected state on disconnect, flags: 0x%u",
                  ucp_ep, ucp_ep->flags);
     }
+
+    ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
     UCS_ASYNC_UNBLOCK(async);
     return 1;
