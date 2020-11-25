@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
+* Copyright (C) Stony Brook University. 2016-2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -18,6 +19,9 @@
 #include <ucs/type/status.h>
 #ifdef __ARM_NEON
 #include <arm_neon.h>
+#endif
+#ifdef __ARM_FEATURE_SVE
+#include <arm_sve.h>
 #endif
 
 
@@ -231,10 +235,30 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
 }
 #endif
 
+#if defined(__ARM_FEATURE_SVE)
+static inline void *memcpy_aarch64_sve(void *dest, const void *src, size_t len)
+{
+    uint8_t *dest_u8      = (uint8_t*) dest;
+    const uint8_t *src_u8 = (uint8_t*) src;
+    uint64_t i            = 0;
+    svbool_t pg           = svwhilelt_b8_u64(i, (uint64_t)len);
+
+    do {
+        svst1_u8(pg, &dest_u8[i], svld1_u8(pg, &src_u8[i]));
+        i += svcntb();
+        pg = svwhilelt_b8_u64(i, (uint64_t)len);
+    } while (svptest_first(svptrue_b8(), pg));
+
+    return dest;
+}
+#endif
+
 static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
 {
 #if defined(HAVE_AARCH64_THUNDERX2)
-    return __memcpy_thunderx2(dst, src,len);
+    return __memcpy_thunderx2(dst, src, len);
+#elif defined(__ARM_FEATURE_SVE)
+    return memcpy_aarch64_sve(dst, src, len);
 #else
     return memcpy(dst, src, len);
 #endif
@@ -245,6 +269,8 @@ ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
 {
 #if defined(HAVE_AARCH64_THUNDERX2)
     __memcpy_thunderx2(dst, src,len);
+#elif defined(__ARM_FEATURE_SVE)
+    memcpy_aarch64_sve(dst, src, len);
 #else
     memcpy(dst, src, len);
 #endif
