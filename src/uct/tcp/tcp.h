@@ -356,6 +356,16 @@ typedef struct uct_tcp_iface {
         unsigned                  syn_cnt;           /* Number of SYN retransmits that TCP should send
                                                       * before aborting the attempt to connect.
                                                       * It cannot exceed 255. */
+        struct {
+            ucs_time_t            idle;              /* The time the connection needs to remain
+                                                      * idle before TCP starts sending keepalive
+                                                      * probes (TCP_KEEPIDLE socket option) */
+            unsigned              cnt;               /* The maximum number of keepalive probes TCP
+                                                      * should send before dropping the connection
+                                                      * (TCP_KEEPCNT socket option). */
+            ucs_time_t            intvl;             /* The time between individual keepalive
+                                                      * probes (TCP_KEEPINTVL socket option). */
+        } keepalive;
     } config;
 
     struct {
@@ -386,6 +396,11 @@ typedef struct uct_tcp_iface_config {
     uct_iface_mpool_config_t       tx_mpool;
     uct_iface_mpool_config_t       rx_mpool;
     ucs_range_spec_t               port_range;
+    struct {
+        ucs_time_t                 idle;
+        unsigned                   cnt;
+        ucs_time_t                 intvl;
+    } keepalive;
 } uct_tcp_iface_config_t;
 
 
