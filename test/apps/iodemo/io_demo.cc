@@ -254,6 +254,7 @@ protected:
             if (_buffer == NULL) {
                 throw std::bad_alloc();
             }
+            memset(_header, 0, sizeof(_header));
         }
 
         ~Buffer() {
