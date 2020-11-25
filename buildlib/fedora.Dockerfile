@@ -1,5 +1,5 @@
-# docker build -t ucfconsort.azurecr.io/ucx/fedora:1 -f buildlib/fedora.Dockerfile buildlib/
-FROM fedora:32
+# docker build -t ucfconsort.azurecr.io/ucx/fedora:5 -f buildlib/fedora.Dockerfile buildlib/
+FROM fedora:33
 
 RUN dnf install -y \
     autoconf \
@@ -13,6 +13,7 @@ RUN dnf install -y \
     file \
     gcc-c++ \
     git \
+    git-clang-format \
     glibc-devel \
     java-1.8.0-openjdk-devel \
     libtool \

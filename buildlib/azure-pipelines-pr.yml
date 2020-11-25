@@ -12,7 +12,7 @@ resources:
       image: ucfconsort.azurecr.io/ucx/centos7:1
       endpoint: ucfconsort_registry
     - container: fedora
-      image: ucfconsort.azurecr.io/ucx/fedora:3
+      image: ucfconsort.azurecr.io/ucx/fedora33:1
       endpoint: ucfconsort_registry
 
 stages:
@@ -47,6 +47,32 @@ stages:
                  echo "##vso[task.complete result=Failed;]"
               fi
             condition: eq(variables['Build.Reason'], 'PullRequest')
+
+      # Check that the code is formatted according to the code style guidelines
+      - job: format
+        displayName: format code
+        container: fedora
+        steps:
+          - checkout: self
+            clean: true
+
+          - bash: |
+              source ./buildlib/az-helpers.sh
+              echo "Checking code format on diff remotes/origin/${SYSTEM_PULLREQUEST_TARGETBRANCH}..${BUILD_SOURCEVERSION}"
+              git-clang-format --diff remotes/origin/${SYSTEM_PULLREQUEST_TARGETBRANCH} ${BUILD_SOURCEVERSION} > format.patch
+              echo "Generated patch file:"
+              cat format.patch
+              if [ "`cat format.patch`" = "no modified files to format" ]; then
+                  exit
+              fi
+              git apply format.patch
+              if ! git diff --quiet --exit-code
+              then
+                  url="https://github.com/openucx/ucx/wiki/Code-style-checking"
+                  azure_log_warning "Code is not formatted according to the code style, see $url for more info."
+              fi
+            condition: eq(variables['Build.Reason'], 'PullRequest')
+
 
   - stage: Build
     jobs:
