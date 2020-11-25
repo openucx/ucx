@@ -283,7 +283,10 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
         ASSERT_UCS_OK(status);
 
         is_dummy = (size == 0);
-        test_rkey_management(&sender(), memh, is_dummy, is_tl_rdma());
+        test_rkey_management(&sender(), memh, is_dummy,
+                             is_tl_rdma() &&
+                             !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
+                             !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type));
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
