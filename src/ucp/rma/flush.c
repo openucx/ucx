@@ -17,12 +17,15 @@
 
 static void ucp_ep_flush_error(ucp_request_t *req, ucs_status_t status)
 {
-    if (ucp_ep_config(req->send.ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER) {
-        ucs_error("error during flush: %s", ucs_status_string(status));
-    }
+    ucs_log_level_t level = (ucp_ep_config(req->send.ep)->key.err_mode ==
+                             UCP_ERR_HANDLING_MODE_PEER) ?
+                             UCS_LOG_LEVEL_TRACE_REQ : UCS_LOG_LEVEL_ERROR;
 
     req->status = status;
     --req->send.state.uct_comp.count;
+    ucs_log(level, "req %p: error during flush: %s, flush comp %p count reduced to %d",
+            req, ucs_status_string(status), &req->send.state.uct_comp,
+            req->send.state.uct_comp.count);
 }
 
 static int ucp_ep_flush_is_completed(ucp_request_t *req)
@@ -130,7 +133,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
             }
         } else {
             ucp_ep_flush_error(req, status);
-            break;
+            req->send.flush.started_lanes |= UCS_BIT(lane);
         }
     }
 
