@@ -85,6 +85,9 @@ public:
 
     void progress();
 
+    static const std::string sockaddr_str(const struct sockaddr* saddr,
+                                          size_t addrlen);
+
 protected:
 
     // Called when new IO message is received
@@ -125,9 +128,6 @@ private:
 
     static void iomsg_recv_callback(void *request, ucs_status_t status,
                                     ucp_tag_recv_info *info);
-
-    static const std::string sockaddr_str(const struct sockaddr* saddr,
-                                          size_t addrlen);
 
     ucp_worker_h worker() const;
 
