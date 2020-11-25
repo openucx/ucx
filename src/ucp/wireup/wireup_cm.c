@@ -638,7 +638,8 @@ static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(async);
 }
 
-static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
+static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep,
+                                                     int *invoke_err_cb_p)
 {
     ucs_status_t status = UCS_ERR_CONNECTION_RESET;
     void *req;
@@ -694,7 +695,7 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
         goto set_ep_failed;
     }
 
-    ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
+    *invoke_err_cb_p = 1;
     return 1;
 
 set_ep_failed:
@@ -709,6 +710,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     ucp_ep_h ucp_ep            = arg;
     uct_ep_h uct_cm_ep         = ucp_ep_get_cm_uct_ep(ucp_ep);
     ucs_async_context_t *async = &ucp_ep->worker->async;
+    int invoke_err_cb          = 0;
     ucp_request_t *close_req;
 
     UCS_ASYNC_BLOCK(async);
@@ -727,20 +729,30 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
             ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
         }
     } else if (ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) {
-        ucp_ep_cm_remote_disconnect_progress(ucp_ep);
+        ucp_ep_cm_remote_disconnect_progress(ucp_ep, &invoke_err_cb);
     } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
         /* if the EP is not local connected, the EP has been closed and flushed,
            CM lane is disconnected, complete close request and destroy EP */
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
         close_req = ucp_ep_ext_control(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
+        /* don't touch UCP EP after local disconnect, since it is not valid
+         *anymore */
+        goto out;
     } else {
         ucs_warn("ep %p: unexpected state on disconnect, flags: 0x%u",
                  ucp_ep, ucp_ep->flags);
     }
 
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
+    if (invoke_err_cb) {
+        /* here invoking error callback if it is asked through the flag set by
+         * ucp_ep_cm_remote_disconnect_progress(), because a user could close
+         * UCP EP in the error callback */
+        ucp_ep_invoke_err_cb(ucp_ep, UCS_ERR_CONNECTION_RESET);
+    }
 
+out:
     UCS_ASYNC_UNBLOCK(async);
     return 1;
 }

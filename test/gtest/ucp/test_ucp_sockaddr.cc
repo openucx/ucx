@@ -621,9 +621,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect_bidi_wait_err_cb,
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 
     one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
-
     wait_for_flag(&m_err_count);
-    EXPECT_EQ(1, m_err_count);
+    EXPECT_EQ(1u, m_err_count);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect,
