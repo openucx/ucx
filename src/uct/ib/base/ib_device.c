@@ -767,8 +767,8 @@ static sa_family_t uct_ib_device_get_addr_family(union ibv_gid *gid, int gid_ind
     const uint32_t addr_last_bits = raw->s6_addr32[2] ^ htonl(0x0000ffff);
     char p[128];
 
-    ucs_debug("testing addr_family on gid index %d: %s",
-              gid_index, uct_ib_gid_str(gid, p, sizeof(p)));
+    ucs_trace_func("testing addr_family on gid index %d: %s",
+                   gid_index, uct_ib_gid_str(gid, p, sizeof(p)));
 
     if (!((raw->s6_addr32[0] | raw->s6_addr32[1]) | addr_last_bits) ||
         uct_ib_device_is_addr_ipv4_mcast(raw, addr_last_bits)) {
