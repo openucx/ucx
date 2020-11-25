@@ -319,10 +319,6 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
 
     ucs_debug("%s ep %p", debug_name, ep);
 
-    if (ep->flags & UCP_EP_FLAG_FAILED) {
-        return NULL;
-    }
-
     req = ucp_request_get_param(ep->worker, param,
                                 {return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);});
 
@@ -497,7 +493,8 @@ static unsigned ucp_worker_flush_progress(void *arg)
         if (UCS_PTR_IS_ERR(ep_flush_request)) {
             /* endpoint flush resulted in an error */
             status = UCS_PTR_STATUS(ep_flush_request);
-            ucs_warn("ucp_ep_flush_internal() failed: %s", ucs_status_string(status));
+            ucs_diag("ucp_ep_flush_internal() failed: %s",
+                     ucs_status_string(status));
         } else if (ep_flush_request != NULL) {
             /* endpoint flush started, increment refcount */
             ++req->flush_worker.comp_count;
