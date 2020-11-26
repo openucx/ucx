@@ -737,7 +737,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
         close_req = ucp_ep_ext_control(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
         /* don't touch UCP EP after local disconnect, since it is not valid
-         *anymore */
+         * anymore */
         goto out;
     } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
         /* if an EP was closed and not local conencted anymore, not failed
