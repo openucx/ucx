@@ -148,6 +148,7 @@ gtest_SOURCES = \
 	ucs/test_algorithm.cc \
 	ucs/test_arbiter.cc \
 	ucs/test_async.cc \
+	ucs/test_bitmap.cc \
 	ucs/test_callbackq.cc \
 	ucs/test_class.cc \
 	ucs/test_config.cc \
