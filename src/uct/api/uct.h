@@ -412,6 +412,13 @@ typedef enum uct_atomic_op {
                                                        and it may also be invoked when uct_worker_progress()
                                                        is called. */
 
+        /* Keepalive */
+#define UCT_IFACE_FLAG_EP_KEEPALIVE   UCS_BIT(46) /**< Transport endpoint has built-in keepalive feature,
+                                                       which guarantees the error callback on the transport
+                                                       interface will be called if the communication
+                                                       channel with remote peer is broken, even if there
+                                                       are no outstanding send operations */
+
         /* Tag matching operations */
 #define UCT_IFACE_FLAG_TAG_EAGER_SHORT UCS_BIT(50) /**< Hardware tag matching short eager support */
 #define UCT_IFACE_FLAG_TAG_EAGER_BCOPY UCS_BIT(51) /**< Hardware tag matching bcopy eager support */
