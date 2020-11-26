@@ -379,7 +379,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     /* all operations will use the first lane, which is a stub endpoint before
      * reconfiguration */
     key.am_lane             = 0;
-    if (ucp_worker_sockaddr_is_cm_proto(ep->worker)) {
+    if (ucp_ep_init_flags_has_cm(ep_init_flags)) {
         key.cm_lane         = 0;
     } else {
         key.wireup_msg_lane = 0;

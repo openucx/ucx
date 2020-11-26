@@ -284,7 +284,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "of all entities which connect to each other are the same.",
    ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
 
-  {"SOCKADDR_CM_ENABLE", "n" /* TODO: set try by default */,
+  {"SOCKADDR_CM_ENABLE", "y",
    "Enable alternative wireup protocol for sockaddr connected endpoints.\n"
    "Enabling this mode changes underlying UCT mechanism for connection\n"
    "establishment and enables synchronized close protocol which does not\n"

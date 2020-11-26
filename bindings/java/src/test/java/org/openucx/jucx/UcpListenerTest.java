@@ -86,7 +86,7 @@ public class UcpListenerTest  extends UcxTest {
     }
 
     @Test
-    public void testConnectionHandler() {
+    public void testConnectionHandler() throws Exception {
         UcpContext context1 = new UcpContext(new UcpParams().requestStreamFeature()
             .requestRmaFeature());
         UcpContext context2 = new UcpContext(new UcpParams().requestStreamFeature()
@@ -113,7 +113,7 @@ public class UcpListenerTest  extends UcxTest {
         // Create endpoint from another worker from pool.
         UcpEndpoint serverToClient = serverWorker2.newEndpoint(
             new UcpEndpointParams().setConnectionRequest(conRequest.get()));
-        
+
         // Temporary workaround until new connection establishment protocol in UCX.
         for (int i = 0; i < 10; i++) {
             serverWorker1.progress();
@@ -147,8 +147,16 @@ public class UcpListenerTest  extends UcxTest {
 
         assertEquals(UcpMemoryTest.MEM_SIZE, recv.getRecvSize());
 
+        UcpRequest serverClose = serverToClient.closeNonBlockingFlush();
+        UcpRequest clientClose = clientToServer.closeNonBlockingFlush();
+
+        while (!serverClose.isCompleted() || !clientClose.isCompleted()) {
+            serverWorker2.progress();
+            clientWorker.progress();
+        }
+
         Collections.addAll(resources, context2, context1, clientWorker, serverWorker1,
-            serverWorker2, listener, serverToClient, clientToServer);
+            serverWorker2, listener);
         closeResources();
     }
 }
