@@ -77,18 +77,24 @@ void ucp_am_ep_cleanup(ucp_ep_h ep)
 
 size_t ucp_am_max_header_size(ucp_worker_h worker)
 {
+    ucp_context_h context = worker->context;
     uct_iface_attr_t *if_attr;
     ucp_rsc_index_t iface_id;
     size_t max_am_header, max_uct_fragment;
+    size_t max_rts_size, max_ucp_header;
 
-    if (!(worker->context->config.features & UCP_FEATURE_AM)) {
+    if (!(context->config.features & UCP_FEATURE_AM)) {
         return 0ul;
     }
 
-    max_am_header = SIZE_MAX;
+    max_am_header  = SIZE_MAX;
+    max_rts_size   = sizeof(ucp_am_rndv_rts_hdr_t) +
+                     ucp_rkey_packed_size(context, UCS_MASK(context->num_mds));
+    max_ucp_header = ucs_max(max_rts_size, sizeof(ucp_am_first_hdr_t));
 
-    /* TODO: Make sure maximal AM header can fit into one bcopy fragment
-     * together with RTS */
+    /* Make sure maximal AM header can fit into one bcopy fragment
+     * together with RTS or first eager header (whatever is bigger)
+     */
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
         if_attr = &worker->ifaces[iface_id]->attr;
 
@@ -103,9 +109,8 @@ size_t ucp_am_max_header_size(ucp_worker_h worker)
          */
         if (if_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
             max_uct_fragment = ucs_max(if_attr->cap.am.max_bcopy,
-                                       sizeof(ucp_am_first_hdr_t) - 1) -
-                               sizeof(ucp_am_first_hdr_t) - 1;
-            max_am_header = ucs_min(max_am_header, max_uct_fragment);
+                                       max_ucp_header - 1) - max_ucp_header - 1;
+            max_am_header    = ucs_min(max_am_header, max_uct_fragment);
         }
     }
 
@@ -828,11 +833,18 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
          * TODO: Consider other ways to send user header, like packing together
          * with UCT AM header, direct registration of user header buffer, etc.
          */
-        zcopy_thresh = SIZE_MAX;
+        zcopy_thresh = rndv_thresh;
     } else {
         zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, count,
                                                      rndv_thresh);
     }
+
+    ucs_trace_req("select am request(%p) progress algorithm datatype=0x%"PRIx64
+                  " buffer=%p length=%zu header_length=%u max_short=%zd"
+                  " rndv_thresh=%zu zcopy_thresh=%zu",
+                  req, req->send.datatype, req->send.buffer, req->send.length,
+                  req->send.msg_proto.am.header_length, max_short, rndv_thresh,
+                  zcopy_thresh);
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
                                     count, !!user_header_length,
@@ -843,7 +855,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
             return UCS_STATUS_PTR(status);
         }
 
-        ucs_assert(req->send.length >= rndv_thresh);
+        ucs_assert(ucp_am_send_req_total_size(req) >= rndv_thresh);
 
         status = ucp_am_send_start_rndv(req);
         if (status != UCS_OK) {
@@ -881,7 +893,7 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
 {
     if (ucs_unlikely(((length != 0) && (header_length != 0)) ||
                      ((ssize_t)(length + header_length) >
-                      ucp_ep_config(ep)->am.max_short)) ||
+                      ucp_ep_config(ep)->am_u.max_eager_short)) ||
                      (flags & UCP_AM_SEND_FLAG_RNDV)) {
         goto out;
     }
@@ -959,12 +971,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     if (flags & UCP_AM_SEND_REPLY) {
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->am_u.reply_proto,
-                              ucs_min(ucp_ep_config(ep)->am.max_short,
+                              ucs_min(ucp_ep_config(ep)->am_u.max_eager_short,
                                       UCP_AM_SHORT_REPLY_MAX_SIZE), flags);
     } else {
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->am_u.proto,
-                              ucp_ep_config(ep)->am.max_short, flags);
+                              ucp_ep_config(ep)->am_u.max_eager_short, flags);
     }
 
 out:

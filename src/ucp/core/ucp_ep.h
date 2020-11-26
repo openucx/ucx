@@ -334,6 +334,9 @@ struct ucp_ep_config {
         /* Protocols used for am operations */
         const ucp_request_send_proto_t   *proto;
         const ucp_request_send_proto_t   *reply_proto;
+
+        /* Maximal size for eager short */
+        ssize_t                          max_eager_short;
     } am_u;
 
     /* Protocol selection data */

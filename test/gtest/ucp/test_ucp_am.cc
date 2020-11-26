@@ -694,6 +694,21 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_flag_send, "RNDV_THRESH=inf")
     test_am_send_recv(64 * UCS_KBYTE, 0, UCP_AM_SEND_FLAG_RNDV);
 }
 
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_zero_send, "RNDV_THRESH=0")
+{
+    test_am_send_recv(0);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, just_header_rndv, "RNDV_THRESH=1")
+{
+    test_am_send_recv(0, max_am_hdr());
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv, header_and_data_rndv, "RNDV_THRESH=128")
+{
+    test_am_send_recv(127, 1);
+}
+
 UCS_TEST_P(test_ucp_am_nbx_rndv, reject_rndv)
 {
     skip_loopback();

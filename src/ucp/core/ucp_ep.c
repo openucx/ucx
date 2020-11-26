@@ -1291,7 +1291,8 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
                                              ucp_ep_config_t *config,
                                              size_t min_rndv_thresh,
                                              size_t max_rndv_thresh,
-                                             ucp_rndv_thresh_t *thresh)
+                                             ucp_rndv_thresh_t *thresh,
+                                             ssize_t *max_short_to_adjust)
 {
     ucp_context_h context = worker->context;
     size_t rndv_thresh, rndv_local_thresh, min_thresh;
@@ -1318,8 +1319,7 @@ static void ucp_ep_config_set_am_rndv_thresh(ucp_worker_h worker,
         rndv_local_thresh = context->config.ext.rndv_thresh;
 
         /* adjust max_short if rndv_thresh is set externally */
-        ucp_ep_config_adjust_max_short(&config->tag.eager.max_short,
-                                       rndv_thresh);
+        ucp_ep_config_adjust_max_short(max_short_to_adjust, rndv_thresh);
     }
 
     min_thresh     = ucs_max(iface_attr->cap.am.min_zcopy, min_rndv_thresh);
@@ -1335,7 +1335,8 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
                                           ucp_lane_index_t *lanes,
                                           size_t min_rndv_thresh,
                                           size_t max_rndv_thresh,
-                                          ucp_rndv_thresh_t *thresh)
+                                          ucp_rndv_thresh_t *thresh,
+                                          ssize_t *max_short_to_adjust)
 {
     ucp_context_t *context = worker->context;
     ucp_lane_index_t lane  = lanes[0];
@@ -1368,8 +1369,7 @@ static void ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker,
         rndv_local_thresh = context->config.ext.rndv_thresh;
 
         /* adjust max_short if rndv_thresh is set externally */
-        ucp_ep_config_adjust_max_short(&config->tag.eager.max_short,
-                                       rndv_thresh);
+        ucp_ep_config_adjust_max_short(max_short_to_adjust, rndv_thresh);
     }
 
     min_thresh = ucs_max(iface_attr->cap.get.min_zcopy, min_rndv_thresh);
@@ -1710,13 +1710,15 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 tag_lanes[0] = lane;
                 ucp_ep_config_set_rndv_thresh(worker, config, tag_lanes,
                                               min_rndv_thresh, max_rndv_thresh,
-                                              &config->tag.rndv.rma_thresh);
+                                              &config->tag.rndv.rma_thresh,
+                                              &config->tag.eager.max_short);
 
                 md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
                 ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr,
                                                  config, min_am_rndv_thresh,
                                                  max_am_rndv_thresh,
-                                                 &config->tag.rndv.am_thresh);
+                                                 &config->tag.rndv.am_thresh,
+                                                 &config->tag.eager.max_short);
             }
 
             /* Max Eager short has to be set after Zcopy and RNDV thresholds */
@@ -1743,6 +1745,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      UCT_IFACE_FLAG_AM_BCOPY,
                                      UCT_IFACE_FLAG_AM_ZCOPY,
                                      sizeof(ucp_eager_hdr_t), SIZE_MAX);
+            config->am_u.max_eager_short = config->am.max_short;
 
             /* Calculate rendezvous thresholds which may be used by UCP AM
              * protocol. */
@@ -1750,17 +1753,20 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 rkey_ptr_lanes[0] = config->key.rkey_ptr_lane;
                 ucp_ep_config_set_rndv_thresh(worker, config, rkey_ptr_lanes,
                                               iface_attr->cap.get.min_zcopy,
-                                              SIZE_MAX, &config->rndv.rma_thresh);
+                                              SIZE_MAX, &config->rndv.rma_thresh,
+                                              &config->am_u.max_eager_short);
             } else {
                 ucp_ep_config_set_rndv_thresh(worker, config,
                                               config->key.rma_bw_lanes,
                                               iface_attr->cap.get.min_zcopy,
-                                              SIZE_MAX, &config->rndv.rma_thresh);
+                                              SIZE_MAX, &config->rndv.rma_thresh,
+                                              &config->am_u.max_eager_short);
             }
 
             ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr, config,
                                              iface_attr->cap.am.min_zcopy,
-                                             SIZE_MAX, &config->rndv.am_thresh);
+                                             SIZE_MAX, &config->rndv.am_thresh,
+                                             &config->am_u.max_eager_short);
 
             /* All keys must fit in RNDV packet.
              * TODO remove some MDs if they don't
@@ -1773,17 +1779,10 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 /* TODO: set threshold level based on all available lanes */
 
                 config->tag.eager           = config->am;
+                config->tag.eager.max_short = config->am_u.max_eager_short;
                 config->tag.lane            = lane;
                 config->tag.rndv.am_thresh  = config->rndv.am_thresh;
                 config->tag.rndv.rma_thresh = config->rndv.rma_thresh;
-
-                if (context->config.ext.rndv_thresh != UCS_MEMUNITS_AUTO) {
-                    /* adjust max_short if rndv_thresh is set externally */
-                    min_rndv_thresh = ucs_min(config->tag.rndv.rma_thresh.remote,
-                                              config->tag.rndv.am_thresh.remote);
-                    ucp_ep_config_adjust_max_short(&config->tag.eager.max_short,
-                                                   min_rndv_thresh);
-                }
 
                 /* Max Eager short has to be set after Zcopy and RNDV thresholds */
                 ucp_ep_config_set_memtype_thresh(&config->tag.max_eager_short,
