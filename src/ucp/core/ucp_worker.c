@@ -2666,7 +2666,7 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 
 static int ucp_worker_keepalive_is_enabled(ucp_worker_h worker)
 {
-    return (worker->context->config.ext.keepalive_timeout != 0) &&
+    return (worker->context->config.ext.keepalive_timeout != UCS_TIME_INFINITY) &&
            (worker->context->config.ext.keepalive_num_eps != 0);
 }
 
