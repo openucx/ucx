@@ -686,7 +686,7 @@ void *ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
         return req;
     }
 
-    ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    /* close request can be completed with any status depends on peer state */
     return NULL;
 }
 
