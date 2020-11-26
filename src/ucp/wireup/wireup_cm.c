@@ -739,6 +739,11 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
         /* don't touch UCP EP after local disconnect, since it is not valid
          *anymore */
         goto out;
+    } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
+        /* if an EP was closed and not local conencted anymore, not failed
+         * and no CLOSE request is set, it means that an EP was disconnected
+         * from a peer */
+        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_DISCONNECTED_CM_LANE);
     } else {
         ucs_warn("ep %p: unexpected state on disconnect, flags: 0x%u",
                  ucp_ep, ucp_ep->flags);
