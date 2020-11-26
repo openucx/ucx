@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -30,6 +31,9 @@ typedef enum ucs_cpu_model {
     UCS_CPU_MODEL_ARM_AARCH64,
     UCS_CPU_MODEL_AMD_NAPLES,
     UCS_CPU_MODEL_AMD_ROME,
+    UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG,
+    UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU,
+    UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI,
     UCS_CPU_MODEL_LAST
 } ucs_cpu_model_t;
 
@@ -59,6 +63,7 @@ typedef enum ucs_cpu_vendor {
     UCS_CPU_VENDOR_GENERIC_ARM,
     UCS_CPU_VENDOR_GENERIC_PPC,
     UCS_CPU_VENDOR_FUJITSU_ARM,
+    UCS_CPU_VENDOR_ZHAOXIN,
     UCS_CPU_VENDOR_LAST
 } ucs_cpu_vendor_t;
 
