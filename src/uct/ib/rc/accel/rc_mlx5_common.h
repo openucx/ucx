@@ -414,7 +414,7 @@ typedef struct uct_rc_mlx5_iface_common {
 #endif
     struct {
         uint8_t                        atomic_fence_flag;
-        ucs_ternary_value_t            cyclic_srq_enable;
+        ucs_ternary_auto_value_t       cyclic_srq_enable;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
@@ -429,11 +429,11 @@ typedef struct uct_rc_mlx5_iface_common_config {
         int                          enable;
         unsigned                     list_size;
         size_t                       seg_size;
-        ucs_ternary_value_t          mp_enable;
+        ucs_ternary_auto_value_t     mp_enable;
         size_t                       mp_num_strides;
     } tm;
     unsigned                         exp_backoff;
-    ucs_ternary_value_t              cyclic_srq_enable;
+    ucs_ternary_auto_value_t         cyclic_srq_enable;
 } uct_rc_mlx5_iface_common_config_t;
 
 

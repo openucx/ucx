@@ -227,7 +227,7 @@ typedef struct uct_ib_mlx5_iface_config {
     } dm;
 #endif
     uct_ib_mlx5_mmio_mode_t  mmio_mode;
-    ucs_ternary_value_t      ar_enable;
+    ucs_ternary_auto_value_t ar_enable;
 } uct_ib_mlx5_iface_config_t;
 
 
@@ -679,7 +679,7 @@ static inline void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5
 
 ucs_status_t
 uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
-                      ucs_ternary_value_t ar_enable,
+                      ucs_ternary_auto_value_t ar_enable,
                       uint16_t hw_sl_mask, int have_sl_mask_cap,
                       const char *dev_name, uint8_t port_num,
                       uint8_t *sl_p);

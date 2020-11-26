@@ -48,14 +48,15 @@ extern const char *ucs_async_mode_names[];
 
 
 /**
- * Ternary logic value.
+ * Ternary logic or Auto value.
  */
-typedef enum ucs_ternary_value {
-    UCS_NO  = 0,
-    UCS_YES = 1,
-    UCS_TRY = 2,
+typedef enum ucs_ternary_auto_value {
+    UCS_NO   = 0,
+    UCS_YES  = 1,
+    UCS_TRY  = 2,
+    UCS_AUTO = 3,
     UCS_TERNARY_LAST
-} ucs_ternary_value_t;
+} ucs_ternary_auto_value_t;
 
 
 /**

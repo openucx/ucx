@@ -44,8 +44,8 @@ typedef struct uct_mm_remote_seg {
  * MM memory domain configuration
  */
 typedef struct uct_mm_md_config {
-    uct_md_config_t       super;
-    ucs_ternary_value_t   hugetlb_mode;     /* Enable using huge pages */
+    uct_md_config_t          super;
+    ucs_ternary_auto_value_t hugetlb_mode;     /* Enable using huge pages */
 } uct_mm_md_config_t;
 
 
