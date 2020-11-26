@@ -262,10 +262,14 @@ static void uct_ib_async_event_handler(int fd, void *arg)
                  ibv_event_type_str(event.event_type), event.element.cq);
         level = UCS_LOG_LEVEL_ERROR;
         break;
+    case IBV_EVENT_COMM_EST:
+        snprintf(event_info, sizeof(event_info), "%s on QPN 0x%x",
+                 ibv_event_type_str(event.event_type), event.element.qp->qp_num);
+        level = UCS_LOG_LEVEL_DEBUG;
+        break;
     case IBV_EVENT_QP_FATAL:
     case IBV_EVENT_QP_REQ_ERR:
     case IBV_EVENT_QP_ACCESS_ERR:
-    case IBV_EVENT_COMM_EST:
     case IBV_EVENT_SQ_DRAINED:
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
