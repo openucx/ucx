@@ -254,7 +254,7 @@ protected:
             if (_buffer == NULL) {
                 throw std::bad_alloc();
             }
-            memset(_header, 0, sizeof(_header));
+            memset(&_header, 0, sizeof(_header));
         }
 
         ~Buffer() {
@@ -278,8 +278,8 @@ protected:
             return (uint8_t*)_buffer + offset;
         }
 
-        inline void *header() {
-            return &_header;
+        inline void *header() const {
+            return (void*)&_header;
         }
 
         inline void resize(size_t size) {
@@ -296,7 +296,11 @@ protected:
 
     private:
         void*                     _buffer;
-        // With AM API need to send a header with every iov element
+        // With AM API need to send a header with every iov element, because:
+        // 1. IOVs (chunks) may arrive OOO, therefore receiver needs to know
+        // total message size to initialize receive IOV buffer properly.
+        // 2. Receiver needs to know sn and iov_index for every chunk
+        // (sn is needed for finding message being assembled in the hash)
         iomsg_t                   _header;
         size_t                    _size;
         MemoryPool<Buffer, true>& _pool;
@@ -476,9 +480,6 @@ protected:
 
     // Holds details of AM message consisting of several chunks
     struct UcxAmMsg {
-        UcxAmMsg() : _iov(NULL), _cb(NULL), _count(0)
-        {}
-
         UcxAmMsg(BufferIov *iov, UcxCallback *cb) :
             _iov(iov), _cb(cb), _count(1) {
             // Count is initialized to 1, because this struct is created when
@@ -785,8 +786,7 @@ public:
             iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
             w->init(this, conn, msg->sn, iov, &_curr_state.write_count);
             if (iov->size() > 1) {
-                UcxAmMsg msg_desc(iov, w);
-                _am_recv_iovs[msg->sn] = msg_desc;
+                _am_recv_iovs.insert(std::make_pair(msg->sn, UcxAmMsg(iov, w)));
             }
         } else {
             iov = iter->second._iov;
@@ -1117,8 +1117,7 @@ public:
                     &_server_info[get_server_index(conn)].num_completed[IO_READ],
                     msg->sn, opts().validate, iov, 0);
             if (iov->size() > 1) {
-                UcxAmMsg msg_desc(iov, r);
-                _am_recv_iovs[msg->sn] = msg_desc;
+                _am_recv_iovs.insert(std::make_pair(msg->sn, UcxAmMsg(iov, r)));
             }
         } else {
             iov = iter->second._iov;
