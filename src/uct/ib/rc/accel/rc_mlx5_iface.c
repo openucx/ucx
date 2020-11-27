@@ -97,7 +97,14 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
 
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num), uct_rc_mlx5_ep_t);
-    ucs_assert(ep != NULL);
+    /* TODO: temporary workaround for uct_ep_flush(cancel) case when EP has been
+     *       destroyed but successful CQE was not polled out from the CQ */
+    if (ucs_unlikely(ep == NULL)) {
+        ucs_debug(UCT_IB_IFACE_FMT": qp_num %x not found",
+                  UCT_IB_IFACE_ARG(&iface->super.super), qp_num);
+        return 1;
+    }
+
     hw_ci = ntohs(cqe->wqe_counter);
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface, ep,
                    qp_num, hw_ci);
