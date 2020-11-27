@@ -994,6 +994,14 @@ public:
         test_ucp_sockaddr::init();
         start_listener(cb_type());
         client_ep_connect();
+
+        /* wait untill all connections are established in order to test
+         * protocols using a real EP configuration instead of initial one
+         * that's assigned when starting a connection establishment
+         * (initial configuration in CM flow has only AM lane) */
+        while (!(sender().ep()->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+            short_progress_loop();
+        }
     }
 
     void get_nb(std::string& send_buf, std::string& recv_buf, ucp_rkey_h rkey,
