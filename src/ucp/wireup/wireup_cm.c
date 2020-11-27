@@ -759,7 +759,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
                  ucp_ep, ucp_ep->flags);
     }
 
-    /* don't remove the flag at the beggining of the function, some functions
+    /* don't remove the flag at the beginning of the function, some functions
      * may rely on that flag (e.g. ucp_ep_cm_remote_disconnect_progress()) */
     ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
