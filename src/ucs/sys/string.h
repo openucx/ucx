@@ -60,6 +60,17 @@ void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max);
 
 
 /**
+ * Strip specified number of last components from file/dir path
+ *
+ * @param path          The pointer of file path to be stripped
+ * @param num_layers    The number of components to be stripped
+ *
+ * @return Pointer of the stripped dir path.
+ */
+char *ucs_dirname(char *path, int num_layers);
+
+
+/**
  * Format a string to a buffer of given size, and fill the rest of the buffer
  * with '\0'. Also, guarantee that the last char in the buffer is '\0'.
  *
