@@ -101,7 +101,12 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     req->recv.tag.tag_mask  = tag_mask;
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
         req->recv.tag.cb    = param->cb.recv;
-        req->user_data      = param->user_data;
+
+        if (param->op_attr_mask & UCP_OP_ATTR_FIELD_USER_DATA) {
+            req->user_data = param->user_data;
+        } else {
+            req->user_data = NULL;
+        }
     }
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
@@ -221,34 +226,44 @@ out:
     return ret;
 }
 
-UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
-                 (worker, buffer, count, datatype, message, cb),
-                 ucp_worker_h worker, void *buffer, size_t count,
-                 ucp_datatype_t datatype, ucp_tag_message_h message,
-                 ucp_tag_recv_callback_t cb)
+ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer, size_t count,
+                                     ucp_datatype_t datatype, ucp_tag_message_h message,
+                                     ucp_tag_recv_callback_t cb)
 {
     ucp_request_param_t param = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FIELD_DATATYPE |
                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL,
+        .datatype     = datatype,
         .cb.recv      = (ucp_tag_recv_nbx_callback_t)cb
     };
+
+    return ucp_tag_msg_recv_nbx(worker, buffer, count, message, &param);
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nbx,
+                 (worker, buffer, count, message, param),
+                 ucp_worker_h worker, void *buffer, size_t count,
+                 ucp_tag_message_h message, const ucp_request_param_t *param)
+{
     ucp_recv_desc_t *rdesc = message;
     ucs_status_ptr_t ret;
     ucp_request_t *req;
+    ucp_datatype_t datatype;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    req = ucp_request_get(worker);
-    if (ucs_likely(req != NULL)) {
-        ret = ucp_tag_recv_common(worker, buffer, count, datatype,
-                                  ucp_rdesc_get_tag(rdesc), UCP_TAG_MASK_FULL,
-                                  req, rdesc, &param, "msg_recv_nb");
-    } else {
-        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-    }
+    req      = ucp_request_get_param(worker, param,
+                                     {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                     goto out;});
+    datatype = ucp_request_param_datatype(param);
+    ret      =  ucp_tag_recv_common(worker, buffer, count, datatype,
+                                    ucp_rdesc_get_tag(rdesc), UCP_TAG_MASK_FULL,
+                                    req, rdesc, param, "msg_recv_nbx");
 
+out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
 }
