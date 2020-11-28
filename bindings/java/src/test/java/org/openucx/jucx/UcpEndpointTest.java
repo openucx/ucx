@@ -253,8 +253,6 @@ public class UcpEndpointTest extends UcxTest {
                 Thread.sleep(10);
             } catch (InterruptedException e) {
                 e.printStackTrace();
-            } finally {
-                closeRequest.close();
             }
         }
 
@@ -431,7 +429,7 @@ public class UcpEndpointTest extends UcxTest {
             new UcxCallback() {
                 @Override
                 public void onSuccess(UcpRequest request) {
-                    assertEquals(request.getRecvSize(), UcpMemoryTest.MEM_SIZE * 2);
+                    assertEquals(UcpMemoryTest.MEM_SIZE * 2, request.getRecvSize());
                     assertEquals((byte)1, recvBuffer.get(0));
                     assertEquals((byte)2, recvBuffer.get(UcpMemoryTest.MEM_SIZE));
                     received.set(true);

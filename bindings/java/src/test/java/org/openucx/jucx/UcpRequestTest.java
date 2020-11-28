@@ -6,6 +6,7 @@ package org.openucx.jucx;
 
 import org.junit.Test;
 import org.openucx.jucx.ucp.*;
+import org.openucx.jucx.ucs.UcsConstants;
 
 import java.nio.ByteBuffer;
 import static org.junit.Assert.*;
@@ -22,6 +23,7 @@ public class UcpRequestTest {
             worker.progress();
         }
 
+        assertEquals(UcsConstants.STATUS.UCS_ERR_CANCELED, recv.getStatus());
         assertTrue(recv.isCompleted());
         assertNull(recv.getNativeId());
 
