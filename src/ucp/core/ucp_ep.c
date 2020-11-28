@@ -948,16 +948,81 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     return ucp_ep_close_nbx(ep, &param);
 }
 
+static uct_iface_t ucp_failed_tl_iface = {
+    .ops = {
+        .ep_put_short        = (uct_ep_put_short_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout,
+        .ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_get_short        = (uct_ep_get_short_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout,
+        .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy,
+        .ep_pending_purge    = (uct_ep_pending_purge_func_t)ucs_empty_function_return_success,
+        .ep_flush            = (uct_ep_flush_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_fence            = (uct_ep_fence_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucs_empty_function_return_ep_timeout,
+        .ep_destroy          = (uct_ep_destroy_func_t)ucs_empty_function,
+        .ep_get_address      = (uct_ep_get_address_func_t)ucs_empty_function_return_ep_timeout
+    }
+};
+
+static uct_ep_t ucp_failed_tl_ep = {
+    .iface = &ucp_failed_tl_iface
+};
+
+void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
+{
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (ep->uct_eps[lane] == NULL) {
+            continue;
+        }
+
+        ucs_trace("ep %p: discard uct_ep[%d]=%p", ep, lane,
+                  ep->uct_eps[lane]);
+        ucp_worker_discard_uct_ep(ep->worker, ep->uct_eps[lane],
+                                  UCT_FLUSH_FLAG_CANCEL,
+                                  ucp_ep_err_pending_purge,
+                                  UCS_STATUS_PTR(status));
+        /* UCT CM lane mustn't be scheduled on worker progress when discarding,
+         * since UCP EP will be destroyed due to peer failure and
+         * ucp_cm_disconnect_cb() could be invoked on async thread after UCP EP
+         * is destroyed and before UCT CM EP is destroyed from discarding
+         * functionality. So, UCP EP will passed as a corrupted argument to
+         * ucp_cm_disconnect_cb() */
+        if (lane == ucp_ep_get_cm_lane(ep)) {
+            ucs_assert(!ucp_worker_is_uct_ep_discarding(ep->worker,
+                                                        ep->uct_eps[lane]));
+        }
+        ep->uct_eps[lane] = &ucp_failed_tl_ep;
+    }
+}
+
 ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 {
     ucp_worker_h  worker = ep->worker;
-    int           force;
-    void          *request;
+    void          *request = NULL;
     ucp_request_t *close_req;
-    unsigned      uct_flags;
 
-    force = ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE;
-    if (force && !ucp_ep_has_cm_lane(ep) &&
+    if ((ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) &&
+        !ucp_ep_has_cm_lane(ep) &&
         (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }
@@ -965,24 +1030,30 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     UCS_ASYNC_BLOCK(&worker->async);
 
     ep->flags |= UCP_EP_FLAG_CLOSED;
-    uct_flags  = force ? UCT_FLUSH_FLAG_CANCEL : UCT_FLUSH_FLAG_LOCAL;
-    request    = ucp_ep_flush_internal(ep, uct_flags, 0,
-                                       &ucp_request_null_param, NULL,
-                                       ucp_ep_close_flushed_callback,
-                                       "close");
-    if (!UCS_PTR_IS_PTR(request)) {
-        if (ucp_ep_is_cm_local_connected(ep) && !force) {
-            /* lanes already flushed, start disconnect on CM lane */
-            ucp_ep_cm_disconnect_cm_lane(ep);
-            close_req = ucp_ep_cm_close_request_get(ep);
-            if (close_req != NULL) {
-                request = close_req + 1;
-                ucp_ep_set_close_request(ep, close_req, "close");
+
+    if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
+        if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
+            ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
+        }
+
+        ucp_ep_disconnected(ep, 1);
+    } else {
+        request = ucp_ep_flush_internal(ep, 0, &ucp_request_null_param, NULL,
+                                        ucp_ep_close_flushed_callback, "close");
+        if (!UCS_PTR_IS_PTR(request)) {
+            if (ucp_ep_is_cm_local_connected(ep)) {
+                /* lanes already flushed, start disconnect on CM lane */
+                ucp_ep_cm_disconnect_cm_lane(ep);
+                close_req = ucp_ep_cm_close_request_get(ep);
+                if (close_req != NULL) {
+                    request = close_req + 1;
+                    ucp_ep_set_close_request(ep, close_req, "close");
+                } else {
+                    request = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                }
             } else {
-                request = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                ucp_ep_disconnected(ep, 0);
             }
-        } else {
-            ucp_ep_disconnected(ep, force);
         }
     }
 

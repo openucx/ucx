@@ -521,8 +521,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                          const ucp_conn_request_h conn_request,
                                          ucp_ep_h *ep_p);
 
-ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned uct_flags,
-                                       unsigned req_flags,
+ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        const ucp_request_param_t *param,
                                        ucp_request_t *worker_req,
                                        ucp_request_callback_t flushed_cb,
@@ -594,6 +593,8 @@ int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
 void ucp_ep_flush_completion(uct_completion_t *self);
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
+
+void ucp_ep_discard_lanes(ucp_ep_h ucp_ep, ucs_status_t status);
 
 /**
  * @brief Do keepalive operation.

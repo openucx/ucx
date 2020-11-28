@@ -678,8 +678,7 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
      */
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_CLOSED));
-    req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, 0,
-                                &ucp_request_null_param, NULL,
+    req = ucp_ep_flush_internal(ucp_ep, 0, &ucp_request_null_param, NULL,
                                 ucp_ep_cm_disconnect_flushed_cb,
                                 "cm_disconnected_cb");
     if (req == NULL) {
