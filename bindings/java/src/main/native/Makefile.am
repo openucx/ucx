@@ -22,7 +22,6 @@ JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConstants.h             \
                          org_openucx_jucx_ucp_UcpEndpoint.h              \
                          org_openucx_jucx_ucp_UcpListener.h              \
                          org_openucx_jucx_ucp_UcpMemory.h                \
-                         org_openucx_jucx_ucp_UcpRequest.h               \
                          org_openucx_jucx_ucp_UcpRemoteKey.h             \
                          org_openucx_jucx_ucp_UcpWorker.h                \
                          org_openucx_jucx_ucs_UcsConstants_ThreadMode.h  \
@@ -59,7 +58,6 @@ libjucx_la_SOURCES = context.cc \
                      jucx_common_def.cc \
                      listener.cc \
                      memory.cc \
-                     request.cc \
                      ucp_constants.cc \
                      ucs_constants.cc \
                      worker.cc

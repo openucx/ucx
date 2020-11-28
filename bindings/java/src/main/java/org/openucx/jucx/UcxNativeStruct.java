@@ -19,8 +19,12 @@ public abstract class UcxNativeStruct {
         return nativeId;
     }
 
+    private void setNativeId(long nativeId) {
+        this.nativeId = Long.valueOf(nativeId);
+    }
+
     protected void setNativeId(Long nativeId) {
-        if (nativeId != null && nativeId < 0) {
+        if (nativeId != null && nativeId <= 0) {
             throw new UcxException("UcxNativeStruct.setNativeId: invalid native pointer: "
                 + nativeId);
         }

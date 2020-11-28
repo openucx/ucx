@@ -9,6 +9,7 @@ import java.io.Closeable;
 import java.nio.ByteBuffer;
 
 import org.openucx.jucx.*;
+import static org.openucx.jucx.ucs.UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_UNKNOWN;
 
 import static org.openucx.jucx.ucs.UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_UNKNOWN;
 
