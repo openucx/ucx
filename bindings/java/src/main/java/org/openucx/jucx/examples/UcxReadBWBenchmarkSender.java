@@ -53,23 +53,32 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
         sendData.putInt(data.hashCode());
         sendData.clear();
 
-        // Send memory metadata and wait until receiver will finish benchmark.
+        // Send memory metadata
         endpoint.sendTaggedNonBlocking(sendData, null);
 
+        // Wait until receiver will finish benchmark
+        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(0);
+        UcpRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer, null);
+        resources.push(recvRequest);
+        Exception cause = null;
         try {
-            while (true) {
+            while (!recvRequest.isCompleted()) {
                 if (worker.progress() == 0) {
                     worker.waitForEvents();
                 }
             }
-        } catch (ConnectException ignored) {
-        } catch (Exception ex) {
-            System.err.println(ex.getMessage());
-        } finally {
-            UcpRequest closeRequest = endpoint.closeNonBlockingForce();
-            worker.progressRequest(closeRequest);
-            resources.push(closeRequest);
-            closeResources();
+        } catch (ConnectException e) {
+            cause = e;
+        } catch (UcxException e) {
+            cause = e;
         }
+
+        // If we could not receive the sync message, the test failed. Otherwise,
+        // we can ignore the error.
+        if (!recvRequest.isCompleted()) {
+            throw new Exception("Receive sync message not completed", cause);
+        }
+
+        closeResources(endpoint);
     }
 }

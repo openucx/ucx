@@ -35,7 +35,7 @@ typedef uintptr_t native_ptr;
  */
 #define JNU_ThrowException(_env, _msg) do { \
     jclass _cls = _env->FindClass("org/openucx/jucx/UcxException"); \
-    ucs_error("JUCX: %s", _msg); \
+    ucs_debug("JUCX: %s", _msg); \
     if (_cls != 0) { /* Otherwise an exception has already been thrown */ \
         _env->ThrowNew(_cls, _msg); \
     } \

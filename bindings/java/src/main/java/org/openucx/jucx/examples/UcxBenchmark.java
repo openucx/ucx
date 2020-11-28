@@ -5,10 +5,12 @@
 
 package org.openucx.jucx.examples;
 
+import org.openucx.jucx.UcxException;
 import org.openucx.jucx.ucp.*;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.ConnectException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -97,9 +99,20 @@ public abstract class UcxBenchmark {
         return sizeInGigabits / secondsElapsed;
     }
 
-    protected static void closeResources() throws IOException {
-        while (!resources.empty()) {
-            resources.pop().close();
+    protected static void closeResources(UcpEndpoint endpoint) throws Exception {
+        System.out.println("Closing endpoint");
+        try {
+            UcpRequest closeRequest = endpoint.closeNonBlockingFlush();
+            resources.push(closeRequest);
+            worker.progressRequest(closeRequest);
+        } catch (ConnectException ignored) {
+            System.out.println("Ignoring '" + ignored.getMessage() + "'");
+        } catch (UcxException ignored) {
+            System.out.println("Ignoring '" + ignored.getMessage() + "'");
+        } finally {
+            while (!resources.empty()) {
+                resources.pop().close();
+            }
         }
     }
 }
