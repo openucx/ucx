@@ -752,8 +752,8 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
          * ucp_ep_cm_disconnect_cm_lane() was called from ucp_ep_close_nbx()),
          * not failed and no CLOSE request is set, it means that an EP was
          * disconnected from a peer */
-        ucs_assert((ucp_ep->flags & UCP_EP_FLAG_DISCONNECTED_CM_LANE) &&
-                   !(ucp_ep->flags & UCP_EP_FLAG_ERR_HANDLER_INVOKED));
+        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_DISCONNECTED_CM_LANE);
+        ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_ERR_HANDLER_INVOKED));
     } else {
         ucs_warn("ep %p: unexpected state on disconnect, flags: 0x%u",
                  ucp_ep, ucp_ep->flags);
