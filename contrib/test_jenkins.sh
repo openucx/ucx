@@ -1320,7 +1320,7 @@ test_jucx() {
 			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
 			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
 			  org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
-			     s=$server_ip p=$JUCX_TEST_PORT &
+			     s=$server_ip p=$JUCX_TEST_PORT t=1000000 &
 			     java_pid=$!
 
 			sleep 10
@@ -1329,7 +1329,7 @@ test_jucx() {
 			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
 			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*"  \
 			  org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
-			     s=$server_ip p=$JUCX_TEST_PORT t=10000000
+			     s=$server_ip p=$JUCX_TEST_PORT t=1000000
 			wait $java_pid
 		done
 
