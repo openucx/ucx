@@ -92,20 +92,6 @@ void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
     }
 }
 
-static UCS_F_ALWAYS_INLINE
-uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
-{
-    /* return the rdmacm connection manager this ep is using */
-    return ucs_container_of(cep->super.super.super.iface, uct_rdmacm_cm_t,
-                            super.iface);
-}
-
-static UCS_F_ALWAYS_INLINE
-ucs_async_context_t *uct_rdmacm_cm_ep_get_async(uct_rdmacm_cm_ep_t *cep)
-{
-    return uct_rdmacm_cm_get_async(uct_rdmacm_cm_ep_get_cm(cep));
-}
-
 void uct_rdmacm_cm_ep_set_failed(uct_rdmacm_cm_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,
                                  ucs_status_t status)
@@ -321,7 +307,7 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
     ucs_trace("%s: rdma_resolve_addr on cm_id %p",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN), cep->id);
     if (rdma_resolve_addr(cep->id, NULL, (struct sockaddr *)params->sockaddr->addr,
-                          1000/* TODO */)) {
+                          uct_rdmacm_cm_get_timeout(rdmacm_cm))) {
         ucs_error("rdma_resolve_addr() to dst addr %s failed: %m",
                   ucs_sockaddr_str((struct sockaddr *)params->sockaddr->addr,
                                    ip_port_str, UCS_SOCKADDR_STRING_LEN));

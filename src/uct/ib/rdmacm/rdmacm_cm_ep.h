@@ -32,6 +32,26 @@ enum {
                                                       uct_rdmacm_cm_ep_t::status.*/
 };
 
+
+static UCS_F_ALWAYS_INLINE
+uct_rdmacm_cm_t *uct_rdmacm_cm_ep_get_cm(uct_rdmacm_cm_ep_t *cep)
+{
+    /* return the rdmacm connection manager this ep is using */
+    return ucs_container_of(cep->super.super.super.iface, uct_rdmacm_cm_t,
+                            super.iface);
+}
+
+static UCS_F_ALWAYS_INLINE
+ucs_async_context_t *uct_rdmacm_cm_ep_get_async(uct_rdmacm_cm_ep_t *cep)
+{
+    return uct_rdmacm_cm_get_async(uct_rdmacm_cm_ep_get_cm(cep));
+}
+
+static inline int uct_rdmacm_cm_get_timeout(uct_rdmacm_cm_t *cm)
+{
+    return UCS_MSEC_PER_SEC * cm->super.config.timeout;
+}
+
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t);
 
