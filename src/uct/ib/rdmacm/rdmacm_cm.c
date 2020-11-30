@@ -78,6 +78,7 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
 {
     struct sockaddr    *remote_addr = rdma_get_peer_addr(event->id);
     uct_rdmacm_cm_ep_t *cep         = (uct_rdmacm_cm_ep_t *)event->id->context;
+    uct_rdmacm_cm_t    *cm          = uct_rdmacm_cm_ep_get_cm(cep);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
@@ -88,7 +89,7 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               event->id);
 
-    if (rdma_resolve_route(event->id, 1000 /* TODO */)) {
+    if (rdma_resolve_route(event->id, uct_rdmacm_cm_get_timeout(cm))) {
         ucs_error("%s: rdma_resolve_route(to addr=%s) failed: %m",
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
                   ucs_sockaddr_str(remote_addr, ip_port_str,

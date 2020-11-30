@@ -20,7 +20,8 @@ UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
  * Specific CMs extend this structure.
  */
 struct uct_cm_config {
-    int allow_addr_inuse;
+    int    allow_addr_inuse;
+    double timeout;
 };
 
 /**
@@ -49,6 +50,7 @@ struct uct_cm {
 
     struct {
         int          allow_addr_inuse;
+        double       timeout;
     } config;
 };
 
