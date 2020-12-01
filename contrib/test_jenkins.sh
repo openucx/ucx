@@ -92,6 +92,26 @@ then
 fi
 echo "==== Running on $(hostname), worker $worker / $nworkers ===="
 
+# Report an warning message to Azure pipeline
+log_warning() {
+	msg=$1
+	azp_tag=""
+	set +x
+	test "x$RUNNING_IN_AZURE" = "xyes" && azp_tag="##vso[task.logissue type=warning]"
+	echo "${azp_tag}${msg}"
+	set -x
+}
+
+# Report an error message to Azure pipeline
+log_error() {
+	msg=$1
+	azp_tag=""
+	set +x
+	test "x$RUNNING_IN_AZURE" = "xyes" && azp_tag="##vso[task.logissue type=error]"
+	echo "${azp_tag}${msg}"
+	set -x
+}
+
 #
 # cleanup ucx
 #
@@ -300,7 +320,7 @@ build_docs() {
 		then
 			doxy_ready=1
 		else
-			echo " doxygen was not found"
+			log_warning "Doxygen was not found"
 		fi
 	else
 		doxy_ready=1
@@ -328,7 +348,7 @@ build_java_docs() {
 		module unload dev/jdk
 		module unload dev/mvn
 	else
-		echo "No jdk and mvn module, failed to build docs".
+		log_warning "No jdk and mvn module, failed to build docs".
 	fi
 }
 
@@ -396,7 +416,7 @@ build_release_pkg() {
 	# extract version from configure.ac and convert to MAJOR.MINOR.PATCH representation
 	version=$(grep -P "define\S+ucx_ver" configure.ac | awk '{print $2}' | sed 's,),,' | xargs echo | tr ' ' '.')
 	if ! grep -q "$version" ucx.spec.in; then
-		echo "Current UCX version ($version) is not present in ucx.spec.in changelog"
+		log_error "Current UCX version ($version) is not present in ucx.spec.in changelog"
 		exit 1
 	fi
 	cd -
@@ -423,7 +443,7 @@ build_icc() {
 		make_clean distclean
 		echo "ok 1 - build successful " >> build_icc.tap
 	else
-		echo "==== Not building with Intel compiler ===="
+		log_warning "==== Not building with Intel compiler ===="
 		echo "ok 1 - # SKIP because Intel compiler not installed" >> build_icc.tap
 	fi
 	module_unload intel/ics-19.1.1
@@ -450,7 +470,7 @@ build_pgi() {
 		make_clean distclean
 		echo "ok 1 - build successful " >> build_pgi.tap
 	else
-		echo "==== Not building with PGI compiler ===="
+		log_warning "==== Not building with PGI compiler ===="
 		echo "ok 1 - # SKIP because PGI compiler not installed" >> build_pgi.tap
 	fi
 
@@ -595,12 +615,12 @@ build_gcc_latest() {
 			echo "ok 1 - build successful " >> build_gcc_latest.tap
 			module unload dev/gcc-latest
 		else
-			echo "==== Not building with latest gcc compiler ===="
+			log_warning "==== Not building with latest gcc compiler ===="
 			echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
 		fi
 	else
-		echo "==== Not building with gcc compiler ===="
-		echo "Required glibc version is too old ($ldd_ver)"
+		log_warning "==== Not building with gcc compiler ===="
+		log_warning "Required glibc version is too old ($ldd_ver)"
 		echo "ok 1 - # SKIP because glibc version is older than 2.14" >> build_gcc_latest.tap
 	fi
 }
@@ -679,7 +699,7 @@ check_make_distcheck() {
 		../contrib/configure-release --prefix=$PWD/install
 		$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
 	else
-		echo "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
+		log_warning "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
 	fi
 }
 
@@ -697,7 +717,7 @@ check_config_h() {
 	then
 		echo "ok 1 - check successful " >> check_config_h.tap
 	else
-		echo "Error: missing include config.h in files: $missing"
+		log_error "Missing include config.h in files: $missing"
 		exit 1
 	fi
 }
