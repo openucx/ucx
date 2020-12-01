@@ -265,7 +265,7 @@ public:
             }
         case UCX_PERF_CMD_PUT:
             if ((TYPE == UCX_PERF_TEST_TYPE_PINGPONG) ||
-                (TYPE == UCX_PERF_TEST_TYPE_PINGPONG_WFE)) {
+                (TYPE == UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM)) {
                 /* Put the control word at the latest byte of the IOV message */
                 set_sn(UCS_PTR_BYTE_OFFSET(buffer,
                                            uct_perf_get_buffer_extent(&m_perf.params) - 1),
@@ -623,7 +623,7 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (TYPE) {
         case UCX_PERF_TEST_TYPE_PINGPONG:
-        case UCX_PERF_TEST_TYPE_PINGPONG_WFE:
+        case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
             return run_pingpong();
         case UCX_PERF_TEST_TYPE_STREAM_UNI:
             /* coverity[switch_selector_expr_is_constant] */
