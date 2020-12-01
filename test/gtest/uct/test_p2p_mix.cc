@@ -100,7 +100,6 @@ ucs_status_t uct_p2p_mix_test::am_zcopy(const mapped_buffer &sendbuf,
                             sendbuf.length());
 
     iov.buffer = (char*)sendbuf.ptr() + header_length;
-    iov.count  = 1;
     iov.length = sendbuf.length() - header_length;
     iov.memh   = sendbuf.memh();
     status = uct_ep_am_zcopy(sender().ep(0), AM_ID, sendbuf.ptr(), header_length,

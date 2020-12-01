@@ -160,8 +160,6 @@
         size_t _buffer_iov_length_it = 0; \
         for (size_t iov_it = 0; iov_it < _name_iovcnt; ++iov_it) { \
             _name_iov[iov_it].buffer = (char *)(_buffer_ptr) + _buffer_iov_length_it; \
-            _name_iov[iov_it].count  = 1; \
-            _name_iov[iov_it].stride = 0; \
             _name_iov[iov_it].memh   = _memh; \
             if (iov_it == (_name_iovcnt - 1)) { /* Last iteration */ \
                 _name_iov[iov_it].length = _buffer_length - _buffer_iov_length_it; \

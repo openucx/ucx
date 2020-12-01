@@ -316,8 +316,6 @@ ucp_tag_offload_do_post(ucp_request_t *req)
     }
 
     iov.length = length;
-    iov.count  = 1;
-    iov.stride = 0;
 
     req->recv.uct_ctx.tag_consumed_cb = ucp_tag_offload_tag_consumed;
     req->recv.uct_ctx.completed_cb    = ucp_tag_offload_completed;

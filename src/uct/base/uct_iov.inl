@@ -27,7 +27,7 @@
 static UCS_F_ALWAYS_INLINE
 size_t uct_iov_get_length(const uct_iov_t *iov)
 {
-    return iov->count * iov->length;
+    return iov->length;
 }
 
 /**

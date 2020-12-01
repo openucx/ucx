@@ -116,37 +116,19 @@ typedef void*                      uct_conn_request_h;
  * @ingroup UCT_RESOURCE
  * @brief Structure for scatter-gather I/O.
  *
- * Specifies a list of buffers which can be used within a single data transfer
+ * Specifies a buffer which can be used within a single data transfer
  * function call.
- *
-   @verbatim
-    buffer
-    |
-    +-----------+-------+-----------+-------+-----------+
-    |  payload  | empty |  payload  | empty |  payload  |
-    +-----------+-------+-----------+-------+-----------+
-    |<-length-->|       |<-length-->|       |<-length-->|
-    |<---- stride ----->|<---- stride ----->|
-   @endverbatim
  *
  * @note The sum of lengths in all iov list must be less or equal to max_zcopy
  *       of the respective communication operation.
- * @note If @a length or @a count are zero, the memory pointed to by @a buffer
+ * @note If @a length is zero, the memory pointed to by @a buffer
  *       will not be accessed. Otherwise, @a buffer must point to valid memory.
- *
- * @note If @a count is one, every iov entry specifies a single contiguous data block
- *
- * @note If @a count > 1, each iov entry specifies a strided block of @a count
- *       elements and distance of @a stride byte between consecutive elements
  *
  */
 typedef struct uct_iov {
     void     *buffer;   /**< Data buffer */
     size_t    length;   /**< Length of the payload in bytes */
     uct_mem_h memh;     /**< Local memory key descriptor for the data */
-    size_t    stride;   /**< Stride between beginnings of payload elements in
-                             the buffer in bytes */
-    unsigned  count;    /**< Number of payload elements in the buffer */
 } uct_iov_t;
 
 
