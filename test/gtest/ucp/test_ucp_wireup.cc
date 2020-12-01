@@ -58,6 +58,13 @@ protected:
 
     void waitall(std::vector<void*> reqs);
 
+    static ucs_log_func_rc_t
+    err_disconnect_handler(const char *file, unsigned line,
+                           const char *function,
+                           ucs_log_level_t level,
+                           const ucs_log_component_config_t *comp_conf,
+                           const char *message, va_list ap);
+
     void disconnect(ucp_ep_h ep);
 
     void disconnect(ucp_test::entity &e);
@@ -338,11 +345,28 @@ void test_ucp_wireup::send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker,
     m_rkeys.clear();
 }
 
-void test_ucp_wireup::disconnect(ucp_ep_h ep) {
-    void *req = ucp_disconnect_nb(ep);
-    if (!UCS_PTR_IS_PTR(req)) {
-        ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+ucs_log_func_rc_t
+test_ucp_wireup::err_disconnect_handler(const char *file, unsigned line,
+                                        const char *function,
+                                        ucs_log_level_t level,
+                                        const ucs_log_component_config_t *comp_conf,
+                                        const char *message, va_list ap) {
+    if (level == UCS_LOG_LEVEL_ERROR) {
+        std::string err_str = format_message(message, ap);
+
+        if ((err_str.find("error during flush")      != std::string::npos) ||
+            (err_str.find("completed with error")    != std::string::npos) ||
+            (err_str.find("operation returned error")!= std::string::npos)) {
+            return UCS_LOG_FUNC_RC_STOP;
+        }
     }
+
+    return UCS_LOG_FUNC_RC_CONTINUE;
+}
+
+void test_ucp_wireup::disconnect(ucp_ep_h ep) {
+    scoped_log_handler slh(err_disconnect_handler);
+    void *req = ucp_disconnect_nb(ep);
     request_wait(req);
 }
 
