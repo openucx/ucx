@@ -609,8 +609,8 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       uct_async_event_cb_t *event_cb,
                                       void **event_arg);
 
-ucs_status_t uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h
-                               tl_iface, ucs_status_t status);
+ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
+                                      ucs_status_t status);
 
 void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr);
 

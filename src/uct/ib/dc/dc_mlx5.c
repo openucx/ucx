@@ -198,13 +198,6 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
     uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress, flags);
 }
 
-static ucs_status_t uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface,
-                                              uct_ep_h ep, ucs_status_t status)
-{
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_mlx5_ep_t), ep,
-                             &ib_iface->super.super, status);
-}
-
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 {
@@ -1133,7 +1126,6 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .arm_cq                   = uct_rc_mlx5_iface_common_arm_cq,
     .event_cq                 = uct_rc_mlx5_iface_common_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
-    .set_ep_failed            = uct_dc_mlx5_ep_set_failed,
     },
     .init_rx                  = uct_dc_mlx5_init_rx,
     .cleanup_rx               = uct_dc_mlx5_cleanup_rx,
@@ -1410,13 +1402,14 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
     ucs_status_t status;
     ucs_log_level_t log_lvl;
 
-    status  = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
-                                           ep_status);
-    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
-
-    if (ep_status != UCS_ERR_CANCELED) {
-        uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
-                                        txwq, log_lvl);
+    if (ep_status == UCS_ERR_CANCELED) {
+        return;
     }
+
+    status  = uct_iface_handle_ep_err(&ib_iface->super.super,
+                                      &ep->super.super, ep_status);
+    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
+    uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
+                                    txwq, log_lvl);
 }
 

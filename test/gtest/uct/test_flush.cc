@@ -122,6 +122,12 @@ public:
         return am_req->test->am_send_pending(am_req);
     }
 
+    static void purge_cb(uct_pending_req_t *self, void *arg)
+    {
+        test_req_t *req = ucs_container_of(self, test_req_t, uct);
+        --req->comp.count;
+    }
+
     static ucs_status_t flush_progress(uct_pending_req_t *req)
     {
         test_req_t *flush_req = ucs_container_of(req, test_req_t, uct);
@@ -368,6 +374,10 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
          ASSERT_UCS_OK(status);
      }
 
+     if (is_flush_cancel()) {
+         uct_ep_pending_purge(sender().ep(0), purge_cb, NULL);
+     }
+
      /* Try to start a flush */
      test_req_t flush_req;
      flush_req.comp.count  = 2;
@@ -399,11 +409,7 @@ void uct_flush_test::test_flush_am_pending(flush_func_t flush, bool destroy_ep)
      EXPECT_EQ(1, flush_req.comp.count);
 
      while (!reqs.empty()) {
-         if (is_flush_cancel()) {
-            EXPECT_EQ(2, reqs.back().comp.count);
-         } else {
-            EXPECT_EQ(1, reqs.back().comp.count);
-         }
+         EXPECT_EQ(1, reqs.back().comp.count);
          reqs.pop_back();
      }
 
@@ -669,7 +675,9 @@ public:
         m_s1->m_e->destroy_eps();
         m_s1->m_e->connect(0, *m_s0->m_e, 0);
 
-        ASSERT_EQ(2, m_err_count);
+        /* there is a chance that one side getting disconect error before
+         * calling flush(CANCEL) */
+        EXPECT_LE(m_err_count, 1);
     }
 
     typedef ucs_status_t (uct_cancel_test::* send_func_t)(peer *s);
@@ -700,7 +708,7 @@ public:
 
     void do_test(send_func_t send) {
         for (int i = 0; i < count(); ++i) {
-            fill(&uct_cancel_test::am_zcopy);
+            fill(send);
             flush_and_reconnect();
         }
     }
@@ -746,7 +754,7 @@ protected:
     }
 
     ucs_status_t error_handler(uct_ep_h ep, ucs_status_t status) {
-        EXPECT_EQ(UCS_ERR_CANCELED, status);
+        EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
         m_err_count++;
         return UCS_OK;
     }

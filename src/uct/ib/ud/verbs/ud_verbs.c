@@ -386,13 +386,6 @@ out:
     return num_wcs;
 }
 
-static ucs_status_t uct_ud_verbs_ep_set_failed(uct_ib_iface_t *iface,
-                                               uct_ep_h ep, ucs_status_t status)
-{
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_ud_verbs_ep_t), ep,
-                             &iface->super.super, status);
-}
-
 static unsigned uct_ud_verbs_iface_async_progress(uct_ud_iface_t *ud_iface)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_iface, uct_ud_verbs_iface_t);
@@ -554,7 +547,6 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
     .handle_failure           = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert,
-    .set_ep_failed            = uct_ud_verbs_ep_set_failed,
     },
     .async_progress           = uct_ud_verbs_iface_async_progress,
     .send_ctl                 = uct_ud_verbs_ep_send_ctl,

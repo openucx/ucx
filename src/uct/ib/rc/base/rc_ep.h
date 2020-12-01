@@ -47,6 +47,12 @@ enum {
     /* EP is connected to peer */
     UCT_RC_EP_FLAG_CONNECTED         = UCS_BIT(1),
 
+    /* Flush cancel was executed on EP */
+    UCT_RC_EP_FLAG_FLUSH_CANCEL      = UCS_BIT(2),
+
+    /* Error handler already called or flush(CANCEL) disabled it */
+    UCT_RC_EP_FLAG_NO_ERR_HANDLER    = UCS_BIT(3),
+
     /* Soft Credit Request: indicates that peer needs to piggy-back credits
      * grant to counter AM (if any). Can be bundled with
      * UCT_RC_EP_FLAG_FC_GRANT  */

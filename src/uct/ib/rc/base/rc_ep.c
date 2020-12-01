@@ -435,9 +435,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
-            if (warn) {
-                ucs_warn("destroying rc ep %p with uncompleted operation %p",
-                         txqp, op);
+            /* Allow clean flush cancel op from destroy flow */
+            if (warn && (op->handler != uct_rc_ep_flush_op_completion_handler)) {
+                ucs_warn("destroying txqp %p with uncompleted operation %p handler %s",
+                         txqp, op, ucs_debug_get_symbol_name(op->handler));
             }
 
             if (op->user_comp != NULL) {
@@ -481,13 +482,25 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
                                            uct_rc_iface_t);
 
     if (!uct_rc_iface_has_tx_resources(iface) ||
-        !uct_rc_ep_has_tx_resources(ep)) {
+        (uct_rc_txqp_available(&ep->txqp) <= 0)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    /* Ignore FC limitations when performing flush(CANCEL) */
+    if (!uct_rc_fc_has_resources(iface, &ep->fc) &&
+        !(flags & UCT_FLUSH_FLAG_CANCEL)) {
         return UCS_ERR_NO_RESOURCE;
     }
 
     if (uct_rc_txqp_available(&ep->txqp) == max_available) {
         UCT_TL_EP_STAT_FLUSH(&ep->super);
         return UCS_OK;
+    }
+
+    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        ucs_assert(ucs_arbiter_group_is_empty(&ep->arb_group));
+        ucs_assert(!(ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL));
+        ep->flags |= UCT_RC_EP_FLAG_FLUSH_CANCEL;
     }
 
     return UCS_INPROGRESS;

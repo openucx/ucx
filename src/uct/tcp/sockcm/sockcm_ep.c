@@ -364,12 +364,13 @@ static unsigned uct_sockcm_client_err_handle_progress(void *arg)
     uct_sockcm_iface_t *iface = ucs_derived_of(sockcm_ep->super.super.iface,
                                                uct_sockcm_iface_t);
 
-    ucs_trace_func("err_handle ep=%p", sockcm_ep);
     UCS_ASYNC_BLOCK(iface->super.worker->async);
 
+    ucs_trace_func("err_handle ep=%p", sockcm_ep);
+
     sockcm_ep->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_sockcm_ep_t), &sockcm_ep->super.super,
-                      sockcm_ep->super.super.iface, sockcm_ep->status);
+    uct_iface_handle_ep_err(&iface->super.super, &sockcm_ep->super.super,
+                            sockcm_ep->status);
 
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
     return 0;
@@ -381,8 +382,7 @@ void uct_sockcm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t stat
     uct_sockcm_ep_t *sockcm_ep       = ucs_derived_of(ep, uct_sockcm_ep_t);
 
     if (sockcm_iface->super.err_handler_flags & UCT_CB_FLAG_ASYNC) {
-        uct_set_ep_failed(&UCS_CLASS_NAME(uct_sockcm_ep_t), &sockcm_ep->super.super,
-                          &sockcm_iface->super.super, status);
+        uct_iface_handle_ep_err(iface, ep, sockcm_ep->status);
     } else {
         sockcm_ep->status = status;
         uct_worker_progress_register_safe(&sockcm_iface->super.worker->super,

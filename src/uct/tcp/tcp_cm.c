@@ -8,6 +8,7 @@
 #endif
 
 #include "tcp.h"
+#include "tcp/tcp.h"
 
 #include <ucs/async/async.h>
 
@@ -58,6 +59,7 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
         }
         break;
     case UCT_TCP_EP_CONN_STATE_CLOSED:
+        ucs_assert(ep->events == 0);
         if (old_conn_state == UCT_TCP_EP_CONN_STATE_CLOSED) {
             return;
         }

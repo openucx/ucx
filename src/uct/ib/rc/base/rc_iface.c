@@ -348,8 +348,8 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
     ucs_assert(iface->config.fc_enabled);
 
-    if (ep == NULL) {
-        /* We get fc for ep which is being removed so should ignore it */
+    if ((ep == NULL) || (ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+        /* We get fc for ep which is being removed or canceled so should ignore it */
         goto out;
     }
 
