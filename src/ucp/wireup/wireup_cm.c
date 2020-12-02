@@ -658,19 +658,21 @@ static int ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
         return 0;
     }
 
-    if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
-        /* the ep is closed by API but close req is not valid yet (checked
-         * above), it will be set later from scheduled
-         * @ref ucp_ep_close_flushed_callback */
-        ucs_debug("ep %p: ep closed but request is not set, waiting for"
-                  " the flush callback", ucp_ep);
-        return 0;
+    if (!(ucp_ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+        /* CM disconnect happens during WIREUP MSGs exchange phase, when EP is
+         * locally connected to the peer, so UCP EP should not wait for flush
+         * completion even if it was started from close EP procedure, because
+         * it won't be never completed due to unreachability of the peer */
+        goto set_ep_failed;
     }
 
-    if (!(ucp_ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-        /* CM disconnect happens during WIREUP MSGs exchange phase, when EP
-         * is locally connected to the peer */
-        goto set_ep_failed;
+    if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
+        /* the ep is remote conencted (checked above) and closed by API but
+         * close req is not valid yet (checked above), it will be set later
+         * from scheduled @ref ucp_ep_close_flushed_callback */
+        ucs_debug("ep %p: ep is remote connected and closed, but request is"
+                  " not set, waiting for the flush callback", ucp_ep);
+        return 0;
     }
 
     /* if the EP is local and remote connected, need to flush it from main
