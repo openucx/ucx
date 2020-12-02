@@ -1,0 +1,97 @@
+# C
+BasedOnStyle: LLVM
+AlignEscapedNewlines: DontAlign
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: true
+AlignAfterOpenBracket: true
+AlignOperands: true
+PointerAlignment: Right
+DerivePointerAlignment: false
+AlignTrailingComments: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 100
+PenaltyBreakAssignment: 100
+PenaltyExcessCharacter: 10
+ColumnLimit: 85
+AlwaysBreakBeforeMultilineStrings: false
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: true
+  AfterNamespace: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+BreakBeforeBinaryOperators: false
+BreakBeforeTernaryOperators: false
+BreakStringLiterals: true
+ContinuationIndentWidth: 4
+IncludeBlocks: Regroup
+IndentCaseLabels: false
+IndentWidth: 4
+KeepEmptyLinesAtTheStartOfBlocks: false
+IndentPPDirectives: None
+MaxEmptyLinesToKeep: 2
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceInEmptyParentheses: false
+SpaceBeforeParens: ControlStatementsExceptForEachMacros
+SpaceBeforeAssignmentOperators: true
+SpaceAfterCStyleCast: false
+ForEachMacros: ["ucs_for_each_submask"]
+
+# CPP
+Standard: Cpp11
+AccessModifierOffset: -4
+AlwaysBreakTemplateDeclarations: false
+BreakBeforeInheritanceComma: false
+CompactNamespaces: false
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ConstructorInitializerIndentWidth: 4
+Cpp11BracedListStyle: true
+FixNamespaceComments: true
+NamespaceIndentation: None
+UseTab: Never
+ReflowComments: true
+SortIncludes: true
+IncludeCategories:
+ - Regex: '^"'
+   Priority: 1
+ - Regex: '^<'
+   Priority: 2
+SortUsingDeclarations: true
+TabWidth: 4
+SpacesInAngles: false
+SpacesBeforeTrailingComments: 1
+SpaceAfterTemplateKeyword: false
+SpacesInContainerLiterals: false
+
+# Issues:
+# 1.
+# Pointer alignment + declaration alignment:
+# long_type_name var;
+# void *         ptr;
+# Instead of:
+#void          *ptr;
+
+...
