@@ -163,7 +163,6 @@ static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
 {
     memset(&iface->inl_am_wr, 0, sizeof(iface->inl_am_wr));
     iface->inl_am_wr.sg_list        = iface->inl_sge;
-    iface->inl_am_wr.num_sge        = 2;
     iface->inl_am_wr.opcode         = IBV_WR_SEND;
     iface->inl_am_wr.send_flags     = IBV_SEND_INLINE;
 
@@ -456,7 +455,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     {
     {
     .ep_am_short              = uct_rc_verbs_ep_am_short,
-    .ep_am_short_iov          = uct_base_ep_am_short_iov,
+    .ep_am_short_iov          = uct_rc_verbs_ep_am_short_iov,
     .ep_am_bcopy              = uct_rc_verbs_ep_am_bcopy,
     .ep_am_zcopy              = uct_rc_verbs_ep_am_zcopy,
     .ep_put_short             = uct_rc_verbs_ep_put_short,

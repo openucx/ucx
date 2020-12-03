@@ -23,9 +23,9 @@
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_MAX_RETRY_COUNT   7
 
-#define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \
+#define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _header_t, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
-     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length, 0, _max_inline, "am_short");
+     UCT_CHECK_LENGTH(sizeof(_header_t) + _length, 0, _max_inline, "am_short");
 
 #define UCT_RC_CHECK_ZCOPY_DATA(_header_length, _length, _seg_size) \
     UCT_CHECK_LENGTH(_header_length + _length, 0, _seg_size, "am_zcopy payload"); \
