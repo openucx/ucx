@@ -220,7 +220,7 @@ case ${host} in
                  );;
     *)
     # HW timer is supported for all other architectures
-    AC_DEFINE([HAVE_HW_TIMER], [1], [high-resolution hardware timer disabled])
+    AC_DEFINE([HAVE_HW_TIMER], [1], [high-resolution hardware timer enabled])
 esac
 
 #
