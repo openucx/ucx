@@ -34,6 +34,9 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
 
 ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep);
 
+int ucp_cm_server_conn_request_progress_cb_pred(const ucs_callbackq_elem_t *elem,
+                                                void *arg);
+
 void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                    const uct_cm_listener_conn_request_args_t
                                    *conn_req_args);
