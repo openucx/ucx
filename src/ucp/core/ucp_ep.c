@@ -1036,7 +1036,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
          * was forcibly closed from a user's error handling callback after
          * disconnect event was received, but some EP flush operation still
          * is in-progress, so, the destroyed EP will be touched upon flush
-         * completion om some transport */
+         * completion on some transport */
         if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
             ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
         }
