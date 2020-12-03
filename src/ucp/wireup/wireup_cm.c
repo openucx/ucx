@@ -631,7 +631,7 @@ static void ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
     }
 
     if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
-        /* the ep is remote conencted (checked above) and closed by API but
+        /* the ep is remote connected (checked above) and closed by API but
          * close req is not valid yet (checked above), it will be set later
          * from scheduled @ref ucp_ep_close_flushed_callback */
         ucs_debug("ep %p: ep is remote connected and closed, but request is"
