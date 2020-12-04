@@ -39,8 +39,35 @@ ucg_builtin_request_t* ucg_cb_test::create_request(ucg_builtin_op_step_t *step) 
     return req;
 }
 
-static void reduce_mock(void *mpi_op, char *src_buffer, char *dst_buffer, unsigned dcount, void *mpi_datatype) {
+static void reduce_mock(void *mpi_op, char *src_buffer, char *dst_buffer, unsigned dcount, void *mpi_datatype)
+{
     // do nothing
+}
+
+static void* coll_ucx_generic_datatype_start_pack(void *context, const void *buffer,
+                                                  size_t count)
+{
+    memcpy(context, buffer, count);
+    return NULL;
+}
+
+static void* coll_ucx_generic_datatype_start_unpack(void *context, void *buffer,
+                                                    size_t count)
+{
+    memcpy(context, buffer, count);
+    return NULL;
+}
+
+static void coll_ucx_generic_datatype_finish(void *state)
+{
+    // do nothing
+}
+
+static ucs_status_t coll_ucx_generic_datatype_unpack(void *state, size_t offset,
+                                                     const void *src, size_t length)
+{
+    memcpy((int *)state + offset, src, length);
+    return UCS_OK;
 }
 
 TEST_F(ucg_cb_test, test_op_no_optimization) {
@@ -54,7 +81,7 @@ TEST_F(ucg_cb_test, test_op_cb_init) {
     ucg_group_h group = create_group();
     ucg_collective_params_t *params = create_allreduce_params();
     ucg_plan_t *plan = create_plan(1, params, group);
-
+    ucp_dt_generic_t *dt_gen = new ucp_dt_generic_t;
     ucg_op_t *op = new ucg_op_t();
 
     ucs_status_t ret = ucg_builtin_op_create(plan, params, &op);
@@ -62,9 +89,19 @@ TEST_F(ucg_cb_test, test_op_cb_init) {
 
     op->params = *params;
     op->plan = plan;
+    ((ucg_builtin_op_t *)op)->send_dt = dt_gen;
+    ((ucg_builtin_op_t *)op)->recv_dt = dt_gen;
     ucg_builtin_op_step_t *step = &((ucg_builtin_op_t *)op)->steps[0];
+    step->bcopy.pack_state.dt.generic.state = (void *)step->recv_buffer;
+    step->bcopy.unpack_state.dt.generic.state = (void *)step->recv_buffer;
     int *send_buf = (int *)params->send.buf;
     int *recv_buf = (int *)params->recv.buf;
+    ucg_builtin_request_t *req = new ucg_builtin_request_t;
+    req->op = (ucg_builtin_op_t *)op;
+    req->step = step;
+    dt_gen->context = (void *)step->recv_buffer;
+    dt_gen->ops.start_pack = coll_ucx_generic_datatype_start_pack;
+    dt_gen->ops.start_unpack = coll_ucx_generic_datatype_start_unpack;
 
     ucg_builtin_init_reduce((ucg_builtin_op_t *)op);
     ASSERT_EQ(send_buf[0], recv_buf[0]);
@@ -98,9 +135,36 @@ TEST_F(ucg_cb_test, test_op_cb_init) {
     // do nothing
     ucg_builtin_init_dummy((ucg_builtin_op_t *)op);
 
+    ucg_builtin_init_state(step, 1, dt_gen, params);
+    ASSERT_EQ(send_buf[0], recv_buf[0]);
+
+    ucg_builtin_init_state(step, 0, dt_gen, params);
+    ASSERT_EQ(send_buf[0], recv_buf[0]);
+
+    ucg_builtin_init_pack((ucg_builtin_op_t *)op);
+    ASSERT_EQ(send_buf[0], recv_buf[0]);
+
+    ucg_builtin_init_unpack((ucg_builtin_op_t *)op);
+    ASSERT_EQ(send_buf[0], recv_buf[0]);
+
+    ucg_builtin_init_pack_and_unpack((ucg_builtin_op_t *)op);
+    ASSERT_EQ(send_buf[0], recv_buf[0]);
+
+    ucg_builtin_init_reduce_and_pack((ucg_builtin_op_t *)op);
+    ASSERT_EQ(send_buf[0], recv_buf[0]);
+
+    ucg_builtin_init_reduce_and_unpack((ucg_builtin_op_t *)op);
+    ASSERT_EQ(send_buf[0], recv_buf[0]);
+
+    ucg_builtin_init_reduce_and_pack_and_unpack((ucg_builtin_op_t *)op);
+    ASSERT_EQ(send_buf[0], recv_buf[0]);
+
     params->send.buf = MPI_IN_PLACE;
     ucg_builtin_init_reduce((ucg_builtin_op_t *)op);
     ASSERT_EQ(recv_buf[0], recv_buf[0]);
+
+    delete req;
+    delete dt_gen;
 }
 
 TEST_F(ucg_cb_test, test_op_cb_final) {
@@ -125,10 +189,16 @@ TEST_F(ucg_cb_test, test_op_cb_final) {
         recv_buf[i] = i;
     }
     step->recv_buffer = (int8_t *)recv_buf;
+    step->bcopy.pack_state.dt.generic.state = (void *)step->recv_buffer;
+    step->bcopy.unpack_state.dt.generic.state = (void *)step->recv_buffer;
 
     ucg_builtin_request_t *req = new ucg_builtin_request_t;
     req->op = (ucg_builtin_op_t *)op;
     req->step = step;
+    ucp_dt_generic_t *dt_gen = new ucp_dt_generic_t;
+    ((ucg_builtin_op_t *)op)->send_dt = dt_gen;
+    ((ucg_builtin_op_t *)op)->recv_dt = dt_gen;
+    dt_gen->ops.finish = coll_ucx_generic_datatype_finish;
 
     ucg_builtin_final_allgather(req);
 
@@ -145,6 +215,34 @@ TEST_F(ucg_cb_test, test_op_cb_final) {
     for (int i = 0; i < count; i++) {
         ASSERT_EQ(i, recv_buf[i]);
     }
+
+    ucg_builtin_finalize_state(step, 1, dt_gen);
+    for (int i = 0; i < count; i++) {
+        ASSERT_EQ(i, recv_buf[i]);
+    }
+
+    ucg_builtin_finalize_state(step, 0, dt_gen);
+    for (int i = 0; i < count; i++) {
+        ASSERT_EQ(i, recv_buf[i]);
+    }
+
+    ucg_builtin_finalize_pack(req);
+    for (int i = 0; i < count; i++) {
+        ASSERT_EQ(i, recv_buf[i]);
+    }
+
+    ucg_builtin_finalize_unpack(req);
+    for (int i = 0; i < count; i++) {
+        ASSERT_EQ(i, recv_buf[i]);
+    }
+
+    ucg_builtin_finalize_pack_and_unpack(req);
+    for (int i = 0; i < count; i++) {
+        ASSERT_EQ(i, recv_buf[i]);
+    }
+
+    delete req;
+    delete dt_gen;
 }
 
 TEST_F(ucg_cb_test, test_send_cb) {
@@ -184,12 +282,16 @@ TEST_F(ucg_cb_test, test_recv_cb_recv_one) {
     int8_t *current_data_buffer = NULL;
     ucg_builtin_op_step_t *step = new ucg_builtin_op_step_t();
     ucp_datatype_t dtype = ucp_dt_make_contig(sizeof(int));
+    ucp_dt_generic_t *dt_gen = new ucp_dt_generic_t;
 
     ucs_status_t ret = ucg_builtin_step_create(phase, dtype, dtype, extra_flags, base_am_id, group_id,
                                                params, &current_data_buffer, step);
     ASSERT_EQ(UCS_OK, ret);
 
     ucg_builtin_request_t *req = create_request(step);
+    req->step->bcopy.unpack_state.dt.generic.state = (void *)step->recv_buffer;
+    req->op->recv_dt = dt_gen;
+    req->op->recv_dt->ops.unpack = coll_ucx_generic_datatype_unpack;
 
     int *recv_buf = (int *)step->recv_buffer;
     uint64_t offset = 0;
@@ -208,12 +310,29 @@ TEST_F(ucg_cb_test, test_recv_cb_recv_one) {
     }
 
     req->comp_req->flags = 0;
-    ret_int = ucg_builtin_comp_recv_one_then_send_cb(req, offset, (void *)data, length);
+    ret_int = ucg_builtin_comp_recv_noncontig_one_cb(req, offset, (void *)data, length);
+    ASSERT_EQ(1, ret_int);
+    for (int i = 0; i < count; i++) {
+        ASSERT_EQ(i, recv_buf[i]);
+        recv_buf[i] = -1;
+    }
 
+    req->comp_req->flags = 0;
+    ret_int = ucg_builtin_comp_recv_one_then_send_cb(req, offset, (void *)data, length);
+    ASSERT_EQ(1, ret_int);
+    for (int i = 0; i < count; i++) {
+        ASSERT_EQ(i, recv_buf[i]);
+        recv_buf[i] = -1;
+    }
+
+    req->comp_req->flags = 0;
+    ret_int = ucg_builtin_comp_recv_noncontig_one_then_send_cb(req, offset, (void *)data, length);
     ASSERT_EQ(1, ret_int);
     for (int i = 0; i < count; i++) {
         ASSERT_EQ(i, recv_buf[i]);
     }
+
+    delete dt_gen;
 }
 
 TEST_F(ucg_cb_test, test_recv_cb_recv_many) {
@@ -225,12 +344,16 @@ TEST_F(ucg_cb_test, test_recv_cb_recv_many) {
     int8_t *current_data_buffer = NULL;
     ucg_builtin_op_step_t *step = new ucg_builtin_op_step_t();
     ucp_datatype_t dtype = ucp_dt_make_contig(sizeof(int));
+    ucp_dt_generic_t *dt_gen = new ucp_dt_generic_t;
 
     ucs_status_t ret = ucg_builtin_step_create(phase, dtype, dtype, extra_flags, base_am_id, group_id,
                                                params, &current_data_buffer, step);
     ASSERT_EQ(UCS_OK, ret);
 
     ucg_builtin_request_t *req = create_request(step);
+    req->step->bcopy.unpack_state.dt.generic.state = (void *)step->recv_buffer;
+    req->op->recv_dt = dt_gen;
+    req->op->recv_dt->ops.unpack = coll_ucx_generic_datatype_unpack;
 
     uint64_t offset = 0;
     int count = 2;
@@ -248,9 +371,23 @@ TEST_F(ucg_cb_test, test_recv_cb_recv_many) {
 
     req->comp_req->flags = 0;
     req->pending = 2;
+    ret_int = ucg_builtin_comp_recv_noncontig_many_cb(req, offset, (void *)data, length);
+    ASSERT_EQ(0, ret_int);
+    ret_int = ucg_builtin_comp_recv_noncontig_many_cb(req, offset, (void *)data, length);
+    ASSERT_EQ(1, ret_int);
+
+    req->comp_req->flags = 0;
+    req->pending = 2;
     ret_int = ucg_builtin_comp_recv_many_then_send_cb(req, offset, (void *)data, length);
     ASSERT_EQ(0, ret_int);
     ret_int = ucg_builtin_comp_recv_many_then_send_cb(req, offset, (void *)data, length);
+    ASSERT_EQ(1, ret_int);
+
+    req->comp_req->flags = 0;
+    req->pending = 2;
+    ret_int = ucg_builtin_comp_recv_noncontig_many_then_send_cb(req, offset, (void *)data, length);
+    ASSERT_EQ(0, ret_int);
+    ret_int = ucg_builtin_comp_recv_noncontig_many_then_send_cb(req, offset, (void *)data, length);
     ASSERT_EQ(1, ret_int);
 
     req->comp_req->flags = 0;
@@ -267,6 +404,23 @@ TEST_F(ucg_cb_test, test_recv_cb_recv_many) {
     step->iter_offset = UCG_BUILTIN_OFFSET_PIPELINE_READY;
     ret_int = ucg_builtin_comp_recv_many_then_send_pipe_cb(req, offset, (void *)data, length);
     ASSERT_EQ(1, ret_int);
+
+    req->comp_req->flags = 0;
+    frag_pending = 1;
+    step->fragment_pending = &frag_pending;
+    step->fragment_length = 1;
+    step->iter_offset = UCG_BUILTIN_OFFSET_PIPELINE_PENDING;
+    ret_int = ucg_builtin_comp_recv_noncontig_many_then_send_pipe_cb(req, offset, (void *)data, length);
+    ASSERT_EQ(1, ret_int);
+    ASSERT_EQ(UCG_BUILTIN_FRAG_PENDING, step->fragment_pending[offset / step->fragment_length]);
+
+    frag_pending = 1;
+    step->fragment_pending = &frag_pending;
+    step->iter_offset = UCG_BUILTIN_OFFSET_PIPELINE_READY;
+    ret_int = ucg_builtin_comp_recv_noncontig_many_then_send_pipe_cb(req, offset, (void *)data, length);
+    ASSERT_EQ(1, ret_int);
+
+    delete dt_gen;
 }
 
 TEST_F(ucg_cb_test, test_recv_cb_reduce_one) {
