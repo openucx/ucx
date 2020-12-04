@@ -204,15 +204,41 @@ get_my_tasks() {
 }
 
 #
-# Get list of active IB devices
+# Get list IB devices
 #
-get_active_ib_devices() {
-	device_list=$(ibv_devinfo -l | tail -n +2 | sed -e 's/^[ \t]*//' | head -n -1)
+get_ib_devices() {
+	state=$1
+	device_list=$(ibv_devinfo -l | tail -n +2)
 	for ibdev in $device_list
 	do
-		port=1
-		(ibv_devinfo -d $ibdev -i $port | grep -q PORT_ACTIVE) && echo "$ibdev:$port" || true
+		num_ports=$(ibv_devinfo -d $ibdev| awk '/phys_port_cnt:/ {print $2}')
+		for port in $(seq 1 $num_ports)
+		do
+			if ibv_devinfo -d $ibdev -i $port | grep -q $state
+			then
+				echo "$ibdev:$port"
+			fi
+		done
 	done
+}
+
+#
+# Get IB devices on state Active
+#
+get_active_ib_devices() {
+	get_ib_devices PORT_ACTIVE
+}
+
+#
+# Check IB devices on state INIT
+#
+check_machine() {
+	init_dev=$(get_ib_devices PORT_INIT)
+	if [ -n "${init_dev}" ]
+	then
+		echo "${init_dev} have state PORT_INIT"
+		exit 1
+	fi
 }
 
 #
@@ -1672,5 +1698,6 @@ do_distributed_task 1 4 check_make_distcheck
 do_distributed_task 2 4 check_config_h
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
+	check_machine
 	run_tests
 fi
