@@ -1,5 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) 2021 Broadcom. ALL RIGHTS RESERVED. The term “Broadcom”
+* refers to Broadcom Inc. and/or its subsidiaries.
 *
 * See file LICENSE for terms.
 */
@@ -956,7 +958,7 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     }
 
     cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(dev->ibv_context, &cq_attr));
-    if (!cq && (errno == ENOSYS))
+    if (!cq && ((errno == EOPNOTSUPP) || (errno == ENOSYS)))
 #endif
     {
         iface->config.max_inl_cqe[dir] = 0;
