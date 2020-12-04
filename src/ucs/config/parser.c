@@ -1033,9 +1033,12 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
                                      const char *name, const char *value,
                                      const char *table_prefix, int recurse)
 {
+    char value_buf[256] = "";
     ucs_config_field_t *field, *sub_fields;
     size_t prefix_len;
     ucs_status_t status;
+    ucs_status_t UCS_V_UNUSED status_restore;
+    int UCS_V_UNUSED ret;
     unsigned count;
     void *var;
 
@@ -1079,9 +1082,17 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
                 return UCS_ERR_NO_ELEM;
             }
 
+            /* backup current value to restore it in case if new value
+             * is not accepted */
+            ret = field->parser.write(value_buf, sizeof(value_buf) - 1, var,
+                                      field->parser.arg);
+            ucs_assert(ret != 0); /* write success */
             ucs_config_parser_release_field(field, var);
             status = ucs_config_parser_parse_field(field, value, var);
             if (status != UCS_OK) {
+                status_restore = ucs_config_parser_parse_field(field, value_buf, var);
+                /* current value must be valid */
+                ucs_assert(status_restore == UCS_OK);
                 return status;
             }
             ++count;

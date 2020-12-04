@@ -224,7 +224,14 @@ ucs_config_field_t car_opts_table[] = {
 static std::vector<std::string> config_err_exp_str;
 
 class test_config : public ucs::test {
+public:
+    test_config() {
+        m_num_errors = 0;
+    }
+
 protected:
+    static int m_num_errors;
+
     static ucs_log_func_rc_t
     config_error_handler(const char *file, unsigned line, const char *function,
                          ucs_log_level_t level,
@@ -241,6 +248,22 @@ protected:
                     return UCS_LOG_FUNC_RC_STOP;
                 }
             }
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static ucs_log_func_rc_t
+    config_error_suppress(const char *file, unsigned line, const char *function,
+                          ucs_log_level_t level,
+                          const ucs_log_component_config_t *comp_conf,
+                          const char *message, va_list ap)
+    {
+        // Ignore errors that invalid input parameters as it is expected
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            m_num_errors++;
+            return wrap_errors_logger(file, line, function, level, comp_conf,
+                                      message, ap);
         }
 
         return UCS_LOG_FUNC_RC_CONTINUE;
@@ -377,6 +400,8 @@ protected:
     }
 };
 
+int test_config::m_num_errors;
+
 UCS_TEST_F(test_config, parse_default) {
     car_opts opts(UCS_DEFAULT_ENV_PREFIX, "TEST");
 
@@ -457,6 +482,17 @@ UCS_TEST_F(test_config, set_get) {
 
     opts.set("VIN", "123456");
     EXPECT_EQ(123456UL, opts->vin);
+
+    /* try to set incorrect value - color should not be updated */
+    {
+        scoped_log_handler log_handler_vars(config_error_suppress);
+        opts.set("COLOR", "magenta");
+    }
+
+    EXPECT_EQ(COLOR_WHITE, opts->color);
+    EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
+            std::string(opts.get("COLOR")));
+    EXPECT_EQ(1, m_num_errors);
 }
 
 UCS_TEST_F(test_config, set_get_with_table_prefix) {
