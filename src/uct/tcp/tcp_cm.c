@@ -184,7 +184,7 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
     pkt_buf         = ucs_alloca(pkt_length);
     pkt_hdr         = (uct_tcp_am_hdr_t*)(UCS_PTR_BYTE_OFFSET(pkt_buf,
                                                               magic_number_length));
-    pkt_hdr->am_id  = UCT_AM_ID_MAX;
+    pkt_hdr->am_id  = UCT_TCP_EP_CM_AM_ID;
     pkt_hdr->length = cm_pkt_length;
 
     if (event == UCT_TCP_CM_CONN_REQ) {

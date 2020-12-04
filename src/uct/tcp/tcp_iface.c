@@ -160,6 +160,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                              UCT_IFACE_FLAG_AM_BCOPY         |
                              UCT_IFACE_FLAG_PENDING          |
                              UCT_IFACE_FLAG_CB_SYNC          |
+                             UCT_IFACE_FLAG_EP_CHECK         |
                              UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
     attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                              UCT_IFACE_FLAG_EVENT_RECV      |
@@ -342,6 +343,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_pending_purge         = uct_tcp_ep_pending_purge,
     .ep_flush                 = uct_tcp_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
+    .ep_check                 = uct_tcp_ep_check,
     .ep_create                = uct_tcp_ep_create,
     .ep_destroy               = uct_tcp_ep_destroy,
     .ep_get_address           = uct_tcp_ep_get_address,
