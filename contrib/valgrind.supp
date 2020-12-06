@@ -277,3 +277,25 @@
    Memcheck:Cond
    fun:gdr_unmap
 }
+{
+    is_cuda_supported_unint_access
+    Memcheck:Param
+    ioctl(generic)
+    fun:ioctl
+    ...
+    fun:cuDeviceTotalMem_v2
+    ...
+    fun:cudaGetDeviceCount
+}
+{
+   rdmacm_event_channel
+   Memcheck:Leak
+   ...
+   fun:rdma_create_event_channel
+}
+{
+   rdmacm_bind_addr
+   Memcheck:Leak
+   ...
+   fun:rdma_bind_addr
+}
