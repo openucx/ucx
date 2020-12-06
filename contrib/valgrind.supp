@@ -287,3 +287,9 @@
     ...
     fun:cudaGetDeviceCount
 }
+{
+   rdmacm_event_channel
+   Memcheck:Leak
+   ...
+   fun:rdma_create_event_channel
+}
