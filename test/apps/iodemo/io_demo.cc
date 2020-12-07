@@ -1202,7 +1202,6 @@ public:
                 check_time_limit(get_time());
                 continue;
             }
-            assert(_num_active_servers_to_use != 0);
 
             VERBOSE_LOG << " <<<< iteration " << total_iter << " >>>>";
             long conns_window_size = opts().conn_window_size *
@@ -1212,6 +1211,14 @@ public:
             wait_for_responses(max_outstanding);
             if (_status != OK) {
                 break;
+            }
+
+            if (_num_active_servers_to_use == 0) {
+                // FIXME: need to investigate why it gets here when no active
+                // servers to use are available. wait_for_responces() has to
+                // wait for at least one available active server is ready to
+                // do read/write operation
+                continue;
             }
 
             size_t server_index = pick_server_index();
