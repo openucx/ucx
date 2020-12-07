@@ -272,6 +272,7 @@ struct uct_rc_iface {
     UCS_STATS_NODE_DECLARE(stats)
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
+    ucs_spinlock_t           eps_lock;
     ucs_list_link_t          ep_list;
     ucs_list_link_t          ep_gc_list;
 
@@ -396,9 +397,14 @@ uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_pending_req_t *req)
 static inline uct_rc_ep_t *uct_rc_iface_lookup_ep(uct_rc_iface_t *iface,
                                                   unsigned qp_num)
 {
+    uct_rc_ep_t *ep;
+
     ucs_assert(qp_num < UCS_BIT(UCT_IB_QPN_ORDER));
-    return iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER]
-                     [qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
+    ucs_spin_lock(&iface->eps_lock);
+    ep = iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER]
+                   [qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
+    ucs_spin_unlock(&iface->eps_lock);
+    return ep;
 }
 
 
