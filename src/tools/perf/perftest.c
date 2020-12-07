@@ -350,7 +350,7 @@ static void print_test_name(struct perftest_context *ctx)
     unsigned i, pos;
 
     if (!(ctx->flags & TEST_FLAG_PRINT_CSV) && (ctx->num_batch_files > 0)) {
-        strcpy(buf, "+--------------+---------+---------+---------+----------+----------+-----------+-----------+");
+        strcpy(buf, "+--------------+--------------+---------+---------+---------+----------+----------+-----------+-----------+");
 
         pos = 1;
         for (i = 0; i < ctx->num_batch_files; ++i) {
