@@ -740,7 +740,10 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
 
     /* rndv_req is NULL in case of put protocol */
     if (!is_put_proto) {
+        /* it is local operation, expected that a request will be always valid */
         rndv_req = ucp_worker_get_request_by_id(worker, rreq_remote_id);
+        ucs_assert(rndv_req != NULL);
+
         /* pipeline recv get protocol */
         rndv_req->send.state.dt.offset += freq->send.length;
 
@@ -1227,17 +1230,24 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
 
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_receive", 0);
 
+    /* if receiving a message on an already closed endpoint, stop processing */
+    ep = UCP_WORKER_GET_VALID_EP_BY_ID(worker, rndv_rts_hdr->sreq.ep_id,
+                                       { status = UCS_ERR_CANCELED;
+                                         goto err;
+                                       },
+                                       "RNDV rts");
+
     /* the internal send request allocated on receiver side (to perform a "get"
      * operation, send "ATS" and "RTR") */
     rndv_req = ucp_request_get(worker);
     if (rndv_req == NULL) {
         ucs_error("failed to allocate rendezvous reply");
-        goto out;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
-    rndv_req->send.ep           = ucp_worker_get_ep_by_id(worker,
-                                                    rndv_rts_hdr->sreq.ep_id);
     rndv_req->flags             = 0;
+    rndv_req->send.ep           = ep;
     rndv_req->send.mdesc        = NULL;
     rndv_req->send.pending_lane = UCP_NULL_LANE;
     is_get_zcopy_failed         = 0;
@@ -1258,7 +1268,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     }
 
     /* if the receive side is not connected yet then the RTS was received on a stub ep */
-    ep        = rndv_req->send.ep;
     ep_config = ucp_ep_config(ep);
     rndv_mode = worker->context->config.ext.rndv_mode;
 
@@ -1330,6 +1339,11 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
+    return;
+
+err:
+    ucp_rndv_recv_req_complete(rreq, status);
+    goto out;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
@@ -1687,8 +1701,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
                  void *arg, void *data, size_t length, unsigned flags)
 {
     ucp_reply_hdr_t *rep_hdr = data;
-    ucp_request_t *req       = ucp_worker_get_request_by_id(arg,
-                                                            rep_hdr->req_id);
+    ucp_request_t *req       = UCP_WORKER_GET_REQ_BY_ID(arg, rep_hdr->req_id,
+                                                        return UCS_OK,
+                                                        "RNDV ATP %p", rep_hdr);
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
@@ -1711,14 +1726,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                  void *arg, void *data, size_t length, unsigned flags)
 {
     ucp_worker_h worker              = arg;
+    ucp_context_h context            = worker->context;
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
-    ucp_request_t *sreq              = ucp_worker_get_request_by_id(worker,
-                                                         rndv_rtr_hdr->sreq_id);
-    ucp_ep_h ep                      = sreq->send.ep;
-    ucp_ep_config_t *ep_config       = ucp_ep_config(ep);
-    ucp_context_h context            = ep->worker->context;
+    ucp_request_t *sreq;
+    ucp_ep_h ep;
+    ucp_ep_config_t *ep_config;
     ucs_status_t status;
     int is_pipeline_rndv;
+
+    sreq      = UCP_WORKER_GET_REQ_BY_ID(arg, rndv_rtr_hdr->sreq_id,
+                                         return UCS_OK, "RNDV RTR %p",
+                                         rndv_rtr_hdr);
+    ep        = sreq->send.ep;
+    ep_config = ucp_ep_config(ep);
 
     ucs_assertv(rndv_rtr_hdr->sreq_id == sreq->send.msg_proto.sreq_id,
                 "received local sreq_id 0x%"PRIx64" is not equal to expected sreq_id"
@@ -1746,7 +1766,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
                              (sreq->send.length != rndv_rtr_hdr->size)) &&
                             (context->config.ext.rndv_mode != UCP_RNDV_MODE_PUT_ZCOPY));
 
-        sreq->send.lane = ucp_rkey_find_rma_lane(ep->worker->context, ep_config,
+        sreq->send.lane = ucp_rkey_find_rma_lane(context, ep_config,
                                                  (is_pipeline_rndv ?
                                                   sreq->send.rndv_put.rkey->mem_type :
                                                   sreq->send.mem_type),
@@ -1832,7 +1852,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     ucp_request_t *rreq;
     size_t recv_len;
 
-    rreq = ucp_worker_get_request_by_id(worker, rndv_data_hdr->rreq_id);
+    rreq = UCP_WORKER_GET_REQ_BY_ID(worker, rndv_data_hdr->rreq_id,
+                                    return UCS_OK, "RNDV data %p",
+                                    rndv_data_hdr);
+
     ucs_assert(!(rreq->flags & UCP_REQUEST_FLAG_RNDV_FRAG) &&
                (rreq->flags & (UCP_REQUEST_FLAG_RECV_AM |
                                UCP_REQUEST_FLAG_RECV_TAG)));

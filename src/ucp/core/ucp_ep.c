@@ -206,8 +206,6 @@ err:
 
 void ucp_ep_delete(ucp_ep_h ep)
 {
-    ucs_status_t status;
-
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
@@ -215,13 +213,24 @@ void ucp_ep_delete(ucp_ep_h ep)
     }
 
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-    status = ucs_ptr_map_del(&ep->worker->ptr_map, ucp_ep_local_id(ep));
-    if (status != UCS_OK) {
-        ucs_warn("ep %p local id 0x%"PRIxPTR": ucs_ptr_map_del failed with status %s",
-                 ep, ucp_ep_local_id(ep), ucs_status_string(status));
+    if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
+        ucp_ep_release_id(ep);
     }
 
     ucp_ep_destroy_base(ep);
+}
+
+void ucp_ep_release_id(ucp_ep_h ep)
+{
+    ucs_status_t status;
+
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
+
+    status = ucs_ptr_map_del(&ep->worker->ptr_map, ucp_ep_local_id(ep));
+    if (status != UCS_OK) {
+        ucs_warn("ep %p local id 0x%" PRIxPTR ": ucs_ptr_map_del failed: %s",
+                 ep, ucp_ep_local_id(ep), ucs_status_string(status));
+    }
 }
 
 ucs_status_t

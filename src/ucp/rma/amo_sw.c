@@ -202,11 +202,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
-    ucp_ep_h ep                      = ucp_worker_get_ep_by_id(worker,
-                                                        atomicreqh->req.ep_id);
     ucp_rsc_index_t amo_rsc_idx      = ucs_ffs64_safe(worker->atomic_tls);
     ucp_request_t *req;
+    ucp_ep_h ep;
 
+    /* allow getting closed EP to be used for sending a completion or AMO data to
+     * enable flush on a peer
+     */
+    ep = UCP_WORKER_GET_EP_BY_ID(worker, atomicreqh->req.ep_id, return UCS_OK,
+                                 "SW AMO request");
     if (ucs_unlikely((amo_rsc_idx != UCP_MAX_RESOURCES) &&
                      (ucp_worker_iface_get_attr(worker,
                                                 amo_rsc_idx)->cap.flags &

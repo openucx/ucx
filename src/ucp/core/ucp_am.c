@@ -138,14 +138,17 @@ static void ucp_am_rndv_send_ats(ucp_worker_h worker,
                                  ucs_status_t status)
 {
     ucp_request_t *req;
+    ucp_ep_h ep;
 
+    ep  = UCP_WORKER_GET_EP_BY_ID(worker, rts->super.sreq.ep_id, return,
+                                  "AM RNDV ATS");
     req = ucp_request_get(worker);
     if (ucs_unlikely(req == NULL)) {
         ucs_error("failed to allocate request for AM RNDV ATS");
         return;
     }
 
-    req->send.ep = ucp_worker_get_ep_by_id(worker, rts->super.sreq.ep_id);
+    req->send.ep = ep;
     req->flags   = 0;
 
     ucp_rndv_req_send_ats(req, NULL, rts->super.sreq.req_id, status);
@@ -1170,8 +1173,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_reply,
     ucp_worker_h worker     = (ucp_worker_h)am_arg;
     ucp_ep_h reply_ep;
 
-    reply_ep = UCP_WORKER_GET_EP_BY_ID(worker, hdr->ep_id, "AM (reply proto)",
-                                       return UCS_OK);
+    reply_ep = UCP_WORKER_GET_VALID_EP_BY_ID(worker, hdr->ep_id, return UCS_OK,
+                                             "AM (reply proto)");
 
     return ucp_am_handler_common(worker, &hdr->super, sizeof(*hdr),
                                  am_length, reply_ep, am_flags,
@@ -1299,8 +1302,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     size_t remaining;
     uint64_t recv_flags;
 
-    ep        = UCP_WORKER_GET_EP_BY_ID(worker, first_hdr->super.ep_id,
-                                        "AM first fragment", return UCS_OK);
+    ep        = UCP_WORKER_GET_VALID_EP_BY_ID(worker, first_hdr->super.ep_id,
+                                              return UCS_OK, "AM first fragment");
     remaining = first_hdr->total_size - (am_length - sizeof(*first_hdr));
 
     if (ucs_unlikely(remaining == 0)) {
@@ -1372,8 +1375,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_middle_handler,
     ucp_ep_h ep;
     ucs_status_t status;
 
-    ep          = UCP_WORKER_GET_EP_BY_ID(worker, mid_hdr->ep_id,
-                                          "AM middle fragment", return UCS_OK);
+    ep          = UCP_WORKER_GET_VALID_EP_BY_ID(worker, mid_hdr->ep_id,
+                                                return UCS_OK, "AM middle fragment");
     ep_ext      = ucp_ep_ext_proto(ep);
     first_rdesc = ucp_am_find_first_rdesc(worker, ep_ext, msg_id);
     if (first_rdesc != NULL) {
@@ -1415,10 +1418,11 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     ucs_status_t status, desc_status;
     void *hdr;
 
-    ep = UCP_WORKER_GET_EP_BY_ID(worker, rts->super.sreq.ep_id, "AM RTS",
-                                 { status = UCS_ERR_ENDPOINT_TIMEOUT;
-                                   goto out_send_ats;
-                                 });
+    ep = UCP_WORKER_GET_VALID_EP_BY_ID(worker, rts->super.sreq.ep_id,
+                                       { status = UCS_ERR_CANCELED;
+                                         goto out_send_ats;
+                                       },
+                                       "AM RTS");
 
     if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
         status = UCS_ERR_INVALID_PARAM;

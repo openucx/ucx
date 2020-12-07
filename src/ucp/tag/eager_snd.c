@@ -296,6 +296,7 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
 {
     ucp_request_hdr_t *reqhdr;
     ucp_request_t *req;
+    ucp_ep_h ep;
 
     ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_SYNC);
 
@@ -313,7 +314,10 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
     }
 
     ucs_assert(reqhdr->req_id != UCP_REQUEST_ID_INVALID);
-    req = ucp_proto_ssend_ack_request_alloc(worker, reqhdr->ep_id);
+    ep = UCP_WORKER_GET_VALID_EP_BY_ID(worker, reqhdr->ep_id, return,
+                                       "ACK for sync-send");
+
+    req = ucp_proto_ssend_ack_request_alloc(worker, ep);
     if (req == NULL) {
         ucs_fatal("could not allocate request");
     }
