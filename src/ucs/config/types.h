@@ -111,6 +111,23 @@ typedef enum {
 
 typedef UCS_CONFIG_STRING_ARRAY_FIELD(names) ucs_config_names_array_t;
 
+
+/**
+ * Enum for representing possible modes of an "allow-list"
+ */
+typedef enum {
+    UCS_CONFIG_ALLOW_LIST_ALLOW_ALL, /* Allow all possible options */
+    UCS_CONFIG_ALLOW_LIST_ALLOW, /* Allow only the specified options */
+    UCS_CONFIG_ALLOW_LIST_NEGATE /* Negate (forbid) the specified options */
+} ucs_config_allow_list_mode_t;
+
+
+typedef struct {
+    ucs_config_names_array_t array;
+    ucs_config_allow_list_mode_t mode;
+} ucs_config_allow_list_t;
+
+
 /**
  * @ingroup UCS_RESOURCE
  * BSD socket address specification.
