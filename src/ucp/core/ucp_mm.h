@@ -131,5 +131,7 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 #define UCP_MEM_IS_ROCM_MANAGED(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_ROCM_MANAGED)
 #define UCP_MEM_IS_ACCESSIBLE_FROM_CPU(_mem_type) \
     (UCS_BIT(_mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)
+#define UCP_MEM_IS_GPU(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA || \
+                                   (_mem_type) == UCS_MEMORY_TYPE_ROCM)
 
 #endif

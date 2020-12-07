@@ -114,9 +114,6 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     ssize_t packed_size;
     size_t size;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_RMA | UCP_FEATURE_AMO,
-                                    return UCS_ERR_INVALID_PARAM);
-
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
