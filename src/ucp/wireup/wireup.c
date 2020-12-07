@@ -372,25 +372,23 @@ ucp_wireup_init_lanes_by_request(ucp_worker_h worker, ucp_ep_h ep,
 
 
 static UCS_F_NOINLINE void
-ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
+ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
+                               const ucp_wireup_msg_t *msg,
                                const ucp_unpacked_address_t *remote_address)
 {
     unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE;
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
-    ucp_ep_h ep;
 
     ucs_assert(msg->type      == UCP_WIREUP_MSG_PRE_REQUEST);
     ucs_assert(msg->dst_ep_id != UCP_EP_ID_INVALID);
+    ucs_assert(ep             != NULL);
+    ucs_assert((ep->flags & UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR) ||
+               ucp_ep_has_cm_lane(ep));
     ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" conn_sn %u",
               remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
               msg->conn_sn);
-
-    /* wireup pre_request for a specific ep */
-    ep = ucp_worker_get_ep_by_id(worker, msg->dst_ep_id);
-    ucs_assert((ep->flags & UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR) ||
-               ucp_ep_has_cm_lane(ep));
 
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
     ucp_ep_flush_state_reset(ep);
@@ -417,7 +415,8 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 }
 
 static UCS_F_NOINLINE void
-ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
+ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
+                           const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
 {
     uint64_t remote_uuid   = remote_address->uuid;
@@ -427,7 +426,6 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     ucp_rsc_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
-    ucp_ep_h ep;
     int has_cm_lane;
 
     ucs_assert(msg->type == UCP_WIREUP_MSG_REQUEST);
@@ -435,13 +433,13 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
               " dst_ep_id 0x%"PRIx64" conn_sn %d", remote_address->uuid,
               msg->src_ep_id, msg->dst_ep_id, msg->conn_sn);
 
-    if (msg->dst_ep_id != UCP_EP_ID_INVALID) {
-        /* wireup request for a specific ep */
-        ep = ucp_worker_get_ep_by_id(worker, msg->dst_ep_id);
+    if (ep != NULL) {
+        ucs_assert(msg->dst_ep_id != UCP_EP_ID_INVALID);
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
         ucp_ep_flush_state_reset(ep);
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     } else {
+        ucs_assert(msg->dst_ep_id == UCP_EP_ID_INVALID);
         ep = ucp_ep_match_retrieve(worker, remote_uuid,
                                    msg->conn_sn ^
                                    (remote_uuid == worker->uuid),
@@ -560,17 +558,16 @@ int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg)
 }
 
 static UCS_F_NOINLINE void
-ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
+ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
+                         const ucp_wireup_msg_t *msg,
                          const ucp_unpacked_address_t *remote_address)
 {
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucs_status_t status;
-    ucp_ep_h ep;
     int ack;
 
-    ep = ucp_worker_get_ep_by_id(worker, msg->dst_ep_id);
-
     ucs_assert(msg->type == UCP_WIREUP_MSG_REPLY);
+    ucs_assert(ep != NULL);
     ucs_trace("ep %p: got wireup reply src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" sn %d", ep, msg->src_ep_id,
               msg->dst_ep_id, msg->conn_sn);
@@ -611,11 +608,10 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 }
 
 static UCS_F_NOINLINE
-void ucp_wireup_process_ack(ucp_worker_h worker, const ucp_wireup_msg_t *msg)
+void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
+                            const ucp_wireup_msg_t *msg)
 {
-    ucp_ep_h ep;
-
-    ep = ucp_worker_get_ep_by_id(worker, msg->dst_ep_id);
+    ucs_assert(ep != NULL);
 
     ucs_assert(msg->type == UCP_WIREUP_MSG_ACK);
     ucs_trace("ep %p: got wireup ack", ep);
@@ -639,21 +635,17 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 {
     ucp_worker_h worker   = arg;
     ucp_wireup_msg_t *msg = data;
+    ucp_ep_h ep           = NULL;
     ucp_unpacked_address_t remote_address;
-    ucp_ep_h ep UCS_V_UNUSED;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
     if (msg->dst_ep_id != UCP_EP_ID_INVALID) {
-        ep = ucp_worker_get_ep_by_id(worker, msg->dst_ep_id);
-        if (ep == NULL) {
-            ucs_diag("got wireup msg %d src_ep_id 0x%"PRIx64" for"
-                     " non-existing dst_ep_id 0x%"PRIx64" sn %d,"
-                     " ignoring it",
-                     msg->type, msg->src_ep_id, msg->dst_ep_id, msg->conn_sn);
-            goto out;
-        }
+        ep = UCP_WORKER_GET_EP_BY_ID(worker, msg->dst_ep_id, goto out,
+                                     "WIREUP message (%d src_ep_id 0x%"PRIx64
+                                     " sn %d)", msg->type, msg->src_ep_id,
+                                     msg->conn_sn);
     }
 
     status = ucp_address_unpack(worker, msg + 1,
@@ -666,13 +658,13 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 
     if (msg->type == UCP_WIREUP_MSG_ACK) {
         ucs_assert(remote_address.address_count == 0);
-        ucp_wireup_process_ack(worker, msg);
+        ucp_wireup_process_ack(worker, ep, msg);
     } else if (msg->type == UCP_WIREUP_MSG_PRE_REQUEST) {
-        ucp_wireup_process_pre_request(worker, msg, &remote_address);
+        ucp_wireup_process_pre_request(worker, ep, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_REQUEST) {
-        ucp_wireup_process_request(worker, msg, &remote_address);
+        ucp_wireup_process_request(worker, ep, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_REPLY) {
-        ucp_wireup_process_reply(worker, msg, &remote_address);
+        ucp_wireup_process_reply(worker, ep, msg, &remote_address);
     } else {
         ucs_bug("invalid wireup message");
     }

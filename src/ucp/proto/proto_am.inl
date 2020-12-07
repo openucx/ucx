@@ -527,17 +527,16 @@ ucp_proto_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*
-ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucs_ptr_map_key_t ep_id)
+ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucp_ep_h ep)
 {
-    ucp_request_t *req;
-
-    req = ucp_request_get(worker);
+    ucp_request_t *req = ucp_request_get(worker);
     if (req == NULL) {
+        ucs_error("failed to allocate UCP request");
         return NULL;
     }
 
     req->flags              = 0;
-    req->send.ep            = ucp_worker_get_ep_by_id(worker, ep_id);
+    req->send.ep            = ep;
     req->send.uct.func      = ucp_proto_progress_am_single;
     req->send.proto.comp_cb = ucp_request_put;
     req->send.proto.status  = UCS_OK;

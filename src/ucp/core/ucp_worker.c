@@ -502,6 +502,7 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
         goto out_ok;
     }
 
+    ucp_ep_release_id(ucp_ep);
     ucp_ep->flags |= UCP_EP_FLAG_FAILED;
 
     if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {

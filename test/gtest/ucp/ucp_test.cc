@@ -240,6 +240,22 @@ ucs_status_t ucp_test::request_wait(void *req, int worker_index)
     return request_process(req, worker_index, true);
 }
 
+ucs_status_t ucp_test::requests_wait(const std::vector<void*> &reqs,
+                                     int worker_index)
+{
+    ucs_status_t ret_status = UCS_OK;
+
+    for (std::vector<void*>::const_iterator it = reqs.begin(); it != reqs.end();
+         ++it) {
+        ucs_status_t status = request_process(*it, worker_index, true);
+        if (status != UCS_OK) {
+            ret_status = status;
+        }
+    }
+
+    return ret_status;
+}
+
 void ucp_test::request_release(void *req)
 {
     request_process(req, 0, false);
@@ -251,6 +267,14 @@ int ucp_test::max_connections() {
     } else {
         return std::numeric_limits<int>::max();
     }
+}
+
+void ucp_test::set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env)
+{
+    /* Set small TL timeouts to reduce testing time */
+    env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
+    env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
+    env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
 }
 
 void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
