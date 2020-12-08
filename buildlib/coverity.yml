@@ -31,7 +31,6 @@ jobs:
             else
               echo "##vso[task.complete result=Failed;]Coverity have errors"
             fi
-
           displayName: ${{ mode }}
         - task: PublishPipelineArtifact@1
           inputs:
