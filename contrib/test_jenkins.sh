@@ -95,21 +95,13 @@ echo "==== Running on $(hostname), worker $worker / $nworkers ===="
 # Report an warning message to Azure pipeline
 log_warning() {
 	msg=$1
-	azp_tag=""
-	set +x
-	test "x$RUNNING_IN_AZURE" = "xyes" && azp_tag="##vso[task.logissue type=warning]"
-	echo "${azp_tag}${msg}"
-	set -x
+	test "x$RUNNING_IN_AZURE" = "xyes" && { azure_log_warning "${msg}" ; set -x; } || echo "${msg}"
 }
 
 # Report an error message to Azure pipeline
 log_error() {
 	msg=$1
-	azp_tag=""
-	set +x
-	test "x$RUNNING_IN_AZURE" = "xyes" && azp_tag="##vso[task.logissue type=error]"
-	echo "${azp_tag}${msg}"
-	set -x
+	test "x$RUNNING_IN_AZURE" = "xyes" && { azure_log_error "${msg}" ; set -x; } || echo "${msg}"
 }
 
 #

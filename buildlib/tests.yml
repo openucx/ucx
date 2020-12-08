@@ -24,6 +24,7 @@ jobs:
         clean: true
 
       - bash: |
+          source ./buildlib/az-helpers.sh
           ./contrib/test_jenkins.sh
         displayName: Run ./contrib/test_jenkins.sh
         env:
