@@ -1329,7 +1329,7 @@ int uct_ib_get_cqe_size(int cqe_size_min)
 
 static ucs_status_t
 uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
-                                 char *ndev_name, size_t max)
+                                 uint8_t gid_index, char *ndev_name, size_t max)
 {
     ssize_t nread;
 
@@ -1338,7 +1338,7 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     /* get the network device name which corresponds to a RoCE port */
     nread = ucs_read_file_str(ndev_name, max, 1,
                               UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
-                              uct_ib_device_name(dev), port_num, 0);
+                              uct_ib_device_name(dev), port_num, gid_index);
     if (nread < 0) {
         ucs_diag("failed to read " UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT": %m",
                  uct_ib_device_name(dev), port_num, 0);
@@ -1349,14 +1349,15 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     return UCS_OK;
 }
 
-unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num)
+unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num,
+                                          uint8_t gid_index)
 {
     char ndev_name[IFNAMSIZ];
     unsigned roce_lag_level;
     ucs_status_t status;
 
-    status = uct_ib_device_get_roce_ndev_name(dev, port_num, ndev_name,
-                                              sizeof(ndev_name));
+    status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
+                                              ndev_name, sizeof(ndev_name));
     if (status != UCS_OK) {
         return 1;
     }
