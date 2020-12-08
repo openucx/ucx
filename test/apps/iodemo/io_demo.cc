@@ -1214,10 +1214,10 @@ public:
             }
 
             if (_num_active_servers_to_use == 0) {
-                // FIXME: need to investigate why it gets here when no active
-                // servers to use are available. wait_for_responces() has to
-                // wait for at least one available active server is ready to
-                // do read/write operation
+                // It is possible that the number of active servers to use is 0
+                // after wait_for_responces(), if some clients were closed in
+                // UCP Worker progress during handling of remote disconnection
+                // from servers
                 continue;
             }
 
