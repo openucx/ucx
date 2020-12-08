@@ -1515,6 +1515,9 @@ static void adjust_opts(options_t *test_opts) {
 
     test_opts->chunk_size = std::min(test_opts->chunk_size,
                                      test_opts->max_data_size);
+
+    /* randomize servers to optimize startup */
+    std::random_shuffle(test_opts->servers.begin(), test_opts->servers.end());
 }
 
 static int parse_window_size(const char *optarg, long &window_size,
