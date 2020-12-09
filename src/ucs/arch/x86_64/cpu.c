@@ -755,4 +755,21 @@ void ucs_x86_memcpy_sse_movntdqa(void *dst, const void *src, size_t len)
 #endif
 }
 
+int ucs_syscall_raw(unsigned long num, unsigned long arg1, unsigned long arg2,
+                    unsigned long arg3)
+{
+    int ret;
+
+    asm volatile (
+        "movq %1, %%rax\n\t"
+        "movq %2, %%rdi\n\t"
+        "movq %3, %%rsi\n\t"
+        "movq %4, %%rdx\n\t"
+        "syscall\n\t"
+        :"=a"(ret)
+        :"r"(num), "r"(arg1), "r"(arg2), "r"(arg3));
+
+    return ret;
+}
+
 #endif

@@ -52,6 +52,9 @@ ucs_cpu_vendor_t ucs_arch_get_cpu_vendor();
 void ucs_cpu_init();
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes);
 void ucs_x86_memcpy_sse_movntdqa(void *dst, const void *src, size_t len);
+int ucs_syscall_raw(unsigned long num, unsigned long arg1, unsigned long arg2,
+                    unsigned long arg3);
+
 
 static UCS_F_ALWAYS_INLINE int ucs_arch_x86_rdtsc_enabled()
 {

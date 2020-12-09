@@ -201,6 +201,19 @@ KHASH_TYPE(uct_ib_async_event, uct_ib_async_event_t, uct_ib_async_event_val_t);
 
 
 /**
+ * Context for non-blocking device cleanup
+ */
+typedef struct {
+    int             pipefds[2];
+    int             cmd_fd;
+    void            *buff;
+    size_t          buff_size;
+    pid_t           pid;
+    int             max_fds;
+} uct_ib_device_nb_close_ctx;
+
+
+/**
  * IB device (corresponds to HCA)
  */
 typedef struct uct_ib_device {
@@ -232,6 +245,7 @@ typedef struct uct_ib_device {
     /* Async event subscribers */
     ucs_spinlock_t              async_event_lock;
     khash_t(uct_ib_async_event) async_events_hash;
+    uct_ib_device_nb_close_ctx  *nb_close_ctx;
 } uct_ib_device_t;
 
 
@@ -280,7 +294,8 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                  struct ibv_device *ibv_device);
 
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
-                                struct ibv_device *ibv_device, int async_events
+                                struct ibv_device *ibv_device, int async_events,
+                                int nb_close
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent));
 
 void uct_ib_device_cleanup(uct_ib_device_t *dev);

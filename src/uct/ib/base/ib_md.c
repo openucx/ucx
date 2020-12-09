@@ -70,6 +70,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Initialize a fork-safe IB library with ibv_fork_init().",
      ucs_offsetof(uct_ib_md_config_t, fork_init), UCS_CONFIG_TYPE_TERNARY},
 
+    {"CLEANUP_THREAD", "n",
+     "Cleanup device resources by a background process.",
+     ucs_offsetof(uct_ib_md_config_t, nb_close), UCS_CONFIG_TYPE_BOOL},
+
     {"ASYNC_EVENTS", "y",
      "Enable listening for async events on the device",
      ucs_offsetof(uct_ib_md_config_t, async_events), UCS_CONFIG_TYPE_BOOL},
@@ -1590,8 +1594,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         goto err;
     }
 
-    status = uct_ib_device_init(&md->dev, ib_device, md_config->async_events
-                                UCS_STATS_ARG(md->stats));
+    status = uct_ib_device_init(&md->dev, ib_device, md_config->async_events,
+                                md_config->nb_close UCS_STATS_ARG(md->stats));
     if (status != UCS_OK) {
         goto err_release_stats;
     }

@@ -70,6 +70,10 @@ BEGIN_C_DECLS
 #define ucs_memory_cpu_wc_fence()     ucs_aarch64_dmb(oshst)
 
 
+/* revert to glibc syscall */
+#define ucs_syscall_raw               syscall
+
+
 /*
  * ARM processor ID (ARM ISA - Main ID Register, EL1)
  */

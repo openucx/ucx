@@ -20,6 +20,9 @@
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/sys.h>
+#include <sys/resource.h>
+#include <sys/prctl.h>
+#include <sys/wait.h>
 #include <sys/poll.h>
 #include <libgen.h>
 #include <sched.h>
@@ -804,11 +807,123 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     return UCS_OK;
 }
 
+static int uct_ib_device_cleanup_proc(void* arg)
+{
+    uct_ib_device_nb_close_ctx *ctx = arg;
+    static const char *process_name = "ucx_cleanup";
+    char dummy;
+    int fd;
+
+    /* Since TLS of this thread is uninitialized avoid using glibc */
+    ucs_syscall_raw(SYS_prctl, PR_SET_NAME, (long)process_name, 0);
+
+    for (fd = 0; fd < ctx->max_fds; fd++) {
+        if ((fd != ctx->cmd_fd) && (fd != ctx->pipefds[0])) {
+            ucs_syscall_raw(SYS_close, fd, 0, 0);
+        }
+    }
+
+    /* Wait until pipe closed - either parent terminated or closing device */
+    ucs_syscall_raw(SYS_read, ctx->pipefds[0], (long)&dummy, 1);
+
+    return 0;
+}
+
+static ucs_status_t
+uct_ib_device_init_nb_close_ctx(int fd, uct_ib_device_nb_close_ctx **ctx_p)
+{
+    uct_ib_device_nb_close_ctx *ctx;
+    struct rlimit nofile;
+    ucs_status_t status;
+    int ret;
+
+    ctx = ucs_calloc(1, sizeof(*ctx), "ibv cleanup ctx");
+    if (ctx == NULL) {
+        ucs_error("cleanup context allocation failure");
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    ret = getrlimit(RLIMIT_NOFILE, &nofile);
+    if (ret == 0) {
+        ctx->max_fds = nofile.rlim_cur;
+    } else {
+        ucs_warn("getrlimit(NOFILE) failed: %m");
+        ctx->max_fds = 1024;
+    }
+
+    ctx->buff_size = ucs_get_page_size() * 2;
+    ctx->cmd_fd    = fd;
+
+    status = ucs_mmap_alloc(&ctx->buff_size, &ctx->buff, 0, "ibv cleanup buff");
+    if (status != UCS_OK) {
+        ucs_error("cleanup buffer allocation failed");
+        goto err_alloc;
+    }
+
+    ret = pipe(ctx->pipefds);
+    if (ret) {
+        ucs_error("cleanup pipe allocation failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err_pipe;
+    }
+
+    /* CLONE_VM - to keep pinned memory shared
+     * CLONE_SETTLS - to avoid corruption of parent's TLS
+     * SIGCHLD - will be sent to parent when child quit, required by waitpid
+     * buffer layout: tls goes up, stack goes down */
+    ret = clone(uct_ib_device_cleanup_proc,
+                UCS_PTR_BYTE_OFFSET(ctx->buff, ctx->buff_size),
+                CLONE_VM|CLONE_SETTLS|SIGCHLD, ctx, NULL, ctx->buff, NULL);
+
+    if (ret == -1) {
+        ucs_error("cleanup clone failed: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err_clone;
+    }
+
+    ctx->pid = ret;
+    *ctx_p   = ctx;
+    close(ctx->pipefds[0]);
+    return UCS_OK;
+
+err_clone:
+    close(ctx->pipefds[0]);
+    close(ctx->pipefds[1]);
+err_pipe:
+    ucs_mmap_free(ctx->buff, ctx->buff_size);
+err_alloc:
+    ucs_free(ctx);
+err:
+    return status;
+}
+
+void uct_ib_device_free_nb_close_ctx(uct_ib_device_nb_close_ctx *ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+
+    close(ctx->pipefds[1]);
+    waitpid(ctx->pid, NULL, 0);
+    ucs_mmap_free(ctx->buff, ctx->buff_size);
+    ucs_free(ctx);
+}
+
 ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
-                                struct ibv_device *ibv_device, int async_events
+                                struct ibv_device *ibv_device,
+                                int async_events, int nb_close
                                 UCS_STATS_ARG(ucs_stats_node_t *stats_parent))
 {
     ucs_status_t status;
+
+    if (nb_close) {
+        status = uct_ib_device_init_nb_close_ctx(dev->ibv_context->cmd_fd,
+                                                 &dev->nb_close_ctx);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
 
     dev->async_events = async_events;
 
@@ -864,6 +979,8 @@ void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev)
 void uct_ib_device_cleanup(uct_ib_device_t *dev)
 {
     ucs_debug("destroying ib device %s", uct_ib_device_name(dev));
+
+    uct_ib_device_free_nb_close_ctx(dev->nb_close_ctx);
 
     if (kh_size(&dev->async_events_hash) != 0) {
         ucs_warn("async_events_hash not empty");

@@ -39,6 +39,10 @@ BEGIN_C_DECLS
 #define ucs_memory_cpu_wc_fence()     ucs_memory_bus_fence()
 
 
+/* revert to glibc syscall */
+#define ucs_syscall_raw               syscall
+
+
 static inline uint64_t ucs_arch_read_hres_clock()
 {
 #if HAVE_DECL___PPC_GET_TIMEBASE
