@@ -830,6 +830,25 @@ static ucp_rsc_index_t ucp_listener_get_cm_index(uct_listener_h listener,
     return UCP_NULL_RESOURCE;
 }
 
+int ucp_cm_server_conn_request_progress_cb_pred(const ucs_callbackq_elem_t *elem,
+                                                void *arg)
+{
+    ucp_listener_h listener = arg;
+    ucp_conn_request_h conn_request;
+
+    if (elem->cb != ucp_cm_server_conn_request_progress) {
+        return 0;
+    }
+
+    conn_request = elem->arg;
+    if (conn_request->listener != listener) {
+        return 0;
+    }
+
+    ucp_listener_reject(listener, conn_request);
+    return 1;
+}
+
 void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                    const uct_cm_listener_conn_request_args_t
                                    *conn_req_args)
