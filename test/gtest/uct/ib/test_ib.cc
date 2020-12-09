@@ -78,6 +78,16 @@ void test_uct_ib::send_recv_short() {
 
 size_t test_uct_ib::m_ib_am_handler_counter = 0;
 
+#if defined(__x86_64__)
+UCS_TEST_SKIP_COND_P(test_uct_ib, nb_close, RUNNING_ON_VALGRIND,
+                     "CLEANUP_THREAD=y")
+{
+}
+#endif
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib);
+
+
 class test_uct_ib_addr : public test_uct_ib {
 public:
     uct_ib_iface_config_t *ib_config() {
