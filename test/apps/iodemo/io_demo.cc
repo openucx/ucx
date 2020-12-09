@@ -622,6 +622,10 @@ public:
         save_prev_state();
     }
 
+    virtual ~DemoServer() {
+        destroy_connections();
+    }
+
     void run() {
         struct sockaddr_in listen_addr;
         memset(&listen_addr, 0, sizeof(listen_addr));
@@ -840,6 +844,10 @@ public:
         _prev_connect_time(0), _num_sent(0), _num_completed(0),
         _status(OK), _start_time(get_time()),
         _read_callback_pool(opts().iomsg_size, "read callbacks") {
+    }
+
+    virtual ~DemoClient() {
+        destroy_connections();
     }
 
     typedef enum {
