@@ -28,6 +28,7 @@ nobase_dist_libucs_la_HEADERS = \
 	config/types.h \
 	datastruct/array.h \
 	datastruct/array.inl \
+	datastruct/bitmap.h \
 	datastruct/callbackq.h \
 	datastruct/hlist.h \
 	datastruct/khash.h \
