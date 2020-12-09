@@ -337,7 +337,15 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
     }
 
     ucs_trace("ep %p: remote connected", ep);
-    ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
+    if (!(ep->flags & UCP_EP_FLAG_CLOSED)) {
+        /* set REMOTE_CONNECTED flag if an EP is not closed, otherwise -
+         * just make UCT EPs remote connected to remove WIREUP_EP for them
+         * and complete flush(LOCAL) operation in UCP EP close procedure
+         * (don't set REMOTE_CONNECTED flag to avoid possible wrong behavior
+         * in ucp_ep_close_flushed_callback() when a peer was already
+         * disconnected, but we set REMOTE_CONNECTED flag again) */
+        ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
+    }
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (ucp_ep_is_lane_p2p(ep, lane)) {
