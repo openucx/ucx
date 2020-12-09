@@ -1086,17 +1086,23 @@ out:
     return ret;
 }
 
+static UCS_F_ALWAYS_INLINE void*
+ucp_am_data_ptr(ucp_am_hdr_t *am_hdr, size_t hdr_size)
+{
+    return UCS_PTR_BYTE_OFFSET(am_hdr, hdr_size + am_hdr->header_length);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_invoke_cb(ucp_worker_h worker, ucp_am_hdr_t *am_hdr,
-                 size_t am_hdr_length, size_t data_length,
+                 size_t am_hdr_length, void *data, size_t data_length,
                  ucp_ep_h reply_ep, uint64_t recv_flags)
 {
     uint16_t           am_id = am_hdr->am_id;
     uint32_t user_hdr_length = am_hdr->header_length;
-        void        *am_data = UCS_PTR_BYTE_OFFSET(am_hdr, am_hdr_length);
     ucp_am_entry_t    *am_cb = &ucs_array_elem(&worker->am, am_id);
     ucp_am_recv_param_t param;
     unsigned flags;
+    void *user_hdr;
 
     if (ucs_unlikely(!ucp_am_recv_check_id(worker, am_id))) {
         return UCS_OK;
@@ -1105,10 +1111,10 @@ ucp_am_invoke_cb(ucp_worker_h worker, ucp_am_hdr_t *am_hdr,
     if (ucs_likely(am_cb->flags & UCP_AM_CB_PRIV_FLAG_NBX)) {
         param.recv_attr = recv_flags;
         param.reply_ep  = reply_ep;
+        user_hdr        = user_hdr_length ?
+                          UCS_PTR_BYTE_OFFSET(am_hdr, am_hdr_length) : NULL;
 
-        return am_cb->cb(am_cb->context, user_hdr_length ? am_data : NULL,
-                         user_hdr_length,
-                         UCS_PTR_BYTE_OFFSET(am_data, user_hdr_length),
+        return am_cb->cb(am_cb->context, user_hdr, user_hdr_length, data,
                          data_length - user_hdr_length, &param);
     }
 
@@ -1122,8 +1128,7 @@ ucp_am_invoke_cb(ucp_worker_h worker, ucp_am_hdr_t *am_hdr,
     flags = (recv_flags & UCP_AM_RECV_ATTR_FLAG_DATA) ?
             UCP_CB_PARAM_FLAG_DATA : 0;
 
-    return am_cb->cb_old(am_cb->context, am_data, data_length, reply_ep,
-                         flags);
+    return am_cb->cb_old(am_cb->context, data, data_length, reply_ep, flags);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -1132,17 +1137,48 @@ ucp_am_handler_common(ucp_worker_h worker, ucp_am_hdr_t *am_hdr, size_t hdr_size
                       uint64_t recv_flags)
 {
     ucp_recv_desc_t *desc = NULL;
-    void *data;
+    ucp_am_entry_t *am_cb = &ucs_array_elem(&worker->am, am_hdr->am_id);
+    void *data            = ucp_am_data_ptr(am_hdr, hdr_size);
     ucs_status_t status;
 
-    recv_flags |= (am_flags & UCT_CB_PARAM_FLAG_DESC) ?
-                  UCP_AM_RECV_ATTR_FLAG_DATA : 0;
+    ucs_assert(total_length >= am_hdr->header_length + hdr_size);
 
-    status      = ucp_am_invoke_cb(worker, am_hdr, hdr_size,
-                                   total_length - hdr_size, reply_ep,
-                                   recv_flags);
+    if (am_flags & UCT_CB_PARAM_FLAG_DESC) {
+        recv_flags |= UCP_AM_RECV_ATTR_FLAG_DATA;
+    } else if (am_cb->flags & UCP_AM_FLAG_PERSISTENT_DATA) {
+        /* If user requested persistent data pointer and UCT_CB_PARAM_FLAG_DESC
+         * is not set by UCT, need to initialize rdesc before calling the callback.
+         * Note: for UCT_CB_PARAM_FLAG_DESC case, can't initialize desc in advance,
+         * because it will overwrite user header (ucp_recv_desc_init uses headroom
+         * right before the data, where user header resides).
+         */
+        status = ucp_recv_desc_init(worker, data,
+                                    total_length - hdr_size - am_hdr->header_length,
+                                    0,
+                                    0, /* pass as a const */
+                                    0, 0, -hdr_size, &desc);
+        if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+            goto err;
+        }
+        data        = desc + 1;
+        recv_flags |= UCP_AM_RECV_ATTR_FLAG_DATA;
+    }
+
+    status = ucp_am_invoke_cb(worker, am_hdr, hdr_size, data,
+                              total_length - hdr_size, reply_ep, recv_flags);
+    if (desc != NULL) {
+        if (status != UCS_INPROGRESS) {
+            /* data is not needed - release previously initialized desc */
+            ucp_recv_desc_release(desc);
+        }
+        /* initialized desc means that UCT_CB_PARAM_FLAG_DESC is not set in
+         * am_flags, thus UCS_OK is the only valid return code
+         */
+        return UCS_OK;
+    }
+
     if (status != UCS_INPROGRESS) {
-        return UCS_OK; /* we do not need UCT desc, just return UCS_OK */
+        return UCS_OK; /* user does not want to keep the data, just return UCS_OK */
     }
 
     if (ucs_unlikely(!(am_flags & UCT_CB_PARAM_FLAG_DESC))) {
@@ -1150,21 +1186,21 @@ ucp_am_handler_common(ucp_worker_h worker, ucp_am_hdr_t *am_hdr, size_t hdr_size
         return UCS_OK;
     }
 
-    ucs_assert(total_length >= am_hdr->header_length + hdr_size);
-    data   = UCS_PTR_BYTE_OFFSET(am_hdr, hdr_size + am_hdr->header_length);
     status = ucp_recv_desc_init(worker, data,
                                 total_length - hdr_size - am_hdr->header_length,
                                 0,
                                 UCT_CB_PARAM_FLAG_DESC, /* pass as a const */
                                 0, 0, -hdr_size, &desc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        ucs_error("worker %p could not allocate descriptor for active"
-                  " message on callback : %u", worker, am_hdr->am_id);
-        return UCS_OK;
+        goto err;
     }
-    ucs_assert(desc != NULL);
 
     return UCS_INPROGRESS;
+
+err:
+    ucs_error("worker %p could not allocate descriptor for active"
+              " message on callback : %u", worker, am_hdr->am_id);
+    return UCS_OK;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_reply,
@@ -1261,11 +1297,11 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
     first_hdr  = (ucp_am_first_hdr_t*)(first_rdesc + 1);
     recv_flags = ucp_am_hdr_reply_ep(worker, first_hdr->super.super.flags,
                                      reply_ep, &reply_ep);
+    msg        = ucp_am_data_ptr(&first_hdr->super.super, sizeof(*first_hdr));
 
     status     = ucp_am_invoke_cb(worker, &first_hdr->super.super,
-                                  sizeof(*first_hdr), first_hdr->total_size,
-                                  reply_ep,
-                                  recv_flags | UCP_AM_RECV_ATTR_FLAG_DATA);
+                                  sizeof(*first_hdr), msg, first_hdr->total_size,
+                                  reply_ep, recv_flags | UCP_AM_RECV_ATTR_FLAG_DATA);
     if (status != UCS_INPROGRESS) {
         ucs_free(first_rdesc); /* user does not need to hold this data */
         return;

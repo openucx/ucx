@@ -337,8 +337,8 @@ public:
         }
     }
 
-    void set_am_data_handler(entity &e, uint16_t am_id,
-                             ucp_am_recv_callback_t cb, void *arg)
+    void set_am_data_handler(entity &e, uint16_t am_id, ucp_am_recv_callback_t cb,
+                             void *arg, unsigned flags = 0)
     {
         ucp_am_handler_param_t param;
 
@@ -349,6 +349,12 @@ public:
         param.id         = am_id;
         param.cb         = cb;
         param.arg        = arg;
+
+        if (flags != 0) {
+            param.field_mask |= UCP_AM_HANDLER_PARAM_FIELD_FLAGS;
+            param.flags       = flags;
+        }
+
         ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
     }
 
@@ -496,6 +502,21 @@ public:
         return UCS_OK;
     }
 
+    static ucs_status_t am_data_hold_cb(void *arg, const void *header,
+                                        size_t header_length, void *data,
+                                        size_t length,
+                                        const ucp_am_recv_param_t *param)
+    {
+        void **rx_data_p = reinterpret_cast<void**>(arg);
+
+        EXPECT_TRUE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
+        EXPECT_EQ(NULL, *rx_data_p);
+
+        *rx_data_p = data;
+
+        return UCS_INPROGRESS;
+    }
+
     static const uint16_t           TEST_AM_NBX_ID = 0;
     ucp_datatype_t                  m_dt;
     volatile bool                   m_am_received;
@@ -597,6 +618,27 @@ UCS_TEST_P(test_ucp_am_nbx, rx_rts_am_on_closed_ep, "RNDV_THRESH=32K")
 UCS_TEST_P(test_ucp_am_nbx, rx_rts_reply_am_on_closed_ep, "RNDV_THRESH=32K")
 {
     test_recv_on_closed_ep(64 * UCS_KBYTE, UCP_AM_SEND_REPLY);
+}
+
+UCS_TEST_P(test_ucp_am_nbx, rx_persistent_data)
+{
+    void *rx_data = NULL;
+    char data     = 'd';
+
+    set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_hold_cb, &rx_data,
+                        UCP_AM_FLAG_PERSISTENT_DATA);
+
+    ucp_request_param_t param;
+
+    param.op_attr_mask    = 0ul;
+    ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
+                                            0ul, &data, sizeof(data), &param);
+    wait_for_flag(&rx_data);
+    EXPECT_TRUE(rx_data != NULL);
+    EXPECT_EQ(data, *reinterpret_cast<char*>(rx_data));
+
+    ucp_am_data_release(receiver().worker(), rx_data);
+    EXPECT_EQ(UCS_OK, request_wait(sptr));
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)

@@ -463,13 +463,21 @@ enum {
  * @ingroup UCP_WORKER
  * @brief Flags for a UCP Active Message callback.
  *
- * Flags that indicate how to handle UCP Active Messages
- * Currently only UCP_AM_FLAG_WHOLE_MSG is supported,
- * which indicates the entire message is handled in one
- * callback.
+ * Flags that indicate how to handle UCP Active Messages.
  */
 enum ucp_am_cb_flags {
-    UCP_AM_FLAG_WHOLE_MSG = UCS_BIT(0)
+    /**
+     * Indicates that the entire message will be handled in one callback.
+     */
+    UCP_AM_FLAG_WHOLE_MSG       = UCS_BIT(0),
+
+    /**
+     * Guarantees that the specified @ref ucp_am_recv_callback_t callback,
+     * will always be called with @ref UCP_AM_RECV_ATTR_FLAG_DATA flag set,
+     * so the data will be accessible outside the callback, until
+     * @ref ucp_am_data_release is called.
+     */
+    UCP_AM_FLAG_PERSISTENT_DATA = UCS_BIT(1)
 };
 
 
