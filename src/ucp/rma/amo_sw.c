@@ -23,7 +23,7 @@ static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
     size_t size                   = req->send.length;
     size_t length;
 
-    atomich->address    = req->send.rma.remote_addr;
+    atomich->address    = req->send.amo.remote_addr;
     atomich->req.ep_id  = ucp_ep_remote_id(ep);
     atomich->req.req_id = fetch ? ucp_send_request_get_id(req) :
                           UCP_REQUEST_ID_INVALID;
