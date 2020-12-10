@@ -1003,7 +1003,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             if (address >= &address_list[UCP_MAX_RESOURCES]) {
                 if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                     ucs_error("failed to parse address: number of addresses"
-                              "exceeds %d", UCP_MAX_RESOURCES);
+                              " exceeds %d", UCP_MAX_RESOURCES);
                 }
                 goto err_free;
             }
