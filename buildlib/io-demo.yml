@@ -125,7 +125,7 @@ jobs:
                   -w 16 \
                   -t 10 \
                   -q \
-                  -a
+                  -A
         displayName: Launch with run_io_demo.sh (active message)
         timeoutInMinutes: 2
 
