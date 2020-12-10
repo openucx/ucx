@@ -246,12 +246,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
     if (ep->worker->context->config.ext.proto_enable) {
         // TODO use dt_iter.inl unpack
         ucp_dt_contig_unpack(ep->worker,
-                             req->send.dt_iter.type.contig.buffer +
-                             req->send.dt_iter.offset,
+                             req->send.state.dt_iter.type.contig.buffer +
+                             req->send.state.dt_iter.offset,
                              getreph + 1, frag_length,
-                             req->send.dt_iter.mem_type);
-        req->send.dt_iter.offset += frag_length;
-        if (req->send.dt_iter.offset == req->send.dt_iter.length) {
+                             req->send.state.dt_iter.mem_type);
+        req->send.state.dt_iter.offset += frag_length;
+        if (req->send.state.dt_iter.offset == req->send.state.dt_iter.length) {
             ucp_proto_request_bcopy_complete(req, UCS_OK);
             ucp_ep_rma_remote_request_completed(ep);
         }

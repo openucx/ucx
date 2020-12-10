@@ -22,7 +22,8 @@ static size_t ucp_proto_put_am_bcopy_pack(void *dest, void *arg)
     ucp_request_t                   *req = pack_ctx->req;
     ucp_put_hdr_t                  *puth = dest;
 
-    puth->address  = req->send.rma.remote_addr + req->send.dt_iter.offset;
+    puth->address  = req->send.rma.remote_addr +
+                     req->send.state.dt_iter.offset;
     puth->ep_id    = ucp_send_request_get_ep_remote_id(req);
     puth->mem_type = req->send.rma.rkey->mem_type;
 

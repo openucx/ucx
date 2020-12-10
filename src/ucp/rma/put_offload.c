@@ -28,8 +28,8 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
 
     tl_rkey = ucp_rma_request_get_tl_rkey(req, spriv->super.rkey_index);
     status  = uct_ep_put_short(ep->uct_eps[spriv->super.lane],
-                               req->send.dt_iter.type.contig.buffer,
-                               req->send.dt_iter.length,
+                               req->send.state.dt_iter.type.contig.buffer,
+                               req->send.state.dt_iter.length,
                                req->send.rma.remote_addr, tl_rkey);
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req->send.lane = spriv->super.lane; /* for pending add */
@@ -39,7 +39,8 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     /* UCS_INPROGRESS is not expected */
     ucs_assert((status == UCS_OK) || UCS_STATUS_IS_ERR(status));
 
-    ucp_datatype_iter_cleanup(&req->send.dt_iter, UCS_BIT(UCP_DATATYPE_CONTIG));
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+                              UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_request_complete_send(req, status);
     return UCS_OK;
 }
@@ -100,7 +101,8 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
     tl_rkey     = ucp_rma_request_get_tl_rkey(req, lpriv->super.rkey_index);
     packed_size = uct_ep_put_bcopy(ep->uct_eps[lpriv->super.lane],
                                    ucp_proto_put_offload_bcopy_pack, &pack_ctx,
-                                   req->send.rma.remote_addr + req->send.dt_iter.offset,
+                                   req->send.rma.remote_addr +
+                                   req->send.state.dt_iter.offset,
                                    tl_rkey);
     if (ucs_likely(packed_size >= 0)) {
         return UCS_OK;
@@ -167,11 +169,13 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
     uct_rkey_t tl_rkey = ucp_rma_request_get_tl_rkey(req, lpriv->super.rkey_index);
     uct_iov_t iov;
 
-    ucp_datatype_iter_next_iov(&req->send.dt_iter, lpriv->super.memh_index,
+    ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
+                               lpriv->super.memh_index,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                next_iter, &iov);
     return uct_ep_put_zcopy(req->send.ep->uct_eps[lpriv->super.lane], &iov, 1,
-                            req->send.rma.remote_addr + req->send.dt_iter.offset,
+                            req->send.rma.remote_addr +
+                            req->send.state.dt_iter.offset,
                             tl_rkey, &req->send.state.uct_comp);
 }
 
