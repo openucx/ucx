@@ -188,7 +188,9 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_destroy_ep_base;
     }
 
-    if (!(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) {
+    if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
+        ep->flags |= UCP_EP_FLAG_INTERNAL;
+    } else {
         ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
     }
 
@@ -208,7 +210,10 @@ void ucp_ep_delete(ucp_ep_h ep)
 
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
-    ucp_worker_keepalive_remove_ep(ep);
+    if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
+        ucp_worker_keepalive_remove_ep(ep);
+    }
+
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     status = ucs_ptr_map_del(&ep->worker->ptr_map, ucp_ep_local_id(ep));
     if (status != UCS_OK) {
@@ -357,12 +362,20 @@ err_cleanup_eps:
 void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker)
 {
     ucs_memory_type_t mem_type;
+    ucp_ep_h ep;
 
     ucs_memory_type_for_each(mem_type) {
-        if (worker->mem_type_ep[mem_type] != NULL) {
-           ucp_ep_destroy_internal(worker->mem_type_ep[mem_type]);
-           worker->mem_type_ep[mem_type] = NULL;
+        ep = worker->mem_type_ep[mem_type];
+        if (ep == NULL) {
+            continue;
         }
+
+        ucs_debug("memtype ep %p: destroy", ep);
+        ucs_assert(ep->flags & UCP_EP_FLAG_INTERNAL);
+
+        ucp_ep_cleanup_lanes(ep);
+        ucp_ep_delete(ep);
+        worker->mem_type_ep[mem_type] = NULL;
     }
 }
 
@@ -792,7 +805,7 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
 {
     ucs_debug("ep %p: destroy", ep);
     ucp_ep_cleanup_lanes(ep);
-    if (ep->flags & UCP_EP_FLAG_TEMPORARY) {
+    if (ep->flags & UCP_EP_FLAG_INTERNAL) {
         /* it's failed tmp ep of main ep */
         ucs_assert(ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID);
         ucp_ep_destroy_base(ep);

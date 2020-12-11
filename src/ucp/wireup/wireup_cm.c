@@ -320,7 +320,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
         goto out_check_err;
     }
 
-    cm_wireup_ep->tmp_ep->flags |= UCP_EP_FLAG_TEMPORARY;
+    cm_wireup_ep->tmp_ep->flags |= UCP_EP_FLAG_INTERNAL;
 
     status = ucp_worker_get_ep_config(worker, &key, 0,
                                       &cm_wireup_ep->tmp_ep->cfg_index);

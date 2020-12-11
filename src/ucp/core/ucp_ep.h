@@ -60,8 +60,9 @@ enum {
     UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
                                                         close_req is valid */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
-    UCP_EP_FLAG_TEMPORARY              = UCS_BIT(13),/* the temporary EP which holds
-                                                        temporary wireup configuration */
+    UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
+                                                        temporary wireup configuration or
+                                                        mem-type EP */
     UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
                                                         indirect endpoint id instead of pointer,
                                                         can be replaced with looking at local ID */
