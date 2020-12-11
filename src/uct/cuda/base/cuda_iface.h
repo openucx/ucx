@@ -86,4 +86,7 @@ ucs_status_t
 uct_cuda_base_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                            unsigned *num_tl_devices_p);
 
+ucs_status_t
+uct_cuda_base_get_sys_dev(CUdevice cuda_device, ucs_sys_device_t *sys_dev_p);
+
 #endif

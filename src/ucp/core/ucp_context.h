@@ -134,6 +134,8 @@ struct ucp_config {
     int                                    warn_invalid_config;
     /** This config environment prefix */
     char                                   *env_prefix;
+    /** MD to compare for transport selection scores */
+    char                                   *selection_cmp;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
 };
@@ -255,6 +257,9 @@ typedef struct ucp_context {
         
         /* Config environment prefix used to create the context */
         char                      *env_prefix;
+
+        /* MD to compare for transport selection scores */
+        char                      *selection_cmp;
 
     } config;
 

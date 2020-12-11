@@ -616,6 +616,7 @@ void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
 
 ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
                                         uct_device_type_t dev_type,
+                                        ucs_sys_device_t sys_device,
                                         uct_tl_device_resource_t **tl_devices_p,
                                         unsigned *num_tl_devices_p);
 
