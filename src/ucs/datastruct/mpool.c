@@ -38,6 +38,7 @@ static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk
 
     for (i = 0; i < chunk->num_elems; ++i) {
         elem = ucs_mpool_chunk_elem(mp->data, chunk, i);
+        VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
         if (elem->mpool != NULL) {
             ucs_warn("object %p was not returned to mpool %s", elem + 1,
                      ucs_mpool_name(mp));
