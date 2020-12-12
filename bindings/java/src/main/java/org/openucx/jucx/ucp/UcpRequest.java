@@ -7,6 +7,7 @@ package org.openucx.jucx.ucp;
 
 import org.openucx.jucx.UcxCallback;
 import org.openucx.jucx.UcxNativeStruct;
+import org.openucx.jucx.ucs.UcsConstants;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
@@ -20,6 +21,8 @@ public class UcpRequest extends UcxNativeStruct implements Closeable {
     private long recvSize;
 
     private long senderTag;
+
+    private int status = UcsConstants.STATUS.UCS_INPROGRESS;
 
     private UcpRequest(long nativeId) {
         setNativeId(nativeId);
@@ -50,6 +53,13 @@ public class UcpRequest extends UcxNativeStruct implements Closeable {
      */
     public boolean isCompleted() {
         return (getNativeId() == null) || isCompletedNative(getNativeId());
+    }
+
+    /**
+     * @return status of the current request
+     */
+    public int getStatus() {
+        return status;
     }
 
     /**
