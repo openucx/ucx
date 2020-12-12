@@ -1260,6 +1260,15 @@ test_ucp_dlopen() {
 	fi
 }
 
+test_init_mt() {
+	echo "==== Running multi-thread init ===="
+	$MAKEP
+	for ((i=0;i<50;++i))
+	do
+		$AFFINITY timeout 1m ./test/apps/test_init_mt
+	done
+}
+
 test_memtrack() {
 	../contrib/configure-devel --prefix=$ucx_inst
 	make_clean
@@ -1688,6 +1697,7 @@ run_tests() {
 	do_distributed_task 2 4 test_env_var_aliases
 	do_distributed_task 1 3 test_malloc_hook
 	do_distributed_task 0 4 test_ucp_dlopen
+	do_distributed_task 1 4 test_init_mt
 
 	# all are running gtest
 	run_gtest_default
