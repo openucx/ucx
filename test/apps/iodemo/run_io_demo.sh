@@ -294,7 +294,7 @@ build_server_args_list() {
 			iodemo_server_args+=" $key $value"
 			shift
 			;;
-		-q|-a|-v|-H)
+		-q|-A|-v|-H)
 			iodemo_server_args+=" $key"
 			;;
 		*)
