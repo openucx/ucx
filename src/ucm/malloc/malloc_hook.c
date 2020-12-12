@@ -550,7 +550,7 @@ static void ucm_malloc_sbrk(ucm_event_type_t event_type,
     if (ucm_malloc_hook_state.heap_start == (void*)-1) {
         ucm_malloc_hook_state.heap_start = event->sbrk.result; /* sbrk() returns the previous break */
     }
-    ucm_malloc_hook_state.heap_end = ucm_orig_sbrk(0);
+    ucm_malloc_hook_state.heap_end = ucm_get_current_brk();
 
     ucm_trace("sbrk(%+ld)=%p - adjusting heap to [%p..%p]",
               event->sbrk.increment, event->sbrk.result,
