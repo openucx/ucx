@@ -76,7 +76,7 @@ struct ucm_bistro_restore_point {
 static void ucm_bistro_fill_base_patch(ucm_bistro_base_patch_t *patch,
                                        uint32_t reg, uintptr_t value)
 {
-    ucs_assert(patch != NULL);
+    ucm_assert(patch != NULL);
 
     patch->addis  = ADDIS ( reg, 0,   (value >> 48));
     patch->ori1   = ORI   ( reg, reg, (value >> 32));
@@ -88,7 +88,7 @@ static void ucm_bistro_fill_base_patch(ucm_bistro_base_patch_t *patch,
 static void ucm_bistro_fill_patch(ucm_bistro_patch_t *patch,
                                   uint32_t reg, uintptr_t value)
 {
-    ucs_assert(patch != NULL);
+    ucm_assert(patch != NULL);
 
     ucm_bistro_fill_base_patch(&patch->super, reg, value);
 
@@ -185,7 +185,7 @@ ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp)
 {
     ucs_status_t status;
 
-    ucs_assert(rp != NULL);
+    ucm_assert(rp != NULL);
 
     status = ucm_bistro_apply_patch(rp->func, &rp->func_patch, sizeof(rp->func_patch));
     if (UCS_STATUS_IS_ERR(status)) {
@@ -202,7 +202,7 @@ ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp)
 
 void *ucm_bistro_restore_addr(ucm_bistro_restore_point_t *rp)
 {
-    ucs_assert(rp != NULL);
+    ucm_assert(rp != NULL);
     return rp->entry;
 }
 

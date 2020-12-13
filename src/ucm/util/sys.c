@@ -371,3 +371,8 @@ void *ucm_brk_syscall(void *addr)
 #endif
     return result;
 }
+
+pid_t ucm_get_tid()
+{
+    return syscall(SYS_gettid);
+}

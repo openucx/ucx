@@ -246,11 +246,6 @@ done:
     *pb = '\0';
 }
 
-static pid_t ucm_get_tid(void)
-{
-    return syscall(SYS_gettid);
-}
-
 static void ucm_log_snprintf(char *buf, size_t max, const char *fmt, ...)
 {
     va_list ap;

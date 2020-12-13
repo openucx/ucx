@@ -51,7 +51,7 @@ unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock);
  */
 #define UCS_INIT_ONCE(_once) \
     for (pthread_mutex_lock(&(_once)->lock); \
-         !(_once)->initialized || ucs_init_once_mutex_unlock(&(_once)->lock); \
+         !(_once)->initialized || pthread_mutex_unlock(&(_once)->lock); \
          (_once)->initialized = 1)
 
 #endif

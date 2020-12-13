@@ -115,7 +115,7 @@ static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
      * So ignore calls from other threads to ensure the only requested events
      * are proceeded.
      */
-    if (data->tid == ucs_get_tid()) {
+    if (data->tid == ucm_get_tid()) {
         data->fired_events |= event_type;
     }
 }
@@ -272,7 +272,7 @@ ucm_mmap_test_events_nolock(int events, int exclusive, const char *event_type)
     handler.cb        = ucm_mmap_event_test_callback;
     handler.arg       = &data;
     data.out_events   = events;
-    data.tid          = ucs_get_tid();
+    data.tid          = ucm_get_tid();
 
     ucm_event_handler_add(&handler);
     ucm_fire_mmap_events_internal(events, &data, exclusive);
@@ -362,7 +362,7 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
         if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
             status = ucm_reloc_modify(&entry->patch);
         } else {
-            ucs_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
+            ucm_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
             status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value,
                                       NULL);
         }
