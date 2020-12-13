@@ -239,6 +239,7 @@ static UCS_F_ALWAYS_INLINE ssize_t uct_mm_ep_am_common_send(
     void *base_address;
     uint8_t elem_flags;
     uint64_t head;
+    ucs_iov_iter_t iov_iter;
 
     UCT_CHECK_AM_ID(am_id);
 
@@ -302,7 +303,9 @@ retry:
         break;
     case UCT_MM_SEND_AM_SHORT_IOV:
         elem_flags   = UCT_MM_FIFO_ELEM_FLAG_INLINE;
-        elem->length = uct_iov_to_buffer(iov, iovcnt, 0, elem + 1, SIZE_MAX);
+        ucs_iov_iter_init(&iov_iter);
+        elem->length = uct_iov_to_buffer(iov, iovcnt, &iov_iter, elem + 1,
+                                         SIZE_MAX);
         uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,
                            elem + 1, elem->length, "TX: AM_SHORT");
         UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, elem->length);

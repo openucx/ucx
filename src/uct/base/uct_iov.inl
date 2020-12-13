@@ -107,39 +107,43 @@ size_t uct_iov_to_iovec(struct iovec *io_vec, size_t *io_vec_cnt_p,
 /**
  * Copy a data from uct_iov_t to buffer.
  *
- * @param [in] iov         A pointer to an array of uct_iov_t elements.
- * @param [in] iov_cnt     A number of elements in the array.
- * @param [in] iov_offset  An offset in the array.
- * @param [in] buf         A buffer to copy data to.
- * @param [in] copy_limit  A maximum amount of data that should be copied.
+ * @param [in] iov         Pointer to the array of uct_iov_t elements.
+ * @param [in] iov_cnt     Number of elements in the array.
+ * @param [inout] iov_iter Pointer to the iterator of the array.
+ * @param [in] buf         Buffer to copy the data to.
+ * @param [in] copy_limit  Maximum amount of the data that should be copied.
  *
  * @return The amount of copied bytes.
  */
 static UCS_F_ALWAYS_INLINE
-size_t uct_iov_to_buffer(const uct_iov_t *iov, size_t iovcnt, size_t iov_offset,
-                         void *buf, size_t copy_limit)
+size_t uct_iov_to_buffer(const uct_iov_t *iov, size_t iovcnt,
+                         ucs_iov_iter_t *iov_iter, void *buf, size_t copy_limit)
 {
-    size_t iov_it = 0;
-    size_t copied = 0;
-    size_t last   = 0;
+    size_t offset        = iov_iter->buffer_offset;
+    size_t copied        = 0;
+    size_t limit_reached = 0;
     size_t to_copy;
 
-    while (iov_it < iovcnt && iov_offset > iov[iov_it].length) {
-        iov_offset -= iov[iov_it].length;
-        ++iov_it;
-    }
-
-    for (; iov_it < iovcnt && !last; ++iov_it) {
-        to_copy = iov[iov_it].length - iov_offset;
+    for (; iov_iter->iov_index < iovcnt; ++iov_iter->iov_index) {
+        to_copy = iov[iov_iter->iov_index].length - offset;
         if (copied + to_copy > copy_limit) {
-            to_copy = copy_limit - copied;
-            last    = 1;
+            to_copy       = copy_limit - copied;
+            limit_reached = 1;
         }
         memcpy(UCS_PTR_BYTE_OFFSET(buf, copied),
-               UCS_PTR_BYTE_OFFSET(iov[iov_it].buffer, iov_offset), to_copy);
-        copied    += to_copy;
-        iov_offset = 0;
+               UCS_PTR_BYTE_OFFSET(iov[iov_iter->iov_index].buffer, offset),
+               to_copy);
+        copied += to_copy;
+
+        if (limit_reached) {
+            offset += to_copy;
+            break;
+        }
+
+        offset = 0;
     }
+
+    iov_iter->buffer_offset = offset;
 
     return copied;
 }

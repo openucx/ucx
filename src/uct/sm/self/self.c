@@ -272,14 +272,17 @@ ucs_status_t uct_self_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
                                                     uct_self_iface_t);
     uct_self_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_self_ep_t);
     void *send_buffer;
+    ucs_iov_iter_t iov_iter;
     size_t length;
 
     UCT_CHECK_AM_ID(id);
     UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), 0, iface->send_size,
                      "am_short_iov");
 
+    ucs_iov_iter_init(&iov_iter);
     send_buffer = UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
-    length      = uct_iov_to_buffer(iov, iovcnt, 0, send_buffer, SIZE_MAX);
+    length      = uct_iov_to_buffer(iov, iovcnt, &iov_iter, send_buffer,
+                                    SIZE_MAX);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, length);
     uct_self_iface_sendrecv_am(iface, id, send_buffer, length, "SHORT_IOV");

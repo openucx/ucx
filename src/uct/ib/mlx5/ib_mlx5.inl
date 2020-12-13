@@ -190,16 +190,17 @@ uct_ib_mlx5_inline_iov_copy(void *restrict dest, const uct_iov_t *iov,
                             uct_ib_mlx5_txwq_t *wq)
 {
     ptrdiff_t remainder;
+    ucs_iov_iter_t iov_iter;
 
     ucs_assert(dest != NULL);
 
+    ucs_iov_iter_init(&iov_iter);
     remainder = UCS_PTR_BYTE_DIFF(dest, wq->qend);
     if (ucs_likely(length <= remainder)) {
-        uct_iov_to_buffer(iov, iovcnt, 0, dest, SIZE_MAX);
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter, dest, SIZE_MAX);
     } else {
-        uct_iov_to_buffer(iov, iovcnt,
-                          uct_iov_to_buffer(iov, iovcnt, 0, dest, remainder),
-                          wq->qstart, SIZE_MAX);
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter, dest, remainder);
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter, wq->qstart, SIZE_MAX);
     }
 }
 
