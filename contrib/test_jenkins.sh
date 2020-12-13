@@ -1134,16 +1134,21 @@ run_ucx_perftest() {
 # Test malloc hooks with mpi
 #
 test_malloc_hooks_mpi() {
-	for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
+	for mode in reloc bistro
 	do
-		echo "==== Running memory hook (${tname}) on MPI ===="
-		$MPIRUN -np 1 $AFFINITY ./test/mpi/test_memhooks -t $tname
-	done
+		for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
+		do
+			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
+			$MPIRUN -np 1 $AFFINITY \
+				./test/mpi/test_memhooks -t $tname -m ${mode}
+		done
 
-	echo "==== Running memory hook (malloc_hooks) on MPI with LD_PRELOAD ===="
-	ucm_lib=$PWD/src/ucm/.libs/libucm.so
-	ls -l $ucm_lib
-	$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY ./test/mpi/test_memhooks -t malloc_hooks
+		echo "==== Running memory hook (malloc_hooks mode ${mode}) on MPI with LD_PRELOAD ===="
+		ucm_lib=$PWD/src/ucm/.libs/libucm.so
+		ls -l $ucm_lib
+		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY \
+			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
+	done
 }
 
 #
