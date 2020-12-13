@@ -283,7 +283,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
     /* select an auxiliary transport which would be used to pass connection
      * establishment messages.
      */
-    status = ucp_wireup_select_aux_transport(ucp_ep, ep_init_flags, UINT64_MAX,
+    status = ucp_wireup_select_aux_transport(ucp_ep, ep_init_flags, ucp_tl_bitmap_max,
                                              remote_address, &select_info);
     if (status != UCS_OK) {
         return status;
@@ -491,14 +491,16 @@ err:
 
 static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
                                                         const char *dev_name,
-                                                        uint64_t *tl_bitmap_p,
+                                                        ucp_tl_bitmap_t *tl_bitmap_p,
                                                         ucp_address_t **address_p,
                                                         size_t *address_length_p)
 {
     ucp_context_h context = worker->context;
     int tl_id, found_supported_tl = 0;
     ucs_status_t status;
-    uint64_t tl_bitmap = 0;
+    ucp_tl_bitmap_t tl_bitmap;
+
+    UCS_BITMAP_CLEAR(tl_bitmap);
 
     /* Find a transport which matches the given dev_name and the user's configuration.
      * It also has to be a UCT_IFACE_FLAG_CONNECT_TO_IFACE transport and support
@@ -510,14 +512,14 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
                                 UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                 UCT_IFACE_FLAG_AM_BCOPY))) {
             found_supported_tl = 1;
-            tl_bitmap |= UCS_BIT(tl_id);
+            UCS_BITMAP_SET(tl_bitmap, tl_id);
         }
     }
 
     if (found_supported_tl) {
-        status = ucp_address_pack(worker, NULL, tl_bitmap,
+        status = ucp_address_pack(worker, NULL, &tl_bitmap,
                                   UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
-                                  address_length_p, (void**)address_p);
+                                  address_length_p, (void **)address_p);
     } else {
         ucs_error("no supported sockaddr auxiliary transports found for %s", dev_name);
         status = UCS_ERR_UNREACHABLE;
@@ -541,7 +543,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
     ucp_address_t *worker_address, *rsc_address;
     uct_iface_attr_t *attrs;
     ucs_status_t status;
-    uint64_t tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap;
     char aux_tls_str[64];
     const char *dev_name;
 
@@ -550,9 +552,9 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
 
     dev_name = pack_args->dev_name;
 
-    status = ucp_address_pack(worker, NULL, UINT64_MAX,
-                              UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
-                              &address_length, (void**)&worker_address);
+    status = ucp_address_pack(worker, NULL, &ucp_tl_bitmap_max,
+                              UCP_ADDRESS_PACK_FLAGS_ALL, NULL, &address_length,
+                              (void **)&worker_address);
     if (status != UCS_OK) {
         goto err;
     }
@@ -587,7 +589,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
             ucs_error("sockaddr aux resources addresses (%s transports)"
                       " information (%zu) exceeds max_priv on "
                       UCT_TL_RESOURCE_DESC_FMT" (%zu)",
-                      ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
+                      ucp_tl_bitmap_str(context, &tl_bitmap, aux_tls_str,
                                         sizeof(aux_tls_str)),
                       conn_priv_len,
                       UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
@@ -607,7 +609,7 @@ ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
                   "(%s transports) (len=%zu) to server. "
                   "total client priv data len: %zu",
                   UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
-                  ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
+                  ucp_tl_bitmap_str(context, &tl_bitmap, aux_tls_str,
                                     sizeof(aux_tls_str)),
                   address_length, conn_priv_len);
     } else {

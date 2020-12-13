@@ -412,8 +412,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
     ucp_rsc_index_t tl;
 
-    status = ucp_address_pack(sender().worker(), NULL,
-                              std::numeric_limits<uint64_t>::max(),
+    status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_max,
                               UCP_ADDRESS_PACK_FLAGS_ALL, m_lanes2remote, &size,
                               &buffer);
     ASSERT_UCS_OK(status);
@@ -421,7 +420,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     ASSERT_GT(size, 0ul);
     EXPECT_LE(size, 2048ul); /* Expect a reasonable address size */
 
-    ucs_for_each_bit(tl, sender().worker()->context->tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(sender().worker()->context->tl_bitmap, tl) {
         if (sender().worker()->context->tl_rscs[tl].flags & UCP_TL_RSC_FLAG_SOCKADDR) {
             continue;
         }
@@ -464,9 +463,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, ep_address, "IB_NUM_PATHS?=2") {
     sender().connect(&receiver(), get_ep_params());
 
     status = ucp_address_pack(sender().worker(), sender().ep(),
-                              std::numeric_limits<uint64_t>::max(),
-                              UCP_ADDRESS_PACK_FLAGS_ALL, m_lanes2remote, &size,
-                              &buffer);
+                              &ucp_tl_bitmap_max, UCP_ADDRESS_PACK_FLAGS_ALL,
+                              m_lanes2remote, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
 
@@ -489,7 +487,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     size_t size;
     void *buffer;
 
-    status = ucp_address_pack(sender().worker(), NULL, 0,
+    status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_min,
                               UCP_ADDRESS_PACK_FLAGS_ALL, m_lanes2remote, &size,
                               &buffer);
     ASSERT_UCS_OK(status);
@@ -940,7 +938,7 @@ public:
     bool check_scalable_tls(const ucp_worker_h worker, size_t est_num_eps) {
         ucp_rsc_index_t rsc_index;
 
-        ucs_for_each_bit(rsc_index, worker->context->tl_bitmap) {
+        UCS_BITMAP_FOR_EACH_BIT(worker->context->tl_bitmap, rsc_index) {
             ucp_md_index_t md_index      = worker->context->tl_rscs[rsc_index].md_index;
             const uct_md_attr_t *md_attr = &worker->context->tl_mds[md_index].attr;
 
@@ -952,10 +950,11 @@ public:
             }
 
             if (ucp_worker_iface_get_attr(worker, rsc_index)->max_num_eps >= est_num_eps) {
-                EXPECT_TRUE((worker->scalable_tl_bitmap & UCS_BIT(rsc_index)) != 0);
+                EXPECT_TRUE(UCS_BITMAP_GET(worker->scalable_tl_bitmap, rsc_index));
                 return true;
             } else {
-                EXPECT_TRUE((worker->scalable_tl_bitmap & UCS_BIT(rsc_index)) == 0);
+                EXPECT_TRUE(
+                    UCS_BITMAP_GET(worker->scalable_tl_bitmap, rsc_index) == 0);
             }
         }
 
@@ -1182,7 +1181,8 @@ protected:
                 device_atomics_cnt++;
             }
         }
-        bool device_atomics_supported = sender().worker()->atomic_tls != 0;
+        bool device_atomics_supported = !UCS_BITMAP_IS_ZERO(
+            sender().worker()->atomic_tls);
 
         test_ucp_wireup::cleanup();
 

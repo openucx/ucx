@@ -12,6 +12,7 @@
 #include <ucp/api/ucp_def.h>
 #include <ucp/api/ucp_compat.h>
 #include <ucp/api/ucp_version.h>
+#include <ucs/datastruct/bitmap.h>
 #include <ucs/type/thread_mode.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/config/types.h>
@@ -192,6 +193,15 @@ enum ucp_listener_params_field {
      *   request. */
     UCP_LISTENER_PARAM_FIELD_CONN_HANDLER        = UCS_BIT(2)
 };
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief UCP TL bitmap
+ *
+ * The bitmap represents which TL resources are in use.
+ */
+typedef ucs_bitmap_t(128) ucp_tl_bitmap_t;
 
 
 /**

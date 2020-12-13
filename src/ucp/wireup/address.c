@@ -49,7 +49,7 @@
 
 typedef struct {
     size_t           dev_addr_len;
-    uint64_t         tl_bitmap;
+    ucp_tl_bitmap_t  tl_bitmap;
     ucp_rsc_index_t  rsc_index;
     ucp_rsc_index_t  tl_count;
     unsigned         num_paths;
@@ -193,7 +193,7 @@ out:
 }
 
 static ucs_status_t
-ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
+ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
                            uint64_t flags, ucp_address_packed_device_t **devices_p,
                            ucp_rsc_index_t *num_devices_p)
 {
@@ -203,6 +203,7 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
     ucp_rsc_index_t num_devices;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
+    ucp_tl_bitmap_t current_tl_bitmap = *tl_bitmap;
 
     devices = ucs_calloc(context->num_tls, sizeof(*devices), "packed_devices");
     if (devices == NULL) {
@@ -210,8 +211,8 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
     }
 
     num_devices = 0;
-    tl_bitmap  &= context->tl_bitmap;
-    ucs_for_each_bit(rsc_index, tl_bitmap) {
+    UCS_BITMAP_INPLACE_AND(current_tl_bitmap, context->tl_bitmap);
+    UCS_BITMAP_FOR_EACH_BIT(current_tl_bitmap, rsc_index) {
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         if (!ucp_worker_iface_can_connect(iface_attr)) {
             continue;
@@ -258,7 +259,7 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep, uint64_t tl_bitmap,
         }
 
         dev->rsc_index  = rsc_index;
-        dev->tl_bitmap |= UCS_BIT(rsc_index);
+        UCS_BITMAP_SET(dev->tl_bitmap, rsc_index);
         dev->num_paths  = iface_attr->dev_num_paths;
     }
 
@@ -455,7 +456,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         unified               = ptr;
         rsc_idx               = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
         iface_attr->lat_ovh   = fabs(unified->lat_ovh);
-        if (!(worker->context->tl_bitmap & UCS_BIT(rsc_idx))) {
+        if (!UCS_BITMAP_GET(worker->context->tl_bitmap, rsc_idx)) {
             if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                 ucs_error("failed to unpack address, resource[%d] is not valid",
                           rsc_idx);
@@ -597,8 +598,7 @@ ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void
 }
 
 static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
-                                        void *buffer, size_t size,
-                                        uint64_t tl_bitmap, unsigned pack_flags,
+                                        void *buffer, size_t size, unsigned pack_flags,
                                         const ucp_lane_index_t *lanes2remote,
                                         const ucp_address_packed_device_t *devices,
                                         ucp_rsc_index_t num_devices)
@@ -612,7 +612,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane, remote_lane;
-    uint64_t dev_tl_bitmap;
+    ucp_tl_bitmap_t dev_tl_bitmap;
     unsigned num_ep_addrs;
     ucs_status_t status;
     size_t iface_addr_len;
@@ -655,7 +655,8 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
 
     for (dev = devices; dev < (devices + num_devices); ++dev) {
 
-        dev_tl_bitmap = context->tl_bitmap & dev->tl_bitmap;
+        dev_tl_bitmap = context->tl_bitmap;
+        UCS_BITMAP_INPLACE_AND(dev_tl_bitmap, dev->tl_bitmap);
 
         /* MD index */
         md_index       = context->tl_rscs[dev->rsc_index].md_index;
@@ -664,9 +665,12 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                            "md_index=%d", md_index);
 
         *(uint8_t*)ptr = md_index |
-                         ((dev_tl_bitmap == 0)           ? UCP_ADDRESS_FLAG_MD_EMPTY_DEV : 0) |
-                         ((md_flags & UCT_MD_FLAG_ALLOC) ? UCP_ADDRESS_FLAG_MD_ALLOC     : 0) |
-                         ((md_flags & UCT_MD_FLAG_REG)   ? UCP_ADDRESS_FLAG_MD_REG       : 0);
+                         (UCS_BITMAP_IS_ZERO(dev_tl_bitmap) ? 
+                          UCP_ADDRESS_FLAG_MD_EMPTY_DEV : 0) |
+                         ((md_flags & UCT_MD_FLAG_ALLOC) ?
+                           UCP_ADDRESS_FLAG_MD_ALLOC : 0) |
+                         ((md_flags & UCT_MD_FLAG_REG) ?
+                           UCP_ADDRESS_FLAG_MD_REG : 0);
         ptr = UCS_PTR_TYPE_OFFSET(ptr, md_index);
 
         /* Device address length */
@@ -702,8 +706,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
         }
 
         flags_ptr = NULL;
-        ucs_for_each_bit(rsc_index, dev_tl_bitmap) {
-
+        UCS_BITMAP_FOR_EACH_BIT(dev_tl_bitmap, rsc_index) {
             wiface     = ucp_worker_iface(worker, rsc_index);
             iface_attr = &wiface->attr;
 
@@ -717,7 +720,7 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
                                       context->tl_rscs[rsc_index].tl_name_csum);
 
             /* Transport information */
-            enable_amo = worker->atomic_tls & UCS_BIT(rsc_index);
+            enable_amo = UCS_BITMAP_GET(worker->atomic_tls, rsc_index);
             attr_len   = ucp_address_pack_iface_attr(worker, ptr, rsc_index,
                                                      iface_attr, pack_flags,
                                                      enable_amo);
@@ -835,11 +838,11 @@ static ucs_status_t ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep,
          * during the above loop So, set the LAST flag for the flags_ptr
          * from the last iteration */
         if (flags_ptr != NULL) {
-            ucs_assert(dev_tl_bitmap != 0);
+            ucs_assert(!UCS_BITMAP_IS_ZERO(dev_tl_bitmap));
             *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_LAST;
         } else {
             /* cppcheck-suppress internalAstError */
-            ucs_assert(dev_tl_bitmap == 0);
+            ucs_assert(UCS_BITMAP_IS_ZERO(dev_tl_bitmap));
         }
     }
 
@@ -851,7 +854,8 @@ out:
 }
 
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
-                              uint64_t tl_bitmap, unsigned pack_flags,
+                              const ucp_tl_bitmap_t  *tl_bitmap,
+                              unsigned  pack_flags,
                               const ucp_lane_index_t *lanes2remote,
                               size_t *size_p, void **buffer_p)
 {
@@ -885,7 +889,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
     memset(buffer, 0, size);
 
     /* Pack the address */
-    status = ucp_address_do_pack(worker, ep, buffer, size, tl_bitmap, pack_flags,
+    status = ucp_address_do_pack(worker, ep, buffer, size, pack_flags,
                                  lanes2remote, devices, num_devices);
     if (status != UCS_OK) {
         ucs_free(buffer);

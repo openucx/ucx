@@ -20,6 +20,24 @@ typedef struct uct_self_iface_config {
 } uct_self_iface_config_t;
 
 
+/**
+ * @brief self device MD descriptor
+ */
+typedef struct uct_self_md {
+    uct_md_t super;
+    size_t   num_devices; /* Number of devices to create */
+} uct_self_md_t;
+
+
+/**
+ * @brief self device MD configuration
+ */
+typedef struct uct_self_md_config {
+    uct_md_config_t super;
+    size_t          num_devices; /* Number of devices to create */
+} uct_self_md_config_t;
+
+
 typedef struct uct_self_iface {
     uct_base_iface_t      super;
     uct_self_iface_addr_t id;           /* Unique identifier for the instance */

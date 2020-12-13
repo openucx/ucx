@@ -327,26 +327,32 @@ void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->dev_num_paths = 1;
 }
 
-ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
-                                        uct_device_type_t dev_type,
-                                        ucs_sys_device_t sys_device,
-                                        uct_tl_device_resource_t **tl_devices_p,
-                                        unsigned *num_tl_devices_p)
+ucs_status_t uct_allocate_device_resources(uct_md_h md, const char *dev_name,
+                                           uct_device_type_t dev_type,
+                                           ucs_sys_device_t sys_device,
+                                           unsigned requested_devices_num,
+                                           uct_tl_device_resource_t **tl_devices_p,
+                                           unsigned *num_tl_devices_p)
 {
-    uct_tl_device_resource_t *device;
+    uct_tl_device_resource_t *devices;
+    int                       i = 0;
 
-    device = ucs_calloc(1, sizeof(*device), "device resource");
-    if (NULL == device) {
+    devices = ucs_calloc(requested_devices_num, sizeof(*devices),
+                         "device resource");
+    if (NULL == devices) {
         ucs_error("failed to allocate device resource");
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucs_snprintf_zero(device->name, sizeof(device->name), "%s", dev_name);
-    device->type       = dev_type;
-    device->sys_device = sys_device;
+    for (; i < requested_devices_num; i++) {
+        ucs_snprintf_zero(devices[i].name, sizeof(devices->name), "%s%d",
+                          dev_name, i);
+        devices[i].type       = dev_type;
+        devices[i].sys_device = sys_device;
+    }
 
-    *num_tl_devices_p = 1;
-    *tl_devices_p     = device;
+    *tl_devices_p     = devices;
+    *num_tl_devices_p = requested_devices_num;
     return UCS_OK;
 }
 

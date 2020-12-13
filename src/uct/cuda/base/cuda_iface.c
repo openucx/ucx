@@ -22,7 +22,7 @@ uct_cuda_base_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p
         uct_cuda_base_get_sys_dev(cuda_device, &sys_device);
     }
 
-    return uct_single_device_resource(md, UCT_CUDA_DEV_NAME,
-                                      UCT_DEVICE_TYPE_ACC, sys_device,
-                                      tl_devices_p, num_tl_devices_p);
+    return uct_allocate_device_resources(md, UCT_CUDA_DEV_NAME,
+                                         UCT_DEVICE_TYPE_ACC, sys_device, 1,
+                                         tl_devices_p, num_tl_devices_p);
 }

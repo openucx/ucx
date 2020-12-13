@@ -60,7 +60,8 @@ SpaceBeforeParens: ControlStatementsExceptForEachMacros
 SpaceBeforeAssignmentOperators: true
 SpaceAfterCStyleCast: false
 SortIncludes: false
-ForEachMacros: ['FOR_EACH_ENTITY',
+ForEachMacros: ['_UCS_BITMAP_FOR_EACH_WORD',
+                'FOR_EACH_ENTITY',
                 'kh_foreach',
                 'kh_foreach_key',
                 'kh_foreach_value',

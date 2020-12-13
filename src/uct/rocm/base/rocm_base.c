@@ -109,10 +109,10 @@ ucs_status_t uct_rocm_base_query_devices(uct_md_h md,
                                          uct_tl_device_resource_t **tl_devices_p,
                                          unsigned *num_tl_devices_p)
 {
-    return uct_single_device_resource(md, md->component->name,
-                                      UCT_DEVICE_TYPE_ACC,
-                                      UCS_SYS_DEVICE_ID_UNKNOWN,
-                                      tl_devices_p, num_tl_devices_p);
+    return uct_allocate_device_resources(md, md->component->name,
+                                         UCT_DEVICE_TYPE_ACC,
+                                         UCS_SYS_DEVICE_ID_UNKNOWN, 1,
+                                         tl_devices_p, num_tl_devices_p);
 }
 
 hsa_agent_t uct_rocm_base_get_dev_agent(int dev_num)

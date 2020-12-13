@@ -18,7 +18,7 @@
 #define UCP_FEATURE_AMO              (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)
 
 /* Resources */
-#define UCP_MAX_RESOURCES            64 /* up to 64 only due to tl_bitmap usage */
+#define UCP_MAX_RESOURCES            128
 #define UCP_NULL_RESOURCE            ((ucp_rsc_index_t)-1)
 typedef uint8_t                      ucp_rsc_index_t;
 

@@ -47,10 +47,10 @@ ucs_status_t
 uct_sm_base_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                              unsigned *num_tl_devices_p)
 {
-    return uct_single_device_resource(md, UCT_SM_DEVICE_NAME,
-                                      UCT_DEVICE_TYPE_SHM,
-                                      UCS_SYS_DEVICE_ID_UNKNOWN,
-                                      tl_devices_p, num_tl_devices_p);
+    return uct_allocate_device_resources(md, UCT_SM_DEVICE_NAME,
+                                         UCT_DEVICE_TYPE_SHM,
+                                         UCS_SYS_DEVICE_ID_UNKNOWN, 1,
+                                         tl_devices_p, num_tl_devices_p);
 }
 
 

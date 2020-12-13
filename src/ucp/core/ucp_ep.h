@@ -13,6 +13,7 @@
 #include <ucp/proto/lane_type.h>
 #include <ucp/proto/proto_select.h>
 #include <ucp/wireup/ep_match.h>
+#include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/ptr_map.inl>
@@ -34,6 +35,18 @@ typedef uint32_t                   ucp_ep_flags_t;
 #else
 typedef uint16_t                   ucp_ep_flags_t;
 #endif
+
+
+/**
+ * Max possible value of TL bitmap (all bits are 1)
+ */
+extern ucp_tl_bitmap_t ucp_tl_bitmap_max;
+
+
+/**
+ * Min possible value of TL bitmap (all bits are 0)
+ */
+extern ucp_tl_bitmap_t ucp_tl_bitmap_min;
 
 
 /**
@@ -513,7 +526,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep);
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
-                                          uint64_t local_tl_bitmap,
+                                          const ucp_tl_bitmap_t *local_tl_bitmap,
                                           const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p);
@@ -577,7 +590,7 @@ void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker);
 
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
-uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep);
+ucp_tl_bitmap_t ucp_ep_get_tl_bitmap(ucp_ep_h ep);
 
 uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep);
 

@@ -954,13 +954,15 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
  * @return Error code as defined by @ref ucs_status_t
  */
 static void ucp_worker_select_best_ifaces(ucp_worker_h worker,
-                                          uint64_t *tl_bitmap_p)
+                                          ucp_tl_bitmap_t *tl_bitmap_p)
 {
     ucp_context_h context = worker->context;
-    uint64_t tl_bitmap    = 0;
+    ucp_tl_bitmap_t tl_bitmap;
     ucp_rsc_index_t repl_ifaces[UCP_MAX_RESOURCES];
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t tl_id, iface_id;
+
+    UCS_BITMAP_CLEAR(tl_bitmap);
 
     /* For each iface check whether there is another iface, which:
      * 1. Supports at least the same capabilities
@@ -969,12 +971,12 @@ static void ucp_worker_select_best_ifaces(ucp_worker_h worker,
     for (tl_id = 0; tl_id < context->num_tls; ++tl_id) {
         wiface = worker->ifaces[tl_id];
         if (!ucp_worker_iface_find_better(worker, wiface, &repl_ifaces[tl_id])) {
-            tl_bitmap |= UCS_BIT(tl_id);
+            UCS_BITMAP_SET(tl_bitmap, tl_id);
         }
     }
 
     *tl_bitmap_p       = tl_bitmap;
-    worker->num_ifaces = ucs_popcount(tl_bitmap);
+    worker->num_ifaces = UCS_BITMAP_POPCOUNT(tl_bitmap);
     ucs_assert(worker->num_ifaces <= context->num_tls);
 
     if (worker->num_ifaces == context->num_tls) {
@@ -986,7 +988,7 @@ static void ucp_worker_select_best_ifaces(ucp_worker_h worker,
     /* Some ifaces need to be closed */
     for (tl_id = 0, iface_id = 0; tl_id < context->num_tls; ++tl_id) {
         wiface = worker->ifaces[tl_id];
-        if (tl_bitmap & UCS_BIT(tl_id)) {
+        if (UCS_BITMAP_GET(tl_bitmap, tl_id)) {
             if (iface_id != tl_id) {
                 worker->ifaces[iface_id] = wiface;
             }
@@ -1027,19 +1029,19 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     uct_iface_params_t iface_params;
     ucp_rsc_index_t tl_id, iface_id;
     ucp_worker_iface_t *wiface;
-    uint64_t ctx_tl_bitmap, tl_bitmap;
+    ucp_tl_bitmap_t ctx_tl_bitmap, tl_bitmap;
     unsigned num_ifaces;
     ucs_status_t status;
 
     /* If tl_bitmap is already set, just use it. Otherwise open ifaces on all
      * available resources and then select the best ones. */
     ctx_tl_bitmap  = context->tl_bitmap;
-    if (ctx_tl_bitmap) {
-        num_ifaces = ucs_popcount(ctx_tl_bitmap);
+    if (!(UCS_BITMAP_IS_ZERO(ctx_tl_bitmap))) {
+        num_ifaces = UCS_BITMAP_POPCOUNT(ctx_tl_bitmap);
         tl_bitmap  = ctx_tl_bitmap;
     } else {
         num_ifaces = context->num_tls;
-        tl_bitmap  = UCS_MASK(context->num_tls);
+        UCS_BITMAP_MASK(tl_bitmap, context->num_tls);
     }
 
     worker->ifaces = ucs_calloc(num_ifaces, sizeof(*worker->ifaces),
@@ -1053,7 +1055,7 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
     worker->num_ifaces = num_ifaces;
     iface_id           = 0;
 
-    ucs_for_each_bit(tl_id, tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(tl_bitmap, tl_id) {
         iface_params.field_mask = UCT_IFACE_PARAM_FIELD_OPEN_MODE;
         resource = &context->tl_rscs[tl_id];
 
@@ -1073,36 +1075,38 @@ static ucs_status_t ucp_worker_add_resource_ifaces(ucp_worker_h worker)
         }
     }
 
-    if (!ctx_tl_bitmap) {
+    if (UCS_BITMAP_IS_ZERO(ctx_tl_bitmap)) {
         /* Context bitmap is not set, need to select the best tl resources */
-        tl_bitmap = 0;
+        UCS_BITMAP_CLEAR(tl_bitmap);
         ucp_worker_select_best_ifaces(worker, &tl_bitmap);
-        ucs_assert(tl_bitmap);
+        ucs_assert(!UCS_BITMAP_IS_ZERO(tl_bitmap));
 
         /* Cache tl_bitmap on the context, so the next workers would not need
          * to select best ifaces. */
         context->tl_bitmap = tl_bitmap;
-        ucs_debug("selected tl bitmap: 0x%"PRIx64" (%d tls)",
-                  tl_bitmap, ucs_popcount(tl_bitmap));
+
+        ucs_debug("selected tl bitmap: 0x%" PRIx64 " 0x%" PRIx64 " (%zu tls)",
+                  tl_bitmap.bits[0], tl_bitmap.bits[1],
+                  UCS_BITMAP_POPCOUNT(tl_bitmap));
     }
 
-    worker->scalable_tl_bitmap = 0;
-    ucs_for_each_bit(tl_id, context->tl_bitmap) {
+    UCS_BITMAP_CLEAR(worker->scalable_tl_bitmap);
+    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
         ucs_assert(ucp_worker_is_tl_p2p(worker, tl_id) ||
                    ucp_worker_is_tl_2iface(worker, tl_id) ||
                    ucp_worker_is_tl_2sockaddr(worker, tl_id));
         wiface = ucp_worker_iface(worker, tl_id);
         if (ucp_is_scalable_transport(context, wiface->attr.max_num_eps)) {
-            worker->scalable_tl_bitmap |= UCS_BIT(tl_id);
+            UCS_BITMAP_SET(worker->scalable_tl_bitmap, tl_id);
         }
     }
 
-    ucs_debug("selected scalable tl bitmap: 0x%"PRIx64" (%d tls)",
-              worker->scalable_tl_bitmap,
-              ucs_popcount(worker->scalable_tl_bitmap));
+    ucs_debug("selected scalable tl bitmap: 0x%"PRIx64" 0x%"PRIx64" (%zu tls)",
+              worker->scalable_tl_bitmap.bits[0], worker->scalable_tl_bitmap.bits[1],
+              UCS_BITMAP_POPCOUNT(worker->scalable_tl_bitmap));
 
     iface_id = 0;
-    ucs_for_each_bit(tl_id, tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(tl_bitmap, tl_id) {
         status = ucp_worker_iface_init(worker, tl_id,
                                        worker->ifaces[iface_id++]);
         if (status != UCS_OK) {
@@ -1360,7 +1364,7 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     ucs_for_each_bit(mem_type_index,
         context->tl_mds[resource->md_index].attr.cap.access_mem_types) {
         ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
-        context->mem_type_access_tls[mem_type_index] |= UCS_BIT(tl_id);
+        UCS_BITMAP_SET(context->mem_type_access_tls[mem_type_index], tl_id);
     }
 
     return UCS_OK;
@@ -1468,7 +1472,7 @@ static void ucp_worker_enable_atomic_tl(ucp_worker_h worker, const char *mode,
     ucs_trace("worker %p: using %s atomics on iface[%d]=" UCT_TL_RESOURCE_DESC_FMT,
               worker, mode, rsc_index,
               UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc));
-    worker->atomic_tls |= UCS_BIT(rsc_index);
+    UCS_BITMAP_SET(worker->atomic_tls, rsc_index);
 }
 
 static void ucp_worker_init_cpu_atomics(ucp_worker_h worker)
@@ -1563,7 +1567,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucs_debug("worker %p: using device atomics", worker);
 
     /* Enable atomics on all resources using same device as the "best" resource */
-    ucs_for_each_bit(rsc_index, context->tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, rsc_index) {
         rsc = &context->tl_rscs[rsc_index];
         if ((supp_tls & UCS_BIT(rsc_index)) &&
             (rsc->md_index == best_rsc->md_index) &&
@@ -1598,7 +1602,7 @@ static void ucp_worker_init_atomic_tls(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
 
-    worker->atomic_tls = 0;
+    UCS_BITMAP_CLEAR(worker->atomic_tls);
 
     if (context->config.features & UCP_FEATURE_AMO) {
         switch(context->config.ext.atomic_mode) {
@@ -2350,7 +2354,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
 {
     ucp_context_h context = worker->context;
     ucs_status_t status   = UCS_OK;
-    uint64_t tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap;
     ucp_rsc_index_t tl_id;
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
@@ -2364,23 +2368,22 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS) {
         /* If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is not set,
          * pack all tl adresses */
-        tl_bitmap = UINT64_MAX;
+        UCS_BITMAP_SET_ALL(tl_bitmap);
 
         if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) {
             if (attr->address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
-                tl_bitmap = 0;
-                ucs_for_each_bit(tl_id, context->tl_bitmap) {
+                UCS_BITMAP_CLEAR(tl_bitmap);
+                UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
                     if (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
-                        tl_bitmap |= UCS_BIT(tl_id);
+                        UCS_BITMAP_SET(tl_bitmap, tl_id);
                     }
                 }
             }
         }
 
-        status = ucp_address_pack(worker, NULL, tl_bitmap,
-                                  UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT,
-                                  NULL, &attr->address_length,
-                                  (void**)&attr->address);
+        status = ucp_address_pack(worker, NULL, &tl_bitmap,
+                                  UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT, NULL,
+                                  &attr->address_length, (void **)&attr->address);
     }
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER) {
@@ -2602,9 +2605,9 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    status = ucp_address_pack(worker, NULL, UINT64_MAX,
+    status = ucp_address_pack(worker, NULL, &ucp_tl_bitmap_max,
                               UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT, NULL,
-                              address_length_p, (void**)address_p);
+                              address_length_p, (void **)address_p);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
@@ -2643,7 +2646,7 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
         fprintf(stream, "#                 atomics: ");
         first = 1;
         for (rsc_index = 0; rsc_index < worker->context->num_tls; ++rsc_index) {
-            if (worker->atomic_tls & UCS_BIT(rsc_index)) {
+            if (UCS_BITMAP_GET(worker->atomic_tls, rsc_index)) {
                 if (!first) {
                     fprintf(stream, ", ");
                 }

@@ -57,6 +57,9 @@ static ucs_stats_class_t ucp_ep_stats_class = {
 };
 #endif
 
+ucp_tl_bitmap_t ucp_tl_bitmap_max = {{-1ul, -1ul}};
+ucp_tl_bitmap_t ucp_tl_bitmap_min = {{0, 0}};
+
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 {
     ucp_lane_index_t i;
@@ -313,12 +316,12 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 
     ucs_memory_type_for_each(mem_type) {
         if (UCP_MEM_IS_HOST(mem_type) ||
-            !context->mem_type_access_tls[mem_type]) {
+            UCS_BITMAP_IS_ZERO(context->mem_type_access_tls[mem_type])) {
             continue;
         }
 
         status = ucp_address_pack(worker, NULL,
-                                  context->mem_type_access_tls[mem_type],
+                                  &context->mem_type_access_tls[mem_type],
                                   UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT, NULL,
                                   &address_length, &address_buffer);
         if (status != UCS_OK) {
@@ -335,7 +338,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
         ucs_snprintf_zero(ep_name, UCP_WORKER_NAME_MAX, "mem_type_ep:%s",
                           ucs_memory_type_names[mem_type]);
 
-        status = ucp_ep_create_to_worker_addr(worker, UINT64_MAX,
+        status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max,
                                               &local_address,
                                               UCP_EP_INIT_FLAG_MEM_TYPE,
                                               ep_name,
@@ -418,7 +421,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
 }
 
 ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
-                                          uint64_t local_tl_bitmap,
+                                          const ucp_tl_bitmap_t *local_tl_bitmap,
                                           const ucp_unpacked_address_t *remote_address,
                                           unsigned ep_init_flags,
                                           const char *message, ucp_ep_h *ep_p)
@@ -441,7 +444,8 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
-    ucs_assert(!(ucp_ep_get_tl_bitmap(ep) & ~local_tl_bitmap));
+    ucs_assert(ucs_bitmap_128_is_zero(ucs_bitmap_128_and(
+        ucp_ep_get_tl_bitmap(ep), ucs_bitmap_128_not(*local_tl_bitmap))));
 
     *ep_p = ep;
     return UCS_OK;
@@ -542,7 +546,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
     switch (sa_data->addr_mode) {
     case UCP_WIREUP_SA_DATA_FULL_ADDR:
         /* create endpoint to the worker address we got in the private data */
-        status = ucp_ep_create_to_worker_addr(worker, UINT64_MAX, &remote_addr,
+        status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max, &remote_addr,
                                               ep_init_flags |
                                               UCP_EP_INIT_CREATE_AM_LANE,
                                               "listener", ep_p);
@@ -688,7 +692,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out_free_address;
     }
 
-    status = ucp_ep_create_to_worker_addr(worker, UINT64_MAX, &remote_address,
+    status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max, &remote_address,
                                           ucp_ep_init_flags(worker, params),
                                           "from api call", &ep);
     if (status != UCS_OK) {
@@ -2334,11 +2338,13 @@ int ucp_ep_is_cm_local_connected(ucp_ep_h ep)
     return ucp_ep_has_cm_lane(ep) && (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 }
 
-uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
+ucp_tl_bitmap_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
 {
-    uint64_t tl_bitmap = 0;
+    ucp_tl_bitmap_t  tl_bitmap;
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_idx;
+
+    UCS_BITMAP_CLEAR(tl_bitmap);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (lane == ucp_ep_get_cm_lane(ep)) {
@@ -2350,7 +2356,7 @@ uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
             continue;
         }
 
-        tl_bitmap |= UCS_BIT(rsc_idx);
+        UCS_BITMAP_SET(tl_bitmap, rsc_idx);
     }
 
     return tl_bitmap;

@@ -204,7 +204,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
     ucp_worker_h worker              = arg;
     ucp_ep_h ep                      = ucp_worker_get_ep_by_id(worker,
                                                         atomicreqh->req.ep_id);
-    ucp_rsc_index_t amo_rsc_idx      = ucs_ffs64_safe(worker->atomic_tls);
+    ucp_rsc_index_t      amo_rsc_idx = UCS_BITMAP_FFS(worker->atomic_tls);
     ucp_request_t *req;
 
     if (ucs_unlikely((amo_rsc_idx != UCP_MAX_RESOURCES) &&

@@ -96,7 +96,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane);
 
 ucs_status_t
 ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
-                                uint64_t tl_bitmap,
+                                ucp_tl_bitmap_t tl_bitmap,
                                 const ucp_unpacked_address_t *remote_address,
                                 ucp_wireup_select_info_t *select_info);
 
@@ -119,12 +119,12 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
                             const ucp_address_entry_t *ae);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
-                                   uint64_t local_tl_bitmap,
+                                   const ucp_tl_bitmap_t *local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices);
 
 ucs_status_t
-ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags, uint64_t tl_bitmap,
+ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags, ucp_tl_bitmap_t tl_bitmap,
                         const ucp_unpacked_address_t *remote_address,
                         unsigned *addr_indices, ucp_ep_config_key_t *key);
 

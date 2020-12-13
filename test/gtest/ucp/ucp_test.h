@@ -329,6 +329,15 @@ protected:
 };
 
 
+class test_ucp_context : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP);
+    }
+};
+
+
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 
 template <class T>

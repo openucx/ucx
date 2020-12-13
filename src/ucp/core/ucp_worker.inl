@@ -134,15 +134,15 @@ ucp_worker_keepalive_is_enabled(ucp_worker_h worker)
 static UCS_F_ALWAYS_INLINE ucp_worker_iface_t*
 ucp_worker_iface(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
-    uint64_t tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap;
 
     if (rsc_index == UCP_NULL_RESOURCE) {
         return NULL;
     }
 
     tl_bitmap = worker->context->tl_bitmap;
-    ucs_assert(UCS_BIT(rsc_index) & tl_bitmap);
-    return worker->ifaces[ucs_bitmap2idx(tl_bitmap, rsc_index)];
+    ucs_assert(UCS_BITMAP_GET(tl_bitmap, rsc_index));
+    return worker->ifaces[UCS_BITMAP_POPCOUNT_UPTO_INDEX(tl_bitmap, rsc_index)];
 }
 
 /**
