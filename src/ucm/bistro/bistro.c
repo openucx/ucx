@@ -16,7 +16,7 @@
 
 ucs_status_t ucm_bistro_remove_restore_point(ucm_bistro_restore_point_t *rp)
 {
-    ucs_assert(rp != NULL);
+    ucm_assert(rp != NULL);
     free(rp);
     return UCS_OK;
 }
@@ -103,7 +103,7 @@ ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp)
 
 void *ucm_bistro_restore_addr(ucm_bistro_restore_point_t *rp)
 {
-    ucs_assert(rp != NULL);
+    ucm_assert(rp != NULL);
     return rp->addr;
 }
 

@@ -157,8 +157,7 @@ libucs_la_SOURCES = \
 	time/timer_wheel.c \
 	time/timerq.c \
 	type/class.c \
-	type/status.c \
-	type/init_once.c
+	type/status.c
 
 if HAVE_AARCH64_THUNDERX2
 libucs_la_SOURCES += \

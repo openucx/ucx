@@ -8,6 +8,7 @@
 #ifndef UCM_UTIL_SYS_H_
 #define UCM_UTIL_SYS_H_
 
+#include <sys/types.h>
 #include <stddef.h>
 
 
@@ -100,5 +101,10 @@ char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *fil
  */
 void *ucm_brk_syscall(void *addr);
 
+
+/**
+ * @return System thread id of the current thread.
+ */
+pid_t ucm_get_tid();
 
 #endif

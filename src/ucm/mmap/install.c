@@ -266,7 +266,7 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
         if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
             status = ucm_reloc_modify(&entry->patch);
         } else {
-            ucs_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
+            ucm_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
             status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value,
                                       NULL);
         }
