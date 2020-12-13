@@ -30,12 +30,12 @@ jobs:
 
       - bash: |
           set -eEx
-
           ./autogen.sh
-          ./contrib/configure-release --prefix=$PWD/__install
+          ./contrib/configure-release --prefix=$(Build.Repository.LocalPath)/install
           make -j`nproc`
-
+          make install
           echo "##vso[task.setvariable variable=workspace;isOutput=true]$(Build.Repository.LocalPath)/buildlib"
+          echo "##vso[task.setvariable variable=io_demo_exe;isOutput=true]$(Build.Repository.LocalPath)/install/bin/io_demo"
         displayName: Build
         name: build
 
@@ -60,6 +60,7 @@ jobs:
 
     variables:
       workspace: $[ dependencies.io_build.outputs['build.workspace'] ]
+      io_demo_exe: $[ dependencies.io_build.outputs['build.io_demo_exe'] ]
 
     displayName: "io_demo: "
     steps:
@@ -95,7 +96,7 @@ jobs:
               --num-servers 1 \
               --map-by slot \
               -i $(roce_iface) \
-              $(workspace)/../test/apps/iodemo/io_demo \
+              $(io_demo_exe) \
                   -d 512:524288 \
                   -o read,write \
                   -i 0 \
@@ -118,7 +119,7 @@ jobs:
               --num-servers 1 \
               --map-by slot \
               -i $(roce_iface) \
-              $(workspace)/../test/apps/iodemo/io_demo \
+              $(io_demo_exe) \
                   -d 512:524288 \
                   -o read,write \
                   -i 0 \
