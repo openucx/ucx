@@ -12,10 +12,9 @@
 #include <uct/base/uct_cm.h>
 #include <ucs/datastruct/khash.h>
 
-#include <infiniband/verbs.h>
 
+KHASH_MAP_INIT_INT(uct_rdmacm_cm_cqs, struct ibv_cq*);
 
-KHASH_MAP_INIT_STR(uct_rdmacm_cm_cqs, struct ibv_cq*);
 
 /**
  * An rdmacm connection manager
@@ -25,6 +24,7 @@ typedef struct uct_rdmacm_cm {
     struct rdma_event_channel  *ev_ch;
     khash_t(uct_rdmacm_cm_cqs) cqs;
 } uct_rdmacm_cm_t;
+
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_t, uct_cm_t, uct_component_h,
                            uct_worker_h, const uct_cm_config_t *);
@@ -46,7 +46,7 @@ ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event);
 ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id);
 
 ucs_status_t uct_rdmacm_cm_get_cq(uct_rdmacm_cm_t *cm, struct ibv_context *verbs,
-                                  const char *device_name, struct ibv_cq **cq);
+                                  uint32_t pd_key, struct ibv_cq **cq);
 
 void uct_rdmacm_cm_cqs_cleanup(uct_rdmacm_cm_t *cm);
 
