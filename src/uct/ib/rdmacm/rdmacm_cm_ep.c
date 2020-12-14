@@ -192,13 +192,13 @@ static ucs_status_t uct_rdmacm_cm_create_dummy_qp(struct rdma_cm_id *id,
 
 ucs_status_t
 uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
-                            uct_rdmacm_cm_ep_t *cep, const char *dev_name)
+                            uct_rdmacm_cm_ep_t *cep)
 {
     struct ibv_cq *cq;
     ucs_status_t status;
 
     status = uct_rdmacm_cm_get_cq(uct_rdmacm_cm_ep_get_cm(cep), cep->id->verbs,
-                                  dev_name, &cq);
+                                  cep->id->pd->handle, &cq);
     if (status != UCS_OK) {
         return status;
     }
@@ -241,7 +241,7 @@ ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
     hdr->length = (uint8_t)priv_data_ret;
     hdr->status = UCS_OK;
 
-    status = uct_rdamcm_cm_ep_set_qp_num(conn_param, cep, dev_name);
+    status = uct_rdamcm_cm_ep_set_qp_num(conn_param, cep);
     if (status != UCS_OK) {
         goto err;
     }

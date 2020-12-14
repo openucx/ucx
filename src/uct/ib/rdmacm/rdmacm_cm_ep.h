@@ -62,7 +62,7 @@ ucs_status_t uct_rdmacm_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
 ucs_status_t
 uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
-                            uct_rdmacm_cm_ep_t *cep, const char *dev_name);
+                            uct_rdmacm_cm_ep_t *cep);
 
 ucs_status_t uct_rdmacm_cm_ep_conn_param_init(uct_rdmacm_cm_ep_t *cep,
                                               struct rdma_conn_param *conn_param);
