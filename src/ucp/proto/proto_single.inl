@@ -84,7 +84,7 @@ ucp_proto_am_zcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
     ucp_md_map_t md_map;
     uct_iov_t iov;
 
-    ucs_assert(req->send.dt_iter.offset == 0);
+    ucs_assert(req->send.state.dt_iter.offset == 0);
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         md_map = (spriv->reg_md == UCP_NULL_RESOURCE) ? 0 : UCS_BIT(spriv->reg_md);
@@ -98,7 +98,8 @@ ucp_proto_am_zcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    ucp_datatype_iter_next_iov(&req->send.dt_iter, spriv->super.memh_index,
+    ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
+                               spriv->super.memh_index,
                                SIZE_MAX, &next_iter, &iov);
     status = uct_ep_am_zcopy(ep->uct_eps[spriv->super.lane], am_id, hdr,
                              hdr_size, &iov, 1, 0, &req->send.state.uct_comp);

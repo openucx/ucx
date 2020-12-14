@@ -22,7 +22,7 @@ static size_t ucp_proto_get_am_bcopy_pack(void *dest, void *arg)
     ucp_get_req_hdr_t *getreqh = dest;
 
     getreqh->address    = req->send.rma.remote_addr;
-    getreqh->length     = req->send.dt_iter.length;
+    getreqh->length     = req->send.state.dt_iter.length;
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
     getreqh->req.req_id = ucp_send_request_get_id(req);
     getreqh->mem_type   = req->send.rma.rkey->mem_type;
@@ -60,8 +60,8 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
 
        /* initialize some request fields, for compatibility of get_reply
          * processing */
-        req->send.buffer = req->send.dt_iter.type.contig.buffer;
-        req->send.length = req->send.dt_iter.length;
+        req->send.buffer = req->send.state.dt_iter.type.contig.buffer;
+        req->send.length = req->send.state.dt_iter.length;
 
         req->flags      |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }

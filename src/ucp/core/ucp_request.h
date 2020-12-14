@@ -129,7 +129,17 @@ struct ucp_request {
             ucp_send_nbx_callback_t cb;         /* Completion callback */
 
             const ucp_proto_config_t *proto_config; /* Selected protocol for the request */
-            ucp_datatype_iter_t      dt_iter;       /* Send buffer state */
+
+            /* This structure holds all mutable fields, and everything else
+             * except common send/recv fields 'status' and 'flags' is immutable
+             * TODO: rework RMA case where length is used instead of dt.offset */
+            struct {
+                union {
+                    ucp_datatype_iter_t  dt_iter;  /* Send buffer state */
+                    ucp_dt_state_t       dt;       /* Position in the send buffer */
+                };
+                uct_completion_t         uct_comp; /* UCT completion used by flush */
+            } state;
 
             union {
                 ucp_wireup_msg_t  wireup;
@@ -259,15 +269,6 @@ struct ucp_request {
                     ucp_atomic_reply_t  data;   /* Atomic reply data */
                 } atomic_reply;
             };
-
-            /* This structure holds all mutable fields, and everything else
-             * except common send/recv fields 'status' and 'flags' is
-             * immutable
-             * TODO: rework RMA case where length is used instead of dt.offset */
-            struct {
-                ucp_dt_state_t    dt;       /* Position in the send buffer */
-                uct_completion_t  uct_comp; /* UCT completion */
-            } state;
 
             union {
                 ucp_lane_index_t  am_bw_index;     /* AM BW lane index */
