@@ -72,6 +72,20 @@ public class UcsConstants {
         public static int UCS_ERR_LAST;
     }
 
+    public static class MEMORY_TYPE {
+        static {
+            load();
+        }
+
+        public static int UCS_MEMORY_TYPE_HOST;          // Default system memory
+        public static int UCS_MEMORY_TYPE_CUDA;          // NVIDIA CUDA memory
+        public static int UCS_MEMORY_TYPE_CUDA_MANAGED;  // NVIDIA CUDA managed (or unified) memory
+        public static int UCS_MEMORY_TYPE_ROCM;          // AMD ROCM memory
+        public static int UCS_MEMORY_TYPE_ROCM_MANAGED;  // AMD ROCM managed system memory
+        public static int UCS_MEMORY_TYPE_LAST;
+        public static int UCS_MEMORY_TYPE_UNKNOWN;
+    }
+
     private static void load() {
         NativeLibs.load();
         loadConstants();
