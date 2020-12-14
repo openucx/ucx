@@ -66,9 +66,14 @@ ucp_worker_get_request_id(ucp_worker_h worker, ucp_request_t *req, int indirect)
     ucs_ptr_map_key_t id;
     ucs_status_t status;
 
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_IN_PTR_MAP));
     status = ucs_ptr_map_put(&worker->ptr_map, req, indirect, &id);
     if (ucs_unlikely(indirect)) {
-        return (status == UCS_OK) ? id : UCP_REQUEST_ID_INVALID;
+        if (ucs_unlikely(status != UCS_OK)) {
+            return UCP_REQUEST_ID_INVALID;
+        }
+
+        req->flags |= UCP_REQUEST_FLAG_IN_PTR_MAP;
     }
 
     ucs_assert(status == UCS_OK);
@@ -86,11 +91,23 @@ ucp_worker_get_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_worker_del_request_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
+ucp_worker_request_check_flags(const ucp_request_t *request,
+                               ucs_ptr_map_key_t id)
+{
+    ucs_assert((request != NULL) &&
+               ((request->flags & UCP_REQUEST_FLAG_IN_PTR_MAP) ||
+                !ucs_ptr_map_key_indirect(id)));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_worker_del_request_id(ucp_worker_h worker, ucp_request_t *request,
+                          ucs_ptr_map_key_t id)
 {
     ucs_status_t status UCS_V_UNUSED;
 
+    ucp_worker_request_check_flags(request, id);
     status = ucs_ptr_map_del(&worker->ptr_map, id);
+    request->flags &= ~UCP_REQUEST_FLAG_IN_PTR_MAP;
     ucs_assert(status == UCS_OK);
 }
 
@@ -100,7 +117,8 @@ ucp_worker_extract_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
     ucp_request_t *request;
 
     request = (ucp_request_t*)ucs_ptr_map_extract(&worker->ptr_map, id);
-    ucs_assert(request != NULL);
+    ucp_worker_request_check_flags(request, id);
+    request->flags &= ~UCP_REQUEST_FLAG_IN_PTR_MAP;
     return request;
 }
 

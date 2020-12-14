@@ -55,10 +55,12 @@ enum {
     UCP_REQUEST_FLAG_RECV_TAG             = UCS_BIT(17),
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(18),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(19)
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(19),
+    UCP_REQUEST_FLAG_IN_PTR_MAP           = UCS_BIT(20)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0,
+    UCP_REQUEST_FLAG_IN_PTR_MAP           = 0
 #endif
 };
 
@@ -147,8 +149,13 @@ struct ucp_request {
                 struct {
                     uint64_t               message_id;  /* used to identify matching parts
                                                            of a large message */
-                    ucs_ptr_map_key_t      rreq_id;     /* receive request ID on the
+                    union {
+                        ucs_ptr_map_key_t  sreq_id;     /* send request ID on the
+                                                           sender side */
+                        ucs_ptr_map_key_t  rreq_id;     /* receive request ID on the
                                                            recv side (used in AM rndv) */
+                    };
+
                     union {
                         struct {
                             ucp_tag_t      tag;
@@ -171,8 +178,9 @@ struct ucp_request {
                 } msg_proto;
 
                 struct {
-                    uint64_t      remote_addr; /* Remote address */
-                    ucp_rkey_h    rkey;     /* Remote memory key */
+                    ucs_ptr_map_key_t sreq_id;     /* Send request ID */
+                    uint64_t          remote_addr; /* Remote address */
+                    ucp_rkey_h        rkey;        /* Remote memory key */
                 } rma;
 
                 struct {
@@ -214,7 +222,7 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    ucs_ptr_map_key_t req_id;         /* the send request ID on receiver side */
+                    ucs_ptr_map_key_t remote_req_id;  /* the send request ID on receiver side */
                     size_t            length;         /* the length of the data that should be fetched
                                                        * from sender side */
                     size_t            offset;         /* offset in recv buffer */
@@ -247,6 +255,7 @@ struct ucp_request {
                 } discard_uct_ep;
 
                 struct {
+                    ucs_ptr_map_key_t     sreq_id;     /* Send request ID */
                     uint64_t              remote_addr; /* Remote address */
                     ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;       /* Atomic argument */
@@ -274,7 +283,8 @@ struct ucp_request {
                 ucp_lane_index_t  am_bw_index;     /* AM BW lane index */
                 ucp_lane_map_t    lanes_map_avail; /* Used lanes map */
             };
-            uint8_t               mem_type;        /* Memory type */
+            uint8_t               mem_type;        /* Memory type, values are
+                                                    * ucs_memory_type_t */
             ucp_lane_index_t      pending_lane;    /* Lane on which request was moved
                                                     * to pending state */
             ucp_lane_index_t      lane;            /* Lane on which this request is being sent */
@@ -295,6 +305,7 @@ struct ucp_request {
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
             ssize_t               remaining;  /* How much more data
                                                * to be received */
+            ucs_ptr_map_key_t     rreq_id;  /* the receive request ID on receiver side */
 
             union {
                 struct {

@@ -2807,6 +2807,7 @@ ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
     kh_value(&worker->discard_uct_ep_hash, iter) = req;
 
     ucs_assert(!ucp_wireup_ep_test(uct_ep));
+    req->flags                              = 0;
     req->send.uct.func                      = ucp_worker_discard_uct_ep_pending_cb;
     req->send.state.uct_comp.func           = ucp_worker_discard_uct_ep_flush_comp;
     req->send.state.uct_comp.count          = 1;

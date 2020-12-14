@@ -83,7 +83,8 @@ extern ucp_amo_proto_t ucp_amo_sw_proto;
 
 
 ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
-                                     ucs_status_t status);
+                                     ucs_status_t status,
+                                     ucs_ptr_map_key_t req_id);
 
 void ucp_ep_flush_remote_completed(ucp_request_t *req);
 
