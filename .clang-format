@@ -86,6 +86,10 @@ SpacesBeforeTrailingComments: 1
 SpaceAfterTemplateKeyword: false
 SpacesInContainerLiterals: false
 
+# Java
+Language: Java
+DisableFormat: true
+
 # Issues:
 # 1.
 # Pointer alignment + declaration alignment:
