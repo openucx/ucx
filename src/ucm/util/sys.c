@@ -17,10 +17,12 @@
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
 #include <ucm/mmap/mmap.h>
+#include <ucs/type/init_once.h>
 #include <ucs/sys/math.h>
 #include <linux/mman.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <syscall.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -282,33 +284,36 @@ void ucm_strerror(int eno, char *buf, size_t max)
 
 void ucm_prevent_dl_unload()
 {
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     Dl_info info;
     void *dl;
     int ret;
 
-    /* Get the path to current library by current function pointer */
-    (void)dlerror();
-    ret = dladdr(ucm_prevent_dl_unload, &info);
-    if (ret == 0) {
-        ucm_warn("could not find address of current library: %s", dlerror());
-        return;
+    UCS_INIT_ONCE(&init_once) {
+        /* Get the path to current library by current function pointer */
+        (void)dlerror();
+        ret = dladdr(ucm_prevent_dl_unload, &info);
+        if (ret == 0) {
+            ucm_warn("could not find address of current library: %s", dlerror());
+            return;
+        }
+
+        /* Load the current library with NODELETE flag, to prevent it from being
+         * unloaded. This will create extra reference to the library, but also add
+         * NODELETE flag to the dynamic link map.
+         */
+        (void)dlerror();
+        dl = dlopen(info.dli_fname, RTLD_LOCAL|RTLD_LAZY|RTLD_NODELETE);
+        if (dl == NULL) {
+            ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
+            return;
+        }
+
+        ucm_debug("loaded '%s' at %p with NODELETE flag", info.dli_fname, dl);
+
+        /* coverity[overwrite_var] */
+        dl = NULL;
     }
-
-    /* Load the current library with NODELETE flag, to prevent it from being
-     * unloaded. This will create extra reference to the library, but also add
-     * NODELETE flag to the dynamic link map.
-     */
-    (void)dlerror();
-    dl = dlopen(info.dli_fname, RTLD_LOCAL|RTLD_LAZY|RTLD_NODELETE);
-    if (dl == NULL) {
-        ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
-        return;
-    }
-
-    ucm_debug("reloaded '%s' at %p with NODELETE flag", info.dli_fname, dl);
-
-    /* Now we drop our reference to the lib, and it won't be unloaded anymore */
-    dlclose(dl);
 }
 
 char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *file)
@@ -339,4 +344,26 @@ char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *fil
     buffer[max + len] = '\0'; /* force close string */
 
     return buffer;
+}
+
+void *ucm_brk_syscall(void *addr)
+{
+    void *result;
+
+#ifdef __x86_64__
+    asm volatile("mov %1, %%rdi\n\t"
+                 "mov $0xc, %%eax\n\t"
+                 "syscall\n\t"
+                 : "=a"(result)
+                 : "m"(addr));
+#else
+    /* TODO implement 64-bit syscall for aarch64, ppc64le */
+    result = (void*)syscall(SYS_brk, addr);
+#endif
+    return result;
+}
+
+pid_t ucm_get_tid()
+{
+    return syscall(SYS_gettid);
 }

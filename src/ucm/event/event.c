@@ -93,6 +93,11 @@ static void ucm_event_call_orig(ucm_event_type_t event_type, ucm_event_t *event,
             event->shmdt.result = ucm_orig_shmdt(event->shmdt.shmaddr);
         }
         break;
+    case UCM_EVENT_BRK:
+        if (event->brk.result == -1) {
+            event->brk.result = ucm_orig_brk(event->brk.addr);
+        }
+        break;
     case UCM_EVENT_SBRK:
         if (event->sbrk.result == MAP_FAILED) {
             event->sbrk.result = ucm_orig_sbrk(event->sbrk.increment);
@@ -119,8 +124,8 @@ static ucm_event_handler_t ucm_event_orig_handler = {
     .list     = UCS_LIST_INITIALIZER(&ucm_event_handlers, &ucm_event_handlers),
     .events   = UCM_EVENT_MMAP | UCM_EVENT_MUNMAP | UCM_EVENT_MREMAP |
                 UCM_EVENT_SHMAT | UCM_EVENT_SHMDT | UCM_EVENT_SBRK |
-                UCM_EVENT_MADVISE,      /* All events */
-    .priority = 0,                      /* Between negative and positive handlers */
+                UCM_EVENT_MADVISE | UCM_EVENT_BRK,             /* All events */
+    .priority = 0,                 /* Between negative and positive handlers */
     .cb       = ucm_event_call_orig
 };
 static ucs_list_link_t ucm_event_handlers =
@@ -351,7 +356,8 @@ void *ucm_sbrk(intptr_t increment)
     ucm_trace("ucm_sbrk(increment=%+ld)", increment);
 
     if (increment < 0) {
-        ucm_dispatch_vm_munmap(UCS_PTR_BYTE_OFFSET(ucm_orig_sbrk(0), increment),
+        ucm_dispatch_vm_munmap(UCS_PTR_BYTE_OFFSET(ucm_get_current_brk(),
+                                                   increment),
                                -increment);
     }
 
@@ -360,7 +366,8 @@ void *ucm_sbrk(intptr_t increment)
     ucm_event_dispatch(UCM_EVENT_SBRK, &event);
 
     if ((increment > 0) && (event.sbrk.result != MAP_FAILED)) {
-        ucm_dispatch_vm_mmap(UCS_PTR_BYTE_OFFSET(ucm_orig_sbrk(0), -increment),
+        ucm_dispatch_vm_mmap(UCS_PTR_BYTE_OFFSET(ucm_get_current_brk(),
+                                                 -increment),
                              increment);
     }
 
@@ -371,38 +378,36 @@ void *ucm_sbrk(intptr_t increment)
 
 int ucm_brk(void *addr)
 {
-#if UCM_BISTRO_HOOKS
-    void *old_addr;
-    intptr_t increment;
+    ptrdiff_t increment;
+    void *current_brk;
     ucm_event_t event;
-
-    old_addr  = ucm_brk_syscall(0);
-    /* in case if addr == NULL - it just returns current pointer */
-    increment = addr ? ((intptr_t)addr - (intptr_t)old_addr) : 0;
 
     ucm_event_enter();
 
     ucm_trace("ucm_brk(addr=%p)", addr);
 
-    if (increment < 0) {
-        ucm_dispatch_vm_munmap(UCS_PTR_BYTE_OFFSET(old_addr, increment),
-                               -increment);
+    if (addr == NULL) {
+        increment = 0;
+    } else {
+        current_brk = ucm_get_current_brk();
+        increment   = UCS_PTR_BYTE_DIFF(current_brk, addr);
     }
 
-    event.sbrk.result    = (void*)-1;
-    event.sbrk.increment = increment;
-    ucm_event_dispatch(UCM_EVENT_SBRK, &event);
+    if (increment < 0) {
+        ucm_dispatch_vm_munmap(addr, -increment);
+    }
 
-    if ((increment > 0) && (event.sbrk.result != MAP_FAILED)) {
-        ucm_dispatch_vm_mmap(old_addr, increment);
+    event.brk.result = -1;
+    event.brk.addr   = addr;
+    ucm_event_dispatch(UCM_EVENT_BRK, &event);
+
+    if ((increment > 0) && (event.brk.result != -1)) {
+        ucm_dispatch_vm_mmap(current_brk, increment);
     }
 
     ucm_event_leave();
 
-    return event.sbrk.result == MAP_FAILED ? -1 : 0;
-#else
-    return -1;
-#endif
+    return event.brk.result;
 }
 
 int ucm_madvise(void *addr, size_t length, int advice)
@@ -437,6 +442,18 @@ int ucm_madvise(void *addr, size_t length, int advice)
     ucm_event_leave();
 
     return event.madvise.result;
+}
+
+void ucm_library_init(const ucm_global_config_t *ucm_opts)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+
+    UCS_INIT_ONCE(&init_once) {
+        if (ucm_opts != NULL) {
+            ucm_global_opts = *ucm_opts;
+        }
+        ucm_mmap_init();
+    }
 }
 
 void ucm_event_handler_add(ucm_event_handler_t *handler)
@@ -481,21 +498,18 @@ static int ucm_events_to_native_events(int events)
 
 static ucs_status_t ucm_event_install(int events)
 {
-    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     UCS_MODULE_FRAMEWORK_DECLARE(ucm);
     ucm_event_installer_t *event_installer;
     int native_events, malloc_events;
     ucs_status_t status;
 
-    UCS_INIT_ONCE(&init_once) {
-        ucm_prevent_dl_unload();
-    }
+    ucm_prevent_dl_unload();
 
     /* Replace aggregate events with the native events which make them */
     native_events = ucm_events_to_native_events(events);
 
     /* TODO lock */
-    status = ucm_mmap_install(native_events);
+    status = ucm_mmap_install(native_events, 0);
     if (status != UCS_OK) {
         ucm_debug("failed to install mmap events");
         goto out_unlock;
@@ -526,7 +540,6 @@ static ucs_status_t ucm_event_install(int events)
 
 out_unlock:
     return status;
-
 }
 
 ucs_status_t ucm_set_event_handler(int events, int priority,
@@ -539,7 +552,7 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
 
     if (events & ~(UCM_EVENT_MMAP|UCM_EVENT_MUNMAP|UCM_EVENT_MREMAP|
                    UCM_EVENT_SHMAT|UCM_EVENT_SHMDT|
-                   UCM_EVENT_SBRK|
+                   UCM_EVENT_BRK|UCM_EVENT_SBRK|
                    UCM_EVENT_MADVISE|
                    UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED|
                    UCM_EVENT_MEM_TYPE_ALLOC|UCM_EVENT_MEM_TYPE_FREE|
@@ -551,6 +564,8 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
     if (events && !ucm_global_opts.enable_events) {
         return UCS_ERR_UNSUPPORTED;
     }
+
+    ucm_library_init(NULL);
 
     /* separate event flags from real events */
     flags   = events & (UCM_EVENT_FLAG_NO_INSTALL |
@@ -626,6 +641,7 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
 
 ucs_status_t ucm_test_events(int events)
 {
+    ucm_library_init(NULL);
     return ucm_mmap_test_installed_events(ucm_events_to_native_events(events));
 }
 

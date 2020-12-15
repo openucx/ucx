@@ -8,6 +8,7 @@
 #ifndef UCM_UTIL_SYS_H_
 #define UCM_UTIL_SYS_H_
 
+#include <sys/types.h>
 #include <stddef.h>
 
 
@@ -87,5 +88,23 @@ void ucm_prevent_dl_unload();
  */
 char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *file);
 
+
+/**
+ * Perform brk() syscall
+ *
+ * @param addr   Address to set as new program break.
+ *
+ * @return New program break.
+ *
+ * @note If the break could not be changed (for example, parameter was invalid
+ *       or exceeds limits) the break remains unchanged.
+ */
+void *ucm_brk_syscall(void *addr);
+
+
+/**
+ * @return System thread id of the current thread.
+ */
+pid_t ucm_get_tid();
 
 #endif

@@ -37,7 +37,7 @@ static inline void *ucm_bistro_lookup(const char *symbol)
 {
     void *addr;
 
-    ucs_assert(symbol != NULL);
+    ucm_assert(symbol != NULL);
 
     addr = dlsym(RTLD_NEXT, symbol);
     if (!addr) {
