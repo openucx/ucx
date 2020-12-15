@@ -271,11 +271,10 @@ struct uct_rc_iface {
 
     UCS_STATS_NODE_DECLARE(stats)
 
+    ucs_spinlock_t           eps_lock; /* common lock for eps and ep_list */
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
-    ucs_spinlock_t           eps_lock;
     ucs_list_link_t          ep_list;
     ucs_list_link_t          ep_gc_list;
-    ucs_spinlock_t           ep_list_lock;
 
     /* Progress function (either regular or TM aware) */
     ucs_callback_t           progress;
