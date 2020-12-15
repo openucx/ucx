@@ -880,7 +880,7 @@ run_ucp_hello() {
 		mem_types_list+="cuda cuda-managed "
 	fi
 
-	export UCX_KEEPALIVE_TIMEOUT=1s
+	export UCX_KEEPALIVE_INTERVAL=1s
 	export UCX_KEEPALIVE_NUM_EPS=10
 
 	for test_mode in -w -f -b -erecv -esend -ekeepalive
@@ -893,7 +893,7 @@ run_ucp_hello() {
 	done
 	rm -f ./ucp_hello_world
 
-	unset UCX_KEEPALIVE_TIMEOUT
+	unset UCX_KEEPALIVE_INTERVAL
 	unset UCX_KEEPALIVE_NUM_EPS
 }
 

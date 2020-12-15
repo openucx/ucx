@@ -60,6 +60,13 @@
 /* Maximal value for connection sequence number */
 #define UCT_TCP_CM_CONN_SN_MAX               UINT64_MAX
 
+/* The seconds the connection needs to remain idle before TCP starts sending
+ * keepalive probes */
+#define UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE    10
+
+/* The seconds between individual keepalive probes */
+#define UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL   1
+
 
 /**
  * TCP EP connection manager ID
@@ -554,6 +561,8 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              int fd);
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
+
+int uct_tcp_keepalive_is_enabled(uct_tcp_iface_t *iface);
 
 static inline void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
 {

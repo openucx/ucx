@@ -2660,7 +2660,7 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 
 static int ucp_worker_keepalive_is_enabled(ucp_worker_h worker)
 {
-    return (worker->context->config.ext.keepalive_timeout != UCS_TIME_INFINITY) &&
+    return (worker->context->config.keepalive_interval != 0) &&
            (worker->context->config.ext.keepalive_num_eps != 0);
 }
 
@@ -2698,7 +2698,7 @@ static unsigned ucp_worker_keepalive_progress(void *arg)
     ucp_ep_h ep;
 
     if (ucs_likely((now - worker->keepalive.last_round) <
-                   worker->context->config.ext.keepalive_timeout)) {
+                   worker->context->config.keepalive_interval)) {
         return 0;
     }
 
