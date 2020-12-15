@@ -65,6 +65,53 @@ ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id)
     return UCS_OK;
 }
 
+ucs_status_t uct_rdmacm_cm_get_cq(uct_rdmacm_cm_t *cm, struct ibv_context *verbs,
+                                  uint32_t pd_key, struct ibv_cq **cq_p)
+{
+    struct ibv_cq *cq;
+    khiter_t iter;
+    int ret;
+
+    iter = kh_put(uct_rdmacm_cm_cqs, &cm->cqs, pd_key, &ret);
+    if (ret == -1) {
+        ucs_error("cm %p: cannot allocate hash entry for CQ", cm);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if (ret == 0) {
+        /* already exists so use it */
+        cq = kh_value(&cm->cqs, iter);
+    } else {
+        /* Create a dummy completion queue */
+        cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
+        if (cq == NULL) {
+            kh_del(uct_rdmacm_cm_cqs, &cm->cqs, iter);
+            ucs_error("ibv_create_cq() failed: %m");
+            return UCS_ERR_IO_ERROR;
+        }
+
+        kh_value(&cm->cqs, iter) = cq;
+    }
+
+    *cq_p = cq;
+    return UCS_OK;
+}
+
+void uct_rdmacm_cm_cqs_cleanup(uct_rdmacm_cm_t *cm)
+{
+    struct ibv_cq *cq;
+    int ret;
+
+    kh_foreach_value(&cm->cqs, cq, {
+        ret = ibv_destroy_cq(cq);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
+        }
+    });
+
+    kh_destroy_inplace(uct_rdmacm_cm_cqs, &cm->cqs);
+}
+
 size_t uct_rdmacm_cm_get_max_conn_priv()
 {
     return UCT_RDMACM_TCP_PRIV_DATA_LEN - sizeof(uct_rdmacm_priv_data_hdr_t);
@@ -584,6 +631,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
                               &uct_rdmacm_cm_iface_ops, worker, component,
                               config);
 
+    kh_init_inplace(uct_rdmacm_cm_cqs, &self->cqs);
+
     self->ev_ch  = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
         ucs_error("rdma_create_event_channel failed: %m");
@@ -631,6 +680,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_t)
 
     ucs_trace("destroying event_channel %p on cm %p", self->ev_ch, self);
     rdma_destroy_event_channel(self->ev_ch);
+    uct_rdmacm_cm_cqs_cleanup(self);
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_cm_t, uct_cm_t);
