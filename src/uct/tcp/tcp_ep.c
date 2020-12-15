@@ -415,6 +415,15 @@ static inline void uct_tcp_ep_ctx_move(uct_tcp_ep_ctx_t *to_ctx,
     memset(from_ctx, 0, sizeof(*from_ctx));
 }
 
+static int uct_tcp_ep_time_seconds(ucs_time_t time_val, int auto_val)
+{
+    if (time_val == UCS_TIME_AUTO) {
+        return auto_val;
+    }
+
+    return ucs_max(1, (int)ucs_time_to_sec(time_val));
+}
+
 static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
 {
 #ifdef UCT_TCP_EP_KEEPALIVE
@@ -425,14 +434,14 @@ static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
     int intvl_sec;
     ucs_status_t status;
 
-    if ((iface->config.keepalive.idle == 0) ||
-        (iface->config.keepalive.cnt == 0) ||
-        (iface->config.keepalive.intvl == 0)) {
+    if (!uct_tcp_keepalive_is_enabled(iface)) {
         return UCS_OK;
     }
 
-    idle_sec  = ucs_max(1, (int)ucs_time_to_sec(iface->config.keepalive.idle));
-    intvl_sec = ucs_max(1, (int)ucs_time_to_sec(iface->config.keepalive.intvl));
+    idle_sec  = uct_tcp_ep_time_seconds(iface->config.keepalive.idle,
+                                        UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE);
+    intvl_sec = uct_tcp_ep_time_seconds(iface->config.keepalive.intvl,
+                                        UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL);
 
     status = ucs_socket_setopt(ep->fd, IPPROTO_TCP, TCP_KEEPINTVL,
                                &intvl_sec, sizeof(intvl_sec));

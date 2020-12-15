@@ -86,7 +86,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, port_range), UCS_CONFIG_TYPE_RANGE_SPEC},
 
 #ifdef UCT_TCP_EP_KEEPALIVE
-  {"KEEPIDLE", "10s",
+  {"KEEPIDLE", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE) "s",
    "The time the connection needs to remain idle before TCP starts sending "
    "keepalive probes.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.idle),
@@ -98,7 +98,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.cnt),
                 UCS_CONFIG_TYPE_UINT},
 
-  {"KEEPINTVL", "10s",
+  {"KEEPINTVL", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL) "s",
    "The time between individual keepalive probes.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.intvl),
                 UCS_CONFIG_TYPE_TIME_UNITS},
@@ -168,6 +168,10 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     attr->cap.am.max_short = am_buf_size;
     attr->cap.am.max_bcopy = am_buf_size;
+
+    if (uct_tcp_keepalive_is_enabled(iface)) {
+        attr->cap.flags   |= UCT_IFACE_FLAG_EP_KEEPALIVE;
+    }
 
     if (iface->config.zcopy.max_iov > UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT) {
         /* AM */
@@ -791,6 +795,17 @@ out_closedir:
     closedir(dir);
 out:
     return status;
+}
+
+int uct_tcp_keepalive_is_enabled(uct_tcp_iface_t *iface)
+{
+#ifdef UCT_TCP_EP_KEEPALIVE
+    return (iface->config.keepalive.idle != UCS_TIME_INFINITY) &&
+           (iface->config.keepalive.cnt != 0) &&
+           (iface->config.keepalive.intvl != UCS_TIME_INFINITY);
+#else /* UCT_TCP_EP_KEEPALIVE */
+    return 0;
+#endif /* UCT_TCP_EP_KEEPALIVE */
 }
 
 UCT_TL_DEFINE(&uct_tcp_component, tcp, uct_tcp_query_devices, uct_tcp_iface_t,

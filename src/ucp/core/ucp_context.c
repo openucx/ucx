@@ -311,9 +311,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
 
-  {"KEEPALIVE_TIMEOUT", "inf",
-   "Time period between keepalive rounds (\"inf\" - disabled).",
-   ucs_offsetof(ucp_config_t, ctx.keepalive_timeout), UCS_CONFIG_TYPE_TIME_UNITS},
+  /* TODO: set for keepalive more reasonable values */
+  {"KEEPALIVE_INTERVAL", "0",
+   "Time interval between keepalive rounds (0 - disabled).",
+   ucs_offsetof(ucp_config_t, ctx.keepalive_interval), UCS_CONFIG_TYPE_TIME},
 
   {"KEEPALIVE_NUM_EPS", "0",
    "Maximal number of endpoints to check on every keepalive round\n"
@@ -1542,6 +1543,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
+    context->config.keepalive_interval = ucs_time_from_sec(context->config.ext.keepalive_interval);
     return UCS_OK;
 
 err_free_alloc_methods:
