@@ -101,7 +101,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #if ENABLE_DEBUG_DATA
   "bt,freeze",
 #else
-  "none",
+  "",
 #endif
   "Error handling mode. A combination of: 'bt' (print backtrace),\n"
   "'freeze' (freeze and wait for a debugger), 'debug' (attach debugger)",
