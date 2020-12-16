@@ -736,7 +736,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
 
     /* which SLs are allowed by user config */
     sl_allow_mask = (ib_config->sl == UCS_ULUNITS_AUTO) ?
-                    UCS_MASK(UCT_IB_SL_MAX) : UCS_BIT(ib_config->sl);
+                    UCS_MASK(UCT_IB_SL_NUM) : UCS_BIT(ib_config->sl);
 
     if (have_sl_mask_cap) {
         sls_with_ar    = sl_allow_mask & hw_sl_mask;
@@ -815,7 +815,7 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
     uint16_t ooo_sl_mask = 0;
     ucs_status_t status;
 
-    ucs_assert(iface->config.sl == UCT_IB_SL_INVALID);
+    ucs_assert(iface->config.sl == UCT_IB_SL_NUM);
 
 #if HAVE_DEVX
     status = uct_ib_mlx5_devx_query_ooo_sl_mask(md, iface->config.port_num,
