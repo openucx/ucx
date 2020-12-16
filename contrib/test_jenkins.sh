@@ -1343,21 +1343,28 @@ test_malloc_hook() {
 	then
 		for mode in reloc bistro
 		do
-			export UCX_MEM_MMAP_HOOK_MODE=${mode}
+			export UCX_MEM_CUDA_HOOK_MODE=${mode}
 
 			# Run cuda memory hooks with dynamic link
 			./test/apps/test_cuda_hook_dynamic
 
 			# Run cuda memory hooks with static link
-			if ./test/apps/test_cuda_hook_static
+			./test/apps/test_cuda_hook_static && status="pass" || status="fail"
+			[ ${mode} == "bistro" ] && exp_status="pass" || exp_status="fail"
+			if [ ${status} == ${exp_status} ]
 			then
-				echo "Static link with cuda is expected to fail"
-				exit 1
+				echo "Static link with cuda ${status}, as expected"
 			else
-				echo "Test failed - as expected"
+				echo "Static link with cuda is expected to ${exp_status}, actual: ${status}"
+				exit 1
 			fi
 
-			unset UCX_MEM_MMAP_HOOK_MODE
+			# Test that driver API hooks work in both reloc and bistro modes,
+			# since we call them directly from the test
+			./test/apps/test_cuda_hook_dynamic -d
+			./test/apps/test_cuda_hook_static -d
+
+			unset UCX_MEM_CUDA_HOOK_MODE
 		done
 	fi
 }

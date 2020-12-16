@@ -338,6 +338,7 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
     static int installed_events = 0;
     ucm_mmap_func_t *entry;
     ucs_status_t status;
+    void *func_ptr;
 
     if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_NONE) {
         ucm_debug("installing mmap hooks is disabled by configuration");
@@ -363,8 +364,14 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
             status = ucm_reloc_modify(&entry->patch);
         } else {
             ucm_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
-            status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value,
-                                      NULL);
+            func_ptr = ucm_reloc_get_orig(entry->patch.symbol,
+                                          entry->patch.value);
+            if (func_ptr == NULL) {
+                status = UCS_ERR_NO_ELEM;
+            } else {
+                status = ucm_bistro_patch(func_ptr, entry->patch.value,
+                                          entry->patch.symbol, NULL, NULL);
+            }
         }
         if (status != UCS_OK) {
             ucm_warn("failed to install %s hook for '%s'", UCM_HOOK_STR,

@@ -69,7 +69,7 @@ noinst_PROGRAMS                += test_cuda_hook_static
 test_cuda_hook_static_SOURCES   = test_cuda_hook.c
 test_cuda_hook_static_CPPFLAGS  = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 test_cuda_hook_static_CFLAGS    = $(BASE_CFLAGS)
-test_cuda_hook_static_LDFLAGS   = -lcudart_static -lrt -ldl -lpthread
+test_cuda_hook_static_LDFLAGS   = -lcudart_static -lcuda -lrt -ldl -lpthread
 test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la
 endif

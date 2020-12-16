@@ -8,6 +8,7 @@
 #define UCM_MMAP_H_
 
 #include <ucm/api/ucm.h>
+#include <ucm/util/sys.h>
 #include <ucs/sys/checker.h>
 
 #define UCM_MMAP_HOOK_RELOC_STR  "reloc"
@@ -40,15 +41,7 @@ void ucm_mmap_init();
 
 static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t ucm_mmap_hook_mode(void)
 {
-#ifdef __SANITIZE_ADDRESS__
-    return UCM_MMAP_HOOK_NONE;
-#else
-    if (RUNNING_ON_VALGRIND && (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO)) {
-        return UCM_MMAP_HOOK_RELOC;
-    }
-
-    return ucm_global_opts.mmap_hook_mode;
-#endif
+    return ucm_get_hook_mode(ucm_global_opts.mmap_hook_mode);
 }
 
 #endif

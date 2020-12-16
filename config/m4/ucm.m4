@@ -6,19 +6,6 @@
 
 
 #
-# Enable overriding library symbols
-#
-AC_ARG_ENABLE([symbol-override],
-	AS_HELP_STRING([--disable-symbol-override], [Disable overriding library symbols, default: NO]),
-	[],
-	[enable_symbol_override=yes])
-	
-AS_IF([test "x$enable_symbol_override" = xyes],
-	[AC_DEFINE([ENABLE_SYMBOL_OVERRIDE], [1], [Enable symbol override])]
-	[:]
-)
-
-#
 # Memory allocator selection
 #
 AC_ARG_WITH([allocator],
