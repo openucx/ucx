@@ -302,6 +302,8 @@ process to map the memory of another process into its virtual address space.
 
 
 %changelog
+* Wed Dec 16 2020 Yossi Itigin <yosefe@mellanox.com> 1.11.0-1
+- Bump version to 1.11.0
 * Wed Nov 11 2020 Yossi Itigin <yosefe@mellanox.com> 1.10.0-1
 - Make the RPM relocatable
 * Tue Jul 07 2020 Yossi Itigin <yosefe@mellanox.com> 1.10.0-1
