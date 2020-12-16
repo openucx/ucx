@@ -306,6 +306,26 @@ get_rdma_device_ip_addr() {
 	echo $ipaddr
 }
 
+get_non_rdma_ip_addr() {
+	if ! which ibdev2netdev >&/dev/null
+	then
+		return
+	fi
+
+	# get the interface of the ip address that is the default gateway (pure Ethernet IPv4 address).
+	eth_iface=$(ip route show| sed -n 's/default via \(\S*\) dev \(\S*\).*/\2/p')
+
+	# the pure Ethernet interface should not appear in the ibdev2netdev output. it should not be an IPoIB or
+	# RoCE interface.
+	if ibdev2netdev|grep -qw "${eth_iface}"
+	then
+		echo "Failed to retrieve an IP of a non IPoIB/RoCE interface"
+		exit 1
+	fi
+
+	get_ifaddr ${eth_iface}
+}
+
 #
 # Prepare build environment
 #
@@ -789,7 +809,7 @@ rename_files() {
 }
 
 run_client_server_app() {
-	test_name=$1
+	test_exe=$1
 	test_args=$2
 	server_addr_arg=$3
 	kill_server=$4
@@ -801,7 +821,7 @@ run_client_server_app() {
 	affinity_server=$(slice_affinity 0)
 	affinity_client=$(slice_affinity 1)
 
-	taskset -c $affinity_server ${test_name} ${test_args} ${server_port_arg} &
+	taskset -c $affinity_server ${test_exe} ${test_args} ${server_port_arg} &
 	server_pid=$!
 
 	sleep 15
@@ -811,7 +831,7 @@ run_client_server_app() {
 		set +Ee
 	fi
 
-	taskset -c $affinity_client ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
+	taskset -c $affinity_client ${test_exe} ${test_args} ${server_addr_arg} ${server_port_arg} &
 	client_pid=$!
 
 	wait ${client_pid}
@@ -942,7 +962,7 @@ run_client_server() {
 			-Wl,-rpath=${ucx_inst}/lib
 	fi
 
-	server_ip=$(get_rdma_device_ip_addr)
+	server_ip=$1
 	if [ "$server_ip" == "" ]
 	then
 		return
@@ -953,14 +973,17 @@ run_client_server() {
 
 run_ucp_client_server() {
 	echo "==== Running UCP client-server  ===="
-	run_client_server
+	run_client_server $(get_rdma_device_ip_addr)
+	run_client_server $(get_non_rdma_ip_addr)
 
 	rm -f ./ucp_client_server
 }
 
 run_io_demo() {
-	server_ip=$(get_rdma_device_ip_addr)
-	if [ "$server_ip" == "" ]
+	server_rdma_addr=$(get_rdma_device_ip_addr)
+	server_nonrdma_addr=$(get_non_rdma_ip_addr)
+
+	if [ -z "$server_rdma_addr" ] && [ -z "$server_nonrdma_addr" ]
 	then
 		return
 	fi
@@ -975,10 +998,11 @@ run_io_demo() {
 		$MAKEP -C test/apps/iodemo ${test_name}
 	fi
 
-	export UCX_SOCKADDR_CM_ENABLE=y
-	run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+	for server_ip in $server_rdma_addr $server_nonrdma_addr
+	do
+		run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+	done
 
-	unset UCX_SOCKADDR_CM_ENABLE
 	make_clean
 }
 
