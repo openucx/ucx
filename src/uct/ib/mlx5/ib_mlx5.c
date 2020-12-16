@@ -817,6 +817,11 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
 
     ucs_assert(iface->config.sl == UCT_IB_SL_INVALID);
 
+    if (uct_ib_device_is_port_roce(uct_ib_iface_device(iface),
+                                   iface->config.port_num)) {
+        return UCS_OK;
+    }
+
 #if HAVE_DEVX
     status = uct_ib_mlx5_devx_query_ooo_sl_mask(md, iface->config.port_num,
                                                 &ooo_sl_mask);
