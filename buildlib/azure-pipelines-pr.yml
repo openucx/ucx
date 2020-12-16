@@ -203,4 +203,8 @@ stages:
         name: hwi
         demands: ucx_hwi -equals yes
         test_perf: 0
-    - template: io-demo.yml
+
+  - stage: io_demo
+    dependsOn: [Codestyle]
+    jobs:
+    - template: io_demo/io-demo.yml
