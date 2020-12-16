@@ -1140,16 +1140,21 @@ run_ucx_perftest() {
 # Test malloc hooks with mpi
 #
 test_malloc_hooks_mpi() {
-	for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
+	for mode in reloc bistro
 	do
-		echo "==== Running memory hook (${tname}) on MPI ===="
-		$MPIRUN -np 1 $AFFINITY ./test/mpi/test_memhooks -t $tname
-	done
+		for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
+		do
+			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
+			$MPIRUN -np 1 $AFFINITY \
+				./test/mpi/test_memhooks -t $tname -m ${mode}
+		done
 
-	echo "==== Running memory hook (malloc_hooks) on MPI with LD_PRELOAD ===="
-	ucm_lib=$PWD/src/ucm/.libs/libucm.so
-	ls -l $ucm_lib
-	$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY ./test/mpi/test_memhooks -t malloc_hooks
+		echo "==== Running memory hook (malloc_hooks mode ${mode}) on MPI with LD_PRELOAD ===="
+		ucm_lib=$PWD/src/ucm/.libs/libucm.so
+		ls -l $ucm_lib
+		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY \
+			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
+	done
 }
 
 #
@@ -1264,6 +1269,15 @@ test_ucp_dlopen() {
 	else
 		echo "==== Not running UCP library loading test ===="
 	fi
+}
+
+test_init_mt() {
+	echo "==== Running multi-thread init ===="
+	$MAKEP
+	for ((i=0;i<50;++i))
+	do
+		$AFFINITY timeout 1m ./test/apps/test_init_mt
+	done
 }
 
 test_memtrack() {
@@ -1694,6 +1708,7 @@ run_tests() {
 	do_distributed_task 2 4 test_env_var_aliases
 	do_distributed_task 1 3 test_malloc_hook
 	do_distributed_task 0 4 test_ucp_dlopen
+	do_distributed_task 1 4 test_init_mt
 
 	# all are running gtest
 	run_gtest_default

@@ -166,7 +166,6 @@ libucs_la_SOURCES = \
 	time/timerq.c \
 	type/class.c \
 	type/status.c \
-	type/init_once.c \
 	type/spinlock.c
 
 if HAVE_AARCH64_THUNDERX2
