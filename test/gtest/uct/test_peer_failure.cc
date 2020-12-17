@@ -8,6 +8,13 @@
 
 #include "test_peer_failure.h"
 
+#if HAVE_TL_DC
+extern "C" {
+#include <uct/api/uct.h>
+#include <uct/ib/dc/dc_mlx5.h>
+#include <uct/ib/dc/dc_mlx5_ep.h>
+}
+#endif
 
 size_t test_uct_peer_failure::m_req_purge_count       = 0ul;
 const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
@@ -231,6 +238,41 @@ test_uct_peer_failure::am_handler_setter::operator() (test_uct_peer_failure::ent
     uct_iface_set_am_handler(e->iface(), 0,
                              am_dummy_handler,
                              reinterpret_cast<void*>(m_test), 0);
+}
+
+void test_uct_peer_failure::print_flushing_debug_info_entity(entity *e) const
+{
+#if HAVE_TL_DC
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->iface(), uct_dc_mlx5_iface_t);
+
+    UCS_TEST_MESSAGE << "  fc_grant " << iface->tx.fc_grants << " tx mp " <<
+        ucs_mpool_is_empty(&iface->super.super.tx.mp) << " tx.reads " <<
+        iface->super.super.tx.reads_available;
+    for (int i = 0; i < iface->tx.ndci; i++) {
+        UCS_TEST_MESSAGE << "  dci " << i << " available " <<
+            uct_rc_txqp_available(&iface->tx.dcis[i].txqp);
+    }
+    for (int i = 0; i < e->num_eps(); i++) {
+        uct_dc_mlx5_ep_t *ep = ucs_derived_of(e->ep(i), uct_dc_mlx5_ep_t);
+        UCS_TEST_MESSAGE << "  ep " << i << " dci " << (int)ep->dci <<
+            " fc_wnd " << ep->fc.fc_wnd << " flags " << std::hex <<
+            (int)ep->flags;
+    }
+#endif
+}
+
+void test_uct_peer_failure::print_flushing_debug_info() const
+{
+#if HAVE_TL_DC
+    if (has_transport("dc_mlx5")) {
+        UCS_TEST_MESSAGE << "sender";
+        print_flushing_debug_info_entity(m_sender);
+        for (int i = 0; i < m_receivers.size(); i++) {
+            UCS_TEST_MESSAGE << "receiver " << i;
+            print_flushing_debug_info_entity(m_receivers[i]);
+        }
+    }
+#endif
 }
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,

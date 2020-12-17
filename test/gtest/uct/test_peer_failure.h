@@ -74,5 +74,8 @@ protected:
     size_t                m_am_count;
     static size_t         m_req_purge_count;
     static const uint64_t m_required_caps;
+
+    virtual void print_flushing_debug_info() const;
+    void print_flushing_debug_info_entity(entity *e) const;
 };
 

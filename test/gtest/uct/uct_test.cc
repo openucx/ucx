@@ -713,6 +713,10 @@ void uct_test::flush(ucs_time_t deadline) const {
         }
     } while (!flushed && (ucs_get_time() < deadline));
 
+    if (!flushed) {
+        print_flushing_debug_info();
+    }
+
     EXPECT_TRUE(flushed) << "Timed out";
 }
 

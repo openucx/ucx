@@ -417,6 +417,8 @@ protected:
 
     void reduce_tl_send_queues();
 
+    virtual void print_flushing_debug_info() const {}
+
     ucs_status_t send_am_message(entity *e, uint8_t am_id = 0, int ep_idx = 0);
 
     ucs::ptr_vector<entity> m_entities;
