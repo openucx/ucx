@@ -468,6 +468,10 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_multiple)
 class test_uct_peer_failure_keepalive : public test_uct_peer_failure
 {
 public:
+    test_uct_peer_failure_keepalive() {
+        m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
+    }
+
     void kill_receiver()
     {
         /* Hack: for SHM-based transports we can't really terminate
@@ -483,6 +487,9 @@ public:
 
         test_uct_peer_failure::kill_receiver();
     }
+
+protected:
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed,

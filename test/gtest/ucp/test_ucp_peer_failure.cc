@@ -464,6 +464,8 @@ public:
     test_ucp_peer_failure_keepalive() {
         m_sbuf.resize(1 * UCS_MBYTE);
         m_rbuf.resize(1 * UCS_MBYTE);
+
+        m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
     }
 
     void init() {

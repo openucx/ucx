@@ -1421,6 +1421,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, ib, "ib")
 
 class test_ucp_wireup_keepalive : public test_ucp_wireup {
 public:
+    test_ucp_wireup_keepalive() {
+        m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
+    }
+
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         test_ucp_wireup::get_test_variants(variants,
@@ -1445,6 +1449,9 @@ public:
         sender().connect(&receiver(), get_ep_params());
         receiver().connect(&sender(), get_ep_params());
     }
+
+protected:
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 /* test if EP has non-empty keepalive lanes mask */
