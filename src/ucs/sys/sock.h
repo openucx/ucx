@@ -378,6 +378,20 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 
 
 /**
+ * Extract the IP address from a given string and return it as a sockaddr storage.
+ *
+ * @param [in]  ip_str       A string to take IP address from.
+ * @param [out] sa_storage   sockaddr storage filled with the IP address and
+ *                           address family.
+ *
+ * @return UCS_OK if @a ip_str has a valid IP address or UCS_ERR_INVALID_ADDR
+ *         otherwise.
+ */
+ucs_status_t ucs_sock_ipstr_to_sockaddr(const char *ip_str,
+                                        struct sockaddr_storage *sa_storage);
+
+
+/**
  * Check if the address family of the given sockaddr is IPv4 or IPv6
  *
  * @param [in] sa       Pointer to sockaddr structure.

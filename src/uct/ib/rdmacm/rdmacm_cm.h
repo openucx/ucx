@@ -23,7 +23,17 @@ typedef struct uct_rdmacm_cm {
     uct_cm_t                   super;
     struct rdma_event_channel  *ev_ch;
     khash_t(uct_rdmacm_cm_cqs) cqs;
+
+    struct {
+        struct sockaddr        *src_addr;
+    } config;
 } uct_rdmacm_cm_t;
+
+
+typedef struct uct_rdmacm_cm_config {
+    uct_cm_config_t super;
+    char            *src_addr;
+} uct_rdmacm_cm_config_t;
 
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_t, uct_cm_t, uct_component_h,

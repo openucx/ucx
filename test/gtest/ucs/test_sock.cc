@@ -154,13 +154,14 @@ UCS_TEST_F(test_socket, sockaddr_get_inet_addr) {
     }
 }
 
-UCS_TEST_F(test_socket, sockaddr_str) {
-    const uint16_t port        = 65534;
-    const char *ipv4_addr      = "192.168.122.157";
-    const char *ipv6_addr      = "fe80::218:e7ff:fe16:fb97";
+UCS_TEST_F(test_socket, str_sockaddr_str) {
+    const uint16_t port   = 65534;
+    const char *ipv4_addr = "192.168.122.157";
+    const char *ipv6_addr = "fe80::218:e7ff:fe16:fb97";
     struct sockaddr_in sa_in;
     struct sockaddr_in6 sa_in6;
     char ipv4_addr_out[128], ipv6_addr_out[128], *str, test_str[1024];
+    ucs_status_t status;
 
     sa_in.sin_family   = AF_INET;
     sa_in.sin_port     = htons(port);
@@ -170,8 +171,13 @@ UCS_TEST_F(test_socket, sockaddr_str) {
     sprintf(ipv4_addr_out, "%s:%d", ipv4_addr, port);
     sprintf(ipv6_addr_out, "%s:%d", ipv6_addr, port);
 
-    inet_pton(AF_INET, ipv4_addr, &(sa_in.sin_addr));
-    inet_pton(AF_INET6, ipv6_addr, &(sa_in6.sin6_addr));
+    status = ucs_sock_ipstr_to_sockaddr(ipv4_addr,
+                                        (struct sockaddr_storage *)&sa_in);
+    ASSERT_EQ(UCS_OK, status);
+
+    status = ucs_sock_ipstr_to_sockaddr(ipv6_addr,
+                                        (struct sockaddr_storage *)&sa_in6);
+    ASSERT_EQ(UCS_OK, status);
 
     /* Check with short `str_len` to fit IP address only */
     {

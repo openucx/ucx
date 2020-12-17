@@ -621,9 +621,46 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .iface_is_reachable       = (uct_iface_is_reachable_func_t)ucs_empty_function_return_zero
 };
 
+static ucs_status_t
+uct_rdmacm_cm_ipstr_to_sockaddr(const char *ip_str, struct sockaddr **saddr_p,
+                                const char *debug_name)
+{
+    struct sockaddr_storage *sa_storage;
+    ucs_status_t status;
+
+    /* NULL-pointer for empty parameter */
+    if (ip_str[0] == '\0') {
+        sa_storage = NULL;
+        goto out;
+    }
+
+    sa_storage = ucs_calloc(1, sizeof(struct sockaddr_storage), debug_name);
+    if (sa_storage == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        ucs_error("cannot allocate memory for rdmacm source address");
+        goto err;
+    }
+
+    status = ucs_sock_ipstr_to_sockaddr(ip_str, sa_storage);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
+
+out:
+    *saddr_p = (struct sockaddr*)sa_storage;
+    return UCS_OK;
+
+err_free:
+    ucs_free(sa_storage);
+err:
+    return status;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
                     uct_worker_h worker, const uct_cm_config_t *config)
 {
+    const uct_rdmacm_cm_config_t *rdmacm_config = ucs_derived_of(config,
+                                                                 uct_rdmacm_cm_config_t);
     uct_priv_worker_t *worker_priv;
     ucs_status_t status;
 
@@ -657,11 +694,20 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
         goto err_destroy_ev_ch;
     }
 
+    status = uct_rdmacm_cm_ipstr_to_sockaddr(rdmacm_config->src_addr,
+                                             &self->config.src_addr,
+                                             "rdmacm_src_addr");
+    if (status != UCS_OK) {
+        goto ucs_async_remove_handler;
+    }
+
     ucs_debug("created rdmacm_cm %p with event_channel %p (fd=%d)",
               self, self->ev_ch, self->ev_ch->fd);
 
     return UCS_OK;
 
+ucs_async_remove_handler:
+    ucs_async_remove_handler(self->ev_ch->fd, 1);
 err_destroy_ev_ch:
     rdma_destroy_event_channel(self->ev_ch);
 err:
@@ -671,6 +717,8 @@ err:
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_t)
 {
     ucs_status_t status;
+
+    ucs_free(self->config.src_addr);
 
     status = ucs_async_remove_handler(self->ev_ch->fd, 1);
     if (status != UCS_OK) {
