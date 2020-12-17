@@ -1,11 +1,11 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h" /* Defines HAVE_RDMACM_QP_LESS */
+#  include "config.h"
 #endif
 
 #include "rdmacm_cm_ep.h"

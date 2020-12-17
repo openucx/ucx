@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -9,6 +9,8 @@
 #endif
 
 #include "rdmacm_listener.h"
+
+#include <ucs/sys/sock.h>
 
 
 #define UCS_RDMACM_MAX_BACKLOG_PATH        "/proc/sys/net/rdma_ucm/max_backlog"

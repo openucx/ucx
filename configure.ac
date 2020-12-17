@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
@@ -193,7 +193,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_CMA], [false])
      AM_CONDITIONAL([HAVE_KNEM], [false])
      AM_CONDITIONAL([HAVE_RDMACM], [false])
-     AM_CONDITIONAL([HAVE_RDMACM_QP_LESS], [false])
      AM_CONDITIONAL([HAVE_MPI], [false])
      AM_CONDITIONAL([HAVE_MPIRUN], [false])
      AM_CONDITIONAL([HAVE_MPICC], [false])

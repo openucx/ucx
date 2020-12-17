@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -104,6 +104,10 @@ ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
     char full_prefix[128] = UCS_DEFAULT_ENV_PREFIX;
     uct_config_bundle_t *config_bundle;
     ucs_status_t status;
+
+    if (config_table == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     config_bundle = ucs_calloc(1, sizeof(*config_bundle) + config_size, "uct_config");
     if (config_bundle == NULL) {
