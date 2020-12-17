@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -336,7 +336,7 @@ struct ucp_ep_config {
         const ucp_request_send_proto_t   *reply_proto;
 
         /* Maximal size for eager short */
-        ssize_t                          max_eager_short;
+        ucp_memtype_thresh_t             max_eager_short;
     } am_u;
 
     /* Protocol selection data */

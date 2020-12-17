@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
  *
@@ -11,6 +11,7 @@
 #include <math.h>
 
 #include <common/test.h>
+#include <common/mem_buffer.h>
 
 #include "ucp_datatype.h"
 #include "ucp_test.h"
@@ -295,6 +296,8 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am)
 
 class test_ucp_am_nbx : public test_ucp_am_base {
 public:
+    static const uint64_t SEED = 0x1111111111111111lu;
+
     test_ucp_am_nbx()
     {
         m_dt          = ucp_dt_make_contig(1);
@@ -352,6 +355,12 @@ public:
         ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
     }
 
+    void check_header(const void *header, size_t header_length)
+    {
+        std::string check_pattern((char*)header, header_length);
+        EXPECT_EQ(check_pattern, m_hdr);
+    }
+
     ucs_status_ptr_t send_am(const ucp::data_type_desc_t& dt_desc,
                              unsigned flags = 0, const void *hdr = NULL,
                              unsigned hdr_length = 0)
@@ -372,18 +381,21 @@ public:
     }
 
     void test_am_send_recv(size_t size, size_t header_size = 0ul,
-                           unsigned flags = 0)
+                           unsigned flags = 0,
+                           ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_HOST)
     {
-        std::string sbuf(size, 'd');
-        std::string hbuf(header_size, 'h');
+        mem_buffer sbuf(size, mem_type);
+        mem_buffer::pattern_fill(sbuf.ptr(), size, SEED, mem_type);
+        m_hdr.resize(header_size);
+        ucs::fill_random(m_hdr);
         m_am_received = false;
 
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this);
 
-        ucp::data_type_desc_t sdt_desc(m_dt, &sbuf[0], size);
+        ucp::data_type_desc_t sdt_desc(m_dt, sbuf.ptr(), size);
 
         ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag() | flags,
-                                        hbuf.c_str(), header_size);
+                                        m_hdr.data(), m_hdr.size());
 
         wait_for_flag(&m_am_received);
         request_wait(sptr);
@@ -408,14 +420,10 @@ public:
                                          const ucp_am_recv_param_t *rx_param)
     {
         EXPECT_FALSE(m_am_received);
-        EXPECT_EQ(std::string::npos,
-                  std::string((const char*)data, length).find_first_not_of('d'));
 
-        if (header_length != 0) {
-            EXPECT_EQ(std::string::npos,
-                      std::string((const char*)header,
-                                  header_length).find_first_not_of('h'));
-        }
+        mem_buffer::pattern_check(data, length, SEED);
+
+        check_header(header, header_length);
 
         bool has_reply_ep = get_send_flag();
 
@@ -442,6 +450,7 @@ public:
     static const uint16_t           TEST_AM_NBX_ID = 0;
     ucp_datatype_t                  m_dt;
     volatile bool                   m_am_received;
+    std::string                     m_hdr;
 };
 
 UCS_TEST_P(test_ucp_am_nbx, set_invalid_handler)
@@ -509,6 +518,37 @@ UCS_TEST_P(test_ucp_am_nbx, zero_send)
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
+
+
+class test_ucp_am_nbx_eager_memtype : public test_ucp_am_nbx {
+public:
+    void init() {
+        modify_config("RNDV_THRESH", "inf");
+        test_ucp_am_nbx::init();
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        // 1. Do not instantiate test case if no GPU memtypes supported.
+        // 2. Do not exclude host memory type, because this generator is used by
+        //    test_ucp_am_nbx_rndv_memtype class to generate combinations like
+        //    host<->cuda, cuda-managed<->host, etc.
+        if (!mem_buffer::is_gpu_supported()) {
+            return;
+        }
+
+        add_variant_memtypes(variants, test_ucp_am_base::get_test_variants,
+                             std::numeric_limits<uint64_t>::max());
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_eager_memtype, basic)
+{
+    ucs_memory_type_t memtype =
+                      mem_buffer::supported_mem_types()[get_variant_value()];
+    test_am_send_recv(16 * UCS_KBYTE, 8, 0, memtype);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_eager_memtype)
 
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx {
@@ -586,12 +626,14 @@ UCS_TEST_P(test_ucp_am_nbx_dts, send_eager_flag, "RNDV_THRESH=128")
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_dts)
 
 
-class test_ucp_am_nbx_rndv: public test_ucp_am_nbx {
+class test_ucp_am_nbx_rndv : public test_ucp_am_nbx {
 public:
     test_ucp_am_nbx_rndv()
     {
-        m_rx_dt  = ucp_dt_make_contig(1);
-        m_status = UCS_OK;
+        m_rx_dt      = ucp_dt_make_contig(1);
+        m_rx_memtype = UCS_MEMORY_TYPE_HOST;
+        m_status     = UCS_OK;
+        m_rx_buf     = NULL;
         modify_config("RNDV_THRESH", "128");
     }
 
@@ -603,9 +645,12 @@ public:
         EXPECT_TRUE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV);
         EXPECT_FALSE(rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
 
-        m_rx_buf.resize(length, 'u');
+        check_header(header, header_length);
 
-        m_rx_dt_desc.make(m_rx_dt, &m_rx_buf[0], length);
+        m_rx_buf = mem_buffer::allocate(length, m_rx_memtype);
+        mem_buffer::pattern_fill(m_rx_buf, length, 0ul, m_rx_memtype);
+
+        m_rx_dt_desc.make(m_rx_dt, m_rx_buf, length);
 
         ucp_request_param_t params;
         params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
@@ -633,7 +678,8 @@ public:
         ASSERT_FALSE(self->m_am_received);
         self->m_am_received = true;
         EXPECT_UCS_OK(status);
-        EXPECT_EQ(self->m_rx_buf, std::vector<char>(length, 'd'));
+        mem_buffer::pattern_check(self->m_rx_buf, length, SEED, self->m_rx_memtype);
+        mem_buffer::release(self->m_rx_buf, self->m_rx_memtype);
     }
 
     static ucs_status_t am_data_reject_rndv_cb(void *arg, const void *header,
@@ -664,9 +710,10 @@ public:
     }
 
     ucp_datatype_t               m_rx_dt;
+    ucs_memory_type_t            m_rx_memtype;
     ucs_status_t                 m_status;
     ucp::data_type_desc_t        m_rx_dt_desc;
-    std::vector<char>            m_rx_buf;
+    void                         *m_rx_buf;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
@@ -763,7 +810,7 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, deferred_reject_rndv)
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv)
 
 
-class test_ucp_am_nbx_rndv_dts: public test_ucp_am_nbx_rndv {
+class test_ucp_am_nbx_rndv_dts : public test_ucp_am_nbx_rndv {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
@@ -797,3 +844,35 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_dts, rndv, "RNDV_THRESH=256")
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv_dts);
+
+
+class test_ucp_am_nbx_rndv_memtype : public test_ucp_am_nbx_rndv {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        // Test will not be instantiated if no GPU memtypes supported, because
+        // of the check for supported memory types in
+        // test_ucp_am_nbx_eager_memtype::get_test_variants
+        add_variant_memtypes(variants,
+                             test_ucp_am_nbx_eager_memtype::get_test_variants,
+                             std::numeric_limits<uint64_t>::max());
+    }
+
+    void init()
+    {
+        modify_config("RNDV_THRESH", "128");
+
+        test_ucp_am_nbx::init();
+        m_rx_memtype = mem_type(1);
+    }
+
+    ucs_memory_type_t mem_type(int idx) {
+        return ucs::supported_mem_type_pairs()[get_variant_value()][idx];
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
+{
+    test_am_send_recv(64 * UCS_KBYTE, 8, 0, mem_type(0));
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype);
