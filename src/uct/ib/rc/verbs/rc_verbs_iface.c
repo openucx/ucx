@@ -78,12 +78,12 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                   ep->txcnt.ci + count, 0);
     uct_rc_verbs_update_tx_res(iface, ep, count);
 
-    if (ep->super.flags & (UCT_RC_EP_FLAG_NO_ERR_HANDLER |
+    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                            UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
         return;
     }
 
-    ep->super.flags |= UCT_RC_EP_FLAG_NO_ERR_HANDLER;
+    ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
 
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);

@@ -198,12 +198,12 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_rc_mlx5_common_update_tx_res(iface, &ep->tx.wq, &ep->super.txqp, pi);
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
 
-    if (ep->super.flags & (UCT_RC_EP_FLAG_NO_ERR_HANDLER |
+    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                            UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
         return;
     }
 
-    ep->super.flags |= UCT_RC_EP_FLAG_NO_ERR_HANDLER;
+    ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
 
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);
