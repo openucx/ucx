@@ -480,7 +480,7 @@ public:
 
     void one_sided_disconnect(entity &e, enum ucp_ep_close_mode mode) {
         void *req           = e.disconnect_nb(0, 0, mode);
-        ucs_time_t deadline = ucs_time_from_sec(10.0) + ucs_get_time();
+        ucs_time_t deadline = ucs::get_deadline();
         while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
                      async progress is implemented. */
