@@ -706,7 +706,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
             return UCS_ERR_UNSUPPORTED;
         }
         /* if msg_size_cnt == 1 the message size checked above */
-        if ((UCX_PERF_CMD_AM == params->command) && (params->msg_size_cnt > 1)) {
+        if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) &&
+            (UCX_PERF_CMD_AM == params->command) && (params->msg_size_cnt > 1)) {
             if (params->am_hdr_size > params->msg_size_list[0]) {
                 if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                     ucs_error("AM header size (%lu) larger than the first IOV "
