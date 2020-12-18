@@ -1499,6 +1499,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
     uct_iface_attr_t *iface_attr;
     size_t it;
     size_t zcopy_thresh;
+    size_t mem_type_zcopy_thresh;
     int mem_type;
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
@@ -1536,11 +1537,13 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
             zcopy_thresh = ucs_min(zcopy_thresh, adjust_min_val);
             config->sync_zcopy_thresh[it] = zcopy_thresh;
             config->zcopy_thresh[it]      = zcopy_thresh;
+            mem_type_zcopy_thresh         = 1;
         }
     } else {
         config->zcopy_auto_thresh    = 0;
         config->sync_zcopy_thresh[0] = config->zcopy_thresh[0] =
                 ucs_min(context->config.ext.zcopy_thresh, adjust_min_val);
+        mem_type_zcopy_thresh        = config->zcopy_thresh[0];
 
         /* adjust max_short if zcopy_thresh is set externally */
         ucp_ep_config_adjust_max_short(&config->max_short,
@@ -1551,7 +1554,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
         if (UCP_MEM_IS_HOST(mem_type)) {
             config->mem_type_zcopy_thresh[mem_type] = config->zcopy_thresh[0];
         } else if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
-            config->mem_type_zcopy_thresh[mem_type] = 1;
+            config->mem_type_zcopy_thresh[mem_type] = mem_type_zcopy_thresh;
         }
     }
 }
