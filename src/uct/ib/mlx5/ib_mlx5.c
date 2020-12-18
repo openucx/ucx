@@ -736,7 +736,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
 
     /* which SLs are allowed by user config */
     sl_allow_mask = (ib_config->sl == UCS_ULUNITS_AUTO) ?
-                    UCS_MASK(UCT_IB_SL_MAX) : UCS_BIT(ib_config->sl);
+                    UCS_MASK(UCT_IB_SL_NUM) : UCS_BIT(ib_config->sl);
 
     if (have_sl_mask_cap) {
         sls_with_ar    = sl_allow_mask & hw_sl_mask;
@@ -815,7 +815,16 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
     uint16_t ooo_sl_mask = 0;
     ucs_status_t status;
 
-    ucs_assert(iface->config.sl == UCT_IB_SL_INVALID);
+    ucs_assert(iface->config.sl == UCT_IB_SL_NUM);
+
+    if (uct_ib_device_is_port_roce(uct_ib_iface_device(iface),
+                                   iface->config.port_num)) {
+        /* Ethernet priority for RoCE devices can't be selected regardless
+         * AR support requested by user, pass empty ooo_sl_mask */
+        return uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1,
+                                     UCT_IB_IFACE_ARG(iface),
+                                     &iface->config.sl);
+    }
 
 #if HAVE_DEVX
     status = uct_ib_mlx5_devx_query_ooo_sl_mask(md, iface->config.port_num,
