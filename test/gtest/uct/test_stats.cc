@@ -220,6 +220,29 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, am_short,
     check_am_rx_counters(sizeof(hdr) + sizeof(send_data));
 }
 
+UCS_TEST_SKIP_COND_P(test_uct_stats, am_short_iov,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    ucs_status_t status;
+
+    init_bufs(0, sender().iface_attr().cap.am.max_short);
+
+    status = uct_iface_set_am_handler(receiver().iface(), 0, am_handler, 0,
+                                      UCT_CB_FLAG_ASYNC);
+    EXPECT_UCS_OK(status);
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
+                            sender().iface_attr().cap.am.max_iov);
+
+    UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short_iov(sender_ep(), 0, iov, iovcnt),
+                                status);
+    EXPECT_UCS_OK(status);
+
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_AM, 1UL);
+    EXPECT_STAT(sender, uct_ep, UCT_EP_STAT_BYTES_SHORT, lbuf->length());
+    check_am_rx_counters(lbuf->length());
+}
+
 UCS_TEST_SKIP_COND_P(test_uct_stats, am_bcopy,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {

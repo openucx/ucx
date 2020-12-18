@@ -347,6 +347,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
         .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_no_resource,
         .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_no_resource,
         .ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucs_empty_function_return_no_resource,
         .ep_am_bcopy         = ucp_wireup_ep_am_bcopy,
         .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_no_resource,
         .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_no_resource,

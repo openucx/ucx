@@ -11,6 +11,7 @@
 
 #include "uct_iface.h"
 #include "uct_cm.h"
+#include "uct_iov.inl"
 
 #include <uct/api/uct.h>
 #include <ucs/async/async.h>
@@ -549,3 +550,42 @@ ucs_config_field_t uct_iface_config_table[] = {
 
   {NULL}
 };
+
+ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *iov,
+                                      size_t iovcnt)
+{
+    uint64_t header = 0;
+    size_t length;
+    void *buffer;
+    size_t iov_it;
+    size_t offset;
+    ucs_status_t status;
+
+    length = uct_iov_total_length(iov, iovcnt);
+    if (length > UCS_ALLOCA_MAX_SIZE) {
+        buffer = ucs_malloc(length, "uct_base_ep_am_short_iov buffer");
+    } else {
+        buffer = ucs_alloca(length);
+    }
+
+    for (iov_it = 0, offset = 0; iov_it < iovcnt; ++iov_it) {
+        memcpy(UCS_PTR_BYTE_OFFSET(buffer, offset), iov[iov_it].buffer,
+               iov[iov_it].length);
+        offset += iov[iov_it].length;
+    }
+
+    /* There is uint64_t header in the parameter list of uct_ep_am_short. Thus the
+     * minmum message size is 8b. If the total length of iov is less than 8b, the
+     * remainder of the header is filled with zeros. */
+    offset = ucs_min(sizeof(header), length);
+    memcpy(&header, buffer, offset);
+
+    status = uct_ep_am_short(ep, id, header, UCS_PTR_BYTE_OFFSET(buffer, offset),
+                             length - offset);
+
+    if (length > UCS_ALLOCA_MAX_SIZE) {
+        ucs_free(buffer);
+    }
+
+    return status;
+}

@@ -691,6 +691,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     {
     .ep_put_short             = uct_ud_mlx5_ep_put_short,
     .ep_am_short              = uct_ud_mlx5_ep_am_short,
+    .ep_am_short_iov          = uct_base_ep_am_short_iov,
     .ep_am_bcopy              = uct_ud_mlx5_ep_am_bcopy,
     .ep_am_zcopy              = uct_ud_mlx5_ep_am_zcopy,
     .ep_pending_add           = uct_ud_ep_pending_add,

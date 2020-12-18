@@ -229,6 +229,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_smsg_iface_t)
 
 static uct_iface_ops_t uct_ugni_smsg_iface_ops = {
     .ep_am_short              = uct_ugni_smsg_ep_am_short,
+    .ep_am_short_iov          = uct_base_ep_am_short_iov,
     .ep_am_bcopy              = uct_ugni_smsg_ep_am_bcopy,
     .ep_pending_add           = uct_ugni_ep_pending_add,
     .ep_pending_purge         = uct_ugni_ep_pending_purge,

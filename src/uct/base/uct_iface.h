@@ -708,4 +708,7 @@ void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
     memcpy(packet->payload, payload, length);
 }
 
+ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *iov,
+                                      size_t iovcnt);
+
 #endif
