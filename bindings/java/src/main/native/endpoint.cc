@@ -110,7 +110,7 @@ JNIEXPORT jobject JNICALL
 Java_org_openucx_jucx_ucp_UcpEndpoint_closeNonBlockingNative(JNIEnv *env, jclass cls,
                                                              jlong ep_ptr, jint mode)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
 
     jobject jucx_request = jucx_request_allocate(env, NULL, &param);
 
@@ -153,11 +153,10 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_putNonBlockingNative(JNIEnv *env, jclass c
                                                            jlong rkey_ptr, jobject callback,
                                                            jint memory_type)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
     jobject jucx_request = jucx_request_allocate(env, callback, &param);
 
-    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_CALLBACK |
-                                       UCP_OP_ATTR_FIELD_MEMORY_TYPE;
+    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_MEMORY_TYPE;
     param.memory_type                = static_cast<ucs_memory_type_t>(memory_type);
     param.cb.send                    = jucx_request_callback;
 
@@ -192,12 +191,11 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_getNonBlockingNative(JNIEnv *env, jclass c
                                                            jlong size, jobject callback,
                                                            jint memory_type)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
 
     jobject jucx_request = jucx_request_allocate(env, callback, &param);
 
-    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_CALLBACK |
-                                       UCP_OP_ATTR_FIELD_MEMORY_TYPE;
+    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_MEMORY_TYPE;
     param.memory_type                = static_cast<ucs_memory_type_t>(memory_type);
     param.cb.send                    = jucx_request_callback;
 
@@ -229,14 +227,12 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedNonBlockingNative(JNIEnv *env, j
                                                                   jlong ep_ptr, jlong addr,
                                                                   jlong size, jlong tag,
                                                                   jobject callback, jint memory_type)
-                                                                  jint memory_type)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
 
     jobject jucx_request = jucx_request_allocate(env, callback, &param);
 
-    param.op_attr_mask             |= UCP_OP_ATTR_FIELD_CALLBACK |
-                                      UCP_OP_ATTR_FIELD_MEMORY_TYPE;
+    param.op_attr_mask             |= UCP_OP_ATTR_FIELD_MEMORY_TYPE;
     param.memory_type               = static_cast<ucs_memory_type_t>(memory_type);
     param.cb.send                   = jucx_request_callback;
 
@@ -254,7 +250,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedIovNonBlockingNative(JNIEnv *env
                                                                     jobject callback, jint memory_type)
 {
     int iovcnt;
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
 
     jobject jucx_request = jucx_request_allocate(env, callback, &param);
     ucp_dt_iov_t* iovec = get_ucp_iov(env, addresses, sizes, iovcnt);
@@ -264,8 +260,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendTaggedIovNonBlockingNative(JNIEnv *env
 
     jucx_request_set_iov(env, jucx_request, iovec);
 
-    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_CALLBACK |
-                                       UCP_OP_ATTR_FIELD_MEMORY_TYPE |
+    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_MEMORY_TYPE |
                                        UCP_OP_ATTR_FIELD_DATATYPE;
     param.memory_type                = static_cast<ucs_memory_type_t>(memory_type);
     param.cb.send                    = jucx_request_callback;
@@ -284,12 +279,11 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamNonBlockingNative(JNIEnv *env, j
                                                                   jlong size, jobject callback,
                                                                   jint memory_type)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
 
     jobject jucx_request = jucx_request_allocate(env, callback, &param);
 
-    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_CALLBACK |
-                                       UCP_OP_ATTR_FIELD_MEMORY_TYPE;
+    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_MEMORY_TYPE;
     param.memory_type                = static_cast<ucs_memory_type_t>(memory_type);
     param.cb.send                    = jucx_request_callback;
 
@@ -307,7 +301,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamIovNonBlockingNative(JNIEnv *env
                                                                      jint memory_type)
 {
     int iovcnt;
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
 
     jobject jucx_request = jucx_request_allocate(env, callback, &param);
     ucp_dt_iov_t* iovec = get_ucp_iov(env, addresses, sizes, iovcnt);
@@ -317,8 +311,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_sendStreamIovNonBlockingNative(JNIEnv *env
 
     jucx_request_set_iov(env, jucx_request, iovec);
 
-    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_CALLBACK |
-                                       UCP_OP_ATTR_FIELD_MEMORY_TYPE |
+    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_MEMORY_TYPE |
                                        UCP_OP_ATTR_FIELD_DATATYPE;
     param.memory_type                = static_cast<ucs_memory_type_t>(memory_type);
     param.cb.send                    = jucx_request_callback;
@@ -338,11 +331,10 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamNonBlockingNative(JNIEnv *env, j
                                                                   jobject callback, jint memory_type)
 {
     size_t rlength;
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
     jobject jucx_request = jucx_request_allocate(env, callback, &param);
 
-    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_CALLBACK    |
-                                       UCP_OP_ATTR_FIELD_MEMORY_TYPE |
+    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_MEMORY_TYPE |
                                        UCP_OP_ATTR_FIELD_FLAGS;
     param.memory_type                = static_cast<ucs_memory_type_t>(memory_type);
     param.cb.recv_stream             = stream_recv_callback;
@@ -380,8 +372,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_recvStreamIovNonBlockingNative(JNIEnv *env
 
     jucx_request_set_iov(env, jucx_request, iovec);
 
-    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_CALLBACK    |
-                                       UCP_OP_ATTR_FIELD_MEMORY_TYPE |
+    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_MEMORY_TYPE |
                                        UCP_OP_ATTR_FIELD_FLAGS       |
                                        UCP_OP_ATTR_FIELD_DATATYPE;
     param.memory_type                = static_cast<ucs_memory_type_t>(memory_type);
@@ -406,15 +397,40 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_flushNonBlockingNative(JNIEnv *env, jclass
                                                              jlong ep_ptr,
                                                              jobject callback)
 {
-    ucp_request_param_t param;
+    ucp_request_param_t param = {0};
 
     jobject jucx_request = jucx_request_allocate(env, callback, &param);
 
-    param.op_attr_mask      |= UCP_OP_ATTR_FIELD_CALLBACK;
     param.cb.send            = jucx_request_callback;
 
     ucs_status_ptr_t status = ucp_ep_flush_nbx((ucp_ep_h)ep_ptr, &param);
     process_request(env, jucx_request, status);
+
+    return jucx_request;
+}
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_sendAmNonBlockingNative(JNIEnv *env, jclass cls,
+                                                              jlong ep_ptr, jint am_id,
+                                                              jlong header_addr, jlong header_length,
+                                                              jlong data_address, jlong data_length,
+                                                              jlong flags, jobject callback,
+                                                              jint memory_type)
+{
+    ucp_request_param_t param = {0};
+
+    jobject jucx_request = jucx_request_allocate(env, callback, &param);
+
+    param.op_attr_mask              |= UCP_OP_ATTR_FIELD_MEMORY_TYPE |
+                                       UCP_OP_ATTR_FIELD_FLAGS;
+    param.memory_type                = static_cast<ucs_memory_type_t>(memory_type);
+    param.cb.send                    = jucx_request_callback;
+    param.flags                      = flags;
+
+    ucs_status_ptr_t status = ucp_am_send_nbx((ucp_ep_h)ep_ptr, am_id, (void*)header_addr, header_length,
+                                              (void*)data_address, data_length, &param);
+    process_request(env, jucx_request, status);
+    ucs_trace_req("JUCX: ucp_am_send_nbx request %p", status);
 
     return jucx_request;
 }

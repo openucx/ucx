@@ -73,6 +73,12 @@ void recv_callback(void *request, ucs_status_t status, const ucp_tag_recv_info_t
 void stream_recv_callback(void *request, ucs_status_t status, size_t length, void *user_data);
 
 /**
+ * @brief Active message receive callback.
+ */
+ucs_status_t am_recv_callback(void *arg, const void *header, size_t header_length, void *data, size_t length,
+                              const ucp_am_recv_param_t *param);
+
+/**
  * @ingroup JUCX_REQ
  * @brief Utility to allocate jucx request and set appropriate java callback in it.
  */
@@ -95,6 +101,12 @@ void jucx_request_update_status(JNIEnv *env, jobject jucx_request, ucs_status_t 
  * @brief Utility to set recv length in JUCX request.
  */
 void jucx_request_update_recv_length(JNIEnv *env, jobject jucx_request, size_t rlength);
+
+/**
+ * @ingroup JUCX_REQ
+ * @brief Utility to set sender tag in JUCX request.
+ */
+void jucx_request_update_sender_tag(JNIEnv *env, jobject jucx_request, ucp_tag_t sender_tag);
 
 /**
  * @brief Function to handle result of ucx function submition, to handle immidiate completion.

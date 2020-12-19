@@ -7,8 +7,10 @@ package org.openucx.jucx.ucp;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 
 import org.openucx.jucx.*;
+
 import static org.openucx.jucx.ucs.UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_UNKNOWN;
 
 import static org.openucx.jucx.ucs.UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_UNKNOWN;
@@ -34,6 +36,17 @@ import static org.openucx.jucx.ucs.UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_UNKN
  */
 public class UcpWorker extends UcxNativeStruct implements Closeable {
 
+    private final HashMap<Integer, UcpAmRecvCallback> amRecvHandlers = new HashMap<>();
+
+    private long maxAmHeaderSize = 0L;
+
+    /**
+     * Maximal allowed header size for {@link UcpEndpoint#sendAmNonBlocking } routine.
+     */
+    public long getMaxAmHeaderSize() {
+        return maxAmHeaderSize;
+    }
+
     public UcpWorker(UcpContext context, UcpWorkerParams params) {
         setNativeId(createWorkerNative(params, context.getNativeId()));
     }
@@ -56,6 +69,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     public void close() {
         releaseWorkerNative(getNativeId());
         setNativeId(null);
+        amRecvHandlers.clear();
     }
 
     /**
@@ -237,6 +251,25 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
 
 
     /**
+     * This routine installs a user defined callback to handle incoming Active
+     * Messages with a specific id. This callback is called whenever an Active
+     * Message that was sent from the remote peer by @ref ucp_am_send_nbx is
+     * received on this worker.
+     *
+     * @param callback - Active Message callback. To clear the already set callback,
+     *                   this value should be set to null.
+     */
+    public void setAmRecvHandler(int amId, UcpAmRecvCallback callback) {
+        if (callback != null) {
+            amRecvHandlers.put(amId, callback);
+            callback.setWorker(this);
+        } else {
+            amRecvHandlers.remove(amId);
+        }
+        setAmRecvHandlerNative(getNativeId(), amId, callback);
+    }
+
+    /**
      * This routine tries to cancels an outstanding communication request. After
      * calling this routine, the request will be in completed or canceled (but
      * not both) state regardless of the status of the target endpoint associated
@@ -250,6 +283,16 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
             throw new UcxException("Request is not valid");
         }
         cancelRequestNative(getNativeId(), request.getNativeId());
+    }
+
+    public void amDataRelease(long address) {
+        amDataReleaseNative(getNativeId(), address);
+    }
+
+    public UcpRequest recvAmDataNonBlocking(long dataDesc, long address, long size,
+                                            UcxCallback callback, int memoryType) {
+        return recvAmDataNonBlockingNative(getNativeId(), dataDesc, address, size, callback,
+            memoryType);
     }
 
     /**
@@ -270,7 +313,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         return result;
     }
 
-    private static native long createWorkerNative(UcpWorkerParams params, long ucpContextId);
+    private native long createWorkerNative(UcpWorkerParams params, long ucpContextId);
 
     private static native void releaseWorkerNative(long workerId);
 
@@ -279,6 +322,9 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native void releaseAddressNative(long workerId, ByteBuffer addressId);
 
     private static native int progressWorkerNative(long workerId) throws Exception;
+
+    private static native void setAmRecvHandlerNative(long workerId, int amId,
+                                                      UcpAmRecvCallback callback);
 
     private static native UcpRequest flushNonBlockingNative(long workerId, UcxCallback callback);
 
@@ -298,6 +344,11 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
                                                                     UcxCallback callback,
                                                                     int memoryType);
 
+    private static native UcpRequest recvAmDataNonBlockingNative(long workerId, long dataDesc,
+                                                                 long address, long size,
+                                                                 UcxCallback callback,
+                                                                 int memoryType);
+
     private static native UcpTagMessage tagProbeNonBlockingNative(long workerId, long tag,
                                                                   long tagMask, boolean remove);
 
@@ -307,4 +358,6 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
                                                                         int memoryType);
 
     private static native void cancelRequestNative(long workerId, long requestId);
+
+    private static native void amDataReleaseNative(long workerId, long dataAddress);
 }

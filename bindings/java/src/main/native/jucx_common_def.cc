@@ -17,6 +17,8 @@ extern "C" {
 
 static JavaVM *jvm_global;
 static jclass jucx_request_cls;
+static jclass jucx_endpoint_cls;
+static jclass jucx_am_data_cls;
 static jfieldID native_id_field;
 static jfieldID recv_size_field;
 static jfieldID sender_tag_field;
@@ -24,8 +26,11 @@ static jfieldID request_callback;
 static jfieldID request_status;
 static jfieldID request_iov_vec;
 static jmethodID on_success;
+static jmethodID on_am_receive;
 static jmethodID jucx_request_constructor;
-static jmethodID jucx_setNativeId;
+static jmethodID jucx_endpoint_constructor;
+static jmethodID jucx_am_data_constructor;
+static jmethodID jucx_set_native_id;
 static jclass ucp_rkey_cls;
 static jmethodID ucp_rkey_cls_constructor;
 static jclass ucp_tag_msg_cls;
@@ -41,24 +46,38 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     }
 
     jclass jucx_request_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRequest");
-    jucx_request_cls = (jclass) env->NewGlobalRef(jucx_request_cls_local);
+    jclass jucx_endpoint_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpEndpoint");
+    jclass jucx_am_data_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpAmData");
     jclass jucx_callback_cls = env->FindClass("org/openucx/jucx/UcxCallback");
+    jclass am_recv_handler = env->FindClass("org/openucx/jucx/ucp/UcpAmRecvCallback");
+    jclass ucp_rkey_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRemoteKey");
+    jclass ucp_tag_msg_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpTagMessage");
+
+    jucx_request_cls = (jclass) env->NewGlobalRef(jucx_request_cls_local);
+    jucx_endpoint_cls = (jclass) env->NewGlobalRef(jucx_endpoint_cls_local);
+    jucx_am_data_cls = (jclass) env->NewGlobalRef(jucx_am_data_cls_local);
+    ucp_rkey_cls = (jclass) env->NewGlobalRef(ucp_rkey_cls_local);
+    ucp_tag_msg_cls = (jclass) env->NewGlobalRef(ucp_tag_msg_cls_local);
+
     native_id_field = env->GetFieldID(jucx_request_cls, "nativeId", "Ljava/lang/Long;");
-    jucx_setNativeId = env->GetMethodID(jucx_request_cls, "setNativeId", "(J)V");
     request_callback = env->GetFieldID(jucx_request_cls, "callback", "Lorg/openucx/jucx/UcxCallback;");
     request_status = env->GetFieldID(jucx_request_cls, "status", "I");
     recv_size_field = env->GetFieldID(jucx_request_cls, "recvSize", "J");
     request_iov_vec = env->GetFieldID(jucx_request_cls, "iovVector", "J");
     sender_tag_field = env->GetFieldID(jucx_request_cls, "senderTag", "J");
+
+    jucx_set_native_id = env->GetMethodID(jucx_request_cls, "setNativeId", "(J)V");
     on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
                                   "(Lorg/openucx/jucx/ucp/UcpRequest;)V");
+    on_am_receive = env->GetMethodID(am_recv_handler, "onReceive",
+                                     "(JJLorg/openucx/jucx/ucp/UcpAmData;Lorg/openucx/jucx/ucp/UcpEndpoint;)I");
+
     jucx_request_constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
-    jclass ucp_rkey_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRemoteKey");
-    ucp_rkey_cls = (jclass) env->NewGlobalRef(ucp_rkey_cls_local);
+    jucx_endpoint_constructor = env->GetMethodID(jucx_endpoint_cls, "<init>", "(J)V");
+    jucx_am_data_constructor = env->GetMethodID(jucx_am_data_cls, "<init>", "(Lorg/openucx/jucx/ucp/UcpAmRecvCallback;JJJ)V");
     ucp_rkey_cls_constructor = env->GetMethodID(ucp_rkey_cls, "<init>", "(J)V");
-    jclass ucp_tag_msg_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpTagMessage");
-    ucp_tag_msg_cls = (jclass) env->NewGlobalRef(ucp_tag_msg_cls_local);
     ucp_tag_msg_cls_constructor = env->GetMethodID(ucp_tag_msg_cls, "<init>", "(JJJ)V");
+
     return JNI_VERSION_1_1;
 }
 
@@ -70,6 +89,10 @@ extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM *jvm, void *reserved) {
 
     if (jucx_request_cls != NULL) {
         env->DeleteGlobalRef(jucx_request_cls);
+    }
+
+    if (jucx_endpoint_cls != NULL) {
+        env->DeleteGlobalRef(jucx_endpoint_cls);
     }
 }
 
@@ -240,13 +263,18 @@ void jucx_request_update_recv_length(JNIEnv *env, jobject jucx_request, size_t r
     env->SetLongField(jucx_request, recv_size_field, rlength);
 }
 
+void jucx_request_update_sender_tag(JNIEnv *env, jobject jucx_request, ucp_tag_t sender_tag)
+{
+    env->SetLongField(jucx_request, sender_tag_field, sender_tag);
+}
+
 void recv_callback(void *request, ucs_status_t status, const ucp_tag_recv_info_t *info,
                    void *user_data)
 {
     JNIEnv *env = get_jni_env();
     jobject jucx_request = reinterpret_cast<jobject>(user_data);
 
-    env->SetLongField(jucx_request, sender_tag_field, info->sender_tag);
+    jucx_request_update_sender_tag(env, jucx_request, info->sender_tag);
     jucx_request_update_recv_length(env, jucx_request, info->length);
     jucx_request_callback(request, status, user_data);
 }
@@ -260,10 +288,30 @@ void stream_recv_callback(void *request, ucs_status_t status, size_t length, voi
     jucx_request_callback(request, status, user_data);
 }
 
+ucs_status_t am_recv_callback(void *arg, const void *header, size_t header_length,
+                              void *data, size_t length, const ucp_am_recv_param_t *param)
+{
+    JNIEnv *env = get_jni_env();
+    jobject jucx_endpoint = NULL;
+
+    jobject callback = reinterpret_cast<jobject>(arg);
+
+    jobject jucx_am_data = env->NewObject(jucx_am_data_cls, jucx_am_data_constructor,
+                                          callback, (native_ptr)data, length, param->recv_attr);
+
+    if (param->recv_attr & UCP_AM_RECV_ATTR_FIELD_REPLY_EP) {
+        jucx_endpoint = env->NewObject(jucx_endpoint_cls, jucx_endpoint_constructor, param->reply_ep);
+    }
+
+
+    return static_cast<ucs_status_t>(env->CallIntMethod(callback, on_am_receive, (native_ptr)header, header_length,
+                                     jucx_am_data, jucx_endpoint));
+}
+
 jobject jucx_request_allocate(JNIEnv *env, const jobject callback, ucp_request_param_t *param)
 {
     jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor);
-    param->op_attr_mask = UCP_OP_ATTR_FIELD_USER_DATA;
+    param->op_attr_mask = UCP_OP_ATTR_FIELD_USER_DATA | UCP_OP_ATTR_FIELD_CALLBACK;
     param->user_data = env->NewGlobalRef(jucx_request);
 
     if (callback != NULL) {
@@ -289,7 +337,7 @@ void process_request(JNIEnv *env, jobject jucx_request, ucs_status_ptr_t status)
             env->SetObjectField(jucx_request, request_callback, NULL);
         }
     } else {
-        env->CallVoidMethod(jucx_request, jucx_setNativeId, (native_ptr)status);
+        env->CallVoidMethod(jucx_request, jucx_set_native_id, (native_ptr)status);
     }
 }
 
