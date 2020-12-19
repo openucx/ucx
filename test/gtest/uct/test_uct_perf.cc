@@ -24,21 +24,39 @@ protected:
 
 const test_perf::test_spec test_uct_perf::tests[] =
 {
-  { "am latency", "usec",
+  { "am short latency", "usec",
     UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
     UCT_PERF_DATA_LAYOUT_SHORT, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 2.5,
     0 },
 
-  { "am rate", "Mpps",
+  { "am short rate", "Mpps",
     UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0,
     0 },
 
-  { "am rate64", "Mpps",
+  { "am short rate64", "Mpps",
     UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCT_PERF_DATA_LAYOUT_SHORT, 0, 1, { 64 }, 1, 2000000lu,
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0,
+    0 },
+
+  { "am short iov latency", "usec",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCT_PERF_DATA_LAYOUT_SHORT_IOV, 0, 2, { 4, 4 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.01, 2.5,
+    0 },
+
+  { "am short iov rate", "Mpps",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCT_PERF_DATA_LAYOUT_SHORT_IOV, 0, 2, { 4, 4 }, 1, 2000000lu,
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0,
+    0 },
+
+  { "am short iov rate64", "Mpps",
+    UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCT_PERF_DATA_LAYOUT_SHORT_IOV, 0, 2, { 32, 32 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.8, 80.0,
     0 },
 
