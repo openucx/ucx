@@ -1338,6 +1338,28 @@ test_malloc_hook() {
 	then
 		./test/apps/test_tcmalloc
 	fi
+
+	if [ "X$have_cuda" == "Xyes" ]
+	then
+		for mode in reloc bistro
+		do
+			export UCX_MEM_MMAP_HOOK_MODE=${mode}
+
+			# Run cuda memory hooks with dynamic link
+			./test/apps/test_cuda_hook_dynamic
+
+			# Run cuda memory hooks with static link
+			if ./test/apps/test_cuda_hook_static
+			then
+				echo "Static link with cuda is expected to fail"
+				exit 1
+			else
+				echo "Test failed - as expected"
+			fi
+
+			unset UCX_MEM_MMAP_HOOK_MODE
+		done
+	fi
 }
 
 test_jucx() {

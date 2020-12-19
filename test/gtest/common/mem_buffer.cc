@@ -23,7 +23,7 @@
     do { \
         cudaError_t cerr = _code; \
         if (cerr != cudaSuccess) { \
-            UCS_TEST_ABORT(# _code << " failed" << _details); \
+            UCS_TEST_ABORT(#_code << " failed with code " << cerr << _details); \
         } \
     } while (0)
 
