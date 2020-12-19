@@ -1600,7 +1600,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
     }
 
     /* Enable progress before `uct_iface_flush` and `uct_worker_progress` called
-     * to give a chance to finish connection for some tranports (ib/ud, tcp).
+     * to give a chance to finish connection for some transports (ib/ud, tcp).
      * They may return UCS_INPROGRESS from `uct_iface_flush` when connections are
      * in progress */
     uct_iface_progress_enable(perf->uct.iface,
