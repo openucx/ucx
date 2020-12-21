@@ -1529,6 +1529,7 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
 
     if (context->config.ext.zcopy_thresh == UCS_MEMUNITS_AUTO) {
         config->zcopy_auto_thresh = 1;
+        mem_type_zcopy_thresh     = 1;
         for (it = 0; it < UCP_MAX_IOV; ++it) {
             zcopy_thresh = ucp_ep_config_get_zcopy_auto_thresh(
                                it + 1, &md_attr->reg_cost, context,
@@ -1537,7 +1538,6 @@ static void ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_i
             zcopy_thresh = ucs_min(zcopy_thresh, adjust_min_val);
             config->sync_zcopy_thresh[it] = zcopy_thresh;
             config->zcopy_thresh[it]      = zcopy_thresh;
-            mem_type_zcopy_thresh         = 1;
         }
     } else {
         config->zcopy_auto_thresh    = 0;
