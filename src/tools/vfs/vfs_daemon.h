@@ -52,4 +52,10 @@ typedef struct {
 extern vfs_opts_t g_opts;
 extern const char *vfs_action_names[];
 
+int vfs_mount(int pid);
+
+int vfs_unmount(int pid);
+
+int vfs_server_loop(int listen_fd);
+
 #endif
