@@ -102,9 +102,9 @@ static inline void
 uct_ud_verbs_ep_tx_inlv(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
                         const void *buffer, unsigned length)
 {
-    iface->tx.sge[1].addr   = (uintptr_t)buffer;
-    iface->tx.sge[1].length = length;
-    ucs_assert(iface->tx.wr_inl.num_sge == 2);
+    iface->tx.sge[1].addr    = (uintptr_t)buffer;
+    iface->tx.sge[1].length  = length;
+    iface->tx.wr_inl.num_sge = 2;
     uct_ud_verbs_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE, 2);
 }
 
@@ -201,11 +201,12 @@ static ucs_status_t uct_ud_verbs_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
 {
     uct_ud_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
     uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_verbs_iface_t);
-    uint32_t length             = uct_iov_total_length(iov, iovcnt);
     uct_ud_send_skb_t *skb;
     ucs_status_t status;
 
-    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + length, 0,
+    UCT_CHECK_IOV_SIZE(iovcnt, (size_t)iface->config.max_send_sge,
+                       "uct_ud_verbs_ep_am_short_iov");
+    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + uct_iov_total_length(iov, iovcnt), 0,
                      iface->super.config.max_inline, "am_short");
 
     uct_ud_enter(&iface->super);
@@ -218,16 +219,15 @@ static ucs_status_t uct_ud_verbs_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
 
     skb->len = iface->tx.sge[0].length = sizeof(uct_ud_neth_t);
     iface->tx.sge[0].addr              = (uintptr_t)skb->neth;
-    iface->tx.wr_skb.num_sge           = uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1,
-                                                                   iov, iovcnt) + 1;
+    iface->tx.wr_inl.num_sge           = uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1,
+                                                                    iov, iovcnt) + 1;
+    uct_ud_verbs_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE,
+                           iface->tx.wr_inl.num_sge);
 
-    uct_ud_verbs_post_send(iface, ep, &iface->tx.wr_skb, IBV_SEND_INLINE,
-                           UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super.super));
-
-    iface->tx.wr_skb.num_sge = 1;
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
-    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, length);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, uct_iov_total_length(iov, iovcnt));
     uct_ud_leave(&iface->super);
+
     return UCS_OK;
 }
 
@@ -674,7 +674,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->tx.wr_inl.imm_data          = 0;
     self->tx.wr_inl.next              = 0;
     self->tx.wr_inl.sg_list           = self->tx.sge;
-    self->tx.wr_inl.num_sge           = 2;
 
     memset(&self->tx.wr_skb, 0, sizeof(self->tx.wr_skb));
     self->tx.wr_skb.opcode            = IBV_WR_SEND;
