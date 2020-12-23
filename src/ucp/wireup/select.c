@@ -1520,6 +1520,22 @@ static void ucp_wireup_init_keepalive_map(ucp_worker_h worker,
 
     dev_map_used = 0;
 
+    /* find all devices with built-in keepalive support */
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        rsc_index = key->lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        dev_index = context->tl_rscs[rsc_index].dev_index;
+        ucs_assert(dev_index < (sizeof(dev_map_used) * 8));
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_EP_KEEPALIVE) {
+            dev_map_used |= UCS_BIT(dev_index);
+        }
+    }
+
+    /* send ep_check on devices without built-in keepalive */
     for (lane = 0; lane < key->num_lanes; ++lane) {
         /* add lanes to ep_check map */
         rsc_index = key->lanes[lane].rsc_index;
