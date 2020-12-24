@@ -105,6 +105,7 @@ public:
                 stop_list.push_back("connection request failed on listener");
                 /* when the "peer failure" error happens, it is followed by: */
                 stop_list.push_back("received event RDMA_CM_EVENT_UNREACHABLE");
+                stop_list.push_back("Connection reset by remote peer");
                 stop_list.push_back(ucs_status_string(UCS_ERR_UNREACHABLE));
                 stop_list.push_back(ucs_status_string(UCS_ERR_UNSUPPORTED));
             }
@@ -481,6 +482,7 @@ public:
     void one_sided_disconnect(entity &e, enum ucp_ep_close_mode mode) {
         void *req           = e.disconnect_nb(0, 0, mode);
         ucs_time_t deadline = ucs::get_deadline();
+        scoped_log_handler slh(detect_error_logger);
         while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
                      async progress is implemented. */
@@ -501,6 +503,7 @@ public:
         void *receiver_ep_close_req = receiver().disconnect_nb(0, 0, mode);
 
         ucs_time_t deadline = ucs::get_deadline();
+        scoped_log_handler slh(detect_error_logger);
         while ((!is_request_completed(sender_ep_close_req) ||
                 !is_request_completed(receiver_ep_close_req)) &&
                (ucs_get_time() < deadline)) {
