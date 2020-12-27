@@ -283,7 +283,11 @@ typedef enum {
                                               flag is not set then
                                               @ref ucp_ep_close_nbx schedules
                                               flushes on all outstanding
-                                              operations. */
+                                              operations.
+                                              @note this flag is incompatible
+                                              with @ref UCP_OP_ATTR_FLAG_NO_IMM_CMPL,
+                                              since it forces immediate completion.
+                                              */
 } ucp_ep_close_flags_t;
 
 
@@ -607,7 +611,7 @@ typedef enum {
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
-                                                        even if it delays remote 
+                                                        even if it delays remote
                                                         data delivery. Note for
                                                         implementer: this option
                                                         can disable zero copy
@@ -2670,11 +2674,11 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  * @brief Add user defined callback for Active Message.
  *
  * This routine installs a user defined callback to handle incoming Active
- * Messages with a specific id. This callback is called whenever an Active 
- * Message that was sent from the remote peer by @ref ucp_am_send_nb is 
+ * Messages with a specific id. This callback is called whenever an Active
+ * Message that was sent from the remote peer by @ref ucp_am_send_nb is
  * received on this worker.
  *
- * @param [in]  worker      UCP worker on which to set the Active Message 
+ * @param [in]  worker      UCP worker on which to set the Active Message
  *                          handler.
  * @param [in]  id          Active Message id.
  * @param [in]  cb          Active Message callback. NULL to clear.
@@ -3657,7 +3661,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  *                                progress of the operation. The application is
  *                                responsible for releasing the handle using
  *                                @ref ucp_request_free "ucp_request_free()" routine.
- * 
+ *
  * @note Only the datatype ucp_dt_make_contig(1) is supported
  * for @a param->datatype, see @ref ucp_dt_make_contig.
  */
@@ -3783,7 +3787,7 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
  *                                progress of the operation. The application is
  *                                responsible for releasing the handle using
  *                                @ref ucp_request_free "ucp_request_free()" routine.
- * 
+ *
  * @note Only the datatype ucp_dt_make_contig(1) is supported
  * for @a param->datatype, see @ref ucp_dt_make_contig.
  */
