@@ -589,9 +589,12 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         ucs_assert(ucs_arbiter_group_is_empty(&ep->arb_group));
-        ucs_assert(!(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL));
         if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
             return UCS_ERR_UNSUPPORTED;
+        }
+
+        if (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL) {
+            goto out;
         }
 
         status = uct_ib_mlx5_modify_qp_state(md, &txwq->super, IBV_QPS_ERR);
@@ -602,6 +605,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL;
     }
 
+out:
     return uct_rc_txqp_add_flush_comp(&iface->super.super, &ep->super, txqp,
                                       comp, txwq->sig_pi);
 }
