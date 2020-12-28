@@ -1,5 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
+# Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -17,6 +18,7 @@ io_demo_LDFLAGS  = -ldl
 
 io_demo_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
+	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la
 
 io_demo_SOURCES = \
