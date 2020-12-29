@@ -377,16 +377,19 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.mlid,
                           ah_attr->src_path_bits & 0x7f);
-        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit,
-                          ah_attr->grh.hop_limit);
-        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
-               &ah_attr->grh.dgid,
-               UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
                           iface->super.super.config.sl);
-        /* TODO add flow_label support */
-        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
-                          iface->super.super.config.traffic_class);
+
+        if (ah_attr->is_global) {
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit,
+                              ah_attr->grh.hop_limit);
+            memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+                   &ah_attr->grh.dgid,
+                   UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
+            /* TODO add flow_label support */
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
+                              iface->super.super.config.traffic_class);
+        }
     }
 
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, ah_attr->port_num);
