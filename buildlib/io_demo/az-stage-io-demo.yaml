@@ -7,8 +7,8 @@ parameters:
 steps:
 - bash: |
     set -eEx
-    source ./buildlib/az-helpers.sh
-    ./buildlib/az-network-corrupter.sh \
+    source $(workspace)/buildlib/az-helpers.sh
+    $(workspace)/buildlib/az-network-corrupter.sh \
       initial_delay=$(initial_delay) \
       cycles=$(cycles) \
       downtime=$(downtime) \
@@ -27,8 +27,8 @@ steps:
     mkdir -p $(workspace)/${{ parameters.name }}
     # set UCX environment variables
     export UCX_SOCKADDR_CM_ENABLE=y
-    #export UCX_NET_DEVICES=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${roce_iface}' .*/\1:\2/p')
-    $(workspace)/../test/apps/iodemo/run_io_demo.sh \
+    export UCX_NET_DEVICES=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${roce_iface}' .*/\1:\2/p')
+    $(workspace)/test/apps/iodemo/run_io_demo.sh \
         -H $(agent_hosts) \
         --tasks-per-node 1 \
         --duration 480 \
