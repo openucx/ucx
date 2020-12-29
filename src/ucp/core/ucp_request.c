@@ -116,6 +116,13 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
     ucp_request_t *req = (ucp_request_t*)request - 1;
     int removed;
 
+    /* Send request may be completed after ep_close(FORCE) released ep */
+    if (req->flags & (UCP_REQUEST_FLAG_SEND_TAG |
+                      UCP_REQUEST_FLAG_SEND_AM)) {
+        req->send.worker = req->send.ep->worker;
+        req->flags |= UCP_REQUEST_FLAG_CANCELED;
+    }
+
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         return;
     }

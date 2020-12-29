@@ -39,6 +39,7 @@
 enum {
     UCP_REQUEST_FLAG_COMPLETED            = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED             = UCS_BIT(1),
+    UCP_REQUEST_FLAG_CANCELED             = UCS_BIT(2),
     UCP_REQUEST_FLAG_EXPECTED             = UCS_BIT(3),
     UCP_REQUEST_FLAG_LOCAL_COMPLETED      = UCS_BIT(4),
     UCP_REQUEST_FLAG_REMOTE_COMPLETED     = UCS_BIT(5),
@@ -124,7 +125,11 @@ struct ucp_request {
         /* "send" part - used for tag_send, am_send, stream_send, put, get, and atomic
          * operations */
         struct {
-            ucp_ep_h                ep;
+            union {
+                ucp_ep_h            ep;
+                ucp_worker_h        worker;     /* Used with UCP_REQUEST_FLAG_CANCELED
+                                                   ep may be released */
+            };
             void                    *buffer;    /* Send buffer */
             ucp_datatype_t          datatype;   /* Send type */
             size_t                  length;     /* Total length, in bytes */
