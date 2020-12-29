@@ -103,6 +103,15 @@ public class UcpParams extends UcxParams {
     }
 
     /**
+     * Request Active Message support feature.
+     */
+    public UcpParams requestAmFeature() {
+        this.fieldMask |= UcpConstants.UCP_PARAM_FIELD_FEATURES;
+        this.features |= UcpConstants.UCP_FEATURE_AM;
+        return this;
+    }
+
+    /**
      * Request remote memory access support.
      */
     public UcpParams requestRmaFeature() {
