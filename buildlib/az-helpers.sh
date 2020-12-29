@@ -54,6 +54,14 @@ function azure_log_warning() {
     echo "##vso[task.logissue type=warning]${msg}"
 }
 
+# Complete the task as "succeeeded with issues"
+function azure_complete_with_issues() {
+    test "x$RUNNING_IN_AZURE" = "xno" && return
+    msg=$1
+    set +x
+    echo "##vso[task.complete result=SucceededWithIssues;]DONE${msg}"
+}
+
 # Get IPv4 address of an interface
 function get_ip() {
     iface=$1

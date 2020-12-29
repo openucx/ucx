@@ -4,7 +4,7 @@ FROM fedora:33
 RUN dnf install -y \
     autoconf \
     automake \
-    clang \
+    cmake \
     cppcheck \
     csclng \
     cscppc \
@@ -20,6 +20,13 @@ RUN dnf install -y \
     make \
     maven \
     numactl-devel \
+    python \
     rdma-core-devel \
     rpm-build \
     && dnf clean dbcache packages
+RUN export BUILD_ROOT=/tmp/llvm-project && \
+    git clone https://github.com/openucx/llvm-project.git --depth=1 -b ucx-clang-format --single-branch ${BUILD_ROOT} && \
+    mkdir -p ${BUILD_ROOT}/build && cd ${BUILD_ROOT}/build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS=clang -G "Unix Makefiles" \
+    ../llvm && \
+    make -j$(nproc) && make install && rm -rf ${BUILD_ROOT}
