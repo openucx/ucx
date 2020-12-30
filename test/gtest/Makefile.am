@@ -46,6 +46,7 @@ noinst_PROGRAMS = gtest
 gtestdir  = $(includedir)
 gtest_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
+	$(top_builddir)/src/ucs/vfs/sock/libucs_vfs_sock.la \
 	$(top_builddir)/src/uct/libuct.la \
 	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la \
@@ -174,6 +175,7 @@ gtest_SOURCES = \
 	ucs/test_type.cc \
 	ucs/test_log.cc \
 	ucs/test_iov.cc \
+	ucs/test_vfs.cc \
 	ucs/arch/test_x86_64.cc
 
 if HAVE_IB
