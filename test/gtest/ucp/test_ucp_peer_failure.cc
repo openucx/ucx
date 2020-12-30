@@ -466,6 +466,7 @@ public:
         m_rbuf.resize(1 * UCS_MBYTE);
 
         m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", "3s"));
     }
 
     void init() {
