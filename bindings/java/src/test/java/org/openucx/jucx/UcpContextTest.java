@@ -28,7 +28,8 @@ public class UcpContextTest {
 
     @Test
     public void testCreateSimpleUcpContext() {
-        UcpParams contextParams = new UcpParams().requestTagFeature();
+        UcpParams contextParams = new UcpParams().requestTagFeature()
+            .requestAmFeature();
         UcpContext context = createContext(contextParams);
         closeContext(context);
     }
