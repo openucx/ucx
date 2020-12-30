@@ -1,5 +1,5 @@
 /*
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
@@ -2767,8 +2767,6 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
  * @note If UCP_OP_ATTR_FLAG_NO_IMM_CMPL flag is set in the op_attr_mask field
  *       of @a param, then the operation will return a request handle, even if
  *       it completes immediately.
- * @note Currently Active Message API supports communication operations with
- *       host memory only.
  * @note This operation supports specific flags, which can be passed
  *       in @a param by @ref ucp_request_param_t.flags. The exact set of flags
  *       is defined by @ref ucp_send_am_flags.
@@ -2822,9 +2820,6 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *       there is no need to release it even if the operation fails.
  *       The routine returns a request handle instead, which can further be used
  *       for tracking operation progress.
- *
- * @note Currently Active Message API supports communication operations with
- *       host memory only.
  *
  * @param [in]  worker     Worker that is used for the receive operation.
  * @param [in]  data_desc  Data descriptor, provided in

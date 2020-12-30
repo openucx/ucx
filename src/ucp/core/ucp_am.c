@@ -277,7 +277,7 @@ static UCS_F_ALWAYS_INLINE ssize_t
 ucp_am_get_short_max(const ucp_request_t *req, ssize_t max_short)
 {
     return (UCP_DT_IS_CONTIG(req->send.datatype) &&
-            UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type)) ?
+            UCP_MEM_IS_HOST(req->send.mem_type)) ?
             max_short : -1;
 }
 
@@ -396,7 +396,7 @@ ucp_am_bcopy_pack_data(void *buffer, ucp_request_t *req, size_t length)
 
     return user_header_length + ucp_dt_pack(req->send.ep->worker,
                                             req->send.datatype,
-                                            UCS_MEMORY_TYPE_HOST,
+                                            req->send.mem_type,
                                             UCS_PTR_BYTE_OFFSET(buffer,
                                                             user_header_length),
                                             req->send.buffer,
@@ -476,7 +476,7 @@ ucp_am_bcopy_pack_args_mid(void *dest, void *arg)
     ucs_assert(req->send.state.dt.offset > 0);
 
     return sizeof(*hdr) + ucp_dt_pack(req->send.ep->worker, req->send.datatype,
-                                      UCS_MEMORY_TYPE_HOST, hdr + 1,
+                                      req->send.mem_type, hdr + 1,
                                       req->send.buffer, &req->send.state.dt,
                                       length);
 }
@@ -772,7 +772,8 @@ static ucs_status_t ucp_am_send_start_rndv(ucp_request_t *sreq)
 static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
                                  const void *header, size_t header_length,
                                  const void *buffer, ucp_datatype_t datatype,
-                                 size_t count, uint16_t flags, uint16_t am_id)
+                                 size_t count, uint16_t flags, uint16_t am_id,
+                                 ucs_memory_type_t mem_type)
 {
     req->flags                           = UCP_REQUEST_FLAG_SEND_AM;
     req->send.ep                         = ep;
@@ -782,13 +783,14 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.msg_proto.am.header_length = header_length;
     req->send.buffer                     = (void*)buffer;
     req->send.datatype                   = datatype;
-    req->send.mem_type                   = UCS_MEMORY_TYPE_HOST;
     req->send.lane                       = ep->am_lane;
     req->send.pending_lane               = UCP_NULL_LANE;
 
     ucp_request_send_state_init(req, datatype, count);
-    req->send.length = ucp_dt_length(req->send.datatype, count,
-                                     req->send.buffer, &req->send.state.dt);
+    req->send.length   = ucp_dt_length(req->send.datatype, count,
+                                       req->send.buffer, &req->send.state.dt);
+    req->send.mem_type = ucp_get_memory_type(ep->worker->context, req->send.buffer,
+                                             req->send.length, mem_type);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
@@ -908,9 +910,13 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
                       const void *buffer, size_t length)
 {
     if (ucs_unlikely(((length != 0) && (header_length != 0)) ||
-                     ((ssize_t)(length + header_length) >
-                      ucp_ep_config(ep)->am_u.max_eager_short)) ||
-                     (flags & UCP_AM_SEND_FLAG_RNDV)) {
+                     (flags & UCP_AM_SEND_FLAG_RNDV))) {
+        goto out;
+    }
+
+    if (ucs_unlikely(!ucp_proto_is_inline(ep,
+                                          &ucp_ep_config(ep)->am_u.max_eager_short,
+                                          length + header_length))) {
         goto out;
     }
 
@@ -938,6 +944,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     ucp_request_t *req;
     uint32_t attr_mask;
     uint32_t flags;
+    ssize_t max_short;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
@@ -982,17 +989,21 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
                                  goto out;});
 
     ucp_am_send_req_init(req, ep, header, header_length, buffer, datatype,
-                         count, flags, id);
+                         count, flags, id, ucp_request_param_mem_type(param));
+
+    /* Note that max_eager_short.memtype_on is always initialized to real
+     * max_short value
+     */
+    max_short = ucp_ep_config(ep)->am_u.max_eager_short.memtype_on;
 
     if (flags & UCP_AM_SEND_REPLY) {
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->am_u.reply_proto,
-                              ucs_min(ucp_ep_config(ep)->am_u.max_eager_short,
-                                      UCP_AM_SHORT_REPLY_MAX_SIZE), flags);
+                              ucs_min(max_short, UCP_AM_SHORT_REPLY_MAX_SIZE),
+                              flags);
     } else {
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
-                              ucp_ep_config(ep)->am_u.proto,
-                              ucp_ep_config(ep)->am_u.max_eager_short, flags);
+                              ucp_ep_config(ep)->am_u.proto, max_short, flags);
     }
 
 out:
@@ -1023,11 +1034,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
 {
     ucp_am_rndv_rts_hdr_t *rts = data_desc;
     ucp_recv_desc_t *desc      = (ucp_recv_desc_t*)data_desc - 1;
+    ucp_context_h context      = worker->context;
     ucs_status_ptr_t ret;
     ucp_request_t *req;
     ucp_datatype_t datatype;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -1063,7 +1075,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
     req->recv.length   = ucp_dt_length(datatype, count, buffer,
                                        &req->recv.state);
-    req->recv.mem_type = UCS_MEMORY_TYPE_HOST;
+    req->recv.mem_type = ucp_get_memory_type(context, buffer, req->recv.length,
+                                             ucp_request_param_mem_type(param));
     req->recv.am.desc  = (ucp_recv_desc_t*)rts - 1;
 
     ucp_request_set_callback_param(param, recv_am, req, recv.am);

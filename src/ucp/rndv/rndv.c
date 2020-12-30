@@ -758,7 +758,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
                 req->recv.remaining, freq->send.length);
     req->recv.remaining -= freq->send.length;
     if (req->recv.remaining == 0) {
-        ucp_request_complete_tag_recv(req, UCS_OK);
+        ucp_rndv_recv_req_complete(req, UCS_OK);
         if (!is_put_proto) {
             ucs_assert(rndv_req != NULL);
             ucp_worker_del_request_id(worker, rndv_req, rreq_remote_id);
@@ -1174,7 +1174,7 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
                               &rkey->tl_rkey[rkey_index].rkey,
                               rndv_rts_hdr->address, &local_ptr);
     if (status != UCS_OK) {
-        ucp_request_complete_tag_recv(rreq, status);
+        ucp_rndv_recv_req_complete(rreq, status);
         ucp_rkey_destroy(rkey);
         ucp_rndv_req_send_ats(rndv_req, rreq, rndv_rts_hdr->sreq.req_id, status);
         return;
