@@ -21,7 +21,7 @@ typedef enum {
     UCS_VFS_SOCK_ACTION_STOP,        /* daemon is asked to stop */
     UCS_VFS_SOCK_ACTION_MOUNT,       /* daemon is asked to mount a file system */
     UCS_VFS_SOCK_ACTION_MOUNT_REPLY, /* daemon sends back FUSE file descriptor */
-    UCS_VFS_SOCK_ACTION_NOP,         /* no-operation, used to test conneciton */
+    UCS_VFS_SOCK_ACTION_NOP,         /* no-operation, used to test connection */
     UCS_VFS_SOCK_ACTION_LAST
 } ucs_vfs_sock_action_t;
 

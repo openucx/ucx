@@ -179,7 +179,7 @@ static int vfs_connect_and_act()
     if (connfd < 0) {
         ret = -errno;
         vfs_error("failed to create connection socket: %m");
-        return ret;
+        goto out;
     }
 
     ret = connect(connfd, (const struct sockaddr*)&g_sockaddr,
@@ -191,7 +191,7 @@ static int vfs_connect_and_act()
         } else {
             vfs_error("connect(%s) failed: %m", g_sockaddr.sun_path);
         }
-        goto err_close;
+        goto out_close;
     }
 
     if (g_opts.action < UCS_VFS_SOCK_ACTION_LAST) {
@@ -202,14 +202,15 @@ static int vfs_connect_and_act()
         ret                = ucs_vfs_sock_send(connfd, &vfs_msg_out);
         if (ret < 0) {
             vfs_error("failed to send: %d", ret);
-            goto err_close;
+            goto out_close;
         }
 
         ret = 0;
     }
 
-err_close:
+out_close:
     close(connfd);
+out:
     return ret;
 }
 
@@ -311,7 +312,7 @@ static int vfs_parse_args(int argc, char **argv)
         if (g_opts.action == UCS_VFS_SOCK_ACTION_LAST) {
             vfs_error("invalid action '%s'", action_str);
             vfs_usage();
-            return -1;
+            return 0;
         }
         ++optind;
     }
@@ -363,8 +364,9 @@ int main(int argc, char **argv)
         }
     } else {
         g_sockaddr.sun_family = AF_UNIX;
+        memset(g_sockaddr.sun_path, 0, sizeof(g_sockaddr.sun_path));
         strncpy(g_sockaddr.sun_path, g_opts.sock_path,
-                sizeof(g_sockaddr.sun_path));
+                sizeof(g_sockaddr.sun_path) - 1);
     }
 
     switch (g_opts.action) {
