@@ -68,6 +68,15 @@
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA UCS_BIT(28) /* GRH/IP in the receive buffer */
 #define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE  UCS_BIT(29) /* GRH/IP in the CQE */
 
+#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_BF
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC MLX5DV_UAR_ALLOC_TYPE_BF
+#else
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC 0
+#endif
+
+#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_NC
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC MLX5DV_UAR_ALLOC_TYPE_NC
+#endif
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
