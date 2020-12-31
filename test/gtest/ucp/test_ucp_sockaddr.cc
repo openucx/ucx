@@ -511,6 +511,11 @@ public:
         receiver().close_ep_req_free(receiver_ep_close_req);
     }
 
+    static void close_completion(void *request, ucs_status_t status,
+                                 void *user_data) {
+        *reinterpret_cast<bool*>(user_data) = true;
+    }
+
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         ucp_test::err_handler_cb(arg, ep, status);
 
@@ -615,6 +620,33 @@ UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
     one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
 }
+
+UCS_TEST_P(test_ucp_sockaddr, close_callback) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+
+    request_wait(receiver().flush_ep_nb());
+    request_wait(sender().flush_ep_nb());
+    ucp_ep_h ep = receiver().revoke_ep();
+
+    bool user_data = false;
+
+    ucp_request_param_t param = {0};
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                         UCP_OP_ATTR_FIELD_USER_DATA |
+                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    param.cb.send      = close_completion;
+    param.user_data    = &user_data;
+
+    ucs_status_ptr_t request = ucp_ep_close_nbx(ep, &param);
+
+    bool is_pointer = UCS_PTR_IS_PTR(request);
+    request_wait(request);
+
+    if (is_pointer) {
+        ASSERT_TRUE(user_data);
+    }
+}
+
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect_bidi_wait_err_cb,
                      no_close_protocol()) {
