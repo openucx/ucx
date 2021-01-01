@@ -574,7 +574,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
      * was detected before receiving WIREUP_MSG/ACK from a client or
      * marking a server's EP as REMOTE_CONNECTED was scheduled on a
      * progress, but not completed yet (CM_WIREUP_EP/AUX_EP is
-     * closed when moving am EP to REMOTE_CONNECTED state) */
+     * closed when moving an EP to REMOTE_CONNECTED state) */
     wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
     if ((lane == ucp_ep_get_cm_lane(ucp_ep))         &&
         (lane == ucp_ep_get_wireup_msg_lane(ucp_ep)) &&
@@ -585,7 +585,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         /* No need to invoke the error handling flow, just flush and
          * destroy CM_WIREUP/AUX_EP */
         aux_uct_ep = wireup_ep->aux_ep;
-        ucs_assert(ucp_wireup_ep_test(aux_uct_ep));
 
         ucs_queue_head_init(&tmp_pending_queue);
         ucp_wireup_ep_disown(ucp_ep->uct_eps[lane], aux_uct_ep);

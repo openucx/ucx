@@ -262,6 +262,7 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
                            ucp_rsc_index_t rsc_index)
 {
+    ucs_assert(!ucp_wireup_ep_test(uct_ep));
     wireup_ep->aux_ep        = uct_ep;
     wireup_ep->aux_rsc_index = rsc_index;
 }
@@ -678,6 +679,7 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
 
     ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->super.uct_ep == NULL);
+    ucs_assert(!ucp_wireup_ep_test(next_ep));
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
     ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
 }

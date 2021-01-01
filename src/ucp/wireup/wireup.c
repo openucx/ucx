@@ -1104,15 +1104,17 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep,
         cm_wireup_ep             = ucp_ep_get_cm_wireup_ep(ep);
         new_key->wireup_msg_lane = new_key->cm_lane;
         reuse_lane               = old_key->wireup_msg_lane;
-        ucp_wireup_ep_set_aux(cm_wireup_ep, ep->uct_eps[reuse_lane],
+        ucp_wireup_ep_set_aux(cm_wireup_ep,
+                              ucp_wireup_ep_extract_next_ep(ep->uct_eps[reuse_lane]),
                               old_key->lanes[reuse_lane].rsc_index);
         ucp_wireup_ep_pending_queue_purge(ep->uct_eps[reuse_lane],
                                           ucp_wireup_pending_purge_cb,
                                           replay_pending_queue);
 
-        /* reset the UCT EP from the previous WIREUP lane to not
-         * destroy it, since it's not needed anymore in the new
-         * configuration, but will be used for WIREUP MSG */
+        /* reset the UCT EP from the previous WIREUP lane and destroy its WIREUP EP,
+         * since it's not needed anymore in the new configuration, UCT EP will be
+         * used for sending WIREUP MSGs in the new configuration */
+        uct_ep_destroy(ep->uct_eps[reuse_lane]);
         ep->uct_eps[reuse_lane]  = NULL;
     }
 
