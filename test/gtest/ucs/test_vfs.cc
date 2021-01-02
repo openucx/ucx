@@ -99,3 +99,10 @@ UCS_TEST_F(test_vfs_sock, send_recv_mount_reply) {
     close(msg_out.fd);
     close(fd);
 }
+
+UCS_TEST_F(test_vfs_sock, send_recv_nop) {
+    /* send stop/start commands from socket[0] to socket[1] */
+    ucs_vfs_sock_message_t msg_out = {};
+    do_send_recv(UCS_VFS_SOCK_ACTION_NOP, m_sockets[0], m_sockets[1], -1,
+                 &msg_out);
+}
