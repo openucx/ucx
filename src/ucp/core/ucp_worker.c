@@ -586,11 +586,9 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         aux_uct_ep = wireup_ep->aux_ep;
 
         ucp_wireup_ep_disown(ucp_ep->uct_eps[lane], aux_uct_ep);
-        ucp_worker_discard_uct_ep(ucp_ep->worker, aux_uct_ep,
-                                  UCT_FLUSH_FLAG_CANCEL,
+        ucp_worker_discard_uct_ep(ucp_ep, aux_uct_ep, UCT_FLUSH_FLAG_CANCEL,
                                   (uct_pending_purge_callback_t)
-                                  ucs_empty_function_do_assert,
-                                  NULL);
+                                  ucs_empty_function_do_assert, NULL);
         return UCS_OK;
     }
 
@@ -2161,18 +2159,27 @@ err_free:
     return status;
 }
 
+static void ucp_worker_put_flush_req(ucp_request_t *req)
+{
+    ucp_ep_h ucp_ep = req->send.ep;
+
+    ucp_worker_flush_ops_count_dec(ucp_ep->worker);
+    ucp_ep_destroy_base(ucp_ep);
+    ucp_request_put(req);
+}
+
 static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
 {
     ucp_request_t *req  = (ucp_request_t*)arg;
     uct_ep_h uct_ep     = req->send.discard_uct_ep.uct_ep;
-    ucp_worker_h worker = req->send.discard_uct_ep.ucp_worker;
+    ucp_ep_h ucp_ep     = req->send.ep;
+    ucp_worker_h worker = ucp_ep->worker;
     khiter_t iter;
 
     ucp_trace_req(req, "destroy uct_ep=%p", uct_ep);
-    ucp_request_put(req);
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ucp_worker_flush_ops_count_dec(worker);
+    ucp_worker_put_flush_req(req);
     iter = kh_get(ucp_worker_discard_uct_ep_hash,
                   &worker->discard_uct_ep_hash, uct_ep);
     if (iter == kh_end(&worker->discard_uct_ep_hash)) {
@@ -2188,21 +2195,13 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     return 1;
 }
 
-static void ucp_worker_put_flush_req(ucp_request_t *req)
-{
-    ucp_worker_h worker = req->send.discard_uct_ep.ucp_worker;
-
-    ucp_worker_flush_ops_count_dec(worker);
-    ucp_request_put(req);
-}
-
 static void
 ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 {
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_request_t *req       = ucs_container_of(self, ucp_request_t,
                                                 send.state.uct_comp);
-    ucp_worker_h worker      = req->send.discard_uct_ep.ucp_worker;
+    ucp_worker_h worker      = req->send.ep->worker;
 
     ucp_trace_req(req, "discard_uct_ep flush completion status %s",
                   ucs_status_string(self->status));
@@ -2248,7 +2247,7 @@ static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucp_request_t *req       = (ucp_request_t*)arg;
     uct_ep_h uct_ep          = req->send.discard_uct_ep.uct_ep;
-    ucp_worker_h worker      = req->send.discard_uct_ep.ucp_worker;
+    ucp_worker_h worker      = req->send.ep->worker;
     ucs_status_t status;
 
     status = ucp_worker_discard_uct_ep_pending_cb(&req->send.uct);
@@ -2778,9 +2777,10 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 }
 
 static void
-ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
+ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                              unsigned ep_flush_flags)
 {
+    ucp_worker_h worker = ucp_ep->worker;
     ucp_request_t *req;
     int ret;
     khiter_t iter;
@@ -2792,6 +2792,8 @@ ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
         return;
     }
 
+    ucs_assert(ucp_ep->ref_cnt < UINT8_MAX);
+    ++ucp_ep->ref_cnt;
     ucp_worker_flush_ops_count_inc(worker);
     iter = kh_put(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
                   uct_ep, &ret);
@@ -2806,11 +2808,11 @@ ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
 
     ucs_assert(!ucp_wireup_ep_test(uct_ep));
     req->flags                              = 0;
+    req->send.ep                            = ucp_ep;
     req->send.uct.func                      = ucp_worker_discard_uct_ep_pending_cb;
     req->send.state.uct_comp.func           = ucp_worker_discard_uct_ep_flush_comp;
     req->send.state.uct_comp.count          = 1;
     req->send.state.uct_comp.status         = UCS_OK;
-    req->send.discard_uct_ep.ucp_worker     = worker;
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
 
@@ -2818,10 +2820,8 @@ ucp_worker_discard_tl_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
 }
 
 static void
-ucp_worker_discard_wireup_uct_ep(ucp_worker_h worker,
-                                 ucp_wireup_ep_t *wireup_ep,
-                                 unsigned ep_flush_flags,
-                                 uct_ep_h uct_ep)
+ucp_worker_discard_wireup_uct_ep(ucp_ep_h ucp_ep, ucp_wireup_ep_t *wireup_ep,
+                                 unsigned ep_flush_flags, uct_ep_h uct_ep)
 {
     if (uct_ep == NULL) {
         return;
@@ -2829,7 +2829,7 @@ ucp_worker_discard_wireup_uct_ep(ucp_worker_h worker,
 
     ucp_wireup_ep_disown(&wireup_ep->super.super, uct_ep);
     /* discard the WIREUP EP's UCT EP */
-    ucp_worker_discard_uct_ep(worker, uct_ep, ep_flush_flags,
+    ucp_worker_discard_uct_ep(ucp_ep, uct_ep, ep_flush_flags,
                               /* make sure that there are no WIREUP MSGs
                                * anymore that are scheduled on the UCT EP, i.e.
                                * the purge callback hasn't be invoked here */
@@ -2838,8 +2838,7 @@ ucp_worker_discard_wireup_uct_ep(ucp_worker_h worker,
 }
 
 static uct_ep_h
-ucp_worker_discard_wireup_ep(ucp_worker_h worker,
-                             ucp_wireup_ep_t *wireup_ep,
+ucp_worker_discard_wireup_ep(ucp_ep_h ucp_ep, ucp_wireup_ep_t *wireup_ep,
                              unsigned ep_flush_flags,
                              uct_pending_purge_callback_t purge_cb,
                              void *purge_arg)
@@ -2849,9 +2848,9 @@ ucp_worker_discard_wireup_ep(ucp_worker_h worker,
 
     ucs_assert(wireup_ep != NULL);
 
-    ucp_worker_discard_wireup_uct_ep(worker, wireup_ep, ep_flush_flags,
+    ucp_worker_discard_wireup_uct_ep(ucp_ep, wireup_ep, ep_flush_flags,
                                      wireup_ep->aux_ep);
-    ucp_worker_discard_wireup_uct_ep(worker, wireup_ep, ep_flush_flags,
+    ucp_worker_discard_wireup_uct_ep(ucp_ep, wireup_ep, ep_flush_flags,
                                      wireup_ep->sockaddr_ep);
 
     is_owner = wireup_ep->super.is_owner;
@@ -2875,7 +2874,7 @@ int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep)
 }
 
 /* must be called with async lock held */
-void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
+void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                unsigned ep_flush_flags,
                                uct_pending_purge_callback_t purge_cb,
                                void *purge_arg)
@@ -2886,7 +2885,7 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
     uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
 
     if (ucp_wireup_ep_test(uct_ep)) {
-        uct_ep = ucp_worker_discard_wireup_ep(worker, ucp_wireup_ep(uct_ep),
+        uct_ep = ucp_worker_discard_wireup_ep(ucp_ep, ucp_wireup_ep(uct_ep),
                                               ep_flush_flags,
                                               purge_cb, purge_arg);
         if (uct_ep == NULL) {
@@ -2894,5 +2893,5 @@ void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
         }
     }
 
-    ucp_worker_discard_tl_uct_ep(worker, uct_ep, ep_flush_flags);
+    ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, ep_flush_flags);
 }

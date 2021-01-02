@@ -1061,7 +1061,6 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep,
                                   ucp_lane_index_t *connect_lane_bitmap,
                                   ucs_queue_head_t *replay_pending_queue)
 {
-    ucp_worker_h worker                            = ep->worker;
     uct_ep_h new_uct_eps[UCP_MAX_LANES]            = { NULL };
     ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES] = { UCP_NULL_LANE };
     ucp_ep_config_key_t *old_key;
@@ -1126,7 +1125,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep,
         if (reuse_lane == UCP_NULL_RESOURCE) {
             if (ep->uct_eps[lane] != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
-                ucp_worker_discard_uct_ep(worker, ep->uct_eps[lane],
+                ucp_worker_discard_uct_ep(ep, ep->uct_eps[lane],
                                           UCT_FLUSH_FLAG_LOCAL,
                                           ucp_wireup_pending_purge_cb,
                                           replay_pending_queue);

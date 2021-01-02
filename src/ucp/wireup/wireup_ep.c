@@ -331,13 +331,43 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
     return UCS_ERR_NO_RESOURCE;
 }
 
+static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
+                                        uct_completion_t *comp)
+{
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_worker_h worker        = wireup_ep->super.ucp_ep->worker;
+
+    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED) {
+        return uct_ep_check(wireup_ep->super.uct_ep, flags, comp);
+    }
+
+    if (wireup_ep->aux_ep != NULL) {
+        ucs_assert(wireup_ep->aux_rsc_index != UCP_NULL_RESOURCE);
+
+        if (ucp_worker_iface(worker, wireup_ep->aux_rsc_index)->attr.cap.flags &
+            UCT_IFACE_FLAG_EP_CHECK) {
+            return uct_ep_check(wireup_ep->aux_ep, flags, comp);
+        }
+
+        /* if EP_CHECK is not supported by auxiliary transport, it has to support
+         * a built-in keepalive mechanism to be able to detect peer failure during
+         * wireup
+         */
+        ucs_assert(ucp_worker_iface(worker,
+                                    wireup_ep->aux_rsc_index)->attr.cap.flags &
+                   UCT_IFACE_FLAG_EP_KEEPALIVE);
+    }
+
+    return UCS_OK;
+}
+
 
 UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 {
     static uct_iface_ops_t ops = {
         .ep_connect_to_ep    = ucp_wireup_ep_connect_to_ep,
         .ep_flush            = ucp_wireup_ep_flush,
-        .ep_check            = ucs_empty_function_return_success,
+        .ep_check            = ucp_wireup_ep_check,
         .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t),
         .ep_pending_add      = ucp_wireup_ep_pending_add,
         .ep_pending_purge    = ucp_wireup_ep_pending_purge,

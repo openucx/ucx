@@ -108,6 +108,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
+    ep->ref_cnt                          = 1;
     ep->cfg_index                        = UCP_WORKER_CFG_INDEX_NULL;
     ep->worker                           = worker;
     ep->am_lane                          = UCP_NULL_LANE;
@@ -157,6 +158,10 @@ err:
 
 void ucp_ep_destroy_base(ucp_ep_h ep)
 {
+    if (--ep->ref_cnt != 0) {
+        return;
+    }
+
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ucp_ep_ext_control(ep));
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
@@ -204,7 +209,7 @@ err:
     return status;
 }
 
-void ucp_ep_delete(ucp_ep_h ep)
+static void ucp_ep_delete(ucp_ep_h ep)
 {
     ucs_status_t status;
 
@@ -1011,7 +1016,7 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
 
         ucs_trace("ep %p: discard uct_ep[%d]=%p", ep, lane,
                   ep->uct_eps[lane]);
-        ucp_worker_discard_uct_ep(ep->worker, ep->uct_eps[lane],
+        ucp_worker_discard_uct_ep(ep, ep->uct_eps[lane],
                                   UCT_FLUSH_FLAG_CANCEL,
                                   ucp_ep_err_pending_purge,
                                   UCS_STATUS_PTR(status));
@@ -1042,6 +1047,12 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
+
+    if (ep->flags & UCP_EP_FLAG_CLOSED) {
+        ucs_error("ep %p has already been closed", ep);
+        request = UCS_STATUS_PTR(UCS_ERR_NOT_CONNECTED);
+        goto out;
+    }
 
     ep->flags |= UCP_EP_FLAG_CLOSED;
 
@@ -1076,6 +1087,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
         }
     }
 
+out:
     UCS_ASYNC_UNBLOCK(&worker->async);
     return request;
 }
