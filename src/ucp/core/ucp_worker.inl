@@ -122,6 +122,12 @@ ucp_worker_extract_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
     return request;
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_keepalive_is_enabled(ucp_worker_h worker)
+{
+    return worker->context->config.keepalive_interval != 0;
+}
+
 /**
  * @return worker-iface struct by resource index
  */

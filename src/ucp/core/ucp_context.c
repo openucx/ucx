@@ -312,13 +312,13 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
 
   /* TODO: set for keepalive more reasonable values */
-  {"KEEPALIVE_INTERVAL", "0",
+  {"KEEPALIVE_INTERVAL", "60s",
    "Time interval between keepalive rounds (0 - disabled).",
    ucs_offsetof(ucp_config_t, ctx.keepalive_interval), UCS_CONFIG_TYPE_TIME},
 
-  {"KEEPALIVE_NUM_EPS", "0",
+  {"KEEPALIVE_NUM_EPS", "128",
    "Maximal number of endpoints to check on every keepalive round\n"
-   "(0 - disabled, inf - check all endpoints on every round)",
+   "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_config_t, ctx.keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
   {"PROTO_INDIRECT_ID", "auto",
@@ -1541,6 +1541,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      context->config.ext.tm_max_bb_size,
                      context->config.ext.seg_size);
         }
+    }
+
+    if (context->config.ext.keepalive_num_eps == 0) {
+        ucs_error("UCX_KEEPALIVE_NUM_EPS value must be greater than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
     }
 
     context->config.keepalive_interval = ucs_time_from_sec(context->config.ext.keepalive_interval);

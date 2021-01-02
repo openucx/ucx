@@ -1244,6 +1244,11 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     iface_params->field_mask       |= UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG |
                                       UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB;
 
+    if (ucp_worker_keepalive_is_enabled(worker)) {
+        iface_params->field_mask        |= UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL;
+        iface_params->keepalive_interval = context->config.keepalive_interval;
+    }
+
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, iface_params, iface_config,
                             &wiface->iface);
@@ -2657,12 +2662,6 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
 
-static int ucp_worker_keepalive_is_enabled(ucp_worker_h worker)
-{
-    return (worker->context->config.keepalive_interval != 0) &&
-           (worker->context->config.ext.keepalive_num_eps != 0);
-}
-
 static UCS_F_ALWAYS_INLINE ucp_ep_h
 ucp_worker_keepalive_current_ep(ucp_worker_h worker)
 {
@@ -2695,6 +2694,8 @@ static unsigned ucp_worker_keepalive_progress(void *arg)
     ucs_time_t now      = ucs_get_time();
     ucs_list_link_t *iter_begin;
     ucp_ep_h ep;
+
+    ucs_assert(worker->context->config.ext.keepalive_num_eps != 0);
 
     if (ucs_likely((now - worker->keepalive.last_round) <
                    worker->context->config.keepalive_interval)) {

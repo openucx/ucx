@@ -579,9 +579,20 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
-    self->config.keepalive.idle    = config->keepalive.idle;
     self->config.keepalive.cnt     = config->keepalive.cnt;
     self->config.keepalive.intvl   = config->keepalive.intvl;
+
+    if (config->keepalive.idle != UCS_MEMUNITS_AUTO) {
+        /* TCP iface configuration sets the keepalive interval */
+        self->config.keepalive.idle = config->keepalive.idle;
+    } else if (params->field_mask & UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL) {
+        /* User parameters set the keepalive interval */
+        self->config.keepalive.idle = params->keepalive_interval;
+    } else {
+        /* Use the default keepalive interval */
+        self->config.keepalive.idle =
+            ucs_time_from_sec(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE);
+    }
 
     status = uct_tcp_iface_set_port_range(self, config);
     if (status != UCS_OK) {
