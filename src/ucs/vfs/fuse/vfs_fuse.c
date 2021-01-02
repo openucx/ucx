@@ -103,7 +103,7 @@ static int ucs_vfs_fuse_read(const char *path, char *buf, size_t size,
         return 0;
     }
 
-    if (offset + size <= length) {
+    if ((offset + size) <= length) {
         nread = size; /* read does not pass end-of-file */
     } else {
         nread = length - offset; /* read truncated by end-of-file */
