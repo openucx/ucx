@@ -566,7 +566,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
 {
     ucp_worker_h worker = ucp_ep->worker;
     ucp_wireup_ep_t *wireup_ep;
-    ucs_queue_head_t tmp_pending_queue;
     uct_ep_h aux_uct_ep;
 
     /* If the failure happened on AUX EP of CM lane on a server EP,
@@ -586,7 +585,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
          * destroy CM_WIREUP/AUX_EP */
         aux_uct_ep = wireup_ep->aux_ep;
 
-        ucs_queue_head_init(&tmp_pending_queue);
         ucp_wireup_ep_disown(ucp_ep->uct_eps[lane], aux_uct_ep);
         ucp_worker_discard_uct_ep(ucp_ep->worker, aux_uct_ep,
                                   UCT_FLUSH_FLAG_CANCEL,
