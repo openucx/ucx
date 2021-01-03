@@ -99,6 +99,122 @@ static int vfs_run_fusermount(char **extra_argv)
     return 0;
 }
 
+static void vfs_get_mountpoint(pid_t pid, char *mountpoint, size_t max_length)
+{
+    snprintf(mountpoint, max_length, "%s/%d", g_opts.mountpoint_dir, pid);
+}
+
+static const char *vfs_get_process_name(int pid, char *buf, size_t max_length)
+{
+    char procfs_comm[NAME_MAX];
+    size_t length;
+    FILE *file;
+    char *p;
+
+    /* open /proc/<pid>/comm to read command name */
+    snprintf(procfs_comm, sizeof(procfs_comm), "/proc/%d/comm", pid);
+    file = fopen(procfs_comm, "r");
+    if (file == NULL) {
+        goto err;
+    }
+
+    /* read command to buffer */
+    if (fgets(buf, max_length, file) == NULL) {
+        goto err_close;
+    }
+
+    /* remove trailing space/newline */
+    length = strlen(buf);
+    for (p = &buf[length - 1]; (p >= buf) && isspace(*p); --p) {
+        *p = '\0';
+        --length;
+    }
+
+    /* append process id */
+    snprintf(buf + length, max_length - length, "@pid:%d", pid);
+    goto out;
+
+err_close:
+    fclose(file);
+err:
+    snprintf(buf, max_length, "pid:%d", pid);
+out:
+    return buf;
+}
+
+int vfs_mount(int pid)
+{
+    char mountpoint[PATH_MAX];
+    char mountopts[1024];
+    char name[NAME_MAX];
+    int fuse_fd, ret;
+
+    /* Add common mount options:
+     * - File system name (source) : process name and pid
+     * - File system type          : ucx_vfs
+     * - Enable permissions check  : yes
+     * - Direct IO (no caching)    : yes
+     */
+    ret = snprintf(
+            mountopts, sizeof(mountopts),
+            "fsname=%s,subtype=ucx_vfs,default_permissions,direct_io%s%s",
+            vfs_get_process_name(pid, name, sizeof(name)),
+            (strlen(g_opts.mount_opts) > 0) ? "," : "", g_opts.mount_opts);
+    if (ret >= sizeof(mountopts)) {
+        return -ENOMEM;
+    }
+
+    /* Create the mount point directory, and ignore "already exists" error */
+    vfs_get_mountpoint(pid, mountpoint, sizeof(mountpoint));
+    ret = mkdir(mountpoint, S_IRWXU);
+    if ((ret < 0) && (errno != EEXIST)) {
+        ret = -errno;
+        vfs_error("failed to create directory '%s': %m", mountpoint);
+        return ret;
+    }
+
+    /* Mount a new FUSE filesystem in the mount point directory */
+    vfs_log("mounting directory '%s' with options '%s'", mountpoint, mountopts);
+    fuse_fd = fuse_open_channel(mountpoint, mountopts);
+    if (fuse_fd < 0) {
+        vfs_error("fuse_open_channel(%s,opts=%s) failed: %m", mountpoint,
+                  mountopts);
+        return fuse_fd;
+    }
+
+    vfs_log("mounted directory '%s' with fd %d", mountpoint, fuse_fd);
+    return fuse_fd;
+}
+
+int vfs_unmount(int pid)
+{
+    char mountpoint[PATH_MAX];
+    char *argv[5];
+    int ret;
+
+    /* Unmount FUSE file system */
+    vfs_get_mountpoint(pid, mountpoint, sizeof(mountpoint));
+    argv[0] = "-u";
+    argv[1] = "-z";
+    argv[2] = "--";
+    argv[3] = mountpoint;
+    argv[4] = NULL;
+    ret     = vfs_run_fusermount(argv);
+    if (ret < 0) {
+        return ret;
+    }
+
+    /* Remove mount point directory */
+    vfs_log("removing directory '%s'", mountpoint);
+    ret = rmdir(mountpoint);
+    if (ret < 0) {
+        vfs_error("failed to remove directory '%s': %m", mountpoint);
+        return ret;
+    }
+
+    return 0;
+}
+
 static int vfs_unlink_socket(int silent_notexist)
 {
     int ret;
@@ -155,8 +271,8 @@ static int vfs_listen(int silent_addinuse_err)
         goto out_unlink;
     }
 
-    vfs_error("closing socket, TODO implement listening for connections");
-    close(listen_fd);
+    vfs_log("listening for connections on '%s'", g_sockaddr.sun_path);
+    ret = vfs_server_loop(listen_fd);
 
 out_unlink:
     vfs_unlink_socket(0);
