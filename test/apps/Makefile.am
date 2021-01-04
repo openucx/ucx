@@ -55,8 +55,7 @@ test_init_mt_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS)
 test_init_mt_LDADD    = $(top_builddir)/src/ucp/libucp.la
 
 if HAVE_CUDA
-noinst_PROGRAMS                += test_cuda_hook_dynamic \
-                                  test_cuda_hook_static
+noinst_PROGRAMS                += test_cuda_hook_dynamic
 
 test_cuda_hook_dynamic_SOURCES  = test_cuda_hook.c
 test_cuda_hook_dynamic_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
@@ -65,13 +64,16 @@ test_cuda_hook_dynamic_LDFLAGS  = $(CUDA_LDFLAGS)
 test_cuda_hook_dynamic_LDADD    = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la
 
+if HAVE_CUDA_STATIC
 noinst_PROGRAMS                += test_cuda_hook_static
 test_cuda_hook_static_SOURCES   = test_cuda_hook.c
 test_cuda_hook_static_CPPFLAGS  = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 test_cuda_hook_static_CFLAGS    = $(BASE_CFLAGS)
-test_cuda_hook_static_LDFLAGS   = -lcudart_static -lcuda -lrt -ldl -lpthread
+test_cuda_hook_static_LDFLAGS   = $(CUDA_STATIC_LIB) -lcuda -lrt -ldl -lpthread
 test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la
+endif
+
 endif
 
 if HAVE_TCMALLOC
