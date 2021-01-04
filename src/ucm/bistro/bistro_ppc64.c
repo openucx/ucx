@@ -134,7 +134,7 @@ static void *ucm_bistro_get_text_addr(void *addr)
 #endif
 }
 
-ucs_status_t ucm_bistro_patch_toc(const char *symbol, void *hook,
+ucs_status_t ucm_bistro_patch_toc(void *func_ptr, void *hook,
                                   ucm_bistro_restore_point_t **rp,
                                   uint64_t toc)
 {
@@ -143,11 +143,9 @@ ucs_status_t ucm_bistro_patch_toc(const char *symbol, void *hook,
     ucm_bistro_restore_point_t restore;
     ucm_bistro_patch_t patch;
 
-    UCM_LOOKUP_SYMBOL(func, symbol);
+    restore.entry = func_ptr;
 
-    restore.entry = func;
-
-    func = ucm_bistro_get_text_addr(func);
+    func = ucm_bistro_get_text_addr(func_ptr);
     hook = ucm_bistro_get_text_addr(hook);
 
     status = ucm_bistro_patch_hook(hook, &restore, toc);

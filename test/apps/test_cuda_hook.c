@@ -11,6 +11,8 @@
 #include <ucp/api/ucp.h>
 #include <ucm/api/ucm.h>
 #include <cuda_runtime.h>
+#include <getopt.h>
+#include <cuda.h>
 
 
 static void event_cb(ucm_event_type_t event_type, ucm_event_t *event, void *arg)
@@ -33,17 +35,74 @@ static void event_cb(ucm_event_type_t event_type, ucm_event_t *event, void *arg)
     ++(*count_p);
 }
 
+static void alloc_driver_api()
+{
+    CUdeviceptr dptr = 0;
+    CUcontext context;
+    CUdevice device;
+    CUresult res;
+
+    res = cuInit(0);
+    if (res != CUDA_SUCCESS) {
+        printf("cuInit() failed: %d\n", res);
+        return;
+    }
+
+    res = cuDeviceGet(&device, 0);
+    if (res != CUDA_SUCCESS) {
+        printf("cuDeviceGet(0) failed: %d\n", res);
+        return;
+    }
+
+    res = cuCtxCreate(&context, 0, device);
+    if (res != CUDA_SUCCESS) {
+        printf("cuCtxCreate() failed: %d\n", res);
+        return;
+    }
+
+    res = cuMemAlloc(&dptr, 4096);
+    printf("cuMemAlloc() returned 0x%lx result %d\n", (uintptr_t)dptr, res);
+    cuMemFree(dptr);
+
+    cuCtxDetach(context);
+}
+
+static void alloc_runtime_api()
+{
+    void *dptr = NULL;
+    cudaError_t res;
+
+    res = cudaMalloc(&dptr, 4096);
+    printf("cudaMalloc() returned %p result %d\n", dptr, res);
+    cudaFree(dptr);
+}
+
 int main(int argc, char **argv)
 {
     static const ucm_event_type_t memtype_events = UCM_EVENT_MEM_TYPE_ALLOC |
                                                    UCM_EVENT_MEM_TYPE_FREE;
     static const int num_expected_events         = 2;
-    ucs_status_t status;
     ucp_context_h context;
+    ucs_status_t status;
     ucp_params_t params;
+    int use_driver_api;
     int num_events;
-    void *dptr;
-    int res;
+    int c;
+
+    use_driver_api = 0;
+    while ((c = getopt(argc, argv, "d")) != -1) {
+        switch (c) {
+        case 'd':
+            use_driver_api = 1;
+            break;
+        default:
+            printf("Usage: test_cuda_hook [options]\n");
+            printf("Options are:\n");
+            printf("  -d :   Use Cuda driver API (Default: use runtime API)\n");
+            printf("\n");
+            return -1;
+        }
+    }
 
     params.field_mask = UCP_PARAM_FIELD_FEATURES;
     params.features   = UCP_FEATURE_TAG | UCP_FEATURE_STREAM;
@@ -56,11 +115,11 @@ int main(int argc, char **argv)
     num_events = 0;
     ucm_set_event_handler(memtype_events, 1000, event_cb, &num_events);
 
-    dptr = NULL;
-    res  = cudaMalloc(&dptr, 4096);
-    printf("cudaMalloc() returned %p result %d\n", dptr, res);
-
-    cudaFree(dptr);
+    if (use_driver_api) {
+        alloc_driver_api();
+    } else {
+        alloc_runtime_api();
+    }
 
     ucm_unset_event_handler(memtype_events, event_cb, &num_events);
     printf("got %d/%d memory events\n", num_events, num_expected_events);

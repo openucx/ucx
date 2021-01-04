@@ -1367,21 +1367,28 @@ test_malloc_hook() {
 	then
 		for mode in reloc bistro
 		do
-			export UCX_MEM_MMAP_HOOK_MODE=${mode}
+			export UCX_MEM_CUDA_HOOK_MODE=${mode}
 
 			# Run cuda memory hooks with dynamic link
 			./test/apps/test_cuda_hook_dynamic
 
 			# Run cuda memory hooks with static link
-			if ./test/apps/test_cuda_hook_static
+			./test/apps/test_cuda_hook_static && status="pass" || status="fail"
+			[ ${mode} == "bistro" ] && exp_status="pass" || exp_status="fail"
+			if [ ${status} == ${exp_status} ]
 			then
-				echo "Static link with cuda is expected to fail"
-				exit 1
+				echo "Static link with cuda ${status}, as expected"
 			else
-				echo "Test failed - as expected"
+				echo "Static link with cuda is expected to ${exp_status}, actual: ${status}"
+				exit 1
 			fi
 
-			unset UCX_MEM_MMAP_HOOK_MODE
+			# Test that driver API hooks work in both reloc and bistro modes,
+			# since we call them directly from the test
+			./test/apps/test_cuda_hook_dynamic -d
+			./test/apps/test_cuda_hook_static -d
+
+			unset UCX_MEM_CUDA_HOOK_MODE
 		done
 	fi
 }
@@ -1746,13 +1753,13 @@ run_tests() {
 	do_distributed_task 2 4 run_ucx_perftest
 	do_distributed_task 1 4 run_io_demo
 	do_distributed_task 3 4 test_profiling
-	do_distributed_task 0 3 test_jucx
+	do_distributed_task 0 4 test_jucx
 	do_distributed_task 1 4 test_ucs_dlopen
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 2 4 test_env_var_aliases
-	do_distributed_task 1 3 test_malloc_hook
+	do_distributed_task 1 4 test_malloc_hook
 	do_distributed_task 0 4 test_ucp_dlopen
 	do_distributed_task 1 4 test_init_mt
 
