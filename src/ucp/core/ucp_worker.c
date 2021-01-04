@@ -1504,11 +1504,12 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     ucp_md_index_t md_index;
     ucp_worker_iface_t *wiface;
     uct_md_attr_t *md_attr;
-    uint64_t supp_tls;
+    ucp_tl_bitmap_t supp_tls;
     uint8_t priority, best_priority;
     ucp_tl_iface_atomic_flags_t atomic;
 
     ucp_context_uct_atomic_iface_flags(context, &atomic);
+    UCS_BITMAP_CLEAR(supp_tls);
 
     iface_cap_flags                      = UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
@@ -1519,7 +1520,6 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     dummy_iface_attr.priority            = 0;
     dummy_iface_attr.lat_ovh             = 0;
 
-    supp_tls                             = 0;
     best_score                           = -1;
     best_rsc                             = NULL;
     best_priority                        = 0;
@@ -1543,7 +1543,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
             continue;
         }
 
-        supp_tls |= UCS_BIT(rsc_index);
+        UCS_BITMAP_SET(supp_tls, rsc_index);
         priority  = iface_attr->priority;
 
         score = ucp_wireup_amo_score_func(context, md_attr, iface_attr,
@@ -1569,7 +1569,7 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
     /* Enable atomics on all resources using same device as the "best" resource */
     UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, rsc_index) {
         rsc = &context->tl_rscs[rsc_index];
-        if ((supp_tls & UCS_BIT(rsc_index)) &&
+        if (UCS_BITMAP_GET(supp_tls, rsc_index) &&
             (rsc->md_index == best_rsc->md_index) &&
             !strncmp(rsc->tl_rsc.dev_name, best_rsc->tl_rsc.dev_name,
                      UCT_DEVICE_NAME_MAX))

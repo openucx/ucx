@@ -505,7 +505,7 @@ static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
     /* Find a transport which matches the given dev_name and the user's configuration.
      * It also has to be a UCT_IFACE_FLAG_CONNECT_TO_IFACE transport and support
      * active messaging for sending a wireup message */
-    ucs_for_each_bit(tl_id, context->config.sockaddr_aux_rscs_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(context->config.sockaddr_aux_rscs_bitmap, tl_id) {
         if ((!strncmp(context->tl_rscs[tl_id].tl_rsc.dev_name, dev_name,
                       UCT_DEVICE_NAME_MAX)) &&
             (ucs_test_all_flags(ucp_worker_iface_get_attr(worker, tl_id)->cap.flags,

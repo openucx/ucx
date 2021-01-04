@@ -968,7 +968,7 @@ static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
     uint64_t dummy_mask   = 0;
     ucp_rsc_index_t tl_id;
 
-    context->config.sockaddr_aux_rscs_bitmap = 0;
+    UCS_BITMAP_CLEAR(context->config.sockaddr_aux_rscs_bitmap);
 
     /* Check if any of the context's resources are present in the sockaddr
      * auxiliary transports for the client-server flow */
@@ -976,7 +976,7 @@ static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
         if (ucp_is_resource_in_transports_list(context->tl_rscs[tl_id].tl_rsc.tl_name,
                                                tl_names, count, &dummy_flags,
                                                &dummy_mask)) {
-            context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id);
+            UCS_BITMAP_SET(context->config.sockaddr_aux_rscs_bitmap, tl_id);
         }
     }
 }

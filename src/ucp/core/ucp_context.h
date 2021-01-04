@@ -242,7 +242,7 @@ typedef struct ucp_context {
         uint64_t                  cm_cmpts_bitmap;
 
         /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
-        uint64_t                  sockaddr_aux_rscs_bitmap;
+        ucp_tl_bitmap_t           sockaddr_aux_rscs_bitmap;
 
         /* Array of sockaddr transports indexes.
          * The indexes appear in the configured priority order */

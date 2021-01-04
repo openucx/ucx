@@ -8,6 +8,7 @@
 #define UCS_BITMAP_H_
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/compiler_def.h>
