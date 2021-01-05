@@ -76,6 +76,9 @@ UCS_TEST_F(test_ucs_bitmap, test_set_all) {
 UCS_TEST_F(test_ucs_bitmap, test_ffs) {
     size_t bit_index;
 
+    bit_index = UCS_BITMAP_FFS(bitmap);
+    EXPECT_EQ(bit_index, 128);
+
     UCS_BITMAP_SET(bitmap, 90);
     UCS_BITMAP_SET(bitmap, 100);
     bit_index = UCS_BITMAP_FFS(bitmap);

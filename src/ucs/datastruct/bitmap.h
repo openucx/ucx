@@ -301,9 +301,9 @@ _UCS_BITMAP_DECLARE_TYPE(256)
     ({ \
         size_t _word_index, _index; \
         _UCS_BITMAP_FOR_EACH_WORD(_bitmap, _word_index) { \
-            _index = ucs_ffs64_safe(_UCS_BITMAP_WORD(_bitmap, _word_index)); \
-            if (_index != UCS_BITMAP_BITS_IN_WORD) { \
-                _index += _word_index * UCS_BITMAP_BITS_IN_WORD; \
+            _index = ucs_ffs64_safe(_UCS_BITMAP_WORD(_bitmap, _word_index)) + \
+                     _word_index * UCS_BITMAP_BITS_IN_WORD; \
+            if (_index % UCS_BITMAP_BITS_IN_WORD) { \
                 break; \
             } \
         } \
