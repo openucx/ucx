@@ -209,6 +209,11 @@ stages:
         name: new
         demands: ucx_new -equals yes
         test_perf: 1
+    - template: tests.yml
+      parameters:
+        name: hwi
+        demands: ucx_hwi -equals yes
+        test_perf: 0
 
   - stage: io_demo
     dependsOn: [Codestyle]
