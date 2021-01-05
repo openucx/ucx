@@ -43,8 +43,8 @@ typedef struct {
  */
 static size_t ucm_bistro_detect_pic_prefix(const void *func, size_t min_length)
 {
+    uint8_t rex, opcode, modrm, mod;
     size_t offset, prev_offset;
-    uint8_t rex, opcode, modrm;
 
     offset = 0;
     while (offset < min_length) {
@@ -72,11 +72,27 @@ static size_t ucm_bistro_detect_pic_prefix(const void *func, size_t min_length)
                 continue;
             }
         } else if ((rex == 0x48) && (opcode == 0x89)) {
-            /* mov %rsp, %rbp */
+            /* MOV Ev,Gv */
             modrm = *(uint8_t*)UCS_PTR_BYTE_OFFSET(func, offset++);
             if (modrm == 0xE5) {
+                /* mov %rsp, %rbp */
                 continue;
             }
+            mod = modrm >> 6;
+            if (((modrm & 7) == 4) && (mod != 3)) {
+                /* r/m = 0b100, mod = 0b00/0b01/0b10 */
+                ++offset; /* skip SIB */
+                if (mod == 1) {
+                    offset += sizeof(uint8_t); /* skip disp8 */
+                } else if (mod == 2) {
+                    offset += sizeof(uint32_t); /* skip disp32 */
+                }
+                continue;
+            }
+        } else if ((rex == 0) && ((opcode & 0xF8) == 0xB8)) {
+            /* mov $imm32, %reg */
+            offset += sizeof(uint32_t);
+            continue;
         }
 
         /* unsupported instruction - bail */
