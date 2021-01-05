@@ -2363,7 +2363,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS) {
         /* If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is not set,
-         * pack all tl adresses */
+         * pack all tl addresses */
         tl_bitmap = UINT64_MAX;
 
         if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) {
