@@ -1211,7 +1211,7 @@ public:
         int index;
 
         index = get_ep_index(ep);
-        ASSERT_GE(index, 0);
+        ASSERT_TRUE(index >= 0);
         EXPECT_LT(index, (2 * m_clients_num));
 
         pthread_mutex_lock(&m_lock);
