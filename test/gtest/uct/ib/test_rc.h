@@ -27,7 +27,7 @@ public:
     } pending_send_request_t;
 
     virtual void init();
-    void connect();
+    virtual void connect();
 
     uct_rc_iface_t* rc_iface(entity *e) {
         return ucs_derived_of(e->iface(), uct_rc_iface_t);

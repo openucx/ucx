@@ -166,14 +166,14 @@ uct_rc_mlx5_devx_init_rx_common(uct_rc_mlx5_iface_common_t *iface,
 
     iface->rx.srq.db = &iface->rx.srq.devx.dbrec->db[MLX5_RCV_DBR];
 
-    if (iface->config.cyclic_srq_enable == UCS_NO) {
-        wq_type = UCT_RC_MLX5_MP_ENABLED(iface) ?
-                  UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ :
-                  UCT_IB_MLX5_SRQ_TOPO_LIST;
-    } else {
+    if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_CYCLIC) {
         wq_type = UCT_RC_MLX5_MP_ENABLED(iface) ?
                   UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ :
                   UCT_IB_MLX5_SRQ_TOPO_CYCLIC;
+    } else {
+        wq_type = UCT_RC_MLX5_MP_ENABLED(iface) ?
+                  UCT_IB_MLX5_SRQ_TOPO_LIST_MP_RQ :
+                  UCT_IB_MLX5_SRQ_TOPO_LIST;
     }
 
     UCT_IB_MLX5DV_SET  (wq, wq, wq_type,       wq_type);

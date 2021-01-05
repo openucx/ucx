@@ -66,7 +66,8 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 #endif
 
 void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
-                                           struct mlx5_cqe64 *cqe)
+                                           struct mlx5_cqe64 *cqe,
+                                           int poll_flags)
 {
     uct_ib_mlx5_cq_t *cq      = &iface->cq[UCT_IB_DIR_RX];
     struct mlx5_err_cqe *ecqe = (void*)cqe;
@@ -87,7 +88,8 @@ void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
         /* TODO: Check if ib_stride_index valid for error CQE */
         uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr, UCS_OK,
                                           iface->super.super.config.rx_headroom_offset,
-                                          &iface->super.super.release_desc);
+                                          &iface->super.super.release_desc,
+                                          poll_flags);
     } else {
         ucs_assert((ecqe->op_own >> 4) != MLX5_CQE_INVALID);
         uct_ib_mlx5_check_completion(&iface->super.super, cq, cqe);
@@ -132,16 +134,35 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
     return 1;
 }
 
-unsigned uct_rc_mlx5_iface_progress(void *arg)
+static UCS_F_ALWAYS_INLINE unsigned
+uct_rc_mlx5_iface_progress(void *arg, int flags)
 {
     uct_rc_mlx5_iface_common_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(iface, UCT_RC_MLX5_POLL_FLAG_HAS_EP);
+    count = uct_rc_mlx5_iface_common_poll_rx(iface, flags);
     if (!uct_rc_iface_poll_tx(&iface->super, count)) {
         return count;
     }
-    return uct_rc_mlx5_iface_poll_tx(iface);
+
+    return count + uct_rc_mlx5_iface_poll_tx(iface);
+}
+
+static unsigned uct_rc_mlx5_iface_progress_cyclic(void *arg)
+{
+    return uct_rc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_HAS_EP);
+}
+
+static unsigned uct_rc_mlx5_iface_progress_ll(void *arg)
+{
+    return uct_rc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_HAS_EP |
+                                           UCT_RC_MLX5_POLL_FLAG_LINKED_LIST);
+}
+
+static unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
+{
+    return uct_rc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_HAS_EP |
+                                           UCT_RC_MLX5_POLL_FLAG_TM);
 }
 
 static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
@@ -302,20 +323,6 @@ err:
     return status;
 }
 
-static UCS_F_MAYBE_UNUSED unsigned uct_rc_mlx5_iface_progress_tm(void *arg)
-{
-    uct_rc_mlx5_iface_common_t *iface = arg;
-    unsigned count;
-
-    count = uct_rc_mlx5_iface_common_poll_rx(iface,
-                                             UCT_RC_MLX5_POLL_FLAG_HAS_EP |
-                                             UCT_RC_MLX5_POLL_FLAG_TM);
-    if (!uct_rc_iface_poll_tx(&iface->super, count)) {
-        return count;
-    }
-    return uct_rc_mlx5_iface_poll_tx(iface);
-}
-
 #if IBV_HW_TM
 static ucs_status_t uct_rc_mlx5_iface_tag_recv_zcopy(uct_iface_h tl_iface,
                                                      uct_tag_t tag,
@@ -340,6 +347,34 @@ static ucs_status_t uct_rc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 }
 #endif
 
+static ucs_status_t
+uct_rc_mlx5_iface_parse_srq_topo(uct_ib_mlx5_md_t *md,
+                                 uct_rc_mlx5_iface_common_config_t *config,
+                                 uct_rc_mlx5_srq_topo_t *topo_p)
+
+{
+    int i;
+
+    for (i = 0; i < config->srq_topo.count; ++i) {
+        if (!strcasecmp(config->srq_topo.types[i], "list")) {
+            *topo_p = UCT_RC_MLX5_SRQ_TOPO_LIST;
+            return UCS_OK;
+        } else if (!strcasecmp(config->srq_topo.types[i], "cyclic")) {
+            /* real cyclic list requires DevX support */
+            if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ)) {
+                continue;
+            }
+            *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC;
+            return UCS_OK;
+        } else if (!strcasecmp(config->srq_topo.types[i], "cyclic_emulated")) {
+            *topo_p = UCT_RC_MLX5_SRQ_TOPO_CYCLIC_EMULATED;
+            return UCS_OK;
+        }
+    }
+
+    return UCS_ERR_INVALID_PARAM;
+}
+
 static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
                                               uct_md_h tl_md,
                                               uct_rc_iface_common_config_t *rc_config,
@@ -353,10 +388,14 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
     struct ibv_tmh tmh;
     int mtu;
     int tm_params;
-    ucs_status_t status;
 #endif
+    ucs_status_t status;
 
-    iface->config.cyclic_srq_enable = mlx5_config->cyclic_srq_enable;
+    status = uct_rc_mlx5_iface_parse_srq_topo(md, mlx5_config,
+                                              &iface->config.srq_topo);
+    if (status != UCS_OK) {
+        return status;
+    }
 
 #if IBV_HW_TM
     /* Both eager and rndv callbacks should be provided for
@@ -502,7 +541,11 @@ uct_rc_mlx5_iface_init_rx(uct_rc_iface_t *rc_iface,
         return status;
     }
 
-    iface->super.progress = uct_rc_mlx5_iface_progress;
+    if (iface->config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST) {
+        iface->super.progress = uct_rc_mlx5_iface_progress_ll;
+    } else {
+        iface->super.progress = uct_rc_mlx5_iface_progress_cyclic;
+    }
     return UCS_OK;
 }
 
