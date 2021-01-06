@@ -52,18 +52,6 @@ typedef uintptr_t native_ptr;
  */
 bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss, socklen_t& sa_len);
 
-struct jucx_context {
-    jobject callback;
-    volatile jobject jucx_request;
-    ucs_status_t status;
-    ucs_recursive_spinlock_t lock;
-    size_t length;
-    ucp_dt_iov_t* iovec;
-    ucp_tag_t sender_tag;
-};
-
-void jucx_request_init(void *request);
-
 /**
  * @brief Get the jni env object. To be able to call java methods from ucx async callbacks.
  */
@@ -72,24 +60,31 @@ JNIEnv* get_jni_env();
 /**
  * @brief Send callback used to invoke java callback class on completion of ucp operations.
  */
-void jucx_request_callback(void *request, ucs_status_t status);
+void jucx_request_callback(void *request, ucs_status_t status, void *user_data);
 
 /**
  * @brief Recv callback used to invoke java callback class on completion of ucp tag_recv_nb operation.
  */
-void recv_callback(void *request, ucs_status_t status, ucp_tag_recv_info_t *info);
+void recv_callback(void *request, ucs_status_t status, const ucp_tag_recv_info_t *info,
+                   void *user_data);
 
 /**
  * @brief Recv callback used to invoke java callback class on completion of ucp stream_recv_nb operation.
  */
-void stream_recv_callback(void *request, ucs_status_t status, size_t length);
+void stream_recv_callback(void *request, ucs_status_t status, size_t length, void *user_data);
 
 /**
- * @brief Utility to process request logic: if request is pointer - set callback to request context.
- * If request is status - call callback directly.
- * Returns jucx_request object, that could be monitored on completion.
+ * @ingroup JUCX_REQ
+ * @brief Utility to allocate jucx request and set appropriate java callback in it.
  */
-jobject process_request(void *request, jobject callback);
+jobject jucx_request_allocate(JNIEnv *env, jobject callback, ucp_request_param_t *param,
+                              jint memory_type);
+
+/**
+ * @ingroup JUCX_REQ
+ * @brief Utility to set iov verctor in jucx_request, to release it on completion.
+ */
+void jucx_request_set_iov(JNIEnv *env, jobject request, ucp_dt_iov_t* iovec);
 
 /**
  * @ingroup JUCX_REQ
@@ -98,9 +93,21 @@ jobject process_request(void *request, jobject callback);
 void jucx_request_update_status(JNIEnv *env, jobject jucx_request, ucs_status_t status);
 
 /**
- * @brief Call java callback on completed stream recv operation, that didn't invoke callback.
+ * @ingroup JUCX_REQ
+ * @brief Utility to set recv length in JUCX request.
  */
-jobject process_completed_stream_recv(size_t length, jobject callback);
+void jucx_request_update_recv_length(JNIEnv *env, jobject jucx_request, size_t rlength);
+
+/**
+ * @ingroup JUCX_REQ
+ * @brief Utility to set sender tag in JUCX request.
+ */
+void jucx_request_update_sender_tag(JNIEnv *env, jobject jucx_request, ucp_tag_t sender_tag);
+
+/**
+ * @brief Function to handle result of ucx function submition, to handle immidiate completion.
+ */
+void process_request(JNIEnv *env, jobject request, ucs_status_ptr_t status);
 
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg);
 

@@ -333,14 +333,14 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
      * both (local and remote) sides to avoid undefined behavior.
      */
     public UcpRequest closeNonBlockingForce() {
-        return closeNonBlockingNative(getNativeId(), UcpConstants.UCP_EP_CLOSE_MODE_FORCE);
+        return closeNonBlockingNative(getNativeId(), UcpConstants.UCP_EP_CLOSE_FLAG_FORCE);
     }
 
     /**
      * Releases the endpoint by scheduling flushes on all outstanding operations.
      */
     public UcpRequest closeNonBlockingFlush() {
-        return closeNonBlockingNative(getNativeId(), UcpConstants.UCP_EP_CLOSE_MODE_FLUSH);
+        return closeNonBlockingNative(getNativeId(), 0);
     }
 
     private native long createEndpointNative(UcpEndpointParams params, long workerId);
