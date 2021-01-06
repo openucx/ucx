@@ -13,18 +13,20 @@ dist_examples_DATA =   \
 	ucp_client_server.c
 
 if HAVE_CUDA
-EXAMPLE_CUDA_LDFLAGS = $(CUDA_LDFLAGS)
+EXAMPLE_CUDA_LD_FLAGS = $(CUDA_LDFLAGS)
+EXAMPLE_CUDA_LIBS = $(CUDA_LIBS)
 # cuda.h couldn't be compiled with -pedantic flag
 EXAMPLE_CUDA_CFLAGS =
 EXAMPLE_CUDA_CPPFLAGS = $(CUDA_CPPFLAGS) -DHAVE_CUDA
 else
-EXAMPLE_CUDA_LDFLAGS =
+EXAMPLE_CUDA_LD_FLAGS =
+EXAMPLE_CUDA_LIBS =
 EXAMPLE_CUDA_CFLAGS = $(CFLAGS_PEDANTIC)
 EXAMPLE_CUDA_CPPFLAGS =
 endif
 
 EXAMPLE_CCLD_FLAGS = -lucs -I$(includedir) -L$(libdir) -Wall -Werror -Wl,-rpath,$(libdir) \
-                     $(EXAMPLE_CUDA_LDFLAGS) $(EXAMPLE_CUDA_CPPFLAGS)
+                     $(EXAMPLE_CUDA_LD_FLAGS) $(EXAMPLE_CUDA_LIBS) $(EXAMPLE_CUDA_CPPFLAGS)
 
 installcheck-local:
 	@echo "INSTALLCHECK: Compiling examples with installed library"
@@ -43,16 +45,18 @@ bin_PROGRAMS = \
 ucp_hello_world_SOURCES  = ucp_hello_world.c
 ucp_hello_world_CFLAGS   = $(BASE_CFLAGS) $(EXAMPLE_CUDA_CFLAGS)
 ucp_hello_world_CPPFLAGS = $(BASE_CPPFLAGS) $(EXAMPLE_CUDA_CPPFLAGS)
+ucp_hello_world_LDFLAGS  = $(EXAMPLE_CUDA_LD_FLAGS)
 ucp_hello_world_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/ucp/libucp.la \
-                           $(EXAMPLE_CUDA_LDFLAGS)
+                           $(EXAMPLE_CUDA_LIBS)
 
 uct_hello_world_SOURCES  = uct_hello_world.c
 uct_hello_world_CFLAGS   = $(BASE_CFLAGS) $(EXAMPLE_CUDA_CFLAGS)
 uct_hello_world_CPPFLAGS = $(BASE_CPPFLAGS) $(EXAMPLE_CUDA_CPPFLAGS)
+uct_hello_world_LDFLAGS  = $(EXAMPLE_CUDA_LD_FLAGS)
 uct_hello_world_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/uct/libuct.la \
-                           $(EXAMPLE_CUDA_LDFLAGS)
+                           $(EXAMPLE_CUDA_LIBS)
 
 ucp_client_server_SOURCES  = ucp_client_server.c
 ucp_client_server_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_PEDANTIC)
