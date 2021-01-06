@@ -351,6 +351,8 @@ struct ucp_ep_config {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
+    uint8_t                       ref_cnt;       /* Reference counter: 0 - it is
+                                                    allowed to destroy EP */
     ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
@@ -506,8 +508,6 @@ void ucp_ep_destroy_base(ucp_ep_h ep);
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
                                   const char *peer_name, const char *message,
                                   ucp_ep_h *ep_p);
-
-void ucp_ep_delete(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep);
