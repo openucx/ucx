@@ -92,6 +92,12 @@ void stream_recv_callback(void *request, ucs_status_t status, size_t length);
 jobject process_request(void *request, jobject callback);
 
 /**
+ * @ingroup JUCX_REQ
+ * @brief Utility to update status of JUCX request to corresponding ucx request.
+ */
+void jucx_request_update_status(JNIEnv *env, jobject jucx_request, ucs_status_t status);
+
+/**
  * @brief Call java callback on completed stream recv operation, that didn't invoke callback.
  */
 jobject process_completed_stream_recv(size_t length, jobject callback);
