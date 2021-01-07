@@ -942,6 +942,7 @@ err_free_ucp_conn_request:
 err_reject:
     status = uct_listener_reject(listener, conn_request);
     if (status != UCS_OK) {
+        /* coverity[pass_freed_arg] */
         ucs_warn("failed to reject connect request %p on listener %p",
                  conn_request, listener);
     }
