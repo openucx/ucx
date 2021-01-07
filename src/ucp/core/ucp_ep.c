@@ -1993,11 +1993,10 @@ static int ucp_ep_is_short_lower_thresh(ssize_t max_short,
             (((size_t)max_short + 1) < thresh));
 }
 
-static void ucp_ep_config_print_tag_proto(FILE *stream, const char *name,
-                                          ssize_t max_eager_short,
-                                          size_t zcopy_thresh,
-                                          size_t rndv_rma_thresh,
-                                          size_t rndv_am_thresh)
+static void
+ucp_ep_config_print_proto(FILE *stream, const char *name,
+                          ssize_t max_eager_short, size_t zcopy_thresh,
+                          size_t rndv_rma_thresh, size_t rndv_am_thresh)
 {
     size_t max_bcopy, min_rndv, max_short;
 
@@ -2194,49 +2193,59 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
     fprintf(stream, "#\n");
 
     if (context->config.features & UCP_FEATURE_TAG) {
-        ucp_ep_config_print_tag_proto(stream, "tag_send",
-                                      config->tag.eager.max_short,
-                                      config->tag.eager.zcopy_thresh[0],
-                                      config->tag.rndv.rma_thresh.remote,
-                                      config->tag.rndv.am_thresh.remote);
-        ucp_ep_config_print_tag_proto(stream, "tag_send_nbr",
-                                      config->tag.eager.max_short,
-                                      /* disable zcopy */
-                                      ucs_min(config->tag.rndv.rma_thresh.local,
-                                              config->tag.rndv.am_thresh.local),
-                                      config->tag.rndv.rma_thresh.local,
-                                      config->tag.rndv.am_thresh.local);
-        ucp_ep_config_print_tag_proto(stream, "tag_send_sync",
-                                      config->tag.eager.max_short,
-                                      config->tag.eager.sync_zcopy_thresh[0],
-                                      config->tag.rndv.rma_thresh.remote,
-                                      config->tag.rndv.am_thresh.remote);
+        ucp_ep_config_print_proto(stream, "tag_send",
+                                  config->tag.eager.max_short,
+                                  config->tag.eager.zcopy_thresh[0],
+                                  config->tag.rndv.rma_thresh.remote,
+                                  config->tag.rndv.am_thresh.remote);
+        ucp_ep_config_print_proto(stream, "tag_send_nbr",
+                                  config->tag.eager.max_short,
+                                  /* disable zcopy */
+                                  ucs_min(config->tag.rndv.rma_thresh.local,
+                                          config->tag.rndv.am_thresh.local),
+                                  config->tag.rndv.rma_thresh.local,
+                                  config->tag.rndv.am_thresh.local);
+        ucp_ep_config_print_proto(stream, "tag_send_sync",
+                                  config->tag.eager.max_short,
+                                  config->tag.eager.sync_zcopy_thresh[0],
+                                  config->tag.rndv.rma_thresh.remote,
+                                  config->tag.rndv.am_thresh.remote);
     }
 
-     if (context->config.features & UCP_FEATURE_RMA) {
-         for (lane = 0; lane < config->key.num_lanes; ++lane) {
-             if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes, lane) == -1) {
-                 continue;
-             }
-             ucp_ep_config_print_rma_proto(stream, "put", lane,
-                                           config->rma[lane].max_put_short + 1,
-                                           config->rma[lane].put_zcopy_thresh);
-             ucp_ep_config_print_rma_proto(stream, "get", lane, 0,
-                                           config->rma[lane].get_zcopy_thresh);
-         }
-     }
+    if (context->config.features & UCP_FEATURE_AM) {
+        ucp_ep_config_print_proto(stream, "am_send",
+                                  config->am_u.max_eager_short.memtype_on,
+                                  config->am.zcopy_thresh[0],
+                                  config->rndv.rma_thresh.remote,
+                                  config->rndv.am_thresh.remote);
+    }
 
-     if (context->config.features & (UCP_FEATURE_TAG|UCP_FEATURE_RMA)) {
-         fprintf(stream, "#\n");
-         fprintf(stream, "# %23s: mds ", "rma_bw");
-         ucs_for_each_bit(md_index, config->key.rma_bw_md_map) {
-             fprintf(stream, "[%d] ", md_index);
-         }
-     }
+    if (context->config.features & UCP_FEATURE_RMA) {
+        for (lane = 0; lane < config->key.num_lanes; ++lane) {
+            if (ucp_ep_config_get_multi_lane_prio(config->key.rma_lanes,
+                                                  lane) == -1) {
+                continue;
+            }
+            ucp_ep_config_print_rma_proto(stream, "put", lane,
+                                          config->rma[lane].max_put_short + 1,
+                                          config->rma[lane].put_zcopy_thresh);
+            ucp_ep_config_print_rma_proto(stream, "get", lane, 0,
+                                          config->rma[lane].get_zcopy_thresh);
+        }
+    }
 
-     if (context->config.features & UCP_FEATURE_TAG) {
-         fprintf(stream, "rndv_rkey_size %zu\n", config->rndv.rkey_size);
-     }
+    if (context->config.features &
+        (UCP_FEATURE_TAG|UCP_FEATURE_RMA|UCP_FEATURE_AM)) {
+        fprintf(stream, "#\n");
+        fprintf(stream, "# %23s: mds ", "rma_bw");
+        ucs_for_each_bit(md_index, config->key.rma_bw_md_map) {
+            fprintf(stream, "[%d] ", md_index);
+        }
+    }
+
+    if (context->config.features & (UCP_FEATURE_TAG | UCP_FEATURE_AM)) {
+        fprintf(stream, "rndv_rkey_size %zu\n", config->rndv.rkey_size);
+    }
 }
 
 void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
