@@ -167,7 +167,7 @@ static ucs_status_t ucm_rocmmem_install(int events)
         }
     }
 
-    ucm_debug("rocm hooks are ready");
+    ucm_info("rocm hooks are ready");
     ucm_rocmmem_installed = 1;
 
 out_unlock:

@@ -419,7 +419,7 @@ ucs_status_t ucm_mmap_install(int events, int exclusive)
 
     /* status == UCS_OK */
     ucm_mmap_installed_events |= native_events;
-    ucm_debug("mmap installed events = 0x%x", ucm_mmap_installed_events);
+    ucm_info("mmap installed events = 0x%x", ucm_mmap_installed_events);
 
 out_unlock:
     pthread_mutex_unlock(&ucm_mmap_install_mutex);

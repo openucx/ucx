@@ -11,6 +11,7 @@
 /* *******************************************************
  * x86 processors family                                 *
  * ***************************************************** */
+
 #if defined(__x86_64__)
 
 #include <sys/mman.h>
@@ -35,6 +36,54 @@ typedef struct {
 } UCS_S_PACKED ucm_bistro_jmp_indirect_t;
 
 
+/* REX prefix */
+#define UCM_BISTRO_X86_REX_MASK  0xF0 /* Mask */
+#define UCM_BISTRO_X86_REX       0x40 /* Value */
+
+#define UCM_BISTRO_X86_REX_W     0x48 /* REX.W value */
+#define UCM_BISTRO_X86_REX_B     0x41 /* REX.B value */
+
+/* PUSH general register
+ * "push $reg"
+ */
+#define UCM_BISTRO_X86_PUSH_R_MASK 0xF0 /* Mask */
+#define UCM_BISTRO_X86_PUSH_R      0x50 /* Value */
+
+/* Immediate Grp 1(1A), Ev, Iz */
+#define UCM_BISTRO_X86_IMM_GRP1_EV_IZ 0x81
+
+/* MOV Ev,Gv */
+#define UCM_BISTRO_X86_MOV_EV_GV 0x89
+
+/* MOV immediate word or double into word, double, or quad register
+ * "mov $imm32, %reg"
+ */
+#define UCM_BISTRO_X86_MOV_IR_MASK 0xF8 /* Mask */
+#define UCM_BISTRO_X86_MOV_IR      0xB8 /* Value */
+
+/* ModR/M encoding:
+ * [ mod | reg   | r/m   ]
+ * [ 7 6 | 5 4 3 | 2 1 0 ]
+ */
+#define UCM_BISTRO_X86_MODRM_MOD_SHIFT 6 /* mod */
+#define UCM_BISTRO_X86_MODRM_REG_SHIFT 3 /* reg */
+#define UCM_BISTRO_X86_MODRM_RM_BITS   3 /* r/m */
+
+/* Table 2-2 */
+#define UCM_BISTRO_X86_MODRM_MOD_DISP8  1 /* 0b01 */
+#define UCM_BISTRO_X86_MODRM_MOD_DISP32 2 /* 0b10 */
+#define UCM_BISTRO_X86_MODRM_MOD_REG    3 /* 0b11 */
+#define UCM_BISTRO_X86_MODRM_RM_SIB     4 /* 0b100 */
+
+/* ModR/M encoding for SUB RSP
+ * mod=0b11, reg=0b101 (SUB as opcode extension), r/m=0b100
+ */
+#define UCM_BISTRO_X86_MODRM_SUB_SP 0xEC /* 11 101 100 */
+
+/* ModR/M encoding for EBP/BP/CH/MM5/XMM5, AH/SP/ESP/MM4/XMM4 */
+#define UCM_BISTRO_X86_MODRM_BP_SP 0xE5 /* 11 100 101 */
+
+
 /*
  * Find the minimal length of initial instructions in the function which can be
  * safely executed from any memory location.
@@ -52,7 +101,7 @@ static size_t ucm_bistro_detect_pic_prefix(const void *func, size_t min_length)
         opcode      = *(uint8_t*)UCS_PTR_BYTE_OFFSET(func, offset++);
 
         /* check for REX prefix */
-        if ((opcode & 0xF0) == 0x40) {
+        if ((opcode & UCM_BISTRO_X86_REX_MASK) == UCM_BISTRO_X86_REX) {
             rex    = opcode;
             opcode = *(uint8_t*)UCS_PTR_BYTE_OFFSET(func, offset++);
         } else {
@@ -60,37 +109,39 @@ static size_t ucm_bistro_detect_pic_prefix(const void *func, size_t min_length)
         }
 
         /* check the opcode */
-        if (((rex == 0) || rex == 0x41) && ((opcode & 0xF0) == 0x50)) {
-            /* push <register> */
+        if (((rex == 0) || rex == UCM_BISTRO_X86_REX_B) &&
+            ((opcode & UCM_BISTRO_X86_PUSH_R_MASK) == UCM_BISTRO_X86_PUSH_R)) {
             continue;
-        } else if ((rex == 0x48) && (opcode == 0x81)) {
-            /* group 1A operation */
+        } else if ((rex == UCM_BISTRO_X86_REX_W) &&
+                   (opcode == UCM_BISTRO_X86_IMM_GRP1_EV_IZ)) {
             modrm = *(uint8_t*)UCS_PTR_BYTE_OFFSET(func, offset++);
-            if (modrm == 0xEC) {
+            if (modrm == UCM_BISTRO_X86_MODRM_SUB_SP) {
                 /* sub $imm32, %rsp */
                 offset += sizeof(uint32_t);
                 continue;
             }
-        } else if ((rex == 0x48) && (opcode == 0x89)) {
-            /* MOV Ev,Gv */
+        } else if ((rex == UCM_BISTRO_X86_REX_W) &&
+                   (opcode == UCM_BISTRO_X86_MOV_EV_GV)) {
             modrm = *(uint8_t*)UCS_PTR_BYTE_OFFSET(func, offset++);
-            if (modrm == 0xE5) {
+            if (modrm == UCM_BISTRO_X86_MODRM_BP_SP) {
                 /* mov %rsp, %rbp */
                 continue;
             }
-            mod = modrm >> 6;
-            if (((modrm & 7) == 4) && (mod != 3)) {
+            mod = modrm >> UCM_BISTRO_X86_MODRM_MOD_SHIFT;
+            if ((mod != UCM_BISTRO_X86_MODRM_MOD_REG) &&
+                ((modrm & UCS_MASK(UCM_BISTRO_X86_MODRM_RM_BITS)) ==
+                 UCM_BISTRO_X86_MODRM_RM_SIB)) {
                 /* r/m = 0b100, mod = 0b00/0b01/0b10 */
                 ++offset; /* skip SIB */
-                if (mod == 1) {
+                if (mod == UCM_BISTRO_X86_MODRM_MOD_DISP8) {
                     offset += sizeof(uint8_t); /* skip disp8 */
-                } else if (mod == 2) {
+                } else if (mod == UCM_BISTRO_X86_MODRM_MOD_DISP32) {
                     offset += sizeof(uint32_t); /* skip disp32 */
                 }
                 continue;
             }
-        } else if ((rex == 0) && ((opcode & 0xF8) == 0xB8)) {
-            /* mov $imm32, %reg */
+        } else if ((rex == 0) &&
+                   ((opcode & UCM_BISTRO_X86_MOV_IR_MASK) == UCM_BISTRO_X86_MOV_IR)) {
             offset += sizeof(uint32_t);
             continue;
         }
