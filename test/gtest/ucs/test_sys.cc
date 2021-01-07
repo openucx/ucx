@@ -23,6 +23,11 @@ protected:
         return ucs_get_mem_prot((uintptr_t)address, (uintptr_t)address + size);
     }
 
+    void test_dirname(char *path, int num_layers, const char *expected) {
+        path = ucs_dirname(path, num_layers);
+        EXPECT_EQ(std::string(expected), path);
+    }
+
     void test_memunits(size_t size, const char *expected) {
         char buf[256];
 
@@ -137,6 +142,11 @@ UCS_TEST_F(test_sys, module) {
     EXPECT_EQ(0, test_module_loaded);
     UCS_MODULE_FRAMEWORK_LOAD(test, 0);
     EXPECT_EQ(1, test_module_loaded);
+}
+
+UCS_TEST_F(test_sys, dirname) {
+    char path[] = "/sys/devices/pci0000:00/0000:00:00.0";
+    test_dirname(path, 3, "/sys");
 }
 
 UCS_TEST_F(test_sys, memunits_to_str) {
