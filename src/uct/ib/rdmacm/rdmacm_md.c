@@ -32,6 +32,10 @@ static ucs_config_field_t uct_rdmacm_cm_config_table[] = {
      "when creating a client connection",
      ucs_offsetof(uct_rdmacm_cm_config_t, src_addr), UCS_CONFIG_TYPE_STRING},
 
+    {"TIMEOUT", "10s",
+     "Timeout for RDMA address and route resolve operations",
+     ucs_offsetof(uct_rdmacm_cm_config_t, timeout), UCS_CONFIG_TYPE_TIME},
+
     {NULL}
 };
 

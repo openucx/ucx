@@ -26,6 +26,7 @@ typedef struct uct_rdmacm_cm {
 
     struct {
         struct sockaddr        *src_addr;
+        double                 timeout;
     } config;
 } uct_rdmacm_cm_t;
 
@@ -33,6 +34,7 @@ typedef struct uct_rdmacm_cm {
 typedef struct uct_rdmacm_cm_config {
     uct_cm_config_t super;
     char            *src_addr;
+    double          timeout;
 } uct_rdmacm_cm_config_t;
 
 
