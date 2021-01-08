@@ -1,0 +1,120 @@
+# C
+BasedOnStyle: LLVM
+AlignEscapedNewlines: DontAlign
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveStructMembers: true
+AlignConsecutiveMacros: true
+AlignAfterOpenBracket: true
+AlignOperands: true
+PointerAlignment: Right
+DerivePointerAlignment: false
+AlignTrailingComments: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 100
+PenaltyBreakAssignment: 100
+PenaltyExcessCharacter: 10
+ColumnLimit: 80
+AlwaysBreakBeforeMultilineStrings: false
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: false
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: true
+  AfterNamespace: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+BreakBeforeBinaryOperators: false
+BreakBeforeTernaryOperators: false
+BreakStringLiterals: true
+ContinuationIndentWidth: 4
+IncludeBlocks: Regroup
+IndentCaseLabels: false
+IndentWidth: 4
+KeepEmptyLinesAtTheStartOfBlocks: false
+IndentPPDirectives: None
+MaxEmptyLinesToKeep: 2
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceInEmptyParentheses: false
+SpaceBeforeParens: ControlStatementsExceptForEachMacros
+SpaceBeforeAssignmentOperators: true
+SpaceAfterCStyleCast: false
+SortIncludes: false
+ForEachMacros: ['FOR_EACH_ENTITY',
+                'kh_foreach',
+                'kh_foreach_key',
+                'kh_foreach_value',
+                'ucp_unpacked_address_for_each',
+                'ucs_array_for_each',
+                'UCS_BITMAP_FOR_EACH_BIT',
+                'ucs_for_each_bit',
+                'ucs_for_each_submask',
+                'ucs_hlist_for_each',
+                'ucs_hlist_for_each_extract',
+                'ucs_hlist_for_each_extract_if',
+                'ucs_list_for_each',
+                'ucs_list_for_each_safe',
+                'ucs_memory_type_for_each',
+                'UCS_PP_FOREACH',
+                'UCS_PP_FOREACH_SEP',
+                'ucs_profile_for_each_location',
+                'ucs_ptr_array_for_each',
+                'ucs_ptr_array_locked_for_each',
+                'ucs_queue_for_each',
+                'ucs_queue_for_each_extract',
+                'ucs_queue_for_each_safe',
+                'ucs_timerq_for_each_expired',
+                'UCT_IB_IFACE_VERBS_FOREACH_RXWQE',
+                'UCT_RC_VERBS_IFACE_FOREACH_TXWQE',
+                'UCS_INIT_ONCE',
+                'UCS_TEST_F',
+                'UCX_PERF_TEST_FOREACH']
+
+# CPP
+Standard: Cpp11
+AccessModifierOffset: -4
+AlwaysBreakTemplateDeclarations: false
+BreakBeforeInheritanceComma: false
+CompactNamespaces: false
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ConstructorInitializerIndentWidth: 4
+Cpp11BracedListStyle: true
+FixNamespaceComments: true
+NamespaceIndentation: None
+UseTab: Never
+ReflowComments: true
+IncludeCategories:
+ - Regex: '^"'
+   Priority: 1
+ - Regex: '^<'
+   Priority: 2
+SortUsingDeclarations: true
+TabWidth: 4
+SpacesInAngles: false
+SpacesBeforeTrailingComments: 1
+SpaceAfterTemplateKeyword: false
+SpacesInContainerLiterals: false
+---
+# Java
+Language: Java
+DisableFormat: true

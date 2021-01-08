@@ -644,13 +644,6 @@ static ucs_status_t uct_ud_mlx5_iface_arm_cq(uct_ib_iface_t *ib_iface,
 #endif
 }
 
-static ucs_status_t uct_ud_mlx5_ep_set_failed(uct_ib_iface_t *iface,
-                                              uct_ep_h ep, ucs_status_t status)
-{
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_ud_mlx5_ep_t), ep,
-                             &iface->super.super, status);
-}
-
 static void uct_ud_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
                                        uct_ib_dir_t dir)
 {
@@ -698,12 +691,14 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     {
     .ep_put_short             = uct_ud_mlx5_ep_put_short,
     .ep_am_short              = uct_ud_mlx5_ep_am_short,
+    .ep_am_short_iov          = uct_base_ep_am_short_iov,
     .ep_am_bcopy              = uct_ud_mlx5_ep_am_bcopy,
     .ep_am_zcopy              = uct_ud_mlx5_ep_am_zcopy,
     .ep_pending_add           = uct_ud_ep_pending_add,
     .ep_pending_purge         = uct_ud_ep_pending_purge,
     .ep_flush                 = uct_ud_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
+    .ep_check                 = uct_ud_ep_check,
     .ep_create                = uct_ud_mlx5_ep_create,
     .ep_destroy               = uct_ud_ep_disconnect ,
     .ep_get_address           = uct_ud_ep_get_address,
@@ -726,7 +721,6 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .arm_cq                   = uct_ud_mlx5_iface_arm_cq,
     .event_cq                 = uct_ud_mlx5_iface_event_cq,
     .handle_failure           = uct_ud_mlx5_iface_handle_failure,
-    .set_ep_failed            = uct_ud_mlx5_ep_set_failed,
     },
     .async_progress           = uct_ud_mlx5_iface_async_progress,
     .send_ctl                 = uct_ud_mlx5_ep_send_ctl,

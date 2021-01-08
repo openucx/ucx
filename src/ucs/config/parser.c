@@ -25,6 +25,8 @@
 /* width of titles in docstring */
 #define UCS_CONFIG_PARSER_DOCSTR_WIDTH         10
 
+/* String literal for allow-list */
+#define UCS_CONFIG_PARSER_ALL "all"
 
 /* list of prefixes for a configuration variable, used to dump all possible
  * aliases.
@@ -47,6 +49,7 @@ extern char **environ;
 UCS_LIST_HEAD(ucs_config_global_list);
 static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars = {0};
 static pthread_mutex_t ucs_config_parser_env_vars_hash_lock    = PTHREAD_MUTEX_INITIALIZER;
+static char ucs_config_parser_negate                           = '^';
 
 
 const char *ucs_async_mode_names[] = {
@@ -814,10 +817,14 @@ ucs_status_t ucs_config_clone_array(const void *src, void *dest, const void *arg
     ucs_status_t status;
     unsigned i;
 
-    dest_array->data = ucs_calloc(src_array->count, array->elem_size,
-                                  "config array");
-    if (dest_array->data == NULL) {
-        return UCS_ERR_NO_MEMORY;
+    if (src_array->count > 0) {
+        dest_array->data = ucs_calloc(src_array->count, array->elem_size,
+                                      "config array");
+        if (dest_array->data == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+    } else {
+        dest_array->data = NULL;
     }
 
     dest_array->count = src_array->count;
@@ -852,6 +859,86 @@ void ucs_config_help_array(char *buf, size_t max, const void *arg)
     const ucs_config_array_t *array = arg;
 
     snprintf(buf, max, "comma-separated list of: ");
+    array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
+}
+
+int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg)
+{
+    ucs_config_allow_list_t *field  = dest;
+    unsigned offset                 = 0;
+
+    if (buf[0] == ucs_config_parser_negate) {
+        field->mode = UCS_CONFIG_ALLOW_LIST_NEGATE;
+        offset++;
+    } else {
+        field->mode = UCS_CONFIG_ALLOW_LIST_ALLOW;
+    }
+
+    if (!ucs_config_sscanf_array(&buf[offset], &field->array, arg)) {
+        return 0;
+    }
+
+    if ((field->array.count >= 1) &&
+        !strcmp(field->array.names[0], UCS_CONFIG_PARSER_ALL)) {
+        field->mode = UCS_CONFIG_ALLOW_LIST_ALLOW_ALL;
+        ucs_config_release_array(&field->array, arg);
+        if (field->array.count != 1) {
+            return 0;
+        }
+
+        field->array.count = 0;
+    }
+
+    return 1;
+}
+
+int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
+                                  const void *arg)
+{
+    const ucs_config_allow_list_t *allow_list = src;
+    size_t offset                             = 0;
+
+    if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        snprintf(buf, max, UCS_CONFIG_PARSER_ALL);
+        return 1;
+    }
+    
+    if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_NEGATE) {
+        buf[offset++] = ucs_config_parser_negate;
+        max--;
+    }
+
+    return ucs_config_sprintf_array(&buf[offset], max, &allow_list->array, arg);
+}
+
+ucs_status_t ucs_config_clone_allow_list(const void *src, void *dest, const void *arg)
+{
+    const ucs_config_allow_list_t *src_list = src;
+    ucs_config_allow_list_t *dest_list      = dest;
+
+    dest_list->mode = src_list->mode;
+    return ucs_config_clone_array(&src_list->array, &dest_list->array, arg);
+}
+
+void ucs_config_release_allow_list(void *ptr, const void *arg)
+{
+    ucs_config_allow_list_t *allow_list = ptr;
+
+    if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        return;
+    }
+
+    ucs_config_release_array(&allow_list->array, arg);
+}
+
+void ucs_config_help_allow_list(char *buf, size_t max, const void *arg)
+{
+    const ucs_config_array_t *array = arg;
+
+    snprintf(
+        buf,
+        max, "comma-separated list (use \"all\" for including \
+              all items or \'^\' for negation) of: ");
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
 
@@ -1033,9 +1120,12 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
                                      const char *name, const char *value,
                                      const char *table_prefix, int recurse)
 {
+    char value_buf[256] = "";
     ucs_config_field_t *field, *sub_fields;
     size_t prefix_len;
     ucs_status_t status;
+    ucs_status_t UCS_V_UNUSED status_restore;
+    int UCS_V_UNUSED ret;
     unsigned count;
     void *var;
 
@@ -1079,9 +1169,17 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
                 return UCS_ERR_NO_ELEM;
             }
 
+            /* backup current value to restore it in case if new value
+             * is not accepted */
+            ret = field->parser.write(value_buf, sizeof(value_buf) - 1, var,
+                                      field->parser.arg);
+            ucs_assert(ret != 0); /* write success */
             ucs_config_parser_release_field(field, var);
             status = ucs_config_parser_parse_field(field, value, var);
             if (status != UCS_OK) {
+                status_restore = ucs_config_parser_parse_field(field, value_buf, var);
+                /* current value must be valid */
+                ucs_assert(status_restore == UCS_OK);
                 return status;
             }
             ++count;

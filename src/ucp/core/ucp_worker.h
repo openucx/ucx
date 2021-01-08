@@ -320,7 +320,7 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep);
 int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 
 /* must be called with async lock held */
-void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
+void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                unsigned ep_flush_flags,
                                uct_pending_purge_callback_t purge_cb,
                                void *purge_arg);

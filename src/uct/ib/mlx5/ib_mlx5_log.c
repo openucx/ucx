@@ -73,7 +73,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
 
     if (ecqe->syndrome == MLX5_CQE_SYNDROME_WR_FLUSH_ERR) {
         ucs_trace("QP 0x%x wqe[%d] is flushed", qp_num, wqe_index);
-        return status;
+        return UCS_ERR_CANCELED;
     }
 
     switch (ecqe->syndrome) {

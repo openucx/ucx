@@ -102,9 +102,9 @@ static inline void
 uct_ud_verbs_ep_tx_inlv(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
                         const void *buffer, unsigned length)
 {
-    iface->tx.sge[1].addr   = (uintptr_t)buffer;
-    iface->tx.sge[1].length = length;
-    ucs_assert(iface->tx.wr_inl.num_sge == 2);
+    iface->tx.sge[1].addr    = (uintptr_t)buffer;
+    iface->tx.sge[1].length  = length;
+    iface->tx.wr_inl.num_sge = 2;
     uct_ud_verbs_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE, 2);
 }
 
@@ -193,6 +193,41 @@ ucs_status_t uct_ud_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  am_hdr+1, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     uct_ud_leave(&iface->super);
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ud_verbs_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                                 const uct_iov_t *iov, size_t iovcnt)
+{
+    uct_ud_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_verbs_ep_t);
+    uct_ud_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ud_verbs_iface_t);
+    uct_ud_send_skb_t *skb;
+    ucs_status_t status;
+
+    UCT_CHECK_IOV_SIZE(iovcnt, (size_t)iface->config.max_send_sge,
+                       "uct_ud_verbs_ep_am_short_iov");
+    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + uct_iov_total_length(iov, iovcnt), 0,
+                     iface->super.config.max_inline, "am_short");
+
+    uct_ud_enter(&iface->super);
+
+    status = uct_ud_am_skb_common(&iface->super, &ep->super, id, &skb);
+    if (status != UCS_OK) {
+        uct_ud_leave(&iface->super);
+        return status;
+    }
+
+    skb->len = iface->tx.sge[0].length = sizeof(uct_ud_neth_t);
+    iface->tx.sge[0].addr              = (uintptr_t)skb->neth;
+    iface->tx.wr_inl.num_sge           = uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1,
+                                                                    iov, iovcnt) + 1;
+    uct_ud_verbs_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE,
+                           iface->tx.wr_inl.num_sge);
+
+    uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, uct_iov_total_length(iov, iovcnt));
+    uct_ud_leave(&iface->super);
+
     return UCS_OK;
 }
 
@@ -386,13 +421,6 @@ out:
     return num_wcs;
 }
 
-static ucs_status_t uct_ud_verbs_ep_set_failed(uct_ib_iface_t *iface,
-                                               uct_ep_h ep, ucs_status_t status)
-{
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_ud_verbs_ep_t), ep,
-                             &iface->super.super, status);
-}
-
 static unsigned uct_ud_verbs_iface_async_progress(uct_ud_iface_t *ud_iface)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_iface, uct_ud_verbs_iface_t);
@@ -526,12 +554,14 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     {
     .ep_put_short             = uct_ud_verbs_ep_put_short,
     .ep_am_short              = uct_ud_verbs_ep_am_short,
+    .ep_am_short_iov          = uct_ud_verbs_ep_am_short_iov,
     .ep_am_bcopy              = uct_ud_verbs_ep_am_bcopy,
     .ep_am_zcopy              = uct_ud_verbs_ep_am_zcopy,
     .ep_pending_add           = uct_ud_ep_pending_add,
     .ep_pending_purge         = uct_ud_ep_pending_purge,
     .ep_flush                 = uct_ud_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
+    .ep_check                 = uct_ud_ep_check,
     .ep_create                = uct_ud_verbs_ep_create,
     .ep_destroy               = uct_ud_ep_disconnect,
     .ep_get_address           = uct_ud_ep_get_address,
@@ -554,7 +584,6 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
     .handle_failure           = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert,
-    .set_ep_failed            = uct_ud_verbs_ep_set_failed,
     },
     .async_progress           = uct_ud_verbs_iface_async_progress,
     .send_ctl                 = uct_ud_verbs_ep_send_ctl,
@@ -646,7 +675,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     self->tx.wr_inl.imm_data          = 0;
     self->tx.wr_inl.next              = 0;
     self->tx.wr_inl.sg_list           = self->tx.sge;
-    self->tx.wr_inl.num_sge           = 2;
 
     memset(&self->tx.wr_skb, 0, sizeof(self->tx.wr_skb));
     self->tx.wr_skb.opcode            = IBV_WR_SEND;

@@ -259,7 +259,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
     ucs_queue_for_each_safe(sreq, iter, queue, send.tag_offload.queue) {
         if ((sreq->send.tag_offload.ssend_tag == rep_hdr->sender_tag) &&
             (ucp_ep_local_id(sreq->send.ep) == rep_hdr->ep_id)) {
-            ucp_tag_eager_sync_completion(sreq, UCP_REQUEST_FLAG_REMOTE_COMPLETED,
+            ucp_tag_offload_request_check_flags(sreq);
+            ucp_tag_eager_sync_completion(sreq,
+                                          UCP_REQUEST_FLAG_REMOTE_COMPLETED,
                                           UCS_OK);
             ucs_queue_del_iter(queue, iter);
             return UCS_OK;

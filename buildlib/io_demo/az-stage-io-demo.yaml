@@ -1,0 +1,77 @@
+parameters:
+- name: name  # defaults for any parameters that aren't specified
+  default: 'test'
+- name: iodemo_args
+  default: ''
+
+steps:
+- bash: |
+    set -eEx
+    source $(workspace)/buildlib/az-helpers.sh
+    $(workspace)/buildlib/az-network-corrupter.sh \
+      initial_delay=$(initial_delay) \
+      cycles=$(cycles) \
+      downtime=$(downtime) \
+      uptime=$(uptime) \
+      |& add_timestamp &>corrupter.log &
+    pgrep -u "$USER" -f 'network-corrupter'
+    corrupter_pid=$(pgrep -u "$USER" -f 'network-corrupter')
+    echo "corrupter_pid=$corrupter_pid"
+    azure_set_variable "corrupter_pid" "$corrupter_pid"
+  displayName: Start network corrupter
+  timeoutInMinutes: 15
+
+- bash: |
+    set -eEx
+    sudo /hpc/local/bin/lshca
+    mkdir -p $(workspace)/${{ parameters.name }}
+    # set UCX environment variables
+    export UCX_SOCKADDR_CM_ENABLE=y
+    export UCX_NET_DEVICES=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${roce_iface}' .*/\1:\2/p')
+    export LD_LIBRARY_PATH=$(workspace)/install/lib:$LD_LIBRARY_PATH
+    $(workspace)/test/apps/iodemo/run_io_demo.sh \
+        -H $(agent_hosts) \
+        --tasks-per-node 1 \
+        --duration 480 \
+        -v \
+        --num-clients 1 \
+        --num-servers 1 \
+        --map-by slot \
+        --log-dir $(workspace)/${{ parameters.name }} \
+        -i $(roce_iface) \
+        $(io_demo_exe) \
+            -d 512:524288 \
+            -o read,write \
+            -i 0 \
+            -w 16 \
+            -t 10 \
+            ${{ parameters.iodemo_args }}
+  displayName: Launch with run_io_demo.sh ( ${{ parameters.name }} )
+  timeoutInMinutes: 10
+
+- bash: |
+    python buildlib/io_demo/iodemo_analyzer.py -d $(workspace)/${{ parameters.name }}
+  displayName: Analyze for ${{ parameters.name }}
+  timeoutInMinutes: 1
+
+- bash: |
+    set -eEx
+    pid=$(corrupter_pid)
+    echo "Stopping corrupter, PID=${pid}"
+    if ! kill ${pid}; then
+      echo "##vso[task.logissue type=warning]Can't stop corrupter: process doesn't exist"
+      echo "##vso[task.complete result=Failed;]"
+    else
+      echo "Corrupter stopped successfully"
+    fi
+    cat corrupter.log
+  displayName: Kill corrupter
+  condition: always()
+  timeoutInMinutes: 10
+
+- bash: |
+    set -eEx
+    ./buildlib/az-network-corrupter.sh reset=yes
+  displayName: Restore port state
+  condition: always()
+  timeoutInMinutes: 2

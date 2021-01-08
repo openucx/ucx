@@ -23,10 +23,9 @@ static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
     size_t size                   = req->send.length;
     size_t length;
 
-    atomich->address    = req->send.rma.remote_addr;
+    atomich->address    = req->send.amo.remote_addr;
     atomich->req.ep_id  = ucp_ep_remote_id(ep);
-    atomich->req.req_id = fetch ? ucp_send_request_get_id(req) :
-                          UCP_REQUEST_ID_INVALID;
+    atomich->req.req_id = req->send.amo.sreq_id;
     atomich->length     = size;
     atomich->opcode     = req->send.amo.uct_op;
 
@@ -59,12 +58,24 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
 
-    req->send.lane = ucp_ep_get_am_lane(req->send.ep);
-    status         = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_ATOMIC_REQ,
-                                            req->send.lane, pack_cb, req, NULL);
-    if (((status != UCS_ERR_NO_RESOURCE) && (status != UCS_OK)) ||
-        ((status == UCS_OK) && !fetch)) {
-        ucp_request_complete_send(req, status);
+    req->send.lane        = ucp_ep_get_am_lane(req->send.ep);
+    req->send.amo.sreq_id = fetch ? ucp_send_request_get_id(req) :
+                            UCP_REQUEST_ID_INVALID;
+
+    status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_ATOMIC_REQ,
+                                    req->send.lane, pack_cb, req, NULL);
+    if ((status != UCS_OK) || ((status == UCS_OK) && !fetch)) {
+        if (fetch) {
+            ucp_worker_del_request_id(req->send.ep->worker, req,
+                                      req->send.amo.sreq_id);
+        }
+
+        if (status != UCS_ERR_NO_RESOURCE) {
+            /* completed with:
+             * - with error if a fetch operation
+             * - either with error or with success if a post operation */
+            ucp_request_complete_send(req, status);
+        }
     }
 
     return status;
@@ -240,6 +251,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
             ucs_fatal("invalid atomic length: %u", atomicreqh->length);
         }
 
+        req->flags                    = 0;
         req->send.ep                  = ep;
         req->send.atomic_reply.req_id = atomicreqh->req.req_id;
         req->send.length              = atomicreqh->length;

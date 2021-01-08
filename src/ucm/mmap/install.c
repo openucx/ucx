@@ -15,6 +15,7 @@
 #include <ucm/event/event.h>
 #include <ucm/util/log.h>
 #include <ucm/util/reloc.h>
+#include <ucm/util/replace.h>
 #include <ucm/util/sys.h>
 #include <ucm/bistro/bistro.h>
 #include <ucs/arch/atomic.h>
@@ -30,8 +31,6 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#define UCM_IS_HOOK_ENABLED(_entry) \
-    ((_entry)->hook_type & UCS_BIT(ucm_mmap_hook_mode()))
 
 #define UCM_HOOK_STR \
     ((ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) ?  "reloc" : "bistro")
@@ -61,17 +60,10 @@
 
 extern const char *ucm_mmap_hook_modes[];
 
-typedef enum ucm_mmap_hook_type {
-    UCM_HOOK_RELOC  = UCS_BIT(UCM_MMAP_HOOK_RELOC),
-    UCM_HOOK_BISTRO = UCS_BIT(UCM_MMAP_HOOK_BISTRO),
-    UCM_HOOK_BOTH   = UCM_HOOK_RELOC | UCM_HOOK_BISTRO
-} ucm_mmap_hook_type_t;
-
 typedef struct ucm_mmap_func {
     ucm_reloc_patch_t    patch;
     ucm_event_type_t     event_type;
     ucm_event_type_t     deps;
-    ucm_mmap_hook_type_t hook_type;
 } ucm_mmap_func_t;
 
 typedef struct ucm_mmap_test_events_data {
@@ -81,18 +73,16 @@ typedef struct ucm_mmap_test_events_data {
 } ucm_mmap_test_events_data_t;
 
 static ucm_mmap_func_t ucm_mmap_funcs[] = {
-    { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    UCM_EVENT_NONE,  UCM_HOOK_BOTH},
-    { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  UCM_EVENT_NONE,  UCM_HOOK_BOTH},
+    { {"mmap",    ucm_override_mmap},    UCM_EVENT_MMAP,    UCM_EVENT_NONE},
+    { {"munmap",  ucm_override_munmap},  UCM_EVENT_MUNMAP,  UCM_EVENT_NONE},
 #if HAVE_MREMAP
-    { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  UCM_EVENT_NONE,  UCM_HOOK_BOTH},
+    { {"mremap",  ucm_override_mremap},  UCM_EVENT_MREMAP,  UCM_EVENT_NONE},
 #endif
-    { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   UCM_EVENT_NONE,  UCM_HOOK_BOTH},
-    { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT, UCM_HOOK_BOTH},
-    { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    UCM_EVENT_NONE,  UCM_HOOK_RELOC},
-#if UCM_BISTRO_HOOKS
-    { {"brk",     ucm_override_brk},     UCM_EVENT_SBRK,    UCM_EVENT_NONE,  UCM_HOOK_BISTRO},
-#endif
-    { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, UCM_EVENT_NONE,  UCM_HOOK_BOTH},
+    { {"shmat",   ucm_override_shmat},   UCM_EVENT_SHMAT,   UCM_EVENT_NONE},
+    { {"shmdt",   ucm_override_shmdt},   UCM_EVENT_SHMDT,   UCM_EVENT_SHMAT},
+    { {"sbrk",    ucm_override_sbrk},    UCM_EVENT_SBRK,    UCM_EVENT_NONE},
+    { {"brk",     ucm_override_brk},     UCM_EVENT_BRK,     UCM_EVENT_NONE},
+    { {"madvise", ucm_override_madvise}, UCM_EVENT_MADVISE, UCM_EVENT_NONE},
     { {NULL, NULL}, UCM_EVENT_NONE}
 };
 
@@ -108,6 +98,7 @@ static const char *ucm_mmap_event_name[] = {
     UCM_MMAP_EVENT_NAME_ENTRY(SHMDT),
     UCM_MMAP_EVENT_NAME_ENTRY(SBRK),
     UCM_MMAP_EVENT_NAME_ENTRY(MADVISE),
+    UCM_MMAP_EVENT_NAME_ENTRY(BRK),
 
     /* Aggregate events */
     UCM_MMAP_EVENT_NAME_ENTRY(VM_MAPPED),
@@ -124,8 +115,17 @@ static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
      * So ignore calls from other threads to ensure the only requested events
      * are proceeded.
      */
-    if (data->tid == ucs_get_tid()) {
+    if (data->tid == ucm_get_tid()) {
         data->fired_events |= event_type;
+    }
+}
+
+/* Call brk() and check return value, to avoid compile error of unused result */
+static void ucm_brk_checked(void *addr)
+{
+    int ret = brk(addr);
+    if ((ret != 0) && (addr != NULL)) {
+        ucm_diag("brk(addr=%p) failed: %m", addr);
     }
 }
 
@@ -136,10 +136,10 @@ static void ucm_mmap_event_test_callback(ucm_event_type_t event_type,
  * exclude additional events from processing used pre/post actions where
  * set of handled events is cleared and evaluated for every system call */
 static void
-ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data)
+ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data,
+                              int exclusive)
 {
     size_t sbrk_size;
-    int sbrk_mask;
     int shmid;
     void *p;
 
@@ -183,19 +183,29 @@ ucm_fire_mmap_events_internal(int events, ucm_mmap_test_events_data_t *data)
                        data, shmdt(p));
     }
 
-    if (events & (UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
-        if (RUNNING_ON_VALGRIND) {
-            /* on valgrind, doing a non-trivial sbrk() causes heap corruption */
-            sbrk_size = 0;
-            sbrk_mask = UCM_EVENT_SBRK;
-        } else {
-            sbrk_size = ucm_get_page_size();
-            sbrk_mask = UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED;
+    if (exclusive && !RUNNING_ON_VALGRIND) {
+        sbrk_size = ucm_get_page_size();
+        if (events & (UCM_EVENT_BRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
+            p = ucm_get_current_brk();
+            UCM_FIRE_EVENT(events, UCM_EVENT_BRK|UCM_EVENT_VM_MAPPED, data,
+                           ucm_brk_checked(UCS_PTR_BYTE_OFFSET(p, sbrk_size)));
+            UCM_FIRE_EVENT(events, UCM_EVENT_BRK|UCM_EVENT_VM_UNMAPPED, data,
+                           ucm_brk_checked(p));
         }
-        UCM_FIRE_EVENT(events, (UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED) & sbrk_mask,
-                       data, (void)sbrk(sbrk_size));
-        UCM_FIRE_EVENT(events, (UCM_EVENT_SBRK|UCM_EVENT_VM_UNMAPPED) & sbrk_mask,
-                       data, (void)sbrk(-sbrk_size));
+        if (events & (UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED|UCM_EVENT_VM_UNMAPPED)) {
+            UCM_FIRE_EVENT(events, UCM_EVENT_SBRK|UCM_EVENT_VM_MAPPED,
+                           data, (void)sbrk(sbrk_size));
+            UCM_FIRE_EVENT(events, UCM_EVENT_SBRK|UCM_EVENT_VM_UNMAPPED,
+                           data, (void)sbrk(-sbrk_size));
+        }
+    } else {
+        /* To avoid side effects on other threads and valgrind heap corruption,
+         * pass invalid parameters. We assume that if the natives events are
+         * delivered, it means VM_MAPPED/UNMAPPED would be delivered as well.
+         */
+        if (events & UCM_EVENT_BRK) {
+            UCM_FIRE_EVENT(events, UCM_EVENT_BRK, data, ucm_brk_checked(NULL));
+        }
     }
 
     if (events & (UCM_EVENT_MADVISE|UCM_EVENT_VM_UNMAPPED)) {
@@ -217,7 +227,7 @@ void ucm_fire_mmap_events(int events)
 {
     ucm_mmap_test_events_data_t data;
 
-    ucm_fire_mmap_events_internal(events, &data);
+    ucm_fire_mmap_events_internal(events, &data, 0);
 }
 
 static void ucm_mmap_event_report_missing(int expected, int actual,
@@ -252,7 +262,7 @@ static void ucm_mmap_event_report_missing(int expected, int actual,
 
 /* Called with lock held */
 static ucs_status_t
-ucm_mmap_test_events_nolock(int events, const char *event_type)
+ucm_mmap_test_events_nolock(int events, int exclusive, const char *event_type)
 {
     ucm_event_handler_t handler;
     ucm_mmap_test_events_data_t data;
@@ -262,10 +272,10 @@ ucm_mmap_test_events_nolock(int events, const char *event_type)
     handler.cb        = ucm_mmap_event_test_callback;
     handler.arg       = &data;
     data.out_events   = events;
-    data.tid          = ucs_get_tid();
+    data.tid          = ucm_get_tid();
 
     ucm_event_handler_add(&handler);
-    ucm_fire_mmap_events_internal(events, &data);
+    ucm_fire_mmap_events_internal(events, &data, exclusive);
     ucm_event_handler_remove(&handler);
 
     ucm_debug("mmap test: got 0x%x out of 0x%x", data.out_events, events);
@@ -274,75 +284,6 @@ ucm_mmap_test_events_nolock(int events, const char *event_type)
     if (!ucs_test_all_flags(data.out_events, events)) {
         ucm_mmap_event_report_missing(events, data.out_events, event_type);
         return UCS_ERR_UNSUPPORTED;
-    }
-
-    return UCS_OK;
-}
-
-ucs_status_t ucm_mmap_test_events(int events, const char *event_type)
-{
-    ucs_status_t status;
-
-    /*
-     * return UCS_OK iff all events are actually working
-     */
-    pthread_mutex_lock(&ucm_mmap_install_mutex);
-    status = ucm_mmap_test_events_nolock(events, event_type);
-    pthread_mutex_unlock(&ucm_mmap_install_mutex);
-
-    return status;
-}
-
-ucs_status_t ucm_mmap_test_installed_events(int events)
-{
-    /*
-     * return UCS_OK iff all installed events are actually working
-     * we don't check the status of events which were not successfully installed
-     */
-    return ucm_mmap_test_events(events & ucm_mmap_installed_events, "internal");
-}
-
-/* Called with lock held */
-static ucs_status_t ucs_mmap_install_reloc(int events)
-{
-    static int installed_events = 0;
-    ucm_mmap_func_t *entry;
-    ucs_status_t status;
-
-    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_NONE) {
-        ucm_debug("installing mmap hooks is disabled by configuration");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    for (entry = ucm_mmap_funcs; entry->patch.symbol != NULL; ++entry) {
-        if (!((entry->event_type|entry->deps) & events)) {
-            /* Not required */
-            continue;
-        }
-
-        if (entry->event_type & installed_events) {
-            /* Already installed */
-            continue;
-        }
-
-        if (UCM_IS_HOOK_ENABLED(entry)) {
-            ucm_debug("mmap: installing %s hook for %s = %p for event 0x%x", UCM_HOOK_STR,
-                      entry->patch.symbol, entry->patch.value, entry->event_type);
-
-            if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
-                status = ucm_reloc_modify(&entry->patch);
-            } else {
-                ucs_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
-                status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value, NULL);
-            }
-            if (status != UCS_OK) {
-                ucm_warn("failed to install %s hook for '%s'",
-                         UCM_HOOK_STR, entry->patch.symbol);
-                return status;
-            }
-
-            installed_events |= entry->event_type;
-        }
     }
 
     return UCS_OK;
@@ -365,7 +306,86 @@ static int ucm_mmap_events_to_native_events(int events)
     return native_events;
 }
 
-ucs_status_t ucm_mmap_install(int events)
+ucs_status_t ucm_mmap_test_events(int events, const char *event_type)
+{
+    ucs_status_t status;
+
+    /*
+     * return UCS_OK iff all events are actually working
+     */
+    pthread_mutex_lock(&ucm_mmap_install_mutex);
+    status = ucm_mmap_test_events_nolock(events, 0, event_type);
+    pthread_mutex_unlock(&ucm_mmap_install_mutex);
+
+    return status;
+}
+
+ucs_status_t ucm_mmap_test_installed_events(int events)
+{
+    int native_events = ucm_mmap_events_to_native_events(events) &
+                        ucm_mmap_installed_events;
+
+    /*
+     * return UCS_OK iff all installed events are actually working
+     * we don't check the status of events which were not successfully installed
+     */
+    return ucm_mmap_test_events(native_events, "internal");
+}
+
+/* Called with lock held */
+static ucs_status_t ucs_mmap_install_reloc(int events)
+{
+    static int installed_events = 0;
+    ucm_mmap_func_t *entry;
+    ucs_status_t status;
+    void *func_ptr;
+
+    if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_NONE) {
+        ucm_debug("installing mmap hooks is disabled by configuration");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    for (entry = ucm_mmap_funcs; entry->patch.symbol != NULL; ++entry) {
+        if (!((entry->event_type|entry->deps) & events)) {
+            /* Not required */
+            continue;
+        }
+
+        if (entry->event_type & installed_events) {
+            /* Already installed */
+            continue;
+        }
+
+        ucm_debug("mmap: installing %s hook for %s = %p for event 0x%x",
+                  UCM_HOOK_STR, entry->patch.symbol, entry->patch.value,
+                  entry->event_type);
+
+        if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_RELOC) {
+            status = ucm_reloc_modify(&entry->patch);
+        } else {
+            ucm_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
+            func_ptr = ucm_reloc_get_orig(entry->patch.symbol,
+                                          entry->patch.value);
+            if (func_ptr == NULL) {
+                status = UCS_ERR_NO_ELEM;
+            } else {
+                status = ucm_bistro_patch(func_ptr, entry->patch.value,
+                                          entry->patch.symbol, NULL, NULL);
+            }
+        }
+        if (status != UCS_OK) {
+            ucm_warn("failed to install %s hook for '%s'", UCM_HOOK_STR,
+                     entry->patch.symbol);
+            return status;
+        }
+
+        installed_events |= entry->event_type;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucm_mmap_install(int events, int exclusive)
 {
     ucs_status_t status;
     int native_events;
@@ -378,7 +398,8 @@ ucs_status_t ucm_mmap_install(int events)
         /* if we already installed these events, check that they are still
          * working, and if not - reinstall them.
          */
-        status = ucm_mmap_test_events_nolock(native_events, 0);
+        status = ucm_mmap_test_events_nolock(native_events, exclusive,
+                                             "previous mmap");
         if (status == UCS_OK) {
             goto out_unlock;
         }
@@ -390,7 +411,7 @@ ucs_status_t ucm_mmap_install(int events)
         goto out_unlock;
     }
 
-    status = ucm_mmap_test_events_nolock(native_events, 0);
+    status = ucm_mmap_test_events_nolock(native_events, exclusive, "mmap");
     if (status != UCS_OK) {
         ucm_debug("failed to install mmap events");
         goto out_unlock;
@@ -403,4 +424,33 @@ ucs_status_t ucm_mmap_install(int events)
 out_unlock:
     pthread_mutex_unlock(&ucm_mmap_install_mutex);
     return status;
+}
+
+void ucm_mmap_init()
+{
+    ucm_event_type_t events;
+    ucm_mmap_func_t *entry;
+
+    if (!ucm_global_opts.enable_events ||
+        (ucm_mmap_hook_mode() != UCM_MMAP_HOOK_BISTRO)) {
+        return;
+    }
+
+    /* We must initialize bistro hooks during startup and not later, before
+     * other threads could execute the modified functions and fail on invalid
+     * instructions
+     */
+    events = 0;
+    for (entry = ucm_mmap_funcs; entry->patch.symbol != NULL; ++entry) {
+        events |= entry->event_type;
+    }
+    if (events & UCM_NATIVE_EVENT_VM_MAPPED) {
+        events |= UCM_EVENT_VM_MAPPED;
+    }
+    if (events & UCM_NATIVE_EVENT_VM_UNMAPPED) {
+        events |= UCM_EVENT_VM_UNMAPPED;
+    }
+
+    ucm_prevent_dl_unload();
+    ucm_mmap_install(events, 1);
 }

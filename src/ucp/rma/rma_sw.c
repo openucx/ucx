@@ -48,7 +48,7 @@ static ucs_status_t ucp_rma_sw_progress_put(uct_pending_req_t *self)
                                             ucp_rma_sw_put_pack_cb, req,
                                             &packed_len);
     return ucp_rma_request_advance(req, packed_len - sizeof(ucp_put_hdr_t),
-                                   status);
+                                   status, UCP_REQUEST_ID_INVALID);
 }
 
 static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
@@ -60,7 +60,7 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
     getreqh->length     = req->send.length;
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
     getreqh->mem_type   = req->send.rma.rkey->mem_type;
-    getreqh->req.req_id = ucp_send_request_get_id(req);
+    getreqh->req.req_id = req->send.rma.sreq_id;
     ucs_assert(getreqh->req.ep_id != UCP_EP_ID_INVALID);
 
     return sizeof(*getreqh);
@@ -72,14 +72,19 @@ static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
     ssize_t packed_len = 0;
     ucs_status_t status;
 
-    req->send.lane = ucp_ep_get_am_lane(req->send.ep);
-    status         = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_GET_REQ,
-                                            req->send.lane,
-                                            ucp_rma_sw_get_req_pack_cb, req,
-                                            &packed_len);
-    if ((status != UCS_OK) && (status != UCS_ERR_NO_RESOURCE)) {
-        /* completed with error */
-        ucp_request_complete_send(req, status);
+    req->send.lane        = ucp_ep_get_am_lane(req->send.ep);
+    req->send.rma.sreq_id = ucp_send_request_get_id(req);
+
+    status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_GET_REQ, req->send.lane,
+                                    ucp_rma_sw_get_req_pack_cb, req,
+                                    &packed_len);
+    if (status != UCS_OK) {
+        ucp_worker_del_request_id(req->send.ep->worker, req,
+                                  req->send.rma.sreq_id);
+        if (ucs_unlikely(status != UCS_ERR_NO_RESOURCE)) {
+            /* completed with error */
+            ucp_request_complete_send(req, status);
+        }
     }
 
     /* If completed with UCS_OK, it means that get request packet sent,
@@ -132,6 +137,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
         return;
     }
 
+    req->flags         = 0;
     req->send.ep       = ep;
     req->send.uct.func = ucp_progress_rma_cmpl;
     ucp_request_send(req, 0);
@@ -218,6 +224,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
         return UCS_OK;
     }
 
+    req->flags                 = 0;
     req->send.ep               = ep;
     req->send.buffer           = (void*)getreqh->address;
     req->send.length           = getreqh->length;
@@ -246,12 +253,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
     if (ep->worker->context->config.ext.proto_enable) {
         // TODO use dt_iter.inl unpack
         ucp_dt_contig_unpack(ep->worker,
-                             req->send.dt_iter.type.contig.buffer +
-                             req->send.dt_iter.offset,
+                             req->send.state.dt_iter.type.contig.buffer +
+                             req->send.state.dt_iter.offset,
                              getreph + 1, frag_length,
-                             req->send.dt_iter.mem_type);
-        req->send.dt_iter.offset += frag_length;
-        if (req->send.dt_iter.offset == req->send.dt_iter.length) {
+                             req->send.state.dt_iter.mem_type);
+        req->send.state.dt_iter.offset += frag_length;
+        if (req->send.state.dt_iter.offset == req->send.state.dt_iter.length) {
             ucp_proto_request_bcopy_complete(req, UCS_OK);
             ucp_ep_rma_remote_request_completed(ep);
         }
@@ -259,8 +266,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
         memcpy(req->send.buffer, getreph + 1, frag_length);
 
         /* complete get request on last fragment of the reply */
-        if (ucp_rma_request_advance(req, frag_length, UCS_OK) == UCS_OK) {
-            ucp_worker_del_request_id(worker, getreph->req_id);
+        if (ucp_rma_request_advance(req, frag_length, UCS_OK,
+                                    getreph->req_id) == UCS_OK) {
             ucp_ep_rma_remote_request_completed(ep);
         }
     }

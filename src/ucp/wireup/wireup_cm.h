@@ -34,6 +34,9 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
 
 ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep);
 
+int ucp_cm_server_conn_request_progress_cb_pred(const ucs_callbackq_elem_t *elem,
+                                                void *arg);
+
 void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                    const uct_cm_listener_conn_request_args_t
                                    *conn_req_args);
@@ -46,7 +49,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 
 void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep);
 
-ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep);
+ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep,
+                                           const ucp_request_param_t *param);
 
 void ucp_ep_cm_slow_cbq_cleanup(ucp_ep_h ep);
 

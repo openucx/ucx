@@ -64,12 +64,14 @@
 
 #define ucp_request_complete(_req, _cb, _status, ...) \
     { \
+        /* NOTE: external request can't have RELEASE flag and we */ \
+        /* will never put it into mpool */ \
+        uint32_t _flags = ((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED); \
         (_req)->status = (_status); \
         if (ucs_likely((_req)->flags & UCP_REQUEST_FLAG_CALLBACK)) { \
             (_req)->_cb((_req) + 1, (_status), ## __VA_ARGS__); \
         } \
-        if (ucs_unlikely(((_req)->flags  |= UCP_REQUEST_FLAG_COMPLETED) & \
-                         UCP_REQUEST_FLAG_RELEASED)) { \
+        if (ucs_unlikely(_flags & UCP_REQUEST_FLAG_RELEASED)) { \
             ucp_request_put(_req); \
         } \
     }
@@ -150,6 +152,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
     ucs_trace_req("put request %p", req);
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_IN_PTR_MAP));
     UCS_PROFILE_REQUEST_FREE(req);
     ucs_mpool_put_inline(req);
 }
@@ -661,7 +664,7 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_process_recv_data(ucp_request_t *req, const void *data,
                               size_t length, size_t offset, int is_zcopy,
-                              int is_am)
+                              int is_am, ucs_ptr_map_key_t req_id)
 {
     ucs_status_t status;
     int last;
@@ -686,6 +689,10 @@ ucp_request_process_recv_data(ucp_request_t *req, const void *data,
     status = req->status;
     if (is_zcopy) {
         ucp_request_recv_buffer_dereg(req);
+    }
+
+    if (req_id != UCP_REQUEST_ID_INVALID) {
+        ucp_worker_del_request_id(req->recv.worker, req, req_id);
     }
 
     if (is_am) {
@@ -760,6 +767,12 @@ ucp_send_request_get_id(ucp_request_t *req)
 {
     return ucp_worker_get_request_id(req->send.ep->worker, req,
                                      ucp_ep_use_indirect_id(req->send.ep));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_send_request_set_id(ucp_request_t *req)
+{
+    req->send.msg_proto.sreq_id = ucp_send_request_get_id(req);
 }
 
 static UCS_F_ALWAYS_INLINE void

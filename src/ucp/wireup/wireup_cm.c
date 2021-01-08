@@ -102,7 +102,7 @@ static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
 
 static ucp_rsc_index_t
 ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context, uint64_t tl_bitmap)
-{   
+{
     ucp_rsc_index_t rsc_index;
     ucp_rsc_index_t dev_index;
 
@@ -320,7 +320,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
         goto out_check_err;
     }
 
-    cm_wireup_ep->tmp_ep->flags |= UCP_EP_FLAG_TEMPORARY;
+    cm_wireup_ep->tmp_ep->flags |= UCP_EP_FLAG_INTERNAL;
 
     status = ucp_worker_get_ep_config(worker, &key, 0,
                                       &cm_wireup_ep->tmp_ep->cfg_index);
@@ -605,44 +605,9 @@ err_out:
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-/*
- * Internal flush completion callback which is a part of close protocol,
- * this flush was initiated by remote peer in disconnect callback on CM lane.
- */
-static void ucp_ep_cm_disconnect_flushed_cb(ucp_request_t *req)
-{
-    ucp_ep_h ucp_ep            = req->send.ep;
-    /* the EP can be closed/destroyed from err callback */
-    ucs_async_context_t *async = &ucp_ep->worker->async;
-
-    UCS_ASYNC_BLOCK(async);
-    if (req->status == UCS_OK) {
-        ucs_assert(ucp_ep_is_cm_local_connected(ucp_ep));
-        ucp_ep_cm_disconnect_cm_lane(ucp_ep);
-    } else if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        ucs_assert(!ucp_ep_is_cm_local_connected(ucp_ep));
-    } else {
-        /* 1) ucp_ep_close(force) is called from err callback which was invoked
-              on remote connection reset
-              TODO: remove this case when IB flush cancel is fixed (#4743),
-                    moving QP to err state should move UCP EP to error state,
-                    then ucp_worker_set_ep_failed disconnects CM lane
-           2) transport err is also possible on flush
-         */
-        ucs_assert((req->status == UCS_ERR_CANCELED) ||
-                   (req->status == UCS_ERR_ENDPOINT_TIMEOUT));
-    }
-
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_CALLBACK));
-    ucp_request_put(req);
-    UCS_ASYNC_UNBLOCK(async);
-}
-
-static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
+static void ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
 {
     ucs_status_t status = UCS_ERR_CONNECTION_RESET;
-    ucp_ep_h ucp_ep     = arg;
-    void *req;
 
     ucs_trace("ep %p: flags 0x%x cm_remote_disconnect_progress", ucp_ep,
               ucp_ep->flags);
@@ -654,52 +619,30 @@ static unsigned ucp_ep_cm_remote_disconnect_progress(void *arg)
                                           UCP_EP_FLAG_CLOSE_REQ_VALID)) {
         ucp_request_complete_send(ucp_ep_ext_control(ucp_ep)->close_req.req,
                                   UCS_OK);
-        return 1;
-    }
-
-    if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
-        /* the ep is closed by API but close req is not valid yet (checked
-         * above), it will be set later from scheduled
-         * @ref ucp_ep_close_flushed_callback */
-        ucs_debug("ep %p: ep closed but request is not set, waiting for"
-                  " the flush callback", ucp_ep);
-        goto err;
+        return;
     }
 
     if (!(ucp_ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
-        /* CM disconnect happens during WIREUP MSGs exchange phase, when EP
-         * is locally connected to the peer */
-        goto err;
+        /* CM disconnect happens during WIREUP MSGs exchange phase, when EP is
+         * locally connected to the peer, so UCP EP should not wait for flush
+         * completion even if it was started from close EP procedure, because
+         * it won't be never completed due to unreachability of the peer */
+        goto set_ep_failed;
     }
 
-    /*
-     * TODO: set the ucp_ep to error state to prevent user from sending more
-     *       ops.
-     */
-    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
-    ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_CLOSED));
-    req = ucp_ep_flush_internal(ucp_ep, UCT_FLUSH_FLAG_LOCAL, 0,
-                                &ucp_request_null_param, NULL,
-                                ucp_ep_cm_disconnect_flushed_cb,
-                                "cm_disconnected_cb");
-    if (req == NULL) {
-        /* flush is successfully completed in place, notify remote peer
-         * that we are disconnected, the EP will be destroyed from API call */
-        ucp_ep_cm_disconnect_cm_lane(ucp_ep);
-    } else if (UCS_PTR_IS_ERR(req)) {
-        status = UCS_PTR_STATUS(req);
-        ucs_error("ucp_ep_flush_internal completed with error: %s",
-                  ucs_status_string(status));
-        goto err;
+    if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
+        /* the ep is remote connected (checked above) and closed by API but
+         * close req is not valid yet (checked above), it will be set later
+         * from scheduled @ref ucp_ep_close_flushed_callback */
+        ucs_debug("ep %p: ep is remote connected and closed, but request is"
+                  " not set, waiting for the flush callback", ucp_ep);
+        return;
     }
 
-    return 1;
-
-err:
+set_ep_failed:
     ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
                              ucp_ep_get_cm_uct_ep(ucp_ep),
                              ucp_ep_get_cm_lane(ucp_ep), status);
-    return 1;
 }
 
 static unsigned ucp_ep_cm_disconnect_progress(void *arg)
@@ -714,8 +657,6 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
     ucs_trace("ep %p: got remote disconnect, cm_ep %p, flags 0x%x", ucp_ep,
               uct_cm_ep, ucp_ep->flags);
     ucs_assert(ucp_ep_get_cm_uct_ep(ucp_ep) == uct_cm_ep);
-
-    ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         /* - ignore close event on failed ep, since all lanes are destroyed in
@@ -732,13 +673,29 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
         /* if the EP is not local connected, the EP has been closed and flushed,
            CM lane is disconnected, complete close request and destroy EP */
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
-        close_req = ucp_ep_ext_control(ucp_ep)->close_req.req;
+        ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
+        close_req      = ucp_ep_ext_control(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
+        /* don't touch UCP EP after local disconnect, since it is not valid
+         * anymore */
+        goto out;
+    } else if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
+        /* if an EP was closed and not local connected anymore (i.e.
+         * ucp_ep_cm_disconnect_cm_lane() was called from ucp_ep_close_nbx()),
+         * not failed and no CLOSE request is set, it means that an EP was
+         * disconnected from a peer */
+        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_DISCONNECTED_CM_LANE);
+        ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_ERR_HANDLER_INVOKED));
     } else {
         ucs_warn("ep %p: unexpected state on disconnect, flags: 0x%u",
                  ucp_ep, ucp_ep->flags);
     }
 
+    /* don't remove the flag at the beginning of the function, some functions
+     * may rely on that flag (e.g. ucp_ep_cm_remote_disconnect_progress()) */
+    ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
+
+out:
     UCS_ASYNC_UNBLOCK(async);
     return 1;
 }
@@ -873,6 +830,25 @@ static ucp_rsc_index_t ucp_listener_get_cm_index(uct_listener_h listener,
     return UCP_NULL_RESOURCE;
 }
 
+int ucp_cm_server_conn_request_progress_cb_pred(const ucs_callbackq_elem_t *elem,
+                                                void *arg)
+{
+    ucp_listener_h listener = arg;
+    ucp_conn_request_h conn_request;
+
+    if (elem->cb != ucp_cm_server_conn_request_progress) {
+        return 0;
+    }
+
+    conn_request = elem->arg;
+    if (conn_request->listener != listener) {
+        return 0;
+    }
+
+    ucp_listener_reject(listener, conn_request);
+    return 1;
+}
+
 void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                    const uct_cm_listener_conn_request_args_t
                                    *conn_req_args)
@@ -966,6 +942,7 @@ err_free_ucp_conn_request:
 err_reject:
     status = uct_listener_reject(listener, conn_request);
     if (status != UCS_OK) {
+        /* coverity[pass_freed_arg] */
         ucs_warn("failed to reject connect request %p on listener %p",
                  conn_request, listener);
     }
@@ -1229,9 +1206,9 @@ void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
     }
 }
 
-ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
+ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep, const ucp_request_param_t *param)
 {
-    ucp_request_t *request = ucp_request_get(ep->worker);
+    ucp_request_t *request = ucp_request_get_param(ep->worker, param, {return NULL;});
 
     if (request == NULL) {
         ucs_error("failed to allocate close request for ep %p", ep);
@@ -1242,6 +1219,8 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep)
     request->flags   = 0;
     request->send.ep = ep;
     request->send.flush.uct_flags = UCT_FLUSH_FLAG_LOCAL;
+
+    ucp_request_set_send_callback_param(param, request, send);
 
     return request;
 }

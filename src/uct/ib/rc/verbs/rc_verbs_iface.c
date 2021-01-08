@@ -42,14 +42,30 @@ static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
   {NULL}
 };
 
+static unsigned uct_rc_verbs_get_tx_res_count(uct_rc_verbs_ep_t *ep,
+                                              struct ibv_wc *wc)
+{
+    return wc->wr_id - ep->txcnt.ci;
+}
+
+static void uct_rc_verbs_update_tx_res(uct_rc_iface_t *iface,
+                                       uct_rc_verbs_ep_t *ep, unsigned count)
+{
+    ep->txcnt.ci += count;
+    uct_rc_txqp_available_add(&ep->super.txqp, count);
+    iface->tx.cq_available += count;
+    uct_rc_iface_update_reads(iface);
+}
+
 static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
-                                        ucs_status_t status)
+                                        ucs_status_t ep_status)
 {
     struct ibv_wc     *wc      = arg;
     uct_rc_iface_t    *iface   = ucs_derived_of(ib_iface, uct_rc_iface_t);
     ucs_log_level_t    log_lvl = UCS_LOG_LEVEL_FATAL;
     uct_rc_verbs_ep_t *ep;
-    ucs_status_t       err_handler_status;
+    ucs_status_t       status;
+    unsigned           count;
 
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface, wc->qp_num),
                         uct_rc_verbs_ep_t);
@@ -57,20 +73,25 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         return;
     }
 
-    err_handler_status = uct_rc_verbs_ep_handle_failure(ep, status);
-    log_lvl            = uct_ib_iface_failure_log_level(ib_iface,
-                                                        err_handler_status, status);
+    count = uct_rc_verbs_get_tx_res_count(ep, wc);
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status,
+                                  ep->txcnt.ci + count, 0);
+    uct_rc_verbs_update_tx_res(iface, ep, count);
+
+    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
+                           UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+        return;
+    }
+
+    ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
+
+    status  = uct_iface_handle_ep_err(&iface->super.super.super,
+                                      &ep->super.super.super, ep_status);
+    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
 
     ucs_log(log_lvl,
             "send completion with error: %s qpn 0x%x wrid 0x%lx vendor_err 0x%x",
             ibv_wc_status_str(wc->status), wc->qp_num, wc->wr_id, wc->vendor_err);
-}
-
-static ucs_status_t uct_rc_verbs_ep_set_failed(uct_ib_iface_t *iface,
-                                               uct_ep_h ep, ucs_status_t status)
-{
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_rc_verbs_ep_t), ep,
-                             &iface->super.super, status);
 }
 
 ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
@@ -82,6 +103,8 @@ ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
     case IBV_WC_RETRY_EXC_ERR:
     case IBV_WC_RNR_RETRY_EXC_ERR:
         return UCS_ERR_ENDPOINT_TIMEOUT;
+    case IBV_WC_WR_FLUSH_ERR:
+        return UCS_ERR_CANCELED;
     default:
         return UCS_ERR_IO_ERROR;
     }
@@ -107,17 +130,12 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
             continue;
         }
 
-        count = wc[i].wr_id - ep->txcnt.ci;
+        count = uct_rc_verbs_get_tx_res_count(ep, &wc[i]);
         ucs_trace_poll("rc_verbs iface %p tx_wc wrid 0x%lx ep %p qpn 0x%x count %d",
                        iface, wc[i].wr_id, ep, wc[i].qp_num, count);
-        ep->txcnt.ci += count;
 
-        uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci);
-
-        uct_rc_txqp_available_add(&ep->super.txqp, count);
-        iface->super.tx.cq_available += count;
-
-        uct_rc_iface_update_reads(&iface->super);
+        uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci + count);
+        uct_rc_verbs_update_tx_res(&iface->super, ep, count);
 
         ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
                                    &ep->super.arb_group);
@@ -145,7 +163,6 @@ static void uct_rc_verbs_iface_init_inl_wrs(uct_rc_verbs_iface_t *iface)
 {
     memset(&iface->inl_am_wr, 0, sizeof(iface->inl_am_wr));
     iface->inl_am_wr.sg_list        = iface->inl_sge;
-    iface->inl_am_wr.num_sge        = 2;
     iface->inl_am_wr.opcode         = IBV_WR_SEND;
     iface->inl_am_wr.send_flags     = IBV_SEND_INLINE;
 
@@ -438,6 +455,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     {
     {
     .ep_am_short              = uct_rc_verbs_ep_am_short,
+    .ep_am_short_iov          = uct_rc_verbs_ep_am_short_iov,
     .ep_am_bcopy              = uct_rc_verbs_ep_am_bcopy,
     .ep_am_zcopy              = uct_rc_verbs_ep_am_zcopy,
     .ep_put_short             = uct_rc_verbs_ep_put_short,
@@ -477,7 +495,6 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .arm_cq                   = uct_ib_iface_arm_cq,
     .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
     .handle_failure           = uct_rc_verbs_handle_failure,
-    .set_ep_failed            = uct_rc_verbs_ep_set_failed,
     },
     .init_rx                  = uct_rc_iface_verbs_init_rx,
     .cleanup_rx               = uct_rc_iface_verbs_cleanup_rx,

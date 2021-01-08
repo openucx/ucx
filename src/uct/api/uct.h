@@ -597,51 +597,54 @@ enum uct_iface_open_mode {
  */
 enum uct_iface_params_field {
     /** Enables @ref uct_iface_params_t::cpu_mask */
-    UCT_IFACE_PARAM_FIELD_CPU_MASK          = UCS_BIT(0),
+    UCT_IFACE_PARAM_FIELD_CPU_MASK           = UCS_BIT(0),
 
     /** Enables @ref uct_iface_params_t::open_mode */
-    UCT_IFACE_PARAM_FIELD_OPEN_MODE         = UCS_BIT(1),
+    UCT_IFACE_PARAM_FIELD_OPEN_MODE          = UCS_BIT(1),
 
     /** Enables @ref uct_iface_params_t_mode_device
      *  "uct_iface_params_t::mode::device" */
-    UCT_IFACE_PARAM_FIELD_DEVICE            = UCS_BIT(2),
+    UCT_IFACE_PARAM_FIELD_DEVICE             = UCS_BIT(2),
 
     /** Enables @ref uct_iface_params_t_mode_sockaddr
      *  "uct_iface_params_t::mode::sockaddr" */
-    UCT_IFACE_PARAM_FIELD_SOCKADDR          = UCS_BIT(3),
+    UCT_IFACE_PARAM_FIELD_SOCKADDR           = UCS_BIT(3),
 
     /** Enables @ref uct_iface_params_t::stats_root */
-    UCT_IFACE_PARAM_FIELD_STATS_ROOT        = UCS_BIT(4),
+    UCT_IFACE_PARAM_FIELD_STATS_ROOT         = UCS_BIT(4),
 
     /** Enables @ref uct_iface_params_t::rx_headroom */
-    UCT_IFACE_PARAM_FIELD_RX_HEADROOM       = UCS_BIT(5),
+    UCT_IFACE_PARAM_FIELD_RX_HEADROOM        = UCS_BIT(5),
 
     /** Enables @ref uct_iface_params_t::err_handler_arg */
-    UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   = UCS_BIT(6),
+    UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG    = UCS_BIT(6),
 
     /** Enables @ref uct_iface_params_t::err_handler */
-    UCT_IFACE_PARAM_FIELD_ERR_HANDLER       = UCS_BIT(7),
+    UCT_IFACE_PARAM_FIELD_ERR_HANDLER        = UCS_BIT(7),
 
     /** Enables @ref uct_iface_params_t::err_handler_flags */
-    UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS = UCS_BIT(8),
+    UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS  = UCS_BIT(8),
 
     /** Enables @ref uct_iface_params_t::eager_arg */
-    UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG   = UCS_BIT(9),
+    UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG    = UCS_BIT(9),
 
     /** Enables @ref uct_iface_params_t::eager_cb */
-    UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB    = UCS_BIT(10),
+    UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_CB     = UCS_BIT(10),
 
     /** Enables @ref uct_iface_params_t::rndv_arg */
-    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG    = UCS_BIT(11),
+    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG     = UCS_BIT(11),
 
     /** Enables @ref uct_iface_params_t::rndv_cb */
-    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB     = UCS_BIT(12),
+    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB      = UCS_BIT(12),
 
     /** Enables @ref uct_iface_params_t::async_event_arg */
-    UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG   = UCS_BIT(13),
+    UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG    = UCS_BIT(13),
 
     /** Enables @ref uct_iface_params_t::async_event_cb */
-    UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB    = UCS_BIT(14)
+    UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB     = UCS_BIT(14),
+
+    /** Enables @ref uct_iface_params_t::keepalive_interval */
+    UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL = UCS_BIT(15)
 };
 
 /**
@@ -886,8 +889,9 @@ struct uct_iface_attr {
         } get;                           /**< Attributes for GET operations */
 
         struct {
-            size_t           max_short;  /**< Total max. size (incl. the header) */
-            size_t           max_bcopy;  /**< Total max. size (incl. the header) */
+            size_t           max_short;  /**< Total maximum size (incl. the header)
+                                              @anchor uct_iface_attr_cap_am_max_short */
+            size_t           max_bcopy;  /**< Total maximum size (incl. the header) */
             size_t           min_zcopy;  /**< Minimal size for am_zcopy (incl. the
                                               header and total of @ref uct_iov_t::length
                                               of the @a iov parameter) */
@@ -1052,6 +1056,9 @@ struct uct_iface_params {
      * read by user if the iface has @ref UCT_IFACE_FLAG_EVENT_ASYNC_CB
      * capability */
     uct_async_event_cb_t                         async_event_cb;
+
+    /* Time period between keepalive rounds */
+    ucs_time_t                                   keepalive_interval;
 };
 
 
@@ -2630,6 +2637,43 @@ UCT_INLINE_API ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t he
                                             const void *payload, unsigned length)
 {
     return ep->iface->ops.ep_am_short(ep, id, header, payload, length);
+}
+
+
+/**
+ * @ingroup UCT_AM
+ * @brief Short io-vector send operation.
+ *
+ * This routine sends a message using @ref uct_short_protocol_desc "short" protocol.
+ * The input data in @a iov array of @ref ::uct_iov_t structures is sent to remote
+ * side to contiguous buffer keeping the order of the data in the array.
+ *
+ * @param [in] ep              Destination endpoint handle.
+ * @param [in] id              Active message id. Must be in range 0..UCT_AM_ID_MAX-1.
+ * @param [in] iov             Points to an array of @ref ::uct_iov_t structures.
+ *                             The @a iov pointer must be a valid address of an array
+ *                             of @ref ::uct_iov_t structures. A particular structure
+ *                             pointer must be a valid address. A NULL terminated
+ *                             array is not required. @a stride and @a count fields in
+ *                             @ref ::uct_iov_t structure are ignored in current
+ *                             implementation. The total size of the data buffers in
+ *                             the array is limited by
+ *                             @ref uct_iface_attr_cap_am_max_short
+ *                             "uct_iface_attr::cap::am::max_short".
+ * @param [in] iovcnt          Size of the @a iov data @ref ::uct_iov_t structures
+ *                             array. If @a iovcnt is zero, the data is considered empty.
+ *                             @a iovcnt is limited by @ref uct_iface_attr_cap_am_max_iov
+ *                             "uct_iface_attr::cap::am::max_iov".
+ *
+ * @return UCS_OK              Operation completed successfully.
+ * @return UCS_ERR_NO_RESOURCE Could not start the operation due to lack of
+ *                             send resources.
+ * @return otherwise           Error code.
+ */
+UCT_INLINE_API ucs_status_t uct_ep_am_short_iov(uct_ep_h ep, uint8_t id,
+                                                const uct_iov_t *iov, size_t iovcnt)
+{
+    return ep->iface->ops.ep_am_short_iov(ep, id, iov, iovcnt);
 }
 
 

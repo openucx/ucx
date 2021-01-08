@@ -26,8 +26,7 @@
 #define UCT_IB_ADDRESS_INVALID_PATH_MTU    ((enum ibv_mtu)0)
 #define UCT_IB_ADDRESS_INVALID_PKEY        0
 #define UCT_IB_ADDRESS_DEFAULT_PKEY        0xffff
-#define UCT_IB_SL_MAX                      15
-#define UCT_IB_SL_INVALID                  (UCT_IB_SL_MAX + 1)
+#define UCT_IB_SL_NUM                      16
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -230,7 +229,6 @@ struct uct_ib_iface_ops {
     uct_ib_iface_arm_cq_func_t         arm_cq;
     uct_ib_iface_event_cq_func_t       event_cq;
     uct_ib_iface_handle_failure_func_t handle_failure;
-    uct_ib_iface_set_ep_failed_func_t  set_ep_failed;
 };
 
 

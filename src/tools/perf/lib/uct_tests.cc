@@ -73,7 +73,8 @@ public:
         const size_t iovcnt    = perf->params.msg_size_cnt;
         size_t iov_length_it, iov_it;
 
-        ucs_assert(UCT_PERF_DATA_LAYOUT_ZCOPY == DATA);
+        ucs_assert((UCT_PERF_DATA_LAYOUT_ZCOPY == DATA) ||
+                   (UCT_PERF_DATA_LAYOUT_SHORT_IOV == DATA));
         ucs_assert(NULL != perf->params.msg_size_list);
         ucs_assert(iovcnt > 0);
         ucs_assert(perf->params.msg_size_list[0] >= header_size);
@@ -100,9 +101,10 @@ public:
     }
 
     void uct_perf_test_prepare_iov_buffer() {
-        if (UCT_PERF_DATA_LAYOUT_ZCOPY == DATA) {
+        if ((UCT_PERF_DATA_LAYOUT_ZCOPY == DATA) ||
+            (UCT_PERF_DATA_LAYOUT_SHORT_IOV == DATA)) {
             size_t start_iov_buffer_size = 0;
-            if (UCX_PERF_CMD_AM == CMD) {
+            if ((UCX_PERF_CMD_AM == CMD) && (UCT_PERF_DATA_LAYOUT_ZCOPY == DATA)) {
                 start_iov_buffer_size = m_perf.params.am_hdr_size;
             }
             uct_perf_get_buffer_iov(m_perf.uct.iov, m_perf.send_buffer,
@@ -249,6 +251,10 @@ public:
                 return uct_ep_am_short(ep, UCT_PERF_TEST_AM_ID, am_short_hdr,
                                        (char*)buffer + sizeof(am_short_hdr),
                                        length - sizeof(am_short_hdr));
+            case UCT_PERF_DATA_LAYOUT_SHORT_IOV:
+                set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn);
+                return uct_ep_am_short_iov(ep, UCT_PERF_TEST_AM_ID, m_perf.uct.iov,
+                                           m_perf.params.msg_size_cnt);
             case UCT_PERF_DATA_LAYOUT_BCOPY:
                 set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn);
                 packed_len = uct_ep_am_bcopy(ep, UCT_PERF_TEST_AM_ID, pack_cb,
@@ -265,7 +271,7 @@ public:
             }
         case UCX_PERF_CMD_PUT:
             if ((TYPE == UCX_PERF_TEST_TYPE_PINGPONG) ||
-                (TYPE == UCX_PERF_TEST_TYPE_PINGPONG_WFE)) {
+                (TYPE == UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM)) {
                 /* Put the control word at the latest byte of the IOV message */
                 set_sn(UCS_PTR_BYTE_OFFSET(buffer,
                                            uct_perf_get_buffer_extent(&m_perf.params) - 1),
@@ -623,7 +629,7 @@ public:
         /* coverity[switch_selector_expr_is_constant] */
         switch (TYPE) {
         case UCX_PERF_TEST_TYPE_PINGPONG:
-        case UCX_PERF_TEST_TYPE_PINGPONG_WFE:
+        case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
             return run_pingpong();
         case UCX_PERF_TEST_TYPE_STREAM_UNI:
             /* coverity[switch_selector_expr_is_constant] */
@@ -690,6 +696,7 @@ private:
    TEST_CASE(_perf, UCS_PP_TUPLE_0 _case, UCS_PP_TUPLE_1 _case, _data, false)
 #define TEST_CASE_ALL_DATA(_perf, _case) \
    TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_SHORT) \
+   TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_SHORT_IOV) \
    TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_BCOPY) \
    TEST_CASE_ALL_OSD(_perf, _case, UCT_PERF_DATA_LAYOUT_ZCOPY)
 

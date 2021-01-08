@@ -376,6 +376,56 @@ UCS_TEST_P(test_uct_ib_gid_idx, non_default_gid_idx, "GID_INDEX=1") {
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_gid_idx);
 
 
+#if HAVE_DEVX
+class test_uct_ib_sl : public test_uct_ib_with_specific_port {
+public:
+    void check_port_attr() {
+        ucs_status_t status;
+        ucs::handle<uct_md_h> uct_md;
+
+        UCS_TEST_CREATE_HANDLE(uct_md_h, uct_md, uct_ib_md_close, uct_ib_md_open,
+                               &uct_ib_component,
+                               ibv_get_device_name(m_ibctx->device),
+                               m_md_config);
+
+        uct_ib_mlx5_md_t *ib_md = ucs_derived_of(uct_md, uct_ib_mlx5_md_t);
+
+        /* check if OOO SL mask can be detected for the port */
+        status = uct_ib_mlx5_devx_query_ooo_sl_mask(ib_md, m_port,
+                                                    &m_ooo_sl_mask);
+        EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_UNSUPPORTED));
+        if (status != UCS_OK) {
+            UCS_TEST_SKIP_R("OOO SL mask couldn't be detected for " +
+                            m_dev_name + ":" + ucs::to_string(m_port));
+        }
+    }
+
+protected:
+    uint16_t m_ooo_sl_mask;
+};
+
+UCS_TEST_P(test_uct_ib_sl, check_ib_sl_config) {
+    // go over all SLs, check UCTs could be initialized on a specific SL
+    // and able to send/recv traffic
+    for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl)  {
+        if (!has_transport("rc_verbs") && !has_transport("ud_verbs")) {
+            // if AR is configured on the given SL, set AR_ENABLE to "y",
+            // otherwise - to "n" in order to test that AR_ENABLE parameter
+            // works as expected w/o errors and warnings
+            modify_config("IB_AR_ENABLE",
+                          (m_ooo_sl_mask & UCS_BIT(sl)) ? "y" : "n");
+        }
+        modify_config("IB_SL", ucs::to_string(static_cast<uint16_t>(sl)));
+
+        test_uct_ib::init();
+        send_recv_short();
+        test_uct_ib::cleanup();
+    }
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_sl);
+#endif
+
 class test_uct_ib_utils : public ucs::test {
 };
 
@@ -519,10 +569,39 @@ protected:
         return status;
     }
 
+    static ucs_log_func_rc_t
+    wrap_errors_check_sl_masks_logger(const char *file, unsigned line,
+                                      const char *function,
+                                      ucs_log_level_t level,
+                                      const ucs_log_component_config_t *
+                                      comp_conf,
+                                      const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+
+            for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl) {
+                std::string sl_val = ucs::to_string(static_cast<uint16_t>(sl));
+
+                if ((err_str.find(sl_val + ", ") == std::string::npos) &&
+                    (err_str.find(sl_val + " }") == std::string::npos)) {
+                    return UCS_LOG_FUNC_RC_CONTINUE;
+                }
+            }
+
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
     ucs_status_t select_sl_nok(ucs_ternary_auto_value_t ar_enable,
-                               uint64_t ooo_sl_mask,
+                               unsigned long config_sl, uint64_t ooo_sl_mask,
                                const uct_ib_iface_config_t &config) const {
-        scoped_log_handler slh(wrap_errors_logger);
+        scoped_log_handler slh(((ooo_sl_mask != m_ooo_sl_mask_not_detected) &&
+                                (config_sl == UCS_ULUNITS_AUTO)) ?
+                               wrap_errors_check_sl_masks_logger :
+                               wrap_errors_logger);
         uint8_t sl;
 
         EXPECT_NE(UCS_AUTO, ar_enable);
@@ -540,7 +619,7 @@ protected:
         if (exp_status == UCS_OK) {
             status = select_sl_ok(ar_enable, config_sl, ooo_sl_mask, config);
         } else {
-            status = select_sl_nok(ar_enable, ooo_sl_mask, config);
+            status = select_sl_nok(ar_enable, config_sl, ooo_sl_mask, config);
         }
         EXPECT_EQ(exp_status, status);
     }
@@ -562,42 +641,60 @@ UCS_TEST_F(test_uct_ib_sl_utils, sl_selection) {
         ucs_ternary_auto_value_t ar_enable =
             static_cast<ucs_ternary_auto_value_t>(i);
 
-        /* select the default SL, with empty OOO SL mask */
+        // select the default SL, with empty OOO SL mask
         select_sl(ar_enable, UCS_ULUNITS_AUTO, 0,
                   (ar_enable == UCS_YES) ? err_status : UCS_OK);
 
-        /* select the default SL, without OOO SL mask (not detected) */
+        // select the default SL, without OOO SL mask (not detected)
         select_sl(ar_enable, UCS_ULUNITS_AUTO, m_ooo_sl_mask_not_detected,
                   ((ar_enable != UCS_TRY) && (ar_enable != UCS_AUTO)) ?
                   err_status : UCS_OK);
 
-        /* select the default SL, with OOO SL mask { 4 } */
-        select_sl(ar_enable, UCS_ULUNITS_AUTO, UCS_BIT(4), UCS_OK);
+        for (uint8_t sl = 0; sl < UCT_IB_SL_NUM; ++sl) {
+            // select the default SL, with OOO SL mask which contains only <sl>
+            select_sl(ar_enable, UCS_ULUNITS_AUTO, UCS_BIT(sl), UCS_OK);
 
-        /* select SL=8, with empty OOO SL mask */
-        select_sl(ar_enable, 8, 0,
-                  (ar_enable == UCS_YES) ? err_status : UCS_OK);
+            // select SL=<sl>, with empty OOO SL mask
+            select_sl(ar_enable, sl, 0,
+                      (ar_enable == UCS_YES) ? err_status : UCS_OK);
 
-        /* select SL=8, without OOO SL mask (not detected) */
-        select_sl(ar_enable, 8, m_ooo_sl_mask_not_detected,
-                  ((ar_enable != UCS_TRY) && (ar_enable != UCS_AUTO)) ?
-                  err_status : UCS_OK);
+            // select SL=<sl>, without OOO SL mask (not detected)
+            select_sl(ar_enable, sl, m_ooo_sl_mask_not_detected,
+                      ((ar_enable != UCS_TRY) && (ar_enable != UCS_AUTO)) ?
+                      err_status : UCS_OK);
 
-        /* select SL=8, with OOO SL mask { 8 } */
-        select_sl(ar_enable, 8, UCS_BIT(8),
-                  (ar_enable == UCS_NO) ? err_status : UCS_OK);
+            /* select SL=<sl>, with OOO SL mask which contains only <sl> */
+            select_sl(ar_enable, sl, UCS_BIT(sl),
+                      (ar_enable == UCS_NO) ? err_status : UCS_OK);
 
-        /* select SL=8, with OOO SL mask { 0 } */
-        select_sl(ar_enable, 8, UCS_BIT(0),
-                  (ar_enable == UCS_YES) ? err_status : UCS_OK);
+            // select SL=<sl>, with OOO SL mask which doesn't contain <sl>, but
+            // it contains one another element
+            select_sl(ar_enable, sl, UCS_BIT(UCT_IB_SL_NUM - 1 - sl),
+                      (ar_enable == UCS_YES) ? err_status : UCS_OK);
 
-        /* select SL=8, with OOO SL mask { 0, 4, 8 } */
-        select_sl(ar_enable, 8, UCS_BIT(0) | UCS_BIT(4) | UCS_BIT(8),
-                  (ar_enable == UCS_NO) ? err_status : UCS_OK);
+            // select SL=<sl>, with OOO SL mask which contains <sl> and two
+            // other elements
+            select_sl(ar_enable, sl,
+                      UCS_BIT(sl)                       |
+                      UCS_BIT((sl + 1) % UCT_IB_SL_NUM) |
+                      UCS_BIT((sl + 2) % UCT_IB_SL_NUM),
+                      (ar_enable == UCS_NO) ? err_status : UCS_OK);
 
-        /* select SL=8, with OOO SL mask { 0, 8, 11 } */
-        select_sl(ar_enable, 8, UCS_BIT(0) | UCS_BIT(4) | UCS_BIT(11),
-                  (ar_enable == UCS_YES) ? err_status : UCS_OK);
+            // select SL=<sl>, with OOO SL mask which doesn't contain <sl>
+            select_sl(ar_enable, sl,
+                      UCS_BIT((sl + 1) % UCT_IB_SL_NUM) |
+                      UCS_BIT((sl + 2) % UCT_IB_SL_NUM) |
+                      UCS_BIT((sl + 3) % UCT_IB_SL_NUM),
+                      (ar_enable == UCS_YES) ? err_status : UCS_OK);
+
+            // select SL=<sl>, with full OOO SL mask
+            select_sl(ar_enable, sl, UCS_MASK(UCT_IB_SL_NUM),
+                      (ar_enable == UCS_NO) ? err_status : UCS_OK);
+
+            // select SL=<sl>, with full OOO SL mask, except <sl>
+            select_sl(ar_enable, sl, UCS_MASK(UCT_IB_SL_NUM) & ~UCS_BIT(sl),
+                      (ar_enable == UCS_YES) ? err_status : UCS_OK);
+        }
     }
 }
 

@@ -523,6 +523,12 @@ void ucp_listener_destroy(ucp_listener_h listener)
 {
     ucs_trace("listener %p: destroying", listener);
 
+    UCS_ASYNC_BLOCK(&listener->worker->async);
+    ucs_callbackq_remove_if(&listener->worker->uct->progress_q,
+                            ucp_cm_server_conn_request_progress_cb_pred,
+                            listener);
+    UCS_ASYNC_UNBLOCK(&listener->worker->async);
+
     if (ucp_worker_sockaddr_is_cm_proto(listener->worker)) {
         ucp_listener_close_uct_listeners(listener);
     } else {
@@ -536,6 +542,8 @@ ucs_status_t ucp_listener_reject(ucp_listener_h listener,
                                  ucp_conn_request_h conn_request)
 {
     ucp_worker_h worker = listener->worker;
+
+    ucs_trace("listener %p: free conn_request %p", listener, conn_request);
 
     UCS_ASYNC_BLOCK(&worker->async);
 

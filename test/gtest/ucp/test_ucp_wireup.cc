@@ -62,6 +62,9 @@ protected:
 
     void disconnect(ucp_test::entity &e);
 
+    static void close_completion(void *request, ucs_status_t status,
+                                 void *user_data);
+
     static void send_completion(void *request, ucs_status_t status);
 
     static void tag_recv_completion(void *request, ucs_status_t status,
@@ -314,6 +317,14 @@ void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
 void test_ucp_wireup::send_completion(void *request, ucs_status_t status)
 {
 }
+
+void test_ucp_wireup::close_completion(void *request, ucs_status_t status,
+                                       void *user_data)
+{
+    ASSERT_UCS_OK(status);
+    ASSERT_NE((test_ucp_wireup *)NULL, (test_ucp_wireup *)user_data);
+}
+
 
 void test_ucp_wireup::tag_recv_completion(void *request, ucs_status_t status,
                                           ucp_tag_recv_info_t *info)
@@ -630,7 +641,15 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
     recv_b(sender().worker(), sender().ep(), 8, 1);
 }
 
-UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, send_disconnect_reply2,
+                     /* skip the test for TCP, because it fails from time to
+                      * time: the sender re-uses a socket fd from the already
+                      * accepted connection from the receiver, but then the
+                      * socket fd is closed, since the receiver closed the
+                      * connection and the underlying TCP EP isn't able to
+                      * receive the data on the failed socket.
+                      * TODO: fix the bug on TCP level */
+                     has_transport("tcp")) {
     sender().connect(&receiver(), get_ep_params());
 
     send_b(sender().ep(), 8, 1);
@@ -796,6 +815,32 @@ UCS_TEST_P(test_ucp_wireup_2sided, connect_disconnect) {
     if (!is_loopback()) {
         disconnect(receiver());
     }
+}
+
+UCS_TEST_P(test_ucp_wireup_2sided, close_nbx_callback) {
+    sender().connect(&receiver(), get_ep_params());
+    if (!is_loopback()) {
+        receiver().connect(&sender(), get_ep_params());
+    }
+
+    std::vector<void *> reqs;
+    ucp_request_param_t param;
+
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                         UCP_OP_ATTR_FIELD_USER_DATA |
+                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    param.cb.send      = close_completion;
+    param.user_data    = this;
+
+    reqs.push_back(ucp_ep_close_nbx(sender().revoke_ep(), &param));
+    EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
+
+    if (!is_loopback()) {
+        reqs.push_back(ucp_ep_close_nbx(receiver().revoke_ep(), &param));
+        EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
+    }
+
+    waitall(reqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
@@ -1413,6 +1458,10 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, ib, "ib")
 
 class test_ucp_wireup_keepalive : public test_ucp_wireup {
 public:
+    test_ucp_wireup_keepalive() {
+        m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
+    }
+
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         test_ucp_wireup::get_test_variants(variants,
@@ -1437,6 +1486,9 @@ public:
         sender().connect(&receiver(), get_ep_params());
         receiver().connect(&sender(), get_ep_params());
     }
+
+protected:
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 /* test if EP has non-empty keepalive lanes mask */

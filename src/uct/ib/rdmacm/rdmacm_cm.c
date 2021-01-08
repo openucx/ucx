@@ -44,6 +44,8 @@ ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event)
 ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id)
 {
     uct_rdmacm_priv_data_hdr_t hdr;
+    char remote_ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char local_ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
     hdr.length = 0;
     hdr.status = (uint8_t)UCS_ERR_REJECTED;
@@ -51,11 +53,63 @@ ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id)
     ucs_trace("reject on cm_id %p", id);
 
     if (rdma_reject(id, &hdr, sizeof(hdr))) {
-        ucs_error("rdma_reject (id=%p) failed with error: %m", id);
+        ucs_error("rdma_reject (id=%p local addr=%s remote addr=%s) failed "
+                  "with error: %m", id,
+                  ucs_sockaddr_str(rdma_get_local_addr(id), local_ip_port_str,
+                                   UCS_SOCKADDR_STRING_LEN),
+                  ucs_sockaddr_str(rdma_get_peer_addr(id), remote_ip_port_str,
+                                   UCS_SOCKADDR_STRING_LEN));
         return UCS_ERR_IO_ERROR;
     }
 
     return UCS_OK;
+}
+
+ucs_status_t uct_rdmacm_cm_get_cq(uct_rdmacm_cm_t *cm, struct ibv_context *verbs,
+                                  uint32_t pd_key, struct ibv_cq **cq_p)
+{
+    struct ibv_cq *cq;
+    khiter_t iter;
+    int ret;
+
+    iter = kh_put(uct_rdmacm_cm_cqs, &cm->cqs, pd_key, &ret);
+    if (ret == -1) {
+        ucs_error("cm %p: cannot allocate hash entry for CQ", cm);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    if (ret == 0) {
+        /* already exists so use it */
+        cq = kh_value(&cm->cqs, iter);
+    } else {
+        /* Create a dummy completion queue */
+        cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
+        if (cq == NULL) {
+            kh_del(uct_rdmacm_cm_cqs, &cm->cqs, iter);
+            ucs_error("ibv_create_cq() failed: %m");
+            return UCS_ERR_IO_ERROR;
+        }
+
+        kh_value(&cm->cqs, iter) = cq;
+    }
+
+    *cq_p = cq;
+    return UCS_OK;
+}
+
+void uct_rdmacm_cm_cqs_cleanup(uct_rdmacm_cm_t *cm)
+{
+    struct ibv_cq *cq;
+    int ret;
+
+    kh_foreach_value(&cm->cqs, cq, {
+        ret = ibv_destroy_cq(cq);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
+        }
+    });
+
+    kh_destroy_inplace(uct_rdmacm_cm_cqs, &cm->cqs);
 }
 
 size_t uct_rdmacm_cm_get_max_conn_priv()
@@ -541,6 +595,7 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .ep_put_bcopy             = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_unsupported,
     .ep_get_bcopy             = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_unsupported,
     .ep_am_short              = (uct_ep_am_short_func_t)ucs_empty_function_return_unsupported,
+    .ep_am_short_iov          = (uct_ep_am_short_iov_func_t)ucs_empty_function_return_unsupported,
     .ep_am_bcopy              = (uct_ep_am_bcopy_func_t)ucs_empty_function_return_unsupported,
     .ep_atomic_cswap64        = (uct_ep_atomic_cswap64_func_t)ucs_empty_function_return_unsupported,
     .ep_atomic64_post         = (uct_ep_atomic64_post_func_t)ucs_empty_function_return_unsupported,
@@ -567,15 +622,54 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .iface_is_reachable       = (uct_iface_is_reachable_func_t)ucs_empty_function_return_zero
 };
 
+static ucs_status_t
+uct_rdmacm_cm_ipstr_to_sockaddr(const char *ip_str, struct sockaddr **saddr_p,
+                                const char *debug_name)
+{
+    struct sockaddr_storage *sa_storage;
+    ucs_status_t status;
+
+    /* NULL-pointer for empty parameter */
+    if (ip_str[0] == '\0') {
+        sa_storage = NULL;
+        goto out;
+    }
+
+    sa_storage = ucs_calloc(1, sizeof(struct sockaddr_storage), debug_name);
+    if (sa_storage == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        ucs_error("cannot allocate memory for rdmacm source address");
+        goto err;
+    }
+
+    status = ucs_sock_ipstr_to_sockaddr(ip_str, sa_storage);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
+
+out:
+    *saddr_p = (struct sockaddr*)sa_storage;
+    return UCS_OK;
+
+err_free:
+    ucs_free(sa_storage);
+err:
+    return status;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
                     uct_worker_h worker, const uct_cm_config_t *config)
 {
+    const uct_rdmacm_cm_config_t *rdmacm_config = ucs_derived_of(config,
+                                                                 uct_rdmacm_cm_config_t);
     uct_priv_worker_t *worker_priv;
     ucs_status_t status;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_rdmacm_cm_ops,
                               &uct_rdmacm_cm_iface_ops, worker, component,
                               config);
+
+    kh_init_inplace(uct_rdmacm_cm_cqs, &self->cqs);
 
     self->ev_ch  = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
@@ -601,11 +695,20 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
         goto err_destroy_ev_ch;
     }
 
+    status = uct_rdmacm_cm_ipstr_to_sockaddr(rdmacm_config->src_addr,
+                                             &self->config.src_addr,
+                                             "rdmacm_src_addr");
+    if (status != UCS_OK) {
+        goto ucs_async_remove_handler;
+    }
+
     ucs_debug("created rdmacm_cm %p with event_channel %p (fd=%d)",
               self, self->ev_ch, self->ev_ch->fd);
 
     return UCS_OK;
 
+ucs_async_remove_handler:
+    ucs_async_remove_handler(self->ev_ch->fd, 1);
 err_destroy_ev_ch:
     rdma_destroy_event_channel(self->ev_ch);
 err:
@@ -616,6 +719,8 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_t)
 {
     ucs_status_t status;
 
+    ucs_free(self->config.src_addr);
+
     status = ucs_async_remove_handler(self->ev_ch->fd, 1);
     if (status != UCS_OK) {
         ucs_warn("failed to remove event handler for fd %d: %s",
@@ -624,6 +729,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_t)
 
     ucs_trace("destroying event_channel %p on cm %p", self->ev_ch, self);
     rdma_destroy_event_channel(self->ev_ch);
+    uct_rdmacm_cm_cqs_cleanup(self);
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_cm_t, uct_cm_t);

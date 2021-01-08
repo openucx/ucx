@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -515,6 +515,15 @@ ucp_proto_get_short_max(const ucp_request_t *req,
             (req->flags & UCP_REQUEST_FLAG_SYNC) ||
             (!UCP_MEM_IS_HOST(req->send.mem_type))) ?
            -1 : msg_config->max_short;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
+                    ssize_t length)
+{
+    return (ucs_likely(length <= max_eager_short->memtype_off) ||
+            (length <= max_eager_short->memtype_on &&
+             ucp_memory_type_cache_is_empty(ep->worker->context)));
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*

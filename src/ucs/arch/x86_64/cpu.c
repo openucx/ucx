@@ -323,7 +323,7 @@ double ucs_arch_get_clocks_per_sec()
 
 ucs_cpu_model_t ucs_arch_get_cpu_model()
 {
-    ucs_x86_cpu_version_t version;
+    ucs_x86_cpu_version_t version = {}; /* Silence static checker */
     uint32_t _ebx, _ecx, _edx;
     uint32_t model, family;
 
@@ -469,7 +469,7 @@ int ucs_arch_get_cpu_flag()
 
 ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
 {
-    ucs_x86_cpu_registers reg;
+    ucs_x86_cpu_registers reg = {}; /* Silence static checker */
 
     ucs_x86_cpuid(X86_CPUID_GET_BASE_VALUE,
                   ucs_unaligned_ptr(&reg.eax), ucs_unaligned_ptr(&reg.ebx),
@@ -518,9 +518,9 @@ void ucs_cpu_init()
 
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 {
+    ucs_x86_cpu_registers reg = {}; /* Silence static checker */
     ucs_x86_cache_line_reg_info_t cache_info;
     ucs_x86_cache_line_reg_info_t line_info;
-    ucs_x86_cpu_registers reg;
     uint32_t sets;
     uint32_t i, t, r, l4;
     uint32_t max_iter;

@@ -439,7 +439,7 @@ UCS_TEST_SKIP_COND_P(test_rc_get_limit, get_zcopy_purge,
         ASSERT_EQ(1ul, m_e1->num_eps());
         status = uct_ep_flush(m_e1->ep(0), flags, NULL);
         progress();
-        if (flags & UCT_FLUSH_FLAG_CANCEL) {
+        if ((flags & UCT_FLUSH_FLAG_CANCEL) && (status != UCS_ERR_NO_RESOURCE)) {
             ASSERT_UCS_OK_OR_INPROGRESS(status);
             flags = UCT_FLUSH_FLAG_LOCAL;
             continue;

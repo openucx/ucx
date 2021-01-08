@@ -303,8 +303,9 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
         }
     }
 
+    flush_ep(sender(), 0, FAILING_EP_INDEX);
     EXPECT_EQ(UCS_OK, m_err_status);
-    
+
     /* Since UCT/UD EP has a SW implementation of reliablity on which peer
      * failure mechanism is based, we should set small UCT/UD EP timeout
      * for UCT/UD EPs for sender's UCP EP to reduce testing time */
@@ -316,7 +317,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
         fail_receiver();
 
         void *sreq = send_nb(failing_sender(), m_failing_rkey);
-
+        flush_ep(sender(), 0, FAILING_EP_INDEX);
         while (!m_err_count) {
             progress();
         }
@@ -463,6 +464,9 @@ public:
     test_ucp_peer_failure_keepalive() {
         m_sbuf.resize(1 * UCS_MBYTE);
         m_rbuf.resize(1 * UCS_MBYTE);
+
+        m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", "3s"));
     }
 
     void init() {
@@ -480,7 +484,7 @@ public:
 };
 
 UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
-           "KEEPALIVE_TIMEOUT=0.3", "KEEPALIVE_NUM_EPS=inf") {
+           "KEEPALIVE_INTERVAL=0.3", "KEEPALIVE_NUM_EPS=inf") {
     /* TODO: wireup is not tested yet */
 
     scoped_log_handler err_handler(wrap_errors_logger);

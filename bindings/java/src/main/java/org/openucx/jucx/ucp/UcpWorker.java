@@ -10,6 +10,8 @@ import java.nio.ByteBuffer;
 
 import org.openucx.jucx.*;
 
+import static org.openucx.jucx.ucs.UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_UNKNOWN;
+
 /**
  * UCP worker is an opaque object representing the communication context. The
  * worker represents an instance of a local communication resource and the
@@ -128,14 +130,20 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         if (!recvBuffer.isDirect()) {
             throw new UcxException("Recv buffer must be direct.");
         }
-        return recvTaggedNonBlockingNative(getNativeId(), UcxUtils.getAddress(recvBuffer),
+        return recvTaggedNonBlocking(UcxUtils.getAddress(recvBuffer),
             recvBuffer.remaining(), tag, tagMask, callback);
     }
 
     public UcpRequest recvTaggedNonBlocking(long localAddress, long size, long tag, long tagMask,
                                             UcxCallback callback) {
+        return recvTaggedNonBlocking(localAddress, size, tag, tagMask, callback,
+            UCS_MEMORY_TYPE_UNKNOWN);
+    }
+
+    public UcpRequest recvTaggedNonBlocking(long localAddress, long size, long tag, long tagMask,
+                                            UcxCallback callback, int memoryType) {
         return recvTaggedNonBlockingNative(getNativeId(), localAddress, size,
-            tag, tagMask, callback);
+            tag, tagMask, callback, memoryType);
     }
 
     /**
@@ -150,10 +158,18 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     public UcpRequest recvTaggedNonBlocking(long[] localAddresses, long[] sizes,
                                             long tag, long tagMask,
                                             UcxCallback callback) {
+
+        return recvTaggedNonBlocking(localAddresses, sizes, tag, tagMask, callback,
+            UCS_MEMORY_TYPE_UNKNOWN);
+    }
+
+    public UcpRequest recvTaggedNonBlocking(long[] localAddresses, long[] sizes,
+                                            long tag, long tagMask,
+                                            UcxCallback callback, int memoryType) {
         UcxParams.checkArraySizes(localAddresses, sizes);
 
         return recvTaggedIovNonBlockingNative(getNativeId(), localAddresses, sizes, tag,
-            tagMask, callback);
+            tagMask, callback, memoryType);
     }
 
     /**
@@ -201,9 +217,15 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * If the receive operation cannot be stated the routine returns an error.
      */
     public UcpRequest recvTaggedMessageNonBlocking(long address, long size, UcpTagMessage message,
-                                                   UcxCallback callback) {
+                                                   UcxCallback callback, int memoryType) {
         return recvTaggedMessageNonBlockingNative(getNativeId(), address, size,
-            message.getNativeId(), callback);
+            message.getNativeId(), callback, memoryType);
+    }
+
+    public UcpRequest recvTaggedMessageNonBlocking(long address, long size, UcpTagMessage message,
+                                                   UcxCallback callback) {
+        return recvTaggedMessageNonBlocking(address, size, message, callback,
+            UCS_MEMORY_TYPE_UNKNOWN);
     }
 
     public UcpRequest recvTaggedMessageNonBlocking(ByteBuffer buffer, UcpTagMessage message,
@@ -211,6 +233,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         return recvTaggedMessageNonBlocking(UcxUtils.getAddress(buffer), buffer.remaining(),
             message, callback);
     }
+
 
     /**
      * This routine tries to cancels an outstanding communication request. After
@@ -222,6 +245,9 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * case it is canceled the status argument is set to UCS_ERR_CANCELED.
      */
     public void cancelRequest(UcpRequest request) {
+        if (request.getNativeId() == null) {
+            throw new UcxException("Request is not valid");
+        }
         cancelRequestNative(getNativeId(), request.getNativeId());
     }
 
@@ -261,20 +287,23 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
 
     private static native UcpRequest recvTaggedNonBlockingNative(long workerId, long localAddress,
                                                                  long size, long tag, long tagMask,
-                                                                 UcxCallback callback);
+                                                                 UcxCallback callback,
+                                                                 int memoryType);
 
     private static native UcpRequest recvTaggedIovNonBlockingNative(long workerId,
                                                                     long[] localAddresses,
                                                                     long[] sizes,
                                                                     long tag, long tagMask,
-                                                                    UcxCallback callback);
+                                                                    UcxCallback callback,
+                                                                    int memoryType);
 
     private static native UcpTagMessage tagProbeNonBlockingNative(long workerId, long tag,
                                                                   long tagMask, boolean remove);
 
     private static native UcpRequest recvTaggedMessageNonBlockingNative(long workerId, long address,
                                                                         long size, long tagMsgId,
-                                                                        UcxCallback callback);
+                                                                        UcxCallback callback,
+                                                                        int memoryType);
 
     private static native void cancelRequestNative(long workerId, long requestId);
 }

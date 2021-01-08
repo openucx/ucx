@@ -297,6 +297,16 @@ protected:
         }
     }
 
+    template <typename T>
+    void wait_for_value(volatile T *var, T value, double timeout = 10.0) const
+    {
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
+        while ((ucs_get_time() < deadline) && (*var != value)) {
+            short_progress_loop();
+        }
+    }
+
     static const ucp_datatype_t DATATYPE;
     static const ucp_datatype_t DATATYPE_IOV;
 

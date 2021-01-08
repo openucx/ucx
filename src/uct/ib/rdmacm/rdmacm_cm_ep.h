@@ -13,7 +13,6 @@
 typedef struct uct_rdmacm_cm_ep {
     uct_cm_base_ep_t  super;
     struct rdma_cm_id *id;  /* The rdmacm id that is created per this ep */
-    struct ibv_cq     *cq;  /* Dummy cq used for creating a dummy qp */
     struct ibv_qp     *qp;  /* Dummy qp used for generating a unique qp_num */
     uint8_t           flags;
     ucs_status_t      status;

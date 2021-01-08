@@ -400,15 +400,56 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
     return uar->ctx == md->super.dev.ibv_context;
 }
 
+#if HAVE_DEVX
+static ucs_status_t
+uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, unsigned flags, int log_level,
+                           char *title, char *fallback,
+                           struct mlx5dv_devx_uar **uar_p)
+{
+    struct mlx5dv_devx_uar *uar;
+    char buf[512];
+
+    uar = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, flags);
+    if (uar == NULL) {
+        sprintf(buf, "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x(%s)) "
+                "failed: %m", uct_ib_device_name(&md->super.dev), flags, title);
+        if (fallback == NULL) {
+            ucs_log(log_level, "%s", buf);
+        } else {
+            ucs_log(log_level, "%s, fallback to %s", buf, fallback);
+        }
+
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *uar_p = uar;
+    return UCS_OK;
+}
+#endif
+
 ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_md_t *md,
                                        uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
 #if HAVE_DEVX
-    uar->uar            = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, 0);
-    if (uar->uar == NULL) {
-        ucs_error("mlx5dv_devx_alloc_uar() failed: %m");
-        return UCS_ERR_NO_MEMORY;
+    ucs_status_t status;
+
+#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_NC
+    status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
+                                        UCS_LOG_LEVEL_DEBUG, "WC", "NC",
+                                        &uar->uar);
+    if (status != UCS_OK) {
+        status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
+                                            UCS_LOG_LEVEL_ERROR, "NC", NULL,
+                                            &uar->uar);
+    }
+#else
+    status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
+                                        UCS_LOG_LEVEL_ERROR, "WC", NULL,
+                                        &uar->uar);
+#endif
+    if (status != UCS_OK) {
+        return status;
     }
 
     uar->super.addr.ptr = uar->uar->reg_addr;
@@ -736,7 +777,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
 
     /* which SLs are allowed by user config */
     sl_allow_mask = (ib_config->sl == UCS_ULUNITS_AUTO) ?
-                    UCS_MASK(UCT_IB_SL_MAX) : UCS_BIT(ib_config->sl);
+                    UCS_MASK(UCT_IB_SL_NUM) : UCS_BIT(ib_config->sl);
 
     if (have_sl_mask_cap) {
         sls_with_ar    = sl_allow_mask & hw_sl_mask;
@@ -815,7 +856,16 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
     uint16_t ooo_sl_mask = 0;
     ucs_status_t status;
 
-    ucs_assert(iface->config.sl == UCT_IB_SL_INVALID);
+    ucs_assert(iface->config.sl == UCT_IB_SL_NUM);
+
+    if (uct_ib_device_is_port_roce(uct_ib_iface_device(iface),
+                                   iface->config.port_num)) {
+        /* Ethernet priority for RoCE devices can't be selected regardless
+         * AR support requested by user, pass empty ooo_sl_mask */
+        return uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1,
+                                     UCT_IB_IFACE_ARG(iface),
+                                     &iface->config.sl);
+    }
 
 #if HAVE_DEVX
     status = uct_ib_mlx5_devx_query_ooo_sl_mask(md, iface->config.port_num,

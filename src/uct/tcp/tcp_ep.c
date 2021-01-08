@@ -8,6 +8,7 @@
 #endif
 
 #include "tcp.h"
+#include "tcp/tcp.h"
 
 #include <ucs/async/async.h>
 
@@ -16,7 +17,7 @@
 static unsigned uct_tcp_ep_progress_data_tx(void *arg);
 static unsigned uct_tcp_ep_progress_data_rx(void *arg);
 static unsigned uct_tcp_ep_progress_magic_number_rx(void *arg);
-static unsigned uct_tcp_ep_failed_progress(void *arg);
+static unsigned uct_tcp_ep_destroy_progress(void *arg);
 
 const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     [UCT_TCP_EP_CONN_STATE_CLOSED] = {
@@ -136,8 +137,6 @@ int uct_tcp_ep_is_self(const uct_tcp_ep_t *ep)
 
 static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
 {
-    uct_tcp_ep_addr_cleanup(&ep->peer_addr);
-
     if (ep->tx.buf != NULL) {
         uct_tcp_ep_ctx_reset(&ep->tx);
     }
@@ -283,7 +282,7 @@ uct_tcp_ep_failed_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
     uct_tcp_ep_t *ep = (uct_tcp_ep_t*)arg;
 
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_FAILED);
-    return (elem->cb == uct_tcp_ep_failed_progress) && (elem->arg == ep);
+    return (elem->cb == uct_tcp_ep_destroy_progress) && (elem->arg == ep);
 }
 
 static int
@@ -328,8 +327,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
     ucs_callbackq_remove_if(&iface->super.worker->super.progress_q,
                             uct_tcp_ep_progress_rx_remove_filter, self);
 
-    uct_tcp_cm_change_conn_state(self, UCT_TCP_EP_CONN_STATE_CLOSED);
     uct_tcp_ep_cleanup(self);
+    uct_tcp_cm_change_conn_state(self, UCT_TCP_EP_CONN_STATE_CLOSED);
+    uct_tcp_ep_addr_cleanup(&self->peer_addr);
 
     ucs_debug("tcp_ep %p: destroyed on iface %p", self, iface);
 }
@@ -363,25 +363,15 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
     }
 }
 
-static unsigned uct_tcp_ep_failed_progress(void *arg)
+static unsigned uct_tcp_ep_destroy_progress(void *arg)
 {
-    uct_tcp_ep_t *ep       = (uct_tcp_ep_t*)arg;
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
+    uct_tcp_ep_t *ep = (uct_tcp_ep_t*)arg;
 
+    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX));
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_FAILED);
     /* Reset FAILED flag to not remove callback in the EP destructor */
     ep->flags &= ~UCT_TCP_EP_FLAG_FAILED;
-
-    if (ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) {
-        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
-        uct_set_ep_failed(&UCS_CLASS_NAME(uct_tcp_ep_t),
-                          &ep->super.super, &iface->super.super,
-                          UCS_ERR_ENDPOINT_TIMEOUT);
-    } else {
-        uct_tcp_ep_destroy_internal(&ep->super.super);
-    }
-
+    uct_tcp_ep_destroy_internal(&ep->super.super);
     return 1;
 }
 
@@ -401,10 +391,17 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
     }
 
     uct_tcp_ep_mod_events(ep, 0, ep->events);
-    ep->flags |= UCT_TCP_EP_FLAG_FAILED;
-    uct_worker_progress_register_safe(&iface->super.worker->super,
-                                      uct_tcp_ep_failed_progress, ep,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+
+    if (ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) {
+        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
+        uct_iface_handle_ep_err(ep->super.super.iface, &ep->super.super,
+                                UCS_ERR_ENDPOINT_TIMEOUT);
+    } else {
+        ep->flags |= UCT_TCP_EP_FLAG_FAILED;
+        uct_worker_progress_register_safe(&iface->super.worker->super,
+                                          uct_tcp_ep_destroy_progress, ep,
+                                          UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
+    }
 }
 
 static inline void uct_tcp_ep_ctx_move(uct_tcp_ep_ctx_t *to_ctx,
@@ -418,6 +415,15 @@ static inline void uct_tcp_ep_ctx_move(uct_tcp_ep_ctx_t *to_ctx,
     memset(from_ctx, 0, sizeof(*from_ctx));
 }
 
+static int uct_tcp_ep_time_seconds(ucs_time_t time_val, int auto_val)
+{
+    if (time_val == UCS_TIME_AUTO) {
+        return auto_val;
+    }
+
+    return ucs_max(1, (int)ucs_time_to_sec(time_val));
+}
+
 static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
 {
 #ifdef UCT_TCP_EP_KEEPALIVE
@@ -428,14 +434,14 @@ static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
     int intvl_sec;
     ucs_status_t status;
 
-    if ((iface->config.keepalive.idle == 0) ||
-        (iface->config.keepalive.cnt == 0) ||
-        (iface->config.keepalive.intvl == 0)) {
+    if (!uct_tcp_keepalive_is_enabled(iface)) {
         return UCS_OK;
     }
 
-    idle_sec  = ucs_max(1, (int)ucs_time_to_sec(iface->config.keepalive.idle));
-    intvl_sec = ucs_max(1, (int)ucs_time_to_sec(iface->config.keepalive.intvl));
+    idle_sec  = uct_tcp_ep_time_seconds(iface->config.keepalive.idle,
+                                        UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE);
+    intvl_sec = uct_tcp_ep_time_seconds(iface->config.keepalive.intvl,
+                                        UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL);
 
     status = ucs_socket_setopt(ep->fd, IPPROTO_TCP, TCP_KEEPINTVL,
                                &intvl_sec, sizeof(intvl_sec));
@@ -1295,6 +1301,9 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
             ucs_assert(hdr->length == sizeof(uint32_t));
             uct_tcp_ep_handle_put_ack(ep, (uct_tcp_ep_put_ack_hdr_t*)(hdr + 1));
             handled++;
+        } else if (hdr->am_id == UCT_TCP_EP_KEEPALIVE_AM_ID) {
+            /* just ignore keepalive requests */
+            handled++;
         } else {
             ucs_assert(hdr->am_id == UCT_TCP_EP_CM_AM_ID);
             handled += 1 + uct_tcp_cm_handle_conn_pkt(&ep, hdr + 1, hdr->length);
@@ -1485,17 +1494,17 @@ uct_tcp_ep_am_send(uct_tcp_ep_t *ep, const uct_tcp_am_hdr_t *hdr)
 static const void*
 uct_tcp_ep_am_sendv_get_trace_payload(uct_tcp_am_hdr_t *hdr,
                                       const void *header,
-                                      const struct iovec *payload_iov,
+                                      const struct iovec *iov, size_t iov_cnt,
                                       int short_sendv)
 {
     if (short_sendv == 0) {
         return header;
     }
 
-    /* If user requested trace data, we copy header and payload
+    /* If user requested trace data, we copy iov
      * to EP TX buffer in order to trace correct data */
-    uct_am_short_fill_data(hdr + 1, *(const uint64_t*)header,
-                           payload_iov->iov_base, payload_iov->iov_len);
+    ucs_iov_copy(iov + 1, iov_cnt - 1, 0, hdr + 1, SIZE_MAX, UCS_IOV_COPY_TO_BUF);
+
     return (hdr + 1);
 }
 
@@ -1524,8 +1533,8 @@ uct_tcp_ep_am_sendv(uct_tcp_ep_t *ep, int short_sendv, uct_tcp_am_hdr_t *hdr,
     uct_iface_trace_am(&iface->super, UCT_AM_TRACE_TYPE_SEND, hdr->am_id,
                        /* the function will be invoked only in case of
                         * data tracing is enabled */
-                       uct_tcp_ep_am_sendv_get_trace_payload(hdr, header,
-                                                             &iov[2], short_sendv),
+                       uct_tcp_ep_am_sendv_get_trace_payload(hdr, header, iov,
+                                                             iov_cnt, short_sendv),
                        hdr->length, "SEND: ep %p fd %d sent %zu/%zu bytes, "
                        "moved by offset %zu, iov cnt %zu "
                        "[addr %p len %zu] [addr %p len %zu]",
@@ -1580,6 +1589,33 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep)
     ep->flags &= ~UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK;
 }
 
+static inline ucs_status_t
+uct_tcp_ep_am_short_sendv(uct_tcp_ep_t *ep, uct_tcp_iface_t *iface,
+                          uct_tcp_am_hdr_t *hdr, uint64_t header, struct iovec *iov,
+                          size_t iov_cnt)
+{
+    ucs_status_t status;
+    size_t offset;
+
+    status = uct_tcp_ep_am_sendv(ep, 1, hdr, iface->config.tx_seg_size, &header, iov,
+                                 iov_cnt);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
+        /* Copy only user's header and payload to the TX buffer,
+         * TCP AM header is placed at the beginning of the buffer */
+        offset = (ep->tx.offset >= sizeof(*hdr)) ? ep->tx.offset - sizeof(*hdr) : 0;
+
+        ucs_iov_copy(&iov[1], iov_cnt - 1, offset,
+                     UCS_PTR_BYTE_OFFSET(hdr + 1, offset),
+                     ep->tx.length - sizeof(*hdr) - offset, UCS_IOV_COPY_TO_BUF);
+    }
+
+    return status;
+}
+
 ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header,
                                  const void *payload, unsigned length)
 {
@@ -1588,7 +1624,6 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     uct_tcp_am_hdr_t *hdr  = NULL;
     struct iovec iov[UCT_TCP_EP_AM_SHORTV_IOV_COUNT];
     uint32_t UCS_V_UNUSED payload_length;
-    size_t offset;
     ucs_status_t status;
 
     UCT_CHECK_LENGTH(length + sizeof(header), 0,
@@ -1610,11 +1645,6 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
     if (length <= iface->config.sendv_thresh) {
         uct_am_short_fill_data(hdr + 1, header, payload, length);
         status = uct_tcp_ep_am_send(ep, hdr);
-        if (ucs_unlikely(status != UCS_OK)) {
-            return status;
-        }
-
-        UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, payload_length);
     } else {
         iov[0].iov_base = hdr;
         iov[0].iov_len  = sizeof(*hdr);
@@ -1625,26 +1655,56 @@ ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header
         iov[2].iov_base = (void*)payload;
         iov[2].iov_len  = length;
 
-        status = uct_tcp_ep_am_sendv(ep, 1, hdr, iface->config.tx_seg_size,
-                                     &header, iov, UCT_TCP_EP_AM_SHORTV_IOV_COUNT);
-        if (ucs_unlikely(status != UCS_OK)) {
-            return status;
-        }
-
-        UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, payload_length);
-
-        if (uct_tcp_ep_ctx_buf_need_progress(&ep->tx)) {
-            /* Copy only user's header and payload to the TX buffer,
-             * TCP AM header is placed at the beginning of the buffer */
-            offset = ((ep->tx.offset >= sizeof(*hdr)) ?
-                      (ep->tx.offset - sizeof(*hdr)) : 0);
-
-            ucs_iov_copy(&iov[1], UCT_TCP_EP_AM_SHORTV_IOV_COUNT - 1,
-                         offset, UCS_PTR_BYTE_OFFSET(hdr + 1, offset),
-                         ep->tx.length - sizeof(*hdr) - offset,
-                         UCS_IOV_COPY_TO_BUF);
-        }
+        status          = uct_tcp_ep_am_short_sendv(ep, iface, hdr, header, iov,
+                                                    UCT_TCP_EP_AM_SHORTV_IOV_COUNT);
     }
+
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, payload_length);
+
+    return status;
+}
+
+ucs_status_t uct_tcp_ep_am_short_iov(uct_ep_h uct_ep, uint8_t am_id,
+                                     const uct_iov_t *uct_iov, size_t uct_iov_cnt)
+{
+    uct_tcp_ep_t *ep       = ucs_derived_of(uct_ep, uct_tcp_ep_t);
+    uct_tcp_iface_t *iface = ucs_derived_of(uct_ep->iface, uct_tcp_iface_t);
+    uct_tcp_am_hdr_t *hdr  = NULL;
+    struct iovec *iov      = ucs_alloca((uct_iov_cnt + 1) * sizeof(*iov));
+    ucs_iov_iter_t uct_iov_iter;
+    size_t UCS_V_UNUSED payload_length;
+    ucs_status_t status;
+
+    UCT_CHECK_AM_ID(am_id);
+    UCT_CHECK_IOV_SIZE(uct_iov_cnt, iface->config.max_iov, "am_short_iov");
+    UCT_CHECK_LENGTH(uct_iov_total_length(uct_iov, uct_iov_cnt), 0,
+                     iface->config.tx_seg_size - sizeof(uct_tcp_am_hdr_t),
+                     "am_short_iov");
+
+    status = uct_tcp_ep_am_prepare(iface, ep, am_id, &hdr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_assertv(hdr != NULL, "ep=%p", ep);
+
+    ucs_iov_iter_init(&uct_iov_iter);
+    iov[0].iov_base = hdr;
+    iov[0].iov_len  = sizeof(*hdr);
+    hdr->length     = payload_length = uct_iov_to_iovec(&iov[1], &uct_iov_cnt,
+                                                        uct_iov, uct_iov_cnt,
+                                                        SIZE_MAX, &uct_iov_iter);
+    status          = uct_tcp_ep_am_short_sendv(ep, iface, hdr, 0, iov,
+                                                uct_iov_cnt + 1);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, payload_length);
 
     return status;
 }
@@ -1694,7 +1754,7 @@ uct_tcp_ep_prepare_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep, uint8_t am_id
     uct_tcp_ep_zcopy_tx_t *ctx;
     ucs_status_t status;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.zcopy.max_iov, name);
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_iov, name);
     UCT_CHECK_LENGTH(header_length, 0, iface->config.zcopy.max_hdr, name);
 
     status = uct_tcp_ep_am_prepare(iface, ep, am_id, &hdr);
@@ -1722,7 +1782,7 @@ uct_tcp_ep_prepare_zcopy(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep, uint8_t am_id
 
     /* User-defined payload */
     ucs_iov_iter_init(&uct_iov_iter);
-    io_vec_cnt       = iovcnt; 
+    io_vec_cnt       = iovcnt;
     *zcopy_payload_p = uct_iov_to_iovec(&ctx->iov[ctx->iov_cnt], &io_vec_cnt,
                                         iov, iovcnt, SIZE_MAX, &uct_iov_iter);
     *ctx_p           = ctx;
@@ -1920,3 +1980,23 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
     return UCS_OK;
 }
 
+ucs_status_t
+uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
+{
+    uct_tcp_ep_t *ep       = ucs_derived_of(tl_ep, uct_tcp_ep_t);
+    uct_tcp_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_tcp_iface_t);
+    uct_tcp_am_hdr_t *hdr  = NULL; /* init to suppress build warning */
+    ucs_status_t status;
+
+    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
+    UCT_CHECK_PARAM(flags == 0, "Unsupported flags: %x", flags);
+
+    status = uct_tcp_ep_am_prepare(iface, ep, UCT_TCP_EP_KEEPALIVE_AM_ID, &hdr);
+    if (status != UCS_OK) {
+        return (status == UCS_ERR_NO_RESOURCE) ? UCS_OK : status;
+    }
+
+    ucs_assert(hdr != NULL);
+    hdr->length = 0;
+    return uct_tcp_ep_am_send(ep, hdr);
+}

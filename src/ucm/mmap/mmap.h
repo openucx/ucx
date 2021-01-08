@@ -8,6 +8,7 @@
 #define UCM_MMAP_H_
 
 #include <ucm/api/ucm.h>
+#include <ucm/util/sys.h>
 #include <ucs/sys/checker.h>
 
 #define UCM_MMAP_HOOK_RELOC_STR  "reloc"
@@ -21,7 +22,7 @@
 #  define UCM_DEFAULT_HOOK_MODE_STR UCM_MMAP_HOOK_RELOC_STR
 #endif
 
-ucs_status_t ucm_mmap_install(int events);
+ucs_status_t ucm_mmap_install(int events, int exclusive);
 
 void *ucm_override_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 int ucm_override_munmap(void *addr, size_t length);
@@ -31,23 +32,16 @@ int ucm_override_shmdt(const void *shmaddr);
 void *ucm_override_sbrk(intptr_t increment);
 void *ucm_sbrk_select(intptr_t increment);
 int ucm_override_brk(void *addr);
-void *ucm_brk_syscall(void *addr);
 int ucm_override_madvise(void *addr, size_t length, int advice);
+void *ucm_get_current_brk();
 void ucm_fire_mmap_events(int events);
 ucs_status_t ucm_mmap_test_installed_events(int events);
 ucs_status_t ucm_mmap_test_events(int events, const char *event_type);
+void ucm_mmap_init();
 
 static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t ucm_mmap_hook_mode(void)
 {
-#ifdef __SANITIZE_ADDRESS__
-    return UCM_MMAP_HOOK_NONE;
-#else
-    if (RUNNING_ON_VALGRIND && (ucm_global_opts.mmap_hook_mode == UCM_MMAP_HOOK_BISTRO)) {
-        return UCM_MMAP_HOOK_RELOC;
-    }
-
-    return ucm_global_opts.mmap_hook_mode;
-#endif
+    return ucm_get_hook_mode(ucm_global_opts.mmap_hook_mode);
 }
 
 #endif

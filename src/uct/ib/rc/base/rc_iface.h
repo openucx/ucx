@@ -23,9 +23,9 @@
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_MAX_RETRY_COUNT   7
 
-#define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \
+#define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _header_t, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
-     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length, 0, _max_inline, "am_short");
+     UCT_CHECK_LENGTH(sizeof(_header_t) + _length, 0, _max_inline, "am_short");
 
 #define UCT_RC_CHECK_ZCOPY_DATA(_header_length, _length, _seg_size) \
     UCT_CHECK_LENGTH(_header_length + _length, 0, _seg_size, "am_zcopy payload"); \
@@ -98,19 +98,20 @@ enum {
 
 /* flags for uct_rc_iface_send_op_t */
 enum {
+    UCT_RC_IFACE_SEND_OP_FLAG_FC_GRANT = UCS_BIT(11),
 #ifdef NVALGRIND
-    UCT_RC_IFACE_SEND_OP_FLAG_IOV   = 0,
+    UCT_RC_IFACE_SEND_OP_FLAG_IOV      = 0,
 #else
-    UCT_RC_IFACE_SEND_OP_FLAG_IOV   = UCS_BIT(12), /* save iovec to make mem defined */
+    UCT_RC_IFACE_SEND_OP_FLAG_IOV      = UCS_BIT(12), /* save iovec to make mem defined */
 #endif
 #if UCS_ENABLE_ASSERT
-    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY = UCS_BIT(13), /* zcopy */
-    UCT_RC_IFACE_SEND_OP_FLAG_IFACE = UCS_BIT(14), /* belongs to iface ops buffer */
-    UCT_RC_IFACE_SEND_OP_FLAG_INUSE = UCS_BIT(15)  /* queued on a txqp */
+    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY    = UCS_BIT(13), /* zcopy */
+    UCT_RC_IFACE_SEND_OP_FLAG_IFACE    = UCS_BIT(14), /* belongs to iface ops buffer */
+    UCT_RC_IFACE_SEND_OP_FLAG_INUSE    = UCS_BIT(15)  /* queued on a txqp */
 #else
-    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY = 0,
-    UCT_RC_IFACE_SEND_OP_FLAG_IFACE = 0,
-    UCT_RC_IFACE_SEND_OP_FLAG_INUSE = 0
+    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY    = 0,
+    UCT_RC_IFACE_SEND_OP_FLAG_IFACE    = 0,
+    UCT_RC_IFACE_SEND_OP_FLAG_INUSE    = 0
 #endif
 };
 
@@ -271,6 +272,7 @@ struct uct_rc_iface {
 
     UCS_STATS_NODE_DECLARE(stats)
 
+    ucs_spinlock_t           eps_lock; /* common lock for eps and ep_list */
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;
     ucs_list_link_t          ep_gc_list;

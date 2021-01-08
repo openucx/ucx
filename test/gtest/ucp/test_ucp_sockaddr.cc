@@ -61,6 +61,8 @@ public:
     ucs::sock_addr_storage m_test_addr;
 
     void init() {
+        m_err_count = 0;
+
         if (get_variant_value() & TEST_MODIFIER_CM) {
             modify_config("SOCKADDR_CM_ENABLE", "yes");
         }
@@ -103,6 +105,7 @@ public:
                 stop_list.push_back("connection request failed on listener");
                 /* when the "peer failure" error happens, it is followed by: */
                 stop_list.push_back("received event RDMA_CM_EVENT_UNREACHABLE");
+                stop_list.push_back("Connection reset by remote peer");
                 stop_list.push_back(ucs_status_string(UCS_ERR_UNREACHABLE));
                 stop_list.push_back(ucs_status_string(UCS_ERR_UNSUPPORTED));
             }
@@ -398,14 +401,14 @@ public:
     virtual ucp_ep_params_t get_ep_params()
     {
         ucp_ep_params_t ep_params = ucp_test::get_ep_params();
-        ep_params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                     UCP_EP_PARAM_FIELD_ERR_HANDLER;
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                                    UCP_EP_PARAM_FIELD_ERR_HANDLER;
         /* The error handling requirement is needed since we need to take
          * care of a case where the client gets an error. In case ucp needs to
          * handle a large worker address but neither ud nor ud_x are present */
-        ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
-        ep_params.err_handler.cb   = err_handler_cb;
-        ep_params.err_handler.arg  = NULL;
+        ep_params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        ep_params.err_handler.cb  = err_handler_cb;
+        ep_params.err_handler.arg = NULL;
         return ep_params;
     }
 
@@ -478,7 +481,8 @@ public:
 
     void one_sided_disconnect(entity &e, enum ucp_ep_close_mode mode) {
         void *req           = e.disconnect_nb(0, 0, mode);
-        ucs_time_t deadline = ucs_time_from_sec(10.0) + ucs_get_time();
+        ucs_time_t deadline = ucs::get_deadline();
+        scoped_log_handler slh(detect_error_logger);
         while (!is_request_completed(req) && (ucs_get_time() < deadline)) {
             /* TODO: replace the progress() with e().progress() when
                      async progress is implemented. */
@@ -499,6 +503,7 @@ public:
         void *receiver_ep_close_req = receiver().disconnect_nb(0, 0, mode);
 
         ucs_time_t deadline = ucs::get_deadline();
+        scoped_log_handler slh(detect_error_logger);
         while ((!is_request_completed(sender_ep_close_req) ||
                 !is_request_completed(receiver_ep_close_req)) &&
                (ucs_get_time() < deadline)) {
@@ -509,8 +514,15 @@ public:
         receiver().close_ep_req_free(receiver_ep_close_req);
     }
 
+    static void close_completion(void *request, ucs_status_t status,
+                                 void *user_data) {
+        *reinterpret_cast<bool*>(user_data) = true;
+    }
+
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         ucp_test::err_handler_cb(arg, ep, status);
+
+        ++m_err_count;
 
         /* The current expected errors are only from the err_handle test
          * and from transports where the worker address is too long but ud/ud_x
@@ -566,7 +578,13 @@ protected:
                     ((lane1 != UCP_NULL_LANE) && (lane2 != UCP_NULL_LANE) &&
                      ucp_ep_config_lane_is_peer_equal(key1, lane1, key2, lane2)));
     }
+
+protected:
+    static unsigned m_err_count;
 };
+
+unsigned test_ucp_sockaddr::m_err_count = 0;
+
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listen, no_close_protocol()) {
     listen_and_communicate(false, 0);
@@ -604,6 +622,42 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect_s2c,
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
     one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_P(test_ucp_sockaddr, close_callback) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+
+    request_wait(receiver().flush_ep_nb());
+    request_wait(sender().flush_ep_nb());
+    ucp_ep_h ep = receiver().revoke_ep();
+
+    bool user_data = false;
+
+    ucp_request_param_t param = {0};
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                         UCP_OP_ATTR_FIELD_USER_DATA |
+                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    param.cb.send      = close_completion;
+    param.user_data    = &user_data;
+
+    ucs_status_ptr_t request = ucp_ep_close_nbx(ep, &param);
+
+    bool is_pointer = UCS_PTR_IS_PTR(request);
+    request_wait(request);
+
+    if (is_pointer) {
+        ASSERT_TRUE(user_data);
+    }
+}
+
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, onesided_disconnect_bidi_wait_err_cb,
+                     no_close_protocol()) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+
+    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FLUSH);
+    wait_for_flag(&m_err_count);
+    EXPECT_EQ(1u, m_err_count);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, concurrent_disconnect,
@@ -1024,34 +1078,41 @@ protected:
 
     void test_tag_send_recv(size_t size, bool is_exp, bool is_sync = false)
     {
-        std::string send_buf(size, 'x');
-        std::string recv_buf(size, 'y');
+        /* send multiple messages to test the protocol both before and after
+         * connection establishment */
+        for (int i = 0; i < m_num_iters; i++) {
+            std::string send_buf(size, 'x');
+            std::string recv_buf(size, 'y');
 
-        void *rreq = NULL, *sreq = NULL;
+            void *rreq = NULL, *sreq = NULL;
 
-        if (is_exp) {
-            rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
-                                   ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
+            if (is_exp) {
+                rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0],
+                                       size, ucp_dt_make_contig(1), 0, 0,
+                                       rtag_complete_cb);
+            }
+
+            if (is_sync) {
+                sreq = ucp_tag_send_sync_nb(sender().ep(), &send_buf[0], size,
+                                            ucp_dt_make_contig(1), 0,
+                                            scomplete_cb);
+            } else {
+                sreq = ucp_tag_send_nb(sender().ep(), &send_buf[0], size,
+                                       ucp_dt_make_contig(1), 0, scomplete_cb);
+            }
+
+            if (!is_exp) {
+                short_progress_loop();
+                rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
+                                       ucp_dt_make_contig(1), 0, 0,
+                                       rtag_complete_cb);
+            }
+
+            request_wait(sreq);
+            request_wait(rreq);
+
+            compare_buffers(send_buf, recv_buf);
         }
-
-        if (is_sync) {
-            sreq = ucp_tag_send_sync_nb(sender().ep(), &send_buf[0], size,
-                                        ucp_dt_make_contig(1), 0, scomplete_cb);
-        } else {
-            sreq = ucp_tag_send_nb(sender().ep(), &send_buf[0], size,
-                                   ucp_dt_make_contig(1), 0, scomplete_cb);
-        }
-
-        if (!is_exp) {
-            short_progress_loop();
-            rreq = ucp_tag_recv_nb(receiver().worker(), &recv_buf[0], size,
-                                   ucp_dt_make_contig(1), 0, 0, rtag_complete_cb);
-        }
-
-        request_wait(sreq);
-        request_wait(rreq);
-
-        compare_buffers(send_buf, recv_buf);
     }
 
     void wait_for_server_ep()
@@ -1063,32 +1124,40 @@ protected:
 
     void test_stream_send_recv(size_t size, bool is_exp)
     {
-        std::string send_buf(size, 'x');
-        std::string recv_buf(size, 'y');
-        size_t recv_length;
-        void *rreq, *sreq;
+        /* send multiple messages to test the protocol both before and after
+         * connection establishment */
+        for (int i = 0; i < m_num_iters; i++) {
+            std::string send_buf(size, 'x');
+            std::string recv_buf(size, 'y');
+            size_t recv_length;
+            void *rreq, *sreq;
 
-        if (is_exp) {
-            wait_for_server_ep();
-            rreq = ucp_stream_recv_nb(receiver().ep(), &recv_buf[0], size,
-                                      ucp_dt_make_contig(1), rstream_complete_cb,
-                                      &recv_length, UCP_STREAM_RECV_FLAG_WAITALL);
-            sreq = ucp_stream_send_nb(sender().ep(), &send_buf[0], size,
-                                      ucp_dt_make_contig(1), scomplete_cb, 0);
-        } else {
-            sreq = ucp_stream_send_nb(sender().ep(), &send_buf[0], size,
-                                   ucp_dt_make_contig(1), scomplete_cb, 0);
-            short_progress_loop();
-            wait_for_server_ep();
-            rreq = ucp_stream_recv_nb(receiver().ep(), &recv_buf[0], size,
-                                      ucp_dt_make_contig(1), rstream_complete_cb,
-                                      &recv_length, UCP_STREAM_RECV_FLAG_WAITALL);
+            if (is_exp) {
+                wait_for_server_ep();
+                rreq = ucp_stream_recv_nb(receiver().ep(), &recv_buf[0], size,
+                                          ucp_dt_make_contig(1),
+                                          rstream_complete_cb, &recv_length,
+                                          UCP_STREAM_RECV_FLAG_WAITALL);
+                sreq = ucp_stream_send_nb(sender().ep(), &send_buf[0], size,
+                                          ucp_dt_make_contig(1), scomplete_cb,
+                                          0);
+            } else {
+                sreq = ucp_stream_send_nb(sender().ep(), &send_buf[0], size,
+                                          ucp_dt_make_contig(1), scomplete_cb,
+                                          0);
+                short_progress_loop();
+                wait_for_server_ep();
+                rreq = ucp_stream_recv_nb(receiver().ep(), &recv_buf[0], size,
+                                          ucp_dt_make_contig(1),
+                                          rstream_complete_cb, &recv_length,
+                                          UCP_STREAM_RECV_FLAG_WAITALL);
+            }
+
+            request_wait(sreq);
+            request_wait(rreq);
+
+            compare_buffers(send_buf, recv_buf);
         }
-
-        request_wait(sreq);
-        request_wait(rreq);
-
-        compare_buffers(send_buf, recv_buf);
     }
 
     void register_mem(entity* initiator, entity* target, void *buffer,
@@ -1117,47 +1186,56 @@ protected:
 
     void test_rma(size_t size, rma_nb_func_t rma_func)
     {
-        std::string send_buf(size, 'x');
-        std::string recv_buf(size, 'y');
+        /* send multiple messages to test the protocol both before and after
+         * connection establishment */
+        for (int i = 0; i < m_num_iters; i++) {
+            std::string send_buf(size, 'x');
+            std::string recv_buf(size, 'y');
 
-        ucp_mem_h memh;
-        ucp_rkey_h rkey;
+            ucp_mem_h memh;
+            ucp_rkey_h rkey;
 
-        register_mem(&sender(), &receiver(), &recv_buf[0], size, &memh, &rkey);
+            register_mem(&sender(), &receiver(), &recv_buf[0], size, &memh,
+                         &rkey);
 
-        std::vector<void*> reqs;
-        (this->*rma_func)(send_buf, recv_buf, rkey, reqs);
+            std::vector<void*> reqs;
+            (this->*rma_func)(send_buf, recv_buf, rkey, reqs);
 
-        while (!reqs.empty()) {
-            request_wait(reqs.back());
-            reqs.pop_back();
+            while (!reqs.empty()) {
+                request_wait(reqs.back());
+                reqs.pop_back();
+            }
+
+            compare_buffers(send_buf, recv_buf);
+
+            ucp_rkey_destroy(rkey);
+            ucs_status_t status = ucp_mem_unmap(receiver().ucph(), memh);
+            ASSERT_UCS_OK(status);
         }
-
-        compare_buffers(send_buf, recv_buf);
-
-        ucp_rkey_destroy(rkey);
-        ucs_status_t status = ucp_mem_unmap(receiver().ucph(), memh);
-        ASSERT_UCS_OK(status);
     }
 
     void test_am_send_recv(size_t size, size_t hdr_size = 0ul)
     {
-        std::string sb(size, 'x');
-        std::string hdr(hdr_size, 'x');
+        /* send multiple messages to test the protocol both before and after
+         * connection establishment */
+        for (int i = 0; i < m_num_iters; i++) {
+            std::string sb(size, 'x');
+            std::string hdr(hdr_size, 'x');
 
-        bool am_received = false;
+            bool am_received = false;
 
-        set_am_data_handler(receiver(), 0, rx_am_msg_cb, &am_received);
+            set_am_data_handler(receiver(), 0, rx_am_msg_cb, &am_received);
 
-        ucp_request_param_t param = {};
-        ucs_status_ptr_t sreq     = ucp_am_send_nbx(sender().ep(), 0, &hdr[0],
-                                                    hdr_size, &sb[0], size,
-                                                    &param);
-        request_wait(sreq);
-        wait_for_flag(&am_received);
-        EXPECT_TRUE(am_received);
+            ucp_request_param_t param = {};
+            ucs_status_ptr_t sreq     = ucp_am_send_nbx(sender().ep(), 0,
+                                                        &hdr[0], hdr_size,
+                                                        &sb[0], size, &param);
+            request_wait(sreq);
+            wait_for_flag(&am_received);
+            EXPECT_TRUE(am_received);
 
-        set_am_data_handler(receiver(), 0, NULL, NULL);
+            set_am_data_handler(receiver(), 0, NULL, NULL);
+        }
     }
 
 private:
@@ -1186,7 +1264,14 @@ private:
         param.arg        = arg;
         ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
     }
+
+private:
+    static const unsigned m_num_iters;
 };
+
+
+const unsigned test_ucp_sockaddr_protocols::m_num_iters = 10;
+
 
 UCS_TEST_P(test_ucp_sockaddr_protocols, stream_short_exp)
 {

@@ -1,7 +1,8 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-*
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
+*
 * See file LICENSE for terms.
 */
 
@@ -11,7 +12,9 @@
 
 
 #define MB   pow(1024.0, -2)
-#define UCP_ARM_PERF_TEST_MULTIPLIER 2
+#define UCT_PERF_TEST_MULTIPLIER  5
+#define UCT_ARM_PERF_TEST_MULTIPLIER  15
+
 class test_ucp_perf : public ucp_test, public test_perf {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
@@ -37,7 +40,7 @@ protected:
         // Ignore errors that transport cannot reach peer
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
-            if (strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNREACHABLE)) || 
+            if (strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNREACHABLE)) ||
                 strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNSUPPORTED))) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
@@ -187,16 +190,62 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
 
     /* Run all tests */
-    for (const test_spec *test_iter = tests; test_iter->title != NULL; ++test_iter) {
+    for (const test_spec *test_iter = tests; test_iter->title != NULL;
+         ++test_iter) {
         test_spec test = *test_iter;
 
         if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
-            test.max *= UCP_ARM_PERF_TEST_MULTIPLIER;
-            test.min /= UCP_ARM_PERF_TEST_MULTIPLIER;
+            test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
+            test.min /= UCT_ARM_PERF_TEST_MULTIPLIER;
+        } else {
+            test.max *= UCT_PERF_TEST_MULTIPLIER;
+            test.min /= UCT_PERF_TEST_MULTIPLIER;
         }
         test.iters = ucs_min(test.iters, max_iter);
+
         run_test(test, 0, check_perf, "", "");
     }
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_perf)
+
+
+class test_ucp_wait_mem : public test_ucp_perf {};
+
+UCS_TEST_P(test_ucp_wait_mem, envelope) {
+    double perf_avg    = 0;
+    double perf_iter   = 0;
+    const int max_iter = ucs_max(ucs::perf_retry_count, 1);
+    int i;
+
+    /* Run ping-pong with no WFE and get latency reference values */
+    const test_spec test1 = { "put latency reference", "usec",
+                              UCX_PERF_API_UCP, UCX_PERF_CMD_PUT,
+                              UCX_PERF_TEST_TYPE_PINGPONG,
+                              UCP_PERF_DATATYPE_CONTIG,
+                              0, 1, { 8 }, 1, 1000lu,
+                              ucs_offsetof(ucx_perf_result_t,
+                                           latency.total_average),
+                              1e6, 0.001, 30.0, 0 };
+    for (i = 0; i < max_iter; i++) {
+        perf_iter = run_test(test1, 0, false, "", "");
+        perf_avg += perf_iter;
+    }
+    perf_avg /= max_iter;
+
+    /* Run ping-pong with WFE while re-using previous run numbers as
+     * a min/max boundary. The latency of the WFE run should stay nearly
+     * identical with 200 percent margin. When WFE does not work as expected
+     * the slow down is typically 10x-100x */
+    const test_spec test2 = { "put latency with ucp_worker_wait_mem()",
+                              "usec", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT,
+                              UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM,
+                              UCP_PERF_DATATYPE_CONTIG,
+                              0, 1, { 8 }, 1, 1000lu,
+                              ucs_offsetof(ucx_perf_result_t,
+                                           latency.total_average),
+                              1e6, perf_avg * 0.7, perf_avg * 2, 0 };
+    run_test(test2, 0, true, "", "");
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wait_mem, shm, "shm")

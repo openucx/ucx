@@ -24,7 +24,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_eager_proto_set_first_hdr(ucp_request_t *req, ucp_eager_first_hdr_t *hdr)
 {
     hdr->super.super.tag = req->send.msg_proto.tag.tag;
-    hdr->total_len       = req->send.dt_iter.length;
+    hdr->total_len       = req->send.state.dt_iter.length;
     hdr->msg_id          = req->send.msg_proto.message_id;
 }
 
@@ -32,7 +32,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_eager_proto_set_middle_hdr(ucp_request_t *req, ucp_eager_middle_hdr_t *hdr)
 {
     hdr->msg_id = req->send.msg_proto.message_id;
-    hdr->offset = req->send.dt_iter.offset;
+    hdr->offset = req->send.state.dt_iter.offset;
 }
 
 static ucs_status_t
@@ -104,7 +104,7 @@ ucp_eager_bcopy_multi_send_func(ucp_request_t *req,
     ucp_am_id_t am_id;
     size_t hdr_size;
 
-    if (req->send.dt_iter.offset == 0) {
+    if (req->send.state.dt_iter.offset == 0) {
         am_id    = UCP_AM_ID_EAGER_FIRST;
         pack_cb  = ucp_eager_bcopy_pack_first;
         hdr_size = sizeof(ucp_eager_first_hdr_t);
@@ -180,7 +180,7 @@ ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
     size_t hdr_size;
     uct_iov_t iov;
 
-    if (req->send.dt_iter.offset == 0) {
+    if (req->send.state.dt_iter.offset == 0) {
         am_id    = UCP_AM_ID_EAGER_FIRST;
         hdr_size = sizeof(hdr.first);
         ucp_eager_proto_set_first_hdr(req, &hdr.first);
@@ -190,7 +190,7 @@ ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
         ucp_eager_proto_set_middle_hdr(req, &hdr.middle);
     }
 
-    ucp_datatype_iter_next_iov(&req->send.dt_iter, lpriv->super.memh_index,
+    ucp_datatype_iter_next_iov(&req->send.state.dt_iter, lpriv->super.memh_index,
                                ucp_proto_multi_max_payload(req, lpriv, hdr_size),
                                next_iter, &iov);
     return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id, &hdr,

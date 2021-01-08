@@ -91,6 +91,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv(uct_rc_mlx5_iface_common_t *iface)
                       sizeof(struct mlx5_wqe_srq_next_seg));
 
     ucs_assert(UCS_CIRCULAR_COMPARE16(srq->ready_idx, <=, srq->free_idx));
+    ucs_assert(rc_iface->rx.srq.available > 0);
 
     wqe_index = srq->ready_idx;
     for (;;) {
@@ -140,6 +141,12 @@ out:
 
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
 {
+    /* prepost recvs only if quota available (recvs were not preposted
+     * before) */ 
+    if (iface->super.rx.srq.quota == 0) {
+        return;
+    }
+
     iface->super.rx.srq.available = iface->super.rx.srq.quota;
     iface->super.rx.srq.quota     = 0;
     uct_rc_mlx5_iface_srq_post_recv(iface);

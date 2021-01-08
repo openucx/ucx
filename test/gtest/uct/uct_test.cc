@@ -27,42 +27,47 @@ std::string resource::name() const {
     return ss.str();
 }
 
-resource::resource() : component(NULL), md_name(""), tl_name(""), dev_name(""),
-                       variant_name(""), dev_type(UCT_DEVICE_TYPE_LAST),
+resource::resource() : component(NULL), dev_type(UCT_DEVICE_TYPE_LAST),
                        variant(DEFAULT_VARIANT)
 {
     CPU_ZERO(&local_cpus);
 }
 
-resource::resource(uct_component_h component, const std::string& md_name,
-                   const ucs_cpu_set_t& local_cpus, const std::string& tl_name,
-                   const std::string& dev_name, uct_device_type_t dev_type) :
-                   component(component), md_name(md_name), local_cpus(local_cpus),
-                   tl_name(tl_name), dev_name(dev_name), variant_name(""),
-                   dev_type(dev_type), variant(DEFAULT_VARIANT)
+resource::resource(uct_component_h component, const std::string& component_name,
+                   const std::string& md_name, const ucs_cpu_set_t& local_cpus,
+                   const std::string& tl_name, const std::string& dev_name,
+                   uct_device_type_t dev_type) :
+                   component(component), component_name(component_name),
+                   md_name(md_name), local_cpus(local_cpus), tl_name(tl_name),
+                   dev_name(dev_name), dev_type(dev_type),
+                   variant(DEFAULT_VARIANT)
 {
 }
 
-resource::resource(uct_component_h component, const uct_md_attr_t& md_attr,
+resource::resource(uct_component_h component,
+                   const uct_component_attr& cmpt_attr,
+                   const uct_md_attr_t& md_attr,
                    const uct_md_resource_desc_t& md_resource,
                    const uct_tl_resource_desc_t& tl_resource) :
                    component(component),
+                   component_name(cmpt_attr.name),
                    md_name(md_resource.md_name),
                    local_cpus(md_attr.local_cpus),
                    tl_name(tl_resource.tl_name),
                    dev_name(tl_resource.dev_name),
-                   variant_name(""),
                    dev_type(tl_resource.dev_type),
                    variant(DEFAULT_VARIANT)
 {
 }
 
-resource_speed::resource_speed(uct_component_h component, const uct_worker_h& worker,
-                               const uct_md_h& md, const uct_md_attr_t& md_attr,
+resource_speed::resource_speed(uct_component_h component,
+                               const uct_component_attr& cmpt_attr,
+                               const uct_worker_h& worker, const uct_md_h& md,
+                               const uct_md_attr_t& md_attr,
                                const uct_md_resource_desc_t& md_resource,
                                const uct_tl_resource_desc_t& tl_resource) :
-                               resource(component, md_attr, md_resource,
-                                        tl_resource) {
+                               resource(component, cmpt_attr, md_attr,
+                                        md_resource, tl_resource) {
     ucs_status_t status;
     uct_iface_params_t iface_params = { 0 };
     uct_iface_config_t *iface_config;
@@ -176,8 +181,6 @@ uct_test::uct_test() {
     status = uct_component_query(GetParam()->component, &component_attr);
     ASSERT_UCS_OK(status);
 
-    UCS_TEST_MESSAGE << "Testing component: " << component_attr.name;
-
     if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
         status = uct_cm_config_read(GetParam()->component, NULL, NULL, &m_cm_config);
         ASSERT_UCS_OK(status);
@@ -197,52 +200,67 @@ uct_test::~uct_test() {
 }
 
 void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
-                                 struct sockaddr *connect_addr, size_t size)
+                                 struct sockaddr *connect_addr, size_t size,
+                                 bool init_src)
 {
     rsc->listen_sock_addr.set_sock_addr(*listen_addr, size);
     rsc->connect_sock_addr.set_sock_addr(*connect_addr, size);
+    if (init_src) {
+        /* src_addr == dst_addr to be sure they are reachable */
+        rsc->source_sock_addr.set_sock_addr(*connect_addr, size);
+    }
 }
 
-void uct_test::set_interface_rscs(uct_component_h cmpt, const char *name,
-                                  ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
+void uct_test::set_interface_rscs(uct_component_h cmpt, const char *cmpt_name,
+                                  const char *md_name, ucs_cpu_set_t local_cpus,
+                                  struct ifaddrs *ifa,
                                   std::vector<resource>& all_resources)
 {
     int i;
 
-    /* Create two resources on the same interface. the first one will have the
-     * ip of the interface and the second one will have INADDR_ANY */
-    for (i = 0; i < 2; i++) {
-        resource rsc(cmpt, std::string(name), local_cpus, "sockaddr",
-                     std::string(ifa->ifa_name), UCT_DEVICE_TYPE_NET);
+    /* Create three resources on the same interface:
+     *  0 - has the ip of the dst interface
+     *  1 - has the ip of the dst interface and IP of src interface
+     *  2 - has INADDR_ANY
+     */
+    for (i = 0; i < 3; i++) {
+        resource rsc(cmpt, std::string(cmpt_name),  std::string(md_name),
+                     local_cpus, "sockaddr", std::string(ifa->ifa_name),
+                     UCT_DEVICE_TYPE_NET);
+        bool init_src_addr = (i == 1);
 
-        if (i == 0) {
-            /* first rsc */
+        if (i < 2) {
             if (ifa->ifa_addr->sa_family == AF_INET) {
                 uct_test::init_sockaddr_rsc(&rsc, ifa->ifa_addr, ifa->ifa_addr,
-                                            sizeof(struct sockaddr_in));
+                                            sizeof(struct sockaddr_in),
+                                            init_src_addr);
             } else if (ifa->ifa_addr->sa_family == AF_INET6) {
                 uct_test::init_sockaddr_rsc(&rsc, ifa->ifa_addr, ifa->ifa_addr,
-                                            sizeof(struct sockaddr_in6));
+                                            sizeof(struct sockaddr_in6),
+                                            init_src_addr);
             } else {
                 UCS_TEST_ABORT("Unknown sa_family " << ifa->ifa_addr->sa_family);
             }
             all_resources.push_back(rsc);
         } else {
-            /* second rsc */
             if (ifa->ifa_addr->sa_family == AF_INET) {
                 struct sockaddr_in sin;
                 memset(&sin, 0, sizeof(struct sockaddr_in));
                 sin.sin_family      = AF_INET;
                 sin.sin_addr.s_addr = INADDR_ANY;
                 uct_test::init_sockaddr_rsc(&rsc, (struct sockaddr*)&sin,
-                                            ifa->ifa_addr, sizeof(struct sockaddr_in));
+                                            ifa->ifa_addr,
+                                            sizeof(struct sockaddr_in),
+                                            init_src_addr);
             } else if (ifa->ifa_addr->sa_family == AF_INET6) {
                 struct sockaddr_in6 sin;
                 memset(&sin, 0, sizeof(struct sockaddr_in6));
                 sin.sin6_family     = AF_INET6;
                 sin.sin6_addr       = in6addr_any;
                 uct_test::init_sockaddr_rsc(&rsc, (struct sockaddr*)&sin,
-                                            ifa->ifa_addr, sizeof(struct sockaddr_in6));
+                                            ifa->ifa_addr,
+                                            sizeof(struct sockaddr_in6),
+                                            init_src_addr);
             } else {
                 UCS_TEST_ABORT("Unknown sa_family " << ifa->ifa_addr->sa_family);
             }
@@ -284,8 +302,9 @@ void uct_test::set_md_sockaddr_resources(const md_resource& md_rsc, uct_md_h md,
         if (uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_LOCAL) &&
             uct_md_is_sockaddr_accessible(md, &sock_addr, UCT_SOCKADDR_ACC_REMOTE))
         {
-            uct_test::set_interface_rscs(md_rsc.cmpt, md_rsc.rsc_desc.md_name,
-                                         local_cpus, ifa, all_resources);
+            uct_test::set_interface_rscs(md_rsc.cmpt, md_rsc.cmpt_attr.name,
+                                         md_rsc.rsc_desc.md_name, local_cpus,
+                                         ifa, all_resources);
         }
     }
 
@@ -305,7 +324,8 @@ void uct_test::set_cm_sockaddr_resources(uct_component_h cmpt, const char *cmpt_
             continue;
         }
 
-        uct_test::set_interface_rscs(cmpt, cmpt_name, local_cpus, ifa, all_resources);
+        uct_test::set_interface_rscs(cmpt, cmpt_name, "", local_cpus, ifa,
+                                     all_resources);
     }
 
     freeifaddrs(ifaddr);
@@ -388,15 +408,16 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
             resource_speed tcp_fastest_rsc;
 
             for (unsigned j = 0; j < num_tl_resources; ++j) {
-                if (tcp_fastest_dev && (std::string("tcp") == tl_resources[j].tl_name)) {
-                    resource_speed rsc(iter->cmpt, worker, md, md_attr,
-                                       iter->rsc_desc, tl_resources[j]);
+                if (tcp_fastest_dev && (std::string("tcp") ==
+                                        tl_resources[j].tl_name)) {
+                    resource_speed rsc(iter->cmpt, iter->cmpt_attr, worker, md,
+                                       md_attr, iter->rsc_desc, tl_resources[j]);
                     if (!tcp_fastest_rsc.bw || (rsc.bw > tcp_fastest_rsc.bw)) {
                         tcp_fastest_rsc = rsc;
                     }
                 } else {
-                    resource rsc(iter->cmpt, md_attr, iter->rsc_desc,
-                                 tl_resources[j]);
+                    resource rsc(iter->cmpt, iter->cmpt_attr, md_attr,
+                                 iter->rsc_desc, tl_resources[j]);
                     all_resources.push_back(rsc);
                 }
             }
@@ -434,9 +455,9 @@ void uct_test::generate_test_variant(int variant,
     for (std::vector<const resource*>::iterator iter = r.begin();
          iter != r.end(); ++iter) {
         if (tl_name.empty() || ((*iter)->tl_name == tl_name)) {
-            resource rsc((*iter)->component, (*iter)->md_name,
-                         (*iter)->local_cpus, (*iter)->tl_name,
-                         (*iter)->dev_name, (*iter)->dev_type);
+            resource rsc((*iter)->component, (*iter)->component_name,
+                         (*iter)->md_name, (*iter)->local_cpus,
+                         (*iter)->tl_name, (*iter)->dev_name, (*iter)->dev_type);
             rsc.variant      = variant;
             rsc.variant_name = variant_name;
             test_res.push_back(rsc);

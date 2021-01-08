@@ -12,8 +12,7 @@ resources:
       image: ucfconsort.azurecr.io/ucx/centos7:1
       endpoint: ucfconsort_registry
     - container: fedora
-      image: ucfconsort.azurecr.io/ucx/fedora:3
-      endpoint: ucfconsort_registry
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
 
 stages:
   - stage: Codestyle
@@ -48,10 +47,44 @@ stages:
               fi
             condition: eq(variables['Build.Reason'], 'PullRequest')
 
+      # Check that the code is formatted according to the code style guidelines
+      - job: format
+        displayName: format code
+        pool:
+          name: MLNX
+          demands:
+          - ucx_instinct -equals yes
+        container: fedora
+        steps:
+          - checkout: self
+            clean: true
+
+          - bash: |
+              source ./buildlib/az-helpers.sh
+              echo "Checking code format on diff remotes/origin/${SYSTEM_PULLREQUEST_TARGETBRANCH}..${BUILD_SOURCEVERSION}"
+              git-clang-format --diff remotes/origin/${SYSTEM_PULLREQUEST_TARGETBRANCH} ${BUILD_SOURCEVERSION} > format.patch
+              echo "Generated patch file:"
+              cat format.patch
+              if [ "`cat format.patch`" = "no modified files to format" ]; then
+                  exit
+              fi
+              git apply format.patch
+              if ! git diff --quiet --exit-code
+              then
+                  url="https://github.com/openucx/ucx/wiki/Code-style-checking"
+                  azure_complete_with_issues "Code is not formatted according to the code style, see $url for more info."
+              fi
+            condition: eq(variables['Build.Reason'], 'PullRequest')
+
+
   - stage: Build
     jobs:
       - job: static_checks
         displayName: Static checks
+        pool:
+          name: MLNX
+          demands:
+          - ucx_instinct -equals yes
         container: fedora
         steps:
           - checkout: self
@@ -132,6 +165,10 @@ stages:
       # Test RPM build
       - job: build_rpm
         displayName: Build tarball and source rpm
+        pool:
+          name: MLNX
+          demands:
+          - ucx_instinct -equals yes
         container: fedora
         steps:
           - checkout: self
@@ -177,4 +214,8 @@ stages:
         name: hwi
         demands: ucx_hwi -equals yes
         test_perf: 0
-    - template: io-demo.yml
+
+  - stage: io_demo
+    dependsOn: [Codestyle]
+    jobs:
+    - template: io_demo/io-demo.yml

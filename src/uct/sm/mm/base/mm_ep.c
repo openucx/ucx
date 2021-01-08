@@ -508,6 +508,5 @@ uct_mm_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     return UCS_OK;
 
 err_set_ep_failed:
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_mm_ep_t), &ep->super.super,
-                             iface, status);
+    return uct_iface_handle_ep_err(iface, &ep->super.super, status);
 }

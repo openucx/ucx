@@ -39,11 +39,10 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
 
     rreq = ucp_tag_exp_search(&worker->tm, rts_hdr->tag.tag);
     if (rreq != NULL) {
-        ucp_tag_rndv_matched(worker, rreq, rts_hdr);
-
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
         ucp_tag_offload_try_cancel(worker, rreq, UCP_TAG_OFFLOAD_CANCEL_FORCE);
+        ucp_tag_rndv_matched(worker, rreq, rts_hdr);
 
         UCP_WORKER_STAT_RNDV(worker, EXP, 1);
         return UCS_OK;
@@ -104,6 +103,8 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     if (status != UCS_OK) {
         return status;
     }
+
+    ucp_send_request_set_id(sreq);
 
     if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
         status = ucp_tag_offload_start_rndv(sreq);

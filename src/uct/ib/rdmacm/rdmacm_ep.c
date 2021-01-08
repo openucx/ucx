@@ -224,8 +224,8 @@ static unsigned uct_rdmacm_client_err_handle_progress(void *arg)
     UCS_ASYNC_BLOCK(iface->super.worker->async);
 
     rdmacm_ep->slow_prog_id = UCS_CALLBACKQ_ID_NULL;
-    uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
-                      rdmacm_ep->super.super.iface, rdmacm_ep->status);
+    uct_iface_handle_ep_err(&iface->super.super, &rdmacm_ep->super.super,
+                            rdmacm_ep->status);
 
     UCS_ASYNC_UNBLOCK(iface->super.worker->async);
     return 0;
@@ -236,12 +236,12 @@ void uct_rdmacm_ep_set_failed(uct_iface_t *iface, uct_ep_h ep, ucs_status_t stat
     uct_rdmacm_iface_t *rdmacm_iface = ucs_derived_of(iface, uct_rdmacm_iface_t);
     uct_rdmacm_ep_t *rdmacm_ep       = ucs_derived_of(ep, uct_rdmacm_ep_t);
 
+    rdmacm_ep->status = status;
+
     if (rdmacm_iface->super.err_handler_flags & UCT_CB_FLAG_ASYNC) {
-        uct_set_ep_failed(&UCS_CLASS_NAME(uct_rdmacm_ep_t), &rdmacm_ep->super.super,
-                          &rdmacm_iface->super.super, status);
+        uct_iface_handle_ep_err(iface, ep, status);
     } else {
         /* invoke the error handling flow from the main thread */
-        rdmacm_ep->status = status;
         uct_worker_progress_register_safe(&rdmacm_iface->super.worker->super,
                                           uct_rdmacm_client_err_handle_progress,
                                           rdmacm_ep, UCS_CALLBACKQ_FLAG_ONESHOT,

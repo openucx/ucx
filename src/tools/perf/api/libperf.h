@@ -48,7 +48,8 @@ typedef enum {
 
 typedef enum {
     UCX_PERF_TEST_TYPE_PINGPONG,         /* Ping-pong mode */
-    UCX_PERF_TEST_TYPE_PINGPONG_WFE,     /* Ping-pong mode with wait for event */
+    UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM,/* Ping-pong mode with
+                                            ucp_worker_wait_mem() */
     UCX_PERF_TEST_TYPE_STREAM_UNI,       /* Unidirectional stream */
     UCX_PERF_TEST_TYPE_STREAM_BI,        /* Bidirectional stream */
     UCX_PERF_TEST_TYPE_LAST
@@ -63,6 +64,7 @@ typedef enum {
 
 typedef enum {
     UCT_PERF_DATA_LAYOUT_SHORT,
+    UCT_PERF_DATA_LAYOUT_SHORT_IOV,
     UCT_PERF_DATA_LAYOUT_BCOPY,
     UCT_PERF_DATA_LAYOUT_ZCOPY,
     UCT_PERF_DATA_LAYOUT_LAST

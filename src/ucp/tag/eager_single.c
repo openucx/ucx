@@ -28,14 +28,15 @@ static ucs_status_t ucp_eager_short_progress(uct_pending_req_t *self)
 
     status = uct_ep_am_short(req->send.ep->uct_eps[spriv->super.lane],
                              UCP_AM_ID_EAGER_ONLY, req->send.msg_proto.tag.tag,
-                             req->send.dt_iter.type.contig.buffer,
-                             req->send.dt_iter.length);
+                             req->send.state.dt_iter.type.contig.buffer,
+                             req->send.state.dt_iter.length);
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req->send.lane = spriv->super.lane; /* for pending add */
         return status;
     }
 
-    ucp_datatype_iter_cleanup(&req->send.dt_iter, UCS_BIT(UCP_DATATYPE_CONTIG));
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+                              UCS_BIT(UCP_DATATYPE_CONTIG));
 
     ucs_assert(status != UCS_INPROGRESS);
     ucp_request_complete_send(req, status);
@@ -86,9 +87,9 @@ static size_t ucp_eager_single_pack(void *dest, void *arg)
     ucp_datatype_iter_t next_iter;
     size_t packed_size;
 
-    ucs_assert(req->send.dt_iter.offset == 0);
+    ucs_assert(req->send.state.dt_iter.offset == 0);
     hdr->super.tag = req->send.msg_proto.tag.tag;
-    packed_size    = ucp_datatype_iter_next_pack(&req->send.dt_iter,
+    packed_size    = ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
                                                  req->send.ep->worker,
                                                  SIZE_MAX, &next_iter, hdr + 1);
     return sizeof(*hdr) + packed_size;

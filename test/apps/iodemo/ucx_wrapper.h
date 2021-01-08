@@ -86,6 +86,11 @@ public:
 
     void progress();
 
+    static const std::string sockaddr_str(const struct sockaddr* saddr,
+                                          size_t addrlen);
+
+    void destroy_connections();
+
 protected:
 
     // Called when new IO message is received
@@ -138,10 +143,6 @@ private:
                                          void *data, size_t length,
                                          const ucp_am_recv_param_t *param);
 
-
-    static const std::string sockaddr_str(const struct sockaddr* saddr,
-                                          size_t addrlen);
-
     ucp_worker_h worker() const;
 
     double connect_timeout() const;
@@ -164,8 +165,6 @@ private:
     void remove_connection(UcxConnection *conn);
 
     void handle_connection_error(UcxConnection *conn);
-
-    void destroy_connections();
 
     void destroy_listener();
 
@@ -260,8 +259,6 @@ private:
     void request_completed(ucx_request *r);
 
     void handle_connection_error(ucs_status_t status);
-
-    void disconnect(enum ucp_ep_close_mode mode);
 
     void ep_close(enum ucp_ep_close_mode mode);
 

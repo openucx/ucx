@@ -22,6 +22,7 @@ extern "C" {
 #include <ucs/time/time.h>
 #include <ucm/malloc/malloc_hook.h>
 #include <ucm/bistro/bistro.h>
+#include <ucm/util/reloc.h>
 #include <ucs/sys/sys.h>
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
@@ -207,8 +208,11 @@ protected:
         bistro_patch(const char* symbol, void *hook)
         {
             ucs_status_t status;
-
-            status = ucm_bistro_patch(symbol, hook, &m_rp);
+            void *func_ptr = ucm_reloc_get_orig(symbol, hook);
+            if (func_ptr == NULL) {
+                UCS_TEST_ABORT("could not find " << symbol);
+            }
+            status = ucm_bistro_patch(func_ptr, hook, symbol, NULL, &m_rp);
             ASSERT_UCS_OK(status);
             EXPECT_NE((intptr_t)m_rp, 0);
         }
@@ -216,6 +220,11 @@ protected:
         ~bistro_patch()
         {
             ucm_bistro_restore(m_rp);
+        }
+
+        ucm_bistro_restore_point_t* rp()
+        {
+            return m_rp;
         }
 
     protected:
@@ -1034,8 +1043,6 @@ typedef int (munmap_f_t)(void *addr, size_t len);
 
 UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
     const char *symbol = "munmap";
-    ucm_bistro_restore_point_t *rp = NULL;
-    ucs_status_t status;
     munmap_f_t *munmap_f;
     void *ptr;
     int res;
@@ -1043,30 +1050,27 @@ UCS_TEST_SKIP_COND_F(malloc_hook, bistro_patch, RUNNING_ON_VALGRIND) {
     uint64_t UCS_V_UNUSED origin;
 
     /* set hook to mmap call */
-    status = ucm_bistro_patch(symbol, (void*)bistro_hook<0>::munmap, &rp);
-    ASSERT_UCS_OK(status);
-    EXPECT_NE((intptr_t)rp, 0);
+    {
+        bistro_patch patch(symbol, (void*)bistro_hook<0>::munmap);
 
-    munmap_f = (munmap_f_t*)ucm_bistro_restore_addr(rp);
-    EXPECT_NE((intptr_t)munmap_f, 0);
+        munmap_f = (munmap_f_t*)ucm_bistro_restore_addr(patch.rp());
+        EXPECT_NE((intptr_t)munmap_f, 0);
 
-    /* save partial body of patched function */
-    patched = *(uint64_t*)munmap_f;
+        /* save partial body of patched function */
+        patched = *(uint64_t*)munmap_f;
 
-    bistro_call_counter = 0;
-    ptr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
-    EXPECT_NE(ptr, MAP_FAILED);
+        bistro_call_counter = 0;
+        ptr                 = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
+                                   MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+        EXPECT_NE(ptr, MAP_FAILED);
 
-    /* try to call munmap, we should jump into munmap_hook instead */
-    res = munmap_f(ptr, 4096);
-    EXPECT_EQ(res, 0);
-    /* due to cache coherency issues on ARM systems could be executed
-     * original function body, so, skip counter evaluation */
-    EXPECT_GT(bistro_call_counter, 0);
-
-    /* restore original mmap body */
-    status = ucm_bistro_restore(rp);
-    ASSERT_UCS_OK(status);
+        /* try to call munmap, we should jump into munmap_hook instead */
+        res = munmap_f(ptr, 4096);
+        EXPECT_EQ(res, 0);
+        /* due to cache coherency issues on ARM systems could be executed
+         * original function body, so, skip counter evaluation */
+        EXPECT_GT(bistro_call_counter, 0);
+    }
 
     bistro_call_counter = 0;
     /* now try to call mmap, we should NOT jump into mmap_hook */
@@ -1200,6 +1204,80 @@ UCS_TEST_SKIP_COND_F(malloc_hook, test_event_unmap,
     status = ucm_test_events(UCM_EVENT_MMAP);
     EXPECT_TRUE(status == UCS_OK);
 }
+
+class memtype_hooks : public ucs::test_with_param<ucs_memory_type_t> {
+public:
+    void mem_event(ucm_event_type_t event_type, ucm_event_t *event)
+    {
+        m_events.push_back(event_t(event_type, *event));
+    }
+
+protected:
+    typedef std::pair<ucm_event_type_t, ucm_event_t> event_t;
+
+    bool is_event_fired(ucm_event_type_t event_type, void *address, size_t size)
+    {
+        for (size_t i = 0; i < m_events.size(); ++i) {
+            if (event_type != m_events[i].first) {
+                continue;
+            }
+
+            if ((event_type == UCM_EVENT_MEM_TYPE_ALLOC) &&
+                (m_events[i].second.mem_type.address == address) &&
+                (m_events[i].second.mem_type.mem_type == mem_type()) &&
+                (m_events[i].second.mem_type.size == size)) {
+                return true;
+            }
+
+            if ((event_type == UCM_EVENT_MEM_TYPE_FREE) &&
+                (m_events[i].second.mem_type.address == address) &&
+                (m_events[i].second.mem_type.size == size)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+protected:
+    ucs_memory_type_t mem_type() const
+    {
+        return GetParam();
+    }
+
+    std::vector<event_t> m_events;
+};
+
+UCS_TEST_SKIP_COND_P(memtype_hooks, alloc_free,
+                     RUNNING_ON_VALGRIND || (GetParam() == UCS_MEMORY_TYPE_HOST))
+{
+
+    /* vector operations should not generate events */
+    m_events.reserve(16);
+
+    mmap_event<memtype_hooks> event_handler(this);
+
+    UCS_TEST_MESSAGE << ucs_memory_type_names[mem_type()];
+
+    ucs_status_t status;
+    status = event_handler.set(UCM_EVENT_MEM_TYPE_ALLOC |
+                               UCM_EVENT_MEM_TYPE_FREE);
+    ASSERT_UCS_OK(status);
+
+    const size_t size = 64 * UCS_KBYTE;
+    ucs::auto_ptr<mem_buffer> buffer(new mem_buffer(size, mem_type()));
+    void *ptr = buffer->ptr();
+
+    EXPECT_TRUE(is_event_fired(UCM_EVENT_MEM_TYPE_ALLOC, ptr, size));
+    m_events.clear();
+
+    buffer.reset();
+
+    EXPECT_TRUE(is_event_fired(UCM_EVENT_MEM_TYPE_FREE, ptr, size));
+}
+
+INSTANTIATE_TEST_CASE_P(mem_types, memtype_hooks,
+                        ::testing::ValuesIn(mem_buffer::supported_mem_types()));
 
 class malloc_hook_dlopen : public malloc_hook {
 protected:

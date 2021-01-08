@@ -68,9 +68,9 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         for (int i = 0; i < numIterations; i++) {
             final int iterNum = i;
             UcpRequest getRequest = endpoint.getNonBlocking(remoteAddress, remoteKey,
-                recvMemory.getAddress(), totalSize,
+                recvMemory.getAddress(), remoteSize,
                 new UcxCallback() {
-                    long startTime = System.nanoTime();
+                    final long startTime = System.nanoTime();
 
                     @Override
                     public void onSuccess(UcpRequest request) {

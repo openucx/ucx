@@ -323,8 +323,4 @@ static inline ucs_status_t uct_ib_qp_max_send_sge(struct ibv_qp *qp,
     return UCS_OK;
 }
 
-typedef struct uct_ib_qpnum {
-    uct_ib_uint24_t qp_num;
-} uct_ib_qpnum_t;
-
 #endif /* UCT_IB_VERBS_H */

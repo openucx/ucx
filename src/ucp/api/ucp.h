@@ -1,5 +1,5 @@
 /*
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
@@ -283,7 +283,11 @@ typedef enum {
                                               flag is not set then
                                               @ref ucp_ep_close_nbx schedules
                                               flushes on all outstanding
-                                              operations. */
+                                              operations.
+                                              @note this flag is incompatible
+                                              with @ref UCP_OP_ATTR_FLAG_NO_IMM_CMPL,
+                                              since it forces immediate completion.
+                                              */
 } ucp_ep_close_flags_t;
 
 
@@ -463,13 +467,21 @@ enum {
  * @ingroup UCP_WORKER
  * @brief Flags for a UCP Active Message callback.
  *
- * Flags that indicate how to handle UCP Active Messages
- * Currently only UCP_AM_FLAG_WHOLE_MSG is supported,
- * which indicates the entire message is handled in one
- * callback.
+ * Flags that indicate how to handle UCP Active Messages.
  */
 enum ucp_am_cb_flags {
-    UCP_AM_FLAG_WHOLE_MSG = UCS_BIT(0)
+    /**
+     * Indicates that the entire message will be handled in one callback.
+     */
+    UCP_AM_FLAG_WHOLE_MSG       = UCS_BIT(0),
+
+    /**
+     * Guarantees that the specified @ref ucp_am_recv_callback_t callback,
+     * will always be called with @ref UCP_AM_RECV_ATTR_FLAG_DATA flag set,
+     * so the data will be accessible outside the callback, until
+     * @ref ucp_am_data_release is called.
+     */
+    UCP_AM_FLAG_PERSISTENT_DATA = UCS_BIT(1)
 };
 
 
@@ -599,7 +611,7 @@ typedef enum {
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
-                                                        even if it delays remote 
+                                                        even if it delays remote
                                                         data delivery. Note for
                                                         implementer: this option
                                                         can disable zero copy
@@ -2662,11 +2674,11 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  * @brief Add user defined callback for Active Message.
  *
  * This routine installs a user defined callback to handle incoming Active
- * Messages with a specific id. This callback is called whenever an Active 
- * Message that was sent from the remote peer by @ref ucp_am_send_nb is 
+ * Messages with a specific id. This callback is called whenever an Active
+ * Message that was sent from the remote peer by @ref ucp_am_send_nb is
  * received on this worker.
  *
- * @param [in]  worker      UCP worker on which to set the Active Message 
+ * @param [in]  worker      UCP worker on which to set the Active Message
  *                          handler.
  * @param [in]  id          Active Message id.
  * @param [in]  cb          Active Message callback. NULL to clear.
@@ -2755,8 +2767,6 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
  * @note If UCP_OP_ATTR_FLAG_NO_IMM_CMPL flag is set in the op_attr_mask field
  *       of @a param, then the operation will return a request handle, even if
  *       it completes immediately.
- * @note Currently Active Message API supports communication operations with
- *       host memory only.
  * @note This operation supports specific flags, which can be passed
  *       in @a param by @ref ucp_request_param_t.flags. The exact set of flags
  *       is defined by @ref ucp_send_am_flags.
@@ -2810,9 +2820,6 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *       there is no need to release it even if the operation fails.
  *       The routine returns a request handle instead, which can further be used
  *       for tracking operation progress.
- *
- * @note Currently Active Message API supports communication operations with
- *       host memory only.
  *
  * @param [in]  worker     Worker that is used for the receive operation.
  * @param [in]  data_desc  Data descriptor, provided in
@@ -3460,7 +3467,7 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  * This routine receives a message that is described by the local address @a
  * buffer, size @a count, @a message handle, and @a datatype object on the @a
  * worker. The @a message handle can be obtained by calling the @ref
- * ucp_tag_probe_nb "ucp_tag_probe_nb()" routine.  @ref ucp_tag_msg_recv_nb
+ * ucp_tag_probe_nb "ucp_tag_probe_nb()" routine. The @ref ucp_tag_msg_recv_nb
  * "ucp_tag_msg_recv_nb()" routine is non-blocking and therefore returns
  * immediately. The receive operation is considered completed when the message
  * is delivered to the @a buffer. In order to notify the application about
@@ -3470,7 +3477,7 @@ ucp_tag_message_h ucp_tag_probe_nb(ucp_worker_h worker, ucp_tag_t tag,
  * routine returns an error.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
- * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  buffer      Pointer to the buffer that will receive the data.
  * @param [in]  count       Number of elements to receive
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  message     Message handle.
@@ -3491,6 +3498,40 @@ ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer,
                                      ucp_tag_message_h message,
                                      ucp_tag_recv_callback_t cb);
 
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Non-blocking receive operation for a probed message.
+ *
+ * This routine receives a message that is described by the local address @a
+ * buffer, size @a count, and @a message handle on the @a worker.
+ * The @a message handle can be obtained by calling the @ref
+ * ucp_tag_probe_nb "ucp_tag_probe_nb()" routine. The @ref ucp_tag_msg_recv_nbx
+ * "ucp_tag_msg_recv_nbx()" routine is non-blocking and therefore returns
+ * immediately. The receive operation is considered completed when the message
+ * is delivered to the @a buffer. In order to notify the application about
+ * completion of the receive operation the UCP library will invoke the
+ * call-back @a cb when the received message is in the receive buffer and ready
+ * for application access. If the receive operation cannot be started the
+ * routine returns an error.
+ *
+ * @param [in]  worker      UCP worker that is used for the receive operation.
+ * @param [in]  buffer      Pointer to the buffer that will receive the data.
+ * @param [in]  count       Number of elements to receive
+ * @param [in]  message     Message handle.
+ * @param [in]  param       Operation parameters, see @ref ucp_request_param_t
+ *
+ * @return UCS_PTR_IS_ERR(_ptr) - The receive operation failed.
+ * @return otherwise            - Operation was scheduled for receive. The request
+ *                                handle is returned to the application in order
+ *                                to track progress of the operation. The
+ *                                application is responsible for releasing the
+ *                                handle using @ref ucp_request_free
+ *                                "ucp_request_free()" routine.
+ */
+ucs_status_ptr_t ucp_tag_msg_recv_nbx(ucp_worker_h worker, void *buffer,
+                                      size_t count, ucp_tag_message_h message,
+                                      const ucp_request_param_t *param);
 
 /**
  * @ingroup UCP_COMM
@@ -3615,7 +3656,7 @@ ucs_status_ptr_t ucp_put_nb(ucp_ep_h ep, const void *buffer, size_t length,
  *                                progress of the operation. The application is
  *                                responsible for releasing the handle using
  *                                @ref ucp_request_free "ucp_request_free()" routine.
- * 
+ *
  * @note Only the datatype ucp_dt_make_contig(1) is supported
  * for @a param->datatype, see @ref ucp_dt_make_contig.
  */
@@ -3741,7 +3782,7 @@ ucs_status_ptr_t ucp_get_nb(ucp_ep_h ep, void *buffer, size_t length,
  *                                progress of the operation. The application is
  *                                responsible for releasing the handle using
  *                                @ref ucp_request_free "ucp_request_free()" routine.
- * 
+ *
  * @note Only the datatype ucp_dt_make_contig(1) is supported
  * for @a param->datatype, see @ref ucp_dt_make_contig.
  */

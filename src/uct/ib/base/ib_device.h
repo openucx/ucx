@@ -367,7 +367,8 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
 void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
 
 unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev,
-                                          uint8_t port_num);
+                                          uint8_t port_num,
+                                          uint8_t gid_index);
 
 
 static inline struct ibv_port_attr*

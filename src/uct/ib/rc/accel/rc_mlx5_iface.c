@@ -114,13 +114,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
     qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(&iface->super, qp_num),
                         uct_rc_mlx5_ep_t);
-    /* TODO: temporary workaround for uct_ep_flush(cancel) case when EP has been
-     *       destroyed but successful CQE was not polled out from the CQ */
-    if (ucs_unlikely(ep == NULL)) {
-        ucs_debug(UCT_IB_IFACE_FMT": qp_num %x not found",
-                  UCT_IB_IFACE_ARG(&iface->super.super), qp_num);
-        return 1;
-    }
+    ucs_assert(ep != NULL);
 
     hw_ci = ntohs(cqe->wqe_counter);
     ucs_trace_poll("rc_mlx5 iface %p tx_cqe: ep %p qpn 0x%x hw_ci %d", iface, ep,
@@ -187,7 +181,7 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
 
 static void
 uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
-                                 ucs_status_t status)
+                                 ucs_status_t ep_status)
 {
     struct mlx5_cqe64  *cqe    = arg;
     uct_rc_iface_t     *iface  = ucs_derived_of(ib_iface, uct_rc_iface_t);
@@ -196,35 +190,26 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     uct_rc_mlx5_ep_t   *ep     = ucs_derived_of(uct_rc_iface_lookup_ep(iface,
                                                                        qp_num),
                                                 uct_rc_mlx5_ep_t);
+    uint16_t           pi      = ntohs(cqe->wqe_counter);
     ucs_log_level_t    log_lvl;
-    uct_ib_mlx5_txwq_t txwq_copy;
-    size_t             txwq_size;
-    ucs_status_t       err_handler_status;
+    ucs_status_t       status;
 
-    if (!ep) {
+    ucs_assert(ep != NULL);
+    uct_rc_mlx5_common_update_tx_res(iface, &ep->tx.wq, &ep->super.txqp, pi);
+    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+
+    if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
+                           UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
         return;
     }
 
-    /* Create a copy of RC txwq for completion error reporting, since the QP
-     * would be released by set_ep_failed()*/
-    txwq_copy = ep->tx.wq;
-    txwq_size = UCS_PTR_BYTE_DIFF(ep->tx.wq.qstart, ep->tx.wq.qend);
-    txwq_copy.qstart = ucs_malloc(txwq_size, "rc_txwq_copy");
-    if (txwq_copy.qstart != NULL) {
-        memcpy(txwq_copy.qstart, ep->tx.wq.qstart, txwq_size);
-        txwq_copy.qend = UCS_PTR_BYTE_OFFSET(txwq_copy.qstart, txwq_size);
-    }
+    ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
 
-    err_handler_status = uct_rc_mlx5_ep_handle_failure(ep, status,
-                                                       ep->tx.wq.sw_pi);
-    log_lvl            = uct_ib_iface_failure_log_level(ib_iface,
-                                                        err_handler_status,
-                                                        status);
+    status  = uct_iface_handle_ep_err(&iface->super.super.super,
+                                      &ep->super.super.super, ep_status);
+    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
 
-    uct_ib_mlx5_completion_with_err(ib_iface, arg,
-                                    txwq_copy.qstart ? &txwq_copy : NULL,
-                                    log_lvl);
-    ucs_free(txwq_copy.qstart);
+    uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
 }
 
 static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
@@ -779,6 +764,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .ep_get_bcopy             = uct_rc_mlx5_ep_get_bcopy,
     .ep_get_zcopy             = uct_rc_mlx5_ep_get_zcopy,
     .ep_am_short              = uct_rc_mlx5_ep_am_short,
+    .ep_am_short_iov          = uct_base_ep_am_short_iov,
     .ep_am_bcopy              = uct_rc_mlx5_ep_am_bcopy,
     .ep_am_zcopy              = uct_rc_mlx5_ep_am_zcopy,
     .ep_atomic_cswap64        = uct_rc_mlx5_ep_atomic_cswap64,
@@ -823,7 +809,6 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .arm_cq                   = uct_rc_mlx5_iface_common_arm_cq,
     .event_cq                 = uct_rc_mlx5_iface_common_event_cq,
     .handle_failure           = uct_rc_mlx5_iface_handle_failure,
-    .set_ep_failed            = uct_rc_mlx5_ep_set_failed,
     },
     .init_rx                  = uct_rc_mlx5_iface_init_rx,
     .cleanup_rx               = uct_rc_mlx5_iface_cleanup_rx,

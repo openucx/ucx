@@ -8,10 +8,10 @@
 #  include "config.h"
 #endif
 
+#include "dc_mlx5.inl"
 #include "dc_mlx5_ep.h"
 #include "dc_mlx5.h"
 
-#include <uct/ib/rc/accel/rc_mlx5.inl>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 
 #define UCT_DC_MLX5_IFACE_TXQP_GET(_iface, _ep, _txqp, _txwq) \
@@ -554,23 +554,10 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t    *ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    uct_ib_mlx5_md_t    *md    = ucs_derived_of(iface->super.super.super.super.md,
+                                                uct_ib_mlx5_md_t);
     ucs_status_t        status;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
-
-    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
-            return UCS_ERR_UNSUPPORTED;
-        }
-
-        uct_ep_pending_purge(tl_ep, NULL, 0);
-        if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-            /* No dci -> no WQEs -> HW is clean, nothing to cancel */
-            return UCS_OK;
-        }
-
-        uct_dc_mlx5_ep_handle_failure(ep, NULL, UCS_ERR_CANCELED);
-        return UCS_OK;
-    }
 
     if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
         return UCS_ERR_NO_RESOURCE;
@@ -600,6 +587,25 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
+    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        ucs_assert(ucs_arbiter_group_is_empty(&ep->arb_group));
+        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+            return UCS_ERR_UNSUPPORTED;
+        }
+
+        if (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL) {
+            goto out;
+        }
+
+        status = uct_ib_mlx5_modify_qp_state(md, &txwq->super, IBV_QPS_ERR);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL;
+    }
+
+out:
     return uct_rc_txqp_add_flush_comp(&iface->super.super, &ep->super, txqp,
                                       comp, txwq->sig_pi);
 }
@@ -826,6 +832,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                                 uct_dc_mlx5_iface_t);
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
     struct ibv_ah_attr ah_attr = {.is_global = 0};
+    uct_rc_iface_send_op_t *grant_ep;
     uct_dc_fc_sender_data_t sender;
     uct_dc_fc_request_t *dc_req;
     struct mlx5_wqe_av mlx5_av;
@@ -892,9 +899,18 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
         sender.global.gid       = ib_iface->gid_info.gid;
         sender.global.is_global = dc_ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
 
+        grant_ep = ucs_mpool_get(&iface->super.super.tx.send_op_mp);
+        if (ucs_unlikely(grant_ep == NULL)) {
+            ucs_error("failed to allocate fc hard req grant op");
+            return UCS_ERR_NO_MEMORY;
+        }
+
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
                                  UCT_RC_FC_STAT_TX_HARD_REQ, 1);
 
+        uct_rc_ep_init_send_op(grant_ep, UCT_RC_IFACE_SEND_OP_FLAG_FC_GRANT,
+                               NULL, (uct_rc_send_handler_t)ucs_mpool_put);
+        grant_ep->ep = tl_ep;
         uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
                                      txqp, txwq, MLX5_OPCODE_SEND_IMM,
                                      &sender.global, sizeof(sender.global), op, sender.ep,
@@ -904,6 +920,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_dc_mlx5_ep_get_grh(dc_ep),
                                      uct_ib_mlx5_wqe_av_size(&dc_ep->av),
                                      MLX5_WQE_CTRL_SOLICITED, INT_MAX);
+        uct_rc_txqp_add_send_op_sn(txqp, grant_ep, txwq->prev_sw_pi);
     }
 
     return UCS_OK;
@@ -928,6 +945,28 @@ static void uct_dc_mlx5_ep_keepalive_cleanup(uct_dc_mlx5_ep_t *ep)
             ucs_queue_del_iter(&txqp->outstanding, iter);
             ucs_mpool_put(op);
             break;
+        }
+    }
+}
+
+static void uct_dc_mlx5_txqp_purge_outstanding(uct_dc_mlx5_iface_t *iface,
+                                               uct_rc_txqp_t *txqp,
+                                               ucs_status_t status,
+                                               uint16_t sn, int warn)
+{
+    uct_rc_iface_send_op_t *op;
+    uct_dc_mlx5_ep_t *ep;
+
+    ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
+                               UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
+        if (op->flags & UCT_RC_IFACE_SEND_OP_FLAG_FC_GRANT) {
+            /* grant operation aborted so need to clear "wait-for-grant" flag */
+            ep = ucs_derived_of(op->ep, uct_dc_mlx5_ep_t);
+            uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
+            ucs_mpool_put(op);
+        } else {
+            uct_rc_txqp_purge_outstanding_op(&iface->super.super, op, status,
+                                             warn);
         }
     }
 }
@@ -975,10 +1014,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                        "iface (%p) ep (%p) dci leak detected: dci=%d", iface,
                        self, self->dci);
 
-    /* TODO should be removed by flush */
-    uct_rc_txqp_purge_outstanding(&iface->super.super,
-                                  &iface->tx.dcis[self->dci].txqp, UCS_ERR_CANCELED,
-                                  iface->tx.dcis[self->dci].txwq.sw_pi, 1);
+    uct_dc_mlx5_txqp_purge_outstanding(iface, &iface->tx.dcis[self->dci].txqp,
+                                       UCS_ERR_CANCELED,
+                                       iface->tx.dcis[self->dci].txwq.sw_pi, 1);
     ucs_assert(ucs_queue_is_empty(&iface->tx.dcis[self->dci].txqp.outstanding));
     iface->tx.dcis[self->dci].ep = NULL;
 }
@@ -1310,34 +1348,25 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
                                    ucs_status_t ep_status)
 {
+    struct mlx5_cqe64 *cqe     = arg;
     uct_iface_h tl_iface       = ep->super.super.iface;
     uint8_t dci                = ep->dci;
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci].txqp;
     uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci].txwq;
+    uint16_t pi                = ntohs(cqe->wqe_counter);
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
-    uct_dc_mlx5_iface_reset_dci(iface, dci, ep_status);
 
-    /* since we removed all outstanding ops on the dci, it should be released */
+    uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
+    uct_dc_mlx5_txqp_purge_outstanding(iface, txqp, ep_status, pi, 0);
+
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     uct_dc_mlx5_iface_dci_put(iface, dci);
-    ucs_assert_always(ep->dci == UCT_DC_MLX5_EP_NO_DCI);
+    uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
-    if (uct_dc_mlx5_ep_fc_wait_for_grant(ep)) {
-        /* No need to wait for grant on this ep anymore */
-        uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
-    }
-
-    if (ep == iface->tx.fc_ep) {
-        ucs_assert(ep_status != UCS_ERR_CANCELED);
-        /* Cannot handle errors on flow-control endpoint.
-         * Or shall we ignore them?
-         */
-        ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
-                  ucs_status_string(ep_status));
-    } else {
-        uct_dc_mlx5_iface_set_ep_failed(iface, ep, (struct mlx5_cqe64*)arg,
-                                        txwq, ep_status);
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        uct_dc_mlx5_iface_reset_dci(iface, dci);
     }
 }
 

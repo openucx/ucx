@@ -347,6 +347,8 @@ public:
 
     const struct sockaddr* get_sock_addr_ptr() const;
 
+    const void* get_sock_addr_in_buf() const;
+
 private:
     struct sockaddr_storage m_storage;
     size_t                  m_size;

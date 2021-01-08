@@ -371,14 +371,19 @@ public:
         user_ctx->consumed = true;
     }
 
+    static void verify_completed(recv_ctx *user_ctx, uct_tag_t stag, size_t length)
+    {
+        EXPECT_EQ(user_ctx->tag, (stag & user_ctx->tmask));
+        EXPECT_EQ(user_ctx->mbuf->length(), length);
+    }
+
     static void completed(uct_tag_context_t *self, uct_tag_t stag, uint64_t imm,
                           size_t length, void *inline_data, ucs_status_t status)
     {
         recv_ctx *user_ctx = ucs_container_of(self, recv_ctx, uct_ctx);
         user_ctx->comp     = true;
         user_ctx->status   = status;
-        EXPECT_EQ(user_ctx->tag, (stag & user_ctx->tmask));
-        EXPECT_EQ(user_ctx->mbuf->length(), length);
+        verify_completed(user_ctx, stag, length);
     }
 
     static void sw_rndv_completed(uct_tag_context_t *self, uct_tag_t stag,
@@ -388,8 +393,10 @@ public:
         recv_ctx *user_ctx = ucs_container_of(self, recv_ctx, uct_ctx);
         user_ctx->sw_rndv  = true;
         user_ctx->status   = status;
-        EXPECT_EQ(user_ctx->tag, (stag & user_ctx->tmask));
-        EXPECT_EQ(user_ctx->mbuf->length(), header_length);
+        if (flags & UCT_TAG_RECV_CB_INLINE_DATA) {
+            memcpy(user_ctx->mbuf->ptr(), header, header_length);
+        }
+        verify_completed(user_ctx, stag, header_length);
     }
 
     static ucs_status_t unexp_eager(void *arg, void *data, size_t length,

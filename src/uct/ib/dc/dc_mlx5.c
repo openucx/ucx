@@ -8,11 +8,11 @@
 #  include "config.h"
 #endif
 
+#include "dc_mlx5.inl"
 #include "dc_mlx5.h"
 #include "dc_mlx5_ep.h"
 
 #include <uct/api/uct.h>
-#include <uct/ib/rc/accel/rc_mlx5.inl>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
@@ -198,13 +198,6 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
     uct_base_iface_progress_enable_cb(&iface->super.super, iface->progress, flags);
 }
 
-static ucs_status_t uct_dc_mlx5_ep_set_failed(uct_ib_iface_t *ib_iface,
-                                              uct_ep_h ep, ucs_status_t status)
-{
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_dc_mlx5_ep_t), ep,
-                             &ib_iface->super.super, status);
-}
-
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 {
@@ -233,11 +226,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
                    iface, dci, qp_num, txqp, hw_ci);
 
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
-
-    uct_rc_txqp_available_set(txqp, uct_ib_mlx5_txwq_update_bb(txwq, hw_ci));
-    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
-
-    uct_rc_iface_update_reads(&iface->super.super);
+    uct_dc_mlx5_update_tx_res(iface, txwq, txqp, hw_ci);
 
     /**
      * Note: DCI is released after handling completion callbacks,
@@ -1091,6 +1080,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .ep_get_bcopy             = uct_dc_mlx5_ep_get_bcopy,
     .ep_get_zcopy             = uct_dc_mlx5_ep_get_zcopy,
     .ep_am_short              = uct_dc_mlx5_ep_am_short,
+    .ep_am_short_iov          = uct_base_ep_am_short_iov,
     .ep_am_bcopy              = uct_dc_mlx5_ep_am_bcopy,
     .ep_am_zcopy              = uct_dc_mlx5_ep_am_zcopy,
     .ep_atomic_cswap64        = uct_dc_mlx5_ep_atomic_cswap64,
@@ -1133,7 +1123,6 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .arm_cq                   = uct_rc_mlx5_iface_common_arm_cq,
     .event_cq                 = uct_rc_mlx5_iface_common_event_cq,
     .handle_failure           = uct_dc_mlx5_iface_handle_failure,
-    .set_ep_failed            = uct_dc_mlx5_ep_set_failed,
     },
     .init_rx                  = uct_dc_mlx5_init_rx,
     .cleanup_rx               = uct_dc_mlx5_cleanup_rx,
@@ -1335,7 +1324,10 @@ put_op:
     ucs_mpool_put(op);
 
 reset_dci:
-    uct_dc_mlx5_iface_reset_dci(iface, dci, ep_status);
+    uct_rc_txqp_available_set(txqp, iface->super.super.config.tx_qp_len);
+    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status,
+                                  txwq->sw_pi, 0);
+    uct_dc_mlx5_iface_reset_dci(iface, dci);
 }
 
 ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
@@ -1357,21 +1349,15 @@ ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
     return UCS_OK;
 }
 
-void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci,
-                                 ucs_status_t ep_status)
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 {
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-                                          uct_ib_mlx5_md_t);
-    uct_ib_mlx5_txwq_t *txwq;
-    uct_rc_txqp_t *txqp;
+    uct_ib_mlx5_md_t *md     = ucs_derived_of(iface->super.super.super.super.md,
+                                              uct_ib_mlx5_md_t);
+    uct_ib_mlx5_txwq_t *txwq = &iface->tx.dcis[dci].txwq;
     ucs_status_t status;
 
     ucs_debug("iface %p reset dci[%d]", iface, dci);
 
-    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, dci, txqp, txwq);
-    uct_rc_txqp_available_set(txqp, (int16_t)iface->super.super.config.tx_qp_len);
-    uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status,
-                                  txwq->sw_pi, 0);
     ucs_assert(txwq->super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
 
     /* Synchronize CQ index with the driver, since it would remove pending
@@ -1410,13 +1396,28 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
     ucs_status_t status;
     ucs_log_level_t log_lvl;
 
-    status  = ib_iface->ops->set_ep_failed(ib_iface, &ep->super.super,
-                                           ep_status);
-    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
-
-    if (ep_status != UCS_ERR_CANCELED) {
-        uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
-                                        txwq, log_lvl);
+    if (ep->flags & (UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED |
+                     UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL)) {
+        return;
     }
+
+    if (ep_status == UCS_ERR_CANCELED) {
+        return;
+    }
+
+    if (ep == iface->tx.fc_ep) {
+        /* Do not report errors on flow control endpoint */
+        ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
+                  ucs_status_string(ep_status));
+        return;
+    }
+
+    status  = uct_iface_handle_ep_err(&ib_iface->super.super,
+                                      &ep->super.super, ep_status);
+    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
+    uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
+                                    txwq, log_lvl);
+
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
 }
 

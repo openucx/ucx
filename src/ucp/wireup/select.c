@@ -225,6 +225,26 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
     return 0;
 }
 
+static int
+ucp_wireup_check_keepalive(const ucp_wireup_select_params_t *select_params,
+                           const uct_tl_resource_desc_t *resource,
+                           uint64_t flags, uint64_t required_flags,
+                           const char *title, const char **flag_descs,
+                           char *reason, size_t max)
+{
+    ucp_worker_h worker = select_params->ep->worker;
+    return /* if error handling and keepalive were requested, UCT iface has to
+            * support peer failure (i.e. UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)
+            * and either built-in keepalive (i.e. UCT_IFACE_FLAG_EP_KEEPALIVE)
+            * or EP checking (i.e. UCT_IFACE_FLAG_EP_CHECK) */
+           !ucp_worker_keepalive_is_enabled(worker) ||
+           !(select_params->ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ||
+           ucp_wireup_check_flags(resource, flags, UCT_IFACE_FLAG_EP_KEEPALIVE, title,
+                                  ucp_wireup_iface_flags, reason, max) ||
+           ucp_wireup_check_flags(resource, flags, UCT_IFACE_FLAG_EP_CHECK, title,
+                                  ucp_wireup_iface_flags, reason, max);
+}
+
 static void
 ucp_wireup_init_select_info(double score, unsigned addr_index,
                             ucp_rsc_index_t rsc_index,
@@ -361,6 +381,10 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
             !ucp_wireup_check_flags(resource, iface_attr->cap.flags,
                                     criteria->local_iface_flags, criteria->title,
                                     ucp_wireup_iface_flags, p, endp - p) ||
+            !ucp_wireup_check_keepalive(select_params, resource,
+                                        iface_attr->cap.flags,
+                                        criteria->local_iface_flags, criteria->title,
+                                        ucp_wireup_iface_flags, p, endp - p) ||
             !ucp_wireup_check_flags(resource, iface_attr->cap.event_flags,
                                     criteria->local_event_flags, criteria->title,
                                     ucp_wireup_event_flags, p, endp - p) ||
@@ -722,6 +746,8 @@ static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
 {
     if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
         criteria->local_iface_flags |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
+        /* transport selection procedure will check additionally for KA or EP check
+         * support */
     }
 }
 
@@ -745,7 +771,6 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
     criteria->calc_score              = ucp_wireup_aux_score_func;
     criteria->tl_rsc_flags            = UCP_TL_RSC_FLAG_AUX; /* Can use aux transports */
 
-    /* TODO: add evaluation for err handling/keepalive mode */
     ucp_wireup_fill_peer_err_criteria(criteria, ep_init_flags);
 }
 
@@ -1520,6 +1545,22 @@ static void ucp_wireup_init_keepalive_map(ucp_worker_h worker,
 
     dev_map_used = 0;
 
+    /* find all devices with built-in keepalive support */
+    for (lane = 0; lane < key->num_lanes; ++lane) {
+        rsc_index = key->lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        dev_index = context->tl_rscs[rsc_index].dev_index;
+        ucs_assert(dev_index < (sizeof(dev_map_used) * 8));
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_EP_KEEPALIVE) {
+            dev_map_used |= UCS_BIT(dev_index);
+        }
+    }
+
+    /* send ep_check on devices without built-in keepalive */
     for (lane = 0; lane < key->num_lanes; ++lane) {
         /* add lanes to ep_check map */
         rsc_index = key->lanes[lane].rsc_index;

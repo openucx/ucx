@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -23,7 +23,7 @@
     do { \
         cudaError_t cerr = _code; \
         if (cerr != cudaSuccess) { \
-            UCS_TEST_ABORT(# _code << " failed" << _details); \
+            UCS_TEST_ABORT(#_code << " failed with code " << cerr << _details); \
         } \
     } while (0)
 
@@ -63,6 +63,11 @@ bool mem_buffer::is_rocm_supported()
 #else
     return false;
 #endif
+}
+
+bool mem_buffer::is_gpu_supported()
+{
+    return is_cuda_supported() || is_rocm_supported();
 }
 
 const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()

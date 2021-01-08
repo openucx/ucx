@@ -16,8 +16,8 @@
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
                                  size_t max_len)
 {
-    struct sockaddr *local_addr  = rdma_get_local_addr(cep->id);
-    struct sockaddr *remote_addr = rdma_get_peer_addr(cep->id);
+    struct sockaddr *local_addr = cep->id ? rdma_get_local_addr(cep->id) : NULL;
+    struct sockaddr *remote_addr = cep->id ? rdma_get_peer_addr(cep->id) : NULL;
     char flags_buf[UCT_RDMACM_EP_FLAGS_STRING_LEN];
     char local_ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char remote_ip_port_str[UCS_SOCKADDR_STRING_LEN];
@@ -33,13 +33,13 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
         NULL
     };
 
-    if (ucs_sockaddr_is_known_af(local_addr)) {
+    if ((local_addr != NULL) && ucs_sockaddr_is_known_af(local_addr)) {
         ucs_sockaddr_str(local_addr, local_ip_port_str, UCS_SOCKADDR_STRING_LEN);
     } else {
         ucs_strncpy_safe(local_ip_port_str, "<invalid>", UCS_SOCKADDR_STRING_LEN);
     }
 
-    if (ucs_sockaddr_is_known_af(remote_addr)) {
+    if ((remote_addr != NULL) && ucs_sockaddr_is_known_af(remote_addr)) {
         ucs_sockaddr_str(remote_addr, remote_ip_port_str, UCS_SOCKADDR_STRING_LEN);
     } else {
         ucs_strncpy_safe(remote_ip_port_str, "<invalid>", UCS_SOCKADDR_STRING_LEN);
@@ -147,7 +147,7 @@ ep_failed:
     return cep->status;
 }
 
-static void uct_rdmacm_cm_ep_destroy_dummy_cq_qp(uct_rdmacm_cm_ep_t *cep)
+static void uct_rdmacm_cm_ep_destroy_dummy_qp(uct_rdmacm_cm_ep_t *cep)
 {
     int ret;
 
@@ -158,39 +158,20 @@ static void uct_rdmacm_cm_ep_destroy_dummy_cq_qp(uct_rdmacm_cm_ep_t *cep)
         }
     }
 
-    if (cep->cq != NULL) {
-        ret = ibv_destroy_cq(cep->cq);
-        if (ret != 0) {
-            ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
-        }
-    }
-
     cep->qp = NULL;
-    cep->cq = NULL;
 }
 
-static ucs_status_t uct_rdmacm_cm_create_dummy_cq_qp(struct rdma_cm_id *id,
-                                                     struct ibv_cq **cq_p,
-                                                     struct ibv_qp **qp_p)
+static ucs_status_t uct_rdmacm_cm_create_dummy_qp(struct rdma_cm_id *id,
+                                                  struct ibv_cq *cq,
+                                                  struct ibv_qp **qp_p)
 {
-    struct ibv_qp_init_attr qp_init_attr;
-    ucs_status_t status;
-    struct ibv_cq *cq;
+    struct ibv_qp_init_attr qp_init_attr = {0};
     struct ibv_qp *qp;
 
-    /* Create a dummy completion queue */
-    cq = ibv_create_cq(id->verbs, 1, NULL, NULL, 0);
-    if (cq == NULL) {
-        ucs_error("ibv_create_cq() failed: %m");
-        status =  UCS_ERR_IO_ERROR;
-        goto err;
-    }
-
     /* Create a dummy UD qp */
-    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
-    qp_init_attr.send_cq = cq;
-    qp_init_attr.recv_cq = cq;
-    qp_init_attr.qp_type = IBV_QPT_UD;
+    qp_init_attr.send_cq          = cq;
+    qp_init_attr.recv_cq          = cq;
+    qp_init_attr.qp_type          = IBV_QPT_UD;
     qp_init_attr.cap.max_send_wr  = 2;
     qp_init_attr.cap.max_recv_wr  = 2;
     qp_init_attr.cap.max_send_sge = 1;
@@ -199,41 +180,36 @@ static ucs_status_t uct_rdmacm_cm_create_dummy_cq_qp(struct rdma_cm_id *id,
     qp = ibv_create_qp(id->pd, &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create a dummy ud qp. %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err_destroy_cq;
+        return UCS_ERR_IO_ERROR;
     }
 
     ucs_debug("created ud QP %p with qp_num: 0x%x and cq %p on rdmacm_id %p",
               qp, qp->qp_num, cq, id);
 
-    *cq_p = cq;
     *qp_p = qp;
-
     return UCS_OK;
-
-err_destroy_cq:
-    ibv_destroy_cq(cq);
-err:
-    return status;
 }
 
 ucs_status_t
 uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
                             uct_rdmacm_cm_ep_t *cep)
 {
-    ucs_status_t status;
-    struct ibv_qp *qp;
     struct ibv_cq *cq;
+    ucs_status_t status;
 
-    /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
-    status = uct_rdmacm_cm_create_dummy_cq_qp(cep->id, &cq, &qp);
+    status = uct_rdmacm_cm_get_cq(uct_rdmacm_cm_ep_get_cm(cep), cep->id->verbs,
+                                  cep->id->pd->handle, &cq);
     if (status != UCS_OK) {
         return status;
     }
 
-    cep->cq             = cq;
-    cep->qp             = qp;
-    conn_param->qp_num  = qp->qp_num;
+    /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
+    status = uct_rdmacm_cm_create_dummy_qp(cep->id, cq, &cep->qp);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    conn_param->qp_num = cep->qp->qp_num;
     return UCS_OK;
 }
 
@@ -276,8 +252,8 @@ err:
 static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
                                                  const uct_ep_params_t *params)
 {
-    uct_rdmacm_cm_t *rdmacm_cm = uct_rdmacm_cm_ep_get_cm(cep);
     uct_cm_base_ep_t *cm_ep    = &cep->super;
+    uct_rdmacm_cm_t *rdmacm_cm = uct_rdmacm_cm_ep_get_cm(cep);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     ucs_status_t status;
@@ -308,8 +284,10 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
      * thread. Therefore, all ep fields have to be initialized before this
      * function is called. */
     ucs_trace("%s: rdma_resolve_addr on cm_id %p",
-              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN), cep->id);
-    if (rdma_resolve_addr(cep->id, NULL, (struct sockaddr*)params->sockaddr->addr,
+              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+              cep->id);
+    if (rdma_resolve_addr(cep->id, rdmacm_cm->config.src_addr,
+                          (struct sockaddr*)params->sockaddr->addr,
                           1000/* TODO */)) {
         ucs_error("rdma_resolve_addr() to dst addr %s failed: %m",
                   ucs_sockaddr_str((struct sockaddr*)params->sockaddr->addr,
@@ -336,6 +314,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     ucs_status_t           status;
     char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
 
+    cep->id     = event->id;
     cep->flags |= UCT_RDMACM_CM_EP_ON_SERVER;
 
     if (event->listen_id->channel != cm->ev_ch) {
@@ -362,7 +341,6 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
         goto err;
     }
 
-    cep->id          = event->id;
     cep->id->context = cep;
 
     memset(&conn_param, 0, sizeof(conn_param));
@@ -386,7 +364,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     if (rdma_accept(event->id, &conn_param)) {
         uct_cm_ep_peer_error(&cep->super, "rdma_accept(on id=%p) failed: %m",
                              event->id);
-        uct_rdmacm_cm_ep_destroy_dummy_cq_qp(cep);
+        uct_rdmacm_cm_ep_destroy_dummy_qp(cep);
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
@@ -485,10 +463,10 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_base_ep_t, params);
 
-    self->cq     = NULL;
     self->qp     = NULL;
     self->flags  = 0;
     self->status = UCS_OK;
+    self->id     = NULL;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         status = uct_rdamcm_cm_ep_client_init(self, params);
@@ -522,7 +500,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_ep_t)
 
     UCS_ASYNC_BLOCK(worker_priv->async);
 
-    uct_rdmacm_cm_ep_destroy_dummy_cq_qp(self);
+    uct_rdmacm_cm_ep_destroy_dummy_qp(self);
 
     /* rdma_destroy_id() cleans all events not yet reported on progress thread,
      * so no events would be reported to the user after destroying the id */

@@ -117,6 +117,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "establishing client/server connection. ",
    ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"SELECT_DISTANCE_MD", "cuda_cpy",
+   "MD whose distance is queried when evaluating transport selection score",
+   ucs_offsetof(ucp_config_t, selection_cmp), UCS_CONFIG_TYPE_STRING},
+
   {"WARN_INVALID_CONFIG", "y",
    "Issue a warning in case of invalid device and/or transport configuration.",
    ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
@@ -307,13 +311,14 @@ static ucs_config_field_t ucp_config_table[] = {
    "Experimental: enable new protocol selection logic",
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
 
-  {"KEEPALIVE_TIMEOUT", "inf",
-   "Time period between keepalive rounds (\"inf\" - disabled).",
-   ucs_offsetof(ucp_config_t, ctx.keepalive_timeout), UCS_CONFIG_TYPE_TIME_UNITS},
+  /* TODO: set for keepalive more reasonable values */
+  {"KEEPALIVE_INTERVAL", "60s",
+   "Time interval between keepalive rounds (0 - disabled).",
+   ucs_offsetof(ucp_config_t, ctx.keepalive_interval), UCS_CONFIG_TYPE_TIME},
 
-  {"KEEPALIVE_NUM_EPS", "0",
+  {"KEEPALIVE_NUM_EPS", "128",
    "Maximal number of endpoints to check on every keepalive round\n"
-   "(0 - disabled, inf - check all endpoints on every round)",
+   "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_config_t, ctx.keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
   {"PROTO_INDIRECT_ID", "auto",
@@ -706,7 +711,8 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
 
     /* add sockaddr dummy resource, if md supports it */
     if (md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-        sa_rsc.dev_type = UCT_DEVICE_TYPE_NET;
+        sa_rsc.dev_type   = UCT_DEVICE_TYPE_NET;
+        sa_rsc.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
         ucs_snprintf_zero(sa_rsc.tl_name, UCT_TL_NAME_MAX, "%s", md->rsc.md_name);
         ucs_snprintf_zero(sa_rsc.dev_name, UCT_DEVICE_NAME_MAX, "sockaddr");
         ucp_add_tl_resource_if_enabled(context, md, md_index, config, &sa_rsc,
@@ -1450,11 +1456,19 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
      * routines */
     UCP_THREAD_LOCK_INIT(&context->mt_lock);
 
+    /* save comparison MD for iface_attr adjustment */
+    context->config.selection_cmp = ucs_strdup(config->selection_cmp,
+                                               "selection cmp");
+    if (context->config.selection_cmp == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
     /* save environment prefix to later notify user for unused variables */
     context->config.env_prefix = ucs_strdup(config->env_prefix, "ucp config");
     if (context->config.env_prefix == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err;
+        goto err_free_selection_cmp;
     }
 
     /* Get allocation alignment from configuration, make sure it's valid */
@@ -1529,12 +1543,21 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
+    if (context->config.ext.keepalive_num_eps == 0) {
+        ucs_error("UCX_KEEPALIVE_NUM_EPS value must be greater than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
+    }
+
+    context->config.keepalive_interval = ucs_time_from_sec(context->config.ext.keepalive_interval);
     return UCS_OK;
 
 err_free_alloc_methods:
     ucs_free(context->config.alloc_methods);
 err_free_env_prefix:
     ucs_free(context->config.env_prefix);
+err_free_selection_cmp:
+    ucs_free(context->config.selection_cmp);
 err:
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
     return status;
@@ -1544,6 +1567,7 @@ static void ucp_free_config(ucp_context_h context)
 {
     ucs_free(context->config.alloc_methods);
     ucs_free(context->config.env_prefix);
+    ucs_free(context->config.selection_cmp);
 }
 
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,

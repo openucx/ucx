@@ -337,7 +337,15 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
     }
 
     ucs_trace("ep %p: remote connected", ep);
-    ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
+    if (!(ep->flags & UCP_EP_FLAG_CLOSED)) {
+        /* set REMOTE_CONNECTED flag if an EP is not closed, otherwise -
+         * just make UCT EPs remote connected to remove WIREUP_EP for them
+         * and complete flush(LOCAL) operation in UCP EP close procedure
+         * (don't set REMOTE_CONNECTED flag to avoid possible wrong behavior
+         * in ucp_ep_close_flushed_callback() when a peer was already
+         * disconnected, but we set REMOTE_CONNECTED flag again) */
+        ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
+    }
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (ucp_ep_is_lane_p2p(ep, lane)) {
@@ -1053,7 +1061,6 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep,
                                   ucp_lane_index_t *connect_lane_bitmap,
                                   ucs_queue_head_t *replay_pending_queue)
 {
-    ucp_worker_h worker                            = ep->worker;
     uct_ep_h new_uct_eps[UCP_MAX_LANES]            = { NULL };
     ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES] = { UCP_NULL_LANE };
     ucp_ep_config_key_t *old_key;
@@ -1096,15 +1103,17 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep,
         cm_wireup_ep             = ucp_ep_get_cm_wireup_ep(ep);
         new_key->wireup_msg_lane = new_key->cm_lane;
         reuse_lane               = old_key->wireup_msg_lane;
-        ucp_wireup_ep_set_aux(cm_wireup_ep, ep->uct_eps[reuse_lane],
+        ucp_wireup_ep_set_aux(cm_wireup_ep,
+                              ucp_wireup_ep_extract_next_ep(ep->uct_eps[reuse_lane]),
                               old_key->lanes[reuse_lane].rsc_index);
         ucp_wireup_ep_pending_queue_purge(ep->uct_eps[reuse_lane],
                                           ucp_wireup_pending_purge_cb,
                                           replay_pending_queue);
 
-        /* reset the UCT EP from the previous WIREUP lane to not
-         * destroy it, since it's not needed anymore in the new
-         * configuration, but will be used for WIREUP MSG */
+        /* reset the UCT EP from the previous WIREUP lane and destroy its WIREUP EP,
+         * since it's not needed anymore in the new configuration, UCT EP will be
+         * used for sending WIREUP MSGs in the new configuration */
+        uct_ep_destroy(ep->uct_eps[reuse_lane]);
         ep->uct_eps[reuse_lane]  = NULL;
     }
 
@@ -1116,7 +1125,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep,
         if (reuse_lane == UCP_NULL_RESOURCE) {
             if (ep->uct_eps[lane] != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
-                ucp_worker_discard_uct_ep(worker, ep->uct_eps[lane],
+                ucp_worker_discard_uct_ep(ep, ep->uct_eps[lane],
                                           UCT_FLUSH_FLAG_LOCAL,
                                           ucp_wireup_pending_purge_cb,
                                           replay_pending_queue);

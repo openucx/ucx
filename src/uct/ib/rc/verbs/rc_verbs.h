@@ -74,7 +74,7 @@ typedef struct uct_rc_verbs_iface {
     struct ibv_srq              *srq;
     struct ibv_send_wr          inl_am_wr;
     struct ibv_send_wr          inl_rwrite_wr;
-    struct ibv_sge              inl_sge[2];
+    struct ibv_sge              inl_sge[UCT_IB_MAX_IOV];
     uct_rc_am_short_hdr_t       am_inl_hdr;
     ucs_mpool_t                 short_desc_mp;
     uct_rc_iface_send_desc_t    *fc_desc; /* used when max_inline is zero */
@@ -122,6 +122,9 @@ ucs_status_t uct_rc_verbs_ep_get_zcopy(uct_ep_h tl_ep,
 ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                       const void *buffer, unsigned length);
 
+ucs_status_t uct_rc_verbs_ep_am_short_iov(uct_ep_h ep, uint8_t id,
+                                          const uct_iov_t *iov, size_t iovcnt);
+
 ssize_t uct_rc_verbs_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                  uct_pack_callback_t pack_cb, void *arg,
                                  unsigned flags);
@@ -152,9 +155,6 @@ void uct_rc_verbs_ep_post_check(uct_ep_h tl_ep);
 
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_pending_req_t *req);
-
-ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
-                                            ucs_status_t status);
 
 ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 

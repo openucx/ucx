@@ -400,6 +400,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_put_bcopy             = uct_sm_ep_put_bcopy,
     .ep_get_bcopy             = uct_sm_ep_get_bcopy,
     .ep_am_short              = uct_mm_ep_am_short,
+    .ep_am_short_iov          = uct_base_ep_am_short_iov,
     .ep_am_bcopy              = uct_mm_ep_am_bcopy,
     .ep_atomic_cswap64        = uct_sm_ep_atomic_cswap64,
     .ep_atomic64_post         = uct_sm_ep_atomic64_post,

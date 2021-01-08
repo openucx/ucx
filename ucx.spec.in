@@ -13,6 +13,7 @@
 %bcond_with    rocm
 %bcond_with    ugni
 %bcond_with    xpmem
+%bcond_with    vfs
 
 Name: ucx
 Version: @VERSION@
@@ -64,6 +65,9 @@ BuildRequires: hsa-rocr-dev
 %if %{with xpmem}
 BuildRequires: xpmem-devel
 %endif
+%if %{with vfs}
+BuildRequires: fuse3-devel
+%endif
 
 %description
 UCX is an optimized communication framework for high-performance distributed
@@ -110,6 +114,7 @@ Provides header files and examples for developing with UCX.
            %_with_arg rdmacm rdmacm \
            %_with_arg rocm rocm \
            %_with_arg xpmem xpmem \
+           %_with_arg vfs fuse3 \
            %_with_arg ugni ugni \
            %{?configure_options}
 make %{?_smp_mflags} V=1
@@ -124,7 +129,9 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 
 %files
 %{_libdir}/lib*.so.*
-%{_bindir}/uc*
+%{_bindir}/ucx_info
+%{_bindir}/ucx_perftest
+%{_bindir}/ucx_read_profile
 @HAVE_GLIBCXX_NOTHROW_TRUE@%{_bindir}/io_demo
 %{_datadir}/ucx
 %exclude %{_datadir}/ucx/examples
@@ -300,8 +307,26 @@ process to map the memory of another process into its virtual address space.
 %{_libdir}/ucx/libuct_xpmem.so.*
 %endif
 
+%if %{with vfs}
+%package vfs
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: UCX Virtual Filesystem support.
+Group: System Environment/Libraries
+
+%description vfs
+Provides a virtual filesystem over FUSE which allows real-time monitoring of UCX
+library internals, protocol objects, transports status, and more.
+
+%files vfs
+%{_libdir}/ucx/libucs_fuse.so.*
+%{_bindir}/ucx_vfs
+%endif
 
 %changelog
+* Wed Dec 16 2020 Yossi Itigin <yosefe@mellanox.com> 1.11.0-1
+- Add VFS sub-package
+* Wed Dec 16 2020 Yossi Itigin <yosefe@mellanox.com> 1.11.0-1
+- Bump version to 1.11.0
 * Wed Nov 11 2020 Yossi Itigin <yosefe@mellanox.com> 1.10.0-1
 - Make the RPM relocatable
 * Tue Jul 07 2020 Yossi Itigin <yosefe@mellanox.com> 1.10.0-1
