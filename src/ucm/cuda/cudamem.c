@@ -216,13 +216,13 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, int *used_reloc,
                        const char *name)
 {
     const char UCS_V_UNUSED *hook_mode;
+    unsigned num_bistro, num_reloc;
     ucm_cuda_func_t *func;
     ucs_status_t status;
     void *func_ptr;
 
-    hook_mode   = (ucm_cuda_hook_mode() == UCM_MMAP_HOOK_BISTRO) ?
-                  "bistro" : "reloc";
-    *used_reloc = 0;
+    num_bistro  = 0;
+    num_reloc   = 0;
     for (func = funcs; func->patch.symbol != NULL; ++func) {
         func_ptr = ucm_reloc_get_orig(func->patch.symbol, func->patch.value);
         if (func_ptr == NULL) {
@@ -238,12 +238,12 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, int *used_reloc,
             if (status == UCS_OK) {
                 ucm_trace("installed bistro hook for '%s': %s",
                           func->patch.symbol, ucs_status_string(status));
+                ++num_bistro;
                 continue;
             }
 
             ucm_debug("failed to install bistro hook for '%s', trying reloc",
                       func->patch.symbol);
-            hook_mode = "mixed";
         }
 
         status = ucm_reloc_modify(&func->patch);
@@ -253,11 +253,13 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, int *used_reloc,
             return status;
         }
 
-        *used_reloc = 1;
+        ++num_reloc;
         ucm_trace("installed reloc hook on '%s'", func->patch.symbol);
     }
 
-    ucm_debug("installed cuda memory %s hooks on %s API", hook_mode, name);
+    *used_reloc = num_reloc > 0;
+    ucm_info("cuda memory hooks on %s API: installed %u bistro and %u reloc",
+             name, num_bistro, num_reloc);
     return UCS_OK;
 }
 
@@ -273,7 +275,7 @@ static ucs_status_t ucm_cudamem_install(int events)
     }
 
     if (ucm_cuda_hook_mode() == UCM_MMAP_HOOK_NONE) {
-        ucm_debug("cuda memory hooks are disabled by configuration");
+        ucm_info("cuda memory hooks are disabled by configuration");
         status = UCS_ERR_UNSUPPORTED;
         goto out;
     }
@@ -323,7 +325,7 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
         return 0;
     }
 
-    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
+    ucm_trace("dispatching initial memtype allocation for %p..%p %s", addr,
               UCS_PTR_BYTE_OFFSET(addr, length), path);
 
     event.mem_type.address  = addr;

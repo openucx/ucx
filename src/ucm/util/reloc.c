@@ -220,7 +220,7 @@ ucm_reloc_dl_apply_patch(const ucm_dl_info_t *dl_info, const char *dl_basename,
 
     /* modify the relocation to the new value */
     *entry = patch->value;
-    ucm_debug("symbol '%s' in %s at [%p] modified from %p to %p",
+    ucm_trace("symbol '%s' in %s at [%p] modified from %p to %p",
               patch->symbol, dl_basename, entry, prev_value, patch->value);
 
     /* store default entry to prev_value to guarantee valid pointers
@@ -232,7 +232,7 @@ ucm_reloc_dl_apply_patch(const ucm_dl_info_t *dl_info, const char *dl_basename,
         !((prev_value >= (void*)dl_info->start) &&
           (prev_value <  (void*)dl_info->end))) {
         patch->prev_value = prev_value;
-        ucm_debug("'%s' prev_value is %p", patch->symbol, prev_value);
+        ucm_trace("'%s' prev_value is %p", patch->symbol, prev_value);
     }
 
     return UCS_OK;
@@ -381,7 +381,7 @@ static void ucm_reloc_dl_info_cleanup(ElfW(Addr) dlpi_addr, const char *dl_name)
 
     khiter = kh_get(ucm_dl_info_hash, &ucm_dl_info_hash, dlpi_addr);
     if (khiter == kh_end(&ucm_dl_info_hash)) {
-        ucm_debug("no dl_info entry for address 0x%lx", dlpi_addr);
+        ucm_trace("no dl_info entry for address 0x%lx", dlpi_addr);
         return;
     }
 

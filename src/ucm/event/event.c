@@ -508,7 +508,7 @@ static ucs_status_t ucm_event_install(int events)
     /* TODO lock */
     status = ucm_mmap_install(events, 0);
     if (status != UCS_OK) {
-        ucm_debug("failed to install mmap events");
+        ucm_diag("failed to install mmap events");
         goto out_unlock;
     }
 
