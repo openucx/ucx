@@ -274,11 +274,14 @@ ucm_mmap_test_events_nolock(int events, int exclusive, const char *event_type)
     data.out_events   = events;
     data.tid          = ucm_get_tid();
 
+    ucm_debug("testing mmap %s events 0x%x", event_type, events);
+
     ucm_event_handler_add(&handler);
     ucm_fire_mmap_events_internal(events, &data, exclusive);
     ucm_event_handler_remove(&handler);
 
-    ucm_debug("mmap test: got 0x%x out of 0x%x", data.out_events, events);
+    ucm_debug("mmap %s events test: got 0x%x out of 0x%x", event_type,
+              data.out_events, events);
 
     /* Return success if we caught all wanted events */
     if (!ucs_test_all_flags(data.out_events, events)) {
@@ -322,14 +325,14 @@ ucs_status_t ucm_mmap_test_events(int events, const char *event_type)
 
 ucs_status_t ucm_mmap_test_installed_events(int events)
 {
-    int native_events = ucm_mmap_events_to_native_events(events) &
-                        ucm_mmap_installed_events;
-
     /*
-     * return UCS_OK iff all installed events are actually working
-     * we don't check the status of events which were not successfully installed
+     * Return UCS_OK iff all installed events are actually working.
+     * - We should not expand 'events' to native events, and test only the exact
+     *   set of events the user asked to test.
+     * - We don't check the status of events which were not reported as
+     *   successfully installed.
      */
-    return ucm_mmap_test_events(native_events, "internal");
+    return ucm_mmap_test_events(events & ucm_mmap_installed_events, "internal");
 }
 
 /* Called with lock held */
@@ -399,7 +402,7 @@ ucs_status_t ucm_mmap_install(int events, int exclusive)
          * working, and if not - reinstall them.
          */
         status = ucm_mmap_test_events_nolock(native_events, exclusive,
-                                             "previous mmap");
+                                             "existing");
         if (status == UCS_OK) {
             goto out_unlock;
         }
@@ -411,7 +414,7 @@ ucs_status_t ucm_mmap_install(int events, int exclusive)
         goto out_unlock;
     }
 
-    status = ucm_mmap_test_events_nolock(native_events, exclusive, "mmap");
+    status = ucm_mmap_test_events_nolock(native_events, exclusive, "installed");
     if (status != UCS_OK) {
         ucm_debug("failed to install mmap events");
         goto out_unlock;
