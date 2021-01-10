@@ -49,6 +49,11 @@ ucs_async_context_t *uct_rdmacm_cm_ep_get_async(uct_rdmacm_cm_ep_t *cep)
     return uct_rdmacm_cm_get_async(uct_rdmacm_cm_ep_get_cm(cep));
 }
 
+static inline int uct_rdmacm_cm_get_timeout(uct_rdmacm_cm_t *cm)
+{
+    return UCS_MSEC_PER_SEC * cm->config.timeout;
+}
+
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t);
 
