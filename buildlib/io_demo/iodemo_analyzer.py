@@ -98,12 +98,13 @@ def process_server(files, is_allow_list):
                     raise Exception("Contains error: {}\nLog {}:\nLine {}".format(line, log, line))
 
 
-def process_client(files, threshold, seek_file, is_allow_list):
+def process_client(files, threshold, seek_file, is_allow_list, duration):
     seek_data = process_seek(seek_file)
     for log in files:
         with open(log) as f:
             curr_ts = 0
             curr_traffic_ts = 0
+            start_traffic_ts = 0
             cur_traffic_date = ""
             prev_traffic_ts = seek_data.get(log, {}).get('timestamp', 0)
             zero_rx_ts = seek_data.get(log, {}).get('timestamp_rx', 0)
@@ -127,6 +128,8 @@ def process_client(files, threshold, seek_file, is_allow_list):
                     curr_ts = datetime.datetime.fromtimestamp(date)
                     if not prev_traffic_ts:
                         prev_traffic_ts = curr_ts
+                    if not start_traffic_ts:
+                        start_traffic_ts = curr_ts
 
                 i += 1
                 read_match = re_traffic_read.match(line)
@@ -196,6 +199,13 @@ def process_client(files, threshold, seek_file, is_allow_list):
 
                 if curr_ts and (curr_ts - prev_traffic_ts).total_seconds() > threshold * 60:
                     raise Exception("No traffic\n{}\nLog {}".format(line, log))
+            if duration and curr_traffic_ts and start_traffic_ts:
+                traffic_duration = curr_traffic_ts - start_traffic_ts
+                delta = duration - traffic_duration.total_seconds()
+                if delta > threshold * 60:
+                    raise Exception("No traffic for more than {} minutes at the end of the test".format(
+                        delta/60.0))
+
 
 
 if __name__ == '__main__':
@@ -205,9 +215,11 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--directory', type=str,
                         help='Directory name with Logs')
     parser.add_argument('-t', '--no_traffic_in_sec', type=int, default=1,
-                        help='No traffic Threshold in min ')
+                        help='No traffic Threshold in min')
     parser.add_argument('-s', '--seek', type=str, default="",
                         help='path to seek file')
+    parser.add_argument('--duration', type=int, default=0,
+                        help='set io_demo duration time in sec')
     parser.add_argument('-r', '--role', type=str, default="client", choices=['client', 'server'],
                         help='choice role if you set filename')
     parser.add_argument('--no-allow-list', dest='allow_list', action='store_false')
@@ -226,7 +238,7 @@ if __name__ == '__main__':
         clients, servers = get_logs(args.directory)
 
     try:
-        process_client(clients, args.no_traffic_in_sec, args.seek, args.allow_list)
+        process_client(clients, args.no_traffic_in_sec, args.seek, args.allow_list, args.duration)
         process_server(servers, args.allow_list)
     except Exception as e:
         print("Error iodemo analyzer: {}\n".format(e))

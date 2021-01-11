@@ -2,18 +2,27 @@ parameters:
   - name: demands
     type: string
     default: "ucx_iodemo -equals yes"
-  - name: test_duration
+  - name: initial_delay
     type: number
-    default: 2
+    default: 20
+  - name: cycles
+    type: number
+    default: 100
+  - name: downtime
+    type: number
+    default: 5
+  - name: uptime
+    type: number
+    default: 40
   - name: tests
     type: object
     default:
-      base:
-        # Disable corrupter for master branch
-        initial_delay: 2000
-        cycles: 100
-        downtime: 5
-        uptime: 40
+      tag:
+        args: ""
+        duration: 480
+      active:
+        args: "-q -A"
+        duration: 480
 
 jobs:
   - job: io_build
@@ -66,15 +75,18 @@ jobs:
         ${{ each test in parameters.tests }}:
           ${{ test.Key }}:
             test_name: ${{ test.Key }}
-            initial_delay: ${{ test.Value.initial_delay }}
-            cycles: ${{ test.Value.cycles }}
-            downtime: ${{ test.Value.downtime }}
-            uptime: ${{ test.Value.uptime }}
+            test_args: ${{ test.Value.args }}
+            test_time: ${{ test.Value.duration }}
       maxParallel: 1
 
     variables:
       workspace: drop_$(Build.BuildId)
       io_demo_exe: drop_$(Build.BuildId)/install/bin/io_demo
+      initial_delay: ${{ parameters.initial_delay }}
+      cycles: ${{ parameters.cycles }}
+      downtime: ${{ parameters.downtime }}
+      uptime: ${{ parameters.uptime }}
+
 
     displayName: "io_demo: "
     steps:
@@ -87,8 +99,6 @@ jobs:
       - bash: chmod u+rwx $(workspace) -R
       - template: az-stage-io-demo.yaml
         parameters:
-          name: tag
-      - template: az-stage-io-demo.yaml
-        parameters:
-          name: active
-          iodemo_args: -q -A
+          name: $(test_name)
+          iodemo_args: $(test_args)
+          duration: $(test_time)
