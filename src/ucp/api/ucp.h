@@ -3378,9 +3378,6 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
  * message is in the receive buffer and ready for application access.  If the
  * receive operation cannot be stated the routine returns an error.
  *
- * @note This routine cannot return UCS_OK. It always returns a request
- *       handle or an error.
- *
  * @param [in]  worker      UCP worker that is used for the receive operation.
  * @param [in]  buffer      Pointer to the buffer to receive the data to.
  * @param [in]  count       Number of elements to receive
