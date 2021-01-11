@@ -1720,6 +1720,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucs_status_t status;
     int is_pipeline_rndv;
 
+    ucs_assertv(rndv_rtr_hdr->sreq_id == sreq->send.msg_proto.sreq_id,
+                "received local sreq_id 0x%"PRIx64" is not equal to expected sreq_id"
+                " 0x%"PRIx64, rndv_rtr_hdr->sreq_id, sreq->send.msg_proto.sreq_id);
     ucp_trace_req(sreq, "received rtr address 0x%"PRIx64" remote rreq_id"
                   "0x%"PRIx64, rndv_rtr_hdr->address, rndv_rtr_hdr->rreq_id);
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_rtr_recv", 0);
@@ -1814,9 +1817,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     }
 
 out_send:
-    /* if it not a PUT pipeline protocol, delete the send request ID */
-    ucp_worker_del_request_id(worker, sreq,
-                              sreq->send.msg_proto.sreq_id);
+    /* if it is not a PUT pipeline protocol, delete the send request ID */
+    ucp_worker_del_request_id(worker, sreq, rndv_rtr_hdr->sreq_id);
     ucp_request_send(sreq, 0);
     return UCS_OK;
 }
