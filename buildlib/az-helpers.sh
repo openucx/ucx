@@ -76,3 +76,33 @@ function add_timestamp() {
         echo "$(date -u +"%Y-%m-%dT%T.%NZ") $line"
     done
 }
+
+function az_init_modules() {
+    . /etc/profile.d/modules.sh
+    export MODULEPATH="/hpc/local/etc/modulefiles:$MODULEPATH"
+}
+
+#
+# Test if an environment module exists and load it if yes.
+# Otherwise, return error code.
+#
+function az_module_load() {
+    module=$1
+
+    if module avail -t 2>&1 | grep -q "^$module\$"
+    then
+        module load $module
+        return 0
+    else
+        azure_log_warning "Module $module cannot be load"
+        return 1
+    fi
+}
+
+#
+# Safe unload for env modules (even if it doesn't exist)
+#
+function az_module_unload() {
+    module=$1
+    module unload "${module}" || true
+}

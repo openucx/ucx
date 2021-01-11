@@ -14,6 +14,9 @@ resources:
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
       options: --privileged
+    - container: coverity_rh7
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
 
 stages:
   - stage: Codestyle
@@ -191,6 +194,14 @@ stages:
                 echo "##vso[task.complete result=Failed;]"
               fi
             displayName: Configure source and build RPM
+
+  - stage: Coverity
+    dependsOn: [Codestyle]
+    jobs:
+      - template: coverity.yml
+        parameters:
+          demands: ucx_instinct -equals yes
+          container: coverity_rh7
 
   - stage: Tests
     dependsOn: [Codestyle]

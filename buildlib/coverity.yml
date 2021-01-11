@@ -1,0 +1,37 @@
+parameters:
+  demands: []
+  container: rhel76
+  modes: ["release", "devel"]
+
+jobs:
+  - ${{each mode in parameters.modes }}:
+    - job: coverity_${{ mode }}
+      pool:
+        name: MLNX
+        demands: ${{ parameters.demands }}
+      displayName: coverity ${{ mode }} on ${{ parameters.container }}
+      container: ${{ parameters.container }}
+      timeoutInMinutes: 30
+      steps:
+        - checkout: self
+          clean: true
+        - bash: |
+            ./buildlib/tools/coverity.sh ${{ mode }}
+            res=$?
+            reportExists=False
+            cov_error_folder=$(System.DefaultWorkingDirectory)/cov_build_${{ mode }}_1/output/errors
+            echo "##vso[task.setvariable variable=cov_error_folder]$cov_error_folder"
+            test -f $cov_error_folder/index.html && reportExists=True
+            echo "##vso[task.setvariable variable=reportExists]$reportExists"
+            if [[ $res -eq 0 ]] ; then
+              echo "##vso[task.complete result=Succeeded;]Done"
+            else
+              echo "##vso[task.complete result=Failed;]Coverity have errors"
+            fi
+
+          displayName: ${{ mode }}
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: variables['cov_error_folder']
+            artifactName: coverity_${{ mode }}
+          condition: eq(variables['reportExists'], True)
