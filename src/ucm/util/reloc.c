@@ -29,6 +29,14 @@
 #include <link.h>
 #include <limits.h>
 
+/* Ensure this macro is defined (from <link.h>) - otherwise, cppcheck might
+   fail with an "unknown macro" warning */
+#ifndef ElfW
+#define ElfW(type)	_ElfW (Elf, __ELF_NATIVE_CLASS, type)
+#define _ElfW(e,w,t)	_ElfW_1 (e, w, _##t)
+#define _ElfW_1(e,w,t)	e##w##t
+#endif
+
 typedef void * (*ucm_reloc_dlopen_func_t)(const char *, int);
 typedef int    (*ucm_reloc_dlclose_func_t)(void *);
 
