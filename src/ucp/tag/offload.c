@@ -120,7 +120,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
 
     if (ucs_unlikely(inline_data != NULL)) {
         status = ucp_request_recv_data_unpack(req, inline_data, length, 0, 1);
-        ucs_mpool_put_inline(req->recv.tag.rdesc);
+        ucp_tag_offload_release_buf(req);
     } else if (req->recv.tag.rdesc != NULL) {
         status = ucp_request_recv_data_unpack(req, req->recv.tag.rdesc + 1,
                                               length, 0, 1);
