@@ -353,7 +353,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
     int active;
     cudaStream_t *stream;
+#if UCS_ENABLE_ASSERT
     ucs_queue_head_t *event_q;
+#endif
 
     UCT_CUDADRV_CTX_ACTIVE(active);
 
