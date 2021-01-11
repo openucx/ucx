@@ -81,7 +81,9 @@ static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_SHORT)]  = "tag eager short",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)]  = "tag eager bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)]  = "tag eager zcopy",
-    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy"
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_CHECK)]         = "ep check",
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_KEEPALIVE)]     = "ep keepalive"
 };
 
 static const char *perf_atomic_op[] = {
