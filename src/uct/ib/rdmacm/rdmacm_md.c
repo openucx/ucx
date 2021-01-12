@@ -24,7 +24,7 @@ static ucs_config_field_t uct_rdmacm_md_config_table[] = {
 };
 
 static ucs_config_field_t uct_rdmacm_cm_config_table[] = {
-    {"", "", NULL,
+    {"CM_", "", NULL,
      ucs_offsetof(uct_rdmacm_cm_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_cm_config_table)},
 
     {"SOURCE_ADDRESS", "",

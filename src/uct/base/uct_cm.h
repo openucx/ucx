@@ -46,6 +46,7 @@ UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
  */
 struct uct_cm_config {
     int          failure;   /* Level of failure reports */
+    int          reuse_addr;
 };
 
 /**
@@ -74,6 +75,7 @@ struct uct_cm {
 
     struct {
         ucs_log_level_t  failure_level;
+        int              reuse_addr;
     } config;
 };
 
