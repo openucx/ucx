@@ -32,6 +32,8 @@
 #include <sys/epoll.h>
 
 
+#define UCP_WORKER_KEEPALIVE_ITER_SKIP 32
+
 #define UCP_WORKER_HEADROOM_SIZE \
     (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
 
@@ -2003,6 +2005,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->keepalive.last_round = 0;
     worker->keepalive.lane_map   = 0;
     worker->keepalive.ep_count   = 0;
+    worker->keepalive.iter_count = 0;
     ucp_worker_keepalive_reset(worker);
     ucs_queue_head_init(&worker->rkey_ptr_reqs);
     ucs_list_head_init(&worker->arm_ifaces);
@@ -2688,12 +2691,17 @@ ucp_worker_keepalive_next_ep(ucp_worker_h worker)
 static unsigned ucp_worker_keepalive_progress(void *arg)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
-    ucs_time_t now      = ucs_get_time();
+    ucs_time_t now;
     ucs_list_link_t *iter_begin;
     ucp_ep_h ep;
 
     ucs_assert(worker->context->config.ext.keepalive_num_eps != 0);
 
+    if ((worker->keepalive.iter_count++ % UCP_WORKER_KEEPALIVE_ITER_SKIP) != 0) {
+        return 0;
+    }
+
+    now = ucs_get_time();
     if (ucs_likely((now - worker->keepalive.last_round) <
                    worker->context->config.keepalive_interval)) {
         return 0;
