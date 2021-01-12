@@ -288,13 +288,6 @@ static ucs_config_field_t ucp_config_table[] = {
    "of all entities which connect to each other are the same.",
    ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
 
-  {"SOCKADDR_CM_ENABLE", "y",
-   "Enable alternative wireup protocol for sockaddr connected endpoints.\n"
-   "Enabling this mode changes underlying UCT mechanism for connection\n"
-   "establishment and enables synchronized close protocol which does not\n"
-   "require out of band synchronization before destroying UCP resources.",
-   ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
-
   {"CM_USE_ALL_DEVICES", "y",
    "When creating client/server endpoints, use all available devices.\n"
    "If disabled, use only the one device on which the connection\n"
@@ -959,73 +952,9 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
     }
 }
 
-static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
-                                             const ucp_config_t *config)
-{
-    const char **tl_names = (const char**)config->sockaddr_aux_tls.aux_tls;
-    unsigned count        = config->sockaddr_aux_tls.count;
-    uint8_t dummy_flags   = 0;
-    uint64_t dummy_mask   = 0;
-    ucp_rsc_index_t tl_id;
-
-    context->config.sockaddr_aux_rscs_bitmap = 0;
-
-    /* Check if any of the context's resources are present in the sockaddr
-     * auxiliary transports for the client-server flow */
-    ucs_for_each_bit(tl_id, context->tl_bitmap) {
-        if (ucp_is_resource_in_transports_list(context->tl_rscs[tl_id].tl_rsc.tl_name,
-                                               tl_names, count, &dummy_flags,
-                                               &dummy_mask)) {
-            context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id);
-        }
-    }
-}
-
-static void ucp_fill_sockaddr_tls_prio_list(ucp_context_h context,
-                                            const char **sockaddr_tl_names,
-                                            ucp_rsc_index_t num_sockaddr_tls)
-{
-    uint64_t sa_tls_bitmap = 0;
-    ucp_rsc_index_t idx    = 0;
-    ucp_tl_resource_desc_t *resource;
-    ucp_rsc_index_t tl_id;
-    ucp_tl_md_t *tl_md;
-    ucp_rsc_index_t j;
-
-    /* Set a bitmap of sockaddr transports */
-    for (j = 0; j < context->num_tls; ++j) {
-        resource = &context->tl_rscs[j];
-        tl_md    = &context->tl_mds[resource->md_index];
-        if (tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-            sa_tls_bitmap |= UCS_BIT(j);
-        }
-    }
-
-    /* Parse the sockaddr transports priority list */
-    for (j = 0; j < num_sockaddr_tls; j++) {
-        /* go over the priority list and find the transport's tl_id in the
-         * sockaddr tls bitmap. save the tl_id's for the client/server usage
-         * later */
-        ucs_for_each_bit(tl_id, sa_tls_bitmap) {
-            resource = &context->tl_rscs[tl_id];
-
-            if (!strcmp(sockaddr_tl_names[j], "*") ||
-                !strncmp(sockaddr_tl_names[j], resource->tl_rsc.tl_name,
-                         UCT_TL_NAME_MAX)) {
-                context->config.sockaddr_tl_ids[idx] = tl_id;
-                idx++;
-                sa_tls_bitmap &= ~UCS_BIT(tl_id);
-            }
-        }
-    }
-
-    context->config.num_sockaddr_tls = idx;
-}
-
 static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
                                             const char **sockaddr_cm_names,
-                                            ucp_rsc_index_t num_sockaddr_cms,
-                                            int sockaddr_cm_enable)
+                                            ucp_rsc_index_t num_sockaddr_cms)
 {
     uint64_t cm_cmpts_bitmap = context->config.cm_cmpts_bitmap;
     uint64_t cm_cmpts_bitmap_safe;
@@ -1033,10 +962,6 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
 
     memset(&context->config.cm_cmpt_idxs, UCP_NULL_RESOURCE, UCP_MAX_RESOURCES);
     context->config.num_cm_cmpts = 0;
-
-    if (!sockaddr_cm_enable) {
-        return;
-    }
 
     /* Parse the sockaddr CMs priority list */
     for (cm_idx = 0; cm_idx < num_sockaddr_cms; ++cm_idx) {
@@ -1061,8 +986,6 @@ static ucs_status_t ucp_fill_sockaddr_prio_list(ucp_context_h context,
 {
     const char **sockaddr_tl_names = (const char**)config->sockaddr_cm_tls.cm_tls;
     unsigned num_sockaddr_tls      = config->sockaddr_cm_tls.count;
-    int sockaddr_cm_enable         = context->config.ext.sockaddr_cm_enable !=
-                                     UCS_NO;
 
     /* Check if a list of sockaddr transports/CMs has valid length */
     if (num_sockaddr_tls > UCP_MAX_RESOURCES) {
@@ -1071,13 +994,10 @@ static ucs_status_t ucp_fill_sockaddr_prio_list(ucp_context_h context,
         num_sockaddr_tls = UCP_MAX_RESOURCES;
     }
 
-    ucp_fill_sockaddr_tls_prio_list(context, sockaddr_tl_names,
-                                    num_sockaddr_tls);
     ucp_fill_sockaddr_cms_prio_list(context, sockaddr_tl_names,
-                                    num_sockaddr_tls, sockaddr_cm_enable);
-    if ((context->config.ext.sockaddr_cm_enable == UCS_YES) &&
-        (context->config.num_cm_cmpts == 0)) {
-        ucs_error("UCX_SOCKADDR_CM_ENABLE is set to yes but none of the available components supports SOCKADDR_CM");
+                                    num_sockaddr_tls);
+    if (context->config.num_cm_cmpts == 0) {
+        ucs_diag("none of the available components supports sockaddr connection management");
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -1274,9 +1194,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
     }
 
-    if ((context->config.ext.sockaddr_cm_enable == UCS_YES) &&
-        (context->config.cm_cmpts_bitmap == 0)) {
-        ucs_error("there are no UCT components with CM capability");
+    if (context->config.cm_cmpts_bitmap == 0) {
+        ucs_debug("there are no UCT components with CM capability");
         status = UCS_ERR_UNSUPPORTED;
         goto err_free_resources;
     }
@@ -1339,7 +1258,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_free_resources;
     }
 
-    ucp_fill_sockaddr_aux_tls_config(context, config);
     status = ucp_fill_sockaddr_prio_list(context, config);
     if (status != UCS_OK) {
         goto err_free_resources;

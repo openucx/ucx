@@ -137,11 +137,6 @@ out:
     return UCS_OK;
 }
 
-static inline int ucp_wireup_is_ep_needed(ucp_ep_h ep)
-{
-    return (ep != NULL) && !(ep->flags & UCP_EP_FLAG_LISTENER);
-}
-
 /*
  * @param [in] rsc_tli  Resource index for every lane.
  */
@@ -180,10 +175,9 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
     ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
 
     /* pack all addresses */
-    status = ucp_address_pack(ep->worker,
-                              ucp_wireup_is_ep_needed(ep) ? ep : NULL,
-                              tl_bitmap, UCP_ADDRESS_PACK_FLAGS_ALL,
-                              lanes2remote, &req->send.length, &address);
+    status = ucp_address_pack(ep->worker, ep, tl_bitmap,
+                              UCP_ADDRESS_PACK_FLAGS_ALL, lanes2remote,
+                              &req->send.length, &address);
     if (status != UCS_OK) {
         ucs_free(req);
         ucs_error("failed to pack address: %s", ucs_status_string(status));
@@ -433,7 +427,6 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     ucp_rsc_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
-    ucp_ep_flags_t listener_flag;
     ucp_ep_h ep;
     int has_cm_lane;
 
@@ -446,12 +439,7 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         /* wireup request for a specific ep */
         ep = ucp_worker_get_ep_by_id(worker, msg->dst_ep_id);
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
-        if (!(ep->flags & UCP_EP_FLAG_LISTENER)) {
-            /* Reset flush state only if it's not a client-server wireup on
-             * server side with long address exchange when listener (united with
-             * flush state) should be valid until user's callback invoking */
-            ucp_ep_flush_state_reset(ep);
-        }
+        ucp_ep_flush_state_reset(ep);
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     } else {
         ep = ucp_ep_match_retrieve(worker, remote_uuid,
@@ -493,15 +481,6 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     }
 
     has_cm_lane = ucp_ep_has_cm_lane(ep);
-
-    if (ep->flags & UCP_EP_FLAG_LISTENER) {
-        /* If this is an ep on a listener (server) that received a partial
-         * worker address from the client, then the following lanes initialization
-         * will be done after an aux lane was already created on this ep.
-         * Therefore, remove the existing aux endpoint since will need to create
-         * new lanes now */
-        ucp_ep_cleanup_lanes(ep);
-    }
 
     if (msg->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
@@ -556,27 +535,8 @@ ucp_wireup_process_request(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     }
 
     if (send_reply) {
-        listener_flag = ep->flags & UCP_EP_FLAG_LISTENER;
-        /* Remove this flag at this point if it's set
-         * (so that address packing would be correct) */
-        ep->flags &= ~UCP_EP_FLAG_LISTENER;
-
         ucs_trace("ep %p: sending wireup reply", ep);
-        status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY, tl_bitmap,
-                                     lanes2remote);
-        if (status != UCS_OK) {
-            return;
-        }
-
-        /* Restore saved flag value */
-        ep->flags |= listener_flag;
-    } else {
-        /* if in client-server flow, schedule invoking the user's callback
-         * (if server is connected) from the main thread */
-        if (ucs_test_all_flags(ep->flags,
-                               (UCP_EP_FLAG_LISTENER | UCP_EP_FLAG_LOCAL_CONNECTED))) {
-            ucp_listener_schedule_accept_cb(ep);
-        }
+        ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY, tl_bitmap, lanes2remote);
     }
 }
 
@@ -611,7 +571,6 @@ ucp_wireup_process_reply(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     ep = ucp_worker_get_ep_by_id(worker, msg->dst_ep_id);
 
     ucs_assert(msg->type == UCP_WIREUP_MSG_REPLY);
-    ucs_assert((!(ep->flags & UCP_EP_FLAG_LISTENER)));
     ucs_trace("ep %p: got wireup reply src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" sn %d", ep, msg->src_ep_id,
               msg->dst_ep_id, msg->conn_sn);
@@ -673,13 +632,6 @@ void ucp_wireup_process_ack(ucp_worker_h worker, const ucp_wireup_msg_t *msg)
     }
 
     ucp_wireup_remote_connected(ep);
-
-    /* if this ack is received as part of the client-server flow, when handling
-     * a large worker address from the client, invoke the cached user callback
-     * from the main thread */
-    if (ep->flags & UCP_EP_FLAG_LISTENER) {
-        ucp_listener_schedule_accept_cb(ep);
-    }
 }
 
 static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
@@ -1209,8 +1161,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-        /* reconfiguration is allowed for CM and sockaddr flows */
-        !ucp_ep_is_sockaddr_stub(ep) && !ucp_ep_has_cm_lane(ep)) {
+        /* reconfiguration is allowed for CM flow */
+        !ucp_ep_has_cm_lane(ep)) {
         /*
          * TODO handle a case where we have to change lanes and reconfigure the ep:
          *
@@ -1304,8 +1256,7 @@ ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
     uint64_t tl_bitmap = UINT64_MAX;  /* pack full worker address */
     ucs_status_t status;
 
-    ucs_assert((ep->flags & UCP_EP_FLAG_LISTENER) ||
-               ucp_ep_has_cm_lane(ep));
+    ucs_assert(ucp_ep_has_cm_lane(ep));
     ucs_assert(!(ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED));
 
     ucs_debug("ep %p: send wireup pre-request (flags=0x%x)", ep, ep->flags);
@@ -1470,7 +1421,7 @@ ucp_ep_params_err_handling_mode(const ucp_ep_params_t *params)
 unsigned ucp_ep_init_flags(const ucp_worker_h worker,
                            const ucp_ep_params_t *params)
 {
-    unsigned flags = ucp_cm_ep_init_flags(worker, params);
+    unsigned flags = ucp_cm_ep_init_flags(params);
 
     if (ucp_ep_init_flags_has_cm(flags) &&
         worker->context->config.ext.cm_use_all_devices) {

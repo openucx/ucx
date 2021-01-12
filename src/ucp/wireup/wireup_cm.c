@@ -18,12 +18,8 @@
 
 
 unsigned
-ucp_cm_ep_init_flags(const ucp_worker_h worker, const ucp_ep_params_t *params)
+ucp_cm_ep_init_flags(const ucp_ep_params_t *params)
 {
-    if (!ucp_worker_sockaddr_is_cm_proto(worker)) {
-        return 0;
-    }
-
     if (params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR) {
         return UCP_EP_INIT_CM_WIREUP_CLIENT | UCP_EP_INIT_CM_PHASE;
     }
@@ -809,6 +805,7 @@ static unsigned ucp_cm_server_conn_request_progress(void *arg)
         return 1;
     }
 
+    ucs_assert(listener->accept_cb != NULL);
     UCS_ASYNC_BLOCK(&worker->async);
     ucp_ep_create_server_accept(worker, conn_request, &ep);
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -908,9 +905,10 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     }
 
     ucp_conn_request->listener     = ucp_listener;
-    ucp_conn_request->uct.listener = listener;
+    ucp_conn_request->uct_listener = listener;
     ucp_conn_request->uct_req      = conn_request;
     ucp_conn_request->cm_idx       = cm_idx;
+    ucp_conn_request->ep           = NULL;
 
     status = ucs_sockaddr_copy((struct sockaddr *)&ucp_conn_request->client_address,
                                conn_req_args->client_address.addr);
@@ -970,7 +968,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                                    client_addr_str, sizeof(client_addr_str)),
                   conn_request->dev_name);
         status = UCS_ERR_UNREACHABLE;
-        goto out;
+        goto out_free_request;
     }
 
     /* Create and connect TL part */
@@ -981,8 +979,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         ucs_warn("failed to create server ep and connect to worker address on "
                  "device %s, tl_bitmap 0x%"PRIx64", status %s",
                  conn_request->dev_name, tl_bitmap, ucs_status_string(status));
-        uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
-        goto out;
+        uct_listener_reject(conn_request->uct_listener, conn_request->uct_req);
+        goto out_free_request;
     }
 
     status = ucp_wireup_connect_local(ep, remote_addr, NULL);
@@ -991,11 +989,11 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                  "device %s, tl_bitmap 0x%"PRIx64", status %s",
                  ep, conn_request->dev_name, tl_bitmap,
                  ucs_status_string(status));
-        uct_listener_reject(conn_request->uct.listener, conn_request->uct_req);
+        uct_listener_reject(conn_request->uct_listener, conn_request->uct_req);
         goto err_destroy_ep;
     }
 
-    status = ucp_ep_cm_connect_server_lane(ep, conn_request->uct.listener,
+    status = ucp_ep_cm_connect_server_lane(ep, conn_request->uct_listener,
                                            conn_request->uct_req,
                                            conn_request->cm_idx);
     if (status != UCS_OK) {
@@ -1006,21 +1004,26 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_destroy_ep;
     }
 
-    ep->flags                       |= UCP_EP_FLAG_LISTENER;
-    ucp_ep_ext_control(ep)->listener = conn_request->listener;
     ucp_ep_update_remote_id(ep, conn_request->sa_data.ep_id);
-    ucp_listener_schedule_accept_cb(ep);
-    *ep_p = ep;
-
-out:
-    ucs_free(conn_request->remote_dev_addr);
-    ucs_free(conn_request);
-
-    return status;
+    if (conn_request->listener->accept_cb == NULL) {
+        goto out_free_request;
+    } else {
+        conn_request->ep = ep;
+        ucp_listener_schedule_accept_cb(conn_request);
+        goto out;
+    }
 
 err_destroy_ep:
     ucp_ep_destroy_internal(ep);
-    goto out;
+out_free_request:
+    ucs_free(conn_request->remote_dev_addr);
+    ucs_free(conn_request);
+out:
+    if (status == UCS_OK) {
+        *ep_p = ep;
+    }
+
+    return status;
 }
 
 static ssize_t ucp_cm_server_priv_pack_cb(void *arg,

@@ -100,11 +100,6 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                 const ucp_unpacked_address_t *remote_address,
                                 ucp_wireup_select_info_t *select_info);
 
-ucs_status_t
-ucp_wireup_select_sockaddr_transport(const ucp_context_h context,
-                                     const ucs_sock_addr_t *sockaddr,
-                                     ucp_rsc_index_t *rsc_index_p);
-
 double ucp_wireup_amo_score_func(ucp_context_h context,
                                  const uct_md_attr_t *md_attr,
                                  const uct_iface_attr_t *iface_attr,

@@ -52,9 +52,6 @@ enum {
     UCP_EP_FLAG_STREAM_HAS_DATA        = UCS_BIT(5), /* EP has data in the ext.stream.match_q */
     UCP_EP_FLAG_ON_MATCH_CTX           = UCS_BIT(6), /* EP is on match queue */
     UCP_EP_FLAG_REMOTE_ID              = UCS_BIT(7), /* remote ID is valid */
-    UCP_EP_FLAG_LISTENER               = UCS_BIT(8), /* EP holds pointer to a listener
-                                                        (on server side due to receiving partial
-                                                        worker address from the client) */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
     UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
@@ -397,10 +394,7 @@ typedef struct {
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
-    union {
-        ucp_listener_h            listener;      /* Listener that may be associated with ep */
-        ucp_ep_close_proto_req_t  close_req;     /* Close protocol request */
-    };
+    ucp_ep_close_proto_req_t      close_req;     /* Close protocol request */
 } ucp_ep_ext_control_t;
 
 
@@ -441,12 +435,7 @@ typedef struct {
 
 
 enum {
-    UCP_WIREUP_SA_DATA_FULL_ADDR = 0,   /* Sockaddr client data contains full
-                                           address. */
-    UCP_WIREUP_SA_DATA_PARTIAL_ADDR,    /* Sockaddr client data contains partial
-                                           address, wireup protocol requires
-                                           extra MSGs. */
-    UCP_WIREUP_SA_DATA_CM_ADDR          /* Sockaddr client data contains address
+    UCP_WIREUP_SA_DATA_CM_ADDR = 2      /* Sockaddr client data contains address
                                            for CM based wireup: there is only
                                            iface and ep address of transport
                                            lanes, remote device address is
@@ -471,15 +460,13 @@ struct ucp_wireup_sockaddr_data {
 
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
-    union {
-        uct_listener_h          listener;
-        uct_iface_h             iface;
-    } uct;
+    uct_listener_h              uct_listener;
     uct_conn_request_h          uct_req;
     ucp_rsc_index_t             cm_idx;
     char                        dev_name[UCT_DEVICE_NAME_MAX];
     uct_device_addr_t           *remote_dev_addr;
     struct sockaddr_storage     client_address;
+    ucp_ep_h                    ep; /* valid only if request is handled internally */
     ucp_wireup_sockaddr_data_t  sa_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
@@ -543,8 +530,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
 void ucp_ep_cleanup_lanes(ucp_ep_h ep);
-
-int ucp_ep_is_sockaddr_stub(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                 const ucp_ep_config_key_t *key);
