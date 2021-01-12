@@ -231,8 +231,9 @@ UCS_TEST_SKIP_COND_P(test_uct_stats, am_short_iov,
                                       UCT_CB_FLAG_ASYNC);
     EXPECT_UCS_OK(status);
 
-    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
-                            sender().iface_attr().cap.am.max_iov);
+    UCS_TEST_GET_BUFFER_IOV(
+        iov, iovcnt, lbuf->ptr(), lbuf->length(), lbuf->memh(),
+        ucs_min(lbuf->length(), sender().iface_attr().cap.am.max_iov));
 
     UCT_TEST_CALL_AND_TRY_AGAIN(uct_ep_am_short_iov(sender_ep(), 0, iov, iovcnt),
                                 status);
