@@ -1741,8 +1741,8 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->num_offcache_buffers  = 0;
     test_opts->iomsg_size            = 256;
     test_opts->iter_count            = 1000;
-    test_opts->window_size           = 1;
-    test_opts->conn_window_size      = 1;
+    test_opts->window_size           = 16;
+    test_opts->conn_window_size      = 16;
     test_opts->random_seed           = std::time(NULL);
     test_opts->verbose               = false;
     test_opts->validate              = false;
