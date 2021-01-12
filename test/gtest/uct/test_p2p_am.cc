@@ -185,8 +185,9 @@ public:
     ucs_status_t am_short_iov(uct_ep_h ep, const mapped_buffer &sendbuf,
                               const mapped_buffer &recvbuf)
     {
-        UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, (char *)sendbuf.ptr(), sendbuf.length(),
-                                sendbuf.memh(), sender().iface_attr().cap.am.max_iov);
+        UCS_TEST_GET_BUFFER_IOV(
+            iov, iovcnt, (char*)sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
+            ucs_min(sendbuf.length(), sender().iface_attr().cap.am.max_iov));
 
         return uct_ep_am_short_iov(ep, AM_ID, iov, iovcnt);
     }

@@ -146,7 +146,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_zcopy        = 0;
     iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_CACHE_LINE_SIZE;
     iface_attr->cap.am.align_mtu        = iface_attr->cap.am.opt_zcopy_align;
-    iface_attr->cap.am.max_iov          = 1;
+    iface_attr->cap.am.max_iov          = SIZE_MAX;
 
     iface_attr->iface_addr_len          = sizeof(uct_mm_iface_addr_t) +
                                           md->iface_addr_len;

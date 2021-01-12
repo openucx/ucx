@@ -106,7 +106,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
     attr->cap.am.opt_zcopy_align  = 1;
     attr->cap.am.align_mtu        = attr->cap.am.opt_zcopy_align;
     attr->cap.am.max_hdr          = 0;
-    attr->cap.am.max_iov          = 1;
+    attr->cap.am.max_iov          = SIZE_MAX;
 
     attr->latency                 = ucs_linear_func_make(0, 0);
     attr->bandwidth.dedicated     = 6911.0 * UCS_MBYTE;
