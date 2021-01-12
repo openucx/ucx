@@ -353,9 +353,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
     int active;
     cudaStream_t *stream;
-#if UCS_ENABLE_ASSERT
     ucs_queue_head_t *event_q;
-#endif
 
     UCT_CUDADRV_CTX_ACTIVE(active);
 
@@ -364,7 +362,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
     if (active) {
         uct_cuda_copy_for_each_stream_event_q(self, stream, event_q, {
             if (*stream != 0) {
-                ucs_assert(ucs_queue_is_empty(event_q));
+                if (!ucs_queue_is_empty(event_q)) {
+                    ucs_warn("stream destroyed but queue not empty");
+		        }
                 UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(*stream));
             }
         });
