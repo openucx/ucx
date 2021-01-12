@@ -214,7 +214,7 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
-    cudaStream_t *strm;
+    cudaStream_t *stream;
     ucs_queue_head_t *event_q;
 
     uct_cuda_copy_for_each_event_q(iface, event_q, {
@@ -223,16 +223,20 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
         }
     });
 
-    uct_cuda_copy_for_each_stream(iface, strm, {
-        status =
+    uct_cuda_copy_for_each_stream_event_q(iface, stream, event_q, {
+        if (!ucs_queue_is_empty(event_q)) {
+            status =
 #if (__CUDACC_VER_MAJOR__ >= 100000)
-            UCT_CUDADRV_FUNC_LOG_ERR(cuLaunchHostFunc(*strm, myHostFn, iface));
+                UCT_CUDADRV_FUNC_LOG_ERR(cuLaunchHostFunc(*stream, myHostFn,
+                                                          iface));
 #else
-            UCT_CUDADRV_FUNC_LOG_ERR(cuStreamAddCallback(*strm, myHostCallback,
-                                                         iface, 0));
+                UCT_CUDADRV_FUNC_LOG_ERR(cuStreamAddCallback(*stream,
+                                                             myHostCallback,
+                                                             iface, 0));
 #endif
-        if (UCS_OK != status) {
-            return status;
+            if (UCS_OK != status) {
+                return status;
+            }
         }
     });
 
