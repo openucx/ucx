@@ -257,9 +257,7 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
                                      uct_ib_mlx5_txwq_t *txwq,
                                      ucs_status_t ep_status);
 
-void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface,
-                                 uint8_t dci,
-                                 ucs_status_t ep_status);
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci);
 
 #if HAVE_DEVX
 

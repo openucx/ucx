@@ -60,6 +60,13 @@
 /* Maximal value for connection sequence number */
 #define UCT_TCP_CM_CONN_SN_MAX               UINT64_MAX
 
+/* The seconds the connection needs to remain idle before TCP starts sending
+ * keepalive probes */
+#define UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE    10
+
+/* The seconds between individual keepalive probes */
+#define UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL   1
+
 
 /**
  * TCP EP connection manager ID
@@ -205,11 +212,13 @@ typedef struct uct_tcp_am_hdr {
  */
 typedef enum uct_tcp_ep_am_id {
     /* AM ID reserved for TCP internal Connection Manager messages */
-    UCT_TCP_EP_CM_AM_ID      = UCT_AM_ID_MAX,
+    UCT_TCP_EP_CM_AM_ID        = UCT_AM_ID_MAX,
     /* AM ID reserved for TCP internal PUT REQ message */
-    UCT_TCP_EP_PUT_REQ_AM_ID = UCT_AM_ID_MAX + 1,
+    UCT_TCP_EP_PUT_REQ_AM_ID   = UCT_AM_ID_MAX + 1,
     /* AM ID reserved for TCP internal PUT ACK message */
-    UCT_TCP_EP_PUT_ACK_AM_ID = UCT_AM_ID_MAX + 2
+    UCT_TCP_EP_PUT_ACK_AM_ID   = UCT_AM_ID_MAX + 2,
+    /* AM ID reserved for TCP internal PUT ACK message */
+    UCT_TCP_EP_KEEPALIVE_AM_ID = UCT_AM_ID_MAX + 3
 } uct_tcp_ep_am_id_t;
 
 
@@ -336,10 +345,10 @@ typedef struct uct_tcp_iface {
         size_t                    rx_seg_size;       /* RX AM buffer size */
         size_t                    sendv_thresh;      /* Minimum size of user's payload from which
                                                       * non-blocking vector send should be used */
-        struct {
-            size_t                max_iov;           /* Maximum supported IOVs limited by
+        size_t                    max_iov;           /* Maximum supported IOVs limited by
                                                       * user configuration and service buffers
                                                       * (TCP protocol and user's AM headers) */
+        struct {
             size_t                max_hdr;           /* Maximum supported AM Zcopy header */
             size_t                hdr_offset;        /* Offset in TX buffer to empty space that
                                                       * can be used for AM Zcopy header */
@@ -491,6 +500,9 @@ void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep);
 ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header,
                                  const void *payload, unsigned length);
 
+ucs_status_t uct_tcp_ep_am_short_iov(uct_ep_h uct_ep, uint8_t am_id,
+                                     const uct_iov_t *iov, size_t iovcnt);
+
 ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
                             uct_pack_callback_t pack_cb, void *arg,
                             unsigned flags);
@@ -512,6 +524,9 @@ void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
 
 ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
                               uct_completion_t *comp);
+
+ucs_status_t
+uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
 ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
                                    uct_tcp_cm_conn_event_t event,
@@ -549,6 +564,8 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
                                              int fd);
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
+
+int uct_tcp_keepalive_is_enabled(uct_tcp_iface_t *iface);
 
 static inline void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
 {

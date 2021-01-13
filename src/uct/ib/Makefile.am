@@ -101,6 +101,7 @@ endif # HAVE_TL_RC
 if HAVE_TL_DC
 noinst_HEADERS += \
 	dc/dc_mlx5_ep.h \
+	dc/dc_mlx5.inl \
 	dc/dc_mlx5.h
 
 libuct_ib_la_SOURCES += \

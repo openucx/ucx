@@ -296,6 +296,9 @@ static void print_header(struct perftest_context *ctx)
             case UCT_PERF_DATA_LAYOUT_SHORT:
                 test_data_str = "short";
                 break;
+            case UCT_PERF_DATA_LAYOUT_SHORT_IOV:
+                test_data_str = "short iov";
+                break;
             case UCT_PERF_DATA_LAYOUT_BCOPY:
                 test_data_str = "bcopy";
                 break;
@@ -350,7 +353,7 @@ static void print_test_name(struct perftest_context *ctx)
     unsigned i, pos;
 
     if (!(ctx->flags & TEST_FLAG_PRINT_CSV) && (ctx->num_batch_files > 0)) {
-        strcpy(buf, "+--------------+---------+---------+---------+----------+----------+-----------+-----------+");
+        strcpy(buf, "+--------------+--------------+---------+---------+---------+----------+----------+-----------+-----------+");
 
         pos = 1;
         for (i = 0; i < ctx->num_batch_files; ++i) {
@@ -447,10 +450,11 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -d <device>    device to use for testing\n");
     printf("     -x <tl>        transport to use for testing\n");
     printf("     -D <layout>    data layout for sender side:\n");
-    printf("                        short - short messages (default, cannot be used for get)\n");
-    printf("                        bcopy - copy-out (cannot be used for atomics)\n");
-    printf("                        zcopy - zero-copy (cannot be used for atomics)\n");
-    printf("                        iov    - scatter-gather list (iovec)\n");
+    printf("                        short    - short messages (default, cannot be used for get)\n");
+    printf("                        shortiov - short io-vector messages (only for active messages)\n");
+    printf("                        bcopy    - copy-out (cannot be used for atomics)\n");
+    printf("                        zcopy    - zero-copy (cannot be used for atomics)\n");
+    printf("                        iov      - scatter-gather list (iovec)\n");
     printf("     -W <count>     flow control window size, for active messages (%u)\n",
                                 ctx->params.super.uct.fc_window);
     printf("     -H <size>      active message header size (%zu)\n",
@@ -654,6 +658,8 @@ static ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 'D':
         if (!strcmp(opt_arg, "short")) {
             params->super.uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
+        } else if (!strcmp(opt_arg, "shortiov")) {
+            params->super.uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT_IOV;
         } else if (!strcmp(opt_arg, "bcopy")) {
             params->super.uct.data_layout   = UCT_PERF_DATA_LAYOUT_BCOPY;
         } else if (!strcmp(opt_arg, "zcopy")) {

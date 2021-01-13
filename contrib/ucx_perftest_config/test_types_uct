@@ -6,12 +6,14 @@ put_short_lat -t put_lat -D short
 put_bcopy_lat -t put_lat -D bcopy
 put_zcopy_lat -t put_lat -D zcopy
 # AM
-am_short_lat  -t am_lat -D short
-am_bcopy_lat  -t am_lat -D bcopy
-am_zcopy_lat  -t am_lat -D zcopy
-am_short_bw   -t am_bw -D short
-am_bcopy_bw   -t am_bw -D bcopy
-am_zcopy_bw   -t am_bw -D zcopy
+am_short_lat     -t am_lat -D short
+am_short_iov_lat -t am_lat -D shortiov
+am_bcopy_lat     -t am_lat -D bcopy
+am_zcopy_lat     -t am_lat -D zcopy
+am_short_bw      -t am_bw  -D short
+am_short_iov_bw  -t am_bw  -D shortiov
+am_bcopy_bw      -t am_bw  -D bcopy
+am_zcopy_bw      -t am_bw  -D zcopy
 # GET
 get_bcopy     -t get -D bcopy
 get_zcopy     -t get -D zcopy

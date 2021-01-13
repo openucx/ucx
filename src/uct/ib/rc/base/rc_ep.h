@@ -42,38 +42,38 @@ enum {
     /* Keepalive Request scheduled: indicates that keepalive request
      * is scheduled in pending queue and no more keepalive actions
      * are needed */
-    UCT_RC_EP_FLAG_KEEPALIVE_PENDING = UCS_BIT(0),
+    UCT_RC_EP_FLAG_KEEPALIVE_PENDING   = UCS_BIT(0),
 
     /* EP is connected to peer */
-    UCT_RC_EP_FLAG_CONNECTED         = UCS_BIT(1),
+    UCT_RC_EP_FLAG_CONNECTED           = UCS_BIT(1),
 
     /* Flush cancel was executed on EP */
-    UCT_RC_EP_FLAG_FLUSH_CANCEL      = UCS_BIT(2),
+    UCT_RC_EP_FLAG_FLUSH_CANCEL        = UCS_BIT(2),
 
     /* Error handler already called or flush(CANCEL) disabled it */
-    UCT_RC_EP_FLAG_NO_ERR_HANDLER    = UCS_BIT(3),
+    UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(3),
 
     /* Soft Credit Request: indicates that peer needs to piggy-back credits
      * grant to counter AM (if any). Can be bundled with
      * UCT_RC_EP_FLAG_FC_GRANT  */
-    UCT_RC_EP_FLAG_FC_SOFT_REQ       = UCS_BIT(UCT_AM_ID_BITS),
+    UCT_RC_EP_FLAG_FC_SOFT_REQ         = UCS_BIT(UCT_AM_ID_BITS),
 
     /* Hard Credit Request: indicates that wnd is close to be exhausted.
      * The peer must send separate AM with credit grant as soon as it
      * receives AM  with this bit set. Can be bundled with
      * UCT_RC_EP_FLAG_FC_GRANT */
-    UCT_RC_EP_FLAG_FC_HARD_REQ       = UCS_BIT((UCT_AM_ID_BITS) + 1),
+    UCT_RC_EP_FLAG_FC_HARD_REQ         = UCS_BIT((UCT_AM_ID_BITS) + 1),
 
     /* Credit Grant: ep should update its FC wnd as soon as it receives AM with
      * this bit set. Can be bundled with either soft or hard request bits */
-    UCT_RC_EP_FLAG_FC_GRANT          = UCS_BIT((UCT_AM_ID_BITS) + 2),
+    UCT_RC_EP_FLAG_FC_GRANT            = UCS_BIT((UCT_AM_ID_BITS) + 2),
 
     /* Special FC AM with Credit Grant: Just an empty message indicating
      * credit grant. Can't be bundled with any other FC flag (as it consumes
      * all 3 FC bits). */
-    UCT_RC_EP_FC_PURE_GRANT          = (UCT_RC_EP_FLAG_FC_HARD_REQ |
-                                        UCT_RC_EP_FLAG_FC_SOFT_REQ |
-                                        UCT_RC_EP_FLAG_FC_GRANT)
+    UCT_RC_EP_FC_PURE_GRANT            = (UCT_RC_EP_FLAG_FC_HARD_REQ |
+                                          UCT_RC_EP_FLAG_FC_SOFT_REQ |
+                                          UCT_RC_EP_FLAG_FC_GRANT)
 };
 
 /*
@@ -276,6 +276,10 @@ ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize
 void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
+
+void uct_rc_txqp_purge_outstanding_op(uct_rc_iface_t *iface,
+                                      uct_rc_iface_send_op_t *op,
+                                      ucs_status_t status, int warn);
 
 void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                                    ucs_status_t status, uint16_t sn, int warn);

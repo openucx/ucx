@@ -38,6 +38,7 @@ public class UcpConstants {
     static long UCP_FEATURE_AMO64;
     static long UCP_FEATURE_WAKEUP;
     static long UCP_FEATURE_STREAM;
+    static long UCP_FEATURE_AM;
 
     /**
      * UCP worker parameters field mask.

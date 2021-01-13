@@ -284,7 +284,7 @@ UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
 
     return UCS_STATS_NODE_ALLOC(&self->iface.stats, &uct_cm_stats_class,
                                 ucs_stats_get_root(), "%s-%p", "iface",
-                                self->iface);
+                                &self->iface);
 }
 
 UCS_CLASS_CLEANUP_FUNC(uct_cm_t)

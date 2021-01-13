@@ -108,8 +108,9 @@ public:
         /* initiate the client's private data callback argument */
         client->max_conn_priv = server->iface_attr().max_conn_priv;
 
-        UCS_TEST_MESSAGE << "Testing " << m_listen_addr
-                         << " Interface: " << GetParam()->dev_name;
+        UCS_TEST_MESSAGE << "Testing " << GetParam()->component_name
+                         << " on " << m_listen_addr
+                         << " interface: " << GetParam()->dev_name;
     }
 
     size_t iface_priv_data_do_pack(void *priv_data)
@@ -391,11 +392,32 @@ public:
     }
 
     void init() {
+        struct {
+            bool is_set;
+            char cstr[UCS_SOCKADDR_STRING_LEN];
+        } src_addr = {
+            .is_set = false,
+            .cstr   = {0}
+        };
+
         uct_test::init();
 
         /* This address is accessible, as it was tested at the resource creation */
         m_listen_addr  = GetParam()->listen_sock_addr;
         m_connect_addr = GetParam()->connect_sock_addr;
+
+        const ucs::sock_addr_storage &src_sock_addr =
+                                                GetParam()->source_sock_addr;
+        if (src_sock_addr.get_sock_addr_ptr() != NULL) {
+            int sa_family   = src_sock_addr.get_sock_addr_ptr()->sa_family;
+            const char *ret = inet_ntop(sa_family,
+                                        src_sock_addr.get_sock_addr_in_buf(),
+                                        src_addr.cstr, UCS_SOCKADDR_STRING_LEN);
+            EXPECT_EQ(src_addr.cstr, ret);
+            set_config((std::string("RDMA_CM_SOURCE_ADDRESS?=") +
+                        src_addr.cstr).c_str());
+            src_addr.is_set = true;
+        }
 
         uint16_t port = ucs::get_port();
         m_listen_addr.set_port(port);
@@ -418,8 +440,12 @@ public:
         m_long_priv_data.resize(m_long_priv_data_len);
         ucs::fill_random(m_long_priv_data);
 
-        UCS_TEST_MESSAGE << "Testing " << m_listen_addr
-                         << " Interface: " << GetParam()->dev_name;
+        UCS_TEST_MESSAGE << "Testing " << GetParam()->component_name << " on "
+                         << m_listen_addr << " interface "
+                         << GetParam()->dev_name
+                         << (src_addr.is_set ?
+                             (std::string(" with RDMA_CM_SOURCE_ADDRESS=") +
+                              src_addr.cstr) : "");
     }
 
 protected:
@@ -1185,7 +1211,7 @@ public:
         int index;
 
         index = get_ep_index(ep);
-        ASSERT_GE(index, 0);
+        ASSERT_TRUE(index >= 0);
         EXPECT_LT(index, (2 * m_clients_num));
 
         pthread_mutex_lock(&m_lock);

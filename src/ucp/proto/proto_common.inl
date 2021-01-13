@@ -17,7 +17,7 @@
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_bcopy_complete(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_datatype_iter_cleanup(&req->send.dt_iter, UINT_MAX);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UINT_MAX);
     ucp_request_complete_send(req, status);
 }
 
@@ -43,14 +43,15 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
 
     ucp_proto_request_completion_init(req, comp_func);
 
-    status = ucp_datatype_iter_mem_reg(ep->worker->context, &req->send.dt_iter,
+    status = ucp_datatype_iter_mem_reg(ep->worker->context,
+                                       &req->send.state.dt_iter,
                                        md_map);
     if (status != UCS_OK) {
         return status;
     }
 
     ucp_trace_req(req, "registered md_map 0x%"PRIx64"/0x%"PRIx64,
-                  req->send.dt_iter.type.contig.reg.md_map, md_map);
+                  req->send.state.dt_iter.type.contig.reg.md_map, md_map);
 
     /* We expect the registration to happen on all desired memory domains, since
      * the protocol initialization code would already disqualify any memory
@@ -58,7 +59,7 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
      * memory key for zero-copy operations. This assumption simplifies memory
      * key lookups during protocol progress.
      */
-    ucs_assert(req->send.dt_iter.type.contig.reg.md_map == md_map);
+    ucs_assert(req->send.state.dt_iter.type.contig.reg.md_map == md_map);
 
     return UCS_OK;
 }
@@ -67,8 +68,9 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_zcopy_cleanup(ucp_request_t *req)
 {
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.dt_iter);
-    ucp_datatype_iter_cleanup(&req->send.dt_iter, UCS_BIT(UCP_DATATYPE_CONTIG));
+                                &req->send.state.dt_iter);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+                              UCS_BIT(UCP_DATATYPE_CONTIG));
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -128,11 +130,11 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     req->send.ep = ep;
 
     ucp_datatype_iter_init(worker->context, (void*)buffer, count, datatype,
-                           contig_length, &req->send.dt_iter, &sg_count);
+                           contig_length, &req->send.state.dt_iter, &sg_count);
 
     ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
-                                req->send.dt_iter.dt_class,
-                                req->send.dt_iter.mem_type,
+                                req->send.state.dt_iter.dt_class,
+                                req->send.state.dt_iter.mem_type,
                                 sg_count);
 
     status = ucp_proto_request_set_proto(worker, ep, req, proto_select, rkey_cfg_index,

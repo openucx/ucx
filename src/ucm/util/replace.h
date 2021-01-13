@@ -79,6 +79,24 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
     _UCM_DEFINE_REPLACE_FUNC(ucm_override_##_name, ucm_##_name, \
                              _rettype, _fail_val, __VA_ARGS__)
 
+/**
+ * Defines the following:
+ *  - ucm_orig_##_name##_dlsym - calls original function by symbol lookup
+ *  - ucm_orig_##_name         - function pointer, initialized by default to
+ *                               ucm_orig_##_name##_dlsym
+ *  - ucm_override_##_name     - calls ucm_##_name
+ */
+#define UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(_name, _rettype, _fail_val, ...) \
+    _UCM_DEFINE_DLSYM_FUNC(_name, ucm_orig_##_name##_dlsym, \
+                           ucm_override_##_name, _rettype, _fail_val, \
+                           __VA_ARGS__) \
+    \
+    _rettype (*ucm_orig_##_name)(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) = \
+        ucm_orig_##_name##_dlsym; \
+    \
+    _UCM_DEFINE_REPLACE_FUNC(ucm_override_##_name, ucm_##_name, \
+                             _rettype, _fail_val, __VA_ARGS__)
+
 #define UCM_DEFINE_SYSCALL_FUNC(_name, _rettype, _syscall_id, ...) \
     /* Call syscall */ \
     _rettype ucm_orig_##_name(UCM_FUNC_DEFINE_ARGS(__VA_ARGS__)) \

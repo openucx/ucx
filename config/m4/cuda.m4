@@ -12,13 +12,19 @@ AS_IF([test "x$cuda_checked" != "xyes"],
                 [], [with_cuda=guess])
 
     AS_IF([test "x$with_cuda" = "xno"],
-        [cuda_happy=no],
+        [
+         cuda_happy=no
+         have_cuda_static=no
+        ],
         [
          save_CPPFLAGS="$CPPFLAGS"
          save_LDFLAGS="$LDFLAGS"
+         save_LIBS="$LIBS"
 
          CUDA_CPPFLAGS=""
          CUDA_LDFLAGS=""
+         CUDA_LIBS=""
+         CUDA_STATIC_LIBS=""
 
          AS_IF([test ! -z "$with_cuda" -a "x$with_cuda" != "xyes" -a "x$with_cuda" != "xguess"],
                [ucx_check_cuda_dir="$with_cuda"
@@ -40,18 +46,31 @@ AS_IF([test "x$cuda_checked" != "xyes"],
 
          # Check cuda libraries
          AS_IF([test "x$cuda_happy" = "xyes"],
-                [AC_CHECK_LIB([cuda], [cuDeviceGetUuid],
-                              [CUDA_LDFLAGS="$CUDA_LDFLAGS -lcuda"], [cuda_happy="no"])])
+               [AC_CHECK_LIB([cuda], [cuDeviceGetUuid],
+                             [CUDA_LIBS="$CUDA_LIBS -lcuda"], [cuda_happy="no"])])
          AS_IF([test "x$cuda_happy" = "xyes"],
-                [AC_CHECK_LIB([cudart], [cudaGetDeviceCount],
-                              [CUDA_LDFLAGS="$CUDA_LDFLAGS -lcudart"], [cuda_happy="no"])])
+               [AC_CHECK_LIB([cudart], [cudaGetDeviceCount],
+                             [CUDA_LIBS="$CUDA_LIBS -lcudart"], [cuda_happy="no"])])
+
+         LDFLAGS="$save_LDFLAGS"
+
+         # Check for cuda static library
+         have_cuda_static="no"
+         AS_IF([test "x$cuda_happy" = "xyes"],
+               [AC_CHECK_LIB([cudart_static], [cudaGetDeviceCount],
+                             [CUDA_STATIC_LIBS="$CUDA_STATIC_LIBS -lcudart_static"
+                              have_cuda_static="yes"],
+                             [], [-ldl -lrt -lpthread])])
 
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"
+         LIBS="$save_LIBS"
 
          AS_IF([test "x$cuda_happy" = "xyes"],
                [AC_SUBST([CUDA_CPPFLAGS], ["$CUDA_CPPFLAGS"])
                 AC_SUBST([CUDA_LDFLAGS], ["$CUDA_LDFLAGS"])
+                AC_SUBST([CUDA_LIBS], ["$CUDA_LIBS"])
+                AC_SUBST([CUDA_STATIC_LIBS], ["$CUDA_STATIC_LIBS"])
                 AC_DEFINE([HAVE_CUDA], 1, [Enable CUDA support])],
                [AS_IF([test "x$with_cuda" != "xguess"],
                       [AC_MSG_ERROR([CUDA support is requested but cuda packages cannot be found])],
@@ -61,6 +80,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
 
         cuda_checked=yes
         AM_CONDITIONAL([HAVE_CUDA], [test "x$cuda_happy" != xno])
+        AM_CONDITIONAL([HAVE_CUDA_STATIC], [test "X$have_cuda_static" = "Xyes"])
 
    ]) # "x$cuda_checked" != "xyes"
 

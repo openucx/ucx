@@ -106,7 +106,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
     attr->cap.am.opt_zcopy_align  = 1;
     attr->cap.am.align_mtu        = attr->cap.am.opt_zcopy_align;
     attr->cap.am.max_hdr          = 0;
-    attr->cap.am.max_iov          = 1;
+    attr->cap.am.max_iov          = SIZE_MAX;
 
     attr->latency                 = ucs_linear_func_make(0, 0);
     attr->bandwidth.dedicated     = 6911.0 * UCS_MBYTE;
@@ -222,6 +222,7 @@ uct_self_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
 {
     return uct_single_device_resource(md, UCT_SM_DEVICE_NAME,
                                       UCT_DEVICE_TYPE_SELF,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN,
                                       tl_devices_p, num_tl_devices_p);
 }
 
@@ -289,6 +290,7 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_put_bcopy             = uct_sm_ep_put_bcopy,
     .ep_get_bcopy             = uct_sm_ep_get_bcopy,
     .ep_am_short              = uct_self_ep_am_short,
+    .ep_am_short_iov          = uct_base_ep_am_short_iov,
     .ep_am_bcopy              = uct_self_ep_am_bcopy,
     .ep_atomic_cswap64        = uct_sm_ep_atomic_cswap64,
     .ep_atomic64_post         = uct_sm_ep_atomic64_post,

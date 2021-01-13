@@ -326,7 +326,8 @@ ucp_tag_request_process_recv_data(ucp_request_t *req, const void *data,
         return ucp_request_recv_offload_data(req, data, length, recv_flags);
     }
 
-    return ucp_request_process_recv_data(req, data, length, offset, dereg, 0);
+    return ucp_request_process_recv_data(req, data, length, offset, dereg, 0,
+                                         UCP_REQUEST_ID_INVALID);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

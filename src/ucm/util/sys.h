@@ -8,6 +8,9 @@
 #ifndef UCM_UTIL_SYS_H_
 #define UCM_UTIL_SYS_H_
 
+#include <ucm/api/ucm.h>
+#include <ucs/sys/checker.h>
+#include <sys/types.h>
 #include <stddef.h>
 
 
@@ -87,5 +90,45 @@ void ucm_prevent_dl_unload();
  */
 char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *file);
 
+
+/**
+ * Perform brk() syscall
+ *
+ * @param addr   Address to set as new program break.
+ *
+ * @return New program break.
+ *
+ * @note If the break could not be changed (for example, parameter was invalid
+ *       or exceeds limits) the break remains unchanged.
+ */
+void *ucm_brk_syscall(void *addr);
+
+
+/**
+ * @return System thread id of the current thread.
+ */
+pid_t ucm_get_tid();
+
+
+/**
+ * Get memory hooks mode to use, based on the configured mode and runtime.
+ *
+ * @param config_mode   Configured memory hook mode.
+ *
+ * @return Memory hook mode to use.
+ */
+static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t
+ucm_get_hook_mode(ucm_mmap_hook_mode_t config_mode)
+{
+#ifdef __SANITIZE_ADDRESS__
+    return UCM_MMAP_HOOK_NONE;
+#else
+    if (RUNNING_ON_VALGRIND && (config_mode == UCM_MMAP_HOOK_BISTRO)) {
+        return UCM_MMAP_HOOK_RELOC;
+    }
+
+    return config_mode;
+#endif
+}
 
 #endif

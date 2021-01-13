@@ -17,22 +17,29 @@
 
 
 enum uct_dc_mlx5_ep_flags {
-    UCT_DC_MLX5_EP_FLAG_TX_WAIT           = UCS_BIT(0), /* ep is in the tx_wait state. See
-                                                           description of the dcs+quota dci
-                                                           selection policy above */
-    UCT_DC_MLX5_EP_FLAG_GRH               = UCS_BIT(1), /* ep has GRH address. Used by
-                                                           dc_mlx5 endpoint */
-    UCT_DC_MLX5_EP_FLAG_VALID             = UCS_BIT(2), /* ep is a valid endpoint */
+    UCT_DC_MLX5_EP_FLAG_TX_WAIT             = UCS_BIT(0), /* ep is in the tx_wait state. See
+                                                             description of the dcs+quota dci
+                                                             selection policy above */
+    UCT_DC_MLX5_EP_FLAG_GRH                 = UCS_BIT(1), /* ep has GRH address. Used by
+                                                             dc_mlx5 endpoint */
+    UCT_DC_MLX5_EP_FLAG_VALID               = UCS_BIT(2), /* ep is a valid endpoint */
     /* Indicates that FC grant has been requested, but is not received yet.
      * Flush will not complete until an outgoing grant request is acked.
      * It is needed to avoid the following cases:
      * 1) Grant arrives for the recently deleted ep.
      * 2) QP resources are available, but there are some pending requests. */
-    UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT = UCS_BIT(3),
+    UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT   = UCS_BIT(3),
+
     /* Keepalive Request scheduled: indicates that keepalive request
      * is scheduled in outstanding queue and no more keepalive actions
      * are needed */
-    UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED  = UCS_BIT(4)
+    UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED    = UCS_BIT(4),
+
+    /* Flush cancel was executed on EP */
+    UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL        = UCS_BIT(5),
+
+    /* Error handler already called or flush(CANCEL) disabled it */
+    UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(6),
 };
 
 

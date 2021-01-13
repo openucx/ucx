@@ -9,7 +9,8 @@
 
 ## Current
 ### Features: TBD
-#### UCX Core TBD
+#### UCX Core
+- Added ucp_tag_msg_recv_nbx routine.
 #### UCX Java (API Preview) TBD
 ### Bugfixes: TBD
 

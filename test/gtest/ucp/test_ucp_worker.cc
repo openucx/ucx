@@ -75,18 +75,19 @@ protected:
                              unsigned wireup_ep_count = 0,
                              unsigned wireup_aux_ep_count = 0) {
         uct_iface_ops_t ops                  = {0};
+        ucp_ep_t ucp_ep                      = {0};
         unsigned created_wireup_aux_ep_count = 0;
         unsigned total_ep_count              = ep_count + wireup_aux_ep_count;
         uct_iface_t iface;
         std::vector<uct_ep_t> eps(total_ep_count);
         std::vector<uct_ep_h> wireup_eps(wireup_ep_count);
-        ucp_ep_t ucp_ep;
         ucs_status_t status;
 
         ASSERT_LE(wireup_ep_count, ep_count);
         ASSERT_LE(wireup_aux_ep_count, wireup_ep_count);
 
-        ucp_ep.worker = sender().worker();
+        ucp_ep.worker  = sender().worker();
+        ucp_ep.ref_cnt = 1u;
 
         ops.ep_flush         = (uct_ep_flush_func_t)ep_flush_func;
         ops.ep_pending_add   = (uct_ep_pending_add_func_t)ep_pending_add_func;
@@ -155,8 +156,7 @@ protected:
             uct_ep_h discard_ep        = *iter;
             unsigned purged_reqs_count = 0;
 
-            ucp_worker_discard_uct_ep(sender().worker(), discard_ep,
-                                      UCT_FLUSH_FLAG_LOCAL,
+            ucp_worker_discard_uct_ep(&ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
                                       ep_pending_purge_count_reqs_cb,
                                       &purged_reqs_count);
 
@@ -236,6 +236,8 @@ protected:
         for (unsigned i = 0; i < created_wireup_aux_ep_count; i++) {
             EXPECT_EQ(NULL, eps[i].iface);
         }
+
+        EXPECT_EQ(1u, ucp_ep.ref_cnt);
     }
 
     static void ep_destroy_func(uct_ep_h ep) {

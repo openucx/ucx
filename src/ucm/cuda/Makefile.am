@@ -9,7 +9,7 @@ if HAVE_CUDA
 module_LTLIBRARIES      = libucm_cuda.la
 libucm_cuda_la_CPPFLAGS = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
 libucm_cuda_la_CFLAGS   = $(BASE_CFLAGS) $(CUDA_CFLAGS)
-libucm_cuda_la_LIBADD   = ../libucm.la
+libucm_cuda_la_LIBADD   = ../libucm.la $(CUDA_LIBS)
 libucm_cuda_la_LDFLAGS  = $(UCM_MODULE_LDFLAGS) \
                           $(patsubst %, -Xlinker %, $(CUDA_LDFLAGS)) \
                           -version-info $(SOVERSION)

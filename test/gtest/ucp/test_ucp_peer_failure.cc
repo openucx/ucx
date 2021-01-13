@@ -103,10 +103,7 @@ ucp_ep_params_t test_ucp_peer_failure::get_ep_params() {
 }
 
 void test_ucp_peer_failure::set_timeouts() {
-    /* Set small TL timeouts to reduce testing time */
-    m_env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
-    m_env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
-    m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
+    set_tl_timeouts(m_env);
 }
 
 void test_ucp_peer_failure::err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
@@ -464,6 +461,9 @@ public:
     test_ucp_peer_failure_keepalive() {
         m_sbuf.resize(1 * UCS_MBYTE);
         m_rbuf.resize(1 * UCS_MBYTE);
+
+        m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
+        m_env.push_back(new ucs::scoped_setenv("UCX_UD_TIMEOUT", "3s"));
     }
 
     void init() {
@@ -481,7 +481,7 @@ public:
 };
 
 UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
-           "KEEPALIVE_TIMEOUT=0.3", "KEEPALIVE_NUM_EPS=inf") {
+           "KEEPALIVE_INTERVAL=0.3", "KEEPALIVE_NUM_EPS=inf") {
     /* TODO: wireup is not tested yet */
 
     scoped_log_handler err_handler(wrap_errors_logger);

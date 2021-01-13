@@ -134,9 +134,24 @@ uct_rc_verbs_iface_fill_inl_am_sge(uct_rc_verbs_iface_t *iface,
                                    const void *buffer, unsigned length)
 {
     uct_rc_am_short_hdr_t *am = &iface->am_inl_hdr;
-    am->rc_hdr.am_id = id;
-    am->am_hdr       = hdr;
+
+    am->rc_hdr.am_id          = id;
+    am->am_hdr                = hdr;
+    iface->inl_am_wr.num_sge  = 2;
     uct_rc_verbs_iface_fill_inl_sge(iface, am, sizeof(*am), buffer, length);
+}
+
+static inline void
+uct_rc_verbs_iface_fill_inl_am_sge_iov(uct_rc_verbs_iface_t *iface, uint8_t id,
+                                       const uct_iov_t *iov, size_t iovcnt)
+{
+    uct_rc_hdr_t *rch        = &iface->am_inl_hdr.rc_hdr;
+
+    rch->am_id               = id;
+    iface->inl_sge[0].addr   = (uintptr_t)rch;
+    iface->inl_sge[0].length = sizeof(*rch);
+    iface->inl_am_wr.num_sge = uct_ib_verbs_sge_fill_iov(iface->inl_sge + 1, iov,
+                                                         iovcnt) + 1;
 }
 
 #define UCT_RC_VERBS_FILL_SGE(_wr, _sge, _length) \

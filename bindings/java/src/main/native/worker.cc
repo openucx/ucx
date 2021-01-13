@@ -145,7 +145,7 @@ Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedNonBlockingNative(JNIEnv *env, jcl
                                                                 jlong ucp_worker_ptr,
                                                                 jlong laddr, jlong size,
                                                                 jlong tag, jlong tag_mask,
-                                                                jobject callback)
+                                                                jobject callback, jint memory_type)
 {
     ucs_status_ptr_t request = ucp_tag_recv_nb((ucp_worker_h)ucp_worker_ptr,
                                                 (void *)laddr, size,
@@ -162,7 +162,7 @@ Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedIovNonBlockingNative(JNIEnv *env, 
                                                                    jlong ucp_worker_ptr,
                                                                    jlongArray addresses, jlongArray sizes,
                                                                    jlong tag, jlong tag_mask,
-                                                                   jobject callback)
+                                                                   jobject callback, jint memory_type)
 {
     int iovcnt;
     ucp_dt_iov_t* iovec = get_ucp_iov(env, addresses, sizes, iovcnt);
@@ -210,7 +210,8 @@ Java_org_openucx_jucx_ucp_UcpWorker_recvTaggedMessageNonBlockingNative(JNIEnv *e
                                                                        jlong ucp_worker_ptr,
                                                                        jlong laddr, jlong size,
                                                                        jlong msg_ptr,
-                                                                       jobject callback)
+                                                                       jobject callback,
+                                                                       jint memory_type)
 {
     ucs_status_ptr_t request = ucp_tag_msg_recv_nb((ucp_worker_h)ucp_worker_ptr,
                                                    (void *)laddr, size,

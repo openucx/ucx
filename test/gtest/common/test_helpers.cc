@@ -685,6 +685,18 @@ const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
     return m_is_valid ? (struct sockaddr *)(&m_storage) : NULL;
 }
 
+const void* sock_addr_storage::get_sock_addr_in_buf() const {
+    const struct sockaddr* saddr = get_sock_addr_ptr();
+
+    ucs_assert_always(saddr != NULL);
+    ucs_assert_always((saddr->sa_family == AF_INET) ||
+                      (saddr->sa_family == AF_INET6));
+
+    return (saddr->sa_family == AF_INET) ?
+           (const void*)&((struct sockaddr_in*)saddr)->sin_addr :
+           (const void*)&((struct sockaddr_in6*)saddr)->sin6_addr;
+}
+
 std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage)
 {
     return os << ucs::sockaddr_to_str(sa_storage.get_sock_addr_ptr());

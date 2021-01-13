@@ -482,24 +482,95 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
     ucs_log(level, "IB Async event on %s: %s", uct_ib_device_name(dev), event_info);
 }
 
+static ucs_status_t uct_ib_device_get_path_buffer(uct_ib_device_t *dev,
+                                                  char *path_buffer)
+{
+    char *resolved_path;
+
+    resolved_path = realpath(dev->ibv_context->device->ibdev_path, path_buffer);
+    if (resolved_path == NULL) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    /* Make sure there is "/infiniband/" substring in path_buffer */
+    if (strstr(path_buffer, "/infiniband/") == NULL) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_device_get_ids_from_path(const char *path,
+                                                    uint16_t *vendor_id,
+                                                    uint16_t *device_id)
+{
+    ucs_status_t status;
+    long value;
+
+    status = ucs_read_file_number(&value, 1, "%s/%s", path, "vendor");
+    if (status != UCS_OK) {
+        return status;
+    }
+    *vendor_id = value;
+
+    status = ucs_read_file_number(&value, 1, "%s/%s", path, "device");
+    if (status != UCS_OK) {
+        return status;
+    }
+    *device_id = value;
+
+    return UCS_OK;
+}
+
 static void uct_ib_device_get_ids(uct_ib_device_t *dev)
 {
-    long vendor_id, device_id;
+    char *ids_path;
+    char path_buffer[PATH_MAX];
+    ucs_status_t status;
 
-    if ((ucs_read_file_number(&vendor_id, 1, UCT_IB_DEVICE_SYSFS_FMT,
-                              uct_ib_device_name(dev), "vendor") == UCS_OK) &&
-        (ucs_read_file_number(&device_id, 1, UCT_IB_DEVICE_SYSFS_FMT,
-                              uct_ib_device_name(dev), "device") == UCS_OK)) {
-        dev->pci_id.vendor = vendor_id;
-        dev->pci_id.device = device_id;
-        ucs_debug("%s vendor_id: 0x%x device_id: %d", uct_ib_device_name(dev),
-                  dev->pci_id.vendor, dev->pci_id.device);
-    } else {
-        dev->pci_id.vendor = 0;
-        dev->pci_id.device = 0;
-        ucs_warn("%s: could not read device/vendor id from sysfs, "
-                 "performance may be affected", uct_ib_device_name(dev));
+    /* PF: realpath name is of form /sys/devices/.../0000:03:00.0/infiniband/mlx5_0 */
+    /* SF: realpath name is of form /sys/devices/.../0000:03:00.0/<UUID>/infiniband/mlx5_0 */
+
+    status = uct_ib_device_get_path_buffer(dev, path_buffer);
+    if (status != UCS_OK) {
+        goto not_found;
     }
+
+    /* PF: strip 2 layers. */
+    ids_path = ucs_dirname(path_buffer, 2);
+    if (ids_path == NULL) {
+        goto not_found;
+    }
+
+    status = uct_ib_device_get_ids_from_path(ids_path,
+                                             &dev->pci_id.vendor,
+                                             &dev->pci_id.device);
+    if (status == UCS_OK) {
+        ucs_debug("PF: %s vendor_id: 0x%x device_id: %d", uct_ib_device_name(dev),
+                  dev->pci_id.vendor, dev->pci_id.device);
+        return;
+    }
+
+    /* SF: strip 3 layers (1 more layer than PF). */
+    ids_path = ucs_dirname(path_buffer, 1);
+    if (ids_path == NULL) {
+        goto not_found;
+    }
+
+    status = uct_ib_device_get_ids_from_path(ids_path,
+                                             &dev->pci_id.vendor,
+                                             &dev->pci_id.device);
+    if (status == UCS_OK) {
+        ucs_debug("SF: %s vendor_id: 0x%x device_id: %d", uct_ib_device_name(dev),
+                  dev->pci_id.vendor, dev->pci_id.device);
+        return;
+    }
+
+not_found:
+    dev->pci_id.vendor = 0;
+    dev->pci_id.device = 0;
+    ucs_warn("%s: could not read device/vendor id from sysfs, "
+             "performance may be affected", uct_ib_device_name(dev));
 }
 
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
@@ -528,10 +599,10 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     }
 
     if (dev->num_ports > UCT_IB_DEV_MAX_PORTS) {
-        ucs_error("%s has %d ports, but only up to %d are supported",
+        ucs_debug("%s has %d ports, but only up to %d are supported",
                   ibv_get_device_name(ibv_device), dev->num_ports,
                   UCT_IB_DEV_MAX_PORTS);
-        return UCS_ERR_UNSUPPORTED;
+        dev->num_ports = UCT_IB_DEV_MAX_PORTS;
     }
 
     /* Query all ports */
@@ -679,6 +750,12 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
+    }
+
+    if (uct_ib_device_port_attr(dev, port_num)->gid_tbl_len == 0) {
+        ucs_debug("%s:%d has no gid", uct_ib_device_name(dev),
+                  port_num);
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (uct_ib_device_port_attr(dev, port_num)->state != IBV_PORT_ACTIVE) {
@@ -1015,7 +1092,7 @@ ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state)
 
 static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
 {
-    char path_buffer[PATH_MAX], *resolved_path;
+    char path_buffer[PATH_MAX];
     ucs_sys_device_t sys_dev;
     ucs_sys_bus_id_t bus_id;
     ucs_status_t status;
@@ -1025,17 +1102,20 @@ static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
     /* realpath name is of form /sys/devices/.../0000:05:00.0/infiniband/mlx5_0
      * and bus_id is constructed from 0000:05:00.0 */
 
-    resolved_path = realpath(dev->ibv_context->device->ibdev_path, path_buffer);
-    if (resolved_path == NULL) {
+    status = uct_ib_device_get_path_buffer(dev, path_buffer);
+    if (status != UCS_OK) {
         return UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
-    /* Make sure there is "/infiniband/" substring in path_buffer*/
-    if (strstr(path_buffer, "/infiniband/") == NULL) {
+    pcie_bus = ucs_dirname(path_buffer, 2);
+    if (pcie_bus == NULL) {
+        return UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+    pcie_bus = basename(pcie_bus);
+    if (pcie_bus == NULL) {
         return UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
-    pcie_bus   = basename(dirname(dirname(path_buffer)));
     num_fields = sscanf(pcie_bus, "%hx:%hhx:%hhx.%hhx", &bus_id.domain,
                         &bus_id.bus, &bus_id.slot, &bus_id.function);
     if (num_fields != 4) {
@@ -1329,7 +1409,7 @@ int uct_ib_get_cqe_size(int cqe_size_min)
 
 static ucs_status_t
 uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
-                                 char *ndev_name, size_t max)
+                                 uint8_t gid_index, char *ndev_name, size_t max)
 {
     ssize_t nread;
 
@@ -1338,7 +1418,7 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     /* get the network device name which corresponds to a RoCE port */
     nread = ucs_read_file_str(ndev_name, max, 1,
                               UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
-                              uct_ib_device_name(dev), port_num, 0);
+                              uct_ib_device_name(dev), port_num, gid_index);
     if (nread < 0) {
         ucs_diag("failed to read " UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT": %m",
                  uct_ib_device_name(dev), port_num, 0);
@@ -1349,14 +1429,15 @@ uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
     return UCS_OK;
 }
 
-unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num)
+unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num,
+                                          uint8_t gid_index)
 {
     char ndev_name[IFNAMSIZ];
     unsigned roce_lag_level;
     ucs_status_t status;
 
-    status = uct_ib_device_get_roce_ndev_name(dev, port_num, ndev_name,
-                                              sizeof(ndev_name));
+    status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
+                                              ndev_name, sizeof(ndev_name));
     if (status != UCS_OK) {
         return 1;
     }

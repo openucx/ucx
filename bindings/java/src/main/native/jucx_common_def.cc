@@ -20,6 +20,7 @@ static jclass jucx_request_cls;
 static jfieldID native_id_field;
 static jfieldID recv_size_field;
 static jfieldID sender_tag_field;
+static jfieldID request_status;
 static jmethodID on_success;
 static jmethodID jucx_request_constructor;
 static jclass ucp_rkey_cls;
@@ -40,6 +41,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     jucx_request_cls = (jclass) env->NewGlobalRef(jucx_request_cls_local);
     jclass jucx_callback_cls = env->FindClass("org/openucx/jucx/UcxCallback");
     native_id_field = env->GetFieldID(jucx_request_cls, "nativeId", "Ljava/lang/Long;");
+    request_status = env->GetFieldID(jucx_request_cls, "status", "I");
     recv_size_field = env->GetFieldID(jucx_request_cls, "recvSize", "J");
     sender_tag_field = env->GetFieldID(jucx_request_cls, "senderTag", "J");
     on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
@@ -172,10 +174,16 @@ JNIEnv* get_jni_env()
     return (JNIEnv*)env;
 }
 
+void jucx_request_update_status(JNIEnv *env, jobject jucx_request, ucs_status_t status)
+{
+    env->SetIntField(jucx_request, request_status, status);
+}
+
 static inline void set_jucx_request_completed(JNIEnv *env, jobject jucx_request,
-                                              struct jucx_context *ctx)
+                                              struct jucx_context *ctx, ucs_status_t status)
 {
     env->SetObjectField(jucx_request, native_id_field, NULL);
+    jucx_request_update_status(env, jucx_request, status);
     if (ctx != NULL) {
         /* sender_tag and length are initialized to 0,
          * so try to avoid the overhead of setting them again */
@@ -238,7 +246,7 @@ UCS_PROFILE_FUNC_VOID(jucx_request_callback, (request, status), void *request, u
     }
 
     JNIEnv *env = get_jni_env();
-    set_jucx_request_completed(env, ctx->jucx_request, ctx);
+    set_jucx_request_completed(env, ctx->jucx_request, ctx, status);
 
     if (ctx->callback != NULL) {
         jucx_call_callback(ctx->callback, ctx->jucx_request, status);
@@ -285,7 +293,7 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
         } else {
             // request was completed whether by progress in other thread or inside
             // ucp_tag_recv_nb function call.
-            set_jucx_request_completed(env, jucx_request, ctx);
+            set_jucx_request_completed(env, jucx_request, ctx, ctx->status);
             if (callback != NULL) {
                 jucx_call_callback(callback, jucx_request, ctx->status);
             }
@@ -296,7 +304,7 @@ UCS_PROFILE_FUNC(jobject, process_request, (request, callback), void *request, j
     } else {
         jmethodID empty_constructor = env->GetMethodID(jucx_request_cls, "<init>", "()V");
         jucx_request = env->NewObject(jucx_request_cls, empty_constructor);
-        set_jucx_request_completed(env, jucx_request, NULL);
+        set_jucx_request_completed(env, jucx_request, NULL, UCS_PTR_RAW_STATUS(request));
         if (UCS_PTR_IS_ERR(request)) {
             JNU_ThrowExceptionByStatus(env, UCS_PTR_STATUS(request));
             if (callback != NULL) {
@@ -315,6 +323,7 @@ jobject process_completed_stream_recv(size_t length, jobject callback)
     jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor, NULL);
     env->SetObjectField(jucx_request, native_id_field, NULL);
     env->SetLongField(jucx_request, recv_size_field, length);
+    jucx_request_update_status(env, jucx_request, UCS_OK);
     if (callback != NULL) {
         jucx_call_callback(callback, jucx_request, UCS_OK);
     }

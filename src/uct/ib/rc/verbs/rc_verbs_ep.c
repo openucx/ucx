@@ -264,10 +264,29 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
-    UCT_RC_CHECK_AM_SHORT(id, length, iface->config.max_inline);
+    UCT_RC_CHECK_AM_SHORT(id, length, uct_rc_am_short_hdr_t, iface->config.max_inline);
     UCT_RC_CHECK_RES_AND_FC(&iface->super, &ep->super, id);
     uct_rc_verbs_iface_fill_inl_am_sge(iface, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
+    uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr,
+                              IBV_SEND_INLINE | IBV_SEND_SOLICITED, INT_MAX);
+    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_verbs_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                          const uct_iov_t *iov, size_t iovcnt)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+
+    UCT_RC_CHECK_AM_SHORT(id, uct_iov_total_length(iov, iovcnt), uct_rc_hdr_t,
+                          iface->config.max_inline);
+    UCT_RC_CHECK_RES_AND_FC(&iface->super, &ep->super, id);
+    UCT_CHECK_IOV_SIZE(iovcnt, UCT_IB_MAX_IOV - 1, "uct_rc_verbs_ep_am_short_iov");
+    uct_rc_verbs_iface_fill_inl_am_sge_iov(iface, id, iov, iovcnt);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, uct_iov_total_length(iov, iovcnt));
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr,
                               IBV_SEND_INLINE | IBV_SEND_SOLICITED, INT_MAX);
     UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
@@ -414,7 +433,8 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                    uct_completion_t *comp)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    int already_canceled        = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
 
     status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, flags);
@@ -427,7 +447,7 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
         uct_rc_verbs_ep_post_flush(ep, IBV_SEND_SIGNALED);
     }
 
-    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+    if (ucs_unlikely((flags & UCT_FLUSH_FLAG_CANCEL) && !already_canceled)) {
         status = uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
         if (status != UCS_OK) {
             return status;

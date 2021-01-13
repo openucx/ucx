@@ -434,11 +434,11 @@ void UcxContext::destroy_connections()
         _conn_requests.pop_front();
     }
 
-    for (conn_map_t::iterator iter = _conns.begin(); iter != _conns.end(); ++iter) {
-        delete iter->second;
+    UCX_LOG << "destroy_connections";
+    while (!_conns.empty()) {
+        // UcxConnection destructor removes itself from _conns map
+        delete _conns.begin()->second;
     }
-
-    _conns.clear();
 }
 
 void UcxContext::destroy_listener()
@@ -524,9 +524,12 @@ UcxConnection::~UcxConnection()
 {
     UCX_CONN_LOG << "destroying, ep is " << _ep;
 
+    _context.remove_connection(this);
+    cancel_all();
+
     // if _ep is NULL, connection was closed and removed by error handler
     if (_ep != NULL) {
-        disconnect(UCP_EP_CLOSE_MODE_FORCE);
+        ep_close(UCP_EP_CLOSE_MODE_FORCE);
     }
 
     if (_close_request) {
@@ -857,13 +860,6 @@ void UcxConnection::handle_connection_error(ucs_status_t status)
         /* the upper layer should close the connection */
         _context.handle_connection_error(this);
     }
-}
-
-void UcxConnection::disconnect(enum ucp_ep_close_mode mode)
-{
-    _context.remove_connection(this);
-    cancel_all();
-    ep_close(mode);
 }
 
 void UcxConnection::ep_close(enum ucp_ep_close_mode mode)

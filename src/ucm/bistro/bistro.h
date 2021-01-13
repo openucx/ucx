@@ -36,6 +36,7 @@ typedef struct ucm_bistro_restore_point ucm_bistro_restore_point_t;
  */
 ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp);
 
+
 /**
  * Remove resore point created by @ref ucm_bistro_patch witout
  * restore original function body
@@ -46,6 +47,7 @@ ucs_status_t ucm_bistro_restore(ucm_bistro_restore_point_t *rp);
  */
 ucs_status_t ucm_bistro_remove_restore_point(ucm_bistro_restore_point_t *rp);
 
+
 /**
  * Get patch address for restore point
  *
@@ -54,5 +56,16 @@ ucs_status_t ucm_bistro_remove_restore_point(ucm_bistro_restore_point_t *rp);
  * @return Address of patched function body
  */
 void *ucm_bistro_restore_addr(ucm_bistro_restore_point_t *rp);
+
+
+/**
+ * Allocate executable memory which can be used to create trampolines or
+ * temporary functions.
+ *
+ * @param size   Memory size to allocated
+ *
+ * @return Pointer to allocated memory, or NULL if failed.
+ */
+void *ucm_bistro_allocate_code(size_t size);
 
 #endif

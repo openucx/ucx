@@ -160,5 +160,11 @@ ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag, size_t length)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_offload_request_check_flags(ucp_request_t *req)
+{
+    ucs_assert(!ucp_ep_use_indirect_id(req->send.ep) &&
+               !(req->flags & UCP_REQUEST_FLAG_IN_PTR_MAP));
+}
 
 #endif

@@ -44,6 +44,24 @@ protected:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
+    static ucs_log_func_rc_t
+    mpool_log_leak_handler(const char *file, unsigned line,
+                           const char *function, ucs_log_level_t level,
+                           const ucs_log_component_config_t *comp_conf,
+                           const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_WARN) {
+            std::string err_str = format_message(message, ap);
+
+            if (err_str.find("was not returned to mpool test") !=
+                std::string::npos) {
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
     static const size_t header_size = 30;
     static const size_t data_size = 152;
     static const size_t align = 128;
@@ -201,5 +219,28 @@ UCS_TEST_F(test_mpool, infinite) {
         q.pop();
     }
 
+    ucs_mpool_cleanup(&mp, 1);
+}
+
+UCS_TEST_F(test_mpool, leak_check) {
+    ucs_mpool_t mp;
+    ucs_status_t status;
+
+    ucs_mpool_ops_t ops = {
+        ucs_mpool_chunk_malloc,
+        ucs_mpool_chunk_free,
+        NULL,
+        NULL
+    };
+
+    status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
+                            6, 18, &ops, "test");
+    ASSERT_UCS_OK(status);
+
+    void *obj = ucs_mpool_get(&mp);
+    EXPECT_TRUE(obj != NULL);
+    // Do not release allocated object
+
+    scoped_log_handler log_handler(mpool_log_leak_handler);
     ucs_mpool_cleanup(&mp, 1);
 }

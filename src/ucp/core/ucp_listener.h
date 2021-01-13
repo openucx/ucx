@@ -40,7 +40,7 @@ typedef struct ucp_listener {
 } ucp_listener_t;
 
 
-void ucp_listener_schedule_accept_cb(ucp_ep_h ep);
+void ucp_listener_schedule_accept_cb(ucp_conn_request_h conn_request);
 
 int ucp_listener_accept_cb_remove_filter(const ucs_callbackq_elem_t *elem,
                                          void *arg);

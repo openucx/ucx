@@ -229,8 +229,10 @@ protected:
     void flush_worker(const entity &e, int worker_index = 0);
     void disconnect(entity& entity);
     ucs_status_t request_wait(void *req, int worker_index = 0);
+    ucs_status_t requests_wait(const std::vector<void*> &reqs, int worker_index = 0);
     void request_release(void *req);
     int max_connections();
+    void set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env);
 
     // Add test variant without values, with given context params
     static ucp_test_variant&
@@ -293,6 +295,16 @@ protected:
     void wait_for_flag(volatile T *flag, double timeout = 10.0) {
         ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
         while ((ucs_get_time() < loop_end_limit) && (!(*flag))) {
+            short_progress_loop();
+        }
+    }
+
+    template <typename T>
+    void wait_for_value(volatile T *var, T value, double timeout = 10.0) const
+    {
+        ucs_time_t deadline = ucs_get_time() +
+                              ucs_time_from_sec(timeout) * ucs::test_time_multiplier();
+        while ((ucs_get_time() < deadline) && (*var != value)) {
             short_progress_loop();
         }
     }

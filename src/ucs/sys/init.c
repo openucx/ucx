@@ -9,6 +9,7 @@
 #endif
 
 #include <ucs/sys/compiler.h>
+#include <ucs/sys/module.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/config/parser.h>
 #include <ucs/debug/debug.h>
@@ -78,6 +79,12 @@ static UCS_F_NOOPTIMIZE void ucs_check_cpu_flags(void)
     }
 }
 
+static void ucs_modules_load()
+{
+    UCS_MODULE_FRAMEWORK_DECLARE(ucs);
+    UCS_MODULE_FRAMEWORK_LOAD(ucs, UCS_MODULE_LOAD_FLAG_GLOBAL);
+}
+
 static void UCS_F_CTOR ucs_init()
 {
     ucs_check_cpu_flags();
@@ -97,6 +104,7 @@ static void UCS_F_CTOR ucs_init()
     ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),
               ucs_debug_get_lib_base_addr());
     ucs_debug("cmd line: %s", ucs_get_process_cmdline());
+    ucs_modules_load();
 }
 
 static void UCS_F_DTOR ucs_cleanup(void)

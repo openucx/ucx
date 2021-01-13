@@ -17,10 +17,12 @@
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
 #include <ucm/mmap/mmap.h>
+#include <ucs/type/init_once.h>
 #include <ucs/sys/math.h>
 #include <linux/mman.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <syscall.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -36,7 +38,7 @@ ucm_global_config_t ucm_global_opts = {
     .mmap_hook_mode             = UCM_DEFAULT_HOOK_MODE,
     .enable_malloc_hooks        = 1,
     .enable_malloc_reloc        = 0,
-    .enable_cuda_reloc          = 1,
+    .cuda_hook_mode             = UCM_DEFAULT_HOOK_MODE,
     .enable_dynamic_mmap_thresh = 1,
     .alloc_alignment            = 16,
     .dlopen_process_rpath       = 1
@@ -282,7 +284,8 @@ void ucm_strerror(int eno, char *buf, size_t max)
 
 void ucm_prevent_dl_unload()
 {
-    int flags = RTLD_LOCAL | RTLD_NODELETE;
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    int flags                        = RTLD_LOCAL | RTLD_NODELETE;
     Dl_info info;
     void *dl;
     int ret;
@@ -292,32 +295,34 @@ void ucm_prevent_dl_unload()
         return;
     }
 
-    flags |= (ucm_global_opts.module_unload_prevent_mode ==
-              UCM_UNLOAD_PREVENT_MODE_NOW) ? RTLD_NOW : RTLD_LAZY;
+    UCS_INIT_ONCE(&init_once) {
+        flags |= (ucm_global_opts.module_unload_prevent_mode ==
+                  UCM_UNLOAD_PREVENT_MODE_NOW) ? RTLD_NOW : RTLD_LAZY;
 
-    /* Get the path to current library by current function pointer */
-    (void)dlerror();
-    ret = dladdr(ucm_prevent_dl_unload, &info);
-    if (ret == 0) {
-        ucm_warn("could not find address of current library: %s", dlerror());
-        return;
+        /* Get the path to current library by current function pointer */
+        (void)dlerror();
+        ret = dladdr(ucm_prevent_dl_unload, &info);
+        if (ret == 0) {
+            ucm_warn("could not find address of current library: %s", dlerror());
+            return;
+        }
+
+        /* Load the current library with NODELETE flag, to prevent it from being
+         * unloaded. This will create extra reference to the library, but also add
+         * NODELETE flag to the dynamic link map.
+         */
+        (void)dlerror();
+        dl = dlopen(info.dli_fname, flags);
+        if (dl == NULL) {
+            ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
+            return;
+        }
+
+        ucm_debug("loaded '%s' at %p with NODELETE flag", info.dli_fname, dl);
+
+        /* coverity[overwrite_var] */
+        dl = NULL;
     }
-
-    /* Load the current library with NODELETE flag, to prevent it from being
-     * unloaded. This will create extra reference to the library, but also add
-     * NODELETE flag to the dynamic link map.
-     */
-    (void)dlerror();
-    dl = dlopen(info.dli_fname, flags);
-    if (dl == NULL) {
-        ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
-        return;
-    }
-
-    ucm_debug("reloaded '%s' at %p with NODELETE flag", info.dli_fname, dl);
-
-    /* Now we drop our reference to the lib, and it won't be unloaded anymore */
-    dlclose(dl);
 }
 
 char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *file)
@@ -348,4 +353,26 @@ char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *fil
     buffer[max + len] = '\0'; /* force close string */
 
     return buffer;
+}
+
+void *ucm_brk_syscall(void *addr)
+{
+    void *result;
+
+#ifdef __x86_64__
+    asm volatile("mov %1, %%rdi\n\t"
+                 "mov $0xc, %%eax\n\t"
+                 "syscall\n\t"
+                 : "=a"(result)
+                 : "m"(addr));
+#else
+    /* TODO implement 64-bit syscall for aarch64, ppc64le */
+    result = (void*)syscall(SYS_brk, addr);
+#endif
+    return result;
+}
+
+pid_t ucm_get_tid()
+{
+    return syscall(SYS_gettid);
 }

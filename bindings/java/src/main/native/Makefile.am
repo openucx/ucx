@@ -40,7 +40,8 @@ MOSTLYCLEANFILES = $(JUCX_GENERATED_H_FILES) $(STAMP_FILE)
 #
 $(STAMP_FILE): \
 		$(javadir)/src/main/java/org/openucx/jucx/ucs/*.java \
-		$(javadir)/src/main/java/org/openucx/jucx/ucp/*.java
+		$(javadir)/src/main/java/org/openucx/jucx/ucp/*.java \
+		$(javadir)/src/main/java/org/openucx/jucx/examples/*.java
 	$(MVNCMD) compile
 	touch $(STAMP_FILE)
 
@@ -73,7 +74,7 @@ libjucx_la_LIBADD = $(topdir)/src/ucs/libucs.la \
 libjucx_la_DEPENDENCIES = Makefile.am Makefile.in Makefile
 
 # Compile Java source code and pack to jar
-$(jarfile):
+$(jarfile): libjucx.la
 	$(MVNCMD) package -DskipTests
 
 package : $(jarfile)

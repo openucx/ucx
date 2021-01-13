@@ -120,7 +120,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
 
     if (ucs_unlikely(inline_data != NULL)) {
         status = ucp_request_recv_data_unpack(req, inline_data, length, 0, 1);
-        ucs_mpool_put_inline(req->recv.tag.rdesc);
+        ucp_tag_offload_release_buf(req);
     } else if (req->recv.tag.rdesc != NULL) {
         status = ucp_request_recv_data_unpack(req, req->recv.tag.rdesc + 1,
                                               length, 0, 1);
@@ -563,6 +563,8 @@ static void ucp_tag_offload_rndv_zcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
+
+    ucp_tag_offload_request_check_flags(req);
     ucp_proto_am_zcopy_req_complete(req, self->status);
 }
 
@@ -579,10 +581,11 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
 
     ucp_tag_offload_unexp_rndv_hdr_t rndv_hdr = {
         .ep_id    = ucp_send_request_get_ep_remote_id(req),
-        .req_id   = ucp_send_request_get_id(req),
+        .req_id   = req->send.msg_proto.sreq_id,
         .md_index = ucp_ep_md_index(ep, req->send.lane)
     };
 
+    ucs_assert(!ucp_ep_use_indirect_id(req->send.ep));
     dt_state = req->send.state.dt;
 
     UCS_STATIC_ASSERT(sizeof(ucp_rsc_index_t) <= sizeof(rndv_hdr.md_index));
@@ -719,10 +722,14 @@ void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, ucs_ptr_map_key_t ep_id,
                                    ucp_tag_t stag, uint16_t recv_flags)
 {
     ucp_request_t *req;
+    ucp_ep_h ep;
 
     ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD);
 
-    req = ucp_proto_ssend_ack_request_alloc(worker, ep_id);
+    ep = UCP_WORKER_GET_VALID_EP_BY_ID(worker, ep_id, return,
+                                       "ACK for sync-send");
+
+    req = ucp_proto_ssend_ack_request_alloc(worker, ep);
     if (req == NULL) {
         ucs_fatal("could not allocate request");
     }

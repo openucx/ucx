@@ -81,7 +81,9 @@ static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_SHORT)]  = "tag eager short",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)]  = "tag eager bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)]  = "tag eager zcopy",
-    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy"
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_CHECK)]         = "ep check",
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_KEEPALIVE)]     = "ep keepalive"
 };
 
 static const char *perf_atomic_op[] = {
@@ -480,7 +482,8 @@ void uct_perf_iface_flush_b(ucx_perf_context_t *perf)
 static inline uint64_t __get_flag(uct_perf_data_layout_t layout, uint64_t short_f,
                                   uint64_t bcopy_f, uint64_t zcopy_f)
 {
-    return (layout == UCT_PERF_DATA_LAYOUT_SHORT) ? short_f :
+    return ((layout == UCT_PERF_DATA_LAYOUT_SHORT) ||
+            (layout == UCT_PERF_DATA_LAYOUT_SHORT_IOV)) ? short_f :
            (layout == UCT_PERF_DATA_LAYOUT_BCOPY) ? bcopy_f :
            (layout == UCT_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_f :
            0;
@@ -502,7 +505,8 @@ static inline ucs_status_t __get_atomic_flag(size_t size, uint64_t *op32,
 static inline size_t __get_max_size(uct_perf_data_layout_t layout, size_t short_m,
                                     size_t bcopy_m, uint64_t zcopy_m)
 {
-    return (layout == UCT_PERF_DATA_LAYOUT_SHORT) ? short_m :
+    return ((layout == UCT_PERF_DATA_LAYOUT_SHORT) ||
+            (layout == UCT_PERF_DATA_LAYOUT_SHORT_IOV)) ? short_m :
            (layout == UCT_PERF_DATA_LAYOUT_BCOPY) ? bcopy_m :
            (layout == UCT_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_m :
            0;
@@ -692,7 +696,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         }
     }
 
-    if (UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) {
+    if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) ||
+        (UCT_PERF_DATA_LAYOUT_SHORT_IOV == params->uct.data_layout)) {
         if (params->msg_size_cnt > max_iov) {
             if ((params->flags & UCX_PERF_TEST_FLAG_VERBOSE) ||
                 !params->msg_size_cnt) {
@@ -703,7 +708,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
             return UCS_ERR_UNSUPPORTED;
         }
         /* if msg_size_cnt == 1 the message size checked above */
-        if ((UCX_PERF_CMD_AM == params->command) && (params->msg_size_cnt > 1)) {
+        if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) &&
+            (UCX_PERF_CMD_AM == params->command) && (params->msg_size_cnt > 1)) {
             if (params->am_hdr_size > params->msg_size_list[0]) {
                 if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                     ucs_error("AM header size (%lu) larger than the first IOV "

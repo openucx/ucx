@@ -98,8 +98,6 @@ typedef struct ucp_context_config {
     int                                    flush_worker_eps;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
-    /** Enable cm wireup-and-close protocol for client-server connections */
-    ucs_ternary_auto_value_t               sockaddr_cm_enable;
     /** Enable cm wireup message exchange to select the best transports
      *  for all lanes after cm phase is done */
     int                                    cm_use_all_devices;
@@ -108,7 +106,7 @@ typedef struct ucp_context_config {
     /** Enable new protocol selection logic */
     int                                    proto_enable;
     /** Time period between keepalive rounds (0 - disabled) */
-    ucs_time_t                             keepalive_timeout;
+    double                                 keepalive_interval;
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
@@ -134,6 +132,8 @@ struct ucp_config {
     int                                    warn_invalid_config;
     /** This config environment prefix */
     char                                   *env_prefix;
+    /** MD to compare for transport selection scores */
+    char                                   *selection_cmp;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
 };
@@ -238,13 +238,6 @@ typedef struct ucp_context {
         /* Cached map of components which support CM capability */
         uint64_t                  cm_cmpts_bitmap;
 
-        /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
-        uint64_t                  sockaddr_aux_rscs_bitmap;
-
-        /* Array of sockaddr transports indexes.
-         * The indexes appear in the configured priority order */
-        ucp_rsc_index_t           sockaddr_tl_ids[UCP_MAX_RESOURCES];
-        ucp_rsc_index_t           num_sockaddr_tls;
         /* Array of CMs indexes. The indexes appear in the configured priority
          * order. */
         ucp_rsc_index_t           cm_cmpt_idxs[UCP_MAX_RESOURCES];
@@ -256,6 +249,11 @@ typedef struct ucp_context {
         /* Config environment prefix used to create the context */
         char                      *env_prefix;
 
+        /* Time period between keepalive rounds */
+        ucs_time_t                keepalive_interval;
+
+        /* MD to compare for transport selection scores */
+        char                      *selection_cmp;
     } config;
 
     /* All configurations about multithreading support */

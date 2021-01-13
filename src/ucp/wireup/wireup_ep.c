@@ -262,6 +262,7 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
                            ucp_rsc_index_t rsc_index)
 {
+    ucs_assert(!ucp_wireup_ep_test(uct_ep));
     wireup_ep->aux_ep        = uct_ep;
     wireup_ep->aux_rsc_index = rsc_index;
 }
@@ -330,13 +331,43 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
     return UCS_ERR_NO_RESOURCE;
 }
 
+static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
+                                        uct_completion_t *comp)
+{
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_worker_h worker        = wireup_ep->super.ucp_ep->worker;
+
+    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED) {
+        return uct_ep_check(wireup_ep->super.uct_ep, flags, comp);
+    }
+
+    if (wireup_ep->aux_ep != NULL) {
+        ucs_assert(wireup_ep->aux_rsc_index != UCP_NULL_RESOURCE);
+
+        if (ucp_worker_iface(worker, wireup_ep->aux_rsc_index)->attr.cap.flags &
+            UCT_IFACE_FLAG_EP_CHECK) {
+            return uct_ep_check(wireup_ep->aux_ep, flags, comp);
+        }
+
+        /* if EP_CHECK is not supported by auxiliary transport, it has to support
+         * a built-in keepalive mechanism to be able to detect peer failure during
+         * wireup
+         */
+        ucs_assert(ucp_worker_iface(worker,
+                                    wireup_ep->aux_rsc_index)->attr.cap.flags &
+                   UCT_IFACE_FLAG_EP_KEEPALIVE);
+    }
+
+    return UCS_OK;
+}
+
 
 UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 {
     static uct_iface_ops_t ops = {
         .ep_connect_to_ep    = ucp_wireup_ep_connect_to_ep,
         .ep_flush            = ucp_wireup_ep_flush,
-        .ep_check            = ucs_empty_function_return_success,
+        .ep_check            = ucp_wireup_ep_check,
         .ep_destroy          = UCS_CLASS_DELETE_FUNC_NAME(ucp_wireup_ep_t),
         .ep_pending_add      = ucp_wireup_ep_pending_add,
         .ep_pending_purge    = ucp_wireup_ep_pending_purge,
@@ -347,6 +378,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
         .ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_no_resource,
         .ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_no_resource,
         .ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_no_resource,
+        .ep_am_short_iov     = (uct_ep_am_short_iov_func_t)ucs_empty_function_return_no_resource,
         .ep_am_bcopy         = ucp_wireup_ep_am_bcopy,
         .ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_no_resource,
         .ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_no_resource,
@@ -487,196 +519,13 @@ err:
     return status;
 }
 
-static ucs_status_t ucp_wireup_ep_pack_sockaddr_aux_tls(ucp_worker_h worker,
-                                                        const char *dev_name,
-                                                        uint64_t *tl_bitmap_p,
-                                                        ucp_address_t **address_p,
-                                                        size_t *address_length_p)
-{
-    ucp_context_h context = worker->context;
-    int tl_id, found_supported_tl = 0;
-    ucs_status_t status;
-    uint64_t tl_bitmap = 0;
-
-    /* Find a transport which matches the given dev_name and the user's configuration.
-     * It also has to be a UCT_IFACE_FLAG_CONNECT_TO_IFACE transport and support
-     * active messaging for sending a wireup message */
-    ucs_for_each_bit(tl_id, context->config.sockaddr_aux_rscs_bitmap) {
-        if ((!strncmp(context->tl_rscs[tl_id].tl_rsc.dev_name, dev_name,
-                      UCT_DEVICE_NAME_MAX)) &&
-            (ucs_test_all_flags(ucp_worker_iface_get_attr(worker, tl_id)->cap.flags,
-                                UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                UCT_IFACE_FLAG_AM_BCOPY))) {
-            found_supported_tl = 1;
-            tl_bitmap |= UCS_BIT(tl_id);
-        }
-    }
-
-    if (found_supported_tl) {
-        status = ucp_address_pack(worker, NULL, tl_bitmap,
-                                  UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
-                                  address_length_p, (void**)address_p);
-    } else {
-        ucs_error("no supported sockaddr auxiliary transports found for %s", dev_name);
-        status = UCS_ERR_UNREACHABLE;
-    }
-
-    *tl_bitmap_p = tl_bitmap;
-    return status;
-}
-
-ssize_t ucp_wireup_ep_sockaddr_fill_private_data(void *arg,
-                                                 const uct_cm_ep_priv_data_pack_args_t
-                                                 *pack_args, void *priv_data)
-{
-    ucp_wireup_sockaddr_data_t *sa_data = priv_data;
-    ucp_wireup_ep_t *wireup_ep          = arg;
-    ucp_ep_h ucp_ep                     = wireup_ep->super.ucp_ep;
-    ucp_rsc_index_t sockaddr_rsc        = wireup_ep->sockaddr_rsc_index;
-    ucp_worker_h worker                 = ucp_ep->worker;
-    ucp_context_h context               = worker->context;
-    size_t address_length, conn_priv_len;
-    ucp_address_t *worker_address, *rsc_address;
-    uct_iface_attr_t *attrs;
-    ucs_status_t status;
-    uint64_t tl_bitmap;
-    char aux_tls_str[64];
-    const char *dev_name;
-
-    ucs_assert_always(pack_args->field_mask &
-                      UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME);
-
-    dev_name = pack_args->dev_name;
-
-    status = ucp_address_pack(worker, NULL, UINT64_MAX,
-                              UCP_ADDRESS_PACK_FLAGS_ALL, NULL,
-                              &address_length, (void**)&worker_address);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    conn_priv_len = sizeof(*sa_data) + address_length;
-
-    /* pack client data */
-    ucs_assert((int)ucp_ep_config(ucp_ep)->key.err_mode <= UINT8_MAX);
-    sa_data->err_mode  = ucp_ep_config(ucp_ep)->key.err_mode;
-    sa_data->ep_id     = ucp_ep_local_id(ucp_ep);
-    sa_data->dev_index = UCP_NULL_RESOURCE; /* Not used */
-
-    attrs = ucp_worker_iface_get_attr(worker, sockaddr_rsc);
-
-    /* check private data length limitation */
-    if (conn_priv_len > attrs->max_conn_priv) {
-
-        /* since the full worker address is too large to fit into the trasnport's
-         * private data, try to pack sockaddr aux tls to pass in the address */
-        status = ucp_wireup_ep_pack_sockaddr_aux_tls(worker, dev_name,
-                                                     &tl_bitmap, &rsc_address,
-                                                     &address_length);
-        if (status != UCS_OK) {
-            goto err_free_address;
-        }
-
-        conn_priv_len = sizeof(*sa_data) + address_length;
-
-        /* check the private data length limitation again, now with partial
-         * resources packed (and not the entire worker address) */
-        if (conn_priv_len > attrs->max_conn_priv) {
-            ucs_error("sockaddr aux resources addresses (%s transports)"
-                      " information (%zu) exceeds max_priv on "
-                      UCT_TL_RESOURCE_DESC_FMT" (%zu)",
-                      ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
-                                        sizeof(aux_tls_str)),
-                      conn_priv_len,
-                      UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
-                      attrs->max_conn_priv);
-            status = UCS_ERR_UNREACHABLE;
-            ucs_free(rsc_address);
-            goto err_free_address;
-        }
-
-        sa_data->addr_mode = UCP_WIREUP_SA_DATA_PARTIAL_ADDR;
-        memcpy(sa_data + 1, rsc_address, address_length);
-        ucp_ep->flags |= UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR;
-
-        ucs_free(rsc_address);
-
-        ucs_trace("sockaddr tl ("UCT_TL_RESOURCE_DESC_FMT") sending partial address: "
-                  "(%s transports) (len=%zu) to server. "
-                  "total client priv data len: %zu",
-                  UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[sockaddr_rsc].tl_rsc),
-                  ucp_tl_bitmap_str(context, tl_bitmap, aux_tls_str,
-                                    sizeof(aux_tls_str)),
-                  address_length, conn_priv_len);
-    } else {
-        sa_data->addr_mode = UCP_WIREUP_SA_DATA_FULL_ADDR;
-        memcpy(sa_data + 1, worker_address, address_length);
-    }
-
-    ucp_worker_release_address(worker, worker_address);
-    return conn_priv_len;
-
-err_free_address:
-    ucp_worker_release_address(worker, worker_address);
-err:
-    return status;
-}
-
-ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
-                                               const ucp_ep_params_t *params)
-{
-    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
-    ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
-    ucp_worker_h worker        = ucp_ep->worker;
-    char saddr_str[UCS_SOCKADDR_STRING_LEN];
-    uct_ep_params_t uct_ep_params;
-    ucp_rsc_index_t sockaddr_rsc;
-    ucp_worker_iface_t *wiface;
-    ucs_status_t status;
-
-    ucs_assert(ucp_wireup_ep_test(uct_ep));
-
-    status = ucp_wireup_select_sockaddr_transport(worker->context,
-                                                  &params->sockaddr,
-                                                  &sockaddr_rsc);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    wiface = ucp_worker_iface(worker, sockaddr_rsc);
-
-    wireup_ep->sockaddr_rsc_index = sockaddr_rsc;
-
-    /* Fill parameters and send connection request using the transport */
-    uct_ep_params.field_mask        = UCT_EP_PARAM_FIELD_IFACE             |
-                                      UCT_EP_PARAM_FIELD_USER_DATA         |
-                                      UCT_EP_PARAM_FIELD_SOCKADDR          |
-                                      UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS |
-                                      UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
-    uct_ep_params.iface             = wiface->iface;
-    uct_ep_params.sockaddr          = &params->sockaddr;
-    uct_ep_params.user_data         = wireup_ep;
-    uct_ep_params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
-    uct_ep_params.sockaddr_pack_cb  = ucp_wireup_ep_sockaddr_fill_private_data;
-    status = uct_ep_create(&uct_ep_params, &wireup_ep->sockaddr_ep);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    ucs_debug("ep %p connecting to %s", ucp_ep,
-              ucs_sockaddr_str(params->sockaddr.addr, saddr_str, sizeof(saddr_str)));
-    status = UCS_OK;
-
-out:
-    return status;
-}
-
 void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
     ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->super.uct_ep == NULL);
+    ucs_assert(!ucp_wireup_ep_test(next_ep));
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
     ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
 }

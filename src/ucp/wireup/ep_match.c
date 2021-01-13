@@ -75,8 +75,7 @@ void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
                !(ep->flags & UCP_EP_FLAG_REMOTE_ID));
     /* NOTE: protect union */
     ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                              UCP_EP_FLAG_FLUSH_STATE_VALID |
-                              UCP_EP_FLAG_LISTENER)));
+                              UCP_EP_FLAG_FLUSH_STATE_VALID)));
     /* EP matching is not used in CM flow */
     ucs_assert(!ucp_ep_has_cm_lane(ep));
     ep->flags                             |= UCP_EP_FLAG_ON_MATCH_CTX;

@@ -647,7 +647,7 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
 
     memset(ah_attr, 0, sizeof(*ah_attr));
 
-    ucs_assert(iface->config.sl != UCT_IB_SL_INVALID);
+    ucs_assert(iface->config.sl < UCT_IB_SL_NUM);
 
     ah_attr->sl                = iface->config.sl;
     ah_attr->port_num          = iface->config.port_num;
@@ -1085,7 +1085,8 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             iface->num_paths =
-                    uct_ib_device_get_roce_lag_level(dev, iface->config.port_num);
+                    uct_ib_device_get_roce_lag_level(dev, iface->config.port_num,
+                                                     iface->gid_info.gid_index);
         } else {
             /* IB - number of paths is LMC level */
             ucs_assert(iface->path_bits_count > 0);
@@ -1178,9 +1179,12 @@ static void uct_ib_iface_set_path_mtu(uct_ib_iface_t *iface,
 
 uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config)
 {
-    ucs_assert((ib_config->sl <= UCT_IB_SL_MAX) ||
-               (ib_config->sl == UCS_ULUNITS_AUTO));
-    return (ib_config->sl == UCS_ULUNITS_AUTO) ? 0 : (uint8_t)ib_config->sl;
+    if (ib_config->sl == UCS_ULUNITS_AUTO) {
+        return 0;
+    }
+
+    ucs_assert(ib_config->sl < UCT_IB_SL_NUM);
+    return (uint8_t)ib_config->sl;
 }
 
 UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
@@ -1243,7 +1247,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
                                               config->rx.queue_len / 4);
     self->config.port_num           = port_num;
-    self->config.sl                 = UCT_IB_SL_INVALID;
+    /* initialize to invalid value */
+    self->config.sl                 = UCT_IB_SL_NUM;
     self->config.hop_limit          = config->hop_limit;
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.enable_res_domain  = config->enable_res_domain;

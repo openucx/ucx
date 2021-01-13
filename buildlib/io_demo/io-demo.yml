@@ -1,0 +1,92 @@
+parameters:
+  - name: demands
+    type: string
+    default: "ucx_iodemo -equals yes"
+  - name: test_duration
+    type: number
+    default: 2
+  - name: tests
+    type: object
+    default:
+      base:
+        # Disable corrupter for master branch
+        initial_delay: 2000
+        cycles: 100
+        downtime: 5
+        uptime: 40
+
+jobs:
+  - job: io_build
+    displayName: Build io_demo
+
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+
+    steps:
+      # address permissions issue when some files created as read-only
+      - bash: chmod u+rwx ./ -R
+
+      - checkout: self
+        clean: true
+        displayName: Checkout
+      - bash: |
+          set -eEx
+          ./autogen.sh
+          ./contrib/configure-release --prefix=$(Build.Repository.LocalPath)/install
+          make -j`nproc`
+          make install
+        displayName: Build
+        name: build
+      - task: CopyFiles@2
+        inputs:
+          sourceFolder: '$(Build.Repository.LocalPath)'
+          contents: |
+            buildlib/az-helpers.sh
+            buildlib/az-network-corrupter.sh
+            install/**
+            test/apps/iodemo/run_io_demo.sh
+          targetFolder: '$(Build.ArtifactStagingDirectory)'
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)'
+          artifactName: drop_$(Build.BuildId)
+
+  - job: test
+    dependsOn: io_build
+
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+
+    strategy:
+      matrix:
+        ${{ each test in parameters.tests }}:
+          ${{ test.Key }}:
+            test_name: ${{ test.Key }}
+            initial_delay: ${{ test.Value.initial_delay }}
+            cycles: ${{ test.Value.cycles }}
+            downtime: ${{ test.Value.downtime }}
+            uptime: ${{ test.Value.uptime }}
+      maxParallel: 1
+
+    variables:
+      workspace: drop_$(Build.BuildId)
+      io_demo_exe: drop_$(Build.BuildId)/install/bin/io_demo
+
+    displayName: "io_demo: "
+    steps:
+      - checkout: none
+      - task: DownloadBuildArtifacts@0
+        displayName: 'Download Build Artifacts'
+        inputs:
+          artifactName: drop_$(Build.BuildId)
+          downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: chmod u+rwx $(workspace) -R
+      - template: az-stage-io-demo.yaml
+        parameters:
+          name: tag
+      - template: az-stage-io-demo.yaml
+        parameters:
+          name: active
+          iodemo_args: -q -A
