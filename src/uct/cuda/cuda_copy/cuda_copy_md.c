@@ -31,9 +31,12 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_REG;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->cap.alloc_mem_types  = 0;
-    md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+    md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->cap.detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
@@ -84,22 +87,23 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 
     result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
                                    (CUdeviceptr)(address));
-    if ((result == CUDA_SUCCESS) && (memType == CU_MEMORYTYPE_HOST)) {
-        /* memory is allocated with cudaMallocHost which is already registered */
+    if (result == CUDA_ERROR_INVALID_VALUE) {
+        /* memory is not recognized by UVA so assume host and register */
+        log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+            UCS_LOG_LEVEL_ERROR;
+        status    = UCT_CUDA_FUNC(cudaHostRegister(address, length,
+                    cudaHostRegisterPortable),
+                log_level);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        *memh_p = address;
+    } else {
+        /* memory recognized by UVA and need not be registered */
         *memh_p = NULL;
-        return UCS_OK;
     }
 
-    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
-                UCS_LOG_LEVEL_ERROR;
-    status    = UCT_CUDA_FUNC(cudaHostRegister(address, length,
-                                               cudaHostRegisterPortable),
-                              log_level);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    *memh_p = address;
     return UCS_OK;
 }
 
