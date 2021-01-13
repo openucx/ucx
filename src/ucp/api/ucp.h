@@ -807,7 +807,7 @@ typedef struct ucp_generic_dt_ops {
      *                             @ref ucp_generic_dt_ops::start_pack
      *                             "start_pack()" routine.
      * @param [in]  offset         Virtual offset in the output stream.
-     * @param [in]  dest           Destination to pack the data to.
+     * @param [in]  dest           Destination buffer to pack the data.
      * @param [in]  max_length     Maximal length to pack.
      *
      * @return The size of the data that was written to the destination buffer.
@@ -3188,7 +3188,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nbx(ucp_ep_h ep, const void *buffer,
  * returns an error.
  *
  * @param [in]     ep       UCP endpoint that is used for the receive operation.
- * @param [in]     buffer   Pointer to the buffer to receive the data to.
+ * @param [in]     buffer   Pointer to the buffer to receive the data.
  * @param [in]     count    Number of elements to receive into @a buffer.
  * @param [in]     datatype Datatype descriptor for the elements in the buffer.
  * @param [in]     cb       Callback function that is invoked whenever the
@@ -3312,7 +3312,7 @@ ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
  *       handle or an error.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
- * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  buffer      Pointer to the buffer to receive the data.
  * @param [in]  count       Number of elements to receive
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  tag         Message tag to expect.
@@ -3351,7 +3351,7 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * used.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
- * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  buffer      Pointer to the buffer to receive the data.
  * @param [in]  count       Number of elements to receive
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  tag         Message tag to expect.
@@ -3386,7 +3386,7 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
  * receive operation cannot be stated the routine returns an error.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
- * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  buffer      Pointer to the buffer to receive the data.
  * @param [in]  count       Number of elements to receive
  * @param [in]  tag         Message tag to expect.
  * @param [in]  tag_mask    Bit mask that indicates the bits that are used for
