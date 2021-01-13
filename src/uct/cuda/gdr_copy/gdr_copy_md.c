@@ -260,12 +260,13 @@ static void uct_gdr_copy_md_close(uct_md_h uct_md)
 }
 
 static uct_md_ops_t md_ops = {
-    .close               = uct_gdr_copy_md_close,
-    .query               = uct_gdr_copy_md_query,
-    .mkey_pack           = uct_gdr_copy_mkey_pack,
-    .mem_reg             = uct_gdr_copy_mem_reg,
-    .mem_dereg           = uct_gdr_copy_mem_dereg,
-    .detect_memory_type  = ucs_empty_function_return_unsupported,
+    .close                  = uct_gdr_copy_md_close,
+    .query                  = uct_gdr_copy_md_query,
+    .mkey_pack              = uct_gdr_copy_mkey_pack,
+    .mem_reg                = uct_gdr_copy_mem_reg,
+    .mem_dereg              = uct_gdr_copy_mem_dereg,
+    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+    .detect_memory_type     = ucs_empty_function_return_unsupported
 };
 
 static inline uct_gdr_copy_rcache_region_t*

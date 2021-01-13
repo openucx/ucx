@@ -231,8 +231,6 @@ protected:
             async_wrapper(const async_wrapper &);
         };
 
-        entity(const entity&);
-
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
         void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
