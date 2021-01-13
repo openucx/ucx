@@ -83,11 +83,7 @@ ucp_worker_get_request_id(ucp_worker_h worker, ucp_request_t *req, int indirect)
 static UCS_F_ALWAYS_INLINE ucp_request_t*
 ucp_worker_get_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
 {
-    ucp_request_t* request;
-
-    request = (ucp_request_t*)ucs_ptr_map_get(&worker->ptr_map, id);
-    ucs_assert(request != NULL);
-    return request;
+    return (ucp_request_t*)ucs_ptr_map_get(&worker->ptr_map, id);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -262,17 +258,41 @@ ucp_worker_get_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     return ucp_worker_add_rkey_config(worker, key, cfg_index_p);
 }
 
-#define UCP_WORKER_GET_EP_BY_ID(_worker, _ep_id, _str, _action) \
+#define UCP_WORKER_GET_EP_BY_ID(_worker, _ep_id, _action, _fmt_str, ...) \
     ({ \
-         ucp_ep_h _ep = ucp_worker_get_ep_by_id(_worker, _ep_id); \
-         if (ucs_unlikely((_ep == NULL) || \
-                          ((_ep)->flags & (UCP_EP_FLAG_CLOSED | \
-                                           UCP_EP_FLAG_FAILED)))) { \
-             ucs_trace_data("worker %p: drop %s on closed/failed ep %p", \
-                            _worker, _str, _ep); \
+         ucp_ep_h __ep = ucp_worker_get_ep_by_id(_worker, _ep_id); \
+         if (ucs_unlikely(__ep == NULL)) { \
+             ucs_trace_data("worker %p: ep id 0x%" PRIx64 " was not found, drop" \
+                            _fmt_str, _worker, _ep_id, ##__VA_ARGS__); \
              _action; \
          } \
-         _ep; \
+         __ep; \
+    })
+
+#define UCP_WORKER_GET_VALID_EP_BY_ID(_worker, _ep_id, _action, _fmt_str, ...) \
+    ({ \
+         ucp_ep_h ___ep = UCP_WORKER_GET_EP_BY_ID(_worker, _ep_id, _action, \
+                                                  _fmt_str, ##__VA_ARGS__); \
+         if (ucs_unlikely((___ep != NULL) && \
+                          (___ep->flags & UCP_EP_FLAG_CLOSED))) { \
+             ucs_trace_data("worker %p: ep id 0x%" PRIx64 " was already closed" \
+                            " ep %p, drop " _fmt_str, _worker, _ep_id, ___ep, \
+                            ##__VA_ARGS__); \
+             _action; \
+         } \
+         ___ep; \
+    })
+
+#define UCP_WORKER_GET_REQ_BY_ID(_worker, _req_id, _action, _fmt_str, ...) \
+    ({ \
+         ucp_request_t *_req = ucp_worker_get_request_by_id(_worker, _req_id); \
+         if (ucs_unlikely(_req == NULL)) { \
+             ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
+                            " drop " _fmt_str, _worker, _req_id, \
+                            ##__VA_ARGS__); \
+             _action; \
+         } \
+         _req; \
     })
 
 #endif
