@@ -97,8 +97,6 @@ ucs_status_t uct_p2p_mix_test::am_short_iov(const mapped_buffer &sendbuf,
 
     iov.buffer = sendbuf.ptr();
     iov.length = sendbuf.length();
-    iov.count  = 1;
-    iov.stride = 0;
     iov.memh   = sendbuf.memh();
 
     status = uct_ep_am_short_iov(sender().ep(0), AM_ID, &iov, 1);
