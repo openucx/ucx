@@ -113,7 +113,7 @@ Cpp11BracedListLineBreak: true
 FixNamespaceComments: true
 NamespaceIndentation: None
 UseTab: Never
-ReflowComments: true
+ReflowComments: false
 SortIncludes: false
 IncludeCategories:
  - Regex: '^"'
