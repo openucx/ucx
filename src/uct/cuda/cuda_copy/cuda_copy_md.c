@@ -101,7 +101,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
         *memh_p = address;
     } else {
         /* memory recognized by UVA and need not be registered */
-        *memh_p = NULL;
+        UCS_STATIC_ASSERT((uint64_t)0xdeadbeef != (uint64_t)UCT_MEM_HANDLE_NULL);
+        *memh_p = (void *) 0xdeadbeef;
     }
 
     return UCS_OK;
@@ -113,7 +114,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
     void *address = (void *)memh;
     ucs_status_t status;
 
-    if (address == NULL) {
+    if ((address == (void *)0xdeadbeef) || (address == NULL)) {
         return UCS_OK;
     }
 
