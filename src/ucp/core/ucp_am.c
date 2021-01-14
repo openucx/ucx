@@ -203,8 +203,6 @@ static ucs_status_t ucp_worker_set_am_handler_common(ucp_worker_h worker,
                                                      uint16_t id,
                                                      unsigned flags)
 {
-    unsigned exclusive_bits = UCP_AM_FLAG_FRAGMENTED_MSG | UCP_AM_FLAG_FIRST_MSG |
-                              UCP_AM_FLAG_WHOLE_MSG;
     ucs_status_t status;
     unsigned i, capacity;
 
@@ -214,22 +212,6 @@ static ucs_status_t ucp_worker_set_am_handler_common(ucp_worker_h worker,
     if (flags >= UCP_AM_CB_PRIV_FIRST_FLAG) {
         ucs_error("unsupported flags requested for UCP AM handler: 0x%x",
                   flags);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (flags & UCP_AM_FLAG_FRAGMENTED_MSG) {
-        ucs_error("UCP_AM_FLAG_FRAGMENTED_MSG is not supported yet");
-        return UCS_ERR_NOT_IMPLEMENTED;
-    }
-
-    if (flags & UCP_AM_FLAG_FIRST_MSG) {
-        ucs_error("UCP_AM_FLAG_FIRST_MSG is not supported yet");
-        return UCS_ERR_NOT_IMPLEMENTED;
-    }
-
-    if (ucs_popcount(flags & exclusive_bits) > 1) {
-        ucs_error("UCP_AM_FLAG_WHOLE_MSG, UCP_AM_FLAG_FIRST_MSG and "
-                  "UCP_AM_FLAG_FRAGMENTED_MSG flags are mutually exclusive");
         return UCS_ERR_INVALID_PARAM;
     }
 

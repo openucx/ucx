@@ -473,9 +473,19 @@ enum ucp_am_cb_flags {
     /**
      * Indicates that the entire message will be handled in one callback. With this
      * option message ordering is not guaranteed (i.e. receive callbacks may be
-     * invoked in a different order than messages were sent). This flag is mutually
-     * exclusive with @a UCP_AM_FLAG_FRAGMENTED_MSG and @a UCP_AM_FLAG_FIRST_MSG
-     * flags. This is the default mode.
+     * invoked in a different order than messages were sent).
+     * If this flag is not set, the data callback may be invoked several times for
+     * the same message (if for example it was split to several fragments by the
+     * transport layer). It is guaranteed that the first data callback for a
+     * particular message is invoked for the first fragment. The ordering of first
+     * message fragments is guaranteed (i. e. receive callbacks will be called
+     * in the order the messages were sent). The order of other fragments is not
+     * guaranteed. User header is passed with the first fragment only. Also it is
+     * possible to avoid data callback invocation for middle message fragments.
+     * In this case, when the first fragment received, user has to call
+     * @ref ucp_am_recv_data_nbx to receive the whole message. Pointer to the first
+     * fragment of data has to be passed to @ref ucp_am_recv_data_nbx as a data
+     * descriptor.
      */
     UCP_AM_FLAG_WHOLE_MSG       = UCS_BIT(0),
 
@@ -485,32 +495,7 @@ enum ucp_am_cb_flags {
      * so the data will be accessible outside the callback, until
      * @ref ucp_am_data_release is called.
      */
-    UCP_AM_FLAG_PERSISTENT_DATA = UCS_BIT(1),
-
-    /**
-     * Indicates that the data callback may be invoked several times for the
-     * same message, if it was split into several fragments by UCP transfer
-     * protocol. This flag guarantees that the first data callback for a
-     * particular message is invoked for the first fragment. Also the ordering of
-     * first message fragments is guaranteed (i. e. receive callbacks will be called
-     * in the order the messages were sent). The order of other fragments is not
-     * guaranteed. User header is passed with the first fragment only. It is not
-     * allowed to invoke @ref ucp_am_recv_data_nbx function for any of the message
-     * fragments received in this mode of operation. This flag is mutually exclusive
-     * with @a UCP_AM_FLAG_WHOLE_MSG and @a UCP_AM_FLAG_FIRST_MSG flags.
-     */
-    UCP_AM_FLAG_FRAGMENTED_MSG  = UCS_BIT(2),
-
-    /**
-     * Indicates that for multi-fragment eager messages data callback will be invoked
-     * for the first fragment only. Then, to receive the whole message, user has to
-     * invoke @ref ucp_am_recv_data_nbx using pointer to the first fragment data as
-     * data descriptor. The ordering of first message fragments is guaranteed (i. e.
-     * receive callbacks will be called in the order the messages were sent). This
-     * flag is mutually exclusive with @a UCP_AM_FLAG_WHOLE_MSG
-     * and @a UCP_AM_FLAG_FRAGMENTED_MSG flags.
-     */
-    UCP_AM_FLAG_FIRST_MSG       = UCS_BIT(3)
+    UCP_AM_FLAG_PERSISTENT_DATA = UCS_BIT(1)
 };
 
 
@@ -667,7 +652,8 @@ typedef enum {
 typedef enum {
     UCP_AM_RECV_ATTR_FIELD_REPLY_EP     = UCS_BIT(0),  /**< reply_ep field */
     UCP_AM_RECV_ATTR_FIELD_TOTAL_LENGTH = UCS_BIT(1),  /**< total_length field */
-    UCP_AM_RECV_ATTR_FIELD_FRAGMENT     = UCS_BIT(2),  /**< fragment field */
+    UCP_AM_RECV_ATTR_FIELD_OFFSET       = UCS_BIT(2),  /**< offset field */
+    UCP_AM_RECV_ATTR_FIELD_MSG_CONTEXT  = UCS_BIT(3),  /**< msg_context field */
 
     /**
      * Indicates that the data provided in @ref ucp_am_recv_callback_t callback
@@ -691,19 +677,19 @@ typedef enum {
     /**
      * Indicates that the arrived data is the first (or only) fragment of the
      * multi-fragment eager message. This flag can only be passed to data handlers
-     * registered with @a UCP_AM_FLAG_FRAGMENTED_MSG or @a UCP_AM_FLAG_FIRST_MSG
-     * flag. The first fragment is guaranteed to be persistent data, as defined by
-     * @a UCP_AM_RECV_ATTR_FLAG_DATA. Thus it is always allowed to invoke
-     * @ref ucp_am_recv_data_nbx routine if data is received by the handler
-     * registered with @a UCP_AM_FLAG_FIRST_MSG flag. The flag is mutually exclusive
-     * with @a UCP_AM_RECV_ATTR_FLAG_RNDV.
+     * registered without @a UCP_AM_FLAG_WHOLE_MSG flag. The first fragment is
+     * guaranteed to be persistent data, as defined by @a UCP_AM_RECV_ATTR_FLAG_DATA.
+     * It is allowed to invoke @ref ucp_am_recv_data_nbx routine to receive the
+     * whole message. In this case data callback for the rest of message
+     * fragments will not be invoked.
+     * The flag is mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV.
      */
     UCP_AM_RECV_ATTR_FLAG_FIRST         = UCS_BIT(18),
 
     /**
      * Indicates that the arrived data is not the last fragment of the eager message
-     * and more fragments yet to be delivered. This flag can only be passed to data
-     * handlers registered with @a UCP_AM_FLAG_FRAGMENTED_MSG flag. The flag is
+     * and more fragments yet to be delivered. his flag can only be passed to data
+     * handlers registered without @a UCP_AM_FLAG_WHOLE_MSG flag. The flag is
      * mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV.
      */
     UCP_AM_RECV_ATTR_FLAG_MORE          = UCS_BIT(19)
@@ -1555,29 +1541,22 @@ struct ucp_am_recv_param {
 
     /**
      * Length of the whole message in bytes. Relevant for multi-fragment eager
-     * messages handled by data handlers registered with
-     * @a UCP_AM_FLAG_FRAGMENTED_MSG or @a UCP_AM_FLAG_FIRST_MSG flag.
+     * messages handled by data handlers registered without UCP_AM_FLAG_WHOLE_MSG
+     * flag.
      */
     size_t             total_length;
 
     /**
-     * Information about received message fragment. Relevant for multi-fragment
-     * eager messages handled by data handlers registered with
-     * @a UCP_AM_FLAG_FRAGMENTED_MSG flag.
+     * Offset of the message fragment in bytes.
      */
-    struct {
-        /**
-         * Offset of the message fragment in bytes.
-         */
-        size_t         offset;
+    size_t             offset;
 
-        /**
-         * Storage for a per-message user-defined context. User initializes it
-         * when the first fragment arrives and then it is provided with each
-         * consecutive fragment of this message.
-         */
-        void           **msg_context;
-    } fragment;
+    /**
+     * Storage for a per-message user-defined context. User initializes it
+     * when the first fragment arrives and then it is provided with each
+     * consecutive fragment of this message.
+     */
+    void               **msg_context;
 };
 
 
@@ -2903,11 +2882,8 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *       (@a UCP_AM_RECV_ATTR_FLAG_DATA is set in
  *       @ref ucp_am_recv_param_t.recv_attr). In the latter case receive operation
  *       may be needed to unpack data to GPU memory or to initiate receive of
- *       multi-fragment eager message if data handler is set with
- *       @a UCP_AM_FLAG_FIRST_MSG flag.
- * @note Using this function is not allowed for any data descriptor obtained in
- *       data handler (@ref ucp_am_recv_callback_t) registered with
- *       @a UCP_AM_FLAG_FRAGMENTED_MSG flag.
+ *       multi-fragment eager message if data handler is set without
+ *       @a UCP_AM_FLAG_WHOLE_MSG flag.
  * @note After this call UCP takes ownership of @a data_desc descriptor, so
  *       there is no need to release it even if the operation fails.
  *       The routine returns a request handle instead, which can further be used
