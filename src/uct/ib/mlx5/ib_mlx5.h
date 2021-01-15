@@ -268,7 +268,6 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t                           ready_idx;  /* what is ready to be posted to hw */
     uint16_t                           sw_pi;      /* what is posted to hw */
     uint16_t                           mask;
-    uint16_t                           tail;       /* tail in the driver */
     uint16_t                           stride;
     union {
         struct {

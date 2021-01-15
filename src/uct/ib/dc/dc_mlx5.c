@@ -40,7 +40,9 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_rc_iface_common_config_table)},
 
-    {"RC_", "", NULL,
+    /* Since long timeout will block SRQ in case of network failure on single
+     * peer default SRQ to list topology. Incur performance degradation. */
+    {"RC_", "SRQ_TOPO=list", NULL,
      ucs_offsetof(uct_dc_mlx5_iface_config_t, rc_mlx5_common),
      UCS_CONFIG_TYPE_TABLE(uct_rc_mlx5_common_config_table)},
 
@@ -237,29 +239,33 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     return 1;
 }
 
-static unsigned uct_dc_mlx5_iface_progress(void *arg)
+static UCS_F_ALWAYS_INLINE unsigned
+uct_dc_mlx5_iface_progress(void *arg, int flags)
 {
     uct_dc_mlx5_iface_t *iface = arg;
     unsigned count;
 
-    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super, 0);
+    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super, flags);
     if (!uct_rc_iface_poll_tx(&iface->super.super, count)) {
         return count;
     }
-    return uct_dc_mlx5_poll_tx(iface);
+
+    return count + uct_dc_mlx5_poll_tx(iface);
+}
+
+static unsigned uct_dc_mlx5_iface_progress_cyclic(void *arg)
+{
+    return uct_dc_mlx5_iface_progress(arg, 0);
+}
+
+static unsigned uct_dc_mlx5_iface_progress_ll(void *arg)
+{
+    return uct_dc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_LINKED_LIST);
 }
 
 static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
 {
-    uct_dc_mlx5_iface_t *iface = arg;
-    unsigned count;
-
-    count = uct_rc_mlx5_iface_common_poll_rx(&iface->super,
-                                             UCT_RC_MLX5_POLL_FLAG_TM);
-    if (!uct_rc_iface_poll_tx(&iface->super.super, count)) {
-        return count;
-    }
-    return uct_dc_mlx5_poll_tx(iface);
+    return uct_dc_mlx5_iface_progress(arg, UCT_RC_MLX5_POLL_FLAG_TM);
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
@@ -613,7 +619,11 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
         goto err;
     }
 
-    iface->super.super.progress = uct_dc_mlx5_iface_progress;
+    if (iface->super.config.srq_topo == UCT_RC_MLX5_SRQ_TOPO_LIST) {
+        iface->super.super.progress = uct_dc_mlx5_iface_progress_ll;
+    } else {
+        iface->super.super.progress = uct_dc_mlx5_iface_progress_cyclic;
+    }
     return UCS_OK;
 
 err_free_srq:

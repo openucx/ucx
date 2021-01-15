@@ -132,15 +132,16 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
                                   uct_ib_mlx5_srq_seg_t *seg,
                                   struct mlx5_cqe64 *cqe, uint16_t wqe_ctr,
                                   ucs_status_t status, unsigned offset,
-                                  uct_recv_desc_t *release_desc)
+                                  uct_recv_desc_t *release_desc, int poll_flags)
 {
+    uct_ib_mlx5_srq_t *srq = &iface->rx.srq;
     uint16_t wqe_index;
     int seg_free;
 
     /* Need to wrap wqe_ctr, because in case of cyclic srq topology
      * it is wrapped around 0xFFFF regardless of real SRQ size.
      * But it respects srq size when srq topology is a linked-list. */
-    wqe_index = wqe_ctr & iface->rx.srq.mask;
+    wqe_index = wqe_ctr & srq->mask;
 
     if (ucs_unlikely(status != UCS_OK)) {
         uct_rc_mlx5_iface_hold_srq_desc(iface, seg, cqe, wqe_ctr, status,
@@ -155,28 +156,35 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
         seg->srq.strides = iface->tm.mp.num_strides;
     }
 
+    ++iface->super.rx.srq.available;
+
+    if (poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) {
+        seg                     = uct_ib_mlx5_srq_get_wqe(srq, srq->free_idx);
+        seg->srq.next_wqe_index = htons(wqe_index);
+        srq->free_idx           = wqe_index;
+        return;
+    }
+
     seg_free = (seg->srq.ptr_mask == UCS_MASK(iface->tm.mp.num_strides));
 
-    if (ucs_likely(seg_free && (wqe_index == ((iface->rx.srq.ready_idx + 1) &
-                                              iface->rx.srq.mask)))) {
+    if (ucs_likely(seg_free && (wqe_ctr == (srq->ready_idx + 1)))) {
          /* If the descriptor was not used - if there are no "holes", we can just
           * reuse it on the receive queue. Otherwise, ready pointer will stay behind
           * until post_recv allocated more descriptors from the memory pool, fills
           * the holes, and moves it forward.
           */
-         ucs_assert(wqe_index == ((iface->rx.srq.free_idx + 1) & iface->rx.srq.mask));
-         ++iface->rx.srq.ready_idx;
-         ++iface->rx.srq.free_idx;
-    } else {
-         if (wqe_index == ((iface->rx.srq.free_idx + 1) & iface->rx.srq.mask)) {
-             ++iface->rx.srq.free_idx;
-         } else {
-             /* Mark the segment as out-of-order, post_recv will advance free */
-             seg->srq.free = 1;
-         }
+         ucs_assert(wqe_ctr == (srq->free_idx + 1));
+         ++srq->ready_idx;
+         ++srq->free_idx;
+         return;
     }
 
-    ++iface->super.rx.srq.available;
+    if (wqe_ctr == (srq->free_idx + 1)) {
+        ++srq->free_idx;
+    } else {
+        /* Mark the segment as out-of-order, post_recv will advance free */
+        seg->srq.free = 1;
+    }
 }
 
 #define uct_rc_mlx5_iface_mp_hash_lookup(_h_name, _h_ptr, _key, _last, _flags, \
@@ -270,7 +278,7 @@ uct_rc_mlx5_iface_rx_mp_context_from_hash(uct_rc_mlx5_iface_common_t *iface,
 }
 
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
-uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *iface)
+uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 {
     uct_ib_mlx5_cq_t *cq = &iface->cq[UCT_IB_DIR_RX];
     struct mlx5_cqe64 *cqe;
@@ -287,7 +295,7 @@ uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *iface)
     if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, idx, cq->cq_length))) {
         return NULL;
     } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
-        uct_rc_mlx5_iface_check_rx_completion(iface, cqe);
+        uct_rc_mlx5_iface_check_rx_completion(iface, cqe, poll_flags);
         return NULL;
     }
 
@@ -401,8 +409,8 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
                                     struct mlx5_cqe64 *cqe,
-                                    uct_rc_mlx5_hdr_t *hdr,
-                                    unsigned flags, unsigned byte_len)
+                                    uct_rc_mlx5_hdr_t *hdr, unsigned flags,
+                                    unsigned byte_len, int poll_flags)
 {
     uint16_t wqe_ctr;
     uct_rc_iface_ops_t *rc_ops;
@@ -432,7 +440,7 @@ uct_rc_mlx5_iface_common_am_handler(uct_rc_mlx5_iface_common_t *iface,
 
     uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr, status,
                                       iface->tm.am_desc.offset,
-                                      &iface->tm.am_desc.super);
+                                      &iface->tm.am_desc.super, poll_flags);
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t
@@ -1216,14 +1224,14 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *iface,
                                  unsigned offset, uct_recv_desc_t *release_desc,
                                  struct mlx5_cqe64 *cqe, ucs_status_t status,
-                                 uint16_t wqe_ctr)
+                                 uint16_t wqe_ctr, int poll_flags)
 {
     uct_ib_mlx5_srq_seg_t *seg;
 
     seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
 
     uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr,
-                                      status, offset, release_desc);
+                                      status, offset, release_desc, poll_flags);
 
     if (ucs_unlikely(!(iface->tm.unexpected_cnt % IBV_DEVICE_MAX_UNEXP_COUNT))) {
         uct_rc_mlx5_iface_common_post_srq_op(&iface->tm.cmd_wq, 0,
@@ -1262,7 +1270,8 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
         ++iface->tm.unexpected_cnt;
         uct_rc_mlx5_iface_unexp_consumed(iface, iface->tm.eager_desc.offset,
                                          &iface->tm.eager_desc.super, cqe,
-                                         status, ntohs(cqe->wqe_counter));
+                                         status, ntohs(cqe->wqe_counter),
+                                         poll_flags);
 
         UCT_RC_MLX5_TM_STAT(iface, RX_EAGER_UNEXP);
         return;
@@ -1290,14 +1299,16 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
         uct_rc_mlx5_iface_unexp_consumed(iface,
                                          iface->super.super.config.rx_headroom_offset,
                                          &iface->super.super.release_desc,
-                                         cqe, status, ntohs(cqe->wqe_counter));
+                                         cqe, status, ntohs(cqe->wqe_counter),
+                                         poll_flags);
         return;
     }
 
     ++iface->tm.unexpected_cnt;
 
     if (ucs_unlikely(tmh->opcode == IBV_TMH_RNDV)) {
-        uct_rc_mlx5_handle_unexp_rndv(iface, tmh, tmh->tag, cqe, flags, byte_len);
+        uct_rc_mlx5_handle_unexp_rndv(iface, tmh, tmh->tag, cqe, flags,
+                                      byte_len, poll_flags);
         return;
     }
 
@@ -1337,12 +1348,13 @@ uct_rc_mlx5_iface_tag_handle_unexp(uct_rc_mlx5_iface_common_t *iface,
 
     uct_rc_mlx5_iface_unexp_consumed(iface, iface->tm.eager_desc.offset,
                                      &iface->tm.eager_desc.super, cqe,
-                                     status, ntohs(cqe->wqe_counter));
+                                     status, ntohs(cqe->wqe_counter),
+                                     poll_flags);
 }
 
 static UCS_F_NOINLINE void
 uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
-                                    struct mlx5_cqe64 *cqe)
+                                    struct mlx5_cqe64 *cqe, int poll_flags)
 {
     uct_ib_mlx5_srq_seg_t *seg;
 
@@ -1354,7 +1366,7 @@ uct_rc_mlx5_iface_handle_filler_cqe(uct_rc_mlx5_iface_common_t *iface,
     /* at least one stride should be in HW ownership when filler CQE arrives */
     ucs_assert(seg->srq.strides);
     uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, ntohs(cqe->wqe_counter),
-                                      UCS_OK, 0, NULL);
+                                      UCS_OK, 0, NULL, poll_flags);
 }
 #endif /* IBV_HW_TM */
 
@@ -1377,10 +1389,11 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_mp_context_t UCS_V_UNUSED *dummy_ctx;
 #endif
 
-    ucs_assert(uct_ib_mlx5_srq_get_wqe(&iface->rx.srq,
-                                       iface->rx.srq.mask)->srq.next_wqe_index == 0);
+    ucs_assert((poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) ||
+               (uct_ib_mlx5_srq_get_wqe(&iface->rx.srq,
+                                        iface->rx.srq.mask)->srq.next_wqe_index == 0));
 
-    cqe = uct_rc_mlx5_iface_poll_rx_cq(iface);
+    cqe = uct_rc_mlx5_iface_poll_rx_cq(iface, poll_flags);
     if (cqe == NULL) {
         /* If no CQE - post receives */
         count = 0;
@@ -1395,7 +1408,8 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 
     if (!(poll_flags & UCT_RC_MLX5_POLL_FLAG_TM)) {
         rc_hdr = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
-        uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags, byte_len);
+        uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags,
+                                            byte_len, poll_flags);
         goto done;
     }
 
@@ -1405,7 +1419,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     if (ucs_unlikely(byte_len & UCT_IB_MLX5_MP_RQ_FILLER_FLAG)) {
         /* TODO: Check if cqe->app_op is valid for filler CQE. Then this check
          * could be done for specific CQE types only. */
-        uct_rc_mlx5_iface_handle_filler_cqe(iface, cqe);
+        uct_rc_mlx5_iface_handle_filler_cqe(iface, cqe, poll_flags);
         count = 0;
         goto done;
     }
@@ -1439,7 +1453,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         if (tmh->opcode == IBV_TMH_NO_TAG) {
             uct_rc_mlx5_iface_common_am_handler(iface, cqe,
                                                 (uct_rc_mlx5_hdr_t*)tmh,
-                                                flags, byte_len);
+                                                flags, byte_len, poll_flags);
         } else {
             ucs_assert(tmh->opcode == IBV_TMH_FIN);
             uct_rc_mlx5_handle_rndv_fin(iface, tmh->app_ctx);
@@ -1448,7 +1462,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 
             uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe,
                                               ntohs(cqe->wqe_counter), UCS_OK,
-                                              0, NULL);
+                                              0, NULL, poll_flags);
 
             UCT_RC_MLX5_TM_STAT(iface, RX_RNDV_FIN);
         }
@@ -1485,7 +1499,11 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 done:
     max_batch = iface->super.super.config.rx_max_batch;
     if (ucs_unlikely(iface->super.rx.srq.available >= max_batch)) {
-        uct_rc_mlx5_iface_srq_post_recv(iface);
+        if (poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) {
+            uct_rc_mlx5_iface_srq_post_recv_ll(iface);
+        } else {
+            uct_rc_mlx5_iface_srq_post_recv(iface);
+        }
     }
     return count;
 }
