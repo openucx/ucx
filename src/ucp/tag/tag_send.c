@@ -297,15 +297,17 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  ucp_tag_t tag, const ucp_request_param_t *param)
 {
+    ucp_worker_h worker = ep->worker;
     ucs_status_t status;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
     uintptr_t datatype;
     ucs_memory_type_t memory_type;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_TAG,
-                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
+                                    return UCS_STATUS_PTR(
+                                            UCS_ERR_INVALID_PARAM));
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     ucs_trace_req("send_sync_nbx buffer %p count %zu tag %"PRIx64" to %s",
                   buffer, count, tag, ucp_ep_peer_name(ep));
@@ -324,15 +326,26 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
         goto out;
     }
 
-    req = ucp_request_get_param(ep->worker, param,
+    req = ucp_request_get_param(worker, param,
                                 {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                  goto out;});
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, memory_type, count, tag,
-                          UCP_REQUEST_FLAG_SYNC);
-    ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
-                           param, ucp_ep_config(ep)->tag.sync_proto);
+    if (worker->context->config.ext.proto_enable) {
+        req->send.msg_proto.tag.tag = tag;
+        ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
+                                        UCP_WORKER_CFG_INDEX_NULL, req,
+                                        UCP_OP_ID_TAG_SEND_SYNC, buffer, count,
+                                        datatype,
+                                        ucp_contig_dt_length(datatype, count),
+                                        param);
+    } else {
+        ucp_tag_send_req_init(req, ep, buffer, datatype, memory_type, count,
+                              tag, UCP_REQUEST_FLAG_SYNC);
+        ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager, param,
+                               ucp_ep_config(ep)->tag.sync_proto);
+    }
+
 out:
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
 }

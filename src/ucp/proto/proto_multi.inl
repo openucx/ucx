@@ -110,6 +110,27 @@ ucp_proto_multi_progress(ucp_request_t *req, ucp_proto_send_multi_cb_t send_func
     return UCS_INPROGRESS;
 }
 
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_multi_bcopy_progress(uct_pending_req_t *uct_req,
+                               ucp_proto_init_cb_t init_func,
+                               ucp_proto_send_multi_cb_t send_func,
+                               ucp_proto_complete_cb_t comp_func)
+{
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+
+    if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        ucp_proto_multi_request_init(req);
+        if (init_func != NULL) {
+            init_func(req);
+        }
+
+        req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+
+    return ucp_proto_multi_progress(req, send_func, comp_func, UINT_MAX);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_multi_zcopy_progress(uct_pending_req_t *uct_req,
                                ucp_proto_init_cb_t init_func,

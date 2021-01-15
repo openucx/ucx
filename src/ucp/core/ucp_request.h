@@ -158,7 +158,8 @@ struct ucp_request {
 
                     union {
                         struct {
-                            ucp_tag_t      tag;
+                            ucp_tag_t         tag;
+                            ucs_ptr_map_key_t req_id;
                         } tag;
 
                         struct {
