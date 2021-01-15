@@ -215,7 +215,7 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
  *                                for the listen() call.
  * @param [in]  silent_bind       Whether or not to print error message on bind
  *                                failure with EADDRINUSE.
- * @param [in]  allow_addr_inuse  Whether or not to allow the socket to use an
+ * @param [in]  reuse_addr        Whether or not to allow the socket to use an
  *                                address that is already in use and was not
  *                                released by another socket yet.
  * @param [out] listen_fd         The fd that belongs to the server.
@@ -223,7 +223,7 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
  * @return UCS_OK on success or an error code on failure.
  */
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int silent_bind, int allow_addr_inuse,
+                                    int backlog, int silent_bind, int reuse_addr,
                                     int *listen_fd);
 
 

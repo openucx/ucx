@@ -115,7 +115,7 @@ UCS_CLASS_INIT_FUNC(uct_tcp_listener_t, uct_cm_h cm,
     }
 
     status = ucs_socket_server_init(saddr, socklen, backlog, 0,
-                                    self->sockcm->allow_addr_inuse,
+                                    self->sockcm->super.config.reuse_addr,
                                     &self->listen_fd);
     if (status != UCS_OK) {
         goto err;
