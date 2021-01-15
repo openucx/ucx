@@ -158,9 +158,16 @@ const char *ucs_memunits_range_str(size_t range_start, size_t range_end,
 {
     char buf_start[64], buf_end[64];
 
-    snprintf(buf, max, "%s..%s",
-             ucs_memunits_to_str(range_start, buf_start, sizeof(buf_start)),
-             ucs_memunits_to_str(range_end,   buf_end,   sizeof(buf_end)));
+    if (range_start == range_end) {
+        snprintf(buf, max, "%s",
+                 ucs_memunits_to_str(range_start, buf_start,
+                                     sizeof(buf_start)));
+    } else {
+        snprintf(buf, max, "%s..%s",
+                 ucs_memunits_to_str(range_start, buf_start, sizeof(buf_start)),
+                 ucs_memunits_to_str(range_end, buf_end, sizeof(buf_end)));
+    }
+
     return buf;
 }
 
