@@ -266,7 +266,7 @@ ucs_time_t get_deadline(double timeout_in_sec = test_timeout_in_sec);
  */
 int max_tcp_connections();
 
- 
+
 /**
  * Signal-safe sleep.
  */
@@ -800,6 +800,17 @@ template <typename T>
 static void deleter(T *ptr) {
     delete ptr;
 }
+
+
+class scoped_log_level {
+public:
+    scoped_log_level(ucs_log_level_t level);
+    ~scoped_log_level();
+
+private:
+    const ucs_log_level_t m_prev_level;
+};
+
 
 extern int    perf_retry_count;
 extern double perf_retry_interval;
