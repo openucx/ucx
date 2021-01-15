@@ -229,6 +229,24 @@ typedef struct ucp_rndv_thresh {
 } ucp_rndv_thresh_t;
 
 
+/*
+ * Rendezvous Zcopy configuration
+ */
+typedef struct ucp_rndv_zcopy {
+    /* Maximal total size of Zcopy operation */
+    size_t           max;
+    /* Minimal size of Zcopy operation */
+    size_t           min;
+    /* Can the message which are > maximal size be split to the segments which are
+     * >= minimal size */
+    int              split;
+    /* Lanes for Zcopy operation */
+    ucp_lane_index_t lanes[UCP_MAX_LANES];
+    /* BW based scale factor for zcopy lanes */
+    double           scale[UCP_MAX_LANES];
+} ucp_ep_rndv_zcopy_config_t;
+
+
 struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
@@ -254,34 +272,18 @@ struct ucp_ep_config {
     ucp_md_index_t          md_index[UCP_MAX_LANES];
 
     struct {
-        /* Maximal total size of rndv_get_zcopy */
-        size_t            max_get_zcopy;
-        /* Minimal size of rndv_get_zcopy */
-        size_t            min_get_zcopy;
-        /* Can the message > `max_get_zcopy` be split to
-         * the segments that are >= `min_get_zcopy` */
-        int               get_zcopy_split;
-        /* Maximal total size of rndv_put_zcopy */
-        size_t            max_put_zcopy;
-        /* Minimal size of rndv_put_zcopy */
-        size_t            min_put_zcopy;
-        /* Can the message > `max_put_zcopy` be split to
-         * the segments that are >= `min_put_zcopy` */
-        int               put_zcopy_split;
+        /* RNDV GET Zcopy configuration */
+        ucp_ep_rndv_zcopy_config_t get_zcopy;
+        /* RNDV PUT Zcopy configuration */
+        ucp_ep_rndv_zcopy_config_t put_zcopy;
         /* Threshold for switching from eager to RMA based rendezvous */
-        ucp_rndv_thresh_t rma_thresh;
+        ucp_rndv_thresh_t          rma_thresh;
         /* Threshold for switching from eager to AM based rendezvous */
-        ucp_rndv_thresh_t am_thresh;
+        ucp_rndv_thresh_t          am_thresh;
         /* Total size of packed rkey, according to high-bw md_map */
-        size_t            rkey_size;
-        /* remote memory domains which support rkey_ptr */
-        ucp_md_map_t      rkey_ptr_dst_mds;
-        /* Lanes for GET zcopy */
-        ucp_lane_index_t  get_zcopy_lanes[UCP_MAX_LANES];
-        /* Lanes for PUT zcopy */
-        ucp_lane_index_t  put_zcopy_lanes[UCP_MAX_LANES];
-        /* BW based scale factor */
-        double            scale[UCP_MAX_LANES];
+        size_t                     rkey_size;
+        /* Remote memory domains which support rkey_ptr */
+        ucp_md_map_t               rkey_ptr_dst_mds;
     } rndv;
 
     struct {

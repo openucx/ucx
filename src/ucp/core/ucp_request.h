@@ -201,20 +201,16 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t             remote_address;  /* address of the sender's data buffer */
-                    ucs_ptr_map_key_t    remote_req_id;   /* the sender's request ID */
-                    ucp_rkey_h           rkey;            /* key for remote send buffer */
-                    ucp_lane_map_t       lanes_map_all;   /* actual lanes map */
-                    uint8_t              lanes_count;     /* actual lanes count */
-                    uint8_t              rkey_index[UCP_MAX_LANES];
-                } rndv_get;
-
-                struct {
-                    uint64_t             remote_address; /* address of the receiver's data buffer */
-                    ucs_ptr_map_key_t    rreq_remote_id; /* receiver's receive request ID */
-                    ucp_rkey_h           rkey;           /* key for remote receive buffer */
-                    uct_rkey_t           uct_rkey;       /* UCT remote key */
-                } rndv_put;
+                    uint64_t          remote_address;  /* address of the sender/receiver's data
+                                                          buffer for the GET/PUT operation */
+                    ucs_ptr_map_key_t remote_req_id;   /* the sender/receiver's request ID of
+                                                          the target of the GET/PUT operation */
+                    ucp_rkey_h        rkey;            /* key for remote send/receive buffer for
+                                                          the GET/PUT operation */
+                    ucp_lane_map_t    lanes_map_all;   /* actual lanes map */
+                    uint8_t           lanes_count;     /* actual lanes count */
+                    uint8_t           rkey_index[UCP_MAX_LANES];
+                } rndv;
 
                 struct {
                     ucs_queue_elem_t     queue_elem;
