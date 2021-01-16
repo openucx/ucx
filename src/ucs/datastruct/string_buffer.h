@@ -19,6 +19,16 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
 
 
 /**
+ * Dynamic string buffer initializer. The backing storage should be released
+ * explicitly by calling @ref ucs_string_buffer_cleanup()
+ */
+#define UCS_STRING_BUFFER_INITIALIZER \
+    { \
+        UCS_ARRAY_DYNAMIC_INITIALIZER \
+    }
+
+
+/**
  * Declare a string buffer which is using an existing string as backing store.
  * Such string buffer does not allocate additional memory and does not have to
  * be cleaned-up, and it can also be used to build a string onto existing
