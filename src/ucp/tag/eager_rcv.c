@@ -279,10 +279,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
 {
     ucp_worker_h    worker   = arg;
     ucp_reply_hdr_t *rep_hdr = data;
-    ucp_request_t   *req     = ucp_worker_extract_request_by_id(worker,
-                                                                rep_hdr->req_id);
+    ucp_request_t *req;
 
-    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_REMOTE_COMPLETED, UCS_OK);
+    if (worker->context->config.ext.proto_enable) {
+        ucp_proto_eager_sync_ack_handler(worker, rep_hdr);
+    } else {
+        req = ucp_worker_extract_request_by_id(worker, rep_hdr->req_id);
+        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_REMOTE_COMPLETED,
+                                      UCS_OK);
+    }
     return UCS_OK;
 }
 
@@ -460,9 +465,11 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         break;
     case UCP_AM_ID_EAGER_SYNC_ONLY:
         ucs_assert(eagers_hdr->req.ep_id != UCP_EP_ID_INVALID);
-        snprintf(buffer, max, "EGRS tag %"PRIx64" ep_id 0x%"PRIx64" req_id 0x%"PRIx64,
+        snprintf(buffer, max,
+                 "EGRS tag %" PRIx64 " ep_id 0x%" PRIx64 " req_id 0x%" PRIx64
+                 " len %zu",
                  eagers_hdr->super.super.tag, eagers_hdr->req.ep_id,
-                 eagers_hdr->req.req_id);
+                 eagers_hdr->req.req_id, length - sizeof(*eagers_hdr));
         header_len = sizeof(*eagers_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_FIRST:
