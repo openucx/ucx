@@ -1095,9 +1095,15 @@ UCS_TEST_F(test_datatype, ptr_map) {
     }
 
     for (std_map_t::iterator i = std_map.begin(); i != std_map.end(); ++i) {
-        ASSERT_EQ(i->second, ucs_ptr_map_get(&ptr_map, i->first));
-        status = ucs_ptr_map_del(&ptr_map, i->first);
+        bool extract = ucs::rand() % 2;
+        void *value;
+        status = ucs_ptr_map_get(&ptr_map, i->first, extract, &value);
         ASSERT_EQ(UCS_OK, status);
+        ASSERT_EQ(i->second, value);
+        if (!extract) {
+            status = ucs_ptr_map_del(&ptr_map, i->first);
+            ASSERT_EQ(UCS_OK, status);
+        }
         delete i->second;
     }
 

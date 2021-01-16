@@ -211,10 +211,8 @@ void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
 {
     ucp_request_t *req;
 
-    req = ucp_worker_extract_request_by_id(worker, rep_hdr->req_id);
-    if (req == NULL) {
-        return;
-    }
+    UCP_WORKER_EXTRACT_REQUEST_BY_ID(&req, worker, rep_hdr->req_id, return,
+                                     "EAGER_S ACK %p", rep_hdr);
 
     req->flags |= UCP_REQUEST_FLAG_REMOTE_COMPLETED;
     if (req->flags & UCP_REQUEST_FLAG_LOCAL_COMPLETED) {

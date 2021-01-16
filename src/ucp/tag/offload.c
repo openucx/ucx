@@ -728,8 +728,8 @@ void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, ucs_ptr_map_key_t ep_id,
 
     ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD);
 
-    ep = UCP_WORKER_GET_VALID_EP_BY_ID(worker, ep_id, return,
-                                       "ACK for sync-send");
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, ep_id, return,
+                                  "ACK for sync-send");
 
     req = ucp_proto_ssend_ack_request_alloc(worker, ep);
     if (req == NULL) {

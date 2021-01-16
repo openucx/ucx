@@ -642,10 +642,10 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     UCS_ASYNC_BLOCK(&worker->async);
 
     if (msg->dst_ep_id != UCP_EP_ID_INVALID) {
-        ep = UCP_WORKER_GET_EP_BY_ID(worker, msg->dst_ep_id, goto out,
-                                     "WIREUP message (%d src_ep_id 0x%"PRIx64
-                                     " sn %d)", msg->type, msg->src_ep_id,
-                                     msg->conn_sn);
+        UCP_WORKER_GET_EP_BY_ID(&ep, worker, msg->dst_ep_id, goto out,
+                                "WIREUP message (%d src_ep_id 0x%" PRIx64
+                                " sn %d)",
+                                msg->type, msg->src_ep_id, msg->conn_sn);
     }
 
     status = ucp_address_unpack(worker, msg + 1,

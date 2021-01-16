@@ -318,8 +318,8 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
     }
 
     ucs_assert(reqhdr->req_id != UCP_REQUEST_ID_INVALID);
-    ep = UCP_WORKER_GET_VALID_EP_BY_ID(worker, reqhdr->ep_id, return,
-                                       "ACK for sync-send");
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, reqhdr->ep_id, return,
+                                  "ACK for sync-send");
 
     req = ucp_proto_ssend_ack_request_alloc(worker, ep);
     if (req == NULL) {

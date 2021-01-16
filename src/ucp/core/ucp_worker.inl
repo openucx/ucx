@@ -47,17 +47,23 @@ ucp_worker_get_name(ucp_worker_h worker)
 /**
  * @return endpoint by a key received from remote side
  */
-static UCS_F_ALWAYS_INLINE ucp_ep_h
-ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
+                        ucp_ep_h *ep_p)
 {
-    ucp_ep_h ep;
+    ucs_status_t status;
+    void *ptr;
 
     ucs_assert(id != UCP_EP_ID_INVALID);
-    ep = (ucp_ep_h)ucs_ptr_map_get(&worker->ptr_map, id);
-    ucs_assertv((ep == NULL) || (ep->worker == worker),
-                "worker=%p ep=%p ep->worker=%p", worker,
-                ep, ep->worker);
-    return ep;
+    status = ucs_ptr_map_get(&worker->ptr_map, id, 0, &ptr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    *ep_p = (ucp_ep_h)ptr;
+    ucs_assertv((*ep_p)->worker == worker, "worker=%p ep=%p ep->worker=%p",
+                worker, (*ep_p), (*ep_p)->worker);
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
@@ -80,10 +86,18 @@ ucp_worker_get_request_id(ucp_worker_h worker, ucp_request_t *req, int indirect)
     return id;
 }
 
-static UCS_F_ALWAYS_INLINE ucp_request_t*
-ucp_worker_get_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_worker_get_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
+                             ucp_request_t **req_p)
 {
-    return (ucp_request_t*)ucs_ptr_map_get(&worker->ptr_map, id);
+    ucs_status_t status;
+    void *ptr;
+
+    status = ucs_ptr_map_get(&worker->ptr_map, id, 0, &ptr);
+    if (ucs_likely(status == UCS_OK)) {
+        *req_p = (ucp_request_t*)ptr;
+    }
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -107,15 +121,22 @@ ucp_worker_del_request_id(ucp_worker_h worker, ucp_request_t *request,
     ucs_assert(status == UCS_OK);
 }
 
-static UCS_F_ALWAYS_INLINE ucp_request_t*
-ucp_worker_extract_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_worker_extract_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
+                                 ucp_request_t **req_p)
 {
-    ucp_request_t *request;
+    ucs_status_t status;
+    void *ptr;
 
-    request = (ucp_request_t*)ucs_ptr_map_extract(&worker->ptr_map, id);
-    ucp_worker_request_check_flags(request, id);
-    request->flags &= ~UCP_REQUEST_FLAG_IN_PTR_MAP;
-    return request;
+    status = ucs_ptr_map_get(&worker->ptr_map, id, 1, &ptr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    *req_p = (ucp_request_t*)ptr;
+    ucp_worker_request_check_flags(*req_p, id);
+    (*req_p)->flags &= ~UCP_REQUEST_FLAG_IN_PTR_MAP;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -258,41 +279,57 @@ ucp_worker_get_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     return ucp_worker_add_rkey_config(worker, key, cfg_index_p);
 }
 
-#define UCP_WORKER_GET_EP_BY_ID(_worker, _ep_id, _action, _fmt_str, ...) \
-    ({ \
-         ucp_ep_h __ep = ucp_worker_get_ep_by_id(_worker, _ep_id); \
-         if (ucs_unlikely(__ep == NULL)) { \
-             ucs_trace_data("worker %p: ep id 0x%" PRIx64 " was not found, drop" \
-                            _fmt_str, _worker, _ep_id, ##__VA_ARGS__); \
-             _action; \
-         } \
-         __ep; \
-    })
+#define UCP_WORKER_GET_EP_BY_ID(_ep_p, _worker, _ep_id, _action, _fmt_str, ...) \
+    { \
+        ucs_status_t __status; \
+        \
+        __status = ucp_worker_get_ep_by_id(_worker, _ep_id, _ep_p); \
+        if (ucs_unlikely(__status != UCS_OK)) { \
+            ucs_trace_data("worker %p: ep id 0x%" PRIx64 \
+                           " was not found, drop" _fmt_str, \
+                           _worker, _ep_id, ##__VA_ARGS__); \
+            _action; \
+        } \
+    }
 
-#define UCP_WORKER_GET_VALID_EP_BY_ID(_worker, _ep_id, _action, _fmt_str, ...) \
-    ({ \
-         ucp_ep_h ___ep = UCP_WORKER_GET_EP_BY_ID(_worker, _ep_id, _action, \
-                                                  _fmt_str, ##__VA_ARGS__); \
-         if (ucs_unlikely((___ep != NULL) && \
-                          (___ep->flags & UCP_EP_FLAG_CLOSED))) { \
-             ucs_trace_data("worker %p: ep id 0x%" PRIx64 " was already closed" \
-                            " ep %p, drop " _fmt_str, _worker, _ep_id, ___ep, \
-                            ##__VA_ARGS__); \
-             _action; \
-         } \
-         ___ep; \
-    })
+#define UCP_WORKER_GET_VALID_EP_BY_ID(_ep_p, _worker, _ep_id, _action, \
+                                      _fmt_str, ...) \
+    { \
+        UCP_WORKER_GET_EP_BY_ID(_ep_p, _worker, _ep_id, _action, _fmt_str, \
+                                ##__VA_ARGS__); \
+        if (ucs_unlikely((*(_ep_p))->flags & UCP_EP_FLAG_CLOSED)) { \
+            ucs_trace_data("worker %p: ep id 0x%" PRIx64 " was already closed" \
+                           " ep %p, drop " _fmt_str, \
+                           _worker, _ep_id, *(_ep_p), ##__VA_ARGS__); \
+            _action; \
+        } \
+    }
 
-#define UCP_WORKER_GET_REQ_BY_ID(_worker, _req_id, _action, _fmt_str, ...) \
-    ({ \
-         ucp_request_t *_req = ucp_worker_get_request_by_id(_worker, _req_id); \
-         if (ucs_unlikely(_req == NULL)) { \
-             ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
-                            " drop " _fmt_str, _worker, _req_id, \
-                            ##__VA_ARGS__); \
-             _action; \
-         } \
-         _req; \
-    })
+#define UCP_WORKER_GET_REQUEST_BY_ID(_req_p, _worker, _req_id, _action, \
+                                     _fmt_str, ...) \
+    { \
+        ucs_status_t __status = ucp_worker_get_request_by_id(_worker, _req_id, \
+                                                             _req_p); \
+        if (ucs_unlikely(__status != UCS_OK)) { \
+            ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
+                           " drop " _fmt_str, \
+                           _worker, _req_id, ##__VA_ARGS__); \
+            _action; \
+        } \
+    }
+
+#define UCP_WORKER_EXTRACT_REQUEST_BY_ID(_req_p, _worker, _req_id, _action, \
+                                         _fmt_str, ...) \
+    { \
+        ucs_status_t __status = ucp_worker_extract_request_by_id(_worker, \
+                                                                 _req_id, \
+                                                                 _req_p); \
+        if (ucs_unlikely(__status != UCS_OK)) { \
+            ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
+                           " drop " _fmt_str, \
+                           _worker, _req_id, ##__VA_ARGS__); \
+            _action; \
+        } \
+    }
 
 #endif
