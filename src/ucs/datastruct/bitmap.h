@@ -55,6 +55,10 @@ typedef uint64_t ucs_bitmap_word_t;
     ((((_length) + (UCS_BITMAP_BITS_IN_WORD - 1)) / UCS_BITMAP_BITS_IN_WORD))
 
 
+#define _UCS_BITMAP_BIT_INDEX(_bit_in_word_index, _word_index) \
+    ((_word_index) * UCS_BITMAP_BITS_IN_WORD + (_bit_in_word_index))
+
+
 #define _UCS_BITMAP_WORD(_bitmap, _word_index) ((_bitmap).bits[_word_index])
 
 
@@ -366,11 +370,13 @@ typedef uint64_t ucs_bitmap_word_t;
  * @param _bit_index Bit index (global offset - relative to the whole bitmap)
  */
 #define UCS_BITMAP_FOR_EACH_BIT(_bitmap, _bit_index) \
-    for (_bit_index = ucs_ffs64_safe(_UCS_BITMAP_WORD(_bitmap, 0)); \
-         _bit_index < _UCS_BITMAP_NUM_WORDS(_bitmap) * UCS_BITMAP_BITS_IN_WORD; \
-         _bit_index = _UCS_BITMAP_WORD_INDEX0(_bit_index) + \
-                  ucs_ffs64_safe(_UCS_BITMAP_WORD_BY_BIT((_bitmap), (_bit_index)) & \
-                                 _UCS_BITMAP_GET_NEXT_BIT(_bit_index)))
+    for (_bit_index = ucs_bitmap_ffs((_bitmap).bits, \
+                                     _UCS_BITMAP_NUM_WORDS(_bitmap), 0); \
+         _bit_index < \
+         _UCS_BITMAP_NUM_WORDS(_bitmap) * UCS_BITMAP_BITS_IN_WORD; \
+         _bit_index = ucs_bitmap_ffs((_bitmap).bits, \
+                                     _UCS_BITMAP_NUM_WORDS(_bitmap), \
+                                     _bit_index + 1))
 
 
 /**
@@ -393,7 +399,7 @@ typedef uint64_t ucs_bitmap_word_t;
  * @return A new bitmap, which is the negation of the given one
  */
 #define UCS_BITMAP_NOT(_bitmap, _length) \
-    _ucs_bitmap_##_length##_not(_bitmap);
+    _ucs_bitmap_##_length##_not(_bitmap)
 
 
 /**
@@ -406,7 +412,7 @@ typedef uint64_t ucs_bitmap_word_t;
  * @return A new bitmap, which is the logical AND of the operands
  */
 #define UCS_BITMAP_AND(_bitmap1, _bitmap2, _length) \
-    _ucs_bitmap_##_length##_and(_bitmap1, _bitmap2);
+    _ucs_bitmap_##_length##_and(_bitmap1, _bitmap2)
 
 
 /**
@@ -419,7 +425,7 @@ typedef uint64_t ucs_bitmap_word_t;
  * @return A new bitmap, which is the logical OR of the operands
  */
 #define UCS_BITMAP_OR(_bitmap1, _bitmap2, _length) \
-    _ucs_bitmap_##_length##_or(_bitmap1, _bitmap2);
+    _ucs_bitmap_##_length##_or(_bitmap1, _bitmap2)
 
 
 /**
@@ -432,7 +438,7 @@ typedef uint64_t ucs_bitmap_word_t;
  * @return A new bitmap, which is the logical XOR of the operands
  */
 #define UCS_BITMAP_XOR(_bitmap1, _bitmap2, _length) \
-    _ucs_bitmap_##_length##_xor(_bitmap1, _bitmap2);
+    _ucs_bitmap_##_length##_xor(_bitmap1, _bitmap2)
 
 
 static UCS_F_ALWAYS_INLINE bool _ucs_bitmap_is_zero(const void *bitmap, size_t num_words)
@@ -446,6 +452,37 @@ static UCS_F_ALWAYS_INLINE bool _ucs_bitmap_is_zero(const void *bitmap, size_t n
     }
 
     return 1;
+}
+
+
+/**
+ * Find the index of the first bit set to 1 in a given bitmap, starting from
+ * a particular index (excluding it). If all bits are zero, returns the index
+ * past the last bit (bitmap size).
+ *
+ * @param bitmap_words Look for the first bit in the words of this bitmap
+ * @param num_words    Number of words in the bitmsp
+ * @param start_index  The first bit to look from
+ */
+static UCS_F_ALWAYS_INLINE int
+ucs_bitmap_ffs(const ucs_bitmap_word_t *bitmap_words, size_t num_words,
+               size_t start_index)
+{
+    size_t word_index = start_index / UCS_BITMAP_BITS_IN_WORD;
+    size_t mask       = ~UCS_MASK(start_index % UCS_BITMAP_BITS_IN_WORD);
+    size_t first_bit_in_word;
+
+    while (word_index < num_words) {
+        if (bitmap_words[word_index] & mask) {
+            first_bit_in_word = ucs_ffs64(bitmap_words[word_index] & mask);
+            return _UCS_BITMAP_BIT_INDEX(first_bit_in_word, word_index);
+        }
+
+        mask = UINT64_MAX;
+        word_index++;
+    }
+
+    return _UCS_BITMAP_BIT_INDEX(0, word_index);
 }
 
 
