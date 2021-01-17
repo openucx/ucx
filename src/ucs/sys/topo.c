@@ -170,6 +170,30 @@ ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
     return buffer;
 }
 
+ucs_status_t
+ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev)
+{
+    ucs_sys_bus_id_t bus_id;
+    int num_fields;
+
+    /* Try to parse as "<domain>:<bus>:<device>.<function>" */
+    num_fields = sscanf(name, "%hx:%hhx:%hhx.%hhx", &bus_id.domain, &bus_id.bus,
+                        &bus_id.slot, &bus_id.function);
+    if (num_fields == 4) {
+        return ucs_topo_find_device_by_bus_id(&bus_id, sys_dev);
+    }
+
+    /* Try to parse as "<bus>:<device>.<function>", assume domain is 0 */
+    bus_id.domain = 0;
+    num_fields    = sscanf(name, "%hhx:%hhx.%hhx", &bus_id.bus, &bus_id.slot,
+                           &bus_id.function);
+    if (num_fields == 3) {
+        return ucs_topo_find_device_by_bus_id(&bus_id, sys_dev);
+    }
+
+    return UCS_ERR_INVALID_PARAM;
+}
+
 void ucs_topo_print_info(FILE *stream)
 {
 }
