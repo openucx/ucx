@@ -933,48 +933,29 @@ public:
         m_e2->connect(1, *m_e1, 1);
     }
 
-    void send(int ep, void *buf)
+    bool send(int ep, void *buf)
     {
         ssize_t status;
 
         status = uct_ep_am_bcopy(m_e1->ep(ep), 0, mapped_buffer::pack, buf, 0);
         if (status == UCS_ERR_NO_RESOURCE) {
             short_progress_loop();
+            return false;
         } else if (status < 0) {
             ASSERT_UCS_OK((ucs_status_t)status);
         }
-    }
 
-    void check()
-    {
-        if (!has_transport("rc_mlx5") && !has_transport("dc_mlx5")) {
-            return;
-        }
-
-        uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(m_e2->iface(),
-                uct_rc_mlx5_iface_common_t);
-        uct_ib_mlx5_srq_t *srq            = &iface->rx.srq;
-        uct_ib_mlx5_srq_seg_t *seg        = (uct_ib_mlx5_srq_seg_t *)srq->buf;
-        unsigned count = 0;
-
-        /* check that all segments organized in linked list */
-        do {
-            seg = (uct_ib_mlx5_srq_seg_t *)UCS_PTR_BYTE_OFFSET(srq->buf,
-                    ntohs(seg->srq.next_wqe_index) * srq->stride);
-            count++;
-        } while (count <= srq->mask);
-
-        ASSERT_EQ(srq->buf, seg);
+        return true;
     }
 
     void test_reorder() {
-        for (size_t i = 0; i < 10000; ++i) {
-            send(0, m_buf8k);
-            send(1, m_buf8b);
+        unsigned i = 0;
+        ucs_time_t deadline = ucs::get_deadline();
+        while ((i < 10000) && (ucs_get_time() < deadline)) {
+            if (send(0, m_buf8k) && send(1, m_buf8b)) {
+                i++;
+            }
         }
-
-        flush();
-        check();
     }
 
     void cleanup() {
