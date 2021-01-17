@@ -919,7 +919,8 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      &dc_ep->av,
                                      uct_dc_mlx5_ep_get_grh(dc_ep),
                                      uct_ib_mlx5_wqe_av_size(&dc_ep->av),
-                                     MLX5_WQE_CTRL_SOLICITED, INT_MAX);
+                                     MLX5_WQE_CTRL_SOLICITED |
+                                     MLX5_WQE_CTRL_CQ_UPDATE, INT_MAX);
         uct_rc_txqp_add_send_op_sn(txqp, grant_ep, txwq->prev_sw_pi);
     }
 
