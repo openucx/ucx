@@ -162,7 +162,8 @@ out:
 /*
  * @param [in] rsc_tli  Resource index for every lane.
  */
-ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
+ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type,
+                                 const ucp_tl_bitmap_t *tl_bitmap,
                                  const ucp_lane_index_t *lanes2remote)
 {
     ucp_request_t* req;
@@ -211,14 +212,19 @@ ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
     return UCS_OK;
 }
 
-static uint64_t ucp_wireup_get_ep_tl_bitmap(ucp_ep_h ep, ucp_lane_map_t lane_map)
+static ucp_tl_bitmap_t
+ucp_wireup_get_ep_tl_bitmap(ucp_ep_h ep, ucp_lane_map_t lane_map)
 {
-    uint64_t         tl_bitmap = 0;
+    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucp_lane_index_t lane;
 
     ucs_for_each_bit(lane, lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
-        tl_bitmap |= UCS_BIT(ucp_ep_get_rsc_index(ep, lane));
+        if (ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE) {
+            continue;
+        }
+        
+        UCS_BITMAP_SET(tl_bitmap, ucp_ep_get_rsc_index(ep, lane));
     }
 
     return tl_bitmap;
@@ -385,7 +391,8 @@ ucp_wireup_init_lanes_by_request(ucp_worker_h worker, ucp_ep_h ep,
                                  const ucp_unpacked_address_t *remote_address,
                                  unsigned *addr_indices)
 {
-    ucs_status_t status = ucp_wireup_init_lanes(ep, ep_init_flags, UINT64_MAX,
+    ucs_status_t status = ucp_wireup_init_lanes(ep, ep_init_flags,
+                                                &ucp_tl_bitmap_max,
                                                 remote_address, addr_indices);
     if (status == UCS_OK) {
         return UCS_OK;
@@ -443,10 +450,10 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
                            const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
 {
-    uint64_t remote_uuid   = remote_address->uuid;
-    uint64_t tl_bitmap     = 0;
-    int send_reply         = 0;
-    unsigned ep_init_flags = 0;
+    uint64_t remote_uuid      = remote_address->uuid;
+    int send_reply            = 0;
+    unsigned ep_init_flags    = 0;
+    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucp_rsc_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
@@ -558,7 +565,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
     if (send_reply) {
         ucs_trace("ep %p: sending wireup reply", ep);
-        ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY, tl_bitmap, lanes2remote);
+        ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REPLY, &tl_bitmap, lanes2remote);
     }
 }
 
@@ -572,7 +579,8 @@ static unsigned ucp_wireup_send_msg_ack(void *arg)
     ucs_trace("ep %p: sending wireup ack", ep);
 
     memset(rsc_tli, UCP_NULL_RESOURCE, sizeof(rsc_tli));
-    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, 0, rsc_tli);
+    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_ACK, &ucp_tl_bitmap_min,
+                                 rsc_tli);
     return (status == UCS_OK);
 }
 
@@ -662,7 +670,8 @@ ucp_wireup_process_ep_check(ucp_worker_h worker, ucp_ep_h ep,
     }
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
-    status = ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_EP_REMOVED, 0, NULL);
+    status = ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_EP_REMOVED,
+                                 &ucp_tl_bitmap_min, NULL);
     if (status != UCS_OK) {
         goto failed_destroy_ep;
     }
@@ -1028,7 +1037,7 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
     unsigned num_dst_mds;
 
     ae_dst_md_map = 0;
-    ucs_for_each_bit(rsc_index, context->tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, rsc_index) {
         ucp_unpacked_address_for_each(ae, remote_address) {
             if (ucp_wireup_is_reachable(ep, ep_init_flags, rsc_index, ae)) {
                 ae_dst_md_map         |= UCS_BIT(ae->md_index);
@@ -1207,13 +1216,15 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
 }
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
-                                   uint64_t local_tl_bitmap,
+                                   const ucp_tl_bitmap_t *local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices)
 {
-    ucp_worker_h worker = ep->worker;
-    uint64_t tl_bitmap  = local_tl_bitmap & worker->context->tl_bitmap;
-    ucp_rsc_index_t cm_idx;
+    ucp_worker_h worker                  = ep->worker;
+    ucp_tl_bitmap_t tl_bitmap            = UCS_BITMAP_AND(*local_tl_bitmap,
+                                                          worker->context->tl_bitmap,
+                                                          UCP_MAX_RESOURCES);
+    ucp_rsc_index_t cm_idx               = UCP_NULL_RESOURCE;
     ucp_lane_index_t connect_lane_bitmap;
     ucp_ep_config_key_t key;
     ucp_worker_cfg_index_t new_cfg_index;
@@ -1222,7 +1233,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     char str[32];
     ucs_queue_head_t replay_pending_queue;
 
-    ucs_assert(tl_bitmap != 0);
+    UCS_BITMAP_AND_INPLACE(&tl_bitmap, worker->context->tl_bitmap);
+    ucs_assert(!UCS_BITMAP_IS_ZERO_INPLACE(&tl_bitmap));
 
     ucs_trace("ep %p: initialize lanes", ep);
     ucs_log_indent(1);
@@ -1330,7 +1342,7 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
 {
     ucp_rsc_index_t rsc_index;
     ucs_status_t status;
-    uint64_t tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap;
 
     tl_bitmap = ucp_wireup_get_ep_tl_bitmap(ep, UCS_MASK(ucp_ep_num_lanes(ep)));
 
@@ -1338,11 +1350,11 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     rsc_index = ucp_wireup_ep_get_aux_rsc_index(
                     ep->uct_eps[ucp_ep_get_wireup_msg_lane(ep)]);
     if (rsc_index != UCP_NULL_RESOURCE) {
-        tl_bitmap |= UCS_BIT(rsc_index);
+        UCS_BITMAP_SET(tl_bitmap, rsc_index);
     }
 
     ucs_debug("ep %p: send wireup request (flags=0x%x)", ep, ep->flags);
-    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REQUEST, tl_bitmap, NULL);
+    status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REQUEST, &tl_bitmap, NULL);
 
     ep->flags |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
 
@@ -1361,7 +1373,6 @@ void ucp_wireup_pending_purge_cb(uct_pending_req_t *self, void *arg)
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
 {
-    uint64_t tl_bitmap = UINT64_MAX;  /* pack full worker address */
     ucs_status_t status;
 
     ucs_assert(ucp_ep_has_cm_lane(ep));
@@ -1369,7 +1380,7 @@ ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
 
     ucs_debug("ep %p: send wireup pre-request (flags=0x%x)", ep, ep->flags);
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_PRE_REQUEST,
-                                 tl_bitmap, NULL);
+                                 &ucp_tl_bitmap_max, NULL);
 
     ep->flags |= UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED;
     return status;
@@ -1497,7 +1508,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     }
 
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
-        ucs_for_each_bit(tl, context->tl_bitmap) {
+        UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl) {
             rsc = &context->tl_rscs[tl];
             if (ae->tl_name_csum == rsc->tl_name_csum) {
                 snprintf(p, end - p, " "UCT_TL_RESOURCE_DESC_FMT,

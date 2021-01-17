@@ -605,7 +605,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    ucs_for_each_bit(rsc_index, worker->context->tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(worker->context->tl_bitmap, rsc_index) {
         wiface = ucp_worker_iface(worker, rsc_index);
         if (wiface->iface == NULL) {
             continue;
