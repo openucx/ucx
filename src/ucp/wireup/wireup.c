@@ -376,15 +376,14 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
                                const ucp_wireup_msg_t *msg,
                                const ucp_unpacked_address_t *remote_address)
 {
-    unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE;
+    unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE |
+                             UCP_EP_INIT_CM_WIREUP_CLIENT;
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
 
     ucs_assert(msg->type      == UCP_WIREUP_MSG_PRE_REQUEST);
     ucs_assert(msg->dst_ep_id != UCP_EP_ID_INVALID);
-    ucs_assert(ep             != NULL);
-    ucs_assert((ep->flags & UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR) ||
-               ucp_ep_has_cm_lane(ep));
+    ucs_assert(ucp_ep_has_cm_lane(ep));
     ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" conn_sn %u",
               remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
@@ -395,10 +394,6 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
 
     if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
-    }
-
-    if (ucp_ep_has_cm_lane(ep)) {
-        ep_init_flags |= UCP_EP_INIT_CM_WIREUP_CLIENT;
     }
 
     /* initialize transport endpoints */
@@ -776,15 +771,8 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
          * during CM pack_cb() on a client side */
         ucs_assert(ucp_wireup_ep_test(ep->uct_eps[lane]));
         ucs_assert(ucp_proxy_ep_extract(ep->uct_eps[lane]) == NULL);
-        ucs_assert(ucp_ep_has_cm_lane(ep) ||
-                   /* TODO: remove when old sockaddr flow will be removed */
-                   (ucp_wireup_ep(ep->uct_eps[0])->sockaddr_ep != NULL));
+        ucs_assert(ucp_ep_has_cm_lane(ep));
         ucp_wireup_ep_lane_set_next_ep(ep, lane, uct_ep);
-
-        /* TODO: remove when old sockaddr flow will be removed */
-        if (ucp_wireup_ep(ep->uct_eps[0])->sockaddr_ep != NULL) {
-            ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
-        }
     }
 
     ucp_worker_iface_progress_ep(wiface);
