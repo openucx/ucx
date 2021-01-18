@@ -2689,18 +2689,14 @@ ucp_worker_keepalive_next_ep(ucp_worker_h worker)
                                  ucp_ep_config(ep)->key.ep_check_map : 0;
 }
 
-static unsigned ucp_worker_keepalive_progress(void *arg)
+static UCS_F_NOINLINE unsigned
+ucp_worker_do_keepalive_progress(ucp_worker_h worker)
 {
-    ucp_worker_h worker = (ucp_worker_h)arg;
     ucs_time_t now;
     ucs_list_link_t *iter_begin;
     ucp_ep_h ep;
 
     ucs_assert(worker->context->config.ext.keepalive_num_eps != 0);
-
-    if ((worker->keepalive.iter_count++ % UCP_WORKER_KEEPALIVE_ITER_SKIP) != 0) {
-        return 0;
-    }
 
     now = ucs_get_time();
     if (ucs_likely((now - worker->keepalive.last_round) <
@@ -2746,6 +2742,17 @@ out_no_resources:
     return worker->keepalive.ep_count;
 }
 
+static unsigned ucp_worker_keepalive_progress(void *arg)
+{
+    ucp_worker_h worker = (ucp_worker_h)arg;
+
+    if ((worker->keepalive.iter_count++ % UCP_WORKER_KEEPALIVE_ITER_SKIP) != 0) {
+        return 0;
+    }
+
+    return ucp_worker_do_keepalive_progress(worker);
+}
+
 void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
@@ -2759,7 +2766,8 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
     }
 
     uct_worker_progress_register_safe(worker->uct,
-                                      ucp_worker_keepalive_progress, worker, 0,
+                                      ucp_worker_keepalive_progress, worker,
+                                      UCS_CALLBACKQ_FLAG_FAST,
                                       &worker->keepalive.cb_id);
 }
 
