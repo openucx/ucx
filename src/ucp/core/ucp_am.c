@@ -151,7 +151,8 @@ static void ucp_am_rndv_send_ats(ucp_worker_h worker,
     req->send.ep = ep;
     req->flags   = 0;
 
-    ucp_rndv_req_send_ats(req, NULL, rts->super.sreq.req_id, status);
+    ucp_rndv_req_send_ack(req, NULL, rts->super.sreq.req_id, status,
+                          UCP_AM_ID_RNDV_ATS, "send_ats");
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_am_data_release, (worker, data),
