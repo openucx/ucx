@@ -1503,6 +1503,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                 const ucp_ep_config_key_t *key)
 {
     ucp_context_h context              = worker->context;
+    const double min_scale             = 1. / context->config.ext.multi_lane_max_ratio;
     ucp_lane_index_t tag_lanes[2]      = {UCP_NULL_LANE, UCP_NULL_LANE};
     ucp_lane_index_t rkey_ptr_lanes[2] = {UCP_NULL_LANE, UCP_NULL_LANE};
     ucp_lane_index_t get_zcopy_lane_count;
@@ -1632,7 +1633,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                     ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
                     scale = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth) /
                             rndv_max_bw[mem_type_index];
-                    if (scale < (1. / context->config.ext.multi_lane_max_ratio)) {
+                    if ((scale - min_scale) < -ucp_calc_epsilon(scale, min_scale)) {
                         continue;
                     }
 

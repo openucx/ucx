@@ -148,7 +148,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "the eager_zcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
 
-  {"MULTI_LANE_MAX_RATIO", "10",
+  {"MULTI_LANE_MAX_RATIO", "4",
    "Maximal allowed ratio between slowest and fastest lane in a multi-lane "
    "protocol. Lanes slower than the specified ratio will not be used.",
    ucs_offsetof(ucp_config_t, ctx.multi_lane_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
