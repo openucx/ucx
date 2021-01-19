@@ -946,25 +946,38 @@ run_io_demo() {
 	server_rdma_addr=$(get_rdma_device_ip_addr)
 	server_nonrdma_addr=$(get_non_rdma_ip_addr)
 	server_loopback_addr="127.0.0.1"
+	mem_types_list="host "
+
+	if [ "X$have_cuda" == "Xyes" ]
+	then
+		mem_types_list+="cuda cuda-managed "
+	fi
 
 	if [ -z "$server_rdma_addr" ] && [ -z "$server_nonrdma_addr" ]
 	then
 		return
 	fi
 
-	echo "==== Running UCP IO demo  ===="
-
-	test_args="$@ -o write,read -d 128:4194304 -i 10000 -w 10"
-	test_name=io_demo
-
-	if [ ! -x ${test_name} ]
-	then
-		$MAKEP -C test/apps/iodemo ${test_name}
-	fi
-
-	for server_ip in $server_rdma_addr $server_nonrdma_addr $server_loopback_addr
+	for mem_type in $mem_types_list
 	do
-		run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+		echo "==== Running UCP IO demo with \"${mem_type}\" memory type ===="
+
+		test_args="$@ -o write,read -d 128:4194304 -i 10000 -w 10 -m ${mem_type}"
+		test_name=io_demo
+
+		if [ ! -x ${test_name} ]
+		then
+			$MAKEP -C test/apps/iodemo ${test_name}
+		fi
+
+		for server_ip in $server_rdma_addr $server_nonrdma_addr $server_loopback_addr
+		do
+			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+			for server_ip in $server_rdma_addr $server_nonrdma_addr
+			do
+				run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+			done
+		done
 	done
 
 	make_clean
