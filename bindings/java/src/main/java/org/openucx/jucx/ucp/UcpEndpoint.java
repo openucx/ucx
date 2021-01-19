@@ -17,6 +17,13 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     // from JNI error handler.
     private UcpEndpointErrorHandler errorHandler;
 
+    /**
+     * To construct reply endpoint for Active Messages from JNI.
+     */
+    private UcpEndpoint(long nativeId) {
+        setNativeId(nativeId);
+    }
+
     @Override
     public String toString() {
         return "UcpEndpoint(id=" + getNativeId() + ", " + paramsString + ")";
@@ -317,6 +324,32 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * Send Active Message.
+     * @param activeMessageId - Active Message id. Specifies which callback registered by
+     *                          {@link UcpWorker#setAmRecvHandler(int, UcpAmRecvCallback)} to run.
+     * @param headerAddress   - User defined Active Message header. NULL value is
+     *                          allowed if no header needed. In this case
+     * @param headerLength    - Active message header length in bytes.
+     * @param dataAddress     - Pointer to the data to be sent to the target node
+     *                          of the Active Message.
+     * @param dataLength      - Data length size in bytes
+     * @param callback        - Callback to call on a completion.
+     */
+    public UcpRequest sendAmNonBlocking(int activeMessageId, long headerAddress, long headerLength,
+                                        long dataAddress, long dataLength, long flags,
+                                        UcxCallback callback, int memoryType) {
+        return sendAmNonBlockingNative(getNativeId(), activeMessageId,
+            headerAddress, headerLength, dataAddress, dataLength, flags, callback, memoryType);
+    }
+
+    public UcpRequest sendAmNonBlocking(int activeMessageId, long headerAddress, long headerLength,
+                                        long dataAddress, long dataLength, long flags,
+                                        UcxCallback callback) {
+        return sendAmNonBlocking(activeMessageId, headerAddress, headerLength,
+            dataAddress, dataLength, flags, callback, UCS_MEMORY_TYPE_UNKNOWN);
+    }
+
+    /**
      * This routine flushes all outstanding AMO and RMA communications on this endpoint.
      * All the AMO and RMA operations issued on this endpoint prior to this call
      * are completed both at the origin and at the target.
@@ -398,6 +431,12 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
                                                                     long[] sizes, long flags,
                                                                     UcxCallback callback,
                                                                     int memoryType);
+
+    private static native UcpRequest sendAmNonBlockingNative(long enpointId, int activeMessageId,
+                                                             long headerAddress, long headerLength,
+                                                             long dataAddress, long dataLength,
+                                                             long flags, UcxCallback callback,
+                                                             int memoryType);
 
     private static native UcpRequest flushNonBlockingNative(long enpointId, UcxCallback callback);
 

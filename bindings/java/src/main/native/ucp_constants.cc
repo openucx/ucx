@@ -84,4 +84,14 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
 
     // The enumeration defines behavior of @ref ucp_stream_recv_nb function
     JUCX_DEFINE_LONG_CONSTANT(UCP_STREAM_RECV_FLAG_WAITALL);
+
+    // The enumeration allows specifying which fields in @ref ucp_am_recv_param_t
+    // are present and receive operation flags are used.
+    JUCX_DEFINE_LONG_CONSTANT(UCP_AM_RECV_ATTR_FLAG_DATA);
+    JUCX_DEFINE_LONG_CONSTANT(UCP_AM_RECV_ATTR_FLAG_RNDV);
+
+    // Flags dictate the behavior of @ref ucp_am_send_nbx routine.
+    JUCX_DEFINE_LONG_CONSTANT(UCP_AM_SEND_FLAG_REPLY);
+    JUCX_DEFINE_LONG_CONSTANT(UCP_AM_SEND_FLAG_EAGER);
+    JUCX_DEFINE_LONG_CONSTANT(UCP_AM_SEND_FLAG_RNDV);
 }
