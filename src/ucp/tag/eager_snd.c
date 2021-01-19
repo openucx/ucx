@@ -117,19 +117,15 @@ static size_t ucp_tag_pack_eager_middle_dt(void *dest, void *arg)
 static ucs_status_t ucp_tag_eager_contig_short(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep = req->send.ep;
+    ucp_ep_t *ep       = req->send.ep;
     ucs_status_t status;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    status = uct_ep_am_short(ep->uct_eps[req->send.lane], UCP_AM_ID_EAGER_ONLY,
-                             req->send.msg_proto.tag.tag, req->send.buffer,
-                             req->send.length);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    ucp_request_complete_send(req, UCS_OK);
-    return UCS_OK;
+    status         = uct_ep_am_short(ep->uct_eps[req->send.lane],
+                                     UCP_AM_ID_EAGER_ONLY,
+                                     req->send.msg_proto.tag.tag, req->send.buffer,
+                                     req->send.length);
+    return ucp_am_short_handle_status_from_pending(req, status);
 }
 
 static ucs_status_t ucp_tag_eager_bcopy_single(uct_pending_req_t *self)

@@ -568,11 +568,7 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
                                        req->send.msg_proto.am.header,
                                        req->send.msg_proto.am.header_length,
                                        req->send.buffer, req->send.length);
-    if (ucs_likely(status == UCS_OK)) {
-        ucp_request_complete_send(req, UCS_OK);
-    }
-
-    return status;
+    return ucp_am_short_handle_status_from_pending(req, status);
 }
 
 static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
@@ -587,11 +583,7 @@ static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
                                              req->send.msg_proto.am.header,
                                              req->send.msg_proto.am.header_length,
                                              req->send.buffer, req->send.length);
-    if (ucs_likely(status == UCS_OK)) {
-        ucp_request_complete_send(req, UCS_OK);
-    }
-
-    return status;
+    return ucp_am_short_handle_status_from_pending(req, status);
 }
 
 static ucs_status_t ucp_am_bcopy_single(uct_pending_req_t *self)

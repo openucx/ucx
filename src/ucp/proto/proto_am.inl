@@ -545,6 +545,17 @@ ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucp_ep_h ep)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_short_handle_status_from_pending(ucp_request_t *req, ucs_status_t status)
+{
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucp_request_complete_send(req, status);
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_bcopy_handle_status_from_pending(uct_pending_req_t *self, int multi,
                                         int tag_sync, ucs_status_t status)
 {
