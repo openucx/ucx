@@ -975,6 +975,7 @@ run_ucp_client_server() {
 	echo "==== Running UCP client-server  ===="
 	run_client_server $(get_rdma_device_ip_addr)
 	run_client_server $(get_non_rdma_ip_addr)
+	run_client_server "127.0.0.1"
 
 	rm -f ./ucp_client_server
 }
@@ -982,6 +983,7 @@ run_ucp_client_server() {
 run_io_demo() {
 	server_rdma_addr=$(get_rdma_device_ip_addr)
 	server_nonrdma_addr=$(get_non_rdma_ip_addr)
+	server_loopback_addr="127.0.0.1"
 
 	if [ -z "$server_rdma_addr" ] && [ -z "$server_nonrdma_addr" ]
 	then
@@ -998,7 +1000,7 @@ run_io_demo() {
 		$MAKEP -C test/apps/iodemo ${test_name}
 	fi
 
-	for server_ip in $server_rdma_addr $server_nonrdma_addr
+	for server_ip in $server_rdma_addr $server_nonrdma_addr $server_loopback_addr
 	do
 		run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
 	done
