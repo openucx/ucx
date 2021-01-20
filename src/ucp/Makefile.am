@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2019. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
@@ -129,6 +129,7 @@ libucp_la_SOURCES = \
 	tag/tag_recv.c \
 	tag/tag_send.c \
 	tag/offload.c \
+	tag/offload/eager.c \
 	wireup/address.c \
 	wireup/ep_match.c \
 	wireup/select.c \

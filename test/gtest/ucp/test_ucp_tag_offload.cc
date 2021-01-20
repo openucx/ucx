@@ -538,12 +538,12 @@ UCS_TEST_P(test_ucp_tag_offload_selection, tag_lane)
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
 
     if (has_tag_offload && !has_shm_or_self) {
-        EXPECT_TRUE(ucp_ep_is_tag_offload_enabled(ep_config));
+        EXPECT_TRUE(ucp_ep_config_key_has_tag_lane(&ep_config->key));
         EXPECT_EQ(ep_config->key.tag_lane, ep_config->tag.lane);
     } else {
         // If shm or self transports exist they would be used for tag matching
         // rather than network offload
-        EXPECT_FALSE(ucp_ep_is_tag_offload_enabled(ep_config));
+        EXPECT_FALSE(ucp_ep_config_key_has_tag_lane(&ep_config->key));
         EXPECT_EQ(ep_config->key.am_lane, ep_config->tag.lane);
     }
 }

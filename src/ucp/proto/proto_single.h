@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2020-2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -28,5 +28,10 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
 
 
 void ucp_proto_single_config_str(const void *priv, ucs_string_buffer_t *strb);
+
+
+typedef ucs_status_t (*ucp_proto_send_single_cb_t)(
+        ucp_request_t *req, const ucp_proto_single_priv_t *spriv,
+        const uct_iov_t *iov);
 
 #endif

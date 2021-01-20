@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -42,14 +42,15 @@ static inline ucp_lane_index_t ucp_ep_get_tag_lane(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.tag_lane;
 }
 
-static inline int ucp_ep_is_tag_offload_enabled(ucp_ep_config_t *config)
+static inline int ucp_ep_config_key_has_tag_lane(const ucp_ep_config_key_t *key)
 {
-    ucp_lane_index_t lane = config->key.tag_lane;
+    ucp_lane_index_t lane = key->tag_lane;
 
     if (lane != UCP_NULL_LANE) {
-        ucs_assert(config->key.lanes[lane].rsc_index != UCP_NULL_RESOURCE);
+        ucs_assert(key->lanes[lane].rsc_index != UCP_NULL_RESOURCE);
         return 1;
     }
+
     return 0;
 }
 

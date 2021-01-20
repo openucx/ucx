@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2020-2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -39,6 +39,11 @@ static ucs_status_t
 ucp_proto_eager_multi_init_common(ucp_proto_multi_init_params_t *params,
                                   ucp_proto_id_t op_id)
 {
+    /* TODO: Disable AM based protocols if tag lane is present! It can be done
+     * when tag offload rndv is implemented (so any msg size can be sent with
+     * tag offload). I. e. would need to check one more condition below:
+     * ucp_ep_config_key_has_tag_lane(params->super.super.ep_config_key)
+     */
     if (params->super.super.select_param->op_id != op_id) {
         return UCS_ERR_UNSUPPORTED;
     }

@@ -1795,7 +1795,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
              */
             ucs_assert_always(config->rndv.rkey_size <= config->am.max_bcopy);
 
-            if (!ucp_ep_is_tag_offload_enabled(config)) {
+            if (!ucp_ep_config_key_has_tag_lane(&config->key)) {
                 /* Tag offload is disabled, AM will be used for all
                  * tag-matching protocols */
                 /* TODO: set threshold level based on all available lanes */

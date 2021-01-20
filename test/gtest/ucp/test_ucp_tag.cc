@@ -176,7 +176,8 @@ void test_ucp_tag::wait_for_unexpected_msg(ucp_worker_h worker, double sec)
 
 void test_ucp_tag::check_offload_support(bool offload_required)
 {
-    bool offload_supported = ucp_ep_is_tag_offload_enabled(ucp_ep_config(sender().ep()));
+    bool offload_supported = ucp_ep_config_key_has_tag_lane(
+                               &ucp_ep_config(sender().ep())->key);
     if (offload_supported != offload_required) {
         cleanup();
         std::string reason = offload_supported ? "tag offload" : "no tag offload";
