@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2017.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2017-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -23,16 +23,34 @@ public:
     }
 
     void check_md_usability() {
+        uct_component_attr_t component_attr = {0};
         uct_md_attr_t md_attr;
         uct_md_config_t *md_config;
         ucs_status_t status;
         uct_md_h md;
+
+        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME  |
+                                    UCT_COMPONENT_ATTR_FIELD_FLAGS |
+                                    UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+        /* coverity[var_deref_model] */
+        status = uct_component_query(GetParam()->component, &component_attr);
+        ASSERT_UCS_OK(status);
+
+        if (component_attr.md_resource_count == 0) {
+            goto skip;
+        }
 
         status = uct_md_config_read(GetParam()->component, NULL, NULL, &md_config);
         EXPECT_TRUE(status == UCS_OK);
 
         status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
                              md_config, &md);
+        if (status == UCS_ERR_UNSUPPORTED) {
+            std::stringstream reason_ss;
+            reason_ss << "component " << GetParam()->component_name
+                      << " does not support MD";
+            UCS_TEST_SKIP_R(reason_ss.str());
+        }
         EXPECT_TRUE(status == UCS_OK);
         uct_config_release(md_config);
 
@@ -42,11 +60,16 @@ public:
         uct_md_close(md);
 
         if (!(md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
-            UCS_TEST_SKIP_R(GetParam()->md_name.c_str() +
-                            std::string(" does not support client-server "
-                                        "connection establishment via sockaddr "
-                                        "without a cm"));
+            goto skip;
         }
+
+        return;
+
+skip:
+        UCS_TEST_SKIP_R(GetParam()->md_name.c_str() +
+                        std::string(" does not support client-server "
+                                    "connection establishment via sockaddr "
+                                    "without a cm"));
     }
 
     void init() {

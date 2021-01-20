@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,6 +11,8 @@
 #include "rdmacm_cm_ep.h"
 #include "rdmacm_cm.h"
 #include <ucs/arch/bitops.h>
+#include <ucs/sys/sock.h>
+#include <ucs/async/async.h>
 
 
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,

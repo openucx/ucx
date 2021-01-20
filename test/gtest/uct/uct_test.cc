@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -147,56 +147,69 @@ std::vector<uct_test_base::md_resource> uct_test_base::enum_md_resources() {
     return all_md_resources;
 }
 
-uct_test::uct_test() {
+uct_test::uct_test() : m_iface_config(NULL), m_md_config(NULL),
+                       m_cm_config(NULL) {
     uct_component_attr_t component_attr = {0};
     ucs_status_t status;
     uct_md_attr_t md_attr;
     uct_md_h md;
 
-    status = uct_md_config_read(GetParam()->component, NULL, NULL, &m_md_config);
+    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME  |
+                                UCT_COMPONENT_ATTR_FIELD_FLAGS |
+                                UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+    /* coverity[var_deref_model] */
+    status = uct_component_query(GetParam()->component, &component_attr);
     ASSERT_UCS_OK(status);
+
+    UCS_TEST_MESSAGE << "Testing component: " << component_attr.name;
+
+    if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
+        status = uct_cm_config_read(GetParam()->component, NULL, NULL,
+                                    &m_cm_config);
+        ASSERT_UCS_OK(status);
+    }
+
+    if (component_attr.md_resource_count > 0) {
+        status = uct_md_config_read(GetParam()->component, NULL, NULL,
+                                    &m_md_config);
+        ASSERT_UCS_OK(status);
+    }
 
     status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
                          m_md_config, &md);
+    if (status == UCS_ERR_UNSUPPORTED) {
+        return;
+    }
+
     ASSERT_UCS_OK(status);
 
     status = uct_md_query(md, &md_attr);
     ASSERT_UCS_OK(status);
-
     if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
         status = uct_md_iface_config_read(md, NULL, NULL, NULL, &m_iface_config);
-    } else if (!strcmp(GetParam()->tl_name.c_str(), "sockaddr")) {
-        m_iface_config = NULL;
-    } else {
+    } else if (GetParam()->tl_name != "sockaddr") { /* TODO: remove this
+                                                             condition after
+                                                             SOCKCM cleanup */
         status = uct_md_iface_config_read(md, GetParam()->tl_name.c_str(), NULL,
                                           NULL, &m_iface_config);
     }
 
     ASSERT_UCS_OK(status);
     uct_md_close(md);
-
-    component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
-                                UCT_COMPONENT_ATTR_FIELD_FLAGS;
-    /* coverity[var_deref_model] */
-    status = uct_component_query(GetParam()->component, &component_attr);
-    ASSERT_UCS_OK(status);
-
-    if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
-        status = uct_cm_config_read(GetParam()->component, NULL, NULL, &m_cm_config);
-        ASSERT_UCS_OK(status);
-    } else {
-        m_cm_config = NULL;
-    }
 }
 
 uct_test::~uct_test() {
     if (m_cm_config != NULL) {
         uct_config_release(m_cm_config);
     }
+
     if (m_iface_config != NULL) {
         uct_config_release(m_iface_config);
     }
-    uct_config_release(m_md_config);
+
+    if (m_md_config != NULL) {
+        uct_config_release(m_md_config);
+    }
 }
 
 void uct_test::init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
@@ -543,15 +556,17 @@ void uct_test::modify_config(const std::string& name, const std::string& value,
         }
     }
 
-    status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
-    if (status == UCS_OK) {
-        mode = IGNORE_IF_NOT_EXIST;
-    }
-    if ((status == UCS_OK) || (status == UCS_ERR_NO_ELEM)) {
-        test_base::modify_config(name, value, mode);
-    } else if (status != UCS_OK) {
-        UCS_TEST_ABORT("Couldn't modify md config parameter: " << name.c_str() <<
-                       " to " << value.c_str() << ": " << ucs_status_string(status));
+    if (m_md_config != NULL) {
+        status = uct_config_modify(m_md_config, name.c_str(), value.c_str());
+        if (status == UCS_OK) {
+            mode = IGNORE_IF_NOT_EXIST;
+        }
+        if ((status == UCS_OK) || (status == UCS_ERR_NO_ELEM)) {
+            test_base::modify_config(name, value, mode);
+        } else if (status != UCS_OK) {
+            UCS_TEST_ABORT("Couldn't modify md config parameter: " << name.c_str() <<
+                           " to " << value.c_str() << ": " << ucs_status_string(status));
+        }
     }
 }
 
@@ -846,13 +861,16 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
                            uct_worker_create, &m_async.m_async,
                            UCS_THREAD_MODE_SINGLE);
 
-    UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close,
-                           uct_md_open, resource.component,
-                           resource.md_name.c_str(), md_config);
+    UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_md_h, m_md, uct_md_close,
+                                        uct_md_open, resource.component,
+                                        resource.md_name.c_str(), md_config);
 
-    status = uct_md_query(m_md, &m_md_attr);
-    ASSERT_UCS_OK(status);
-
+    if (m_md) {
+        status = uct_md_query(m_md, &m_md_attr);
+        ASSERT_UCS_OK(status);
+    } else {
+        memset(&m_md_attr, 0, sizeof(m_md_attr));
+    }
 
     comp_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_NAME |
                            UCT_COMPONENT_ATTR_FIELD_FLAGS;
