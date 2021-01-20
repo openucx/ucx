@@ -172,7 +172,8 @@ test_base::count_warns_logger(const char *file, unsigned line, const char *funct
     } else if (level == UCS_LOG_LEVEL_WARN) {
         ++m_total_warnings;
     }
-    if (m_first_warns_and_errors.size() < 5) {
+    if ((level <= UCS_LOG_LEVEL_WARN) &&
+        (m_first_warns_and_errors.size() < 5)) {
         /* Save the first few errors/warnings which cause the test to fail */
         va_list ap2;
         va_copy(ap2, ap);
@@ -288,7 +289,7 @@ void test_base::SetUpProxy() {
     m_errors.clear();
     m_warnings.clear();
     m_first_warns_and_errors.clear();
-    m_num_log_handlers_before    = ucs_log_num_handlers();
+    m_num_log_handlers_before = ucs_log_num_handlers();
     ucs_log_push_handler(count_warns_logger);
 
     try {
@@ -317,7 +318,9 @@ void test_base::TearDownProxy() {
 
     m_errors.clear();
 
-    ucs_log_pop_handler();
+    if (ucs_log_num_handlers() > m_num_log_handlers_before) {
+        ucs_log_pop_handler();
+    }
 
     unsigned num_not_removed = ucs_log_num_handlers() - m_num_log_handlers_before;
     if (num_not_removed != 0) {

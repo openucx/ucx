@@ -21,22 +21,29 @@
 #define UCS_MAX_LOG_HANDLERS    32
 
 #define UCS_LOG_TIME_FMT        "[%lu.%06lu]"
-#define UCS_LOG_FILE_FMT        "%16s:%-4u"
-#define UCS_LOG_METADATA_FMT    "%-4s %-5s"
+#define UCS_LOG_METADATA_FMT    "%17s:%-4u %-4s %-5s %*s"
 #define UCS_LOG_PROC_DATA_FMT   "[%s:%-5d:%d]"
-#define UCS_LOG_SHORT_FMT       UCS_LOG_TIME_FMT" "UCS_LOG_FILE_FMT" " \
-                                UCS_LOG_METADATA_FMT" ""%s\n"
-#define UCS_LOG_FMT             UCS_LOG_TIME_FMT" "UCS_LOG_PROC_DATA_FMT" " \
-                                UCS_LOG_FILE_FMT" "UCS_LOG_METADATA_FMT" ""%s\n"
+
+#define UCS_LOG_SHORT_FMT       UCS_LOG_TIME_FMT " " UCS_LOG_METADATA_FMT "%s\n"
+#define UCS_LOG_FMT             UCS_LOG_TIME_FMT " " UCS_LOG_PROC_DATA_FMT " " \
+                                UCS_LOG_METADATA_FMT "%s\n"
 
 #define UCS_LOG_TIME_ARG(_tv)  (_tv)->tv_sec, (_tv)->tv_usec
+
+#define UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf) \
+    (_short_file), (_line), (_comp_conf)->name, \
+    ucs_log_level_names[_level], (ucs_log_current_indent * 2), ""
+
+#define UCS_LOG_PROC_DATA_ARG() \
+    ucs_log_hostname, ucs_log_pid, ucs_log_get_thread_num()
+
 #define UCS_LOG_SHORT_ARG(_short_file, _line, _level, _comp_conf, _tv, _message) \
-    UCS_LOG_TIME_ARG(_tv), _short_file, _line, (_comp_conf)->name, \
-    ucs_log_level_names[_level], _message
+    UCS_LOG_TIME_ARG(_tv), \
+    UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf), (_message)
+
 #define UCS_LOG_ARG(_short_file, _line, _level, _comp_conf, _tv, _message) \
-    UCS_LOG_TIME_ARG(_tv), ucs_log_hostname, ucs_log_pid, \
-    ucs_log_get_thread_num(),_short_file, _line, (_comp_conf)->name, \
-    ucs_log_level_names[_level], _message
+    UCS_LOG_TIME_ARG(_tv), UCS_LOG_PROC_DATA_ARG(), \
+    UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf), (_message)
 
 const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_FATAL]        = "FATAL",
@@ -57,6 +64,7 @@ const char *ucs_log_level_names[] = {
 
 static unsigned ucs_log_handlers_count      = 0;
 static int ucs_log_initialized              = 0;
+static int __thread ucs_log_current_indent  = 0;
 static char ucs_log_hostname[HOST_NAME_MAX] = {0};
 static int  ucs_log_pid                     = 0;
 static FILE *ucs_log_file                   = NULL;
@@ -239,8 +247,9 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
 {
     size_t buffer_size = ucs_log_get_buffer_size();
     char *saveptr      = "";
-    char *log_line;
+    const char *short_file;
     struct timeval tv;
+    char *log_line;
     char *buf;
 
     if (!ucs_log_component_is_enabled(level, comp_conf) && (level != UCS_LOG_LEVEL_PRINT)) {
@@ -254,12 +263,13 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     if (level <= ucs_global_opts.log_level_trigger) {
         ucs_fatal_error_message(file, line, function, buf);
     } else {
+        short_file = ucs_basename(file);
         gettimeofday(&tv, NULL);
 
         log_line = strtok_r(buf, "\n", &saveptr);
         while (log_line != NULL) {
-            ucs_log_print(buffer_size, ucs_basename(file), line, level, comp_conf,
-                          &tv, log_line);
+            ucs_log_print(buffer_size, short_file, line, level, comp_conf, &tv,
+                          log_line);
             log_line = strtok_r(NULL, "\n", &saveptr);
         }
     }
@@ -284,6 +294,17 @@ void ucs_log_pop_handler()
     if (ucs_log_handlers_count > 0) {
         --ucs_log_handlers_count;
     }
+}
+
+void ucs_log_indent(int delta)
+{
+    ucs_log_current_indent += delta;
+    ucs_assert(ucs_log_current_indent >= 0);
+}
+
+int ucs_log_get_current_indent()
+{
+    return ucs_log_current_indent;
 }
 
 unsigned ucs_log_num_handlers()
