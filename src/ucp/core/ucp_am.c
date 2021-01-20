@@ -738,14 +738,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_am_rndv_rts, (self),
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     size_t max_rts_size;
+    ucs_status_t status;
 
     /* RTS consists of: AM RTS header, packed rkeys and user header */
     max_rts_size = sizeof(ucp_am_rndv_rts_hdr_t) +
                    ucp_ep_config(sreq->send.ep)->rndv.rkey_size +
                    sreq->send.msg_proto.am.header_length;
 
-    return ucp_do_am_single(self, UCP_AM_ID_RNDV_RTS, ucp_am_rndv_rts_pack,
-                            max_rts_size);
+    status = ucp_do_am_single(self, UCP_AM_ID_RNDV_RTS, ucp_am_rndv_rts_pack,
+                              max_rts_size);
+    return ucp_rndv_rts_handle_status_from_pending(sreq, status);
 }
 
 static ucs_status_t ucp_am_send_start_rndv(ucp_request_t *sreq)

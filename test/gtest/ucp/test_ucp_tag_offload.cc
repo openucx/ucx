@@ -612,8 +612,8 @@ UCS_TEST_P(test_ucp_tag_offload_gpu, rx_scatter_to_cqe, "TM_THRESH=1")
     wait_and_validate(sreq);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_gpu, rc_dc_gpu,
-                              "dc_x,rc_x," UCP_TEST_GPU_COPY_TLS)
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_tag_offload_gpu, rc_dc_gpu,
+                                        "dc_x,rc_x")
 
 class test_ucp_tag_offload_status : public test_ucp_tag {
 public:
@@ -864,7 +864,7 @@ UCS_TEST_P(test_ucp_tag_offload_stats_gpu, block_gpu_no_gpu_direct,
     req_cancel(receiver(), rreq);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_stats_gpu, rc_dc_gpu,
-                              "dc_x,rc_x," UCP_TEST_GPU_COPY_TLS)
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_tag_offload_stats_gpu,
+                                        rc_dc_gpu, "dc_x,rc_x")
 
 #endif

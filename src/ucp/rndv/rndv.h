@@ -68,4 +68,7 @@ void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
 void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
                            ucs_ptr_map_key_t remote_req_id, ucs_status_t status);
 
+ucs_status_t ucp_rndv_rts_handle_status_from_pending(ucp_request_t *sreq,
+                                                     ucs_status_t status);
+
 #endif
