@@ -215,7 +215,12 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     ucs_log_level_t    log_lvl;
     ucs_status_t       status;
 
-    ucs_assert(ep != NULL);
+    if (ep == NULL) { /* EP is already destroyed */
+        ucs_diag("Can't find EP for iface %p, qp_num %u, EP already destroyed",
+                 iface, qp_num);
+        return;
+    }
+
     uct_rc_mlx5_common_update_tx_res(iface, &ep->tx.wq, &ep->super.txqp, pi);
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
 
