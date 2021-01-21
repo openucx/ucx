@@ -358,10 +358,10 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     }
 
     if (dev->num_ports > UCT_IB_DEV_MAX_PORTS) {
-        ucs_error("%s has %d ports, but only up to %d are supported",
+        ucs_debug("%s has %d ports, but only up to %d are supported",
                   ibv_get_device_name(ibv_device), dev->num_ports,
                   UCT_IB_DEV_MAX_PORTS);
-        return UCS_ERR_UNSUPPORTED;
+        dev->num_ports = UCT_IB_DEV_MAX_PORTS;
     }
 
     /* Query all ports */
@@ -507,6 +507,12 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
+    }
+
+    if (uct_ib_device_port_attr(dev, port_num)->gid_tbl_len == 0) {
+        ucs_debug("%s:%d has no gid", uct_ib_device_name(dev),
+                  port_num);
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (uct_ib_device_port_attr(dev, port_num)->state != IBV_PORT_ACTIVE) {
