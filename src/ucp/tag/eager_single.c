@@ -176,7 +176,6 @@ static ucs_status_t ucp_eager_zcopy_single_progress(uct_pending_req_t *self)
         .super.tag = req->send.msg_proto.tag.tag
     };
 
-    hdr.super.tag = req->send.msg_proto.tag.tag;
     return ucp_proto_am_zcopy_single_progress(req, UCP_AM_ID_EAGER_ONLY,
                                               &hdr, sizeof(ucp_eager_hdr_t));
 }
