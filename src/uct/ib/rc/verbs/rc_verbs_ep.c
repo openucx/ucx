@@ -414,7 +414,8 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                    uct_completion_t *comp)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    int already_canceled        = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
 
     status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, flags);
@@ -427,7 +428,7 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
         uct_rc_verbs_ep_post_flush(ep, IBV_SEND_SIGNALED);
     }
 
-    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+    if (ucs_unlikely((flags & UCT_FLUSH_FLAG_CANCEL) && !already_canceled)) {
         status = uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
         if (status != UCS_OK) {
             return status;
