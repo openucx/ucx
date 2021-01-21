@@ -64,7 +64,7 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
         UcpMemory recvMemory = context.memoryMap(allocationParams);
         resources.push(recvMemory);
         ByteBuffer data = UcxUtils.getByteBufferView(recvMemory.getAddress(),
-            (int)Math.min(Integer.MAX_VALUE, totalSize));
+            Math.min(Integer.MAX_VALUE, totalSize));
         for (int i = 0; i < numIterations; i++) {
             final int iterNum = i;
             UcpRequest getRequest = endpoint.getNonBlocking(remoteAddress, remoteKey,
