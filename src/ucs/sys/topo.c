@@ -137,16 +137,10 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
      * TODO implement more accurate estimation, based on system type, PCIe
      * switch, etc.
      */
-    if (path_distance <= 2) {
-        distance->latency   = 0;
-        distance->bandwidth = DBL_MAX;
-    } else if (path_distance <= 4) {
-        distance->latency   = 300e-9;
-        distance->bandwidth = 2000 * UCS_MBYTE;
-    } else {
-        distance->latency   = 900e-9;
-        distance->bandwidth = 300 * UCS_MBYTE;
-    }
+    distance->latency   = 100e-9 * path_distance;
+    distance->bandwidth = (path_distance == 0) ?
+                                  DBL_MAX :
+                                  ((20000 / path_distance) * UCS_MBYTE);
 
     return UCS_OK;
 }

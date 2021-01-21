@@ -23,6 +23,39 @@ protected:
     }
 };
 
+UCS_TEST_F(test_string, count_char) {
+    static const char *str1 = "/foo";
+    static const char *str2 = "/foo/bar";
+    size_t count;
+
+    count = ucs_string_count_char(str1, '/');
+    EXPECT_EQ(1, count);
+
+    count = ucs_string_count_char((const char*)UCS_PTR_BYTE_OFFSET(str1, 1),
+                                  '/');
+    EXPECT_EQ(0, count);
+
+    count = ucs_string_count_char(str2, '/');
+    EXPECT_EQ(2, count);
+
+    count = ucs_string_count_char((const char*)UCS_PTR_BYTE_OFFSET(str2, 1),
+                                  '/');
+    EXPECT_EQ(1, count);
+}
+
+UCS_TEST_F(test_string, common_prefix_len) {
+    static const char *str1 = "/foo";
+    static const char *str2 = "/foobar";
+    static const char *str3 = "foo/bar";
+    size_t common_length;
+
+    common_length = ucs_string_common_prefix_len(str1, str2);
+    EXPECT_EQ(4, common_length);
+
+    common_length = ucs_string_common_prefix_len(str1, str3);
+    EXPECT_EQ(0, common_length);
+}
+
 UCS_TEST_F(test_string, trim) {
     char str1[] = " foo ";
     EXPECT_EQ("foo", std::string(ucs_strtrim(str1)));
