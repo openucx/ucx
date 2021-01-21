@@ -251,4 +251,35 @@ UCS_TEST_F(test_ucs_bitmap, test_for_each_bit)
     EXPECT_EQ(bits[25], 1);
     EXPECT_EQ(bits[64], 1);
     EXPECT_EQ(bits[100], 1);
+
+    /* Test FOREACH on an empty bitmap */
+    UCS_BITMAP_CLEAR(&bitmap);
+    i = 0;
+    
+    UCS_BITMAP_FOR_EACH_BIT(bitmap, bit_index) {
+        i++;
+    }
+    EXPECT_EQ(i, 0);
+}
+
+UCS_TEST_F(test_ucs_bitmap, test_for_each_bit_single_word) {
+    int i         = 0;
+    int bits[128] = {0};
+    int bit_index;
+
+    UCS_BITMAP_SET(bitmap, 0);
+    UCS_BITMAP_SET(bitmap, 25);
+    UCS_BITMAP_FOR_EACH_BIT(bitmap, bit_index) {
+        i++;
+        bits[bit_index]++;
+    }
+
+    EXPECT_EQ(i, 2);
+    EXPECT_EQ(bits[0], 1);
+    EXPECT_EQ(bits[25], 1);
+}
+
+UCS_TEST_F(test_ucs_bitmap, test_compose) {
+    /* The result is irrelevant, the code only needs to compile */
+    UCS_BITMAP_AND(UCS_BITMAP_NOT(bitmap, 128), bitmap, 128);
 }
