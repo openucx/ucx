@@ -321,6 +321,7 @@ uct_ud_iface_conn_match_purge_cb(ucs_conn_match_ctx_t *conn_match_ctx,
 
 ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
 {
+    uct_ib_device_t *dev                = uct_ib_iface_device(&iface->super);
     ucs_async_context_t *async          = iface->super.super.worker->async;
     ucs_async_mode_t async_mode         = async->mode;
     ucs_conn_match_ops_t conn_match_ops = {
@@ -344,12 +345,12 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
         goto err;
     }
 
-    status = uct_ib_iface_event_fd_get(&iface->super.super.super, &event_fd);
-    if (status != UCS_OK) {
-        goto err_twheel_cleanup;
-    }
+    if (iface->async.event_cb != NULL && dev->has_cq_notify) {
+        status = uct_ib_iface_event_fd_get(&iface->super.super.super, &event_fd);
+        if (status != UCS_OK) {
+            goto err_twheel_cleanup;
+        }
 
-    if (iface->async.event_cb != NULL) {
         status = ucs_async_set_event_handler(async_mode, event_fd,
                                              UCS_EVENT_SET_EVREAD |
                                              UCS_EVENT_SET_EVERR,
@@ -705,6 +706,7 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
                                 uct_iface_attr_t *iface_attr,
                                 size_t am_max_iov, size_t am_max_hdr)
 {
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
     ucs_status_t status;
 
     status = uct_ib_iface_query(&iface->super,
@@ -723,9 +725,11 @@ ucs_status_t uct_ud_iface_query(uct_ud_iface_t *iface,
                                          UCT_IFACE_FLAG_CB_SYNC          |
                                          UCT_IFACE_FLAG_CB_ASYNC         |
                                          UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE;
-    iface_attr->cap.event_flags        = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+    if (dev->has_cq_notify) {
+        iface_attr->cap.event_flags    = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                          UCT_IFACE_FLAG_EVENT_RECV      |
                                          UCT_IFACE_FLAG_EVENT_ASYNC_CB;
+    }
 
     iface_attr->cap.am.max_short       = uct_ib_iface_hdr_size(iface->config.max_inline,
                                                                sizeof(uct_ud_neth_t));
