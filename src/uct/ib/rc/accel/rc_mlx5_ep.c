@@ -563,6 +563,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
                                           uct_ib_mlx5_md_t);
+    int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
     uint16_t sn;
 
@@ -585,7 +586,7 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         sn = ep->tx.wq.sig_pi;
     }
 
-    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+    if (ucs_unlikely((flags & UCT_FLUSH_FLAG_CANCEL) && !already_canceled)) {
         status = uct_ib_mlx5_modify_qp_state(md, &ep->tx.wq.super, IBV_QPS_ERR);
         if (status != UCS_OK) {
             return status;

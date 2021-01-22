@@ -503,7 +503,6 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         ucs_assert(ucs_arbiter_group_is_empty(&ep->arb_group));
-        ucs_assert(!(ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL));
         ep->flags |= UCT_RC_EP_FLAG_FLUSH_CANCEL;
     }
 
