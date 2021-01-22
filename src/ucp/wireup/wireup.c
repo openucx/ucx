@@ -376,19 +376,23 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
                                const ucp_wireup_msg_t *msg,
                                const ucp_unpacked_address_t *remote_address)
 {
-    unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE |
-                             UCP_EP_INIT_CM_WIREUP_CLIENT;
+    ucp_wireup_ep_t *wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    unsigned ep_init_flags     = UCP_EP_INIT_CREATE_AM_LANE |
+                                 UCP_EP_INIT_CM_WIREUP_CLIENT;
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
 
     ucs_assert(msg->type      == UCP_WIREUP_MSG_PRE_REQUEST);
     ucs_assert(msg->dst_ep_id != UCP_EP_ID_INVALID);
-    ucs_assert(ucp_ep_has_cm_lane(ep));
+    ucs_assert(wireup_ep      != NULL);
     ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" conn_sn %u",
               remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
               msg->conn_sn);
 
+    /* restore the EP here to avoid access to incomplete configuration before
+       this point */
+    ucp_cm_client_restore_ep(wireup_ep, ep);
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
     ucp_ep_flush_state_reset(ep);
 
@@ -1007,13 +1011,17 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep,
         return;
     }
 
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        ucs_assert((ep->uct_eps[lane] != NULL) ||
+                   /* CM lane is owned by real EP but present in temporary
+                      configuration as well */
+                   ((ep->flags & UCP_EP_FLAG_INTERNAL) &&
+                    (lane == ucp_ep_get_cm_lane(ep))));
+    }
+
     old_key = &ucp_ep_config(ep)->key;
 
     ucp_ep_config_lanes_intersect(old_key, new_key, reuse_lane_map);
-
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        ucs_assert(ep->uct_eps[lane] != NULL);
-    }
 
     /* CM lane has to be re-used by the new EP configuration */
     ucs_assert(reuse_lane_map[ucp_ep_get_cm_lane(ep)] != UCP_NULL_LANE);

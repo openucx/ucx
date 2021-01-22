@@ -1657,10 +1657,12 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
                 ucp_wireup_compare_lane_amo_score, select_ctx->lane_descs);
 
     /* Select lane for wireup messages, if: */
-    if (/* - no CM support was requested */
-        !ucp_ep_init_flags_has_cm(select_params->ep_init_flags) ||
-        /* - CM support was requested, but not locally connected yet */
-        !(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+    if (/* - the EP is not internal */
+        !(ep->flags & UCP_EP_FLAG_INTERNAL) &&
+        (/* - no CM support was requested */
+         !ucp_ep_init_flags_has_cm(select_params->ep_init_flags) ||
+         /* - CM support was requested, but not locally connected yet */
+         !(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED))) {
         key->wireup_msg_lane =
         ucp_wireup_select_wireup_msg_lane(worker,
                                           ucp_wireup_ep_init_flags(select_params,

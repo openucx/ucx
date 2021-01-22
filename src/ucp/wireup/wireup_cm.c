@@ -384,14 +384,14 @@ ucp_cm_client_connect_prog_arg_free(ucp_cm_client_connect_progress_arg_t *arg)
     ucs_free(arg);
 }
 
-static void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep,
-                                     ucp_ep_h ucp_ep)
+void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep, ucp_ep_h ucp_ep)
 {
     ucp_ep_h tmp_ep = wireup_cm_ep->tmp_ep;
     ucp_wireup_ep_t *w_ep;
     ucp_lane_index_t lane_idx;
 
     ucp_ep->cfg_index = tmp_ep->cfg_index;
+    ucp_ep->am_lane   = ucp_ep_config(ucp_ep)->key.am_lane;
 
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(tmp_ep); ++lane_idx) {
         if (tmp_ep->uct_eps[lane_idx] != NULL) {
@@ -450,22 +450,19 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
     ucp_ep_update_remote_id(ucp_ep, progress_arg->sa_data->ep_id);
 
-    /* Get tl bitmap from tmp_ep, because it contains initial configuration. */
+    /* get tl bitmap from tmp_ep, because it contains initial configuration */
     tl_bitmap = ucp_ep_get_tl_bitmap(wireup_ep->tmp_ep);
     dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, tl_bitmap);
 
-    /* Restore initial configuration from tmp_ep created for packing local
-     * addresses. */
-    ucp_cm_client_restore_ep(wireup_ep, ucp_ep);
-
     tl_bitmap = ucp_context_dev_idx_tl_bitmap(context, dev_index);
-    status    = ucp_wireup_init_lanes(ucp_ep, wireup_ep->ep_init_flags,
-                                      tl_bitmap, &addr, addr_indices);
+    status    = ucp_wireup_init_lanes(wireup_ep->tmp_ep,
+                                      wireup_ep->ep_init_flags, tl_bitmap,
+                                      &addr, addr_indices);
     if (status != UCS_OK) {
         goto out_free_addr;
     }
 
-    status = ucp_wireup_connect_local(ucp_ep, &addr, NULL);
+    status = ucp_wireup_connect_local(wireup_ep->tmp_ep, &addr, NULL);
     if (status != UCS_OK) {
         goto out_free_addr;
     }
@@ -478,6 +475,9 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     }
 
     if (!context->config.ext.cm_use_all_devices) {
+        /* restore initial configuration from tmp_ep created for packing local
+         * addresses */
+        ucp_cm_client_restore_ep(wireup_ep, ucp_ep);
         ucp_wireup_remote_connected(ucp_ep);
     }
 
