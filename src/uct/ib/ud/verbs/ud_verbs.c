@@ -127,6 +127,7 @@ uct_ud_verbs_ep_send_ctl(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
     uct_ud_verbs_iface_t *iface = ucs_derived_of(ud_ep->super.super.iface,
                                                  uct_ud_verbs_iface_t);
     uct_ud_verbs_ep_t *ep = ucs_derived_of(ud_ep, uct_ud_verbs_ep_t);
+    uct_ib_device_t *dev  = uct_ib_iface_device(&iface->super.super);
     unsigned send_flags;
     uint16_t iov_index;
 
@@ -137,7 +138,7 @@ uct_ud_verbs_ep_send_ctl(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
     } else {
         ucs_assert(!(flags & UCT_UD_IFACE_SEND_CTL_FLAG_INLINE));
     }
-    if (flags & UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED) {
+    if ((flags & UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED) && dev->has_cq_notify) {
         send_flags |= IBV_SEND_SOLICITED;
     }
     if (flags & UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED) {

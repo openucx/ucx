@@ -207,6 +207,7 @@ typedef struct uct_ib_device {
     uct_ib_device_attr          dev_attr;        /* Cached device attributes */
     uint8_t                     first_port;      /* Number of first port (usually 1) */
     uint8_t                     num_ports;       /* Amount of physical ports */
+    uint8_t                     has_cq_notify;   /* Whether CQ events are supported */
     ucs_sys_cpuset_t            local_cpus;      /* CPUs local to device */
     int                         numa_node;       /* NUMA node of the device */
     int                         async_events;    /* Whether async events are handled */
