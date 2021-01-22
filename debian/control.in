@@ -14,6 +14,7 @@ Homepage: http://www.openucx.org
 
 Package: @PACKAGE@
 Section: libs
+Depends: libc6, libgomp1, libnuma1
 Architecture: any
 Description: Unified Communication X
  UCX is a communication library implementing high-performance messaging.
