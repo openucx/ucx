@@ -480,12 +480,7 @@ enum ucp_am_cb_flags {
      * particular message is invoked for the first fragment. The ordering of first
      * message fragments is guaranteed (i. e. receive callbacks will be called
      * in the order the messages were sent). The order of other fragments is not
-     * guaranteed. User header is passed with the first fragment only. Also it is
-     * possible to avoid data callback invocation for middle message fragments.
-     * In this case, when the first fragment received, user has to call
-     * @ref ucp_am_recv_data_nbx to receive the whole message. Pointer to the first
-     * fragment of data has to be passed to @ref ucp_am_recv_data_nbx as a data
-     * descriptor.
+     * guaranteed. User header is passed with the first fragment only.
      */
     UCP_AM_FLAG_WHOLE_MSG       = UCS_BIT(0),
 
@@ -688,7 +683,7 @@ typedef enum {
 
     /**
      * Indicates that the arrived data is not the last fragment of the eager message
-     * and more fragments yet to be delivered. his flag can only be passed to data
+     * and more fragments yet to be delivered. This flag can only be passed to data
      * handlers registered without @a UCP_AM_FLAG_WHOLE_MSG flag. The flag is
      * mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV.
      */
@@ -2881,9 +2876,7 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *       @ref ucp_am_recv_param_t.recv_attr) or persistent data pointer
  *       (@a UCP_AM_RECV_ATTR_FLAG_DATA is set in
  *       @ref ucp_am_recv_param_t.recv_attr). In the latter case receive operation
- *       may be needed to unpack data to GPU memory or to initiate receive of
- *       multi-fragment eager message if data handler is set without
- *       @a UCP_AM_FLAG_WHOLE_MSG flag.
+ *       may be needed to unpack data to GPU memory or some specific datatype.
  * @note After this call UCP takes ownership of @a data_desc descriptor, so
  *       there is no need to release it even if the operation fails.
  *       The routine returns a request handle instead, which can further be used

@@ -651,27 +651,12 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  *                            @ref ucp_am_data_release or data receive is initiated by
  *                            @ref ucp_am_recv_data_nbx.
  *
- * @return UCS_ERR_NO_MESSAGE Can only be returned if this receive handler was
- *                            registered without UCP_AM_FLAG_WHOLE_MSG flag and
- *                            @a param->recv_attr has @a UCP_AM_RECV_ATTR_FLAG_FIRST
- *                            and UCP_AM_RECV_ATTR_FLAG_MORE flags set (i. e. it is
- *                            the first fragment of multi-fragment message). In this
- *                            case receive handler will not be invoked for the rest
- *                            of fragments. Then, to receive the whole message, user
- *                            has to invoke @ref ucp_am_recv_data_nbx using pointer
- *                            to the first fragment data as a data descriptor. Thus,
- *                            if @ref ucp_am_recv_data_nbx was not invoked in the
- *                            callback, the @a data will persist after the callback
- *                            has returned. To free the memory, a pointer to the
- *                            data must be passed into @ref ucp_am_data_release (in
- *                            this case the whole message will be dropped) or data
- *                            receive is initiated by @ref ucp_am_recv_data_nbx.
- *
  * @return otherwise          Can only be returned if @a param->recv_attr contains
  *                            UCP_AM_RECV_ATTR_FLAG_RNDV. In this case data
  *                            descriptor @a data will be dropped and the
- *                            corresponding @ref ucp_am_send_nbx call should
- *                            complete with the status returned from the callback.
+ *                            corresponding @ref ucp_am_send_nbx call on the
+ *                            sender side will complete with the status returned
+ *                            from the callback.
  *
  * @note This callback should be set and released
  *       by @ref ucp_worker_set_am_recv_handler function.
