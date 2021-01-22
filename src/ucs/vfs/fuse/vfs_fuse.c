@@ -167,18 +167,21 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
 {
 #ifdef HAVE_INOTIFY
     char event_buf[sizeof(struct inotify_event) + NAME_MAX];
-    const char *watch_dirname, *watch_filename;
     const struct inotify_event *event;
-    char path_buf[NAME_MAX];
+    char watch_filename[NAME_MAX];
+    const char *watch_dirname;
+    char dir_buf[PATH_MAX];
     ucs_status_t status;
     ssize_t nread;
     size_t offset;
 
     pthread_mutex_lock(&ucs_vfs_fuse_context.mutex);
 
-    ucs_strncpy_safe(path_buf, path, sizeof(path_buf));
-    watch_dirname  = dirname(path_buf);
-    watch_filename = ucs_basename(path);
+    /* copy path components to 'dir_buf' and 'watch_filename' */
+    ucs_strncpy_safe(dir_buf, path, sizeof(dir_buf));
+    ucs_strncpy_safe(watch_filename, ucs_basename(path),
+                     sizeof(watch_filename));
+    watch_dirname = dirname(dir_buf);
 
     /* Create inotify channel */
     ucs_vfs_fuse_context.inotify_fd = inotify_init();
