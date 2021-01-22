@@ -574,53 +574,28 @@ UCS_TEST_SKIP_COND_P(test_md, reg_multi_thread,
     pthread_join(thread_id, NULL);
 }
 
-UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
-                     !check_caps(UCT_MD_FLAG_SOCKADDR)) {
+UCS_TEST_P(test_md, sockaddr_accessibility) {
     ucs_sock_addr_t sock_addr;
     struct ifaddrs *ifaddr, *ifa;
-    bool found_rdma = false;
-    bool found_ip   = false;
 
+    /* currently we don't have MDs with deprecated capability */
+    ASSERT_FALSE(check_caps(UCT_MD_FLAG_SOCKADDR));
+    ASSERT_NE(NULL, uintptr_t(md()));
     ASSERT_TRUE(getifaddrs(&ifaddr) != -1);
-
     /* go through a linked list of available interfaces */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ucs::is_inet_addr(ifa->ifa_addr) &&
             ucs_netif_flags_is_active(ifa->ifa_flags)) {
             sock_addr.addr = ifa->ifa_addr;
 
-            found_ip = true;
-
-            if (GetParam().md_name == "rdmacm") {
-                if (ucs::is_rdmacm_netdev(ifa->ifa_name)) {
-                    UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
-                                        ucs::sockaddr_to_str(ifa->ifa_addr);
-                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                              UCT_SOCKADDR_ACC_LOCAL));
-                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                              UCT_SOCKADDR_ACC_REMOTE));
-                    found_rdma = true;
-                }
-            } else {
-                UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
-                                    ucs::sockaddr_to_str(ifa->ifa_addr);
-                ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                          UCT_SOCKADDR_ACC_LOCAL));
-                ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                          UCT_SOCKADDR_ACC_REMOTE));
-            }
+            UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with "
+                             << ucs::sockaddr_to_str(ifa->ifa_addr);
+            ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                       UCT_SOCKADDR_ACC_LOCAL));
+            ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                       UCT_SOCKADDR_ACC_REMOTE));
         }
     }
-
-    if (GetParam().md_name == "rdmacm") {
-        if (!found_rdma) {
-            UCS_TEST_MESSAGE <<
-                "Cannot find an IPoIB/RoCE interface with an IPv4 address on the host";
-        }
-    } else if (!found_ip) {
-        UCS_TEST_MESSAGE << "Cannot find an IPv4/IPv6 interface on the host";
-    }
-
     freeifaddrs(ifaddr);
 }
 

@@ -998,13 +998,14 @@ static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 }
 
 static uct_md_ops_t uct_ib_md_rcache_ops = {
-    .close              = uct_ib_md_close,
-    .query              = uct_ib_md_query,
-    .mem_reg            = uct_ib_mem_rcache_reg,
-    .mem_dereg          = uct_ib_mem_rcache_dereg,
-    .mem_advise         = uct_ib_mem_advise,
-    .mkey_pack          = uct_ib_mkey_pack,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .close                  = uct_ib_md_close,
+    .query                  = uct_ib_md_query,
+    .mem_reg                = uct_ib_mem_rcache_reg,
+    .mem_dereg              = uct_ib_mem_rcache_dereg,
+    .mem_advise             = uct_ib_mem_advise,
+    .mkey_pack              = uct_ib_mkey_pack,
+    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+    .detect_memory_type     = ucs_empty_function_return_unsupported,
 };
 
 static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
