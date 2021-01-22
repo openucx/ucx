@@ -149,6 +149,36 @@ static uct_ib_device_spec_t uct_ib_builtin_device_specs[] = {
   {NULL}
 };
 
+static int uct_ib_device_has_cq_notify(uct_ib_device_t *dev)
+{
+    int ret = 0;
+    struct ibv_cq *cq;
+    struct ibv_comp_channel *channel;
+
+    channel = ibv_create_comp_channel(dev->ibv_context);
+    if (!channel) {
+        goto out;
+    }
+
+    cq = ibv_create_cq(dev->ibv_context, 1, NULL, channel, 0);
+    if (!cq) {
+        goto out_free_channel;
+    }
+
+    if (ibv_req_notify_cq(cq, 1)) {
+        goto out_free_cq;
+    }
+
+    ret = 1;
+
+out_free_cq:
+    ibv_destroy_cq(cq);
+out_free_channel:
+    ibv_destroy_comp_channel(channel);
+out:
+    return ret;
+}
+
 static void uct_ib_device_get_locality(const char *dev_name,
                                        ucs_sys_cpuset_t *cpu_mask,
                                        int *numa_node)
@@ -659,6 +689,14 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     }
 
     dev->mr_access_flags = UCT_IB_MEM_ACCESS_FLAGS;
+
+    if (uct_ib_device_has_cq_notify(dev)) {
+        dev->has_cq_notify = 1;
+    } else {
+        dev->has_cq_notify = 0;
+        ucs_debug("%s: async event handling is not supported",
+                   uct_ib_device_name(dev));
+    }
 
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
     ucs_recursive_spinlock_init(&dev->ah_lock, 0);
