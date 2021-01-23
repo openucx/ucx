@@ -157,6 +157,23 @@ UCS_TEST_F(test_string_buffer, fixed_onstack) {
     test_fixed(&strb, num_elems);
 }
 
+UCS_TEST_F(test_string_buffer, append_hex) {
+    static const uint8_t hexbytes[] = {0xde, 0xad, 0xbe, 0xef,
+                                       0xba, 0xdc, 0xf,  0xee};
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_append_hex(&strb, hexbytes,
+                                 ucs_static_array_size(hexbytes), SIZE_MAX);
+    EXPECT_EQ(std::string("deadbeef:badc0fee"), ucs_string_buffer_cstr(&strb));
+}
+
+UCS_TEST_F(test_string_buffer, dump) {
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_appendf(&strb, "hungry\n");
+    ucs_string_buffer_appendf(&strb, "for\n");
+    ucs_string_buffer_appendf(&strb, "apples\n");
+    ucs_string_buffer_dump(&strb, "[ TEST     ] ", stdout);
+}
+
 class test_string_set : public ucs::test {
 };
 
