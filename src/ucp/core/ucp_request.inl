@@ -148,6 +148,14 @@
     }
 
 
+#define UCP_REQUEST_CHECK_PARAM(_param) \
+    if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
+        ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
+        ucs_error("invalid memory type paramter: %d", (_param)->memory_type); \
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
+    }
+
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
@@ -756,10 +764,20 @@ ucp_request_param_datatype(const ucp_request_param_t *param)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_memory_type_t
-ucp_request_param_mem_type(const ucp_request_param_t *param)
+ucp_request_get_memory_type(ucp_context_h context, const void *address,
+                            size_t length, const ucp_request_param_t *param)
 {
-    return (param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ?
-           param->memory_type : UCS_MEMORY_TYPE_UNKNOWN;
+    ucs_memory_info_t mem_info;
+
+    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ||
+        (param->memory_type == UCS_MEMORY_TYPE_UNKNOWN)) {
+        ucp_memory_detect(context, address, length, &mem_info);
+        ucs_assert(mem_info.type < UCS_MEMORY_TYPE_UNKNOWN);
+        return (ucs_memory_type_t)mem_info.type;
+    }
+
+    ucs_assert(param->memory_type < UCS_MEMORY_TYPE_UNKNOWN);
+    return param->memory_type;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t

@@ -134,11 +134,11 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 
     ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
                                 req->send.state.dt_iter.dt_class,
-                                req->send.state.dt_iter.mem_type,
-                                sg_count);
+                                &req->send.state.dt_iter.mem_info, sg_count);
 
-    status = ucp_proto_request_set_proto(worker, ep, req, proto_select, rkey_cfg_index,
-                                      &sel_param, contig_length);
+    status = ucp_proto_request_set_proto(worker, ep, req, proto_select,
+                                         rkey_cfg_index, &sel_param,
+                                         contig_length);
     if (status != UCS_OK) {
         goto out_put_request;
     }

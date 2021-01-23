@@ -34,12 +34,12 @@ UCS_TEST_P(test_ucp_mem_type, detect) {
 
     const size_t size                      = 256;
     const ucs_memory_type_t alloc_mem_type = mem_type();
+    ucs_memory_info_t mem_info;
 
     mem_buffer b(size, alloc_mem_type);
 
-    ucs_memory_type_t detected_mem_type =
-                    ucp_memory_type_detect(sender().ucph(), b.ptr(), size);
-    EXPECT_EQ(alloc_mem_type, detected_mem_type);
+    ucp_memory_detect(sender().ucph(), b.ptr(), size, &mem_info);
+    EXPECT_EQ(alloc_mem_type, mem_info.type);
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mem_type, all, "all")
@@ -71,10 +71,12 @@ protected:
 UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
     sender().connect(&receiver(), get_ep_params());
 
-    EXPECT_EQ(mem_type(), ucp_memory_type_detect(sender().ucph(),
-                                                 m_send_buffer->ptr(), m_size));
-    EXPECT_EQ(mem_type(), ucp_memory_type_detect(receiver().ucph(),
-                                                 m_recv_buffer->ptr(), m_size));
+    ucs_memory_info_t mem_info;
+    ucp_memory_detect(sender().ucph(), m_send_buffer->ptr(), m_size, &mem_info);
+    EXPECT_EQ(mem_type(), mem_info.type) << "send buffer";
+    ucp_memory_detect(receiver().ucph(), m_recv_buffer->ptr(), m_size,
+                      &mem_info);
+    EXPECT_EQ(mem_type(), mem_info.type) << "receive buffer";
 
     mem_buffer::pattern_fill(m_send_buffer->ptr(), m_size, SEED, mem_type());
 

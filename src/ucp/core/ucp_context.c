@@ -1692,28 +1692,33 @@ uct_md_h ucp_context_find_tl_md(ucp_context_h context, const char *md_name)
     return NULL;
 }
 
-ucs_memory_type_t
-ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t size)
+void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
+                                size_t length, ucs_memory_info_t *mem_info)
 {
-    ucs_memory_type_t mem_type;
-    unsigned i, md_index;
+    uct_md_mem_attr_t mem_attr;
     ucs_status_t status;
+    ucp_md_index_t i;
+    uct_md_h md;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
 
     for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
-        md_index = context->mem_type_detect_mds[i];
-        status   = uct_md_detect_memory_type(context->tl_mds[md_index].md,
-                                             address, size, &mem_type);
+        md     = context->tl_mds[context->mem_type_detect_mds[i]].md;
+        status = uct_md_mem_query(md, address, length, &mem_attr);
         if (status == UCS_OK) {
+            mem_info->type    = mem_attr.mem_type;
+            mem_info->sys_dev = mem_attr.sys_dev;
             if (context->memtype_cache != NULL) {
-                ucs_memtype_cache_update(context->memtype_cache, address, size,
-                                         mem_type);
+                ucs_memtype_cache_update(context->memtype_cache, address,
+                                         length, mem_info);
             }
-            return mem_type;
+            return;
         }
     }
 
     /* Memory type not detected by any memtype MD - assume it is host memory */
-    return UCS_MEMORY_TYPE_HOST;
+    ucp_memory_info_set_host(mem_info);
 }
 
 uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)

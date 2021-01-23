@@ -34,27 +34,31 @@ protected:
         ucs::test_with_param<ucs_memory_type_t>::cleanup();
     }
 
-    void check_lookup(const void *ptr, size_t size,
-                      bool expect_found,
-                      ucs_memory_type_t expected_type = UCS_MEMORY_TYPE_LAST) const {
+    void
+    check_lookup(const void *ptr, size_t size, bool expect_found,
+                 ucs_memory_type_t expected_type = UCS_MEMORY_TYPE_UNKNOWN) const
+    {
         if (!size) {
             return;
         }
 
-        ucs_memory_type_t mem_type;
+        ucs_memory_info_t mem_info;
         ucs_status_t status = ucs_memtype_cache_lookup(m_memtype_cache, ptr,
-                                                       size, &mem_type);
+                                                       size, &mem_info);
 
         if (!expect_found || (expected_type == UCS_MEMORY_TYPE_HOST)) {
             /* memory type should be not found or unknown */
             EXPECT_TRUE((status == UCS_ERR_NO_ELEM) ||
-                        ((status == UCS_OK) && (mem_type == UCS_MEMORY_TYPE_LAST)))
-                << "ptr=" << ptr << " size=" << size << ": "
-                << ucs_status_string(status)
-                << " memtype=" << mem_buffer::mem_type_name(mem_type);
+                        ((status == UCS_OK) &&
+                         (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN)))
+                    << "ptr=" << ptr << " size=" << size << ": "
+                    << ucs_status_string(status) << " memtype="
+                    << mem_buffer::mem_type_name(
+                               (ucs_memory_type_t)mem_info.type);
         } else {
             EXPECT_UCS_OK(status);
-            EXPECT_EQ(expected_type, mem_type) << "ptr=" << ptr << " size=" << size;
+            EXPECT_EQ(expected_type, mem_info.type)
+                    << "ptr=" << ptr << " size=" << size;
         }
     }
 
@@ -282,7 +286,10 @@ protected:
             return;
         }
 
-        ucs_memtype_cache_update(m_memtype_cache, ptr, size, mem_type);
+        ucs_memory_info_t mem_info;
+        mem_info.type    = mem_type;
+        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        ucs_memtype_cache_update(m_memtype_cache, ptr, size, &mem_info);
     }
 
     void memtype_cache_update(const mem_buffer &b) {
@@ -481,7 +488,7 @@ protected:
                 memtype_cache_update(b);
             }
 
-            /* check that able to find the entire region */ 
+            /* check that able to find the entire region */
             test_region_found(b);
 
             ptr = b.ptr();
