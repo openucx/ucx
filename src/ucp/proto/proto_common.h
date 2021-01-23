@@ -114,6 +114,10 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_index_t *lanes, ucp_md_map_t *reg_md_map_p);
 
 
+ucp_lane_index_t
+ucp_proto_common_find_am_bcopy_lane(const ucp_proto_init_params_t *params);
+
+
 void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
                                 const ucp_proto_common_perf_params_t *perf_params);
 
