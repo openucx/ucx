@@ -103,6 +103,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
                             ucp_lane_index_t *lanes, ucp_md_map_t *reg_md_map_p)
 {
+    UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
     ucp_context_h context                        = params->super.worker->context;
     const ucp_ep_config_key_t *ep_config_key     = params->super.ep_config_key;
     const ucp_rkey_config_key_t *rkey_config_key = params->super.rkey_config_key;
@@ -111,16 +112,22 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
     ucp_lane_index_t lane, num_lanes;
     const uct_md_attr_t *md_attr;
     ucp_rsc_index_t rsc_index;
-    ucs_string_buffer_t strb;
     ucp_md_index_t md_index;
     ucp_lane_map_t lane_map;
+    char lane_desc[64];
     size_t frag_size;
 
-    ucp_proto_select_param_str(select_param, &strb);
-    ucs_trace("selecting %d out of %d lanes for %s %s", max_lanes,
+    num_lanes = 0;
+
+    ucp_proto_select_param_str(select_param, &sel_param_strb);
+    if (rkey_config_key != NULL) {
+        ucs_string_buffer_appendf(&sel_param_strb, "->");
+        ucp_rkey_config_dump_brief(rkey_config_key, &sel_param_strb);
+    }
+    ucs_trace("selecting up to %d/%d lanes for %s %s", max_lanes,
               ep_config_key->num_lanes, params->super.proto_name,
-              ucs_string_buffer_cstr(&strb));
-    ucs_string_buffer_cleanup(&strb);
+              ucs_string_buffer_cstr(&sel_param_strb));
+    ucs_log_indent(1);
 
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
         if ((select_param->dt_class == UCP_DATATYPE_GENERIC) ||
@@ -129,7 +136,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
             /* TODO support IOV registration */
             ucs_trace("datatype %s cannot be used with zcopy",
                       ucp_datatype_class_names[select_param->dt_class]);
-            return 0;
+            goto out;
         }
     } else if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE) &&
                (select_param->dt_class != UCP_DATATYPE_GENERIC) &&
@@ -139,34 +146,38 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
         ucs_trace("memory type %s with datatype %s is not supported",
                   ucs_memory_type_names[select_param->mem_type],
                   ucp_datatype_class_names[select_param->dt_class]);
-        return 0;
+        goto out;
     }
 
     lane_map      = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
     *reg_md_map_p = 0;
-    num_lanes     = 0;
     ucs_for_each_bit(lane, lane_map) {
         if (num_lanes >= max_lanes) {
             break;
         }
 
-        /* Check if lane type matches */
         ucs_assert(lane < UCP_MAX_LANES);
-        if (!(ep_config_key->lanes[lane].lane_types & UCS_BIT(lane_type))) {
-            ucs_trace("lane[%d]: no %s", lane,
-                      ucp_lane_type_info[lane_type].short_name);
+        rsc_index = ep_config_key->lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
             continue;
         }
 
-        rsc_index = ep_config_key->lanes[lane].rsc_index;
-        if (rsc_index == UCP_NULL_RESOURCE) {
+        snprintf(lane_desc, sizeof(lane_desc),
+                 "lane[%d] " UCT_TL_RESOURCE_DESC_FMT, lane,
+                 UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc));
+
+        /* Check if lane type matches */
+        ucs_assert(lane < UCP_MAX_LANES);
+        if (!(ep_config_key->lanes[lane].lane_types & UCS_BIT(lane_type))) {
+            ucs_trace("%s: no %s in name types", lane_desc,
+                      ucp_lane_type_info[lane_type].short_name);
             continue;
         }
 
         /* Check iface capabilities */
         iface_attr = ucp_proto_common_get_iface_attr(&params->super, lane);
         if (!ucs_test_all_flags(iface_attr->cap.flags, tl_cap_flags)) {
-            ucs_trace("lane[%d]: no cap 0x%"PRIx64, lane, tl_cap_flags);
+            ucs_trace("%s: no cap 0x%" PRIx64, lane_desc, tl_cap_flags);
             continue;
         }
 
@@ -180,38 +191,42 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                  * memory type */
                 if (!(md_attr->cap.flags & UCT_MD_FLAG_REG) ||
                     !(md_attr->cap.reg_mem_types & UCS_BIT(select_param->mem_type))) {
-                    ucs_trace("lane[%d]: no reg of mem type %s", lane,
+                    ucs_trace("%s: no reg of mem type %s", lane_desc,
                               ucs_memory_type_names[select_param->mem_type]);
                     continue;
                 }
 
                 *reg_md_map_p |= UCS_BIT(md_index);
-            } else {
-                /* Memory domain which does not require a registration for zero
+            } else if (!(md_attr->cap.access_mem_types &
+                         UCS_BIT(select_param->mem_type))) {
+                /*
+                 * Memory domain which does not require a registration for zero
                  * copy operation must be able to access the relevant memory type
-                 * TODO UCT should expose a bitmap of accessible memory types
                  */
-                if (!(md_attr->cap.access_mem_types & UCS_BIT(select_param->mem_type))) {
-                    ucs_trace("lane[%d]: no access to mem type %s", lane,
-                              ucs_memory_type_names[select_param->mem_type]);
-                    continue;
-                }
+                ucs_trace("%s: no access to mem type %s", lane_desc,
+                          ucs_memory_type_names[select_param->mem_type]);
+                continue;
             }
         }
 
         /* Check remote access capabilities */
         if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
-            ucs_assert(rkey_config_key != NULL);
+            if (rkey_config_key == NULL) {
+                ucs_trace("protocol requires remote access but remote key is "
+                          "not present");
+                goto out;
+            }
+
             if (md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
                 if (!(rkey_config_key->md_map &
                     UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) {
-                    ucs_trace("lane[%d]: no support of dst md map 0x%"PRIx64,
-                              lane, rkey_config_key->md_map);
+                    ucs_trace("%s: no support of dst md map 0x%" PRIx64,
+                              lane_desc, rkey_config_key->md_map);
                     continue;
                 }
             } else if (!(md_attr->cap.access_mem_types &
                          UCS_BIT(rkey_config_key->mem_type))) {
-                ucs_trace("lane[%d]: no access to remote mem type %s", lane,
+                ucs_trace("%s: no access to remote mem type %s", lane_desc,
                           ucs_memory_type_names[rkey_config_key->mem_type]);
                 continue;
             }
@@ -229,7 +244,9 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
         lanes[num_lanes++] = lane;
     }
 
+out:
     ucs_trace("selected %d lanes", num_lanes);
+    ucs_log_indent(-1);
     return num_lanes;
 }
 
@@ -462,15 +479,16 @@ void ucp_proto_request_select_error(ucp_request_t *req,
                                     const ucp_proto_select_param_t *sel_param,
                                     size_t msg_length)
 {
+    UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
+    UCS_STRING_BUFFER_ONSTACK(proto_select_strb, UCP_PROTO_CONFIG_STR_MAX);
     ucp_ep_h ep = req->send.ep;
-    ucs_string_buffer_t strb;
 
-    ucp_proto_select_param_str(sel_param, &strb);
+    ucp_proto_select_param_str(sel_param, &sel_param_strb);
     ucp_proto_select_dump(ep->worker, ep->cfg_index, rkey_cfg_index,
-                          proto_select, stdout);
+                          proto_select, &proto_select_strb);
     ucs_fatal("req %p on ep %p to %s: could not find a protocol for %s "
-              "length %zu",
-              req, ep, ucp_ep_peer_name(ep), ucs_string_buffer_cstr(&strb),
-              msg_length);
-    ucs_string_buffer_cleanup(&strb);
+              "length %zu\navailable protocols:\n%s\n",
+              req, ep, ucp_ep_peer_name(ep),
+              ucs_string_buffer_cstr(&sel_param_strb), msg_length,
+              ucs_string_buffer_cstr(&proto_select_strb));
 }

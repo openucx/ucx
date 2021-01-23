@@ -117,7 +117,7 @@ ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
     select_param->op_flags   = ucp_proto_select_op_attr_to_flags(op_attr_mask);
     select_param->dt_class   = dt_class;
     select_param->mem_type   = mem_type;
-    select_param->sys_dev    = 0;
+    select_param->sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
     select_param->sg_count   = sg_count;
     select_param->padding[0] = 0;
     select_param->padding[1] = 0;

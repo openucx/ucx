@@ -1880,13 +1880,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
 
 static void ucp_rndv_dump_rkey(const void *packed_rkey, char *buffer, size_t max)
 {
-    char *p    = buffer;
-    char *endp = buffer + max;
+    UCS_STRING_BUFFER_FIXED(strb, buffer, max);
 
-    snprintf(p, endp - p, " rkey ");
-    p += strlen(p);
-
-    ucp_rkey_dump_packed(packed_rkey, p, endp - p);
+    ucs_string_buffer_appendf(&strb, " rkey ");
+    ucp_rkey_dump_packed(packed_rkey, &strb);
 }
 
 static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,

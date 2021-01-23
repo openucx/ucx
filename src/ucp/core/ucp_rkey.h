@@ -9,6 +9,7 @@
 
 #include "ucp_types.h"
 
+#include <ucp/core/ucp_context.h>
 #include <ucp/proto/proto_select.h>
 
 
@@ -145,6 +146,15 @@ ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
                           void *rkey_buffer);
 
 
-void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max);
+void ucp_rkey_dump_packed(const void *rkey_buffer, ucs_string_buffer_t *strb);
+
+
+void ucp_rkey_config_dump_brief(const ucp_rkey_config_key_t *rkey_config_key,
+                                ucs_string_buffer_t *strb);
+
+
+void ucp_rkey_proto_select_dump(ucp_worker_h worker,
+                                ucp_worker_cfg_index_t rkey_cfg_index,
+                                ucs_string_buffer_t *strb);
 
 #endif

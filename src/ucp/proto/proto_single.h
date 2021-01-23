@@ -27,7 +27,8 @@ typedef struct {
 ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params);
 
 
-void ucp_proto_single_config_str(const void *priv, ucs_string_buffer_t *strb);
+void ucp_proto_single_config_str(size_t min_length, size_t max_length,
+                                 const void *priv, ucs_string_buffer_t *strb);
 
 
 typedef ucs_status_t (*ucp_proto_send_single_cb_t)(

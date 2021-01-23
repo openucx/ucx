@@ -2173,10 +2173,11 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
 
 void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 {
-    ucp_worker_h    worker  = ep->worker;
+    ucp_worker_h worker     = ep->worker;
     ucp_ep_config_t *config = ucp_ep_config(ep);
     ucp_rsc_index_t aux_rsc_index;
     ucp_lane_index_t wireup_msg_lane;
+    ucs_string_buffer_t strb;
     uct_ep_h wireup_ep;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -2188,7 +2189,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
 
     /* if there is a wireup lane, set aux_rsc_index to the stub ep resource */
     aux_rsc_index   = UCP_NULL_RESOURCE;
-    wireup_msg_lane = ucp_ep_config(ep)->key.wireup_msg_lane;
+    wireup_msg_lane = config->key.wireup_msg_lane;
     if (wireup_msg_lane != UCP_NULL_LANE) {
         wireup_ep   = ep->uct_eps[wireup_msg_lane];
         if (ucp_wireup_ep_test(wireup_ep)) {
@@ -2200,9 +2201,11 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
     fprintf(stream, "#\n");
 
     if (worker->context->config.ext.proto_enable) {
+        ucs_string_buffer_init(&strb);
         ucp_proto_select_dump(worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
-                              &config->proto_select, stream);
-        fprintf(stream, "#\n");
+                              &config->proto_select, &strb);
+        ucs_string_buffer_dump(&strb, "# ", stream);
+        ucs_string_buffer_cleanup(&strb);
     }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);

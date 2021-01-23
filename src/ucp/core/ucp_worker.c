@@ -1653,11 +1653,11 @@ static char* ucp_worker_add_feature_rsc(ucp_context_h context,
     return p;
 }
 
-static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
-                                      ucp_context_h context,
-                                      ucp_worker_cfg_index_t config_idx)
+char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
+                                ucp_context_h context,
+                                ucp_worker_cfg_index_t config_idx, char *info,
+                                size_t max)
 {
-    char info[256]                  = {0};
     ucp_lane_map_t tag_lanes_map    = 0;
     ucp_lane_map_t rma_lanes_map    = 0;
     ucp_lane_map_t amo_lanes_map    = 0;
@@ -1666,12 +1666,8 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     ucp_lane_index_t lane;
     char *p, *endp;
 
-    if (!ucs_log_is_enabled(UCS_LOG_LEVEL_INFO)) {
-        return;
-    }
-
     p    = info;
-    endp = p + sizeof(info);
+    endp = p + max;
 
     snprintf(p, endp - p,  "ep_cfg[%d]: ", config_idx);
     p += strlen(p);
@@ -1719,7 +1715,8 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                    p, endp - p);
     ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream",
                                p, endp - p);
-    ucs_info("%s", info);
+
+    return info;
 }
 
 static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
@@ -1875,7 +1872,9 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
     }
 
     if (print_cfg) {
-        ucp_worker_print_used_tls(key, context, ep_cfg_index);
+        char info[256];
+        ucs_info("%s", ucp_worker_print_used_tls(key, context, ep_cfg_index,
+                                                 info, sizeof(info)));
     }
 
     ++worker->ep_config_count;
@@ -2630,10 +2629,12 @@ void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address)
 void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 {
     ucp_context_h context = worker->context;
+    ucp_worker_cfg_index_t rkey_cfg_index;
+    ucp_rsc_index_t rsc_index;
+    ucs_string_buffer_t strb;
     ucp_address_t *address;
     size_t address_length;
     ucs_status_t status;
-    ucp_rsc_index_t rsc_index;
     int first;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -2667,6 +2668,17 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     }
 
     fprintf(stream, "#\n");
+
+    if (context->config.ext.proto_enable) {
+        ucs_string_buffer_init(&strb);
+        for (rkey_cfg_index = 0; rkey_cfg_index < worker->rkey_config_count;
+             ++rkey_cfg_index) {
+            ucp_rkey_proto_select_dump(worker, rkey_cfg_index, &strb);
+            ucs_string_buffer_appendf(&strb, "\n");
+        }
+        ucs_string_buffer_dump(&strb, "# ", stream);
+        ucs_string_buffer_cleanup(&strb);
+    }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
