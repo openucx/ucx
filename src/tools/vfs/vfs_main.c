@@ -12,6 +12,7 @@
 
 #include <sys/wait.h>
 #include <limits.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
 
@@ -75,13 +76,18 @@ static int vfs_run_fusermount(char **extra_argv)
     if (child_pid == 0) {
         if (!g_opts.verbose) {
             devnull_fd = open("/dev/null", O_WRONLY);
+            if (devnull_fd < 0) {
+                vfs_error("failed open /dev/null: %m");
+                exit(1);
+            }
+
             dup2(devnull_fd, 1);
             dup2(devnull_fd, 2);
             close(devnull_fd);
         }
         execvp(argv[0], argv);
         vfs_error("failed to execute '%s': %m", command);
-        _exit(1);
+        exit(1);
     }
 
     ret = waitpid(child_pid, &status, 0);
@@ -132,6 +138,7 @@ static const char *vfs_get_process_name(int pid, char *buf, size_t max_length)
 
     /* append process id */
     snprintf(buf + length, max_length - length, "@pid:%d", pid);
+    fclose(file);
     goto out;
 
 err_close:
