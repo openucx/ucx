@@ -98,7 +98,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - rocm    : ROCm (AMD GPU) memory support.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.\n",
-   ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
+   ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
@@ -486,22 +486,24 @@ static int ucp_tls_array_is_present(const char **tls, unsigned count,
     }
 }
 
-static int ucp_config_is_tl_enabled(const char **names, unsigned count,
-                                    const char *tl_name, int is_alias,
-                                    uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
+static int
+ucp_config_is_tl_name_present(const ucs_config_allow_list_t *allow_list,
+                              const char *tl_name, int is_alias,
+                              uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
 {
     char strict_name[UCT_TL_NAME_MAX + 1];
 
     snprintf(strict_name, sizeof(strict_name), "\\%s", tl_name);
+
     return /* strict name, with leading \\ */
-           (!is_alias && ucp_tls_array_is_present(names, count, strict_name, "",
-                                                  rsc_flags, tl_cfg_mask)) ||
-           /* plain transport name */
-           ucp_tls_array_is_present(names, count, tl_name, "", rsc_flags,
-                                    tl_cfg_mask) ||
-           /* all available transports */
-           ucp_tls_array_is_present(names, count, UCP_RSC_CONFIG_ALL, "", rsc_flags,
-                                    tl_cfg_mask);
+            (!is_alias &&
+             (ucp_tls_array_is_present((const char**)allow_list->array.names,
+                                       allow_list->array.count, strict_name, "",
+                                       rsc_flags, tl_cfg_mask))) ||
+            /* plain transport name */
+            (ucp_tls_array_is_present((const char**)allow_list->array.names,
+                                      allow_list->array.count, tl_name, "",
+                                      rsc_flags, tl_cfg_mask));
 }
 
 static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
@@ -535,47 +537,56 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
     return !!mask;
 }
 
-static int ucp_is_resource_in_transports_list(const char *tl_name,
-                                              const char **names, unsigned count,
-                                              uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
+static int
+ucp_is_resource_in_transports_list(const char *tl_name,
+                                   const ucs_config_allow_list_t *allow_list,
+                                   uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
 {
     uint64_t dummy_mask, tmp_tl_cfg_mask;
     uint8_t tmp_rsc_flags;
     ucp_tl_alias_t *alias;
-    int tl_enabled;
     char info[32];
     unsigned alias_arr_count;
 
-    ucs_assert(count > 0);
-    if (ucp_config_is_tl_enabled(names, count, tl_name, 0,
-                                 rsc_flags, tl_cfg_mask)) {
-        tl_enabled = 1;
-    } else {
-        tl_enabled = 0;
+    if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        return 1;
+    }
 
-        /* check aliases */
-        for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
-            /* If an alias is enabled, and the transport is part of this alias,
-             * enable the transport.
-             */
-            alias_arr_count = ucp_tl_alias_count(alias);
-            snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
-            dummy_mask      = 0;
-            tmp_rsc_flags   = 0;
-            tmp_tl_cfg_mask = 0;
-            if (ucp_config_is_tl_enabled(names, count, alias->alias, 1,
-                                         &tmp_rsc_flags, &tmp_tl_cfg_mask) &&
-                ucp_tls_array_is_present(alias->tls, alias_arr_count, tl_name,
-                                         info, &tmp_rsc_flags, &dummy_mask)) {
-                *rsc_flags   |= tmp_rsc_flags;
-                *tl_cfg_mask |= tmp_tl_cfg_mask;
-                tl_enabled  = 1;
-                break;
+    ucs_assert(allow_list->array.count > 0);
+    if (ucp_config_is_tl_name_present(allow_list, tl_name, 0, rsc_flags,
+                                      tl_cfg_mask)) {
+        /* If the TL was found by its strict name - the result is known,
+           otherwise checking aliases is required */
+        return (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW);
+    }
+
+    /* check aliases */
+    for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
+        /* If an alias is in the list and the transport belongs this alias,
+         * enable/disable the transport (according to the list mode)
+         */
+        alias_arr_count = ucp_tl_alias_count(alias);
+        snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
+        dummy_mask      = 0;
+        tmp_rsc_flags   = 0;
+        tmp_tl_cfg_mask = 0;
+        if (ucp_tls_array_is_present(alias->tls, alias_arr_count, tl_name, info,
+                                     &tmp_rsc_flags, &dummy_mask)) {
+            if (ucp_config_is_tl_name_present(allow_list, alias->alias, 1,
+                                              &tmp_rsc_flags,
+                                              &tmp_tl_cfg_mask)) {
+                if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW) {
+                    *rsc_flags   |= tmp_rsc_flags;
+                    *tl_cfg_mask |= tmp_tl_cfg_mask;
+                    return 1;
+                } else {
+                    return 0;
+                }
             }
         }
     }
 
-    return tl_enabled;
+    return allow_list->mode == UCS_CONFIG_ALLOW_LIST_NEGATE;
 }
 
 static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
@@ -593,8 +604,7 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
 
     /* Find the enabled UCTs */
     tl_enabled = ucp_is_resource_in_transports_list(resource->tl_name,
-                                                    (const char**)config->tls.names,
-                                                    config->tls.count, rsc_flags,
+                                                    &config->tls, rsc_flags,
                                                     tl_cfg_mask);
 
     ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is %sabled",
@@ -684,8 +694,8 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
     }
 
     /* print configuration */
-    for (i = 0; i < config->tls.count; ++i) {
-        ucs_trace("allowed transport %d : '%s'", i, config->tls.names[i]);
+    for (i = 0; i < config->tls.array.count; ++i) {
+        ucs_trace("allowed transport %d : '%s'", i, config->tls.array.names[i]);
     }
 
     /* copy only the resources enabled by user configuration */
@@ -849,8 +859,10 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
 
      /* if we got here then num_resources > 0.
       * if the user's tls list is empty, there is no match */
-     if (0 == config->tls.count) {
-         ucs_error("The TLs list is empty. Please specify the transports you would like to use "
+     if ((0 == config->tls.array.count) &&
+         (config->tls.mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL)) {
+         ucs_error("The TLs list is empty. Please specify the transports you "
+                   "would like to allow/forbid "
                    "or omit the UCX_TLS so that the default will be used.");
          return UCS_ERR_NO_ELEM;
      }
@@ -931,7 +943,7 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
     p    = buf;
     endp = buf + max;
 
-    ucp_resource_config_array_str(&config->tls, "", p, endp - p);
+    ucp_resource_config_array_str(&config->tls.array, "", p, endp - p);
 
     if (strlen(p)) {
         p += strlen(p);
@@ -1248,7 +1260,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         }
 
         ucp_get_aliases_set(&avail_tls);
-        ucp_report_unavailable(&config->tls, tl_cfg_mask, "", "transport",
+        ucp_report_unavailable(&config->tls.array, tl_cfg_mask, "", "transport",
                                &avail_tls);
     }
 

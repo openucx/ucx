@@ -169,11 +169,13 @@ uct_test::uct_test() : m_iface_config(NULL), m_md_config(NULL),
         ASSERT_UCS_OK(status);
     }
 
-    if (component_attr.md_resource_count > 0) {
-        status = uct_md_config_read(GetParam()->component, NULL, NULL,
-                                    &m_md_config);
-        ASSERT_UCS_OK(status);
+    if (component_attr.md_resource_count == 0) {
+        return;
     }
+
+    status = uct_md_config_read(GetParam()->component, NULL, NULL,
+                                &m_md_config);
+    ASSERT_UCS_OK(status);
 
     status = uct_md_open(GetParam()->component, GetParam()->md_name.c_str(),
                          m_md_config, &md);

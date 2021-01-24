@@ -121,7 +121,7 @@ struct ucp_config {
      *  and acceleration devices */
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
-    ucs_config_names_array_t               tls;
+    ucs_config_allow_list_t                tls;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
