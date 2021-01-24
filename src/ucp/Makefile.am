@@ -104,6 +104,7 @@ libucp_la_SOURCES = \
 	proto/lane_type.c \
 	proto/proto_am.c \
 	proto/proto_common.c \
+	proto/proto_reconfig.c \
 	proto/proto_multi.c \
 	proto/proto_select.c \
 	proto/proto_single.c \
