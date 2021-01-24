@@ -99,6 +99,19 @@ UCS_TEST_P(test_rc, tx_cq_moderation) {
     EXPECT_EQ(init_rsc, rc_ep(m_e1)->txqp.available);
 }
 
+UCS_TEST_P(test_rc, flush_fc, "FLUSH_MODE?=fc") {
+    send_am_messages(m_e1, 1, UCS_OK);
+
+    ucs_status_t status;
+    do {
+        status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+        short_progress_loop();
+        if (status != UCS_ERR_NO_RESOURCE) {
+            ASSERT_UCS_OK_OR_INPROGRESS(status);
+        }
+    } while (status != UCS_OK);
+}
+
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
 
