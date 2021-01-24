@@ -610,31 +610,42 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
                              ucp_worker_cfg_index_t rkey_cfg_index,
                              const ucp_proto_select_param_t *select_param)
 {
-    ucp_proto_select_elem_t *select_elem;
+    ucp_proto_select_elem_t *select_elem, tmp_select_elem;
     ucp_proto_select_key_t key;
     ucs_status_t status;
     khiter_t khiter;
     int khret;
 
     key.param = *select_param;
-    khiter    = kh_put(ucp_proto_select_hash, &proto_select->hash, key.u64,
-                       &khret);
-    ucs_assert_always((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
-                      (khret == UCS_KH_PUT_BUCKET_CLEAR));
+    khiter    = kh_get(ucp_proto_select_hash, &proto_select->hash, key.u64);
+    if (khiter != kh_end(&proto_select->hash)) {
+        select_elem = &kh_value(&proto_select->hash, khiter);
+        goto out;
+    }
+
+    status = ucp_proto_select_elem_init(worker, ep_cfg_index, rkey_cfg_index,
+                                        select_param, &tmp_select_elem);
+    if (status != UCS_OK) {
+        kh_del(ucp_proto_select_hash, &proto_select->hash, khiter);
+        return NULL;
+    }
+
+    /* add to hash after initializing the temp element, since calling
+     * ucp_proto_select_elem_init() can recursively modify the hash
+     */
+    khiter = kh_put(ucp_proto_select_hash, &proto_select->hash, key.u64,
+                    &khret);
+    ucs_assert_always(khret == UCS_KH_PUT_BUCKET_EMPTY);
+
+    select_elem  = &kh_value(&proto_select->hash, khiter);
+    *select_elem = tmp_select_elem;
 
     /* Adding hash values may reallocate the array, so the cached pointer to
      * select_elem may not be valid anymore.
      */
     ucp_proto_select_cache_reset(proto_select);
 
-    select_elem = &kh_value(&proto_select->hash, khiter);
-    status      = ucp_proto_select_elem_init(worker, ep_cfg_index, rkey_cfg_index,
-                                             select_param, select_elem);
-    if (status != UCS_OK) {
-        kh_del(ucp_proto_select_hash, &proto_select->hash, khiter);
-        return NULL;
-    }
-
+out:
     return select_elem;
 }
 
