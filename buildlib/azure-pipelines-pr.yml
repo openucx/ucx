@@ -13,6 +13,7 @@ resources:
       endpoint: ucfconsort_registry
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
+      options: --privileged
 
 stages:
   - stage: Codestyle
