@@ -105,6 +105,7 @@ gtest_SOURCES = \
 	uct/test_progress.cc \
 	uct/test_uct_ep.cc \
 	uct/test_uct_perf.cc \
+	uct/v2/test_uct_query.cc \
 	uct/test_zcopy_comp.cc \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
