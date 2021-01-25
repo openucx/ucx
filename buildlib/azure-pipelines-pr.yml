@@ -215,6 +215,11 @@ stages:
         name: hwi
         demands: ucx_hwi -equals yes
         test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: sputnik
+        demands: ucx_sputnik -equals yes
+        test_perf: 0
 
   - stage: io_demo
     dependsOn: [Codestyle]
