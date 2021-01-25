@@ -1120,10 +1120,11 @@ protected:
             ucp_request_t *req = (ucp_request_t*)sreq - 1;
             req->flags        |= UCP_REQUEST_FLAG_COMPLETED;
 
-            ucp_request_t *req_from_id =
-                ucp_worker_get_request_by_id(sender().worker(),
-                                             req->send.msg_proto.sreq_id);
-            if (req_from_id != NULL) {
+            ucp_request_t *req_from_id;
+            ucs_status_t status = ucp_worker_get_request_by_id(
+                    sender().worker(), req->send.msg_proto.sreq_id,
+                    &req_from_id);
+            if (status == UCS_OK) {
                 EXPECT_EQ(req, req_from_id);
                 /* check PTR MAP flag only in this way, since it is debug
                  * only flag has 0 value in a release mode */
@@ -1151,7 +1152,7 @@ protected:
 
             void *rreq = NULL, *sreq = NULL;
             std::vector<void*> reqs;
-            
+
             ucs::auto_ptr<scoped_log_handler> slh;
             if (err_handling_test) {
                 slh.reset(new scoped_log_handler(wrap_errors_logger));
@@ -1616,7 +1617,6 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_zcopy_4k_unexp,
            "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
 {
     test_tag_send_recv(4 * UCS_KBYTE, false, false);
-    
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_zcopy_64k_unexp,

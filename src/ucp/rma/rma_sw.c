@@ -153,8 +153,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
     /* allow getting closed EP to be used for sending a completion to enable flush
      * on a peer
      */
-    ep = UCP_WORKER_GET_EP_BY_ID(worker, puth->ep_id, return UCS_OK,
-                                 "SW PUT request");
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, puth->ep_id, return UCS_OK,
+                            "SW PUT request");
     ucp_dt_contig_unpack(worker, (void*)puth->address, puth + 1,
                          length - sizeof(*puth), puth->mem_type);
     ucp_rma_sw_send_cmpl(ep);
@@ -171,8 +171,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flag
     /* allow getting closed EP to be used for handling a completion to enable flush
      * on a peer
      */
-    ep = UCP_WORKER_GET_EP_BY_ID(worker, putackh->ep_id, return UCS_OK,
-                                 "SW RMA completion");
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, putackh->ep_id, return UCS_OK,
+                            "SW RMA completion");
     ucp_ep_rma_remote_request_completed(ep);
     return UCS_OK;
 }
@@ -231,8 +231,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
     /* allow getting closed EP to be used for sending a GET operation data to enable
      * flush on a peer
      */
-    ep  = UCP_WORKER_GET_EP_BY_ID(worker, getreqh->req.ep_id, return UCS_OK,
-                                  "SW GET request");
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, getreqh->req.ep_id, return UCS_OK,
+                            "SW GET request");
     req = ucp_request_get(worker);
     if (req == NULL) {
         ucs_error("failed to allocate get reply");
@@ -264,10 +264,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
     ucp_request_t *req;
     ucp_ep_h ep;
 
-    req = UCP_WORKER_GET_REQ_BY_ID(worker, getreph->req_id,
-                                   return UCS_OK,
-                                   "GET reply data %p", getreph);
-    ep  = req->send.ep;
+    UCP_WORKER_GET_REQUEST_BY_ID(&req, worker, getreph->req_id, return UCS_OK,
+                                 "GET reply data %p", getreph);
+    ep = req->send.ep;
     if (ep->worker->context->config.ext.proto_enable) {
         // TODO use dt_iter.inl unpack
         ucp_dt_contig_unpack(ep->worker,

@@ -166,35 +166,40 @@ static void uct_tcp_ep_ptr_map_add(uct_tcp_ep_t *ep)
     ep->flags |= UCT_TCP_EP_FLAG_ON_PTR_MAP;
 }
 
+static void uct_tcp_ep_ptr_map_removed(uct_tcp_ep_t *ep)
+{
+    ucs_assert(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP);
+    ucs_assert(ep->flags & UCT_TCP_EP_FLAG_ON_PTR_MAP);
+    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
+    ep->flags &= ~UCT_TCP_EP_FLAG_ON_PTR_MAP;
+}
+
 static void uct_tcp_ep_ptr_map_del(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
     ucs_status_t status;
 
-    ucs_assert(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP);
-    ucs_assert(ep->flags & UCT_TCP_EP_FLAG_ON_PTR_MAP);
-    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
-
     status = ucs_ptr_map_del(&iface->ep_ptr_map, ep->cm_id.ptr_map_key);
     ucs_assert_always(status == UCS_OK);
-
-    ep->flags &= ~UCT_TCP_EP_FLAG_ON_PTR_MAP;
+    uct_tcp_ep_ptr_map_removed(ep);
 }
 
-uct_tcp_ep_t* uct_tcp_ep_ptr_map_retrieve(uct_tcp_iface_t *iface,
+uct_tcp_ep_t *uct_tcp_ep_ptr_map_retrieve(uct_tcp_iface_t *iface,
                                           ucs_ptr_map_key_t ptr_map_key)
 {
+    ucs_status_t status;
     uct_tcp_ep_t *ep;
+    void *ptr;
 
-    ep = ucs_ptr_map_get(&iface->ep_ptr_map, ptr_map_key);
-    if (ep != NULL) {
-        ucs_assert(ep->flags & UCT_TCP_EP_FLAG_ON_PTR_MAP);
-        ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
-        uct_tcp_ep_ptr_map_del(ep);
+    status = ucs_ptr_map_get(&iface->ep_ptr_map, ptr_map_key, 1, &ptr);
+    if (ucs_likely(status == UCS_OK)) {
+        ep = ptr;
+        uct_tcp_ep_ptr_map_removed(ep);
+        return ep;
     }
 
-    return ep;
+    return NULL;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,

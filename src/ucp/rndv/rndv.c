@@ -732,6 +732,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
     int is_put_proto                 = (rreq_remote_id == UCP_REQUEST_ID_INVALID);
     ucp_request_t *req               = freq->super_req;
     ucp_request_t *rndv_req          = NULL;
+    ucs_status_t UCS_V_UNUSED status;
 
     ucs_trace_req("freq:%p: recv_frag_put done. rreq:%p ", freq, req);
 
@@ -741,8 +742,9 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
     /* rndv_req is NULL in case of put protocol */
     if (!is_put_proto) {
         /* it is local operation, expected that a request will be always valid */
-        rndv_req = ucp_worker_get_request_by_id(worker, rreq_remote_id);
-        ucs_assert(rndv_req != NULL);
+        status = ucp_worker_get_request_by_id(worker, rreq_remote_id,
+                                              &rndv_req);
+        ucs_assert(status == UCS_OK);
 
         /* pipeline recv get protocol */
         rndv_req->send.state.dt.offset += freq->send.length;
@@ -905,7 +907,7 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, ucs_ptr_map_key_t rreq_id,
 
     freq->super_req                     = sreq;
     freq->send.lanes_map_avail          =
-    freq->send.rndv_get.lanes_map_all   = lanes_map;    
+    freq->send.rndv_get.lanes_map_all   = lanes_map;
     freq->send.rndv_get.lanes_count     = ucs_popcount(lanes_map);
     freq->send.rndv_get.rkey            = rkey;
     freq->send.rndv_get.remote_address  = remote_address;
@@ -1231,11 +1233,9 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_receive", 0);
 
     /* if receiving a message on an already closed endpoint, stop processing */
-    ep = UCP_WORKER_GET_VALID_EP_BY_ID(worker, rndv_rts_hdr->sreq.ep_id,
-                                       { status = UCS_ERR_CANCELED;
-                                         goto err;
-                                       },
-                                       "RNDV rts");
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rndv_rts_hdr->sreq.ep_id,
+                                  { status = UCS_ERR_CANCELED; goto err; },
+                                  "RNDV rts");
 
     /* the internal send request allocated on receiver side (to perform a "get"
      * operation, send "ATS" and "RTR") */
@@ -1367,8 +1367,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
 {
     ucp_worker_h worker      = arg;
     ucp_reply_hdr_t *rep_hdr = data;
-    ucp_request_t *sreq      = ucp_worker_extract_request_by_id(worker,
-                                                                rep_hdr->req_id);
+    ucp_request_t *sreq;
+
+    UCP_WORKER_EXTRACT_REQUEST_BY_ID(&sreq, worker, rep_hdr->req_id,
+                                     return UCS_OK, "RNDV ATS %p", rep_hdr);
 
     /* dereg the original send request and set it to complete */
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_ats_recv", 0);
@@ -1701,9 +1703,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
                  void *arg, void *data, size_t length, unsigned flags)
 {
     ucp_reply_hdr_t *rep_hdr = data;
-    ucp_request_t *req       = UCP_WORKER_GET_REQ_BY_ID(arg, rep_hdr->req_id,
-                                                        return UCS_OK,
-                                                        "RNDV ATP %p", rep_hdr);
+    ucp_request_t *req;
+
+    UCP_WORKER_GET_REQUEST_BY_ID(&req, arg, rep_hdr->req_id, return UCS_OK,
+                                 "RNDV ATP %p", rep_hdr);
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
@@ -1734,9 +1737,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     ucs_status_t status;
     int is_pipeline_rndv;
 
-    sreq      = UCP_WORKER_GET_REQ_BY_ID(arg, rndv_rtr_hdr->sreq_id,
-                                         return UCS_OK, "RNDV RTR %p",
-                                         rndv_rtr_hdr);
+    UCP_WORKER_GET_REQUEST_BY_ID(&sreq, arg, rndv_rtr_hdr->sreq_id,
+                                 return UCS_OK, "RNDV RTR %p", rndv_rtr_hdr);
     ep        = sreq->send.ep;
     ep_config = ucp_ep_config(ep);
 
@@ -1852,9 +1854,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     ucp_request_t *rreq;
     size_t recv_len;
 
-    rreq = UCP_WORKER_GET_REQ_BY_ID(worker, rndv_data_hdr->rreq_id,
-                                    return UCS_OK, "RNDV data %p",
-                                    rndv_data_hdr);
+    UCP_WORKER_GET_REQUEST_BY_ID(&rreq, worker, rndv_data_hdr->rreq_id,
+                                 return UCS_OK, "RNDV data %p", rndv_data_hdr);
 
     ucs_assert(!(rreq->flags & UCP_REQUEST_FLAG_RNDV_FRAG) &&
                (rreq->flags & (UCP_REQUEST_FLAG_RECV_AM |
