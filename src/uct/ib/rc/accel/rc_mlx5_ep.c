@@ -985,8 +985,15 @@ void uct_rc_mlx5_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx)
                                                        uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
                                                        uct_ib_mlx5_md_t);
+#if !HAVE_DECL_MLX5DV_INIT_OBJ
+    int count;
 
-    uct_rc_mlx5_iface_common_check_cqs_ci(iface, &iface->super.super);
+    count = uct_rc_mlx5_iface_commom_clean(&iface->cq[UCT_IB_DIR_RX],
+                                           &iface->rx.srq,
+                                           ep_cleanup_ctx->qp.qp_num);
+    iface->super.rx.srq.available += count;
+    uct_rc_mlx5_iface_common_update_cqs_ci(iface, &iface->super.super);
+#endif
 
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
