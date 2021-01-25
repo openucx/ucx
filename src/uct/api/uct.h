@@ -1273,14 +1273,14 @@ struct uct_md_attr {
  * The enumeration allows specifying which fields in @ref uct_md_mem_attr_t
  * are present.
  */
-enum uct_md_mem_attr_field {
+typedef enum uct_md_mem_attr_field {
     UCT_MD_MEM_ATTR_FIELD_MEM_TYPE = UCS_BIT(0), /**< Indicate if memory type
                                                       is populated. E.g. CPU/GPU */
     UCT_MD_MEM_ATTR_FIELD_SYS_DEV  = UCS_BIT(1)  /**< Indicate if details of
                                                       system device backing
                                                       the pointer are populated.
                                                       E.g. NUMA/GPU */
-};
+} uct_md_mem_attr_field_t;
 
 
 /**
@@ -1294,7 +1294,7 @@ enum uct_md_mem_attr_field {
 typedef struct uct_md_mem_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_md_mem_attr_t. Note that the field mask is
+     * @ref uct_md_mem_attr_field_t. Note that the field mask is
      * populated upon return from uct_md_mem_query and not set by user.
      * Subsequent use of members of the structure are valid after ensuring that
      * relevant bits in the field_mask are set.
@@ -1332,7 +1332,7 @@ typedef struct uct_md_mem_attr {
  *
  * @return Error code.
  */
-ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, const size_t length,
+ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
                               uct_md_mem_attr_t *mem_attr);
 
 
