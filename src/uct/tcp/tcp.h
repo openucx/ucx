@@ -164,11 +164,11 @@ typedef enum uct_tcp_cm_conn_event {
     /* Connection request from a EP that has TX capability to a EP that
      * has to be able to receive AM data (i.e. has to have RX capability). */
     UCT_TCP_CM_CONN_REQ               = UCS_BIT(0),
-    /* Connection acknowledgment from a EP that accepts a conenction from
+    /* Connection acknowledgment from a EP that accepts a connection from
      * initiator of a connection request. */
     UCT_TCP_CM_CONN_ACK               = UCS_BIT(1),
     /* Connection acknowledgment + Connection request. The mesasge is sent
-     * from a EP that accepts remote conenction when it was in
+     * from a EP that accepts remote connection when it was in
      * `UCT_TCP_EP_CONN_STATE_CONNECTING` state (i.e. original
      * `UCT_TCP_CM_CONN_REQ` wasn't sent yet) and want to have RX capability
      * on a peer's EP in order to send AM data. */
