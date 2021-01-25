@@ -665,29 +665,24 @@ typedef enum {
      * to the internal UCP descriptor, which can be used for obtaining the actual
      * data by calling @ref ucp_am_recv_data_nbx routine. This flag is mutually
      * exclusive with @a UCP_AM_RECV_ATTR_FLAG_DATA, @a UCP_AM_RECV_ATTR_FLAG_FIRST
-     * and @a UCP_AM_RECV_ATTR_FLAG_MORE flags.
+     * and @a UCP_AM_RECV_ATTR_FLAG_ONLY flags.
      */
     UCP_AM_RECV_ATTR_FLAG_RNDV          = UCS_BIT(17),
 
     /**
-     * Indicates that the arrived data is the first (or only) fragment of the
-     * multi-fragment eager message. This flag can only be passed to data handlers
-     * registered without @a UCP_AM_FLAG_WHOLE_MSG flag. The first fragment is
-     * guaranteed to be persistent data, as defined by @a UCP_AM_RECV_ATTR_FLAG_DATA.
-     * It is allowed to invoke @ref ucp_am_recv_data_nbx routine to receive the
-     * whole message. In this case data callback for the rest of message
-     * fragments will not be invoked.
-     * The flag is mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV.
+     * Indicates that the arrived data is the first fragment of the multi-fragment
+     * eager message. This flag can only be passed to data handlers registered
+     * without @a UCP_AM_FLAG_WHOLE_MSG flag. This flag is mutually exclusive
+     * with @a UCP_AM_RECV_ATTR_FLAG_RNDV and @a UCP_AM_RECV_ATTR_FLAG_ONLY flags.
      */
     UCP_AM_RECV_ATTR_FLAG_FIRST         = UCS_BIT(18),
 
     /**
-     * Indicates that the arrived data is not the last fragment of the eager message
-     * and more fragments yet to be delivered. This flag can only be passed to data
-     * handlers registered without @a UCP_AM_FLAG_WHOLE_MSG flag. The flag is
-     * mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV.
+     * Indicates that the arrived data carries the whole message. This flag is
+     * mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV and
+     * @a UCP_AM_RECV_ATTR_FLAG_FIRST flags.
      */
-    UCP_AM_RECV_ATTR_FLAG_MORE          = UCS_BIT(19)
+    UCP_AM_RECV_ATTR_FLAG_ONLY          = UCS_BIT(19)
 } ucp_am_recv_attr_t;
 
 
