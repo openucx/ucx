@@ -66,7 +66,7 @@ void ucs_close_fd(int *fd_p)
 
 int ucs_netif_flags_is_active(unsigned int flags)
 {
-    return (flags & IFF_UP) && (flags & IFF_RUNNING) && !(flags & IFF_LOOPBACK);
+    return (flags & IFF_UP) && (flags & IFF_RUNNING);
 }
 
 ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
