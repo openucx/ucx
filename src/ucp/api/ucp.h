@@ -680,7 +680,9 @@ typedef enum {
     /**
      * Indicates that the arrived data carries the whole message. This flag is
      * mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV and
-     * @a UCP_AM_RECV_ATTR_FLAG_FIRST flags.
+     * @a UCP_AM_RECV_ATTR_FLAG_FIRST flags. Also this flags is always passed to
+     * the data handlers, which are registered with @a UCP_AM_FLAG_WHOLE_MSG
+     * flag.
      */
     UCP_AM_RECV_ATTR_FLAG_ONLY          = UCS_BIT(19)
 } ucp_am_recv_attr_t;
@@ -1537,8 +1539,8 @@ struct ucp_am_recv_param {
     size_t             total_length;
 
     /**
-     * Offset of the message fragment in bytes. Layout of the multi-fragment
-     * message is depicted below:
+     * Offset of the message fragment in bytes relative to the beginning of
+     * overall message. Layout of the multi-fragment message is depicted below:
      *        Multi-fragment message
      *  +--------+--------+--------+--------+
      *  |frag 1  |frag 2  |  ...   |frag N  |
@@ -2881,8 +2883,8 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  *         @ref ucp_am_recv_param_t.recv_attr) or
  *       - It is persistent data pointer (@a UCP_AM_RECV_ATTR_FLAG_DATA is set
  *         in @ref ucp_am_recv_param_t.recv_attr). In this case receive
- *         operation may be needed to unpack data to device memory or some
- *         specific datatype.
+ *         operation may be needed to unpack data to device memory (for example
+ *         GPU device) or some specific datatype.
  * @note After this call UCP takes ownership of @a data_desc descriptor, so
  *       there is no need to release it even if the operation fails.
  *       The routine returns a request handle instead, which can further be used
