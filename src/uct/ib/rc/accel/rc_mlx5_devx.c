@@ -326,7 +326,8 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
                                          struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu path_mtu)
+                                         enum ibv_mtu path_mtu,
+                                         uint8_t path_index)
 {
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
     char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
@@ -372,6 +373,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
                               iface->super.super.config.traffic_class >> 2);
         }
+        UCT_IB_MLX5DV_SET(qpc, qpc, lag_tx_port_affinity, path_index);
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);
