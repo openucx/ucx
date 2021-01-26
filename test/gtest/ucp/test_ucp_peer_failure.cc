@@ -351,6 +351,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
             void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
             request_wait(creq);
+            short_progress_loop(); /* allow discard lanes & complete destroy EP */
 
             unsigned allocd_eps_after =
                     ucs_strided_alloc_inuse_count(&sender().worker()->ep_alloc);
