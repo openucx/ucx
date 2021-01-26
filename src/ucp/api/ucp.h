@@ -472,13 +472,13 @@ enum {
 enum ucp_am_cb_flags {
     /**
      * Indicates that the entire message will be handled in one callback. With this
-     * option message ordering is not guaranteed (i.e. receive callbacks may be
+     * option, message ordering is not guaranteed (i.e. receive callbacks may be
      * invoked in a different order than messages were sent).
      * If this flag is not set, the data callback may be invoked several times for
-     * the same message (if for example it was split to several fragments by the
+     * the same message (if for example it was split into several fragments by the
      * transport layer). It is guaranteed that the first data callback for a
      * particular message is invoked for the first fragment. The ordering of first
-     * message fragments is guaranteed (i. e. receive callbacks will be called
+     * message fragments is guaranteed (i.e. receive callbacks will be called
      * in the order the messages were sent). The order of other fragments is not
      * guaranteed. User header is passed with the first fragment only.
      */
@@ -647,7 +647,7 @@ typedef enum {
 typedef enum {
     UCP_AM_RECV_ATTR_FIELD_REPLY_EP     = UCS_BIT(0),  /**< reply_ep field */
     UCP_AM_RECV_ATTR_FIELD_TOTAL_LENGTH = UCS_BIT(1),  /**< total_length field */
-    UCP_AM_RECV_ATTR_FIELD_OFFSET       = UCS_BIT(2),  /**< offset field */
+    UCP_AM_RECV_ATTR_FIELD_FRAG_OFFSET  = UCS_BIT(2),  /**< frag_offset field */
     UCP_AM_RECV_ATTR_FIELD_MSG_CONTEXT  = UCS_BIT(3),  /**< msg_context field */
 
     /**
@@ -1525,7 +1525,7 @@ struct ucp_am_recv_param {
     uint64_t           recv_attr;
 
     /**
-     * Endpoint, which can be used for reply to this message.
+     * Endpoint, which can be used for the reply to this message.
      */
     ucp_ep_h           reply_ep;
 
@@ -1537,9 +1537,18 @@ struct ucp_am_recv_param {
     size_t             total_length;
 
     /**
-     * Offset of the message fragment in bytes.
+     * Offset of the message fragment in bytes. Layout of the multi-fragment
+     * message is depicted below:
+     *        Multi-fragment message
+     *  +--------+--------+--------+--------+
+     *  |frag 1  |frag 2  |  ...   |frag N  |
+     *  +--------+--------+--------+--------+
+     *           |                 v
+     *           |               offset of the N-th fragment
+     *           v
+     *         offset of the 2-d fragment
      */
-    size_t             offset;
+    size_t             frag_offset;
 
     /**
      * Storage for a per-message user-defined context. User initializes it
@@ -2856,7 +2865,7 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
 
 /**
  * @ingroup UCP_COMM
- * @brief Receive Active Message by provided data descriptor.
+ * @brief Receive Active Message as defined by provided data descriptor.
  *
  * This routine receives a message that is described by the data descriptor
  * @a data_desc, local address @a buffer, size @a count and @a param
@@ -2866,12 +2875,14 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  * started the routine returns an error.
  *
  * @note This routine can be performed on any valid data descriptor delivered in
- *       @ref ucp_am_recv_callback_t. Valid data descriptor means that it is either
- *       rendezvous request (@a UCP_AM_RECV_ATTR_FLAG_RNDV is set in
- *       @ref ucp_am_recv_param_t.recv_attr) or persistent data pointer
- *       (@a UCP_AM_RECV_ATTR_FLAG_DATA is set in
- *       @ref ucp_am_recv_param_t.recv_attr). In the latter case receive operation
- *       may be needed to unpack data to GPU memory or some specific datatype.
+ *       @ref ucp_am_recv_callback_t.
+ *       Data descriptor is considered to be valid if:
+ *       - It is rendezvous request (@a UCP_AM_RECV_ATTR_FLAG_RNDV is set in
+ *         @ref ucp_am_recv_param_t.recv_attr) or
+ *       - It is persistent data pointer (@a UCP_AM_RECV_ATTR_FLAG_DATA is set
+ *         in @ref ucp_am_recv_param_t.recv_attr). In this case receive
+ *         operation may be needed to unpack data to device memory or some
+ *         specific datatype.
  * @note After this call UCP takes ownership of @a data_desc descriptor, so
  *       there is no need to release it even if the operation fails.
  *       The routine returns a request handle instead, which can further be used
