@@ -48,6 +48,20 @@ public:
                           m_long_priv_data_len(0) {
     }
 
+    static std::vector<const resource*>
+    enum_cm_resources(const std::string &cm_cmpt_name)
+    {
+        static std::vector<resource> all_resources;
+
+        if (all_resources.empty()) {
+            set_cm_resources(all_resources);
+        }
+
+        return filter_resources(all_resources,
+                                resource::is_equal_component_name,
+                                cm_cmpt_name);
+    }
+
     void init() {
         struct {
             bool is_set;

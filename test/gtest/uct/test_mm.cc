@@ -56,7 +56,8 @@ public:
             }
         }
 
-        return filter_resources(all_resources, tl_name);
+        return filter_resources(all_resources, resource::is_equal_tl_name,
+                                tl_name);
     }
 
     test_uct_mm() : m_e1(NULL), m_e2(NULL) {
