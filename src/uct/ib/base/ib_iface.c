@@ -1022,7 +1022,7 @@ uct_ib_iface_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
 out_unsetenv:
 #if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
-    iface->config.max_inl_cqe[dir] = cqe_size / 2;
+    iface->config.max_inl_cqe[dir] = (inl > 0) ? (cqe_size / 2) : 0;
     if (env_var_added) {
         /* if we created a new environment variable, remove it */
         ret = ibv_exp_unsetenv(dev->ibv_context, cqe_size_env_var);
