@@ -54,9 +54,10 @@ EmptyCallback* EmptyCallback::get() {
 
 bool UcxLog::use_human_time = false;
 
-UcxLog::UcxLog(const char* prefix, bool enable) : _enable(enable)
+UcxLog::UcxLog(const char* prefix, bool enable)
 {
     if (!enable) {
+        _ss = NULL;
         return;
     }
 
@@ -70,13 +71,17 @@ UcxLog::UcxLog(const char* prefix, bool enable) : _enable(enable)
     } else {
         snprintf(str, sizeof(str), "[%lu.%06lu] ", tv.tv_sec, tv.tv_usec);
     }
-    std::cout << str << prefix << " ";
+
+    _ss = new std::stringstream();
+    (*_ss) << str << prefix << " ";
 }
 
 UcxLog::~UcxLog()
 {
-    if (_enable) {
-        std::cout << std::endl;
+    if (_ss != NULL) {
+        (*_ss) << std::endl;
+        std::cout << (*_ss).str();
+        delete _ss;
     }
 }
 
