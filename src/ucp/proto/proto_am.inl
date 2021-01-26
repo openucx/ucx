@@ -345,9 +345,12 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
 
     if (enable_am_bw && (req->send.state.dt.offset != 0)) {
         req->send.lane = ucp_send_request_get_am_bw_lane(req);
-        ucp_send_request_add_reg_lane(req, req->send.lane);
     } else {
         req->send.lane = ucp_ep_get_am_lane(ep);
+    }
+
+    if (enable_am_bw || (req->send.state.dt.offset == 0)) {
+        ucp_send_request_add_reg_lane(req, req->send.lane);
     }
 
     uct_ep     = ep->uct_eps[req->send.lane];
