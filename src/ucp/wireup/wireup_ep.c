@@ -396,15 +396,13 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 
     UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
 
-    self->aux_ep             = NULL;
-    self->sockaddr_ep        = NULL;
-    self->tmp_ep             = NULL;
-    self->aux_rsc_index      = UCP_NULL_RESOURCE;
-    self->sockaddr_rsc_index = UCP_NULL_RESOURCE;
-    self->pending_count      = 0;
-    self->flags              = 0;
-    self->progress_id        = UCS_CALLBACKQ_ID_NULL;
-    self->cm_idx             = UCP_NULL_RESOURCE;
+    self->aux_ep        = NULL;
+    self->tmp_ep        = NULL;
+    self->aux_rsc_index = UCP_NULL_RESOURCE;
+    self->pending_count = 0;
+    self->flags         = 0;
+    self->progress_id   = UCS_CALLBACKQ_ID_NULL;
+    self->cm_idx        = UCP_NULL_RESOURCE;
     ucs_queue_head_init(&self->pending_q);
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
@@ -437,10 +435,6 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
         uct_ep_destroy(self->aux_ep);
         self->aux_ep = NULL;
         ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
-    }
-
-    if (self->sockaddr_ep != NULL) {
-        uct_ep_destroy(self->sockaddr_ep);
     }
 
     if (self->tmp_ep != NULL) {
@@ -601,7 +595,6 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
     }
 
     return (ucp_wireup_aux_ep_is_owner(wireup_ep, owned_ep)) ||
-           (wireup_ep->sockaddr_ep == owned_ep) ||
            (wireup_ep->super.uct_ep == owned_ep);
 }
 
@@ -612,8 +605,6 @@ void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep)
     ucs_assert_always(wireup_ep != NULL);
     if (wireup_ep->aux_ep == owned_ep) {
         wireup_ep->aux_ep = NULL;
-    } else if (wireup_ep->sockaddr_ep == owned_ep) {
-        wireup_ep->sockaddr_ep = NULL;
     } else if (wireup_ep->super.uct_ep == owned_ep) {
         ucp_proxy_ep_extract(uct_ep);
     }
