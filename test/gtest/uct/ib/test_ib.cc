@@ -99,8 +99,7 @@ public:
         pack_params.gid       = gid_in;
         pack_params.lid       = lid_in;
         pack_params.roce_info = iface->gid_info.roce_info;
-        /* to suppress gcc 4.3.4 warning */
-        pack_params.path_mtu  = (enum ibv_mtu)0;
+        pack_params.path_mtu  = iface->config.path_mtu;
         pack_params.gid_index = std::numeric_limits<uint8_t>::max();
         pack_params.pkey      = iface->pkey;
         address_size          = uct_ib_address_size(&pack_params);
@@ -130,8 +129,13 @@ public:
             EXPECT_EQ(gid_in.global.interface_id, unpack_params.gid.global.interface_id);
         }
 
-        EXPECT_TRUE(!(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU));
-        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params.path_mtu);
+        if (iface->config.path_mtu == IBV_MTU_4096) {
+            EXPECT_FALSE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
+            EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params.path_mtu);
+        } else {
+            EXPECT_TRUE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
+            EXPECT_EQ(iface->config.path_mtu, unpack_params.path_mtu);
+        }
 
         EXPECT_TRUE(!(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX));
         EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, unpack_params.gid_index);
@@ -178,6 +182,19 @@ UCS_TEST_P(test_uct_ib_addr, address_pack) {
     test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
     test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
     test_address_pack(0xdeadfeedbeefa880ul);
+}
+
+UCS_TEST_P(test_uct_ib_addr, address_pack_path_mtu, "IB_PATH_MTU=2048") {
+    uct_ib_iface_t *iface = ucs_derived_of(m_entities.front()->iface(),
+                                           uct_ib_iface_t);
+    size_t addr_len = uct_ib_iface_address_size(iface);
+    std::vector<char> buffer(addr_len);
+    uct_ib_address_t *addr = (uct_ib_address_t*)&buffer[0];
+    uct_ib_iface_address_pack(iface, addr);
+    uct_ib_address_pack_params_t params;
+    uct_ib_address_unpack(addr, &params);
+    EXPECT_TRUE((params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) != 0);
+    EXPECT_TRUE(params.path_mtu == IBV_MTU_2048);
 }
 
 UCS_TEST_P(test_uct_ib_addr, fill_ah_attr) {
