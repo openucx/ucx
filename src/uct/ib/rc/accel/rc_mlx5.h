@@ -127,7 +127,8 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
-                          struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu);
+                          struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
+                          uint8_t path_index);
 
 ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
                                           const uct_device_addr_t *dev_addr,
