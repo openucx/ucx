@@ -165,9 +165,8 @@ uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
                          uint64_t remote_addr, uct_rkey_t rkey)
 {
 #if HAVE_IBV_DM
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_common_t);
-    uct_rc_iface_t *rc_iface          = &iface->super;
-    uct_rc_mlx5_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_rc_iface_t *rc_iface = &iface->super;
     ucs_status_t status;
 
     if (ucs_likely((length <= UCT_IB_MLX5_PUT_MAX_SHORT(0)) || !iface->dm.dm)) {
@@ -298,9 +297,8 @@ uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                         const void *payload, unsigned length)
 {
 #if HAVE_IBV_DM
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_mlx5_iface_common_t);
-    uct_rc_iface_t *rc_iface          = &iface->super;
-    uct_rc_mlx5_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_mlx5_ep_t);
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_rc_iface_t *rc_iface = &iface->super;
     ucs_status_t status;
     uct_rc_mlx5_dm_copy_data_t cache;
 
