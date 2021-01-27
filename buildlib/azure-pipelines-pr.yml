@@ -9,8 +9,7 @@ pr:
 resources:
   containers:
     - container: centos7
-      image: ucfconsort.azurecr.io/ucx/centos7:1
-      endpoint: ucfconsort_registry
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.x-cuda11.1:1
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
       options: --privileged
@@ -143,6 +142,10 @@ stages:
       # Perform test builds on relevant distributions.
       - job: Distros
         displayName: Build for
+        pool:
+          name: MLNX
+          demands:
+          - ucx_instinct -equals yes
         strategy:
           matrix:
             centos7:
@@ -169,6 +172,18 @@ stages:
               gcc -v
               make -s -j `nproc`
             displayName: Build for $(CONTAINER)
+
+          - bash: |
+              set -x
+              cd build
+              ./src/tools/info/ucx_info -e -u t 2>&1 | tee info.txt
+              grep -i error info.txt
+              retVal=$?
+              if [ $retVal -eq 0 ]; then
+                  exit 1;
+              fi
+              exit 0;
+            displayName: Test ucx_info
 
       # Test RPM build
       - job: build_rpm

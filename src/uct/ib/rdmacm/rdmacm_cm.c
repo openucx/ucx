@@ -678,6 +678,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
         if (errno == ENODEV) {
             status  = UCS_ERR_NO_DEVICE;
             log_lvl = UCS_LOG_LEVEL_DIAG;
+        } else if (errno == ENOENT) {
+            status  = UCS_ERR_IO_ERROR;
+            log_lvl = UCS_LOG_LEVEL_WARN;
         } else {
             status  = UCS_ERR_IO_ERROR;
             log_lvl = UCS_LOG_LEVEL_ERROR;

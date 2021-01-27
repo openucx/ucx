@@ -10,6 +10,7 @@ RUN yum install -y \
     git \
     glibc-devel \
     libtool \
+    librdmacm \
     make \
     maven \
     numactl-devel \

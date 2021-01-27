@@ -10,6 +10,7 @@ RUN yum install -y \
     git \
     glibc-devel \
     libtool \
+    librdmacm \
     make \
     maven \
     numactl-devel \
@@ -43,4 +44,3 @@ ENV CPATH /usr/local/cuda/include:${CPATH}
 ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LD_LIBRARY_PATH}
 ENV LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LIBRARY_PATH}
 ENV PATH /usr/local/cuda/compat:${PATH}
-
