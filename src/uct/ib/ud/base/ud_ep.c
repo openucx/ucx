@@ -1308,7 +1308,9 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     skb->neth->packet_type = ep->dest_ep_id;
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
         skb->neth->packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
-        ctl_flags              |= UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED;
+        if (ep->tx.tick >= iface->config.min_poke_time) {
+            ctl_flags |= UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED;
+        }
     }
 
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_NACK)) {
