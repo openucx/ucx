@@ -1092,11 +1092,8 @@ protected:
 
             sreq_mem_dereg(sreq);
 
-            if (recv_stop) {
-                sender().disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
-            } else {
+            if (send_stop) {
                 disconnect(*this, sender());
-                receiver().disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
             }
         }
 
@@ -1136,6 +1133,16 @@ protected:
         }
 
         ucp_request_release(sreq);
+    }
+
+    void extra_send_before_disconnect(entity &e, const std::string &send_buf,
+                                      const ucp_request_param_t &send_param)
+    {
+        void *sreq = ucp_tag_send_nbx(e.ep(), &send_buf[0], send_buf.size(), 0,
+                                      &send_param);
+        request_wait(sreq);
+
+        e.disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
     }
 
     void test_tag_send_recv(size_t size, bool is_exp, bool is_sync = false,
@@ -1198,6 +1205,14 @@ protected:
 
             if (!err_handling_test) {
                 compare_buffers(send_buf, recv_buf);
+            } else {
+                wait_for_flag(&m_err_count);
+
+                if (send_stop == false) {
+                    extra_send_before_disconnect(sender(), send_buf, send_param);
+                } else if (recv_stop == false) {
+                    extra_send_before_disconnect(receiver(), send_buf, send_param);
+                }
             }
         }
     }
@@ -1543,17 +1558,16 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_64k,
 }
 
 
-
 /* For DC case, allow fallback to UD if DC is not supported */
 #define UCP_INSTANTIATE_CM_TEST_CASE(_test_case) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcudx, "dc_x,ud") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,    "ud_v") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,   "ud_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,    "rc_v") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,   "rc_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ib,    "ib")   \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,   "tcp")  \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all,   "all")
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, dcudx, "dc_x,ud") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ud, "ud_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, udx, "ud_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rc, "rc_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rcx, "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ib, "ib") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, tcp, "tcp") \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all, "all")
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols)
 
@@ -1575,10 +1589,6 @@ protected:
         set_tl_timeouts(m_env);
     }
 
-    void init() {
-        test_ucp_sockaddr_protocols::init();
-    }
-
     void test_tag_send_recv(size_t size, bool is_exp,
                             bool is_sync = false) {
         /* warmup */
@@ -1591,27 +1601,16 @@ protected:
                                                         variants & RECV_STOP);
     }
 
-    void cleanup() {
-        test_ucp_sockaddr_protocols::cleanup();
-    }
-
-    static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-        test_ucp_sockaddr::err_handler_cb(arg, ep, status);
-
-        test_ucp_sockaddr_protocols *test =
-            static_cast<test_ucp_sockaddr_protocols*>(arg);
-        if (test->sender().ep() == ep) {
-            test->sender().disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
-        } else {
-            ASSERT_EQ(test->receiver().ep(), ep);
-            test->receiver().disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
-        }
-    }
-
 protected:
     ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_eager_32_unexp,
+           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(32, false, false);
+}
 
 UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_zcopy_4k_unexp,
            "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
@@ -1623,6 +1622,12 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_zcopy_64k_unexp,
            "ZCOPY_THRESH=2k", "RNDV_THRESH=inf")
 {
     test_tag_send_recv(64 * UCS_KBYTE, false, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_eager_32_unexp_sync,
+           "ZCOPY_THRESH=inf", "RNDV_THRESH=inf")
+{
+    test_tag_send_recv(32, false, true);
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_zcopy_4k_unexp_sync,
@@ -1638,7 +1643,13 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_zcopy_64k_unexp_sync,
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp,
-           "RNDV_THRESH=0")
+           "RNDV_THRESH=0", "RNDV_SCHEME=auto")
+{
+    test_tag_send_recv(64 * UCS_KBYTE, false, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp_get_scheme,
+           "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy")
 {
     test_tag_send_recv(64 * UCS_KBYTE, false, false);
 }
