@@ -801,6 +801,8 @@ static ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length
 
     memh = uct_ib_memh_alloc(md);
     if (memh == NULL) {
+        uct_md_log_mem_reg_error(flags,
+                                 "md %p: failed to allocate memory handle", md);
         return UCS_ERR_NO_MEMORY;
     }
 
