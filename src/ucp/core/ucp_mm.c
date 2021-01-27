@@ -126,7 +126,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             }
 
             level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
-                    UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+                    UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
 
             ucs_log(level,
                     "failed to register address %p mem_type bit 0x%lx length %zu on "
