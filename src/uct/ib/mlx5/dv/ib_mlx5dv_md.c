@@ -546,6 +546,28 @@ no_odp:
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ib_mlx5_devx_query_lag(uct_ib_mlx5_md_t *md, uint8_t *state)
+{
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_out)]   = {};
+    void *lag;
+    int ret;
+
+    lag = UCT_IB_MLX5DV_ADDR_OF(query_lag_out, out, lag_context);
+    UCT_IB_MLX5DV_SET(query_lag_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_LAG);
+    ret = mlx5dv_devx_general_cmd(md->super.dev.ibv_context, in, sizeof(in),
+                                  out, sizeof(out));
+    if (ret != 0) {
+        ucs_error("mlx5dv_devx_general_cmd(QUERY_LAG) failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *state = UCT_IB_MLX5DV_GET(lag_context, lag, lag_state);
+
+    return UCS_OK;
+}
+
 static struct ibv_context *
 uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device,
                              struct mlx5dv_context_attr *dv_attr)
@@ -582,6 +604,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     uct_ib_device_t *dev;
     uct_ib_mlx5_md_t *md;
     void *cap;
+    uint8_t lag_state = 0;
     int ret;
 
 #if HAVE_DECL_MLX5DV_IS_SUPPORTED
@@ -624,6 +647,8 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
+    status = uct_ib_mlx5_devx_query_lag(md, &lag_state);
+
     cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod, UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR |
@@ -649,8 +674,16 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct)) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    if (lag_state == 0) {
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct)) {
+            dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+        }
+        dev->lag_level = 0;
+    } else {
+        if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, lag_dct)) {
+            dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+        }
+        dev->lag_level = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, num_lag_ports);
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, rndv_offload_dc)) {

@@ -217,6 +217,7 @@ typedef struct uct_ib_device {
     uint8_t                     pci_fadd_arg_sizes;
     uint8_t                     pci_cswap_arg_sizes;
     uint8_t                     atomic_align;
+    uint8_t                     lag_level;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
@@ -365,10 +366,6 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
                                             struct ibv_ah **ah_p);
 
 void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
-
-unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev,
-                                          uint8_t port_num,
-                                          uint8_t gid_index);
 
 
 static inline struct ibv_port_attr*

@@ -1407,47 +1407,6 @@ int uct_ib_get_cqe_size(int cqe_size_min)
     return cqe_size;
 }
 
-static ucs_status_t
-uct_ib_device_get_roce_ndev_name(uct_ib_device_t *dev, uint8_t port_num,
-                                 uint8_t gid_index, char *ndev_name, size_t max)
-{
-    ssize_t nread;
-
-    ucs_assert_always(uct_ib_device_is_port_roce(dev, port_num));
-
-    /* get the network device name which corresponds to a RoCE port */
-    nread = ucs_read_file_str(ndev_name, max, 1,
-                              UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT,
-                              uct_ib_device_name(dev), port_num, gid_index);
-    if (nread < 0) {
-        ucs_diag("failed to read " UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT": %m",
-                 uct_ib_device_name(dev), port_num, 0);
-        return UCS_ERR_NO_DEVICE;
-    }
-
-    ucs_strtrim(ndev_name);
-    return UCS_OK;
-}
-
-unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev, uint8_t port_num,
-                                          uint8_t gid_index)
-{
-    char ndev_name[IFNAMSIZ];
-    unsigned roce_lag_level;
-    ucs_status_t status;
-
-    status = uct_ib_device_get_roce_ndev_name(dev, port_num, gid_index,
-                                              ndev_name, sizeof(ndev_name));
-    if (status != UCS_OK) {
-        return 1;
-    }
-
-    roce_lag_level = ucs_netif_bond_ad_num_ports(ndev_name);
-    ucs_debug("RoCE LAG level on %s:%d (%s) is %u", uct_ib_device_name(dev),
-              port_num, ndev_name, roce_lag_level);
-    return roce_lag_level;
-}
-
 const char* uct_ib_ah_attr_str(char *buf, size_t max,
                                const struct ibv_ah_attr *ah_attr)
 {
