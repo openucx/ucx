@@ -200,6 +200,15 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
         goto out_close_inotify_fd;
     }
 
+    /* Check 'stop' flag before entering the loop. If the main thread sets
+     * 'stop' flag before this thread created 'inotify_fd' fd, the execution
+     * of the thread has to be stopped, otherwise - the thread hangs waiting
+     * for the data on 'inotify_fd' fd.
+     */
+    if (ucs_vfs_fuse_context.stop) {
+        status = UCS_ERR_CANCELED;
+        goto out_close_watch_id;
+    }
 
     /* Read events from inotify channel and exit when either the main thread set
      * 'stop' flag, or the file was created
