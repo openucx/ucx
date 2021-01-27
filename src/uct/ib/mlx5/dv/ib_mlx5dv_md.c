@@ -546,6 +546,27 @@ no_odp:
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ib_mlx5_devx_query_lag(uct_ib_mlx5_md_t *md, uint8_t *state)
+{
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_out)]  = {};
+    void *lag;
+    int ret;
+
+    lag = UCT_IB_MLX5DV_ADDR_OF(query_lag_out, out, lag_context);
+    UCT_IB_MLX5DV_SET(query_lag_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_LAG);
+    ret = mlx5dv_devx_general_cmd(md->super.dev.ibv_context, in, sizeof(in),
+                                  out, sizeof(out));
+    if (ret != 0) {
+        ucs_debug("mlx5dv_devx_general_cmd(QUERY_LAG) failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *state = UCT_IB_MLX5DV_GET(lag_context, lag, lag_state);
+    return UCS_OK;
+}
+
 static struct ibv_context *
 uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device,
                              struct mlx5dv_context_attr *dv_attr)
@@ -576,8 +597,9 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
-    struct mlx5dv_context_attr dv_attr = {};
-    ucs_status_t status = UCS_OK;
+    struct mlx5dv_context_attr dv_attr                     = {};
+    ucs_status_t status                                    = UCS_OK;
+    uint8_t lag_state                                      = 0;
     struct ibv_context *ctx;
     uct_ib_device_t *dev;
     uct_ib_mlx5_md_t *md;
@@ -649,8 +671,19 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct)) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    status = uct_ib_mlx5_devx_query_lag(md, &lag_state);
+    if (status != UCS_OK) {
+        dev->lag_level = 0;
+    } else if (lag_state == 0) {
+        dev->lag_level = 1;
+    } else {
+        dev->lag_level = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, num_lag_ports);
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct) &&
+         (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, lag_dct) || (lag_state == 0))) {
+         /* Either DCT supports LAG, or LAG is off */
+         dev->flags |= UCT_IB_DEVICE_FLAG_DC;
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, rndv_offload_dc)) {
