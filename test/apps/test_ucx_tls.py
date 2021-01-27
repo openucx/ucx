@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 #
 # Copyright (C) Mellanox Technologies Ltd. 2017-.  ALL RIGHTS RESERVED.
 #
