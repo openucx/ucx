@@ -489,9 +489,16 @@ static ucs_status_t uct_ib_mlx5_exp_dereg_atomic_key(uct_ib_md_t *ibmd,
 {
 #ifdef HAVE_EXP_UMR
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
+    struct ibv_mr *atomic_mr;
     int ret;
 
-    ret = UCS_PROFILE_CALL(ibv_dereg_mr, memh->atomic_mr);
+    if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
+        atomic_mr = memh->ksm_data->atomic_mr;
+    } else {
+        atomic_mr = memh->atomic_mr;
+    }
+
+    ret = UCS_PROFILE_CALL(ibv_dereg_mr, atomic_mr);
     if (ret != 0) {
         ucs_error("ibv_dereg_mr() failed: %m");
         return UCS_ERR_IO_ERROR;
@@ -575,13 +582,6 @@ static ucs_status_t uct_ib_mlx5_exp_dereg_multithreaded(uct_ib_md_t *ibmd,
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     size_t chunk = ibmd->config.mt_reg_chunk;
     ucs_status_t s, status = UCS_OK;
-
-    if (memh->super.flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
-        s = uct_ib_dereg_mr(memh->ksm_data->atomic_mr);
-        if (s != UCS_OK) {
-            status = s;
-        }
-    }
 
     s = uct_ib_md_handle_mr_list_multithreaded(ibmd, memh->mr->addr,
                                                memh->mr->length,
