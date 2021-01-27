@@ -329,7 +329,8 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
             ucs_status_t status = ucp_request_check_status(sreq);
             EXPECT_NE(UCS_INPROGRESS, status);
             if (request_must_fail) {
-                EXPECT_EQ(m_err_status, status);
+                EXPECT_TRUE((m_err_status == status) ||
+                            (UCS_ERR_CANCELED == status));
             } else {
                 EXPECT_TRUE((m_err_status == status) || (UCS_OK == status));
             }
