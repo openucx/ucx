@@ -93,10 +93,12 @@ static void print_resource_usage(const resource_usage_t *usage_before,
     printf("#\n");
 }
 
-void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
-                    uint64_t ctx_features, const ucp_ep_params_t *base_ep_params,
-                    size_t estimated_num_eps, size_t estimated_num_ppn,
-                    unsigned dev_type_bitmap, const char *mem_size)
+ucs_status_t print_ucp_info(int print_opts,
+                            ucs_config_print_flags_t print_flags,
+                            uint64_t ctx_features,
+                            const ucp_ep_params_t *base_ep_params,
+                            size_t estimated_num_eps, size_t estimated_num_ppn,
+                            unsigned dev_type_bitmap, const char *mem_size)
 {
     ucp_config_t *config;
     ucs_status_t status;
@@ -113,7 +115,7 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
 
     status = ucp_config_read(NULL, NULL, &config);
     if (status != UCS_OK) {
-        return;
+        goto out;
     }
 
     memset(&params, 0, sizeof(params));
@@ -200,6 +202,8 @@ void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
             } while (status == UCS_INPROGRESS);
             ucp_request_release(status_ptr);
         }
+
+        status = UCS_OK;
     }
 
 out_destroy_worker:
@@ -208,4 +212,6 @@ out_cleanup_context:
     ucp_cleanup(context);
 out_release_config:
     ucp_config_release(config);
+out:
+    return status;
 }

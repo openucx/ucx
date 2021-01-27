@@ -212,8 +212,10 @@ int main(int argc, char **argv)
             usage();
             return -1;
         }
-        print_ucp_info(print_opts, print_flags, ucp_features, &ucp_ep_params,
-                       ucp_num_eps, ucp_num_ppn, dev_type_bitmap, mem_size);
+
+        return print_ucp_info(print_opts, print_flags, ucp_features,
+                              &ucp_ep_params, ucp_num_eps, ucp_num_ppn,
+                              dev_type_bitmap, mem_size);
     }
 
     return 0;
