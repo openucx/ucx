@@ -29,7 +29,7 @@ ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_IOV:
         if ((count > max_iov) &&
-            ucp_ep_is_tag_offload_enabled(ucp_ep_config(req->send.ep))) {
+            ucp_ep_config_key_has_tag_lane(&ucp_ep_config(req->send.ep)->key)) {
             /* Make sure SW RNDV will be used, because tag offload does
              * not support multi-packet eager protocols. */
             return 1;

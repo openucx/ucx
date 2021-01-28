@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2020-2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -61,8 +61,9 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_SHORT
     };
 
-    /* short protocol requires contig/host */
-    if ((select_param->op_id != UCP_OP_ID_TAG_SEND) ||
+    /* AM based proto can not be used if tag offload lane configured */
+    if (!ucp_proto_eager_check_op_id(init_params, 0) ||
+        /* short protocol requires contig/host */
         (select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !UCP_MEM_IS_HOST(select_param->mem_type)) {
         return UCS_ERR_UNSUPPORTED;
@@ -127,7 +128,8 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
 
-    if (init_params->select_param->op_id != UCP_OP_ID_TAG_SEND) {
+    /* AM based proto can not be used if tag offload lane configured */
+    if (!ucp_proto_eager_check_op_id(init_params, 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -162,23 +164,35 @@ ucp_proto_eager_zcopy_single_init(const ucp_proto_init_params_t *init_params)
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
-    if (init_params->select_param->op_id != UCP_OP_ID_TAG_SEND) {
+    /* AM based proto can not be used if tag offload lane configured */
+    if (!ucp_proto_eager_check_op_id(init_params, 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     return ucp_proto_single_init(&params);
 }
 
-static ucs_status_t ucp_eager_zcopy_single_progress(uct_pending_req_t *self)
+static ucs_status_t
+ucp_proto_eager_zcopy_send_func(ucp_request_t *req,
+                                const ucp_proto_single_priv_t *spriv,
+                                const uct_iov_t *iov)
 {
-    ucp_request_t  *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_eager_hdr_t hdr = {
         .super.tag = req->send.msg_proto.tag.tag
     };
 
-    hdr.super.tag = req->send.msg_proto.tag.tag;
-    return ucp_proto_am_zcopy_single_progress(req, UCP_AM_ID_EAGER_ONLY,
-                                              &hdr, sizeof(ucp_eager_hdr_t));
+    return uct_ep_am_zcopy(req->send.ep->uct_eps[spriv->super.lane],
+                           UCP_AM_ID_EAGER_ONLY, &hdr, sizeof(hdr), iov, 1, 0,
+                           &req->send.state.uct_comp);
+}
+
+static ucs_status_t
+ucp_proto_eager_zcopy_single_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    return ucp_proto_zcopy_single_progress(req, ucp_proto_eager_zcopy_send_func,
+                                           "am_zcopy_only");
 }
 
 static ucp_proto_t ucp_eager_zcopy_single_proto = {
@@ -186,6 +200,6 @@ static ucp_proto_t ucp_eager_zcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_zcopy_single_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_eager_zcopy_single_progress,
+    .progress   = ucp_proto_eager_zcopy_single_progress,
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_single_proto);

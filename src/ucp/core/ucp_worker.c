@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -1823,6 +1823,7 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
     ucp_worker_cfg_index_t ep_cfg_index;
     ucp_proto_select_short_t tag_short;
     ucp_ep_config_t *ep_config;
+    ucp_memtype_thresh_t *max_eager_short;
     ucs_status_t status;
 
     /* Search for the given key in the ep_config array */
@@ -1853,7 +1854,10 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
             ucp_proto_select_short_init(worker, &ep_config->proto_select,
                                         ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
                                         UCP_OP_ID_TAG_SEND, 0,
-                                        UCP_PROTO_FLAG_AM_SHORT, &tag_short);
+                                        ucp_ep_config_key_has_tag_lane(key) ?
+                                                UCP_PROTO_FLAG_TAG_SHORT :
+                                                UCP_PROTO_FLAG_AM_SHORT,
+                                        &tag_short);
             /* short protocol should be either disabled, or use key->am_lane */
             ucs_assert((tag_short.max_length_host_mem < 0) ||
                        (tag_short.lane == key->am_lane));
@@ -1862,8 +1866,12 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
         }
 
         /* TODO replace ep_config->tag.max_eager_short by this struct */
-        ep_config->tag.max_eager_short.memtype_off = tag_short.max_length_unknown_mem;
-        ep_config->tag.max_eager_short.memtype_on  = tag_short.max_length_host_mem;
+        max_eager_short = ucp_ep_config_key_has_tag_lane(key) ?
+                                  &ep_config->tag.max_eager_short :
+                                  &ep_config->tag.offload.max_eager_short;
+
+        max_eager_short->memtype_off = tag_short.max_length_unknown_mem;
+        max_eager_short->memtype_on  = tag_short.max_length_host_mem;
     }
 
     if (print_cfg) {

@@ -23,8 +23,6 @@ public:
     };
 
     test_ucp_tag_match() {
-        // TODO: test offload and offload MP as different variants
-        enable_tag_mp_offload();
         if (RUNNING_ON_VALGRIND) {
             m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
             m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
@@ -37,6 +35,12 @@ public:
         if (get_variant_value() & ENABLE_PROTO) {
             modify_config("PROTO_ENABLE", "y");
             modify_config("MAX_EAGER_LANES", "2");
+        } else {
+            // TODO:
+            // 1. test offload and offload MP as different variants
+            // 2. Enable offload for new protocols as well when it is fully
+            //    supported.
+            enable_tag_mp_offload();
         }
         test_ucp_tag::init();
     }

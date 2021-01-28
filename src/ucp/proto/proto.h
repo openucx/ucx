@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -47,7 +47,9 @@ typedef uint64_t ucp_proto_id_mask_t;
  */
 enum {
     UCP_PROTO_FLAG_AM_SHORT  = UCS_BIT(0), /* The protocol uses only uct_ep_am_short() */
-    UCP_PROTO_FLAG_PUT_SHORT = UCS_BIT(1)  /* The protocol uses only uct_ep_put_short() */
+    UCP_PROTO_FLAG_PUT_SHORT = UCS_BIT(1), /* The protocol uses only uct_ep_put_short() */
+    UCP_PROTO_FLAG_TAG_SHORT = UCS_BIT(2)  /* The protocol uses only
+                                              uct_ep_tag_eager_short() */
 };
 
 

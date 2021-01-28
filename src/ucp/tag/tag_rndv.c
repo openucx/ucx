@@ -110,7 +110,7 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
 
     ucp_send_request_set_id(sreq);
 
-    if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
+    if (ucp_ep_config_key_has_tag_lane(&ucp_ep_config(ep)->key)) {
         status = ucp_tag_offload_start_rndv(sreq);
     } else {
         ucs_assert(sreq->send.lane == ucp_ep_get_am_lane(ep));
