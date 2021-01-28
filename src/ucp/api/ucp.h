@@ -165,9 +165,23 @@ enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
     UCP_WORKER_PARAM_FIELD_EVENTS       = UCS_BIT(2), /**< Worker's events bitmap */
     UCP_WORKER_PARAM_FIELD_USER_DATA    = UCS_BIT(3), /**< User data */
-    UCP_WORKER_PARAM_FIELD_EVENT_FD     = UCS_BIT(4)  /**< External event file
+    UCP_WORKER_PARAM_FIELD_EVENT_FD     = UCS_BIT(4), /**< External event file
                                                            descriptor */
+    UCP_WORKER_PARAM_FIELD_FLAGS        = UCS_BIT(5) /**< Worker flags */
 };
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP worker flags
+ *
+ * This enumeration allows specifying flags for @ref ucp_worker_params_t.flags,
+ * which is used as parameter for @ref ucp_worker_create.
+ */
+typedef enum {
+    UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK = UCS_BIT(0) /**< Do not print warnings
+                                                          about request leaks */
+} ucp_worker_flags_t;
 
 
 /**
@@ -1116,6 +1130,14 @@ typedef struct ucp_worker_params {
      * from @ref ucp_worker_get_efd().
      */
     int                     event_fd;
+
+    /**
+     * Worker flags.
+     * This value is optional.
+     * If @ref UCP_WORKER_PARAM_FIELD_FLAGS is not set in the field_mask, the
+     * value of this field will default to 0.
+     */
+    uint64_t                flags;
 
 } ucp_worker_params_t;
 
