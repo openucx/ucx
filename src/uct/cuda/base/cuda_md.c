@@ -57,15 +57,16 @@ ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
 
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
-                 (md, addr, length, mem_type_p),
-                 uct_md_h md, const void *addr, size_t length,
+                 (md, address, length, mem_type_p),
+                 uct_md_h md, const void *address, size_t length,
                  ucs_memory_type_t *mem_type_p)
 {
     uct_md_mem_attr_t mem_attr;
     ucs_status_t status;
 
     mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
-    status              = uct_cuda_base_mem_query(md, addr, length, &mem_attr);
+    status              = uct_cuda_base_mem_query(md, address, length,
+                                                  &mem_attr);
     if (status != UCS_OK) {
         return status;
     }

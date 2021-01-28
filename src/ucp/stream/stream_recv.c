@@ -528,7 +528,8 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
 
     ucs_assert(am_length >= sizeof(ucp_stream_am_hdr_t));
 
-    ep     = ucp_worker_get_ep_by_id(worker, data->hdr.ep_id);
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, data->hdr.ep_id, return UCS_OK,
+                                  "stream data");
     ep_ext = ucp_ep_ext_proto(ep);
 
     if (ucs_unlikely(ep->flags & (UCP_EP_FLAG_CLOSED |

@@ -19,6 +19,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <time.h>
+#include <libgen.h>
 
 
 const char *ucs_memunits_suffixes[] = {"", "K", "M", "G", "T", "P", "E", NULL};
@@ -157,9 +158,16 @@ const char *ucs_memunits_range_str(size_t range_start, size_t range_end,
 {
     char buf_start[64], buf_end[64];
 
-    snprintf(buf, max, "%s..%s",
-             ucs_memunits_to_str(range_start, buf_start, sizeof(buf_start)),
-             ucs_memunits_to_str(range_end,   buf_end,   sizeof(buf_end)));
+    if (range_start == range_end) {
+        snprintf(buf, max, "%s",
+                 ucs_memunits_to_str(range_start, buf_start,
+                                     sizeof(buf_start)));
+    } else {
+        snprintf(buf, max, "%s..%s",
+                 ucs_memunits_to_str(range_start, buf_start, sizeof(buf_start)),
+                 ucs_memunits_to_str(range_end, buf_end, sizeof(buf_end)));
+    }
+
     return buf;
 }
 
@@ -197,6 +205,17 @@ ucs_status_t ucs_str_to_memunits(const char *buf, void *dest)
 
     *(size_t*)dest = value * bytes;
     return UCS_OK;
+}
+
+char *ucs_dirname(char *path, int num_layers)
+{
+    while (num_layers-- > 0) {
+        path = dirname(path);
+        if (path == NULL) {
+            return NULL;
+        }
+    }
+    return path;
 }
 
 void ucs_snprintf_safe(char *buf, size_t size, const char *fmt, ...)

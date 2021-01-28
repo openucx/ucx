@@ -81,9 +81,6 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
                                    unsigned path_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address);
 
-ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
-                                               const ucp_ep_params_t *params);
-
 void ucp_wireup_ep_pending_queue_purge(uct_ep_h uct_ep,
                                        uct_pending_purge_callback_t cb,
                                        void *arg);

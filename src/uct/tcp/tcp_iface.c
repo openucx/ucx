@@ -173,9 +173,9 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         attr->cap.flags   |= UCT_IFACE_FLAG_EP_KEEPALIVE;
     }
 
-    if (iface->config.zcopy.max_iov > UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT) {
+    if (iface->config.max_iov > UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT) {
         /* AM */
-        attr->cap.am.max_iov          = iface->config.zcopy.max_iov -
+        attr->cap.am.max_iov          = iface->config.max_iov -
                                         UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT;
         attr->cap.am.max_zcopy        = iface->config.rx_seg_size -
                                         sizeof(uct_tcp_am_hdr_t);
@@ -185,7 +185,7 @@ static ucs_status_t uct_tcp_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
         if (iface->config.put_enable) {
             /* PUT */
-            attr->cap.put.max_iov          = iface->config.zcopy.max_iov -
+            attr->cap.put.max_iov          = iface->config.max_iov -
                                              UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT;
             attr->cap.put.max_zcopy        = UCT_TCP_EP_PUT_ZCOPY_MAX -
                                              UCT_TCP_EP_PUT_SERVICE_LENGTH;
@@ -340,7 +340,7 @@ ucs_status_t uct_tcp_iface_set_sockopt(uct_tcp_iface_t *iface, int fd,
 
 static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_am_short              = uct_tcp_ep_am_short,
-    .ep_am_short_iov          = uct_base_ep_am_short_iov,
+    .ep_am_short_iov          = uct_tcp_ep_am_short_iov,
     .ep_am_bcopy              = uct_tcp_ep_am_bcopy,
     .ep_am_zcopy              = uct_tcp_ep_am_zcopy,
     .ep_put_zcopy             = uct_tcp_ep_put_zcopy,
@@ -546,19 +546,18 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     /* Maximum IOV count allowed by user's configuration (considering TCP
      * protocol and user's AM headers that use 1st and 2nd IOVs
      * correspondingly) and system constraints */
-    self->config.zcopy.max_iov    = ucs_min(config->max_iov +
+    self->config.max_iov          = ucs_min(config->max_iov +
                                             UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT,
                                             ucs_iov_get_max());
     /* Use a remaining part of TX segment for AM Zcopy header */
     self->config.zcopy.hdr_offset = (sizeof(uct_tcp_ep_zcopy_tx_t) +
-                                     sizeof(struct iovec) *
-                                     self->config.zcopy.max_iov);
+                                     sizeof(struct iovec) * self->config.max_iov);
     if ((self->config.zcopy.hdr_offset > self->config.tx_seg_size) &&
-        (self->config.zcopy.max_iov > UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT)) {
+        (self->config.max_iov > UCT_TCP_EP_ZCOPY_SERVICE_IOV_COUNT)) {
         ucs_error("AM Zcopy context (%zu) must be <= TX segment size (%zu). "
                   "It can be adjusted by decreasing maximum IOV count (%zu)",
                   self->config.zcopy.hdr_offset, self->config.tx_seg_size,
-                  self->config.zcopy.max_iov);
+                  self->config.max_iov);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -580,9 +579,20 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     self->sockopt.nodelay          = config->sockopt_nodelay;
     self->sockopt.sndbuf           = config->sockopt.sndbuf;
     self->sockopt.rcvbuf           = config->sockopt.rcvbuf;
-    self->config.keepalive.idle    = config->keepalive.idle;
     self->config.keepalive.cnt     = config->keepalive.cnt;
     self->config.keepalive.intvl   = config->keepalive.intvl;
+
+    if (config->keepalive.idle != UCS_MEMUNITS_AUTO) {
+        /* TCP iface configuration sets the keepalive interval */
+        self->config.keepalive.idle = config->keepalive.idle;
+    } else if (params->field_mask & UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL) {
+        /* User parameters set the keepalive interval */
+        self->config.keepalive.idle = params->keepalive_interval;
+    } else {
+        /* Use the default keepalive interval */
+        self->config.keepalive.idle =
+            ucs_time_from_sec(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE);
+    }
 
     status = uct_tcp_iface_set_port_range(self, config);
     if (status != UCS_OK) {

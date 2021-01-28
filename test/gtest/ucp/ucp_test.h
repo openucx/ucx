@@ -229,8 +229,10 @@ protected:
     void flush_worker(const entity &e, int worker_index = 0);
     void disconnect(entity& entity);
     ucs_status_t request_wait(void *req, int worker_index = 0);
+    ucs_status_t requests_wait(const std::vector<void*> &reqs, int worker_index = 0);
     void request_release(void *req);
     int max_connections();
+    void set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env);
 
     // Add test variant without values, with given context params
     static ucp_test_variant&
@@ -345,11 +347,24 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
  *
  * @param _test_case   Test case class, derived from ucp_test.
  * @param _name        Instantiation name.
- * @param ...          Transport names.
+ * @param _tls         Transport names.
  */
 #define UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name, _tls) \
     INSTANTIATE_TEST_CASE_P(_name,  _test_case, \
                             testing::ValuesIn(enum_test_params<_test_case>(_tls)));
+
+
+/**
+ * Instantiate the parameterized test case a combination of transports with GPU
+ * awareness.
+ *
+ * @param _test_case   Test case class, derived from ucp_test.
+ * @param _name        Instantiation name.
+ * @param _tls         Transport names.
+ */
+#define UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, _name, _tls) \
+    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name, \
+                                  _tls "," UCP_TEST_GPU_COPY_TLS)
 
 
 /**
@@ -382,15 +397,23 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
  * @param _test_case  Test case class, derived from ucp_test.
  */
 #define UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(_test_case) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dcx,        "dc_x," UCP_TEST_GPU_COPY_TLS) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ud,         "ud_v," UCP_TEST_GPU_COPY_TLS) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, udx,        "ud_x," UCP_TEST_GPU_COPY_TLS) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rc,         "rc_v," UCP_TEST_GPU_COPY_TLS) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, rcx,        "rc_x," UCP_TEST_GPU_COPY_TLS) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib,     "shm,ib," UCP_TEST_GPU_COPY_TLS) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm_ib_ipc, "shm,ib,cuda_ipc,rocm_ipc," \
-                                                          UCP_TEST_GPU_COPY_TLS) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, ugni,       "ugni," UCP_TEST_GPU_COPY_TLS) \
-    UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, tcp,        "tcp," UCP_TEST_GPU_COPY_TLS)
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, dcx, \
+                                            "dc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ud, \
+                                            "ud_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, udx, \
+                                            "ud_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rc, \
+                                            "rc_v") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rcx, \
+                                            "rc_x") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib, \
+                                            "shm,ib") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib_ipc, \
+                                            "shm,ib,cuda_ipc,rocm_ipc") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ugni, \
+                                            "ugni") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, tcp, \
+                                            "tcp")
 
 #endif

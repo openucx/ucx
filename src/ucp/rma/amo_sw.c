@@ -202,11 +202,15 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
 {
     ucp_atomic_req_hdr_t *atomicreqh = data;
     ucp_worker_h worker              = arg;
-    ucp_ep_h ep                      = ucp_worker_get_ep_by_id(worker,
-                                                        atomicreqh->req.ep_id);
     ucp_rsc_index_t amo_rsc_idx      = ucs_ffs64_safe(worker->atomic_tls);
     ucp_request_t *req;
+    ucp_ep_h ep;
 
+    /* allow getting closed EP to be used for sending a completion or AMO data to
+     * enable flush on a peer
+     */
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, atomicreqh->req.ep_id, return UCS_OK,
+                            "SW AMO request");
     if (ucs_unlikely((amo_rsc_idx != UCP_MAX_RESOURCES) &&
                      (ucp_worker_iface_get_attr(worker,
                                                 amo_rsc_idx)->cap.flags &
@@ -268,10 +272,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_fl
     ucp_worker_h worker    = arg;
     ucp_rma_rep_hdr_t *hdr = data;
     size_t frag_length     = length - sizeof(*hdr);
-    ucp_request_t *req     = ucp_worker_extract_request_by_id(worker,
-                                                              hdr->req_id);
-    ucp_ep_h ep            = req->send.ep;
+    ucp_request_t *req;
+    ucp_ep_h ep;
 
+    UCP_WORKER_EXTRACT_REQUEST_BY_ID(&req, worker, hdr->req_id, return UCS_OK,
+                                     "ATOMIC_REP %p", hdr);
+    ep = req->send.ep;
     memcpy(req->send.buffer, hdr + 1, frag_length);
     ucp_request_complete_send(req, UCS_OK);
     ucp_ep_rma_remote_request_completed(ep);

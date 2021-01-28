@@ -561,6 +561,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .ep_pending_purge         = uct_ud_ep_pending_purge,
     .ep_flush                 = uct_ud_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
+    .ep_check                 = uct_ud_ep_check,
     .ep_create                = uct_ud_verbs_ep_create,
     .ep_destroy               = uct_ud_ep_disconnect,
     .ep_get_address           = uct_ud_ep_get_address,

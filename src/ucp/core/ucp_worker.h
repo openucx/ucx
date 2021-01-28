@@ -265,7 +265,9 @@ typedef struct ucp_worker {
         ucs_time_t                   last_round;          /* Last round timespamp */
         ucs_list_link_t              *iter;               /* Last EP processed keepalive */
         ucp_lane_map_t               lane_map;            /* Lane map used to retry after no-resources */
-        unsigned                     ep_count;            /* Number if EPs processed in current time slot */
+        unsigned                     ep_count;            /* Number of EPs processed in current time slot */
+        unsigned                     iter_count;          /* Number of progress iterations to skip,
+                                                           * used to minimize call of ucs_get_time */
     } keepalive;
 } ucp_worker_t;
 
@@ -320,7 +322,7 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep);
 int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 
 /* must be called with async lock held */
-void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
+void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                unsigned ep_flush_flags,
                                uct_pending_purge_callback_t purge_cb,
                                void *purge_arg);

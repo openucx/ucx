@@ -63,6 +63,14 @@ UCS_TEST_F(test_string, mask_str) {
     }
 }
 
+UCS_TEST_F(test_string, range_str) {
+    char buf[64];
+    EXPECT_EQ(std::string("1..10"),
+              ucs_memunits_range_str(1, 10, buf, sizeof(buf)));
+    EXPECT_EQ(std::string("10"),
+              ucs_memunits_range_str(10, 10, buf, sizeof(buf)));
+}
+
 class test_string_buffer : public ucs::test {
 protected:
     void test_fixed(ucs_string_buffer_t *strb, size_t capacity);

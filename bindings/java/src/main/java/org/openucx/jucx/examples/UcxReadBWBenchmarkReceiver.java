@@ -89,8 +89,6 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         UcpRequest closeRequest = endpoint.closeNonBlockingFlush();
         worker.progressRequest(closeRequest);
-        // Close request won't be return to pull automatically, since there's no callback.
-        resources.push(closeRequest);
 
         closeResources();
     }

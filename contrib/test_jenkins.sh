@@ -306,6 +306,26 @@ get_rdma_device_ip_addr() {
 	echo $ipaddr
 }
 
+get_non_rdma_ip_addr() {
+	if ! which ibdev2netdev >&/dev/null
+	then
+		return
+	fi
+
+	# get the interface of the ip address that is the default gateway (pure Ethernet IPv4 address).
+	eth_iface=$(ip route show| sed -n 's/default via \(\S*\) dev \(\S*\).*/\2/p')
+
+	# the pure Ethernet interface should not appear in the ibdev2netdev output. it should not be an IPoIB or
+	# RoCE interface.
+	if ibdev2netdev|grep -qw "${eth_iface}"
+	then
+		echo "Failed to retrieve an IP of a non IPoIB/RoCE interface"
+		exit 1
+	fi
+
+	get_ifaddr ${eth_iface}
+}
+
 #
 # Prepare build environment
 #
@@ -789,7 +809,7 @@ rename_files() {
 }
 
 run_client_server_app() {
-	test_name=$1
+	test_exe=$1
 	test_args=$2
 	server_addr_arg=$3
 	kill_server=$4
@@ -801,7 +821,7 @@ run_client_server_app() {
 	affinity_server=$(slice_affinity 0)
 	affinity_client=$(slice_affinity 1)
 
-	taskset -c $affinity_server ${test_name} ${test_args} ${server_port_arg} &
+	taskset -c $affinity_server ${test_exe} ${test_args} ${server_port_arg} &
 	server_pid=$!
 
 	sleep 15
@@ -811,7 +831,7 @@ run_client_server_app() {
 		set +Ee
 	fi
 
-	taskset -c $affinity_client ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
+	taskset -c $affinity_client ${test_exe} ${test_args} ${server_addr_arg} ${server_port_arg} &
 	client_pid=$!
 
 	wait ${client_pid}
@@ -942,7 +962,7 @@ run_client_server() {
 			-Wl,-rpath=${ucx_inst}/lib
 	fi
 
-	server_ip=$(get_rdma_device_ip_addr)
+	server_ip=$1
 	if [ "$server_ip" == "" ]
 	then
 		return
@@ -953,14 +973,19 @@ run_client_server() {
 
 run_ucp_client_server() {
 	echo "==== Running UCP client-server  ===="
-	run_client_server
+	run_client_server $(get_rdma_device_ip_addr)
+	run_client_server $(get_non_rdma_ip_addr)
+	run_client_server "127.0.0.1"
 
 	rm -f ./ucp_client_server
 }
 
 run_io_demo() {
-	server_ip=$(get_rdma_device_ip_addr)
-	if [ "$server_ip" == "" ]
+	server_rdma_addr=$(get_rdma_device_ip_addr)
+	server_nonrdma_addr=$(get_non_rdma_ip_addr)
+	server_loopback_addr="127.0.0.1"
+
+	if [ -z "$server_rdma_addr" ] && [ -z "$server_nonrdma_addr" ]
 	then
 		return
 	fi
@@ -975,10 +1000,11 @@ run_io_demo() {
 		$MAKEP -C test/apps/iodemo ${test_name}
 	fi
 
-	export UCX_SOCKADDR_CM_ENABLE=y
-	run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+	for server_ip in $server_rdma_addr $server_nonrdma_addr $server_loopback_addr
+	do
+		run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+	done
 
-	unset UCX_SOCKADDR_CM_ENABLE
 	make_clean
 }
 
@@ -1292,7 +1318,7 @@ test_memtrack() {
 test_unused_env_var() {
 	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
-	UCX_SOCKADDR_CM_ENABLE=y UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS"
+	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS"
 }
 
 test_env_var_aliases() {
@@ -1341,23 +1367,38 @@ test_malloc_hook() {
 
 	if [ "X$have_cuda" == "Xyes" ]
 	then
+		cuda_dynamic_exe=./test/apps/test_cuda_hook_dynamic
+		cuda_static_exe=./test/apps/test_cuda_hook_static
+
 		for mode in reloc bistro
 		do
-			export UCX_MEM_MMAP_HOOK_MODE=${mode}
+			export UCX_MEM_CUDA_HOOK_MODE=${mode}
 
 			# Run cuda memory hooks with dynamic link
-			./test/apps/test_cuda_hook_dynamic
+			${cuda_dynamic_exe}
 
-			# Run cuda memory hooks with static link
-			if ./test/apps/test_cuda_hook_static
+			# Run cuda memory hooks with static link, if exists. If the static
+			# library 'libcudart_static.a' is not present, static test will not
+			# be built.
+			if [ -x ${cuda_static_exe} ]
 			then
-				echo "Static link with cuda is expected to fail"
-				exit 1
-			else
-				echo "Test failed - as expected"
+				${cuda_static_exe} && status="pass" || status="fail"
+				[ ${mode} == "bistro" ] && exp_status="pass" || exp_status="fail"
+				if [ ${status} == ${exp_status} ]
+				then
+					echo "Static link with cuda ${status}, as expected"
+				else
+					echo "Static link with cuda is expected to ${exp_status}, actual: ${status}"
+					exit 1
+				fi
 			fi
 
-			unset UCX_MEM_MMAP_HOOK_MODE
+			# Test that driver API hooks work in both reloc and bistro modes,
+			# since we call them directly from the test
+			${cuda_dynamic_exe} -d
+			[ -x ${cuda_static_exe} ] && ${cuda_static_exe} -d
+
+			unset UCX_MEM_CUDA_HOOK_MODE
 		done
 	fi
 }
@@ -1684,7 +1725,7 @@ run_tests() {
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 100))"-"$((34000 + EXECUTOR_NUMBER * 100))"
-	export UCX_TCP_CM_ALLOW_ADDR_INUSE=y
+	export UCX_TCP_CM_REUSEADDR=y
 
 	# test cuda build if cuda modules available
 	do_distributed_task 2 4 build_cuda
@@ -1722,13 +1763,13 @@ run_tests() {
 	do_distributed_task 2 4 run_ucx_perftest
 	do_distributed_task 1 4 run_io_demo
 	do_distributed_task 3 4 test_profiling
-	do_distributed_task 0 3 test_jucx
+	do_distributed_task 0 4 test_jucx
 	do_distributed_task 1 4 test_ucs_dlopen
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 2 4 test_env_var_aliases
-	do_distributed_task 1 3 test_malloc_hook
+	do_distributed_task 1 4 test_malloc_hook
 	do_distributed_task 0 4 test_ucp_dlopen
 	do_distributed_task 1 4 test_init_mt
 

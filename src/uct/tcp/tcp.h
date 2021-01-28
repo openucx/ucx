@@ -345,10 +345,10 @@ typedef struct uct_tcp_iface {
         size_t                    rx_seg_size;       /* RX AM buffer size */
         size_t                    sendv_thresh;      /* Minimum size of user's payload from which
                                                       * non-blocking vector send should be used */
-        struct {
-            size_t                max_iov;           /* Maximum supported IOVs limited by
+        size_t                    max_iov;           /* Maximum supported IOVs limited by
                                                       * user configuration and service buffers
                                                       * (TCP protocol and user's AM headers) */
+        struct {
             size_t                max_hdr;           /* Maximum supported AM Zcopy header */
             size_t                hdr_offset;        /* Offset in TX buffer to empty space that
                                                       * can be used for AM Zcopy header */
@@ -499,6 +499,9 @@ void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep);
 
 ucs_status_t uct_tcp_ep_am_short(uct_ep_h uct_ep, uint8_t am_id, uint64_t header,
                                  const void *payload, unsigned length);
+
+ucs_status_t uct_tcp_ep_am_short_iov(uct_ep_h uct_ep, uint8_t am_id,
+                                     const uct_iov_t *iov, size_t iovcnt);
 
 ssize_t uct_tcp_ep_am_bcopy(uct_ep_h uct_ep, uint8_t am_id,
                             uct_pack_callback_t pack_cb, void *arg,

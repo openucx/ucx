@@ -274,11 +274,14 @@ ucm_mmap_test_events_nolock(int events, int exclusive, const char *event_type)
     data.out_events   = events;
     data.tid          = ucm_get_tid();
 
+    ucm_debug("testing mmap %s events 0x%x", event_type, events);
+
     ucm_event_handler_add(&handler);
     ucm_fire_mmap_events_internal(events, &data, exclusive);
     ucm_event_handler_remove(&handler);
 
-    ucm_debug("mmap test: got 0x%x out of 0x%x", data.out_events, events);
+    ucm_debug("mmap %s events test: got 0x%x out of 0x%x", event_type,
+              data.out_events, events);
 
     /* Return success if we caught all wanted events */
     if (!ucs_test_all_flags(data.out_events, events)) {
@@ -322,14 +325,14 @@ ucs_status_t ucm_mmap_test_events(int events, const char *event_type)
 
 ucs_status_t ucm_mmap_test_installed_events(int events)
 {
-    int native_events = ucm_mmap_events_to_native_events(events) &
-                        ucm_mmap_installed_events;
-
     /*
-     * return UCS_OK iff all installed events are actually working
-     * we don't check the status of events which were not successfully installed
+     * Return UCS_OK iff all installed events are actually working.
+     * - We should not expand 'events' to native events, and test only the exact
+     *   set of events the user asked to test.
+     * - We don't check the status of events which were not reported as
+     *   successfully installed.
      */
-    return ucm_mmap_test_events(native_events, "internal");
+    return ucm_mmap_test_events(events & ucm_mmap_installed_events, "internal");
 }
 
 /* Called with lock held */
@@ -338,6 +341,7 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
     static int installed_events = 0;
     ucm_mmap_func_t *entry;
     ucs_status_t status;
+    void *func_ptr;
 
     if (ucm_mmap_hook_mode() == UCM_MMAP_HOOK_NONE) {
         ucm_debug("installing mmap hooks is disabled by configuration");
@@ -363,8 +367,14 @@ static ucs_status_t ucs_mmap_install_reloc(int events)
             status = ucm_reloc_modify(&entry->patch);
         } else {
             ucm_assert(ucm_mmap_hook_mode() == UCM_MMAP_HOOK_BISTRO);
-            status = ucm_bistro_patch(entry->patch.symbol, entry->patch.value,
-                                      NULL);
+            func_ptr = ucm_reloc_get_orig(entry->patch.symbol,
+                                          entry->patch.value);
+            if (func_ptr == NULL) {
+                status = UCS_ERR_NO_ELEM;
+            } else {
+                status = ucm_bistro_patch(func_ptr, entry->patch.value,
+                                          entry->patch.symbol, NULL, NULL);
+            }
         }
         if (status != UCS_OK) {
             ucm_warn("failed to install %s hook for '%s'", UCM_HOOK_STR,
@@ -392,7 +402,7 @@ ucs_status_t ucm_mmap_install(int events, int exclusive)
          * working, and if not - reinstall them.
          */
         status = ucm_mmap_test_events_nolock(native_events, exclusive,
-                                             "previous mmap");
+                                             "existing");
         if (status == UCS_OK) {
             goto out_unlock;
         }
@@ -404,7 +414,7 @@ ucs_status_t ucm_mmap_install(int events, int exclusive)
         goto out_unlock;
     }
 
-    status = ucm_mmap_test_events_nolock(native_events, exclusive, "mmap");
+    status = ucm_mmap_test_events_nolock(native_events, exclusive, "installed");
     if (status != UCS_OK) {
         ucm_debug("failed to install mmap events");
         goto out_unlock;
@@ -412,7 +422,7 @@ ucs_status_t ucm_mmap_install(int events, int exclusive)
 
     /* status == UCS_OK */
     ucm_mmap_installed_events |= native_events;
-    ucm_debug("mmap installed events = 0x%x", ucm_mmap_installed_events);
+    ucm_info("mmap installed events = 0x%x", ucm_mmap_installed_events);
 
 out_unlock:
     pthread_mutex_unlock(&ucm_mmap_install_mutex);

@@ -137,7 +137,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
 
     uint8_t    reserved_at_140[0xa];
     uint8_t    log_max_ra_req_qp[0x6];
-    uint8_t    reserved_at_150[0xa];
+    uint8_t    reserved_at_150[0x2];
+    uint8_t    rts2rts_lag_tx_port_affinity[0x1];
+    uint8_t    reserved_at_153[0x7];
     uint8_t    log_max_ra_res_qp[0x6];
 
     uint8_t    end_pad[0x1];
@@ -202,7 +204,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    wol_p[0x1];
 
     uint8_t    stat_rate_support[0x10];
-    uint8_t    reserved_at_1f0[0xc];
+    uint8_t    reserved_at_1f0[0x8];
+    uint8_t    init2_lag_tx_port_affinity[0x1];
+    uint8_t    reserved_at_1f9[0x3];
     uint8_t    cqe_version[0x4];
 
     uint8_t    compact_address_vector[0x1];
@@ -271,8 +275,9 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    pad_tx_eth_packet[0x1];
     uint8_t    reserved_at_263[0x8];
     uint8_t    log_bf_reg_size[0x5];
-
-    uint8_t    reserved_at_270[0xb];
+    uint8_t    reserved_at_270[0x8];
+    uint8_t    lag_tx_port_affinity[0x1];
+    uint8_t    reserved_at_279[0x2];
     uint8_t    lag_master[0x1];
     uint8_t    num_lag_ports[0x4];
 

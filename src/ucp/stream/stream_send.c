@@ -200,10 +200,7 @@ static ucs_status_t ucp_stream_contig_am_short(uct_pending_req_t *self)
     ucs_status_t   status = ucp_stream_send_am_short(req->send.ep,
                                                      req->send.buffer,
                                                      req->send.length);
-    if (ucs_likely(status == UCS_OK)) {
-        ucp_request_complete_send(req, UCS_OK);
-    }
-    return status;
+    return ucp_am_short_handle_status_from_pending(req, status);
 }
 
 static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)

@@ -69,6 +69,9 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
 void ucp_tag_eager_sync_completion(ucp_request_t *req, uint32_t flag,
                                    ucs_status_t status);
 
+void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
+                                      const ucp_reply_hdr_t *rep_hdr);
+
 void ucp_tag_eager_zcopy_completion(uct_completion_t *self);
 
 void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);

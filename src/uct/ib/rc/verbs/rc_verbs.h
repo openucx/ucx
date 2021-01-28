@@ -27,11 +27,17 @@ enum {
 };
 
 
+enum {
+    UCT_RC_VERBS_FLUSH_MODE_RDMA_WRITE_0,
+    UCT_RC_VERBS_FLUSH_MODE_FLOW_CONTROL,
+    UCT_RC_VERBS_FLUSH_MODE_AUTO,
+    UCT_RC_VERBS_FLUSH_MODE_LAST
+};
+
+
 typedef struct uct_rc_verbs_ep_address {
     uint8_t          flags;
     uct_ib_uint24_t  qp_num;
-    uint64_t         flush_addr;
-    uint32_t         flush_rkey;
 } UCS_S_PACKED uct_rc_verbs_ep_address_t;
 
 
@@ -49,10 +55,6 @@ typedef struct uct_rc_verbs_ep {
     uct_rc_verbs_txcnt_t   txcnt;
     uct_ib_fence_info_t    fi;
     struct ibv_qp          *qp;
-    struct {
-        uintptr_t          remote_addr;
-        uint32_t           rkey;
-    } flush;
 } uct_rc_verbs_ep_t;
 
 
@@ -63,6 +65,7 @@ typedef struct uct_rc_verbs_iface_config {
     uct_rc_iface_config_t              super;
     size_t                             max_am_hdr;
     unsigned                           tx_max_wr;
+    unsigned                           flush_mode;
 } uct_rc_verbs_iface_config_t;
 
 
@@ -78,18 +81,15 @@ typedef struct uct_rc_verbs_iface {
     uct_rc_am_short_hdr_t       am_inl_hdr;
     ucs_mpool_t                 short_desc_mp;
     uct_rc_iface_send_desc_t    *fc_desc; /* used when max_inline is zero */
-    struct ibv_mr               *flush_mr; /* MR for writing dummy value to flush */
-    void                        *flush_mem;
     struct {
         size_t                  short_desc_size;
         size_t                  max_inline;
         size_t                  max_send_sge;
         unsigned                tx_max_wr;
+        uint8_t                 flush_by_fc;
     } config;
 } uct_rc_verbs_iface_t;
 
-
-ucs_status_t uct_rc_verbs_iface_flush_mem_create(uct_rc_verbs_iface_t *iface);
 
 UCS_CLASS_DECLARE(uct_rc_verbs_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_verbs_ep_t, uct_ep_t, const uct_ep_params_t *);

@@ -46,6 +46,7 @@ noinst_PROGRAMS = gtest
 gtestdir  = $(includedir)
 gtest_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
+	$(top_builddir)/src/ucs/vfs/sock/libucs_vfs_sock.la \
 	$(top_builddir)/src/uct/libuct.la \
 	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la \
@@ -174,6 +175,7 @@ gtest_SOURCES = \
 	ucs/test_type.cc \
 	ucs/test_log.cc \
 	ucs/test_iov.cc \
+	ucs/test_vfs.cc \
 	ucs/arch/test_x86_64.cc
 
 if HAVE_IB
@@ -204,7 +206,7 @@ endif
 if HAVE_TL_RC
 gtest_SOURCES += \
 	uct/ib/test_rc.cc
-endif	
+endif
 if HAVE_TL_DC
 gtest_SOURCES += \
 	uct/ib/test_dc.cc
@@ -220,8 +222,10 @@ gtest_SOURCES += \
 	ucm/cuda_hooks.cc
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(CUDA_LDFLAGS)
 gtest_LDADD += \
-	$(CUDA_LDFLAGS) \
+	$(CUDA_LIBS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
 endif
 

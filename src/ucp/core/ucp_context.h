@@ -98,8 +98,6 @@ typedef struct ucp_context_config {
     int                                    flush_worker_eps;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
-    /** Enable cm wireup-and-close protocol for client-server connections */
-    ucs_ternary_auto_value_t               sockaddr_cm_enable;
     /** Enable cm wireup message exchange to select the best transports
      *  for all lanes after cm phase is done */
     int                                    cm_use_all_devices;
@@ -123,7 +121,7 @@ struct ucp_config {
      *  and acceleration devices */
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
-    ucs_config_names_array_t               tls;
+    ucs_config_allow_list_t                tls;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
@@ -240,13 +238,6 @@ typedef struct ucp_context {
         /* Cached map of components which support CM capability */
         uint64_t                  cm_cmpts_bitmap;
 
-        /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
-        uint64_t                  sockaddr_aux_rscs_bitmap;
-
-        /* Array of sockaddr transports indexes.
-         * The indexes appear in the configured priority order */
-        ucp_rsc_index_t           sockaddr_tl_ids[UCP_MAX_RESOURCES];
-        ucp_rsc_index_t           num_sockaddr_tls;
         /* Array of CMs indexes. The indexes appear in the configured priority
          * order. */
         ucp_rsc_index_t           cm_cmpt_idxs[UCP_MAX_RESOURCES];

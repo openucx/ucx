@@ -38,6 +38,7 @@ public class UcpConstants {
     static long UCP_FEATURE_AMO64;
     static long UCP_FEATURE_WAKEUP;
     static long UCP_FEATURE_STREAM;
+    static long UCP_FEATURE_AM;
 
     /**
      * UCP worker parameters field mask.
@@ -96,8 +97,7 @@ public class UcpConstants {
     /**
      *  The enumeration is used to specify the behavior of UcpEndpoint closeNonBlocking.
      */
-    static int UCP_EP_CLOSE_MODE_FORCE;
-    static int UCP_EP_CLOSE_MODE_FLUSH;
+    static int UCP_EP_CLOSE_FLAG_FORCE;
 
     /**
      * UCP memory mapping parameters field mask.

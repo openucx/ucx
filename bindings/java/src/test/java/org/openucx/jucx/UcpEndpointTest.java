@@ -253,8 +253,6 @@ public class UcpEndpointTest extends UcxTest {
                 Thread.sleep(10);
             } catch (InterruptedException e) {
                 e.printStackTrace();
-            } finally {
-                closeRequest.close();
             }
         }
 

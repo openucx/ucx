@@ -346,7 +346,7 @@ int ucm_shmdt(const void *shmaddr)
 
     ucm_event_enter();
 
-    ucm_debug("ucm_shmdt(shmaddr=%p)", shmaddr);
+    ucm_trace("ucm_shmdt(shmaddr=%p)", shmaddr);
 
     if (!ucm_shm_del_entry_from_khash(shmaddr, &size)) {
         size = ucm_get_shm_seg_size(shmaddr);
@@ -508,7 +508,7 @@ static ucs_status_t ucm_event_install(int events)
     /* TODO lock */
     status = ucm_mmap_install(events, 0);
     if (status != UCS_OK) {
-        ucm_debug("failed to install mmap events");
+        ucm_diag("failed to install mmap events");
         goto out_unlock;
     }
 
@@ -602,6 +602,7 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
 void ucm_set_external_event(int events)
 {
     ucm_event_enter_exclusive();
+    ucm_debug("set external events: 0x%x", events);
     ucm_external_events |= events;
     ucm_event_leave();
 }
@@ -609,6 +610,7 @@ void ucm_set_external_event(int events)
 void ucm_unset_external_event(int events)
 {
     ucm_event_enter_exclusive();
+    ucm_debug("unset external events: 0x%x", events);
     ucm_external_events &= ~events;
     ucm_event_leave();
 }

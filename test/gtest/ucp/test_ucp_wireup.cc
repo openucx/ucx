@@ -526,7 +526,12 @@ UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
         /* expect the endpoint to be connected to itself */
         ucp_ep_h ep         = sender().ep();
         ucp_worker_h worker = sender().worker();
-        EXPECT_EQ(ep, ucp_worker_get_ep_by_id(worker, ucp_ep_remote_id(ep)));
+        ucp_ep_h ep_by_id;
+        ucs_status_t status = ucp_worker_get_ep_by_id(worker,
+                                                      ucp_ep_remote_id(ep),
+                                                      &ep_by_id);
+        ASSERT_EQ(UCS_OK, status);
+        EXPECT_EQ(ep, ep_by_id);
     }
     flush_worker(sender());
 }

@@ -39,6 +39,7 @@ static void usage() {
     printf("                    'a' : atomic operations\n");
     printf("                    'r' : remote memory access\n");
     printf("                    't' : tag matching \n");
+    printf("                    'm' : active messages \n");
     printf("                    'w' : wakeup\n");
     printf("                  Modifiers to use in combination with above features:\n");
     printf("                    'e' : error handling\n");
@@ -140,6 +141,9 @@ int main(int argc, char **argv)
                 case 'w':
                     ucp_features |= UCP_FEATURE_WAKEUP;
                     break;
+                case 'm':
+                    ucp_features |= UCP_FEATURE_AM;
+                    break;
                 case 'e':
                     ucp_ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
                     ucp_ep_params.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
@@ -208,7 +212,7 @@ int main(int argc, char **argv)
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP|PRINT_MEM_MAP)) {
         if (ucp_features == 0) {
-            printf("Please select UCP features using -u switch: a|r|t|w\n");
+            printf("Please select UCP features using -u switch: a|r|t|m|w\n");
             usage();
             return -1;
         }

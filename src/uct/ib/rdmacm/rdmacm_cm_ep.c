@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,13 +11,15 @@
 #include "rdmacm_cm_ep.h"
 #include "rdmacm_cm.h"
 #include <ucs/arch/bitops.h>
+#include <ucs/sys/sock.h>
+#include <ucs/async/async.h>
 
 
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
                                  size_t max_len)
 {
-    struct sockaddr *local_addr  = rdma_get_local_addr(cep->id);
-    struct sockaddr *remote_addr = rdma_get_peer_addr(cep->id);
+    struct sockaddr *local_addr = cep->id ? rdma_get_local_addr(cep->id) : NULL;
+    struct sockaddr *remote_addr = cep->id ? rdma_get_peer_addr(cep->id) : NULL;
     char flags_buf[UCT_RDMACM_EP_FLAGS_STRING_LEN];
     char local_ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char remote_ip_port_str[UCS_SOCKADDR_STRING_LEN];
@@ -33,13 +35,13 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
         NULL
     };
 
-    if (ucs_sockaddr_is_known_af(local_addr)) {
+    if ((local_addr != NULL) && ucs_sockaddr_is_known_af(local_addr)) {
         ucs_sockaddr_str(local_addr, local_ip_port_str, UCS_SOCKADDR_STRING_LEN);
     } else {
         ucs_strncpy_safe(local_ip_port_str, "<invalid>", UCS_SOCKADDR_STRING_LEN);
     }
 
-    if (ucs_sockaddr_is_known_af(remote_addr)) {
+    if ((remote_addr != NULL) && ucs_sockaddr_is_known_af(remote_addr)) {
         ucs_sockaddr_str(remote_addr, remote_ip_port_str, UCS_SOCKADDR_STRING_LEN);
     } else {
         ucs_strncpy_safe(remote_ip_port_str, "<invalid>", UCS_SOCKADDR_STRING_LEN);
@@ -288,7 +290,7 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
               cep->id);
     if (rdma_resolve_addr(cep->id, rdmacm_cm->config.src_addr,
                           (struct sockaddr*)params->sockaddr->addr,
-                          1000/* TODO */)) {
+                          uct_rdmacm_cm_get_timeout(rdmacm_cm))) {
         ucs_error("rdma_resolve_addr() to dst addr %s failed: %m",
                   ucs_sockaddr_str((struct sockaddr*)params->sockaddr->addr,
                                    ip_port_str, UCS_SOCKADDR_STRING_LEN));
@@ -314,6 +316,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     ucs_status_t           status;
     char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
 
+    cep->id     = event->id;
     cep->flags |= UCT_RDMACM_CM_EP_ON_SERVER;
 
     if (event->listen_id->channel != cm->ev_ch) {
@@ -340,7 +343,6 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
         goto err;
     }
 
-    cep->id          = event->id;
     cep->id->context = cep;
 
     memset(&conn_param, 0, sizeof(conn_param));
@@ -466,6 +468,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     self->qp     = NULL;
     self->flags  = 0;
     self->status = UCS_OK;
+    self->id     = NULL;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         status = uct_rdamcm_cm_ep_client_init(self, params);

@@ -402,6 +402,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
                         "should detect error by keepalive mechanism\n");
         free(msg);
         raise(SIGKILL);
+        exit(1);
     }
 
     peer_addr_len = msg->data_len;

@@ -170,6 +170,22 @@ unsigned ucs_log_num_handlers();
 
 
 /**
+ * Add indentation to all subsequent log messages.
+ *
+ * @param [in] delta   How much indentation to add, on top of the current
+ *                     indentation level.
+ *                     A negative number will reduce the indentation level.
+ */
+void ucs_log_indent(int delta);
+
+
+/**
+ * @return Current log indent level.
+ */
+int ucs_log_get_current_indent();
+
+
+/**
  * Log backtrace.
  *
  * @param level          Log level.

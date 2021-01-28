@@ -98,7 +98,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - rocm    : ROCm (AMD GPU) memory support.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
    " and disables aliasing.\n",
-   ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_STRING_ARRAY},
+   ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
@@ -148,7 +148,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "the eager_zcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
 
-  {"MULTI_LANE_MAX_RATIO", "10",
+  {"MULTI_LANE_MAX_RATIO", "4",
    "Maximal allowed ratio between slowest and fastest lane in a multi-lane "
    "protocol. Lanes slower than the specified ratio will not be used.",
    ucs_offsetof(ucp_config_t, ctx.multi_lane_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
@@ -288,13 +288,6 @@ static ucs_config_field_t ucp_config_table[] = {
    "of all entities which connect to each other are the same.",
    ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
 
-  {"SOCKADDR_CM_ENABLE", "y",
-   "Enable alternative wireup protocol for sockaddr connected endpoints.\n"
-   "Enabling this mode changes underlying UCT mechanism for connection\n"
-   "establishment and enables synchronized close protocol which does not\n"
-   "require out of band synchronization before destroying UCP resources.",
-   ucs_offsetof(ucp_config_t, ctx.sockaddr_cm_enable), UCS_CONFIG_TYPE_TERNARY},
-
   {"CM_USE_ALL_DEVICES", "y",
    "When creating client/server endpoints, use all available devices.\n"
    "If disabled, use only the one device on which the connection\n"
@@ -312,13 +305,13 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
 
   /* TODO: set for keepalive more reasonable values */
-  {"KEEPALIVE_INTERVAL", "0",
+  {"KEEPALIVE_INTERVAL", "60s",
    "Time interval between keepalive rounds (0 - disabled).",
    ucs_offsetof(ucp_config_t, ctx.keepalive_interval), UCS_CONFIG_TYPE_TIME},
 
-  {"KEEPALIVE_NUM_EPS", "0",
+  {"KEEPALIVE_NUM_EPS", "128",
    "Maximal number of endpoints to check on every keepalive round\n"
-   "(0 - disabled, inf - check all endpoints on every round)",
+   "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_config_t, ctx.keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
   {"PROTO_INDIRECT_ID", "auto",
@@ -493,22 +486,24 @@ static int ucp_tls_array_is_present(const char **tls, unsigned count,
     }
 }
 
-static int ucp_config_is_tl_enabled(const char **names, unsigned count,
-                                    const char *tl_name, int is_alias,
-                                    uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
+static int
+ucp_config_is_tl_name_present(const ucs_config_allow_list_t *allow_list,
+                              const char *tl_name, int is_alias,
+                              uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
 {
     char strict_name[UCT_TL_NAME_MAX + 1];
 
     snprintf(strict_name, sizeof(strict_name), "\\%s", tl_name);
+
     return /* strict name, with leading \\ */
-           (!is_alias && ucp_tls_array_is_present(names, count, strict_name, "",
-                                                  rsc_flags, tl_cfg_mask)) ||
-           /* plain transport name */
-           ucp_tls_array_is_present(names, count, tl_name, "", rsc_flags,
-                                    tl_cfg_mask) ||
-           /* all available transports */
-           ucp_tls_array_is_present(names, count, UCP_RSC_CONFIG_ALL, "", rsc_flags,
-                                    tl_cfg_mask);
+            (!is_alias &&
+             (ucp_tls_array_is_present((const char**)allow_list->array.names,
+                                       allow_list->array.count, strict_name, "",
+                                       rsc_flags, tl_cfg_mask))) ||
+            /* plain transport name */
+            (ucp_tls_array_is_present((const char**)allow_list->array.names,
+                                      allow_list->array.count, tl_name, "",
+                                      rsc_flags, tl_cfg_mask));
 }
 
 static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource,
@@ -542,47 +537,56 @@ static int ucp_is_resource_in_device_list(const uct_tl_resource_desc_t *resource
     return !!mask;
 }
 
-static int ucp_is_resource_in_transports_list(const char *tl_name,
-                                              const char **names, unsigned count,
-                                              uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
+static int
+ucp_is_resource_in_transports_list(const char *tl_name,
+                                   const ucs_config_allow_list_t *allow_list,
+                                   uint8_t *rsc_flags, uint64_t *tl_cfg_mask)
 {
     uint64_t dummy_mask, tmp_tl_cfg_mask;
     uint8_t tmp_rsc_flags;
     ucp_tl_alias_t *alias;
-    int tl_enabled;
     char info[32];
     unsigned alias_arr_count;
 
-    ucs_assert(count > 0);
-    if (ucp_config_is_tl_enabled(names, count, tl_name, 0,
-                                 rsc_flags, tl_cfg_mask)) {
-        tl_enabled = 1;
-    } else {
-        tl_enabled = 0;
+    if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        return 1;
+    }
 
-        /* check aliases */
-        for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
-            /* If an alias is enabled, and the transport is part of this alias,
-             * enable the transport.
-             */
-            alias_arr_count = ucp_tl_alias_count(alias);
-            snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
-            dummy_mask      = 0;
-            tmp_rsc_flags   = 0;
-            tmp_tl_cfg_mask = 0;
-            if (ucp_config_is_tl_enabled(names, count, alias->alias, 1,
-                                         &tmp_rsc_flags, &tmp_tl_cfg_mask) &&
-                ucp_tls_array_is_present(alias->tls, alias_arr_count, tl_name,
-                                         info, &tmp_rsc_flags, &dummy_mask)) {
-                *rsc_flags   |= tmp_rsc_flags;
-                *tl_cfg_mask |= tmp_tl_cfg_mask;
-                tl_enabled  = 1;
-                break;
+    ucs_assert(allow_list->array.count > 0);
+    if (ucp_config_is_tl_name_present(allow_list, tl_name, 0, rsc_flags,
+                                      tl_cfg_mask)) {
+        /* If the TL was found by its strict name - the result is known,
+           otherwise checking aliases is required */
+        return (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW);
+    }
+
+    /* check aliases */
+    for (alias = ucp_tl_aliases; alias->alias != NULL; ++alias) {
+        /* If an alias is in the list and the transport belongs this alias,
+         * enable/disable the transport (according to the list mode)
+         */
+        alias_arr_count = ucp_tl_alias_count(alias);
+        snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
+        dummy_mask      = 0;
+        tmp_rsc_flags   = 0;
+        tmp_tl_cfg_mask = 0;
+        if (ucp_tls_array_is_present(alias->tls, alias_arr_count, tl_name, info,
+                                     &tmp_rsc_flags, &dummy_mask)) {
+            if (ucp_config_is_tl_name_present(allow_list, alias->alias, 1,
+                                              &tmp_rsc_flags,
+                                              &tmp_tl_cfg_mask)) {
+                if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_ALLOW) {
+                    *rsc_flags   |= tmp_rsc_flags;
+                    *tl_cfg_mask |= tmp_tl_cfg_mask;
+                    return 1;
+                } else {
+                    return 0;
+                }
             }
         }
     }
 
-    return tl_enabled;
+    return allow_list->mode == UCS_CONFIG_ALLOW_LIST_NEGATE;
 }
 
 static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
@@ -600,8 +604,7 @@ static int ucp_is_resource_enabled(const uct_tl_resource_desc_t *resource,
 
     /* Find the enabled UCTs */
     tl_enabled = ucp_is_resource_in_transports_list(resource->tl_name,
-                                                    (const char**)config->tls.names,
-                                                    config->tls.count, rsc_flags,
+                                                    &config->tls, rsc_flags,
                                                     tl_cfg_mask);
 
     ucs_trace(UCT_TL_RESOURCE_DESC_FMT " is %sabled",
@@ -691,8 +694,8 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
     }
 
     /* print configuration */
-    for (i = 0; i < config->tls.count; ++i) {
-        ucs_trace("allowed transport %d : '%s'", i, config->tls.names[i]);
+    for (i = 0; i < config->tls.array.count; ++i) {
+        ucs_trace("allowed transport %d : '%s'", i, config->tls.array.names[i]);
     }
 
     /* copy only the resources enabled by user configuration */
@@ -856,8 +859,10 @@ static ucs_status_t ucp_check_resource_config(const ucp_config_t *config)
 
      /* if we got here then num_resources > 0.
       * if the user's tls list is empty, there is no match */
-     if (0 == config->tls.count) {
-         ucs_error("The TLs list is empty. Please specify the transports you would like to use "
+     if ((0 == config->tls.array.count) &&
+         (config->tls.mode != UCS_CONFIG_ALLOW_LIST_ALLOW_ALL)) {
+         ucs_error("The TLs list is empty. Please specify the transports you "
+                   "would like to allow/forbid "
                    "or omit the UCX_TLS so that the default will be used.");
          return UCS_ERR_NO_ELEM;
      }
@@ -938,7 +943,7 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
     p    = buf;
     endp = buf + max;
 
-    ucp_resource_config_array_str(&config->tls, "", p, endp - p);
+    ucp_resource_config_array_str(&config->tls.array, "", p, endp - p);
 
     if (strlen(p)) {
         p += strlen(p);
@@ -959,73 +964,9 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
     }
 }
 
-static void ucp_fill_sockaddr_aux_tls_config(ucp_context_h context,
-                                             const ucp_config_t *config)
-{
-    const char **tl_names = (const char**)config->sockaddr_aux_tls.aux_tls;
-    unsigned count        = config->sockaddr_aux_tls.count;
-    uint8_t dummy_flags   = 0;
-    uint64_t dummy_mask   = 0;
-    ucp_rsc_index_t tl_id;
-
-    context->config.sockaddr_aux_rscs_bitmap = 0;
-
-    /* Check if any of the context's resources are present in the sockaddr
-     * auxiliary transports for the client-server flow */
-    ucs_for_each_bit(tl_id, context->tl_bitmap) {
-        if (ucp_is_resource_in_transports_list(context->tl_rscs[tl_id].tl_rsc.tl_name,
-                                               tl_names, count, &dummy_flags,
-                                               &dummy_mask)) {
-            context->config.sockaddr_aux_rscs_bitmap |= UCS_BIT(tl_id);
-        }
-    }
-}
-
-static void ucp_fill_sockaddr_tls_prio_list(ucp_context_h context,
-                                            const char **sockaddr_tl_names,
-                                            ucp_rsc_index_t num_sockaddr_tls)
-{
-    uint64_t sa_tls_bitmap = 0;
-    ucp_rsc_index_t idx    = 0;
-    ucp_tl_resource_desc_t *resource;
-    ucp_rsc_index_t tl_id;
-    ucp_tl_md_t *tl_md;
-    ucp_rsc_index_t j;
-
-    /* Set a bitmap of sockaddr transports */
-    for (j = 0; j < context->num_tls; ++j) {
-        resource = &context->tl_rscs[j];
-        tl_md    = &context->tl_mds[resource->md_index];
-        if (tl_md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-            sa_tls_bitmap |= UCS_BIT(j);
-        }
-    }
-
-    /* Parse the sockaddr transports priority list */
-    for (j = 0; j < num_sockaddr_tls; j++) {
-        /* go over the priority list and find the transport's tl_id in the
-         * sockaddr tls bitmap. save the tl_id's for the client/server usage
-         * later */
-        ucs_for_each_bit(tl_id, sa_tls_bitmap) {
-            resource = &context->tl_rscs[tl_id];
-
-            if (!strcmp(sockaddr_tl_names[j], "*") ||
-                !strncmp(sockaddr_tl_names[j], resource->tl_rsc.tl_name,
-                         UCT_TL_NAME_MAX)) {
-                context->config.sockaddr_tl_ids[idx] = tl_id;
-                idx++;
-                sa_tls_bitmap &= ~UCS_BIT(tl_id);
-            }
-        }
-    }
-
-    context->config.num_sockaddr_tls = idx;
-}
-
 static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
                                             const char **sockaddr_cm_names,
-                                            ucp_rsc_index_t num_sockaddr_cms,
-                                            int sockaddr_cm_enable)
+                                            ucp_rsc_index_t num_sockaddr_cms)
 {
     uint64_t cm_cmpts_bitmap = context->config.cm_cmpts_bitmap;
     uint64_t cm_cmpts_bitmap_safe;
@@ -1033,10 +974,6 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
 
     memset(&context->config.cm_cmpt_idxs, UCP_NULL_RESOURCE, UCP_MAX_RESOURCES);
     context->config.num_cm_cmpts = 0;
-
-    if (!sockaddr_cm_enable) {
-        return;
-    }
 
     /* Parse the sockaddr CMs priority list */
     for (cm_idx = 0; cm_idx < num_sockaddr_cms; ++cm_idx) {
@@ -1061,8 +998,6 @@ static ucs_status_t ucp_fill_sockaddr_prio_list(ucp_context_h context,
 {
     const char **sockaddr_tl_names = (const char**)config->sockaddr_cm_tls.cm_tls;
     unsigned num_sockaddr_tls      = config->sockaddr_cm_tls.count;
-    int sockaddr_cm_enable         = context->config.ext.sockaddr_cm_enable !=
-                                     UCS_NO;
 
     /* Check if a list of sockaddr transports/CMs has valid length */
     if (num_sockaddr_tls > UCP_MAX_RESOURCES) {
@@ -1071,13 +1006,10 @@ static ucs_status_t ucp_fill_sockaddr_prio_list(ucp_context_h context,
         num_sockaddr_tls = UCP_MAX_RESOURCES;
     }
 
-    ucp_fill_sockaddr_tls_prio_list(context, sockaddr_tl_names,
-                                    num_sockaddr_tls);
     ucp_fill_sockaddr_cms_prio_list(context, sockaddr_tl_names,
-                                    num_sockaddr_tls, sockaddr_cm_enable);
-    if ((context->config.ext.sockaddr_cm_enable == UCS_YES) &&
-        (context->config.num_cm_cmpts == 0)) {
-        ucs_error("UCX_SOCKADDR_CM_ENABLE is set to yes but none of the available components supports SOCKADDR_CM");
+                                    num_sockaddr_tls);
+    if (context->config.num_cm_cmpts == 0) {
+        ucs_diag("none of the available components supports sockaddr connection management");
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -1274,9 +1206,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
     }
 
-    if ((context->config.ext.sockaddr_cm_enable == UCS_YES) &&
-        (context->config.cm_cmpts_bitmap == 0)) {
-        ucs_error("there are no UCT components with CM capability");
+    if (context->config.cm_cmpts_bitmap == 0) {
+        ucs_debug("there are no UCT components with CM capability");
         status = UCS_ERR_UNSUPPORTED;
         goto err_free_resources;
     }
@@ -1329,7 +1260,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         }
 
         ucp_get_aliases_set(&avail_tls);
-        ucp_report_unavailable(&config->tls, tl_cfg_mask, "", "transport",
+        ucp_report_unavailable(&config->tls.array, tl_cfg_mask, "", "transport",
                                &avail_tls);
     }
 
@@ -1339,7 +1270,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_free_resources;
     }
 
-    ucp_fill_sockaddr_aux_tls_config(context, config);
     status = ucp_fill_sockaddr_prio_list(context, config);
     if (status != UCS_OK) {
         goto err_free_resources;
@@ -1541,6 +1471,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      context->config.ext.tm_max_bb_size,
                      context->config.ext.seg_size);
         }
+    }
+
+    if (context->config.ext.keepalive_num_eps == 0) {
+        ucs_error("UCX_KEEPALIVE_NUM_EPS value must be greater than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
     }
 
     context->config.keepalive_interval = ucs_time_from_sec(context->config.ext.keepalive_interval);

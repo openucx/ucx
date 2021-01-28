@@ -158,7 +158,8 @@ struct ucp_request {
 
                     union {
                         struct {
-                            ucp_tag_t      tag;
+                            ucp_tag_t         tag;
+                            ucs_ptr_map_key_t req_id;
                         } tag;
 
                         struct {
@@ -246,8 +247,6 @@ struct ucp_request {
                 } disconnect;
 
                 struct {
-                    ucp_worker_h          ucp_worker;     /* UCP worker where a discard UCT EP
-                                                           * operation submitted on */
                     uct_ep_h              uct_ep;         /* UCT EP that should be flushed and
                                                              destroyed */
                     unsigned              ep_flush_flags; /* Flags that should be passed into

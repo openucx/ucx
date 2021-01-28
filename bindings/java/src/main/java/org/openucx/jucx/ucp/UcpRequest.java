@@ -7,6 +7,7 @@ package org.openucx.jucx.ucp;
 
 import org.openucx.jucx.UcxCallback;
 import org.openucx.jucx.UcxNativeStruct;
+import org.openucx.jucx.ucs.UcsConstants;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
@@ -15,15 +16,17 @@ import java.nio.ByteBuffer;
  * Request object, that returns by ucp operations (GET, PUT, SEND, etc.).
  * Call {@link UcpRequest#isCompleted()} to monitor completion of request.
  */
-public class UcpRequest extends UcxNativeStruct implements Closeable {
+public class UcpRequest extends UcxNativeStruct {
 
     private long recvSize;
 
     private long senderTag;
 
-    private UcpRequest(long nativeId) {
-        setNativeId(nativeId);
-    }
+    private int status = UcsConstants.STATUS.UCS_INPROGRESS;
+
+    private long iovVector;
+
+    private UcxCallback callback;
 
     /**
      * To initialize for failed and immediately completed requests.
@@ -49,23 +52,14 @@ public class UcpRequest extends UcxNativeStruct implements Closeable {
      * @return whether this request is completed.
      */
     public boolean isCompleted() {
-        return (getNativeId() == null) || isCompletedNative(getNativeId());
+        return status != UcsConstants.STATUS.UCS_INPROGRESS;
     }
 
     /**
-     * This routine releases the non-blocking request back to the library, regardless
-     * of its current state. Communications operations associated with this request
-     * will make progress internally, however no further notifications or callbacks
-     * will be invoked for this request.
+     * @return status of the current request
      */
-    @Override
-    public void close() {
-        if (getNativeId() != null) {
-            closeRequestNative(getNativeId());
-        }
+    public int getStatus() {
+        return status;
     }
 
-    private static native boolean isCompletedNative(long ucpRequest);
-
-    private static native void closeRequestNative(long ucpRequest);
 }

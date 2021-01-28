@@ -1,5 +1,5 @@
 /*
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014-2017. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2017.  ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
@@ -837,7 +837,7 @@ typedef struct ucp_generic_dt_ops {
      *                             @ref ucp_generic_dt_ops::start_pack
      *                             "start_pack()" routine.
      * @param [in]  offset         Virtual offset in the output stream.
-     * @param [in]  dest           Destination to pack the data to.
+     * @param [in]  dest           Destination buffer to pack the data.
      * @param [in]  max_length     Maximal length to pack.
      *
      * @return The size of the data that was written to the destination buffer.
@@ -2825,8 +2825,6 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
  * @note If UCP_OP_ATTR_FLAG_NO_IMM_CMPL flag is set in the op_attr_mask field
  *       of @a param, then the operation will return a request handle, even if
  *       it completes immediately.
- * @note Currently Active Message API supports communication operations with
- *       host memory only.
  * @note This operation supports specific flags, which can be passed
  *       in @a param by @ref ucp_request_param_t.flags. The exact set of flags
  *       is defined by @ref ucp_send_am_flags.
@@ -3257,7 +3255,7 @@ ucs_status_ptr_t ucp_tag_send_sync_nbx(ucp_ep_h ep, const void *buffer,
  * returns an error.
  *
  * @param [in]     ep       UCP endpoint that is used for the receive operation.
- * @param [in]     buffer   Pointer to the buffer to receive the data to.
+ * @param [in]     buffer   Pointer to the buffer to receive the data.
  * @param [in]     count    Number of elements to receive into @a buffer.
  * @param [in]     datatype Datatype descriptor for the elements in the buffer.
  * @param [in]     cb       Callback function that is invoked whenever the
@@ -3381,7 +3379,7 @@ ucs_status_ptr_t ucp_stream_recv_data_nb(ucp_ep_h ep, size_t *length);
  *       handle or an error.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
- * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  buffer      Pointer to the buffer to receive the data.
  * @param [in]  count       Number of elements to receive
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  tag         Message tag to expect.
@@ -3420,7 +3418,7 @@ ucs_status_ptr_t ucp_tag_recv_nb(ucp_worker_h worker, void *buffer, size_t count
  * used.
  *
  * @param [in]  worker      UCP worker that is used for the receive operation.
- * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  buffer      Pointer to the buffer to receive the data.
  * @param [in]  count       Number of elements to receive
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  tag         Message tag to expect.
@@ -3454,11 +3452,8 @@ ucs_status_t ucp_tag_recv_nbr(ucp_worker_h worker, void *buffer, size_t count,
  * message is in the receive buffer and ready for application access.  If the
  * receive operation cannot be stated the routine returns an error.
  *
- * @note This routine cannot return UCS_OK. It always returns a request
- *       handle or an error.
- *
  * @param [in]  worker      UCP worker that is used for the receive operation.
- * @param [in]  buffer      Pointer to the buffer to receive the data to.
+ * @param [in]  buffer      Pointer to the buffer to receive the data.
  * @param [in]  count       Number of elements to receive
  * @param [in]  tag         Message tag to expect.
  * @param [in]  tag_mask    Bit mask that indicates the bits that are used for

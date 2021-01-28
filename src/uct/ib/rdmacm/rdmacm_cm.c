@@ -1,11 +1,11 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h" /* Defines HAVE_RDMACM_QP_LESS */
+#  include "config.h"
 #endif
 
 #include "rdmacm_cm_ep.h"
@@ -128,6 +128,7 @@ static ucs_status_t uct_rdmacm_cm_query(uct_cm_h cm, uct_cm_attr_t *cm_attr)
 static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event)
 {
     uct_rdmacm_cm_ep_t *cep = (uct_rdmacm_cm_ep_t*)event->id->context;
+    uct_rdmacm_cm_t    *cm  = uct_rdmacm_cm_ep_get_cm(cep);
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
 
@@ -137,11 +138,11 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               event->id);
 
-    if (rdma_resolve_route(event->id, 1000 /* TODO */)) {
-        ucs_error("%s: rdma_resolve_route failed: %m",
+    if (rdma_resolve_route(event->id, uct_rdmacm_cm_get_timeout(cm))) {
+        ucs_diag("%s: rdma_resolve_route failed: %m",
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN));
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_UNREACHABLE);
     }
 }
 
@@ -701,6 +702,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
     if (status != UCS_OK) {
         goto ucs_async_remove_handler;
     }
+
+    self->config.timeout = rdmacm_config->timeout;
 
     ucs_debug("created rdmacm_cm %p with event_channel %p (fd=%d)",
               self, self->ev_ch, self->ev_ch->fd);

@@ -120,7 +120,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
 
     if (ucs_unlikely(inline_data != NULL)) {
         status = ucp_request_recv_data_unpack(req, inline_data, length, 0, 1);
-        ucs_mpool_put_inline(req->recv.tag.rdesc);
+        ucp_tag_offload_release_buf(req);
     } else if (req->recv.tag.rdesc != NULL) {
         status = ucp_request_recv_data_unpack(req, req->recv.tag.rdesc + 1,
                                               length, 0, 1);
@@ -724,10 +724,14 @@ void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, ucs_ptr_map_key_t ep_id,
                                    ucp_tag_t stag, uint16_t recv_flags)
 {
     ucp_request_t *req;
+    ucp_ep_h ep;
 
     ucs_assert(recv_flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD);
 
-    req = ucp_proto_ssend_ack_request_alloc(worker, ep_id);
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, ep_id, return,
+                                  "ACK for sync-send");
+
+    req = ucp_proto_ssend_ack_request_alloc(worker, ep);
     if (req == NULL) {
         ucs_fatal("could not allocate request");
     }

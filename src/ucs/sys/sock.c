@@ -66,7 +66,7 @@ void ucs_close_fd(int *fd_p)
 
 int ucs_netif_flags_is_active(unsigned int flags)
 {
-    return (flags & IFF_UP) && (flags & IFF_RUNNING) && !(flags & IFF_LOOPBACK);
+    return (flags & IFF_UP) && (flags & IFF_RUNNING);
 }
 
 ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
@@ -365,7 +365,7 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
                                     int backlog, int silent_err_in_use,
-                                    int allow_addr_inuse, int *listen_fd)
+                                    int reuse_addr, int *listen_fd)
 {
     int so_reuse_optval = 1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
@@ -385,7 +385,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
         goto err_close_socket;
     }
 
-    if (allow_addr_inuse) {
+    if (reuse_addr) {
         status = ucs_socket_setopt(fd, SOL_SOCKET, SO_REUSEADDR,
                                    &so_reuse_optval, sizeof(so_reuse_optval));
         if (status != UCS_OK) {

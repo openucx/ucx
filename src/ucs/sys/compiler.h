@@ -84,16 +84,4 @@
 #define UCS_CACHELINE_PADDING_MISALIGN(...) \
     ((UCS_PP_FOREACH(UCS_CACHELINE_PADDING_SIZEOF, _, __VA_ARGS__)) % UCS_SYS_CACHE_LINE_SIZE)
 
-/*
- * Define code which runs at global constructor phase
- */
-#define UCS_STATIC_INIT \
-    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_ctor)()
-
-/*
- * Define code which runs at global destructor phase
- */
-#define UCS_STATIC_CLEANUP \
-    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_dtor)()
-
 #endif

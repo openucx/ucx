@@ -26,8 +26,8 @@ steps:
     sudo /hpc/local/bin/lshca
     mkdir -p $(workspace)/${{ parameters.name }}
     # set UCX environment variables
-    export UCX_SOCKADDR_CM_ENABLE=y
     export UCX_NET_DEVICES=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${roce_iface}' .*/\1:\2/p')
+    export LD_LIBRARY_PATH=$(workspace)/install/lib:$LD_LIBRARY_PATH
     $(workspace)/test/apps/iodemo/run_io_demo.sh \
         -H $(agent_hosts) \
         --tasks-per-node 1 \
@@ -45,12 +45,11 @@ steps:
             -w 16 \
             -t 10 \
             ${{ parameters.iodemo_args }}
-
   displayName: Launch with run_io_demo.sh ( ${{ parameters.name }} )
   timeoutInMinutes: 10
 
 - bash: |
-    python buildlib/io_demo/iodemo_analyzer.py -d $(workspace)/${{ parameters.name }}
+    python $(workspace)/buildlib/io_demo/iodemo_analyzer.py -d $(workspace)/${{ parameters.name }}
   displayName: Analyze for ${{ parameters.name }}
   timeoutInMinutes: 1
 
@@ -71,7 +70,7 @@ steps:
 
 - bash: |
     set -eEx
-    ./buildlib/az-network-corrupter.sh reset=yes
+    $(workspace)/buildlib/az-network-corrupter.sh reset=yes
   displayName: Restore port state
   condition: always()
   timeoutInMinutes: 2

@@ -13,6 +13,7 @@ resources:
       endpoint: ucfconsort_registry
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
+      options: --privileged
 
 stages:
   - stage: Codestyle
@@ -209,6 +210,16 @@ stages:
         name: new
         demands: ucx_new -equals yes
         test_perf: 1
+    - template: tests.yml
+      parameters:
+        name: hwi
+        demands: ucx_hwi -equals yes
+        test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: sputnik
+        demands: ucx_sputnik -equals yes
+        test_perf: 0
 
   - stage: io_demo
     dependsOn: [Codestyle]

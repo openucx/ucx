@@ -30,9 +30,9 @@ jobs:
         ubuntu18_cuda10_2:
           build_container: ubuntu18_cuda10_2
           artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-ubuntu18.04-mofed5.0-cuda10.2.deb
-        ubuntu18_cuda11.0:
-          build_container: ubuntu18_cuda11.0
-          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-ubuntu18.04-mofed5.0-cuda11.0.deb
+        ubuntu18_cuda11_1:
+          build_container: ubuntu18_cuda11_1
+          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-ubuntu18.04-mofed5.0-cuda11.1.deb
 
     container: $[ variables['build_container'] ]
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -52,9 +52,6 @@ enum {
     UCP_EP_FLAG_STREAM_HAS_DATA        = UCS_BIT(5), /* EP has data in the ext.stream.match_q */
     UCP_EP_FLAG_ON_MATCH_CTX           = UCS_BIT(6), /* EP is on match queue */
     UCP_EP_FLAG_REMOTE_ID              = UCS_BIT(7), /* remote ID is valid */
-    UCP_EP_FLAG_LISTENER               = UCS_BIT(8), /* EP holds pointer to a listener
-                                                        (on server side due to receiving partial
-                                                        worker address from the client) */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
     UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
@@ -73,11 +70,8 @@ enum {
     UCP_EP_FLAG_CONNECT_ACK_SENT       = UCS_BIT(18),/* DEBUG: Connection ACK was sent */
     UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(19),/* DEBUG: Connection request was ignored */
     UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(20),/* DEBUG: Connection pre-request was sent */
-    UCP_EP_FLAG_SOCKADDR_PARTIAL_ADDR  = UCS_BIT(21),/* DEBUG: Partial worker address was sent
-                                                               to the remote peer when starting
-                                                               connection establishment on this EP */
-    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(22),/* DEBUG: flush_state is valid */
-    UCP_EP_FLAG_DISCONNECTED_CM_LANE   = UCS_BIT(23) /* DEBUG: CM lane was disconnected, i.e.
+    UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(21),/* DEBUG: flush_state is valid */
+    UCP_EP_FLAG_DISCONNECTED_CM_LANE   = UCS_BIT(22) /* DEBUG: CM lane was disconnected, i.e.
                                                         @uct_ep_disconnect was called for CM EP */
 };
 
@@ -337,7 +331,7 @@ struct ucp_ep_config {
         const ucp_request_send_proto_t   *reply_proto;
 
         /* Maximal size for eager short */
-        ssize_t                          max_eager_short;
+        ucp_memtype_thresh_t             max_eager_short;
     } am_u;
 
     /* Protocol selection data */
@@ -351,6 +345,8 @@ struct ucp_ep_config {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
+    uint8_t                       ref_cnt;       /* Reference counter: 0 - it is
+                                                    allowed to destroy EP */
     ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
@@ -395,10 +391,7 @@ typedef struct {
     ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
     ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
     ucp_err_handler_cb_t          err_cb;        /* Error handler */
-    union {
-        ucp_listener_h            listener;      /* Listener that may be associated with ep */
-        ucp_ep_close_proto_req_t  close_req;     /* Close protocol request */
-    };
+    ucp_ep_close_proto_req_t      close_req;     /* Close protocol request */
 } ucp_ep_ext_control_t;
 
 
@@ -439,12 +432,7 @@ typedef struct {
 
 
 enum {
-    UCP_WIREUP_SA_DATA_FULL_ADDR = 0,   /* Sockaddr client data contains full
-                                           address. */
-    UCP_WIREUP_SA_DATA_PARTIAL_ADDR,    /* Sockaddr client data contains partial
-                                           address, wireup protocol requires
-                                           extra MSGs. */
-    UCP_WIREUP_SA_DATA_CM_ADDR          /* Sockaddr client data contains address
+    UCP_WIREUP_SA_DATA_CM_ADDR = 2      /* Sockaddr client data contains address
                                            for CM based wireup: there is only
                                            iface and ep address of transport
                                            lanes, remote device address is
@@ -469,15 +457,13 @@ struct ucp_wireup_sockaddr_data {
 
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
-    union {
-        uct_listener_h          listener;
-        uct_iface_h             iface;
-    } uct;
+    uct_listener_h              uct_listener;
     uct_conn_request_h          uct_req;
     ucp_rsc_index_t             cm_idx;
     char                        dev_name[UCT_DEVICE_NAME_MAX];
     uct_device_addr_t           *remote_dev_addr;
     struct sockaddr_storage     client_address;
+    ucp_ep_h                    ep; /* valid only if request is handled internally */
     ucp_wireup_sockaddr_data_t  sa_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
@@ -507,7 +493,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
                                   const char *peer_name, const char *message,
                                   ucp_ep_h *ep_p);
 
-void ucp_ep_delete(ucp_ep_h ep);
+void ucp_ep_release_id(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep);
@@ -543,8 +529,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
 void ucp_ep_cleanup_lanes(ucp_ep_h ep);
-
-int ucp_ep_is_sockaddr_stub(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                 const ucp_ep_config_key_t *key);

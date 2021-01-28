@@ -51,7 +51,8 @@ UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
 
 void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
-                                           struct mlx5_cqe64 *cqe);
+                                           struct mlx5_cqe64 *cqe,
+                                           int poll_flags);
 
 ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
                                       uint64_t remote_addr, uct_rkey_t rkey);
@@ -126,13 +127,12 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
-                          struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu);
+                          struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
+                          uint8_t path_index);
 
 ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
                                           const uct_device_addr_t *dev_addr,
                                           const uct_ep_addr_t *ep_addr);
-
-unsigned uct_rc_mlx5_iface_progress(void *arg);
 
 ucs_status_t uct_rc_mlx5_ep_tag_eager_short(uct_ep_h tl_ep, uct_tag_t tag,
                                             const void *data, size_t length);

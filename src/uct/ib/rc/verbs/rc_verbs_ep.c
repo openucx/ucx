@@ -410,21 +410,27 @@ static void uct_rc_verbs_ep_post_flush(uct_rc_verbs_ep_t *ep, int send_flags)
     struct ibv_sge sge;
     int inl_flag;
 
-    /*
-     * Send small RDMA_WRITE as a flush operation
-     * (some adapters do not support 0-size RDMA_WRITE or inline sends)
-     */
-    sge.addr               = (uintptr_t)iface->flush_mem;
-    sge.length             = 1;
-    sge.lkey               = iface->flush_mr->lkey;
-    wr.next                = NULL;
-    wr.sg_list             = &sge;
-    wr.num_sge             = 1;
-    wr.opcode              = IBV_WR_RDMA_WRITE;
-    wr.wr.rdma.remote_addr = ep->flush.remote_addr;
-    wr.wr.rdma.rkey        = ep->flush.rkey;
-    inl_flag               = (iface->config.max_inline >= sge.length) ?
-                             IBV_SEND_INLINE : 0;
+    if (iface->config.flush_by_fc || (iface->config.max_inline == 0)) {
+        /* Flush by flow control pure grant, in case the device does not
+         * support 0-size RDMA_WRITE or does not support inline.
+         */
+        sge.addr   = (uintptr_t)(iface->fc_desc + 1);
+        sge.length = sizeof(uct_rc_hdr_t);
+        sge.lkey   = iface->fc_desc->lkey;
+        wr.sg_list = &sge;
+        wr.num_sge = 1;
+        wr.opcode  = IBV_WR_SEND;
+        inl_flag   = 0;
+    } else {
+        /* Flush by empty RDMA_WRITE */
+        wr.sg_list             = NULL;
+        wr.num_sge             = 0;
+        wr.opcode              = IBV_WR_RDMA_WRITE;
+        wr.wr.rdma.remote_addr = 0;
+        wr.wr.rdma.rkey        = 0;
+        inl_flag               = IBV_SEND_INLINE;
+    }
+    wr.next = NULL;
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, inl_flag | send_flags, 1);
 }
@@ -522,17 +528,9 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_ib_md_t *md                    = uct_ib_iface_md(&iface->super.super);
     uct_rc_verbs_ep_address_t *rc_addr = (uct_rc_verbs_ep_address_t*)addr;
-    ucs_status_t status;
     uint8_t mr_id;
 
-    status = uct_rc_verbs_iface_flush_mem_create(iface);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     rc_addr->flags      = 0;
-    rc_addr->flush_addr = (uintptr_t)iface->flush_mem;
-    rc_addr->flush_rkey = iface->flush_mr->rkey;
     uct_ib_pack_uint24(rc_addr->qp_num, ep->qp->qp_num);
 
     if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
@@ -568,9 +566,6 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     if (status != UCS_OK) {
         return status;
     }
-
-    ep->flush.remote_addr = rc_addr->flush_addr;
-    ep->flush.rkey        = rc_addr->flush_rkey;
 
     if (rc_addr->flags & UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR) {
         ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(*(uint8_t*)(rc_addr + 1));

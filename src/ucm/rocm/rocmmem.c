@@ -28,11 +28,6 @@ UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t,
 UCM_DEFINE_REPLACE_DLSYM_FUNC(hsa_amd_memory_pool_free, hsa_status_t,
                               HSA_STATUS_ERROR, void*)
 
-#if ENABLE_SYMBOL_OVERRIDE
-UCM_OVERRIDE_FUNC(hsa_amd_memory_pool_allocate, hsa_status_t)
-UCM_OVERRIDE_FUNC(hsa_amd_memory_pool_free, hsa_status_t)
-#endif
-
 static UCS_F_ALWAYS_INLINE void
 ucm_dispatch_mem_type_alloc(void *addr, size_t length, ucs_memory_type_t mem_type)
 {
@@ -172,7 +167,7 @@ static ucs_status_t ucm_rocmmem_install(int events)
         }
     }
 
-    ucm_debug("rocm hooks are ready");
+    ucm_info("rocm hooks are ready");
     ucm_rocmmem_installed = 1;
 
 out_unlock:

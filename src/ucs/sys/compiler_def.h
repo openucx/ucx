@@ -179,4 +179,16 @@
 /* Check if an expression is a compile-time constant */
 #define ucs_is_constant(expr)      __builtin_constant_p(expr)
 
+/*
+ * Define code which runs at global constructor phase
+ */
+#define UCS_STATIC_INIT \
+    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_ctor)()
+
+/*
+ * Define code which runs at global destructor phase
+ */
+#define UCS_STATIC_CLEANUP \
+    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_dtor)()
+
 #endif /* UCS_COMPILER_DEF_H */
