@@ -475,8 +475,8 @@ enum ucp_am_cb_flags {
      * option, message ordering is not guaranteed (i.e. receive callbacks may be
      * invoked in a different order than messages were sent).
      * If this flag is not set, the data callback may be invoked several times for
-     * the same message (if for example it was split into several fragments by the
-     * transport layer). It is guaranteed that the first data callback for a
+     * the same message (if, for example, it was split into several fragments by
+     * the transport layer). It is guaranteed that the first data callback for a
      * particular message is invoked for the first fragment. The ordering of first
      * message fragments is guaranteed (i.e. receive callbacks will be called
      * in the order the messages were sent). The order of other fragments is not
@@ -670,7 +670,7 @@ typedef enum {
     UCP_AM_RECV_ATTR_FLAG_RNDV          = UCS_BIT(17),
 
     /**
-     * Indicates that the arrived data is the first fragment of the multi-fragment
+     * Indicates that the incoming data is the first fragment of the multi-fragment
      * eager message. This flag can only be passed to data handlers registered
      * without @a UCP_AM_FLAG_WHOLE_MSG flag. This flag is mutually exclusive
      * with @a UCP_AM_RECV_ATTR_FLAG_RNDV and @a UCP_AM_RECV_ATTR_FLAG_ONLY flags.
@@ -678,7 +678,7 @@ typedef enum {
     UCP_AM_RECV_ATTR_FLAG_FIRST         = UCS_BIT(18),
 
     /**
-     * Indicates that the arrived data carries the whole message. This flag is
+     * Indicates that the incoming data carries the whole message. This flag is
      * mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV and
      * @a UCP_AM_RECV_ATTR_FLAG_FIRST flags. Also this flags is always passed to
      * the data handlers, which are registered with @a UCP_AM_FLAG_WHOLE_MSG
@@ -2879,16 +2879,16 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  * @note This routine can be performed on any valid data descriptor delivered in
  *       @ref ucp_am_recv_callback_t.
  *       Data descriptor is considered to be valid if:
- *       - It is rendezvous request (@a UCP_AM_RECV_ATTR_FLAG_RNDV is set in
+ *       - It is a rendezvous request (@a UCP_AM_RECV_ATTR_FLAG_RNDV is set in
  *         @ref ucp_am_recv_param_t.recv_attr) or
- *       - It is persistent data pointer (@a UCP_AM_RECV_ATTR_FLAG_DATA is set
+ *       - It is a persistent data pointer (@a UCP_AM_RECV_ATTR_FLAG_DATA is set
  *         in @ref ucp_am_recv_param_t.recv_attr). In this case receive
  *         operation may be needed to unpack data to device memory (for example
  *         GPU device) or some specific datatype.
  * @note After this call UCP takes ownership of @a data_desc descriptor, so
  *       there is no need to release it even if the operation fails.
- *       The routine returns a request handle instead, which can further be used
- *       for tracking operation progress.
+ *       The routine returns a request handle instead, which can be used for
+ *       tracking operation progress.
  *
  * @param [in]  worker     Worker that is used for the receive operation.
  * @param [in]  data_desc  Data descriptor, provided in

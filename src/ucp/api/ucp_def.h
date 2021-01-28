@@ -638,10 +638,10 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  *
  * @return UCS_OK             @a data will not persist after the callback returns.
  *                            If UCP_AM_RECV_ATTR_FLAG_RNDV flag is set in
- *                            @a param->recv_attr and @ref ucp_am_recv_data_nbx was not
- *                            called for this data, the data descriptor will be
+ *                            @a param->recv_attr and @ref ucp_am_recv_data_nbx was
+ *                            not called for this data, the data descriptor will be
  *                            dropped and the corresponding @ref ucp_am_send_nbx
- *                            call should complete with UCS_OK status.
+ *                            call will complete with UCS_OK status.
  *
  * @return UCS_INPROGRESS     Can only be returned if @a param->recv_attr flags
  *                            contains UCP_AM_RECV_ATTR_FLAG_DATA or
