@@ -53,6 +53,7 @@ typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t         super;
     uct_ud_iface_common_config_t  ud_common;
     double                        peer_timeout;
+    double                        min_poke_time;
     double                        timer_tick;
     double                        timer_backoff;
     double                        event_timer_tick;
@@ -179,6 +180,7 @@ struct uct_ud_iface {
     } tx;
     struct {
         ucs_time_t           peer_timeout;
+        ucs_time_t           min_poke_time;
         unsigned             tx_qp_len;
         unsigned             max_inline;
         int                  check_grh_dgid;
