@@ -17,7 +17,7 @@ test_uct_ib::test_uct_ib() : m_e1(NULL), m_e2(NULL) { }
 void test_uct_ib::create_connected_entities() {
     m_e1 = uct_test::create_entity(0);
     m_e2 = uct_test::create_entity(0);
-    
+
     m_entities.push_back(m_e1);
     m_entities.push_back(m_e2);
 
@@ -561,7 +561,7 @@ protected:
             sls_without_ar = 0;
         }
 
-        status = ib_select_sl(ar_enable, ooo_sl_mask, config, sl); 
+        status = ib_select_sl(ar_enable, ooo_sl_mask, config, sl);
         if ((ooo_sl_mask == 0) || (ar_enable == UCS_AUTO)) {
             if (config_sl == UCS_ULUNITS_AUTO) {
                 EXPECT_EQ(m_default_sl, sl);
@@ -971,5 +971,75 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
     m_e2->flush();
 }
 
-
 UCT_INSTANTIATE_IB_TEST_CASE(test_uct_event_ib);
+
+class test_uct_ib_mtu : public test_uct_ib {
+public:
+    void create_connected_entities() {
+        modify_config("IB_PATH_MTU", "4096");
+        m_e1 = uct_test::create_entity(0);
+        modify_config("IB_PATH_MTU", "2048");
+        m_e2 = uct_test::create_entity(0);
+
+        m_entities.push_back(m_e1);
+        m_entities.push_back(m_e2);
+
+        m_e1->connect(0, *m_e2, 0);
+        m_e2->connect(0, *m_e1, 0);
+    }
+    static ucs_status_t ib_am_bcopy_handler(void *arg, void *data,
+                                            size_t length, unsigned flags) {
+        memcpy(arg, data, length);
+        ++test_uct_ib::m_ib_am_handler_counter;
+        return UCS_OK;
+    }
+
+    static size_t ib_am_bcopy_pack_cb(void *dest, void *arg) {
+        size_t length = (size_t)arg;
+
+        memset(dest, 0, length);
+        return length;
+    }
+
+    void send_recv_bcopy(uct_ep_h ep, entity *ent, size_t length) {
+        size_t start_am_counter = test_uct_ib::m_ib_am_handler_counter;
+        uct_ib_iface_t *iface   = ucs_derived_of(ep->iface, uct_ib_iface_t);
+        std::vector<char> buffer(length);
+        uct_iface_attr_t attr;
+        ucs_status_t status;
+        size_t len;
+
+        check_caps_skip(UCT_IFACE_FLAG_AM_BCOPY);
+        status = uct_iface_query(&iface->super.super, &attr);
+        ASSERT_UCS_OK(status);
+        ASSERT_LE(length, attr.cap.am.max_bcopy);
+
+        /* set a callback for the uct to invoke for receiving the data */
+        uct_iface_set_am_handler(ent->iface(), 0, ib_am_bcopy_handler, &buffer[0], 0);
+
+        /* send the data */
+        len = uct_ep_am_bcopy(ep, 0, ib_am_bcopy_pack_cb, (void*)length, 0);
+        ASSERT_EQ(length, len);
+
+        flush();
+        wait_for_value(&test_uct_ib::m_ib_am_handler_counter,
+                       start_am_counter + 1, true);
+    }
+
+};
+
+UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, mtu_4096_to_2048,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY,
+                                 UCT_IFACE_FLAG_CONNECT_TO_IFACE))
+{
+    send_recv_bcopy(m_e1->ep(0), m_e2, 4096);
+}
+
+UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, mtu_2048_to_4096,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    send_recv_bcopy(m_e2->ep(0), m_e1, 4096);
+}
+
+UCT_INSTANTIATE_RC_TEST_CASE(test_uct_ib_mtu);
+
