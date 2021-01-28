@@ -393,3 +393,27 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_flushNonBlockingNative(JNIEnv *env, jclass
 
     return jucx_request;
 }
+
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpEndpoint_sendAmNonBlockingNative(JNIEnv *env, jclass cls,
+                                                              jlong ep_ptr, jint am_id,
+                                                              jlong header_addr, jlong header_length,
+                                                              jlong data_address, jlong data_length,
+                                                              jlong flags, jobject callback,
+                                                              jint memory_type)
+{
+    ucp_request_param_t param = {0};
+
+    jobject jucx_request = jucx_request_allocate(env, callback, &param, memory_type);
+
+    param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;
+    param.cb.send       = jucx_request_callback;
+    param.flags         = flags;
+
+    ucs_status_ptr_t status = ucp_am_send_nbx((ucp_ep_h)ep_ptr, am_id, (void*)header_addr, header_length,
+                                              (void*)data_address, data_length, &param);
+    ucs_trace_req("JUCX: ucp_am_send_nbx request %p", status);
+
+    process_request(env, jucx_request, status);
+    return jucx_request;
+}

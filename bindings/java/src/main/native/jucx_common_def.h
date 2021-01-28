@@ -74,6 +74,12 @@ void recv_callback(void *request, ucs_status_t status, const ucp_tag_recv_info_t
 void stream_recv_callback(void *request, ucs_status_t status, size_t length, void *user_data);
 
 /**
+ * @brief Active message receive callback.
+ */
+ucs_status_t am_recv_callback(void *arg, const void *header, size_t header_length, void *data, size_t length,
+                              const ucp_am_recv_param_t *param);
+
+/**
  * @ingroup JUCX_REQ
  * @brief Utility to allocate jucx request and set appropriate java callback in it.
  */

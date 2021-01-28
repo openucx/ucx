@@ -7,8 +7,10 @@ package org.openucx.jucx;
 
 import org.junit.Test;
 import org.openucx.jucx.ucp.*;
+import org.openucx.jucx.ucs.UcsConstants;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -424,7 +426,7 @@ public class UcpEndpointTest extends UcxTest {
 
         AtomicBoolean received = new AtomicBoolean(false);
         serverToClient.recvStreamNonBlocking(
-            UcxUtils.getAddress(recvBuffer), UcpMemoryTest.MEM_SIZE * 2,
+            UcxUtils.getAddress(recvBuffer), UcpMemoryTest.MEM_SIZE * 2L,
             UcpConstants.UCP_STREAM_RECV_FLAG_WAITALL,
             new UcxCallback() {
                 @Override
@@ -593,5 +595,100 @@ public class UcpEndpointTest extends UcxTest {
         ep.close();
         worker1.close();
         context1.close();
+    }
+
+    @Test
+    public void testActiveMessages() throws Exception {
+        UcpParams params = new UcpParams().requestAmFeature().requestTagFeature();
+        UcpContext context1 = new UcpContext(params);
+        UcpContext context2 = new UcpContext(params);
+
+        UcpWorker worker1 = context1.newWorker(new UcpWorkerParams());
+        UcpWorker worker2 = context2.newWorker(new UcpWorkerParams());
+
+        String headerString = "Hello";
+        String dataString = "Active messages";
+        long headerSize = headerString.length() * 2;
+        long dataSize = UcpMemoryTest.MEM_SIZE;
+        assertTrue(headerSize < worker1.getMaxAmHeaderSize());
+
+        ByteBuffer header = ByteBuffer.allocateDirect((int)headerSize);
+        header.asCharBuffer().append(headerString);
+
+        header.rewind();
+
+        ByteBuffer data = ByteBuffer.allocateDirect((int)dataSize);
+        data.asCharBuffer().put(dataString);
+        data.rewind();
+
+        ByteBuffer recvData = ByteBuffer.allocateDirect((int)dataSize);
+        ByteBuffer recvHeader = ByteBuffer.allocateDirect((int)headerSize);
+        UcpRequest[] requests = new UcpRequest[5];
+
+        UcpEndpoint ep = worker2.newEndpoint(
+            new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
+
+        // Test rndv flow
+        worker1.setAmRecvHandler(0, (headerAddress, headerSize12, amData, replyEp) -> {
+            assertFalse(amData.isDataValid());
+            try {
+                assertEquals(headerString,
+                    UcxUtils.getByteBufferView(headerAddress, (int) headerSize12)
+                        .asCharBuffer().toString().trim());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            requests[2] = replyEp.sendTaggedNonBlocking(header, null);
+            requests[3] = amData.receive(UcxUtils.getAddress(recvData), null);
+
+            return UcsConstants.STATUS.UCS_OK;
+        });
+
+        // Test eager flow
+        worker1.setAmRecvHandler(1, (headerAddress, headerSize1, amData, replyEp) -> {
+            assertTrue(amData.isDataValid());
+            try {
+                assertEquals(dataString,
+                    UcxUtils.getByteBufferView(amData.getDataAddress(), (int)amData.getLength())
+                        .asCharBuffer().toString().trim());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return UcsConstants.STATUS.UCS_OK;
+        });
+
+        requests[0] = ep.sendAmNonBlocking(0,
+            UcxUtils.getAddress(header), headerSize,
+            UcxUtils.getAddress(data), dataSize,
+            UcpConstants.UCP_AM_SEND_FLAG_REPLY | UcpConstants.UCP_AM_SEND_FLAG_RNDV,
+            new UcxCallback() {
+                @Override
+                public void onSuccess(UcpRequest request) {
+                    assertTrue(request.isCompleted());
+                }
+            });
+
+        requests[1] = worker2.recvTaggedNonBlocking(recvHeader, null);
+        requests[4] = ep.sendAmNonBlocking(1, 0L, 0L,
+            UcxUtils.getAddress(data), dataSize, UcpConstants.UCP_AM_SEND_FLAG_EAGER, null);
+
+
+        while (!Arrays.stream(requests).allMatch(r -> (r != null) && r.isCompleted())) {
+            worker1.progress();
+            worker2.progress();
+        }
+
+        assertEquals(dataString,
+            recvData.asCharBuffer().toString().trim());
+
+        assertEquals(headerString,
+            recvHeader.asCharBuffer().toString().trim());
+
+        // Reset AM callback
+        worker1.removeAmRecvHandler(0);
+        worker1.removeAmRecvHandler(1);
+
+        Collections.addAll(resources, context1, context2, worker1, worker2, ep);
     }
 }

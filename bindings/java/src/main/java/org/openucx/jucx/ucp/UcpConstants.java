@@ -119,5 +119,30 @@ public class UcpConstants {
      */
     public static long UCP_STREAM_RECV_FLAG_WAITALL;
 
+    /**
+     * Indicates that the data provided in {@link UcpAmRecvCallback} callback
+     * can be held by the user. If {@link org.openucx.jucx.ucs.UcsConstants.STATUS#UCS_INPROGRESS}
+     * is returned from the callback, the data parameter will persist and the user has to call
+     * {@link UcpWorker#amDataRelease } when data is no longer needed. This flag is
+     * mutually exclusive with {@link UcpConstants#UCP_AM_RECV_ATTR_FLAG_RNDV}.
+     */
+    public static long UCP_AM_RECV_ATTR_FLAG_DATA;
+
+    /**
+     * Indicates that the arriving data was sent using rendezvous protocol.
+     * In this case dataAddress parameter of the {@link UcpAmRecvCallback#onReceive} points
+     * to the internal UCP descriptor, which can be used for obtaining the actual
+     * data by calling {@link UcpWorker#recvAmDataNonBlocking} routine. This flag is mutually
+     * exclusive with {@link UcpConstants#UCP_AM_RECV_ATTR_FLAG_DATA}.
+     */
+    public static long UCP_AM_RECV_ATTR_FLAG_RNDV;
+
+    /**
+     * Flags dictate the behavior of {@link UcpEndpoint#sendAmNonBlocking} routine.
+     */
+    public static long UCP_AM_SEND_FLAG_REPLY;
+    public static long UCP_AM_SEND_FLAG_EAGER;
+    public static long UCP_AM_SEND_FLAG_RNDV;
+
     private static native void loadConstants();
 }
