@@ -761,7 +761,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
 
     init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
     init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.rx_hdr_len            = sizeof(uct_rc_mlx5_hdr_t);
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.qp_type               = IBV_QPT_RC;
 

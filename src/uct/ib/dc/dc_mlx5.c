@@ -1166,7 +1166,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     init_attr.qp_type     = UCT_IB_QPT_DCI;
     init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.fc_req_size = sizeof(uct_dc_fc_request_t);
-    init_attr.rx_hdr_len  = sizeof(uct_rc_mlx5_hdr_t);
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DC_TM) {
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
