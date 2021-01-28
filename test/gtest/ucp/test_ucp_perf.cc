@@ -57,115 +57,155 @@ const test_perf::test_spec test_ucp_perf::tests[] =
 {
   { "tag latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
+    0 },
+
+  { "blocking tag latency", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_SLEEP,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
   { "tag iov latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_IOV, 8192, 3, { 1024, 1024, 1024 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
   { "tag mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
+    0 },
+
+  { "blocking tag mr", "Mpps",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_SLEEP,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
     0 },
 
   { "tag sync mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 200000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.05, 100.0, 0},
 
   { "tag wild mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
     UCX_PERF_TEST_FLAG_TAG_WILDCARD },
 
   { "tag bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
+
+  { "blocking tag bw", "MB/sec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_SLEEP,
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
 
   { "tag bw_zcopy_multi", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 16, 100000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
 
   { "put latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
   { "put rate", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.5, 100.0,
     0 },
 
   { "put bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 2048 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0,
     0 },
 
   { "get latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
   { "get bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 16384 }, 1, 10000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0,
     0 },
 
   { "stream latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0, 0 },
 
   { "stream bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 16384 }, 1, 10000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0, 0 },
 
   { "stream recv-data latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     UCX_PERF_TEST_FLAG_STREAM_RECV_DATA },
 
   { "stream recv-data bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 16384 }, 1, 10000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0,
     UCX_PERF_TEST_FLAG_STREAM_RECV_DATA },
 
   { "atomic add rate", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 1000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 500.0,
     0 },
 
   { "atomic fadd latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
   { "atomic swap latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
   { "atomic cswap latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
@@ -193,6 +233,15 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     for (const test_spec *test_iter = tests; test_iter->title != NULL;
          ++test_iter) {
         test_spec test = *test_iter;
+
+        /* FIXME: ud, shm, self are all hanging when wakeup mode is enabled so
+         * skipping wakeup tests when these transports are used for now */
+        if ((has_transport("ud_x") || has_transport("ud_v") ||
+             has_transport("ud") || has_transport("shm") ||
+             has_transport("self")) &&
+            (test.wait_mode == UCX_PERF_WAIT_MODE_SLEEP)) {
+            continue;
+        }
 
         if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
             test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
@@ -222,6 +271,7 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
     const test_spec test1 = { "put latency reference", "usec",
                               UCX_PERF_API_UCP, UCX_PERF_CMD_PUT,
                               UCX_PERF_TEST_TYPE_PINGPONG,
+                              UCX_PERF_WAIT_MODE_POLL,
                               UCP_PERF_DATATYPE_CONTIG,
                               0, 1, { 8 }, 1, 1000lu,
                               ucs_offsetof(ucx_perf_result_t,
@@ -240,6 +290,7 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
     const test_spec test2 = { "put latency with ucp_worker_wait_mem()",
                               "usec", UCX_PERF_API_UCP, UCX_PERF_CMD_PUT,
                               UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM,
+                              UCX_PERF_WAIT_MODE_POLL,
                               UCP_PERF_DATATYPE_CONTIG,
                               0, 1, { 8 }, 1, 1000lu,
                               ucs_offsetof(ucx_perf_result_t,

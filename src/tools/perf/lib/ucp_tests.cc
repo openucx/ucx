@@ -90,16 +90,30 @@ public:
         }
     }
 
-    void UCS_F_ALWAYS_INLINE progress_responder() {
-        if (!(FLAGS & UCX_PERF_TEST_FLAG_ONE_SIDED) &&
-            !(m_perf.params.flags & UCX_PERF_TEST_FLAG_ONE_SIDED))
-        {
+    void UCS_F_ALWAYS_INLINE blocking_progress() {
+        if (ucp_worker_progress(m_perf.ucp.worker) == 0) {
+            ucp_worker_wait(m_perf.ucp.worker);
+        }
+    }
+
+    void UCS_F_ALWAYS_INLINE progress() {
+        if (ucs_unlikely(UCX_PERF_WAIT_MODE_SLEEP == m_perf.params.wait_mode)) {
+            blocking_progress();
+        } else {
             ucp_worker_progress(m_perf.ucp.worker);
         }
     }
 
+    void UCS_F_ALWAYS_INLINE progress_responder() {
+        if (!(FLAGS & UCX_PERF_TEST_FLAG_ONE_SIDED) &&
+            !(m_perf.params.flags & UCX_PERF_TEST_FLAG_ONE_SIDED))
+        {
+            progress();
+        }
+    }
+
     void UCS_F_ALWAYS_INLINE progress_requestor() {
-        ucp_worker_progress(m_perf.ucp.worker);
+        progress();
     }
 
     ssize_t UCS_F_ALWAYS_INLINE wait_stream_recv(void *request)
