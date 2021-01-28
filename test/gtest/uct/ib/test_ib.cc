@@ -989,7 +989,7 @@ public:
     }
     static ucs_status_t ib_am_bcopy_handler(void *arg, void *data,
                                             size_t length, unsigned flags) {
-        memcpy(arg, data, length);
+        EXPECT_EQ((size_t)arg, length);
         ++test_uct_ib::m_ib_am_handler_counter;
         return UCS_OK;
     }
@@ -1004,18 +1004,18 @@ public:
     void send_recv_bcopy(uct_ep_h ep, entity *ent, size_t length) {
         size_t start_am_counter = test_uct_ib::m_ib_am_handler_counter;
         uct_ib_iface_t *iface   = ucs_derived_of(ep->iface, uct_ib_iface_t);
-        std::vector<char> buffer(length);
         uct_iface_attr_t attr;
         ucs_status_t status;
         size_t len;
 
-        check_caps_skip(UCT_IFACE_FLAG_AM_BCOPY);
         status = uct_iface_query(&iface->super.super, &attr);
         ASSERT_UCS_OK(status);
+        ASSERT_TRUE(attr.cap.flags & UCT_IFACE_FLAG_AM_BCOPY);
         ASSERT_LE(length, attr.cap.am.max_bcopy);
 
         /* set a callback for the uct to invoke for receiving the data */
-        uct_iface_set_am_handler(ent->iface(), 0, ib_am_bcopy_handler, &buffer[0], 0);
+        uct_iface_set_am_handler(ent->iface(), 0, ib_am_bcopy_handler,
+                                 (void*)length, 0);
 
         /* send the data */
         len = uct_ep_am_bcopy(ep, 0, ib_am_bcopy_pack_cb, (void*)length, 0);
@@ -1029,8 +1029,7 @@ public:
 };
 
 UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, mtu_4096_to_2048,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY,
-                                 UCT_IFACE_FLAG_CONNECT_TO_IFACE))
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
     send_recv_bcopy(m_e1->ep(0), m_e2, 4096);
 }
