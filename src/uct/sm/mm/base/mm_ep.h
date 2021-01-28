@@ -61,6 +61,10 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
 ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                 const void *payload, unsigned length);
+
+ucs_status_t uct_mm_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                    const uct_iov_t *iov, size_t iovcnt);
+
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
                            void *arg, unsigned flags);
 
