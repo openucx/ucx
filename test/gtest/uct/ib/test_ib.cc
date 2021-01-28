@@ -193,7 +193,7 @@ UCS_TEST_P(test_uct_ib_addr, address_pack_path_mtu, "IB_PATH_MTU=2048") {
     uct_ib_iface_address_pack(iface, addr);
     uct_ib_address_pack_params_t params;
     uct_ib_address_unpack(addr, &params);
-    EXPECT_TRUE((params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) != 0);
+    EXPECT_TRUE(params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
     EXPECT_TRUE(params.path_mtu == IBV_MTU_2048);
 }
 
