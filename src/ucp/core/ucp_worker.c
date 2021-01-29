@@ -1431,11 +1431,12 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
         }
 
         status = uct_cm_open(cmpt, worker->uct, cm_config, &worker->cms[i].cm);
+        uct_config_release(cm_config);
         if (status != UCS_OK) {
-            ucs_error("failed to open CM on component %s with status %s",
-                      context->tl_cmpts[cmpt_index].attr.name,
-                      ucs_status_string(status));
-            goto err_free_cms;
+            ucs_diag("failed to open CM on component %s with status %s",
+                     context->tl_cmpts[cmpt_index].attr.name,
+                     ucs_status_string(status));
+            continue;
         }
 
         worker->cms[i].attr.field_mask = UCT_CM_ATTR_FIELD_MAX_CONN_PRIV;
@@ -1448,7 +1449,6 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
             goto err_free_cms;
         }
 
-        uct_config_release(cm_config);
         worker->cms[i++].cmpt_idx = cmpt_index;
     }
 

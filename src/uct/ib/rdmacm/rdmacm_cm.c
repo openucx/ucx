@@ -665,6 +665,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
                                                                  uct_rdmacm_cm_config_t);
     uct_priv_worker_t *worker_priv;
     ucs_status_t status;
+    ucs_log_level_t log_lvl;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_rdmacm_cm_ops,
                               &uct_rdmacm_cm_iface_ops, worker, component,
@@ -672,10 +673,17 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
 
     kh_init_inplace(uct_rdmacm_cm_cqs, &self->cqs);
 
-    self->ev_ch  = rdma_create_event_channel();
+    self->ev_ch = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
-        ucs_error("rdma_create_event_channel failed: %m");
-        status = UCS_ERR_IO_ERROR;
+        if (errno == ENODEV) {
+            status  = UCS_ERR_NO_DEVICE;
+            log_lvl = UCS_LOG_LEVEL_DIAG;
+        } else {
+            status  = UCS_ERR_IO_ERROR;
+            log_lvl = UCS_LOG_LEVEL_ERROR;
+        }
+
+        ucs_log(log_lvl, "rdma_create_event_channel failed: %m");
         goto err;
     }
 
