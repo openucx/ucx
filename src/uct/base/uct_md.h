@@ -18,6 +18,10 @@
 #include <string.h>
 
 
+#define uct_md_log_mem_reg_error(_flags, _fmt, ...) \
+    ucs_log(uct_md_reg_log_lvl(_flags), _fmt, ## __VA_ARGS__)
+
+
 typedef struct uct_md_rcache_config {
     size_t               alignment;    /**< Force address alignment */
     unsigned             event_prio;   /**< Memory events priority */
@@ -195,5 +199,11 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
                                         const uct_mem_alloc_params_t *params);
 
 extern ucs_config_field_t uct_md_config_table[];
+
+static inline ucs_log_level_t uct_md_reg_log_lvl(unsigned flags)
+{
+    return (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
+            UCS_LOG_LEVEL_ERROR;
+}
 
 #endif

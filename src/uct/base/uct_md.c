@@ -450,11 +450,17 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
     ucs_status_t status;
 
     if ((length == 0) || (address == NULL)) {
+        uct_md_log_mem_reg_error(flags,
+                                 "uct_md_mem_reg(address=%p length=%zu): "
+                                 "invalid parameters", address, length);
         return UCS_ERR_INVALID_PARAM;
     }
 
     status = uct_mem_check_flags(flags);
     if (status != UCS_OK) {
+        uct_md_log_mem_reg_error(flags,
+                                 "uct_md_mem_reg(flags=0x%x): invalid flags",
+                                 flags);
         return status;
     }
 
