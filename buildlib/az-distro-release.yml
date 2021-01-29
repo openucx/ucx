@@ -77,6 +77,7 @@ jobs:
 
       - task: GithubRelease@0
         displayName: Upload artifacts to draft release
+        condition: contains(variables['Build.SourceBranch'], 'refs/tags/')
         inputs:
           githubConnection: release
           repositoryName: openucx/ucx
@@ -86,3 +87,14 @@ jobs:
           addChangeLog: false
           assetUploadMode: replace
           assets: "./$(artifact_name)"
+
+      - task: UniversalPackages@0
+        displayName: Publish snapshot
+        inputs:
+          command: publish
+          publishDirectory: '$(Build.ArtifactStagingDirectory)'
+          vstsFeedPublish: 'ucx/packages'
+          vstsFeedPackagePublish: ${AZ_ARTIFACT_NAME}
+          packagePublishDescription: "Snapshot of ${AZ_ARTIFACT_NAME}"
+        env:
+          AZ_ARTIFACT_NAME: $(artifact_name)

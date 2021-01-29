@@ -18,3 +18,4 @@ stages:
       - template: jucx-publish.yml
         parameters:
           target: publish-snapshot
+      - template: az-distro-release.yml
