@@ -52,7 +52,8 @@ public:
 protected:
     bool resolve_rma(entity *e, ucp_rkey_h rkey);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);
-    bool resolve_rma_bw(entity *e, ucp_rkey_h rkey);
+    bool resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey);
+    bool resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey);
     void test_length0(unsigned flags);
     void test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy,
                               bool expect_rma_offload);
@@ -98,14 +99,30 @@ bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
     }
 }
 
-bool test_ucp_mmap::resolve_rma_bw(entity *e, ucp_rkey_h rkey)
+bool test_ucp_mmap::resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey)
 {
     ucp_ep_config_t *ep_config = ucp_ep_config(e->ep());
     ucp_lane_index_t lane;
     uct_rkey_t uct_rkey;
 
     lane = ucp_rkey_find_rma_lane(e->ucph(), ep_config, UCS_MEMORY_TYPE_HOST,
-                                  ep_config->rndv.get_zcopy_lanes, rkey, 0,
+                                  ep_config->rndv.get_zcopy.lanes, rkey, 0,
+                                  &uct_rkey);
+    if (lane != UCP_NULL_LANE) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool test_ucp_mmap::resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey)
+{
+    ucp_ep_config_t *ep_config = ucp_ep_config(e->ep());
+    ucp_lane_index_t lane;
+    uct_rkey_t uct_rkey;
+
+    lane = ucp_rkey_find_rma_lane(e->ucph(), ep_config, UCS_MEMORY_TYPE_HOST,
+                                  ep_config->rndv.put_zcopy.lanes, rkey, 0,
                                   &uct_rkey);
     if (lane != UCP_NULL_LANE) {
         return true;
@@ -144,13 +161,14 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
     /* Test ucp_rkey_packed_md_map() */
     EXPECT_EQ(rkey->md_map, ucp_rkey_packed_md_map(rkey_buffer));
 
-    bool have_rma    = resolve_rma(e, rkey);
-    bool have_amo    = resolve_amo(e, rkey);
-    bool have_rma_bw = resolve_rma_bw(e, rkey);
+    bool have_rma              = resolve_rma(e, rkey);
+    bool have_amo              = resolve_amo(e, rkey);
+    bool have_rma_bw_get_zcopy = resolve_rma_bw_get_zcopy(e, rkey);
+    bool have_rma_bw_put_zcopy = resolve_rma_bw_put_zcopy(e, rkey);
 
     /* Test that lane resolution on the remote key returns consistent results */
     for (int i = 0; i < 10; ++i) {
-        switch (ucs::rand() % 3) {
+        switch (ucs::rand() % 4) {
         case 0:
             EXPECT_EQ(have_rma, resolve_rma(e, rkey));
             break;
@@ -158,7 +176,10 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
             EXPECT_EQ(have_amo, resolve_amo(e, rkey));
             break;
         case 2:
-            EXPECT_EQ(have_rma_bw, resolve_rma_bw(e, rkey));
+            EXPECT_EQ(have_rma_bw_get_zcopy, resolve_rma_bw_get_zcopy(e, rkey));
+            break;
+        case 3:
+            EXPECT_EQ(have_rma_bw_put_zcopy, resolve_rma_bw_put_zcopy(e, rkey));
             break;
         }
     }
