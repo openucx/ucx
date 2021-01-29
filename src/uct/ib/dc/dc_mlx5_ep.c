@@ -557,6 +557,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     uct_ib_mlx5_md_t    *md    = ucs_derived_of(iface->super.super.super.super.md,
                                                 uct_ib_mlx5_md_t);
     ucs_status_t        status;
+    uint16_t            sn;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
@@ -586,8 +587,11 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+    sn = txwq->sig_pi;
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        UCT_DC_MLX5_CHECK_RES(iface, ep);
+
         ucs_assert(ucs_arbiter_group_is_empty(&ep->arb_group));
         if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
             return UCS_ERR_UNSUPPORTED;
@@ -603,11 +607,22 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         }
 
         ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL;
+        sn         = txwq->sw_pi;
+        /* post NOP operation which will complete with error, to trigger DCI
+         * reset. Otherwise, DCI could be returned to poll in error state */
+        uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
+                                     txqp, txwq,
+                                     MLX5_OPCODE_NOP, NULL, 0,
+                                     0, 0, 0,
+                                     0, 0,
+                                     &ep->av, uct_dc_mlx5_ep_get_grh(ep),
+                                     uct_ib_mlx5_wqe_av_size(&ep->av),
+                                     0, INT_MAX);
     }
 
 out:
     return uct_rc_txqp_add_flush_comp(&iface->super.super, &ep->super, txqp,
-                                      comp, txwq->sig_pi);
+                                      comp, sn);
 }
 
 #if IBV_HW_TM
