@@ -89,10 +89,19 @@ UCS_TEST_P(test_ud_ds, if_addr) {
     EXPECT_NE(uct_ib_unpack_uint24(if_adr1.qp_num),
               uct_ib_unpack_uint24(if_adr2.qp_num));
 
-    EXPECT_TRUE(!(unpack_params1.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU));
-    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params1.path_mtu);
-    EXPECT_TRUE(!(unpack_params2.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU));
-    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params2.path_mtu);
+    if (unpack_params1.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
+        EXPECT_NE(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params1.path_mtu);
+        EXPECT_NE(IBV_MTU_4096, unpack_params1.path_mtu);
+    } else {
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params1.path_mtu);
+    }
+
+    if (unpack_params2.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
+        EXPECT_NE(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params2.path_mtu);
+        EXPECT_NE(IBV_MTU_4096, unpack_params2.path_mtu);
+    } else {
+        EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params2.path_mtu);
+    }
 
     EXPECT_TRUE(!(unpack_params1.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX));
     EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, unpack_params1.gid_index);

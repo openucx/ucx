@@ -130,10 +130,12 @@ public:
         }
 
         if (iface->config.path_mtu == IBV_MTU_4096) {
-            EXPECT_FALSE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
+            EXPECT_FALSE(unpack_params.flags &
+                         UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
             EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params.path_mtu);
         } else {
-            EXPECT_TRUE(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
+            EXPECT_TRUE(unpack_params.flags &
+                        UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
             EXPECT_EQ(iface->config.path_mtu, unpack_params.path_mtu);
         }
 
@@ -184,17 +186,18 @@ UCS_TEST_P(test_uct_ib_addr, address_pack) {
     test_address_pack(0xdeadfeedbeefa880ul);
 }
 
-UCS_TEST_P(test_uct_ib_addr, address_pack_path_mtu, "IB_PATH_MTU=2048") {
+UCS_TEST_P(test_uct_ib_addr, address_pack_path_mtu, "IB_PATH_MTU=2048")
+{
     uct_ib_iface_t *iface = ucs_derived_of(m_entities.front()->iface(),
                                            uct_ib_iface_t);
-    size_t addr_len = uct_ib_iface_address_size(iface);
+    size_t addr_len        = uct_ib_iface_address_size(iface);
     std::vector<char> buffer(addr_len);
     uct_ib_address_t *addr = (uct_ib_address_t*)&buffer[0];
     uct_ib_iface_address_pack(iface, addr);
     uct_ib_address_pack_params_t params;
     uct_ib_address_unpack(addr, &params);
     EXPECT_TRUE(params.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
-    EXPECT_TRUE(params.path_mtu == IBV_MTU_2048);
+    EXPECT_EQ(IBV_MTU_2048, params.path_mtu);
 }
 
 UCS_TEST_P(test_uct_ib_addr, fill_ah_attr) {
@@ -975,7 +978,8 @@ UCT_INSTANTIATE_IB_TEST_CASE(test_uct_event_ib);
 
 class test_uct_ib_mtu : public test_uct_ib {
 public:
-    void create_connected_entities() {
+    void create_connected_entities()
+    {
         modify_config("IB_PATH_MTU", "4096");
         m_e1 = uct_test::create_entity(0);
         modify_config("IB_PATH_MTU", "2048");
@@ -987,21 +991,25 @@ public:
         m_e1->connect(0, *m_e2, 0);
         m_e2->connect(0, *m_e1, 0);
     }
-    static ucs_status_t ib_am_bcopy_handler(void *arg, void *data,
-                                            size_t length, unsigned flags) {
+
+    static ucs_status_t
+    ib_am_bcopy_handler(void *arg, void *data, size_t length, unsigned flags)
+    {
         EXPECT_EQ((size_t)arg, length);
         ++test_uct_ib::m_ib_am_handler_counter;
         return UCS_OK;
     }
 
-    static size_t ib_am_bcopy_pack_cb(void *dest, void *arg) {
+    static size_t ib_am_bcopy_pack_cb(void *dest, void *arg)
+    {
         size_t length = (size_t)arg;
 
         memset(dest, 0, length);
         return length;
     }
 
-    void send_recv_bcopy(uct_ep_h ep, entity *ent, size_t length) {
+    void send_recv_bcopy(uct_ep_h ep, entity *ent, size_t length)
+    {
         size_t start_am_counter = test_uct_ib::m_ib_am_handler_counter;
         uct_ib_iface_t *iface   = ucs_derived_of(ep->iface, uct_ib_iface_t);
         uct_iface_attr_t attr;
@@ -1025,20 +1033,13 @@ public:
         wait_for_value(&test_uct_ib::m_ib_am_handler_counter,
                        start_am_counter + 1, true);
     }
-
 };
 
-UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, mtu_4096_to_2048,
+UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, non_equal_mtu,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
 {
-    send_recv_bcopy(m_e1->ep(0), m_e2, 4096);
-}
-
-UCS_TEST_SKIP_COND_P(test_uct_ib_mtu, mtu_2048_to_4096,
-                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
-{
-    send_recv_bcopy(m_e2->ep(0), m_e1, 4096);
+    send_recv_bcopy(m_e1->ep(0), m_e2, m_e1->iface_attr().cap.am.max_bcopy);
+    send_recv_bcopy(m_e2->ep(0), m_e1, m_e2->iface_attr().cap.am.max_bcopy);
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_uct_ib_mtu);
-
