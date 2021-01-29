@@ -33,7 +33,6 @@ struct ucp_wireup_ep {
     ucp_proxy_ep_t            super;         /**< Derive from ucp_proxy_ep_t */
     ucs_queue_head_t          pending_q;     /**< Queue of pending operations */
     uct_ep_h                  aux_ep;        /**< Used to wireup the "real" endpoint */
-    uct_ep_h                  sockaddr_ep;   /**< Used for client-server wireup */
     ucp_ep_h                  tmp_ep;        /**< Used by the client for local tls setup */
     struct sockaddr_storage   cm_remote_sockaddr;  /**< sockaddr of the remote peer -
                                                         used only on the client side
@@ -42,7 +41,6 @@ struct ucp_wireup_ep {
                                                   this is the index of the CM resource
                                                   on which it was created */
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
-    ucp_rsc_index_t           sockaddr_rsc_index; /**< Index of sockaddr transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */

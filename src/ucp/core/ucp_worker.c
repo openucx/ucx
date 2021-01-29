@@ -2875,8 +2875,6 @@ ucp_worker_discard_wireup_ep(ucp_ep_h ucp_ep, ucp_wireup_ep_t *wireup_ep,
 
     ucp_worker_discard_wireup_uct_ep(ucp_ep, wireup_ep, ep_flush_flags,
                                      wireup_ep->aux_ep);
-    ucp_worker_discard_wireup_uct_ep(ucp_ep, wireup_ep, ep_flush_flags,
-                                     wireup_ep->sockaddr_ep);
 
     is_owner = wireup_ep->super.is_owner;
     uct_ep   = ucp_wireup_ep_extract_next_ep(&wireup_ep->super.super);
