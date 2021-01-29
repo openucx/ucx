@@ -471,7 +471,16 @@ enum {
  */
 enum ucp_am_cb_flags {
     /**
-     * Indicates that the entire message will be handled in one callback.
+     * Indicates that the entire message will be handled in one callback. With this
+     * option, message ordering is not guaranteed (i.e. receive callbacks may be
+     * invoked in a different order than messages were sent).
+     * If this flag is not set, the data callback may be invoked several times for
+     * the same message (if, for example, it was split into several fragments by
+     * the transport layer). It is guaranteed that the first data callback for a
+     * particular message is invoked for the first fragment. The ordering of first
+     * message fragments is guaranteed (i.e. receive callbacks will be called
+     * in the order the messages were sent). The order of other fragments is not
+     * guaranteed. User header is passed with the first fragment only.
      */
     UCP_AM_FLAG_WHOLE_MSG       = UCS_BIT(0),
 
@@ -636,7 +645,10 @@ typedef enum {
  * backward compatibility support.
  */
 typedef enum {
-    UCP_AM_RECV_ATTR_FIELD_REPLY_EP    = UCS_BIT(0),  /**< reply_ep field */
+    UCP_AM_RECV_ATTR_FIELD_REPLY_EP     = UCS_BIT(0),  /**< reply_ep field */
+    UCP_AM_RECV_ATTR_FIELD_TOTAL_LENGTH = UCS_BIT(1),  /**< total_length field */
+    UCP_AM_RECV_ATTR_FIELD_FRAG_OFFSET  = UCS_BIT(2),  /**< frag_offset field */
+    UCP_AM_RECV_ATTR_FIELD_MSG_CONTEXT  = UCS_BIT(3),  /**< msg_context field */
 
     /**
      * Indicates that the data provided in @ref ucp_am_recv_callback_t callback
@@ -645,16 +657,34 @@ typedef enum {
      * @ref ucp_am_data_release when data is no longer needed. This flag is
      * mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV.
      */
-    UCP_AM_RECV_ATTR_FLAG_DATA         = UCS_BIT(16),
+    UCP_AM_RECV_ATTR_FLAG_DATA          = UCS_BIT(16),
 
     /**
      * Indicates that the arriving data was sent using rendezvous protocol.
      * In this case @a data parameter of the @ref ucp_am_recv_callback_t points
      * to the internal UCP descriptor, which can be used for obtaining the actual
      * data by calling @ref ucp_am_recv_data_nbx routine. This flag is mutually
-     * exclusive with @a UCP_AM_RECV_ATTR_FLAG_DATA.
+     * exclusive with @a UCP_AM_RECV_ATTR_FLAG_DATA, @a UCP_AM_RECV_ATTR_FLAG_FIRST
+     * and @a UCP_AM_RECV_ATTR_FLAG_ONLY flags.
      */
-    UCP_AM_RECV_ATTR_FLAG_RNDV         = UCS_BIT(17)
+    UCP_AM_RECV_ATTR_FLAG_RNDV          = UCS_BIT(17),
+
+    /**
+     * Indicates that the incoming data is the first fragment of the multi-fragment
+     * eager message. This flag can only be passed to data handlers registered
+     * without @a UCP_AM_FLAG_WHOLE_MSG flag. This flag is mutually exclusive
+     * with @a UCP_AM_RECV_ATTR_FLAG_RNDV and @a UCP_AM_RECV_ATTR_FLAG_ONLY flags.
+     */
+    UCP_AM_RECV_ATTR_FLAG_FIRST         = UCS_BIT(18),
+
+    /**
+     * Indicates that the incoming data carries the whole message. This flag is
+     * mutually exclusive with @a UCP_AM_RECV_ATTR_FLAG_RNDV and
+     * @a UCP_AM_RECV_ATTR_FLAG_FIRST flags. Also this flags is always passed to
+     * the data handlers, which are registered with @a UCP_AM_FLAG_WHOLE_MSG
+     * flag.
+     */
+    UCP_AM_RECV_ATTR_FLAG_ONLY          = UCS_BIT(19)
 } ucp_am_recv_attr_t;
 
 
@@ -1497,9 +1527,37 @@ struct ucp_am_recv_param {
     uint64_t           recv_attr;
 
     /**
-     * Endpoint, which can be used for reply to this message.
+     * Endpoint, which can be used for the reply to this message.
      */
     ucp_ep_h           reply_ep;
+
+    /**
+     * Length of the whole message in bytes. Relevant for multi-fragment eager
+     * messages handled by data handlers registered without UCP_AM_FLAG_WHOLE_MSG
+     * flag.
+     */
+    size_t             total_length;
+
+    /**
+     * Offset of the message fragment in bytes relative to the beginning of
+     * overall message. Layout of the multi-fragment message is depicted below:
+     *        Multi-fragment message
+     *  +--------+--------+--------+--------+
+     *  |frag 1  |frag 2  |  ...   |frag N  |
+     *  +--------+--------+--------+--------+
+     *           |                 v
+     *           |               offset of the N-th fragment
+     *           v
+     *         offset of the 2-d fragment
+     */
+    size_t             frag_offset;
+
+    /**
+     * Storage for a per-message user-defined context. User initializes it
+     * when the first fragment arrives and then it is provided with each
+     * consecutive fragment of this message.
+     */
+    void               **msg_context;
 };
 
 
@@ -2807,7 +2865,7 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
 
 /**
  * @ingroup UCP_COMM
- * @brief Receive Active Message sent with rendezvous protocol.
+ * @brief Receive Active Message as defined by provided data descriptor.
  *
  * This routine receives a message that is described by the data descriptor
  * @a data_desc, local address @a buffer, size @a count and @a param
@@ -2816,10 +2874,19 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  * message is delivered to the @a buffer. If the receive operation cannot be
  * started the routine returns an error.
  *
+ * @note This routine can be performed on any valid data descriptor delivered in
+ *       @ref ucp_am_recv_callback_t.
+ *       Data descriptor is considered to be valid if:
+ *       - It is a rendezvous request (@a UCP_AM_RECV_ATTR_FLAG_RNDV is set in
+ *         @ref ucp_am_recv_param_t.recv_attr) or
+ *       - It is a persistent data pointer (@a UCP_AM_RECV_ATTR_FLAG_DATA is set
+ *         in @ref ucp_am_recv_param_t.recv_attr). In this case receive
+ *         operation may be needed to unpack data to device memory (for example
+ *         GPU device) or some specific datatype.
  * @note After this call UCP takes ownership of @a data_desc descriptor, so
  *       there is no need to release it even if the operation fails.
- *       The routine returns a request handle instead, which can further be used
- *       for tracking operation progress.
+ *       The routine returns a request handle instead, which can be used for
+ *       tracking operation progress.
  *
  * @param [in]  worker     Worker that is used for the receive operation.
  * @param [in]  data_desc  Data descriptor, provided in

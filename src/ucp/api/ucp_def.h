@@ -629,29 +629,34 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  * @param [in]  length        Length of data. If @a UCP_AM_RECV_ATTR_FLAG_RNDV
  *                            flag is set in @ref ucp_am_recv_param_t.recv_attr,
  *                            it indicates the required receive buffer size for
- *                            initiating rendezvous protocol.
+ *                            initiating rendezvous protocol. If this receive
+ *                            handler was registered without UCP_AM_FLAG_WHOLE_MSG
+ *                            flag set, it represents length of received fragment.
+ *                            In this case the whole message length is available in
+ *                            @ref ucp_am_recv_param_t.total_length.
  * @param [in]  param         Data receive parameters.
  *
- * @return UCS_OK         @a data will not persist after the callback returns.
- *                        If UCP_AM_RECV_ATTR_FLAG_RNDV flag is set in
- *                        @a param->recv_attr, the data descriptor will be
- *                        dropped and the corresponding @ref ucp_am_send_nbx
- *                        call should complete with UCS_OK status.
+ * @return UCS_OK             @a data will not persist after the callback returns.
+ *                            If UCP_AM_RECV_ATTR_FLAG_RNDV flag is set in
+ *                            @a param->recv_attr and @ref ucp_am_recv_data_nbx was
+ *                            not called for this data, the data descriptor will be
+ *                            dropped and the corresponding @ref ucp_am_send_nbx
+ *                            call will complete with UCS_OK status.
  *
- * @return UCS_INPROGRESS Can only be returned if @a param->recv_attr flags
- *                        contains UCP_AM_RECV_ATTR_FLAG_DATA or
- *                        UCP_AM_RECV_ATTR_FLAG_RNDV. The @a data will persist
- *                        after the callback has returned. To free the memory,
- *                        a pointer to the data must be passed into
- *                        @ref ucp_am_data_release or, in the case of rendezvous
- *                        descriptor, data receive is initiated by
- *                        @ref ucp_am_recv_data_nbx.
+ * @return UCS_INPROGRESS     Can only be returned if @a param->recv_attr flags
+ *                            contains UCP_AM_RECV_ATTR_FLAG_DATA or
+ *                            UCP_AM_RECV_ATTR_FLAG_RNDV. The @a data will persist
+ *                            after the callback has returned. To free the memory,
+ *                            a pointer to the data must be passed into
+ *                            @ref ucp_am_data_release or data receive is initiated by
+ *                            @ref ucp_am_recv_data_nbx.
  *
- * @return otherwise      Can only be returned if @a param->recv_attr contains
- *                        UCP_AM_RECV_ATTR_FLAG_RNDV. In this case data
- *                        descriptor @a data will be dropped and the
- *                        corresponding @ref ucp_am_send_nbx call should
- *                        complete with the status returned from the callback.
+ * @return otherwise          Can only be returned if @a param->recv_attr contains
+ *                            UCP_AM_RECV_ATTR_FLAG_RNDV. In this case data
+ *                            descriptor @a data will be dropped and the
+ *                            corresponding @ref ucp_am_send_nbx call on the
+ *                            sender side will complete with the status returned
+ *                            from the callback.
  *
  * @note This callback should be set and released
  *       by @ref ucp_worker_set_am_recv_handler function.
