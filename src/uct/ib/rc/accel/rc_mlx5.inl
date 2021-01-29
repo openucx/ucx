@@ -1535,7 +1535,7 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     memcpy(cache->bytes + hdr_len, payload, head);
 
     UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->bytes));
-    UCS_STATIC_ASSERT(sizeof(log_sge->sg_list) / sizeof(log_sge->sg_list[0]) >= 2);
+    UCS_STATIC_ASSERT(ucs_static_array_size(log_sge->sg_list) >= 2);
 
     /* condition is static-evaluated */
     if (cache && hdr_len) {
