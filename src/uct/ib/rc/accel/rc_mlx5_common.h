@@ -620,9 +620,6 @@ void uct_rc_mlx5_iface_common_update_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
 void uct_rc_mlx5_iface_common_sync_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
                                           uct_ib_iface_t *ib_iface);
 
-void uct_rc_mlx5_iface_common_check_cqs_ci(uct_rc_mlx5_iface_common_t *iface,
-                                           uct_ib_iface_t *ib_iface);
-
 ucs_status_t
 uct_rc_mlx5_iface_common_arm_cq(uct_ib_iface_t *ib_iface, uct_ib_dir_t dir,
                                 int solicited_only);
