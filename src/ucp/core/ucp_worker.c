@@ -1822,6 +1822,7 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
     ucp_ep_config_t *ep_config;
     ucp_memtype_thresh_t *max_eager_short;
     ucs_status_t status;
+    char tl_info[256];
 
     /* Search for the given key in the ep_config array */
     for (ep_cfg_index = 0; ep_cfg_index < worker->ep_config_count;
@@ -1872,9 +1873,8 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
     }
 
     if (print_cfg) {
-        char info[256];
         ucs_info("%s", ucp_worker_print_used_tls(key, context, ep_cfg_index,
-                                                 info, sizeof(info)));
+                                                 tl_info, sizeof(tl_info)));
     }
 
     ++worker->ep_config_count;
