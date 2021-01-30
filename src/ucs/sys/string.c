@@ -14,6 +14,7 @@
 #include <ucs/config/parser.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/math.h>
+#include <ucs/debug/log.h>
 
 #include <string.h>
 #include <ctype.h>
@@ -325,32 +326,53 @@ const char* ucs_flags_str(char *buf, size_t max,
     return buf;
 }
 
+size_t ucs_string_count_char(const char *str, char c)
+{
+    size_t count = 0;
+    const char *p;
+
+    for (p = str; *p != '\0'; ++p) {
+        if (*p == c) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+size_t ucs_string_common_prefix_len(const char *str1, const char *str2)
+{
+    const char *p1 = str1;
+    const char *p2 = str2;
+
+    /* as long as *p1==*p2, if *p1 is not '\0' then neither is *p2 */
+    while ((*p1 != '\0') && (*p1 == *p2)) {
+        p1++;
+        p2++;
+    }
+
+    return (p1 - str1);
+}
+
 ssize_t ucs_path_calc_distance(const char *path1, const char *path2)
 {
     unsigned distance = 0;
-    int same          = 1;
-    char resolved_path1[PATH_MAX], resolved_path2[PATH_MAX];
-    size_t comp_len, i;
-    size_t rp_len1, rp_len2;
+    size_t common_length;
+    char rpath1[PATH_MAX], rpath2[PATH_MAX];
 
-    if ((NULL == realpath(path1, resolved_path1)) ||
-        (NULL == realpath(path2, resolved_path2))) {
+    if ((NULL == realpath(path1, rpath1)) ||
+        (NULL == realpath(path2, rpath2))) {
         return UCS_ERR_INVALID_PARAM;
     }
 
-    rp_len1  = strlen(resolved_path1);
-    rp_len2  = strlen(resolved_path2);
-    comp_len = ucs_min(rp_len1, rp_len2);
+    common_length = ucs_string_common_prefix_len(rpath1, rpath2);
 
-    for (i = 0; i < comp_len; i++) {
-        if (resolved_path1[i] != resolved_path2[i]) {
-            same = 0;
-        }
-
-        if ((resolved_path1[i] == '/') && !same) {
-            distance++;
-        }
+    if (rpath1[common_length] != rpath2[common_length]) {
+        ++distance; /* count the differentiating path component */
     }
+
+    distance += ucs_max(ucs_string_count_char(rpath1 + common_length, '/'),
+                        ucs_string_count_char(rpath2 + common_length, '/'));
 
     return distance;
 }
