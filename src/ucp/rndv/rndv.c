@@ -107,7 +107,9 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
 
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_rndv_is_get_zcopy(sreq, worker->context)) {
+        ucp_rndv_is_get_zcopy(sreq, worker->context) &&
+        (UCP_MEM_IS_HOST(sreq->send.mem_type) ||
+         (sreq->send.state.dt.dt.contig.md_map != 0))) {
         /* pack rkey, ask target to do get_zcopy */
         rndv_rts_hdr->address = (uintptr_t)sreq->send.buffer;
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
