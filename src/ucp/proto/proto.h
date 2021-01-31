@@ -34,6 +34,10 @@
 #define UCP_PROTO_ID_INVALID        ((ucp_proto_id_t)-1)
 
 
+/** Maximal length of ucp_proto_config_str_func_t output */
+#define UCP_PROTO_CONFIG_STR_MAX 128
+
+
 /* Protocol identifier */
 typedef unsigned ucp_proto_id_t;
 
@@ -142,14 +146,18 @@ typedef ucs_status_t
 /**
  * Dump protocol-specific configuration.
  *
- * @param [in]  priv      Protocol private data, which was previously filled by
- *                        @ref ucp_proto_init_func_t.
- * @param [out] strb      Filled with a string of protocol configuration text.
- *                        The user is responsible to release the string by
- *                        calling @ref ucs_string_buffer_cleanup.
+ * @param [in]  min_length  Return information starting from this message length.
+ * @param [in]  max_length  Return information up to this message length (inclusive).
+ * @param [in]  priv        Protocol private data, which was previously filled by
+ *                          @ref ucp_proto_init_func_t.
+ * @param [out] strb        Protocol configuration text should be written to this
+ *                          string buffer. This function should only **append**
+ *                          data to the buffer, and should not initialize, release
+ *                          or erase any data already in the buffer.
  */
-typedef void
-(*ucp_proto_config_str_func_t)(const void *priv, ucs_string_buffer_t *strb);
+typedef void (*ucp_proto_config_str_func_t)(size_t min_length,
+                                            size_t max_length, const void *priv,
+                                            ucs_string_buffer_t *strb);
 
 
 /**
@@ -160,7 +168,11 @@ struct ucp_proto {
     unsigned                        flags;      /* Protocol flags for special handling */
     ucp_proto_init_func_t           init;       /* Initialization function */
     ucp_proto_config_str_func_t     config_str; /* Configuration dump function */
-    uct_pending_callback_t          progress;   /* UCT progress function */
+
+    /* Initial UCT progress function, can be changed during the protocol
+     * request lifetime to implement different stages
+     */
+    uct_pending_callback_t          progress;
 };
 
 

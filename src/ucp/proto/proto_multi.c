@@ -90,13 +90,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
     return UCS_OK;
 }
 
-void ucp_proto_multi_config_str(const void *priv, ucs_string_buffer_t *strb)
+void ucp_proto_multi_config_str(size_t min_length, size_t max_length,
+                                const void *priv, ucs_string_buffer_t *strb)
 {
     const ucp_proto_multi_priv_t *mpriv = priv;
     const ucp_proto_multi_lane_priv_t *lpriv;
     ucp_lane_index_t i;
 
-    ucs_string_buffer_init(strb);
     for (i = 0; i < mpriv->num_lanes; ++i) {
         if (i > 0) {
             ucs_string_buffer_appendf(strb, " ");

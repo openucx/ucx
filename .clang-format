@@ -97,7 +97,7 @@ ForEachMacros: ['FOR_EACH_ENTITY',
                 'UCS_TEST_F',
                 'UCX_PERF_TEST_FOREACH']
 StatementMacros : []
-TypenameMacros: ['khash_t']
+TypenameMacros: ['khash_t', 'ucs_array_t']
 WhitespaceSensitiveMacros: []
 
 # CPP

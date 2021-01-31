@@ -148,6 +148,10 @@ void ucs_string_buffer_dump(const ucs_string_buffer_t *strb,
     const char *next_tok, *tok;
     size_t size, remaining;
 
+    if (ucs_array_is_empty(&strb->str)) {
+        return;
+    }
+
     tok      = ucs_array_begin(&strb->str);
     next_tok = strchr(tok, '\n');
     while (next_tok != NULL) {

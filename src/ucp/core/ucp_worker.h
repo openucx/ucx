@@ -327,6 +327,11 @@ void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                uct_pending_purge_callback_t purge_cb,
                                void *purge_arg);
 
+char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
+                                ucp_context_h context,
+                                ucp_worker_cfg_index_t config_idx, char *info,
+                                size_t max);
+
 /* must be called with async lock held */
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_flush_ops_count_inc(ucp_worker_h worker)

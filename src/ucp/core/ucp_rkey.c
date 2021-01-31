@@ -299,6 +299,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
         ucp_rkey_resolve_inner(rkey, ep);
     }
 
+    ucs_trace("unpacked rkey %p with md_map 0x%lx type %s", rkey, rkey->md_map,
+              ucs_memory_type_names[rkey->mem_type]);
     *rkey_p = rkey;
     status  = UCS_OK;
 
@@ -311,43 +313,33 @@ err_destroy:
     goto out_unlock;
 }
 
-void ucp_rkey_dump_packed(const void *rkey_buffer, char *buffer, size_t max)
+void ucp_rkey_dump_packed(const void *rkey_buffer, ucs_string_buffer_t *strb)
 {
-    char *p                 = buffer;
-    char *endp              = buffer + max;
     const uint8_t *rkey_buf = rkey_buffer;
+    ucs_memory_type_t mem_type;
     ucp_md_map_t md_map;
     unsigned md_index;
     uint8_t md_size;
-    int first;
-
-    snprintf(p, endp - p, "{");
-    p += strlen(p);
 
     md_map    = *(ucp_md_map_t*)(rkey_buf);
-    rkey_buf += sizeof(ucp_md_map_t) + sizeof(uint8_t);
+    rkey_buf += sizeof(ucp_md_map_t);
 
-    first = 1;
+    mem_type  = *(uint8_t*)rkey_buf;
+    rkey_buf += sizeof(uint8_t);
+
+    ucs_string_buffer_appendf(strb, "{%s", ucs_memory_type_names[mem_type]);
+
     ucs_for_each_bit(md_index, md_map) {
          md_size   = *rkey_buf;
          rkey_buf += sizeof(uint8_t);
 
-         if (!first) {
-             snprintf(p, endp - p, ",");
-             p += strlen(p);
-         }
-         first = 0;
-
-         snprintf(p, endp - p, "%d:", md_index);
-         p += strlen(p);
-
-         ucs_str_dump_hex(rkey_buf, md_size, p, endp - p, SIZE_MAX);
-         p += strlen(p);
+         ucs_string_buffer_appendf(strb, ",%d:", md_index);
+         ucs_string_buffer_append_hex(strb, rkey_buf, md_size, SIZE_MAX);
 
          rkey_buf += md_size;
     }
 
-    snprintf(p, endp - p, "}");
+    ucs_string_buffer_appendf(strb, "}");
 }
 
 ucs_status_t ucp_rkey_ptr(ucp_rkey_h rkey, uint64_t raddr, void **addr_p)
@@ -374,6 +366,8 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
 {
     unsigned remote_md_index, rkey_index;
     ucp_worker_h UCS_V_UNUSED worker;
+
+    ucs_trace("destroying rkey %p", rkey);
 
     rkey_index = 0;
     ucs_for_each_bit(remote_md_index, rkey->md_map) {
@@ -515,4 +509,23 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
               rkey, ep, ep->cfg_index,
               rkey->cache.rma_proto->name, rkey->cache.rma_lane, rkey->cache.rma_rkey,
               rkey->cache.amo_proto->name, rkey->cache.amo_lane, rkey->cache.amo_rkey);
+}
+
+void ucp_rkey_config_dump_brief(const ucp_rkey_config_key_t *rkey_config_key,
+                                ucs_string_buffer_t *strb)
+{
+    ucs_string_buffer_appendf(strb, "%s memory, md_map 0x%" PRIx64,
+                              ucs_memory_type_names[rkey_config_key->mem_type],
+                              rkey_config_key->md_map);
+}
+
+void ucp_rkey_proto_select_dump(ucp_worker_h worker,
+                                ucp_worker_cfg_index_t rkey_cfg_index,
+                                ucs_string_buffer_t *strb)
+{
+    const ucp_rkey_config_t *rkey_config = &worker->rkey_config[rkey_cfg_index];
+
+    ucp_proto_select_dump_short(&rkey_config->put_short, "put_short", strb);
+    ucp_proto_select_dump(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,
+                          &rkey_config->proto_select, strb);
 }
