@@ -1469,8 +1469,7 @@ public:
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        test_ucp_wireup::get_test_variants(variants,
-                                           UCP_FEATURE_RMA | UCP_FEATURE_TAG);
+        test_ucp_wireup::get_test_variants(variants, UCP_FEATURE_TAG);
     }
 
     ucp_ep_params_t get_ep_params() {
