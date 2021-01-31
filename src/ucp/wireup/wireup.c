@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHOBTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -26,6 +26,22 @@
  * Description of the protocol in UCX wiki:
  * https://github.com/openucx/ucx/wiki/Connection-establishment
  */
+
+
+/* Validate wireup message, implemented as a macro to prevent static checker
+ * warnings */
+#define UCP_WIREUP_MSG_CHECK(_msg, _ep, _msg_type) \
+    do { \
+        ucs_assert((_msg)->type == (_msg_type)); \
+        if ((_msg_type) == UCP_WIREUP_MSG_REQUEST) { \
+            ucs_assert(((_msg)->dst_ep_id == UCP_EP_ID_INVALID) ^ \
+                       ((_ep) != NULL)); \
+        } else { \
+            ucs_assert((_msg)->dst_ep_id != UCP_EP_ID_INVALID); \
+            ucs_assert((_ep) != NULL); \
+        } \
+    } while (0)
+
 
 static size_t ucp_wireup_msg_pack(void *dest, void *arg)
 {
@@ -353,7 +369,6 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
     ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_ID);
 }
 
-
 static ucs_status_t
 ucp_wireup_init_lanes_by_request(ucp_worker_h worker, ucp_ep_h ep,
                                  unsigned ep_init_flags,
@@ -370,25 +385,25 @@ ucp_wireup_init_lanes_by_request(ucp_worker_h worker, ucp_ep_h ep,
     return status;
 }
 
-
 static UCS_F_NOINLINE void
 ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
                                const ucp_wireup_msg_t *msg,
                                const ucp_unpacked_address_t *remote_address)
 {
-    ucp_wireup_ep_t *wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-    unsigned ep_init_flags     = UCP_EP_INIT_CREATE_AM_LANE |
-                                 UCP_EP_INIT_CM_WIREUP_CLIENT;
+    unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE |
+                             UCP_EP_INIT_CM_WIREUP_CLIENT;
     unsigned addr_indices[UCP_MAX_LANES];
+    ucp_wireup_ep_t *wireup_ep;
     ucs_status_t status;
 
-    ucs_assert(msg->type      == UCP_WIREUP_MSG_PRE_REQUEST);
-    ucs_assert(msg->dst_ep_id != UCP_EP_ID_INVALID);
-    ucs_assert(wireup_ep      != NULL);
+    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_PRE_REQUEST);
     ucs_trace("got wireup pre_request from 0x%"PRIx64" src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" conn_sn %u",
               remote_address->uuid, msg->src_ep_id, msg->dst_ep_id,
               msg->conn_sn);
+
+    wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    ucs_assert(wireup_ep != NULL);
 
     /* restore the EP here to avoid access to incomplete configuration before
        this point */
@@ -427,7 +442,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     ucs_status_t status;
     int has_cm_lane;
 
-    ucs_assert(msg->type == UCP_WIREUP_MSG_REQUEST);
+    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REQUEST);
     ucs_trace("got wireup request from 0x%"PRIx64" src_ep_id 0x%"PRIx64""
               " dst_ep_id 0x%"PRIx64" conn_sn %d", remote_address->uuid,
               msg->src_ep_id, msg->dst_ep_id, msg->conn_sn);
@@ -565,8 +580,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     ucs_status_t status;
     int ack;
 
-    ucs_assert(msg->type == UCP_WIREUP_MSG_REPLY);
-    ucs_assert(ep != NULL);
+    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_REPLY);
     ucs_trace("ep %p: got wireup reply src_ep_id 0x%"PRIx64
               " dst_ep_id 0x%"PRIx64" sn %d", ep, msg->src_ep_id,
               msg->dst_ep_id, msg->conn_sn);
@@ -610,9 +624,7 @@ static UCS_F_NOINLINE
 void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
                             const ucp_wireup_msg_t *msg)
 {
-    ucs_assert(ep != NULL);
-
-    ucs_assert(msg->type == UCP_WIREUP_MSG_ACK);
+    UCP_WIREUP_MSG_CHECK(msg, ep, UCP_WIREUP_MSG_ACK);
     ucs_trace("ep %p: got wireup ack", ep);
 
     ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_ID);
