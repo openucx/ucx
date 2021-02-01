@@ -190,7 +190,7 @@ UCS_TEST_P(test_uct_ib_addr, address_pack_path_mtu, "IB_PATH_MTU=2048")
 {
     uct_ib_iface_t *iface = ucs_derived_of(m_entities.front()->iface(),
                                            uct_ib_iface_t);
-    size_t addr_len        = uct_ib_iface_address_size(iface);
+    size_t addr_len       = uct_ib_iface_address_size(iface);
     std::vector<char> buffer(addr_len);
     uct_ib_address_t *addr = (uct_ib_address_t*)&buffer[0];
     uct_ib_iface_address_pack(iface, addr);
