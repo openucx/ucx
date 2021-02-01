@@ -11,11 +11,11 @@ jobs:
       matrix:
         ubuntu18_cuda11_1_debug:
           build_container: ubuntu18_cuda11_1
-          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-ubuntu18.04-mofed5.0-cuda11.1.deb
+          artifact_name: ucx-nightly-dbg-ubuntu18.04-mofed5.0-cuda11.1.deb
           configure_mode: devel
         ubuntu18_cuda11_1:
           build_container: ubuntu18_cuda11_1
-          artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-ubuntu18.04-mofed5.0-cuda11.1.deb
+          artifact_name:  ucx-nightly-ubuntu18.04-mofed5.0-cuda11.1.deb
           configure_mode: release
 
     container: $[ variables['build_container'] ]
@@ -31,7 +31,7 @@ jobs:
           ./autogen.sh
           mkdir pkg-build
           cd pkg-build
-          ../contrib/configure-${parameters.m} --with-cuda
+          ../contrib/configure-${CONFIGURE_MODE} --with-cuda --with-valgrind=no
         displayName: Configure
         env:
           CONFIGURE_MODE: $(configure_mode)
@@ -74,14 +74,14 @@ jobs:
           assetUploadMode: replace
           assets: "./$(artifact_name)"
 
-      - task: UniversalPackages@0
-        displayName: Publish snapshot
-        condition: eq(variables['Build.Reason'], 'PullRequest')
+      - task: CopyFiles@2
         inputs:
-          command: publish
-          publishDirectory: '$(Build.ArtifactStagingDirectory)'
-          vstsFeedPublish: 'ucx/packages'
-          vstsFeedPackagePublish: ${AZ_ARTIFACT_NAME}
-          packagePublishDescription: "Snapshot of ${AZ_ARTIFACT_NAME}"
-        env:
-          AZ_ARTIFACT_NAME: $(artifact_name)
+          sourceFolder: '$(Build.Repository.LocalPath)'
+          contents: |
+              "./$(artifact_name)"
+          targetFolder: '$(Build.ArtifactStagingDirectory)'
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)'
+          artifactName: "./$(artifact_name)"

@@ -17,6 +17,26 @@ resources:
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: centos7
+      image: ucfconsort.azurecr.io/ucx/centos7:2
+      endpoint: ucfconsort_registry
+    - container: centos7_cuda10_1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.1:1
+    - container: centos7_cuda10_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.2:1
+    - container: centos7_cuda11_0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda11.0:1
+    - container: ubuntu16_cuda10_1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5.0-cuda10.1:1
+    - container: ubuntu16_cuda10_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5.0-cuda10.2:1
+    - container: ubuntu18_cuda10_1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.1:1
+    - container: ubuntu18_cuda10_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.2:1
+    - container: ubuntu18_cuda11_1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda11.1:1
+
 
 stages:
   - stage: Codestyle
