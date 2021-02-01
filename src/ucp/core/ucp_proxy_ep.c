@@ -68,6 +68,8 @@ UCP_PROXY_EP_DEFINE_OP(ucs_status_t, get_zcopy, const uct_iov_t*, size_t,
                        uint64_t, uct_rkey_t, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, am_short, uint8_t, uint64_t, const void*,
                        unsigned)
+UCP_PROXY_EP_DEFINE_OP(ucs_status_t, am_short_iov, uint8_t, const uct_iov_t*,
+                       size_t)
 UCP_PROXY_EP_DEFINE_OP(ssize_t, am_bcopy, uint8_t, uct_pack_callback_t, void*,
                        unsigned)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, am_zcopy, uint8_t, const void*, unsigned,
@@ -131,6 +133,7 @@ UCS_CLASS_INIT_FUNC(ucp_proxy_ep_t, const uct_iface_ops_t *ops, ucp_ep_h ucp_ep,
     UCP_PROXY_EP_SET_OP(ep_get_bcopy);
     UCP_PROXY_EP_SET_OP(ep_get_zcopy);
     UCP_PROXY_EP_SET_OP(ep_am_short);
+    UCP_PROXY_EP_SET_OP(ep_am_short_iov);
     UCP_PROXY_EP_SET_OP(ep_am_bcopy);
     UCP_PROXY_EP_SET_OP(ep_am_zcopy);
     UCP_PROXY_EP_SET_OP(ep_atomic_cswap64);
