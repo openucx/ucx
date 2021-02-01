@@ -655,25 +655,34 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, close_ep_force_before_err_cb,
                      "ERROR_HANDLER_DELAY=1s") {
     const size_t N = 30000;
     std::vector<char> buffer(20);
+    std::vector<void*> reqs;
 
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    size_t ok_cntr = 0;
     for (size_t i = 0; i < N; ++i) {
         ucs_status_ptr_t req = ucp_stream_send_nb(sender().ep(), &buffer[0],
                                                   buffer.size(),
                                                   ucp_dt_make_contig(buffer.size()),
                                                   scomplete_cb, 0);
         if (UCS_PTR_IS_PTR(req)) {
-            ucp_request_free(req);
+            reqs.push_back(req);
+        } else {
+            ASSERT_EQ(NULL, req);
+            ++ok_cntr;
         }
     }
 
-    ucs_time_t deadline = ucs::get_deadline(10);
+    UCS_TEST_MESSAGE << ok_cntr << "/" << N
+                     << " requests are completed in place";
 
     one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
     short_progress_loop();
     one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FORCE);
 
-    EXPECT_LT(ucs_get_time(), deadline);
+    {
+        scoped_log_handler slh(hide_errors_logger);
+        requests_wait(reqs);
+    }
 }
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
