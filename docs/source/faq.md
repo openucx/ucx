@@ -200,7 +200,7 @@ and NUMA locality.
 
 #### Is it possible to use more than 2 rails?
 
-Yes, by setting `UCX_MAX_RNDV_RAILS=<num-rails>`. Currently up to 4 are supported.
+Yes, by setting `UCX_MAX_RNDV_RAILS=<num-rails>`. Currently up to 6 are supported.
 
 #### Is it possible that each process would just use the closest device?
 
