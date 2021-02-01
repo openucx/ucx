@@ -1134,10 +1134,13 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
          * disconnect event was received, but some EP flush operation still
          * is in-progress, so, the destroyed EP will be touched upon flush
          * completion on some transport */
-        if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
-            ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
+        if (ep->flags & UCP_EP_FLAG_FAILED) {
+            /* handle failures internally from this point */
+            ep->flags &= ~UCP_EP_FLAG_USED;
+            goto out;
         }
 
+        ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
         ucp_ep_disconnected(ep, 1);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,
