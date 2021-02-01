@@ -606,6 +606,11 @@ public:
         }
     }
 
+    static bool is_valid(const handle &h)
+    {
+        return bool(h);
+    }
+
     void revoke() const {
         m_initialized = false;
     }

@@ -196,6 +196,10 @@ void ucp_test::disconnect(entity& e) {
     }
 
     for (int i = 0; i < e.get_num_workers(); i++) {
+        if (e.get_num_valid_eps() == 0) {
+            continue;
+        }
+
         enum ucp_ep_close_mode close_mode;
 
         if (has_failed_entity) {
@@ -229,16 +233,12 @@ ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
             status = ucp_request_check_status(req);
         } while ((status == UCS_INPROGRESS) && (ucs_get_time() < deadline));
         EXPECT_NE(UCS_INPROGRESS, status) << "request " << req
-                                          << " was not completed on time";
+                                          << " did not complete on time";
     } else {
         status = ucp_request_check_status(req);
     }
 
-    if (status == UCS_INPROGRESS) {
-        if (wait) {
-            ucs_error("request %p did not complete on time", req);
-        }
-    } else if (status != UCS_OK) {
+    if (UCS_STATUS_IS_ERR(status)) {
         /* UCS errors are suppressed in case of error handling tests */
         ucs_error("request %p completed with error %s", req,
                   ucs_status_string(status));
@@ -892,6 +892,13 @@ int ucp_test_base::entity::get_num_workers() const {
 
 int ucp_test_base::entity::get_num_eps(int worker_index) const {
     return m_workers[worker_index].second.size();
+}
+
+int ucp_test_base::entity::get_num_valid_eps(int worker_index) const
+{
+    return std::count_if(m_workers[worker_index].second.begin(),
+                         m_workers[worker_index].second.end(),
+                         ucs::handle<ucp_ep_h, entity*>::is_valid);
 }
 
 void ucp_test_base::entity::add_err(ucs_status_t status) {
