@@ -136,7 +136,7 @@ stages:
                 echo "No errors reported by static checkers"
               fi
             displayName: cstools reports
-
+      - template: az-distro-release.yml
       # Perform test builds on relevant distributions.
       - job: Distros
         displayName: Build for
@@ -236,7 +236,3 @@ stages:
     dependsOn: [Codestyle]
     jobs:
     - template: io_demo/io-demo.yml
-
-  - stage: Release
-    jobs:
-      - template: az-distro-release.yml
