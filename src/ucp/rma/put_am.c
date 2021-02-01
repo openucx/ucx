@@ -64,7 +64,8 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    return ucp_proto_multi_progress(req, ucp_proto_put_am_bcopy_send_func,
+    return ucp_proto_multi_progress(req, mpriv,
+                                    ucp_proto_put_am_bcopy_send_func,
                                     ucp_proto_request_bcopy_complete,
                                     UCS_BIT(UCP_DATATYPE_CONTIG));
 }

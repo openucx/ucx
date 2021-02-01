@@ -60,7 +60,8 @@ static ucs_status_t ucp_proto_get_offload_bcopy_progress(uct_pending_req_t *self
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    return ucp_proto_multi_progress(req, ucp_proto_get_offload_bcopy_send_func,
+    return ucp_proto_multi_progress(req, req->send.proto_config->priv,
+                                    ucp_proto_get_offload_bcopy_send_func,
                                     ucp_request_invoke_uct_completion,
                                     UCS_BIT(UCP_DATATYPE_CONTIG));
 }
@@ -123,7 +124,10 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
 
 static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self)
 {
-    return ucp_proto_multi_zcopy_progress(self, NULL,
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    return ucp_proto_multi_zcopy_progress(req, req->send.proto_config->priv,
+                                          NULL,
                                           ucp_proto_get_offload_zcopy_send_func,
                                           ucp_proto_request_zcopy_completion);
 }

@@ -41,10 +41,12 @@ ucp_proto_multi_data_pack(ucp_proto_multi_pack_ctx_t *pack_ctx, void *dest)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_multi_progress(ucp_request_t *req, ucp_proto_send_multi_cb_t send_func,
-                         ucp_proto_complete_cb_t complete_func, unsigned dt_mask)
+ucp_proto_multi_progress(ucp_request_t *req,
+                         const ucp_proto_multi_priv_t *mpriv,
+                         ucp_proto_send_multi_cb_t send_func,
+                         ucp_proto_complete_cb_t complete_func,
+                         unsigned dt_mask)
 {
-    const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
     const ucp_proto_multi_lane_priv_t *lpriv;
     ucs_status_t pending_add_status;
     ucp_datatype_iter_t next_iter;
@@ -112,13 +114,12 @@ ucp_proto_multi_progress(ucp_request_t *req, ucp_proto_send_multi_cb_t send_func
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_multi_bcopy_progress(uct_pending_req_t *uct_req,
+ucp_proto_multi_bcopy_progress(ucp_request_t *req,
+                               const ucp_proto_multi_priv_t *mpriv,
                                ucp_proto_init_cb_t init_func,
                                ucp_proto_send_multi_cb_t send_func,
                                ucp_proto_complete_cb_t comp_func)
 {
-    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
-
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         ucp_proto_multi_request_init(req);
         if (init_func != NULL) {
@@ -128,22 +129,21 @@ ucp_proto_multi_bcopy_progress(uct_pending_req_t *uct_req,
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    return ucp_proto_multi_progress(req, send_func, comp_func, UINT_MAX);
+    return ucp_proto_multi_progress(req, mpriv, send_func, comp_func, UINT_MAX);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_multi_zcopy_progress(uct_pending_req_t *uct_req,
+ucp_proto_multi_zcopy_progress(ucp_request_t *req,
+                               const ucp_proto_multi_priv_t *mpriv,
                                ucp_proto_init_cb_t init_func,
                                ucp_proto_send_multi_cb_t send_func,
                                uct_completion_callback_t comp_func)
 {
-    ucp_request_t *req                 = ucs_container_of(uct_req, ucp_request_t,
-                                                          send.uct);
-    const ucp_proto_multi_priv_t *priv = req->send.proto_config->priv;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_proto_request_zcopy_init(req, priv->reg_md_map, comp_func);
+        status = ucp_proto_request_zcopy_init(req, mpriv->reg_md_map,
+                                              comp_func);
         if (status != UCS_OK) {
             ucp_proto_request_zcopy_complete(req, status);
             return UCS_OK; /* remove from pending after request is completed */
@@ -157,7 +157,7 @@ ucp_proto_multi_zcopy_progress(uct_pending_req_t *uct_req,
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    return ucp_proto_multi_progress(req, send_func,
+    return ucp_proto_multi_progress(req, mpriv, send_func,
                                     ucp_request_invoke_uct_completion,
                                     UCS_BIT(UCP_DATATYPE_CONTIG));
 }
