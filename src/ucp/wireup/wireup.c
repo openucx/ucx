@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHOBTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -34,7 +34,7 @@
     do { \
         ucs_assert((_msg)->type == (_msg_type)); \
         if ((_msg_type) == UCP_WIREUP_MSG_REQUEST) { \
-            ucs_assert(((_msg)->dst_ep_id == UCP_EP_ID_INVALID) ^ \
+            ucs_assert(((_msg)->dst_ep_id == UCP_EP_ID_INVALID) != \
                        ((_ep) != NULL)); \
         } else { \
             ucs_assert((_msg)->dst_ep_id != UCP_EP_ID_INVALID); \
