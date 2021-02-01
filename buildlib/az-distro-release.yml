@@ -90,6 +90,7 @@ jobs:
 
       - task: UniversalPackages@0
         displayName: Publish snapshot
+        condition: eq(variables['Build.Reason'], 'PullRequest')
         inputs:
           command: publish
           publishDirectory: '$(Build.ArtifactStagingDirectory)'

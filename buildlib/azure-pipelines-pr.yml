@@ -236,3 +236,7 @@ stages:
     dependsOn: [Codestyle]
     jobs:
     - template: io_demo/io-demo.yml
+
+  - stage: Release
+    jobs:
+      - template: az-distro-release.yml
