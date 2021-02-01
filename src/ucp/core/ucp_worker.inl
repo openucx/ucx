@@ -229,4 +229,31 @@ ucp_worker_get_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
         } \
     }
 
+#define UCP_WORKER_GET_REQUEST_BY_ID(_req_p, _worker, _req_id, _action, \
+                                     _fmt_str, ...) \
+    { \
+        ucs_status_t __status = ucp_worker_get_request_by_id(_worker, _req_id, \
+                                                             _req_p); \
+        if (ucs_unlikely(__status != UCS_OK)) { \
+            ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
+                           " drop " _fmt_str, \
+                           _worker, _req_id, ##__VA_ARGS__); \
+            _action; \
+        } \
+    }
+
+#define UCP_WORKER_EXTRACT_REQUEST_BY_ID(_req_p, _worker, _req_id, _action, \
+                                         _fmt_str, ...) \
+    { \
+        ucs_status_t __status = ucp_worker_extract_request_by_id(_worker, \
+                                                                 _req_id, \
+                                                                 _req_p); \
+        if (ucs_unlikely(__status != UCS_OK)) { \
+            ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
+                           " drop " _fmt_str, \
+                           _worker, _req_id, ##__VA_ARGS__); \
+            _action; \
+        } \
+    }
+
 #endif

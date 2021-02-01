@@ -649,7 +649,7 @@ unsigned test_ucp_sockaddr::m_err_count = 0;
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, close_ep_force_before_err_cb,
                      has_transport("tcp") /* FIXME: */,
-                     "DEFER_ERR_HANDLER_TIME=10s") {
+                     "ERROR_HANDLER_DELAY=1s") {
     const size_t N = 30000;
     std::vector<char> buffer(20);
 

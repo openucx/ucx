@@ -329,9 +329,9 @@ static ucs_config_field_t ucp_config_table[] = {
    "endpoint.",
    ucs_offsetof(ucp_config_t, ctx.proto_indirect_id), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
-  {"DEFER_ERR_HANDLER_TIME", "0us",
+  {"ERROR_HANDLER_DELAY", "0us",
    "Time period between error has been detected and handled (0 - disabled).\n"
-   "For debug purposes only",
+   "Used for testing purposes",
    ucs_offsetof(ucp_config_t, ctx.defer_err_handling_time),
    UCS_CONFIG_TYPE_TIME_UNITS},
    {NULL}

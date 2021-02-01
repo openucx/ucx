@@ -309,7 +309,7 @@ typedef struct ucp_worker {
  */
 typedef struct ucp_worker_err_handle_arg {
     ucp_ep_h         ucp_ep;
-    ucs_time_t       time_stamp;
+    ucs_time_t       timeout;
     ucs_status_t     status;
 } ucp_worker_err_handle_arg_t;
 

@@ -433,9 +433,8 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     ucp_request_t *close_req;
     uct_worker_cb_id_t prog_id;
 
-    if ((ucs_get_time() - err_handle_arg->time_stamp) <
-        worker->context->config.ext.defer_err_handling_time) {
-        ucs_diag("ep %p: defer err handler, flags: 0x%x, status %s",
+    if (ucs_get_time() < err_handle_arg->timeout) {
+        ucs_debug("ep %p: defer err handler, flags: 0x%x, status %s",
                   ucp_ep, ucp_ep->flags, ucs_status_string(status));
 
         prog_id = UCS_CALLBACKQ_ID_NULL;
@@ -538,9 +537,10 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
         goto out;
     }
 
-    err_handle_arg->ucp_ep      = ucp_ep;
-    err_handle_arg->time_stamp  = ucs_get_time();
-    err_handle_arg->status      = status;
+    err_handle_arg->ucp_ep  = ucp_ep;
+    err_handle_arg->status  = status;
+    err_handle_arg->timeout = ucs_get_time() +
+            worker->context->config.ext.defer_err_handling_time;
 
     /* invoke the rest of the error handling flow from the main thread */
     uct_worker_progress_register_safe(worker->uct,

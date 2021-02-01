@@ -536,14 +536,6 @@ ucp_stream_am_handler(void *am_arg, void *am_data, size_t am_length,
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, data->hdr.ep_id, return UCS_OK,
                                   "stream data");
     ep_ext = ucp_ep_ext_proto(ep);
-
-    if (ucs_unlikely((ep == NULL) ||
-                     (ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_FAILED)))) {
-        ucs_trace_data("ep %p: stream is invalid", ep);
-        /* drop the data */
-        return UCS_OK;
-    }
-
     status = ucp_stream_am_data_process(worker, ep_ext, data,
                                         am_length - sizeof(data->hdr),
                                         am_flags);
