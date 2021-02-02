@@ -60,6 +60,17 @@ resource::resource(uct_component_h component,
 {
 }
 
+bool resource::is_equal_tl_name(const resource &rsc, const std::string &name)
+{
+    return rsc.tl_name == name;
+}
+
+bool resource::is_equal_component_name(const resource &rsc,
+                                       const std::string &name)
+{
+    return rsc.component_name == name;
+}
+
 resource_speed::resource_speed(uct_component_h component,
                                const uct_component_attr& cmpt_attr,
                                const uct_worker_h& worker, const uct_md_h& md,
@@ -161,8 +172,6 @@ uct_test::uct_test() : m_iface_config(NULL), m_md_config(NULL),
     status = uct_component_query(GetParam()->component, &component_attr);
     ASSERT_UCS_OK(status);
 
-    UCS_TEST_MESSAGE << "Testing component: " << component_attr.name;
-
     if (component_attr.flags & UCT_COMPONENT_FLAG_CM) {
         status = uct_cm_config_read(GetParam()->component, NULL, NULL,
                                     &m_cm_config);
@@ -189,9 +198,7 @@ uct_test::uct_test() : m_iface_config(NULL), m_md_config(NULL),
     ASSERT_UCS_OK(status);
     if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
         status = uct_md_iface_config_read(md, NULL, NULL, NULL, &m_iface_config);
-    } else if (GetParam()->tl_name != "sockaddr") { /* TODO: remove this
-                                                             condition after
-                                                             SOCKCM cleanup */
+    } else if (!GetParam()->tl_name.empty()) {
         status = uct_md_iface_config_read(md, GetParam()->tl_name.c_str(), NULL,
                                           NULL, &m_iface_config);
     }
@@ -239,8 +246,8 @@ void uct_test::set_interface_rscs(uct_component_h cmpt, const char *cmpt_name,
      *  2 - has INADDR_ANY
      */
     for (i = 0; i < 3; i++) {
-        resource rsc(cmpt, std::string(cmpt_name),  std::string(md_name),
-                     local_cpus, "sockaddr", std::string(ifa->ifa_name),
+        resource rsc(cmpt, std::string(cmpt_name), std::string(md_name),
+                     local_cpus, "", std::string(ifa->ifa_name),
                      UCT_DEVICE_TYPE_NET);
         bool init_src_addr = (i == 1);
 
@@ -453,31 +460,9 @@ std::vector<const resource*> uct_test::enum_resources(const std::string& tl_name
 
         uct_worker_destroy(worker);
         ucs_async_context_destroy(async);
-
-        set_cm_resources(all_resources);
     }
 
-    return filter_resources(all_resources, tl_name);
-}
-
-void uct_test::generate_test_variant(int variant,
-                                     const std::string &variant_name,
-                                     std::vector<resource>& test_res,
-                                     const std::string &tl_name)
-{
-    std::vector<const resource*> r = uct_test::enum_resources("");
-
-    for (std::vector<const resource*>::iterator iter = r.begin();
-         iter != r.end(); ++iter) {
-        if (tl_name.empty() || ((*iter)->tl_name == tl_name)) {
-            resource rsc((*iter)->component, (*iter)->component_name,
-                         (*iter)->md_name, (*iter)->local_cpus,
-                         (*iter)->tl_name, (*iter)->dev_name, (*iter)->dev_type);
-            rsc.variant      = variant;
-            rsc.variant_name = variant_name;
-            test_res.push_back(rsc);
-        }
-    }
+    return filter_resources(all_resources, resource::is_equal_tl_name, tl_name);
 }
 
 void uct_test::init() {
@@ -863,11 +848,10 @@ uct_test::entity::entity(const resource& resource, uct_md_config_t *md_config,
                            uct_worker_create, &m_async.m_async,
                            UCS_THREAD_MODE_SINGLE);
 
-    UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(uct_md_h, m_md, uct_md_close,
-                                        uct_md_open, resource.component,
-                                        resource.md_name.c_str(), md_config);
-
-    if (m_md) {
+    if (md_config != NULL) {
+        UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
+                               resource.component, resource.md_name.c_str(),
+                               md_config);
         status = uct_md_query(m_md, &m_md_attr);
         ASSERT_UCS_OK(status);
     } else {
