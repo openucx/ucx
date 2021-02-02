@@ -2287,9 +2287,10 @@ ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
     ucp_trace_req(req, "discard_uct_ep flush completion status %s",
                   ucs_status_string(self->status));
 
-    if (ucs_unlikely(self->status == UCS_ERR_CANCELED)) {
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_WORKER_CLEANUP)) {
         /* we run from worker destroy & discarded EPs cleanup,
          * handle everything there */
+        ucs_assert(self->status == UCS_ERR_CANCELED);
         return;
     }
 
@@ -2363,8 +2364,10 @@ static void ucp_worker_discarded_uct_eps_cleanup(ucp_worker_h worker)
 
     kh_foreach(&worker->discard_uct_ep_hash, uct_ep, req, {
         ucs_assert(req->send.discard_uct_ep.uct_ep == uct_ep);
-        ucp_worker_put_flush_req(req);
+        /* set the flag to handle canceled UCT completions correctly */
+        req->flags |= UCP_REQUEST_FLAG_WORKER_CLEANUP;
         uct_ep_destroy(uct_ep);
+        ucp_worker_put_flush_req(req);
     })
 }
 

@@ -1106,8 +1106,8 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
 
 ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 {
-    ucp_worker_h  worker = ep->worker;
-    void          *request = NULL;
+    ucp_worker_h worker = ep->worker;
+    void *request;
     ucp_request_t *close_req;
 
     if ((ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) &&
@@ -1134,31 +1134,41 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
          * disconnect event was received, but some EP flush operation still
          * is in-progress, so, the destroyed EP will be touched upon flush
          * completion on some transport */
-        if (ep->flags & UCP_EP_FLAG_FAILED) {
+        if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
+            ucs_assert(!(ep->flags & UCP_EP_FLAG_ERR_HANDLER_INVOKED));
+            ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
+            ucp_ep_disconnected(ep, 1);
+        } else if (!(ep->flags & UCP_EP_FLAG_ERR_HANDLER_INVOKED)) {
+            /* the failed EP handler is scheduled but isn't invoked yet */
             /* handle failures internally from this point */
             ep->flags &= ~UCP_EP_FLAG_USED;
-            goto out;
+        } else {
+            ucs_assert(ucs_test_all_flags(ep->flags,
+                                          UCP_EP_FLAG_FAILED |
+                                          UCP_EP_FLAG_ERR_HANDLER_INVOKED));
+            /* everything is done, just destroy */
+            ucp_ep_disconnected(ep, 1);
         }
 
-        ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
-        ucp_ep_disconnected(ep, 1);
-    } else {
-        request = ucp_ep_flush_internal(ep, 0, param, NULL,
-                                        ucp_ep_close_flushed_callback, "close");
-        if (!UCS_PTR_IS_PTR(request)) {
-            if (ucp_ep_is_cm_local_connected(ep)) {
-                /* lanes already flushed, start disconnect on CM lane */
-                ucp_ep_cm_disconnect_cm_lane(ep);
-                close_req = ucp_ep_cm_close_request_get(ep, param);
-                if (close_req != NULL) {
-                    request = close_req + 1;
-                    ucp_ep_set_close_request(ep, close_req, "close");
-                } else {
-                    request = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                }
+        request = NULL;
+        goto out;
+    }
+
+    request = ucp_ep_flush_internal(ep, 0, param, NULL,
+                                    ucp_ep_close_flushed_callback, "close");
+    if (!UCS_PTR_IS_PTR(request)) {
+        if (ucp_ep_is_cm_local_connected(ep)) {
+            /* lanes already flushed, start disconnect on CM lane */
+            ucp_ep_cm_disconnect_cm_lane(ep);
+            close_req = ucp_ep_cm_close_request_get(ep, param);
+            if (close_req != NULL) {
+                request = close_req + 1;
+                ucp_ep_set_close_request(ep, close_req, "close");
             } else {
-                ucp_ep_disconnected(ep, 0);
+                request = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
             }
+        } else {
+            ucp_ep_disconnected(ep, 0);
         }
     }
 
