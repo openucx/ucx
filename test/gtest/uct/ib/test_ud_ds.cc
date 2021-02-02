@@ -67,6 +67,16 @@ public:
                    uct_ud_iface_addr_t *if_addr,
                    uct_ud_ep_conn_sn_t conn_sn, uct_ud_ep_t *ep);
 
+    void check_mtu(uct_ib_address_pack_params_t *unpack_params)
+    {
+        if (unpack_params->flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
+            EXPECT_NE(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params->path_mtu);
+            EXPECT_NE(IBV_MTU_4096, unpack_params->path_mtu);
+        } else {
+            EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params->path_mtu);
+        }
+    }
+
 protected:
     entity *m_e1, *m_e2;
     uct_ib_address_t *ib_adr1, *ib_adr2;
@@ -89,10 +99,8 @@ UCS_TEST_P(test_ud_ds, if_addr) {
     EXPECT_NE(uct_ib_unpack_uint24(if_adr1.qp_num),
               uct_ib_unpack_uint24(if_adr2.qp_num));
 
-    EXPECT_TRUE(!(unpack_params1.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU));
-    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params1.path_mtu);
-    EXPECT_TRUE(!(unpack_params2.flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU));
-    EXPECT_EQ(UCT_IB_ADDRESS_INVALID_PATH_MTU, unpack_params2.path_mtu);
+    check_mtu(&unpack_params1);
+    check_mtu(&unpack_params2);
 
     EXPECT_TRUE(!(unpack_params1.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX));
     EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, unpack_params1.gid_index);
