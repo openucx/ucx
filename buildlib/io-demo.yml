@@ -74,6 +74,10 @@ jobs:
             downtime=$(downtime) \
             uptime=$(uptime) \
             |& add_timestamp &>corrupter.log &
+          while ! pgrep -u "$USER" -f 'network-corrupter'
+          do
+            sleep 1
+          done
           pgrep -u "$USER" -f 'network-corrupter'
           corrupter_pid=$(pgrep -u "$USER" -f 'network-corrupter')
           echo "corrupter_pid=$corrupter_pid"
