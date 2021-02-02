@@ -78,7 +78,6 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->dst_md_cmpts     = NULL;
     key->ep_check_map     = 0;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
-    key->status           = UCS_OK;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
     memset(key->rma_bw_lanes, UCP_NULL_LANE, sizeof(key->rma_bw_lanes));
@@ -1105,28 +1104,27 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
     ucp_lane_index_t lane;
     int i;
 
-    if ((key1->num_lanes        != key2->num_lanes)                                ||
-        memcmp(key1->rma_lanes,    key2->rma_lanes,    sizeof(key1->rma_lanes))    ||
-        memcmp(key1->am_bw_lanes,  key2->am_bw_lanes,  sizeof(key1->am_bw_lanes))  ||
-        memcmp(key1->rma_bw_lanes, key2->rma_bw_lanes, sizeof(key1->rma_bw_lanes)) ||
-        memcmp(key1->amo_lanes,    key2->amo_lanes,    sizeof(key1->amo_lanes))    ||
-        (key1->rma_bw_md_map    != key2->rma_bw_md_map)                            ||
-        (key1->reachable_md_map != key2->reachable_md_map)                         ||
-        (key1->am_lane          != key2->am_lane)                                  ||
-        (key1->tag_lane         != key2->tag_lane)                                 ||
-        (key1->wireup_msg_lane  != key2->wireup_msg_lane)                          ||
-        (key1->cm_lane          != key2->cm_lane)                                  ||
-        (key1->rkey_ptr_lane    != key2->rkey_ptr_lane)                            ||
-        (key1->ep_check_map     != key2->ep_check_map)                             ||
-        (key1->err_mode         != key2->err_mode)                                 ||
-        (key1->status           != key2->status))
-    {
+    if ((key1->num_lanes != key2->num_lanes) ||
+        memcmp(key1->rma_lanes, key2->rma_lanes, sizeof(key1->rma_lanes)) ||
+        memcmp(key1->am_bw_lanes, key2->am_bw_lanes,
+               sizeof(key1->am_bw_lanes)) ||
+        memcmp(key1->rma_bw_lanes, key2->rma_bw_lanes,
+               sizeof(key1->rma_bw_lanes)) ||
+        memcmp(key1->amo_lanes, key2->amo_lanes, sizeof(key1->amo_lanes)) ||
+        (key1->rma_bw_md_map != key2->rma_bw_md_map) ||
+        (key1->reachable_md_map != key2->reachable_md_map) ||
+        (key1->am_lane != key2->am_lane) ||
+        (key1->tag_lane != key2->tag_lane) ||
+        (key1->wireup_msg_lane != key2->wireup_msg_lane) ||
+        (key1->cm_lane != key2->cm_lane) ||
+        (key1->rkey_ptr_lane != key2->rkey_ptr_lane) ||
+        (key1->ep_check_map != key2->ep_check_map) ||
+        (key1->err_mode != key2->err_mode)) {
         return 0;
     }
 
     for (lane = 0; lane < key1->num_lanes; ++lane) {
-        if (!ucp_ep_config_lane_is_equal(key1, key2, lane))
-        {
+        if (!ucp_ep_config_lane_is_equal(key1, key2, lane)) {
             return 0;
         }
     }

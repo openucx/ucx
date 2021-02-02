@@ -166,7 +166,6 @@ struct ucp_ep_config_key {
 
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
-    ucs_status_t             status;
 };
 
 
