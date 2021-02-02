@@ -228,6 +228,8 @@ ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
             progress(worker_index);
             status = ucp_request_check_status(req);
         } while ((status == UCS_INPROGRESS) && (ucs_get_time() < deadline));
+        EXPECT_NE(UCS_INPROGRESS, status) << "request " << req
+                                          << " was not completed on time";
     } else {
         status = ucp_request_check_status(req);
     }

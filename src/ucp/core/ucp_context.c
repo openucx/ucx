@@ -334,6 +334,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "Used for testing purposes",
    ucs_offsetof(ucp_config_t, ctx.defer_err_handling_time),
    UCS_CONFIG_TYPE_TIME_UNITS},
+
    {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,

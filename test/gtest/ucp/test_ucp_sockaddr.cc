@@ -648,7 +648,10 @@ protected:
 unsigned test_ucp_sockaddr::m_err_count = 0;
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, close_ep_force_before_err_cb,
-                     has_transport("tcp") /* FIXME: */,
+                     /* FIXME: TCP reports UCS_ERR_ENDPOINT_TIMEOUT status
+                      *        even in case when UCS_ERR_CONNECTION_RESET is
+                      *        detected correctly */
+                     has_transport("tcp"),
                      "ERROR_HANDLER_DELAY=1s") {
     const size_t N = 30000;
     std::vector<char> buffer(20);
