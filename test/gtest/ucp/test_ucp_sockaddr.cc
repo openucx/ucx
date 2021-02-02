@@ -831,6 +831,30 @@ UCS_TEST_P(test_ucp_sockaddr, compare_cm_and_wireup_configs) {
     }
 }
 
+UCS_TEST_P(test_ucp_sockaddr, connect_and_fail_wireup)
+{
+    start_listener(cb_type());
+
+    scoped_log_handler slh(wrap_errors_logger);
+    client_ep_connect();
+    if (!wait_for_server_ep(false)) {
+        UCS_TEST_SKIP_R("cannot connect to server");
+    }
+
+    ucp_lane_index_t am_lane = ucp_ep_get_wireup_msg_lane(sender().ep());
+    uct_ep_h uct_ep          = sender().ep()->uct_eps[am_lane];
+
+    /* emulate failure of WIREUP MSG sending */
+    uct_ep->iface->ops.ep_am_bcopy = reinterpret_cast<uct_ep_am_bcopy_func_t>(
+            ucs_empty_function_return_bc_ep_timeout);
+
+    while (!(sender().ep()->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
+        progress();
+    }
+
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+}
+
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
 
 class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {

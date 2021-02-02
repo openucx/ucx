@@ -18,6 +18,7 @@
 #include <ucp/core/ucp_proxy_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_listener.h>
+#include <ucp/proto/proto_am.inl>
 #include <ucp/tag/eager.h>
 #include <ucs/async/async.h>
 #include <ucs/datastruct/queue.h>
@@ -124,12 +125,12 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_WIREUP,
                                  ucp_wireup_msg_pack, req, am_flags);
-    if (packed_len < 0) {
-        if (packed_len != UCS_ERR_NO_RESOURCE) {
-            ucs_error("failed to send wireup: %s",
-                      ucs_status_string((ucs_status_t)packed_len));
-        }
-        return (ucs_status_t)packed_len;
+    UCP_AM_BCOPY_HANDLE_STATUS(0, (ucs_status_t)packed_len);
+    if (ucs_unlikely(packed_len < 0)) {
+        ucs_assert((ucs_status_t)packed_len != UCS_ERR_NO_RESOURCE);
+        ucs_error("failed to send wireup: %s",
+                  ucs_status_string((ucs_status_t)packed_len));
+        return UCS_OK;
     }
 
     switch (req->send.wireup.type) {
