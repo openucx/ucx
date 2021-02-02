@@ -301,6 +301,7 @@ public:
         m_am_received = false;
     }
 
+protected:
     size_t max_am_hdr()
     {
         ucp_worker_attr_t attr;
@@ -400,53 +401,6 @@ public:
         if (max_am_hdr() > small_hdr_size) {
             test_am_send_recv(size, max_am_hdr(), flags);
         }
-    }
-
-    void test_recv_on_closed_ep(size_t size, unsigned flags = 0,
-                                bool poke_rx_progress = false,
-                                bool rx_expected = false)
-    {
-        skip_loopback();
-        test_am_send_recv(0, max_am_hdr()); // warmup wireup
-
-        m_am_received = false;
-        std::vector<char> sbuf(size, 'd');
-        ucp::data_type_desc_t sdt_desc(m_dt, &sbuf[0], size);
-
-        set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_rx_check_cb, this);
-
-        ucs_status_ptr_t sreq = send_am(sdt_desc, flags);
-
-        sender().progress();
-        if (poke_rx_progress) {
-            receiver().progress();
-            if (m_am_received) {
-                request_wait(sreq);
-                UCS_TEST_SKIP_R("received all AMs before ep closed");
-            }
-        }
-
-        void *close_req = receiver().disconnect_nb(0, 0,
-                                                   UCP_EP_CLOSE_MODE_FLUSH);
-        ucs_time_t deadline = ucs::get_deadline(10);
-        while (!is_request_completed(close_req) &&
-               (ucs_get_time() < deadline)) {
-            progress();
-        };
-
-        receiver().close_ep_req_free(close_req);
-
-        if (rx_expected) {
-            request_wait(sreq);
-            wait_for_flag(&m_am_received);
-        } else {
-            // Send request may complete with error
-            // (rndv should complete with EP_TIMEOUT)
-            scoped_log_handler wrap_err(wrap_errors_logger);
-            request_wait(sreq);
-        }
-
-        EXPECT_EQ(rx_expected, m_am_received);
     }
 
     virtual ucs_status_t am_data_handler(const void *header,
@@ -565,7 +519,71 @@ UCS_TEST_P(test_ucp_am_nbx, zero_send)
     test_am_send_recv(0, max_am_hdr());
 }
 
-UCS_TEST_P(test_ucp_am_nbx, rx_short_am_on_closed_ep, "RNDV_THRESH=inf")
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
+
+
+class test_ucp_am_nbx_closed_ep : public test_ucp_am_nbx {
+protected:
+    virtual ucp_ep_params_t get_ep_params()
+    {
+        ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        /* The error handling requirement is needed since we need to take care of
+         * a case when a receiver tries to fetch data on a closed EP */
+        ep_params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        return ep_params;
+    }
+
+    void test_recv_on_closed_ep(size_t size, unsigned flags = 0,
+                                bool poke_rx_progress = false,
+                                bool rx_expected = false)
+    {
+        skip_loopback();
+        test_am_send_recv(0, max_am_hdr()); // warmup wireup
+
+        m_am_received = false;
+        std::vector<char> sbuf(size, 'd');
+        ucp::data_type_desc_t sdt_desc(m_dt, &sbuf[0], size);
+
+        set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_rx_check_cb, this);
+
+        ucs_status_ptr_t sreq = send_am(sdt_desc, flags);
+
+        sender().progress();
+        if (poke_rx_progress) {
+            receiver().progress();
+            if (m_am_received) {
+                request_wait(sreq);
+                UCS_TEST_SKIP_R("received all AMs before ep closed");
+            }
+        }
+
+        void *close_req = receiver().disconnect_nb(0, 0,
+                                                   UCP_EP_CLOSE_MODE_FLUSH);
+        ucs_time_t deadline = ucs::get_deadline(10);
+        while (!is_request_completed(close_req) &&
+               (ucs_get_time() < deadline)) {
+            progress();
+        };
+
+        receiver().close_ep_req_free(close_req);
+
+        if (rx_expected) {
+            request_wait(sreq);
+            wait_for_flag(&m_am_received);
+        } else {
+            // Send request may complete with error
+            // (rndv should complete with EP_TIMEOUT)
+            scoped_log_handler wrap_err(wrap_errors_logger);
+            request_wait(sreq);
+        }
+
+        EXPECT_EQ(rx_expected, m_am_received);
+    }
+};
+
+
+UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_short_am_on_closed_ep, "RNDV_THRESH=inf")
 {
     // Single fragment message sent without REPLY flag is expected
     // to be received even if remote side closes its ep
@@ -574,32 +592,32 @@ UCS_TEST_P(test_ucp_am_nbx, rx_short_am_on_closed_ep, "RNDV_THRESH=inf")
 
 // All the following type of AM messages are expected to be dropped on the
 // receiver side, when its ep is closed
-UCS_TEST_P(test_ucp_am_nbx, rx_short_reply_am_on_closed_ep, "RNDV_THRESH=inf")
+UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_short_reply_am_on_closed_ep, "RNDV_THRESH=inf")
 {
     test_recv_on_closed_ep(8, UCP_AM_SEND_REPLY);
 }
 
-UCS_TEST_P(test_ucp_am_nbx, rx_long_am_on_closed_ep, "RNDV_THRESH=inf")
+UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_long_am_on_closed_ep, "RNDV_THRESH=inf")
 {
     test_recv_on_closed_ep(64 * UCS_KBYTE, 0, true);
 }
 
-UCS_TEST_P(test_ucp_am_nbx, rx_long_reply_am_on_closed_ep, "RNDV_THRESH=inf")
+UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_long_reply_am_on_closed_ep, "RNDV_THRESH=inf")
 {
     test_recv_on_closed_ep(64 * UCS_KBYTE, UCP_AM_SEND_REPLY, true);
 }
 
-UCS_TEST_P(test_ucp_am_nbx, rx_rts_am_on_closed_ep, "RNDV_THRESH=32K")
+UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_rts_am_on_closed_ep, "RNDV_THRESH=32K")
 {
     test_recv_on_closed_ep(64 * UCS_KBYTE, 0);
 }
 
-UCS_TEST_P(test_ucp_am_nbx, rx_rts_reply_am_on_closed_ep, "RNDV_THRESH=32K")
+UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_rts_reply_am_on_closed_ep, "RNDV_THRESH=32K")
 {
     test_recv_on_closed_ep(64 * UCS_KBYTE, UCP_AM_SEND_REPLY);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_closed_ep)
 
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx {

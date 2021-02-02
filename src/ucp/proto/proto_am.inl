@@ -20,6 +20,24 @@
 
 #define UCP_STATUS_PENDING_SWITCH (UCS_ERR_LAST - 1)
 
+#define UCP_AM_BCOPY_HANDLE_STATUS(_multi, _status) \
+    do { \
+        if (_multi) { \
+            if (_status == UCS_INPROGRESS) { \
+                return UCS_INPROGRESS; \
+            } else if (ucs_unlikely(_status == UCP_STATUS_PENDING_SWITCH)) { \
+                return UCS_OK; \
+            } \
+        } else { \
+            ucs_assert(_status != UCS_INPROGRESS); \
+        } \
+        \
+        if (ucs_unlikely(_status == UCS_ERR_NO_RESOURCE)) { \
+            return UCS_ERR_NO_RESOURCE; \
+        } \
+    } while (0)
+
+
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
 
@@ -518,17 +536,16 @@ ucp_proto_get_short_max(const ucp_request_t *req,
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*
-ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucs_ptr_map_key_t ep_id)
+ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucp_ep_h ep)
 {
-    ucp_request_t *req;
-
-    req = ucp_request_get(worker);
+    ucp_request_t *req = ucp_request_get(worker);
     if (req == NULL) {
+        ucs_error("failed to allocate UCP request");
         return NULL;
     }
 
     req->flags              = 0;
-    req->send.ep            = ucp_worker_get_ep_by_id(worker, ep_id);
+    req->send.ep            = ep;
     req->send.uct.func      = ucp_proto_progress_am_single;
     req->send.proto.comp_cb = ucp_request_put;
     req->send.proto.status  = UCS_OK;
@@ -553,21 +570,7 @@ ucp_am_bcopy_handle_status_from_pending(uct_pending_req_t *self, int multi,
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    if (multi) {
-        if (status == UCS_INPROGRESS) {
-            return UCS_INPROGRESS;
-        }
-
-        if (ucs_unlikely(status == UCP_STATUS_PENDING_SWITCH)) {
-            return UCS_OK;
-        }
-    } else {
-        ucs_assert(status != UCS_INPROGRESS);
-    }
-
-    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
-        return UCS_ERR_NO_RESOURCE;
-    }
+    UCP_AM_BCOPY_HANDLE_STATUS(multi, status);
 
     ucp_request_send_generic_dt_finish(req);
     if (tag_sync) {
