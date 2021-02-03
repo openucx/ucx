@@ -64,11 +64,22 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
     }
 
     if (rdma_bind_addr(self->id, (struct sockaddr*)saddr)) {
-        status = ((errno == EADDRINUSE) || (errno == EADDRNOTAVAIL)) ?
-                 UCS_ERR_BUSY : UCS_ERR_IO_ERROR;
-        ucs_error("rdma_bind_addr(addr=%s) failed: %m",
-                  ucs_sockaddr_str(saddr, ip_port_str,
-                                   UCS_SOCKADDR_STRING_LEN));
+        switch (errno) {
+        case EADDRINUSE:
+        case EADDRNOTAVAIL:
+            status = UCS_ERR_BUSY;
+            break;
+        case ENODEV:
+            status = UCS_ERR_NO_DEVICE;
+            break;
+        default:
+            status = UCS_ERR_IO_ERROR;
+            break;
+        }
+
+        ucs_diag("rdma_bind_addr(addr=%s) failed: %m",
+                 ucs_sockaddr_str(saddr, ip_port_str,
+                                  UCS_SOCKADDR_STRING_LEN));
         goto err_destroy_id;
     }
 

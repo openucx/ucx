@@ -1277,6 +1277,11 @@ typedef struct ucp_listener_params {
      * flow. In order for the callback inside this handler to be invoked, the
      * @ref UCP_LISTENER_PARAM_FIELD_CONN_HANDLER needs to be set in the
      * field_mask.
+     * @note User is expected to call ucp_ep_create with set
+     *       @ref UCP_EP_PARAM_FIELD_CONN_REQUEST flag to
+     *       @ref ucp_ep_params_t::field_mask and
+     *       @ref ucp_ep_params_t::conn_request in order to be able to receive
+     *       communications.
      */
     ucp_listener_conn_handler_t         conn_handler;
 } ucp_listener_params_t;
@@ -2179,6 +2184,10 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
  *                               by calling @ref ucp_listener_destroy
  *
  * @return Error code as defined by @ref ucs_status_t
+ *
+ * @note @ref ucp_listener_params_t::conn_handler or
+ *       @ref ucp_listener_params_t::accept_handler must be provided to be
+ *       able to handle incoming connections.
  */
 ucs_status_t ucp_listener_create(ucp_worker_h worker,
                                  const ucp_listener_params_t *params,
