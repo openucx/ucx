@@ -181,8 +181,10 @@ static void ucp_cm_priv_data_pack(ucp_wireup_sockaddr_data_t *sa_data,
     memcpy(sa_data + 1, addr, addr_size);
 }
 
-static void uct_wireup_cm_tmp_ep_cleanup(ucp_ep_h tmp_ep, ucs_queue_head_t *queue)
+static void uct_wireup_cm_tmp_ep_cleanup(ucp_wireup_ep_t *cm_wireup_ep,
+                                         ucs_queue_head_t *queue)
 {
+    ucp_ep_h tmp_ep = cm_wireup_ep->tmp_ep;
     ucp_lane_index_t lane_idx;
     uct_ep_h uct_ep;
 
@@ -208,10 +210,12 @@ static void uct_wireup_cm_tmp_ep_cleanup(ucp_ep_h tmp_ep, ucs_queue_head_t *queu
 
         /* destroy the wireup ep */
         uct_ep_destroy(tmp_ep->uct_eps[lane_idx]);
+        tmp_ep->uct_eps[lane_idx] = NULL;
     }
 
     ucs_trace("deleting tmp_ep %p", tmp_ep);
-    ucp_ep_destroy_base(tmp_ep);
+    ucp_ep_disconnected(tmp_ep, 1);
+    cm_wireup_ep->tmp_ep = NULL;
 }
 
 static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep, uint64_t *tl_bitmap,
@@ -305,8 +309,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
     /* cleanup the previously created cm_wireup_ep->tmp_ep. the one that was
      * created on the previous call to this client's pack_cb */
-    uct_wireup_cm_tmp_ep_cleanup(cm_wireup_ep->tmp_ep, &tmp_pending_queue);
-    cm_wireup_ep->tmp_ep = NULL;
+    uct_wireup_cm_tmp_ep_cleanup(cm_wireup_ep, &tmp_pending_queue);
 
     /* Create tmp ep which will hold local tl addresses until connect
      * event arrives, to avoid asynchronous ep reconfiguration. */
