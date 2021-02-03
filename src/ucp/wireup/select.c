@@ -860,7 +860,8 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
     criteria.tl_rsc_flags           = 0;
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
-    return ucp_wireup_add_memaccess_lanes(select_params, &criteria, UINT64_MAX,
+    return ucp_wireup_add_memaccess_lanes(select_params, &criteria,
+                                          select_params->tl_bitmap,
                                           UCP_LANE_TYPE_RMA, select_ctx);
 }
 
