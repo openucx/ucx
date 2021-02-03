@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 * Copyright (C) 2021 Broadcom. ALL RIGHTS RESERVED. The term “Broadcom”
 * refers to Broadcom Inc. and/or its subsidiaries.
 *
@@ -224,8 +224,11 @@ static void uct_ib_iface_recv_desc_init(uct_iface_h tl_iface, void *obj, uct_mem
 
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                           const uct_ib_iface_config_t *config,
+                                          const uct_iface_params_t *params,
                                           const char *name, ucs_mpool_t *mp)
 {
+    size_t align_offset, alignment;
+    ucs_status_t status;
     unsigned grow;
 
     if (config->rx.queue_len < 1024) {
@@ -236,13 +239,24 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                         config->rx.mp.max_bufs);
     }
 
+    /* Preserve the default alignment by UCT header if user does not request
+     * specific alignment.
+     * TODO: Analyze how to keep UCT header aligned by cache line even when
+     * user requested specific alignment for payload.
+     */
+    status = uct_iface_param_am_alignment(params, iface->config.seg_size,
+                                          iface->config.rx_hdr_offset,
+                                          iface->config.rx_payload_offset,
+                                          &alignment, &align_offset);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     return uct_iface_mpool_init(&iface->super, mp,
-                                iface->config.rx_payload_offset + iface->config.seg_size,
-                                iface->config.rx_hdr_offset,
-                                UCS_SYS_CACHE_LINE_SIZE,
-                                &config->rx.mp, grow,
-                                uct_ib_iface_recv_desc_init,
-                                name);
+                                iface->config.rx_payload_offset +
+                                        iface->config.seg_size,
+                                align_offset, alignment, &config->rx.mp, grow,
+                                uct_ib_iface_recv_desc_init, name);
 }
 
 void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
@@ -1488,7 +1502,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     double numa_latency;
 
     uct_base_iface_query(&iface->super, iface_attr);
-    
+
     active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_attr(iface)->active_speed;
     active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;

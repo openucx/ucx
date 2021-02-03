@@ -322,6 +322,11 @@ uct_completion_t *uct_p2p_test::comp() {
     }
 }
 
+void uct_p2p_test::disable_comp()
+{
+    m_null_completion = true;
+}
+
 void uct_p2p_test::completion_cb(uct_completion_t *self) {
     completion *comp = ucs_container_of(self, completion, uct);
     ++comp->self->m_completion_count;

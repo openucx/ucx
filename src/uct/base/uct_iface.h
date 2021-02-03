@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -187,6 +187,11 @@ enum {
 #define UCT_EP_KEEPALIVE_CHECK_PARAM(_flags, _comp) \
     UCT_CHECK_PARAM((_comp) == NULL, "Unsupported completion on ep_check"); \
     UCT_CHECK_PARAM((_flags) == 0, "Unsupported flags: %x", (_flags));
+
+
+#define UCT_IFACE_PARAM_VALUE(_params, _name, _flag, _default) \
+    (((_params)->field_mask & (UCT_IFACE_PARAM_FIELD_##_flag)) ? \
+     (_params)->_name : (_default))
 
 
 /**
@@ -611,6 +616,29 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
 
 ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
                                       ucs_status_t status);
+
+/**
+ * Initialize AM data alignment and its offset based on the user configuration
+ * provided in interface parameters.
+ *
+ * @param [in]  params         User defined interface parameters.
+ * @param [in]  elem_size      Transport receive buffer size.
+ * @param [in]  base_offset    Default offset in the transport receive buffer,
+ *                             which should be aligned to the certain boundary.
+ * @param [in]  payload_offset Offset to the payload in the transport receive
+ *                             buffer.
+ * @param [out] align          Alignment of the Active Message data on the
+ *                             receiver.
+ * @param [out] align_offset   Offset in the incoming Active Message which
+ *                             should be aligned to the @a align boundary.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM if user specified invalid
+ *         combination of @a am_alignment and @a am_align_offset in @a params.
+ */
+ucs_status_t
+uct_iface_param_am_alignment(const uct_iface_params_t *params, size_t elem_size,
+                             size_t base_offset, size_t payload_offset,
+                             size_t *align, size_t *align_offset);
 
 void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr);
 

@@ -63,25 +63,10 @@ public:
 
         uct_test::init();
 
-        entity *sender = uct_test::create_entity(0ul, NULL, unexp_eager,
-                                                 unexp_rndv,
-                                                 reinterpret_cast<void*>(this),
-                                                 reinterpret_cast<void*>(this));
-        m_entities.push_back(sender);
-
+        uct_test::create_connected_entities(0ul, NULL, unexp_eager, unexp_rndv,
+                                            reinterpret_cast<void*>(this),
+                                            reinterpret_cast<void*>(this));
         check_skip_test();
-
-        if (UCT_DEVICE_TYPE_SELF == GetParam()->dev_type) {
-            sender->connect(0, *sender, 0);
-        } else {
-            entity *receiver = uct_test::create_entity(0ul, NULL, unexp_eager,
-                                                       unexp_rndv,
-                                                       reinterpret_cast<void*>(this),
-                                                       reinterpret_cast<void*>(this));
-            m_entities.push_back(receiver);
-
-            sender->connect(0, *receiver, 0);
-        }
     }
 
     void init_send_ctx(send_ctx &s,mapped_buffer *b, uct_tag_t t, uint64_t i,

@@ -327,6 +327,39 @@ void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->dev_num_paths = 1;
 }
 
+ucs_status_t
+uct_iface_param_am_alignment(const uct_iface_params_t *params, size_t elem_size,
+                             size_t base_offset, size_t payload_offset,
+                             size_t *align, size_t *align_offset)
+{
+    if (!(params->field_mask & UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT)) {
+        if (params->field_mask & UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET) {
+            ucs_error("alignment offset has no effect without alignment");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        *align        = UCS_SYS_CACHE_LINE_SIZE;
+        *align_offset = base_offset;
+
+        return UCS_OK;
+    }
+
+    *align        = params->am_alignment;
+    *align_offset = UCT_IFACE_PARAM_VALUE(params, am_align_offset,
+                                          AM_ALIGN_OFFSET, 0ul);
+
+    if (*align_offset >= elem_size) {
+        ucs_diag("invalid AM alignment offset %zu, must be less than %zu",
+                 *align_offset, elem_size);
+
+        *align_offset = 0ul;
+    }
+
+    *align_offset += payload_offset;
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
                                         uct_device_type_t dev_type,
                                         ucs_sys_device_t sys_device,

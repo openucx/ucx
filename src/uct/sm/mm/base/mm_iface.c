@@ -1,6 +1,6 @@
 /**
  * Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -562,6 +562,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     uct_mm_iface_config_t *mm_config =
                     ucs_derived_of(tl_config, uct_mm_iface_config_t);
     uct_mm_fifo_element_t* fifo_elem_p;
+    size_t alignment, align_offset;
     ucs_status_t status;
     unsigned i;
     char proc[32];
@@ -651,17 +652,22 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_free_fifo;
     }
 
+    status = uct_iface_param_am_alignment(params, self->config.seg_size,
+                                          sizeof(uct_mm_recv_desc_t),
+                                          sizeof(uct_mm_recv_desc_t),
+                                          &alignment, &align_offset);
+    if (status != UCS_OK) {
+        goto err_close_signal_fd;
+    }
+
     /* create a memory pool for receive descriptors */
-    status = uct_iface_mpool_init(&self->super.super,
-                                  &self->recv_desc_mp,
-                                  sizeof(uct_mm_recv_desc_t) + self->rx_headroom +
-                                  self->config.seg_size,
-                                  sizeof(uct_mm_recv_desc_t),
-                                  UCS_SYS_CACHE_LINE_SIZE,
-                                  &mm_config->mp,
+    status = uct_iface_mpool_init(&self->super.super, &self->recv_desc_mp,
+                                  sizeof(uct_mm_recv_desc_t) +
+                                          self->rx_headroom +
+                                          self->config.seg_size,
+                                  align_offset, alignment, &mm_config->mp,
                                   mm_config->mp.bufs_grow,
-                                  uct_mm_iface_recv_desc_init,
-                                  "mm_recv_desc");
+                                  uct_mm_iface_recv_desc_init, "mm_recv_desc");
     if (status != UCS_OK) {
         ucs_error("failed to create a receive descriptor memory pool for the MM transport");
         goto err_close_signal_fd;
