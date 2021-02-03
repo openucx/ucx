@@ -1006,7 +1006,10 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
     const ucp_proto_threshold_elem_t *thresh;
     ucp_proto_select_param_t select_param;
     const ucp_proto_single_priv_t *spriv;
+    ucs_memory_info_t mem_info;
     uint32_t op_attr;
+
+    ucp_memory_info_set_host(&mem_info);
 
     /*
      * Find the minimal threshold among all protocols for all possible
@@ -1016,7 +1019,7 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
      */
     ucs_for_each_submask(op_attr, op_attr_mask) {
         ucp_proto_select_param_init(&select_param, op_id, op_attr,
-                                    UCP_DATATYPE_CONTIG, UCS_MEMORY_TYPE_HOST, 1);
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
         thresh = ucp_proto_select_lookup(worker, proto_select, ep_cfg_index,
                                          rkey_cfg_index, &select_param, 0);
         if (thresh == NULL) {

@@ -44,7 +44,6 @@ enum {
 struct ucp_rkey_config_key {
     ucp_md_map_t                  md_map;       /* Which *remote* MDs have valid memory handles */
     ucp_worker_cfg_index_t        ep_cfg_index; /* Endpoint configuration */
-    ucs_sys_device_t              sys_dev;      /* Remote device id */
     ucs_memory_type_t             mem_type;     /* Remote memory type */
 };
 

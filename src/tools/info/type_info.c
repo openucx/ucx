@@ -17,6 +17,7 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/ptr_array.h>
+#include <ucs/memory/memtype_cache.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/memory/rcache_int.h>
 #include <ucs/time/timerq.h>
@@ -126,6 +127,7 @@ void print_type_info(const char * tl_name)
         PRINT_SIZE(ucs_rcache_t);
         PRINT_SIZE(ucs_rcache_region_t);
         PRINT_SIZE(ucs_conn_match_elem_t);
+        PRINT_SIZE(ucs_memory_info_t);
 
         printf("\nUCT:\n");
         PRINT_SIZE(uct_am_handler_t);

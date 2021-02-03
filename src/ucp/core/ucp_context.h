@@ -245,7 +245,7 @@ typedef struct ucp_context {
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
-        
+
         /* Config environment prefix used to create the context */
         char                      *env_prefix;
 
@@ -378,8 +378,8 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
 
-ucs_memory_type_t
-ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t length);
+void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
+                                size_t length, ucs_memory_info_t *mem_info);
 
 /**
  * Calculate a small value to overcome float imprecision
@@ -441,45 +441,52 @@ static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h cont
             !context->memtype_cache->pgtable.num_regions);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_memory_type_t
-ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length)
+static UCS_F_ALWAYS_INLINE void
+ucp_memory_info_set_host(ucs_memory_info_t *mem_info)
 {
-    ucs_memory_type_t mem_type;
+    mem_info->type    = UCS_MEMORY_TYPE_HOST;
+    mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
+                  ucs_memory_info_t *mem_info)
+{
     ucs_status_t status;
 
     if (ucs_likely(context->num_mem_type_detect_mds == 0)) {
-        return UCS_MEMORY_TYPE_HOST;
+        goto out_host_mem;
     }
 
     if (ucs_likely(context->memtype_cache != NULL)) {
         if (!context->memtype_cache->pgtable.num_regions) {
-            return UCS_MEMORY_TYPE_HOST;
+            goto out_host_mem;
         }
 
         status = ucs_memtype_cache_lookup(context->memtype_cache, address,
-                                          length, &mem_type);
-        if (status != UCS_OK) {
+                                          length, mem_info);
+        if (ucs_likely(status != UCS_OK)) {
             ucs_assert(status == UCS_ERR_NO_ELEM);
-            return UCS_MEMORY_TYPE_HOST;
+            goto out_host_mem;
         }
 
-        if (mem_type != UCS_MEMORY_TYPE_LAST) {
-            return mem_type;
+        if ((mem_info->type != UCS_MEMORY_TYPE_UNKNOWN) &&
+            ((mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN))) {
+            return;
         }
 
-        /* mem_type is UCS_MEMORY_TYPE_LAST: fall thru to memory detection by
-         * UCT memory domains */
+        /* Fall thru to slow-path memory type and system device detection by UCT
+         * memory domains. In any case, the memory type cache is not expected to
+         * return HOST memory type.
+         */
+        ucs_assert(mem_info->type != UCS_MEMORY_TYPE_HOST);
     }
 
-    return ucp_memory_type_detect_mds(context, address, length);
-}
+    ucp_memory_detect_slowpath(context, address, length, mem_info);
+    return;
 
-static UCS_F_ALWAYS_INLINE ucs_memory_type_t
-ucp_get_memory_type(ucp_context_h context, const void *address,
-                    size_t length, ucs_memory_type_t memory_type)
-{
-    return (memory_type == UCS_MEMORY_TYPE_UNKNOWN) ?
-           ucp_memory_type_detect(context, address, length) : memory_type;
+out_host_mem:
+    ucp_memory_info_set_host(mem_info);
 }
 
 uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);

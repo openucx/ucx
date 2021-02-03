@@ -310,8 +310,8 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
         ucs_topo_sys_device_bdf_name(mem_attr.sys_dev, sys_dev_name,
                                      sizeof(sys_dev_name));
         UCS_TEST_MESSAGE << ucs_memory_type_names[alloc_mem_type] << ": "
-                         << "sys_dev[" << mem_attr.sys_dev << "] "
-                         << "(" << sys_dev_name << ")";
+                         << "sys_dev[" << static_cast<int>(mem_attr.sys_dev)
+                         << "] (" << sys_dev_name << ")";
     }
 }
 

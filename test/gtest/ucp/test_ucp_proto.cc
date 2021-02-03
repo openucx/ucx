@@ -67,7 +67,6 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
     rkey_config_key.ep_cfg_index = 0;
     rkey_config_key.md_map       = 0;
     rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     ucs_status_t status;
 
@@ -85,7 +84,6 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
     rkey_config_key.ep_cfg_index = 0;
     rkey_config_key.md_map       = 1;
     rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     /* different configuration should return different index */
     ucp_worker_cfg_index_t cfg_index3;
@@ -103,7 +101,6 @@ UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
     rkey_config_key.ep_cfg_index = 0;
     rkey_config_key.md_map       = 0;
     rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     /* similar configurations should return same index */
     ucp_worker_cfg_index_t cfg_index;
