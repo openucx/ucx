@@ -1150,17 +1150,15 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices)
 {
-    ucp_worker_h worker                  = ep->worker;
-    uint64_t tl_bitmap                   = local_tl_bitmap &
-                                           worker->context->tl_bitmap;
-    ucp_rsc_index_t cm_idx               = UCP_NULL_RESOURCE;
+    ucp_worker_h worker = ep->worker;
+    uint64_t tl_bitmap  = local_tl_bitmap & worker->context->tl_bitmap;
+    ucp_rsc_index_t cm_idx;
     ucp_lane_index_t connect_lane_bitmap;
     ucp_ep_config_key_t key;
     ucp_worker_cfg_index_t new_cfg_index;
     ucp_lane_index_t lane;
     ucs_status_t status;
     char str[32];
-    ucp_wireup_ep_t *cm_wireup_ep;
     ucs_queue_head_t replay_pending_queue;
 
     ucs_assert(tl_bitmap != 0);
@@ -1203,10 +1201,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         goto out;
     }
 
-    cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-    if (cm_wireup_ep != NULL) {
-        cm_idx = cm_wireup_ep->cm_idx;
-    }
+    cm_idx = ucp_ep_ext_control(ep)->cm_idx;
 
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
         /* reconfiguration is allowed for CM flow */

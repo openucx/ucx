@@ -114,6 +114,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ep->flags                            = 0;
     ep->conn_sn                          = UCP_EP_MATCH_CONN_SN_MAX;
     ucp_ep_ext_gen(ep)->user_data        = NULL;
+    ucp_ep_ext_control(ep)->cm_idx       = UCP_NULL_RESOURCE;
     ucp_ep_ext_control(ep)->err_cb       = NULL;
     ucp_ep_ext_control(ep)->local_ep_id  =
     ucp_ep_ext_control(ep)->remote_ep_id = UCP_EP_ID_INVALID;
@@ -2173,18 +2174,26 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
 }
 
 static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
-                                const ucp_ep_config_t *config,
-                                const unsigned *addr_indices,
+                                const ucp_ep_h ep, const unsigned *addr_indices,
                                 ucp_rsc_index_t aux_rsc_index)
 {
-    ucp_context_h context = worker->context;
-    char lane_info[128]   = {0};
+    ucp_context_h context   = worker->context;
+    char lane_info[128]     = {0};
+    ucp_ep_config_t *config = ucp_ep_config(ep);
     ucp_md_index_t md_index;
     ucp_lane_index_t lane;
+    ucp_rsc_index_t cm_idx;
 
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
-        ucp_ep_config_lane_info_str(worker, &config->key, addr_indices, lane,
-                                    aux_rsc_index, lane_info, sizeof(lane_info));
+        if (lane == config->key.cm_lane) {
+            cm_idx = ucp_ep_ext_control(ep)->cm_idx;
+            ucp_ep_config_cm_lane_info_str(worker, &config->key, lane, cm_idx,
+                                           lane_info, sizeof(lane_info));
+        } else {
+            ucp_ep_config_lane_info_str(worker, &config->key, addr_indices,
+                                        lane, aux_rsc_index, lane_info,
+                                        sizeof(lane_info));
+        }
         fprintf(stream, "#                 %s\n", lane_info);
     }
     fprintf(stream, "#\n");
@@ -2271,7 +2280,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
         }
     }
 
-    ucp_ep_config_print(stream, worker, config, NULL, aux_rsc_index);
+    ucp_ep_config_print(stream, worker, ep, NULL, aux_rsc_index);
     fprintf(stream, "#\n");
 
     if (worker->context->config.ext.proto_enable) {

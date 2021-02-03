@@ -421,7 +421,6 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->pending_count    = 0;
     self->flags            = 0;
     self->progress_id      = UCS_CALLBACKQ_ID_NULL;
-    self->cm_idx           = UCP_NULL_RESOURCE;
     ucs_queue_head_init(&self->pending_q);
 
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {

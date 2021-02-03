@@ -393,10 +393,11 @@ typedef struct {
  * Endpoint extension for control data path
  */
 typedef struct {
-    ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
-    ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
-    ucp_err_handler_cb_t          err_cb;        /* Error handler */
-    ucp_ep_close_proto_req_t      close_req;     /* Close protocol request */
+    ucp_rsc_index_t          cm_idx; /* CM index */
+    ucs_ptr_map_key_t        local_ep_id; /* Local EP ID */
+    ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
+    ucp_err_handler_cb_t     err_cb; /* Error handler */
+    ucp_ep_close_proto_req_t close_req; /* Close protocol request */
 } ucp_ep_ext_control_t;
 
 
