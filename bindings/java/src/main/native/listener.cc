@@ -44,8 +44,16 @@ Java_org_openucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jclass cls,
         field = env->GetFieldID(jucx_listener_param_class,
                                 "connectionHandler", "Lorg/openucx/jucx/ucp/UcpListenerConnectionHandler;");
         jobject jucx_conn_handler = env->GetObjectField(ucp_listener_params, field);
-        params.conn_handler.arg = env->NewGlobalRef(jucx_conn_handler);
+        params.conn_handler.arg = env->NewWeakGlobalRef(jucx_conn_handler);
         params.conn_handler.cb = jucx_connection_handler;
+    }
+
+    if (params.field_mask & UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER) {
+        field = env->GetFieldID(jucx_listener_param_class,
+                                "acceptHandler", "Lorg/openucx/jucx/ucp/UcpListenerAcceptHandler;");
+        jobject jucx_accept_hndl = env->GetObjectField(ucp_listener_params, field);
+        params.accept_handler.arg = env->NewWeakGlobalRef(jucx_accept_hndl);
+        params.accept_handler.cb = jucx_accept_handler;
     }
 
     ucs_status_t status = ucp_listener_create(ucp_worker, &params, &listener);

@@ -117,6 +117,8 @@ void process_request(JNIEnv *env, jobject request, ucs_status_ptr_t status);
 
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg);
 
+void jucx_accept_handler(ucp_ep_h ep, void *arg);
+
 /**
  * @brief Creates new jucx rkey class.
  */

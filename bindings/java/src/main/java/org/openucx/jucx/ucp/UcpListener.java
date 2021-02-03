@@ -17,11 +17,20 @@ import java.net.InetSocketAddress;
 public class UcpListener extends UcxNativeStruct implements Closeable {
 
     private InetSocketAddress address;
+    private UcpListenerAcceptHandler acceptHandler;
+    private UcpListenerConnectionHandler connectionHandler;
 
     public UcpListener(UcpWorker worker, UcpListenerParams params) {
         if (params.getSockAddr() == null) {
             throw new UcxException("UcpListenerParams.sockAddr must be non-null.");
         }
+
+        if (params.acceptHandler == null && params.connectionHandler == null) {
+            throw new UcxException("Accept or connection handler should be provided " +
+                "to be able to handle incoming connections.");
+        }
+        acceptHandler = params.acceptHandler;
+        connectionHandler = params.connectionHandler;
         setNativeId(createUcpListener(params, worker.getNativeId()));
         address = params.getSockAddr();
     }

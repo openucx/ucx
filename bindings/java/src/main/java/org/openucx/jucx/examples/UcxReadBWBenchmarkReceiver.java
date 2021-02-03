@@ -26,21 +26,19 @@ public class UcxReadBWBenchmarkReceiver extends UcxBenchmark {
 
         String serverHost = argsMap.get("s");
         InetSocketAddress sockaddr = new InetSocketAddress(serverHost, serverPort);
-        AtomicReference<UcpConnectionRequest> connRequest = new AtomicReference<>(null);
+        AtomicReference<UcpEndpoint> endpointReference = new AtomicReference<>(null);
         UcpListener listener = worker.newListener(
             new UcpListenerParams()
-                .setConnectionHandler(connRequest::set)
+                .setAcceptHandler(endpointReference::set)
                 .setSockAddr(sockaddr));
         resources.push(listener);
         System.out.println("Waiting for connections on " + sockaddr + " ...");
 
-        while (connRequest.get() == null) {
+        while (endpointReference.get() == null) {
             worker.progress();
         }
 
-        UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
-            .setConnectionRequest(connRequest.get())
-            .setPeerErrorHandlingMode());
+        UcpEndpoint endpoint = endpointReference.get();
 
         ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
         UcpRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer, null);

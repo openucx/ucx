@@ -377,7 +377,19 @@ void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
     jmethodID on_conn_request = env->GetMethodID(jucx_conn_hndl_cls, "onConnectionRequest",
                                                  "(Lorg/openucx/jucx/ucp/UcpConnectionRequest;)V");
     env->CallVoidMethod(jucx_conn_handler, on_conn_request, jucx_conn_request);
-    env->DeleteGlobalRef(jucx_conn_handler);
+}
+
+void jucx_accept_handler(ucp_ep_h ep, void *arg)
+{
+    jobject jucx_accept_handler = reinterpret_cast<jobject>(arg);
+
+    JNIEnv *env = get_jni_env();
+
+    jclass jucx_accept_hndl_cls = env->FindClass("org/openucx/jucx/ucp/UcpListenerAcceptHandler");
+    jmethodID on_accept = env->GetMethodID(jucx_accept_hndl_cls, "onAccept",
+                                           "(Lorg/openucx/jucx/ucp/UcpEndpoint;)V");
+    jobject jucx_endpoint = env->NewObject(jucx_endpoint_cls, jucx_endpoint_constructor, ep);
+    env->CallVoidMethod(jucx_accept_handler, on_accept, jucx_endpoint);
 }
 
 jobject new_rkey_instance(JNIEnv *env, ucp_rkey_h rkey)

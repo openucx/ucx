@@ -14,15 +14,19 @@ public class UcpListenerParams extends UcxParams {
     public UcpListenerParams clear() {
         super.clear();
         sockAddr = null;
+        connectionHandler = null;
+        acceptHandler = null;
         return this;
     }
 
     private InetSocketAddress sockAddr;
 
-    private UcpListenerConnectionHandler connectionHandler;
+    UcpListenerConnectionHandler connectionHandler;
+
+    UcpListenerAcceptHandler acceptHandler;
 
     /**
-     *  An address, on which {@link UcpListener} would bind.
+     * An address, on which {@link UcpListener} would bind.
      */
     public UcpListenerParams setSockAddr(InetSocketAddress sockAddr) {
         this.sockAddr = sockAddr;
@@ -35,11 +39,20 @@ public class UcpListenerParams extends UcxParams {
     }
 
     /**
-     *  Handler of an incoming connection request in a client-server connection flow.
+     * Handler of an incoming connection request in a client-server connection flow.
      */
     public UcpListenerParams setConnectionHandler(UcpListenerConnectionHandler handler) {
         this.connectionHandler = handler;
         this.fieldMask |= UcpConstants.UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+        return this;
+    }
+
+    /**
+     * Handler to endpoint creation in a client-server connection flow.
+     */
+    public UcpListenerParams setAcceptHandler(UcpListenerAcceptHandler handler) {
+        this.acceptHandler = handler;
+        this.fieldMask |= UcpConstants.UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
         return this;
     }
 }

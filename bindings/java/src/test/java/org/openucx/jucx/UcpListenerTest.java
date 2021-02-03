@@ -159,4 +159,73 @@ public class UcpListenerTest  extends UcxTest {
             serverWorker2, listener);
         closeResources();
     }
+
+    @Test
+    public void testAcceptHandler() throws Exception {
+        UcpContext context1 = new UcpContext(new UcpParams().requestStreamFeature()
+            .requestRmaFeature());
+        UcpContext context2 = new UcpContext(new UcpParams().requestStreamFeature()
+            .requestRmaFeature());
+        UcpWorker serverWorker = context1.newWorker(new UcpWorkerParams());
+        UcpWorker clientWorker = context2.newWorker(new UcpWorkerParams());
+
+        AtomicReference<UcpEndpoint> endpointReference = new AtomicReference<>(null);
+
+        // Create listener and set accept handler
+        UcpListenerParams listenerParams = new UcpListenerParams()
+            .setAcceptHandler(endpointReference::set);
+        UcpListener listener = tryBindListener(serverWorker, listenerParams);
+
+        UcpEndpoint clientToServer = clientWorker.newEndpoint(new UcpEndpointParams()
+            .setSocketAddress(listener.getAddress()));
+
+        while (endpointReference.get() == null) {
+            serverWorker.progress();
+            clientWorker.progress();
+        }
+
+        UcpEndpoint serverToClient = endpointReference.get();
+
+        // Temporary workaround until new connection establishment protocol in UCX.
+        for (int i = 0; i < 10; i++) {
+            serverWorker.progress();
+            clientWorker.progress();
+            try {
+                Thread.sleep(10);
+            } catch (Exception ignored) { }
+        }
+
+        UcpRequest sent = serverToClient.sendStreamNonBlocking(
+            ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), null);
+
+        // Progress all workers to make sure recv request will complete immediately
+        for (int i = 0; i < 10; i++) {
+            serverWorker.progress();
+            clientWorker.progress();
+            try {
+                Thread.sleep(2);
+            } catch (Exception ignored) { }
+        }
+
+        UcpRequest recv = clientToServer.recvStreamNonBlocking(
+            ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE), 0, null);
+
+        while (!sent.isCompleted() || !recv.isCompleted()) {
+            serverWorker.progress();
+            clientWorker.progress();
+        }
+
+        assertEquals(UcpMemoryTest.MEM_SIZE, recv.getRecvSize());
+
+        UcpRequest serverClose = serverToClient.closeNonBlockingForce();
+        UcpRequest clientClose = clientToServer.closeNonBlockingFlush();
+
+        while (!serverClose.isCompleted() || !clientClose.isCompleted()) {
+            serverWorker.progress();
+            clientWorker.progress();
+        }
+
+        Collections.addAll(resources, context2, context1, clientWorker, serverWorker, listener);
+        closeResources();
+    }
 }
