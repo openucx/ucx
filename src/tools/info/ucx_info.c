@@ -157,12 +157,16 @@ int main(int argc, char **argv)
         case 'D':
             if (!strcasecmp(optarg, "net")) {
                 dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_NET);
+                /* don't set acceleration devices, when only network devices are
+                 * requested */
             } else if (!strcasecmp(optarg, "shm")) {
-                dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SHM);
+                dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SHM) |
+                                  UCS_BIT(UCT_DEVICE_TYPE_ACC);
             } else if (!strcasecmp(optarg, "self")) {
-                dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SELF);
+                dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SELF) |
+                                  UCS_BIT(UCT_DEVICE_TYPE_ACC);
             } else if (!strcasecmp(optarg, "all")) {
-                dev_type_bitmap = UINT_MAX;
+                dev_type_bitmap = UCS_MASK(UCT_DEVICE_TYPE_LAST);
             } else {
                 usage();
                 return -1;

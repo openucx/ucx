@@ -137,6 +137,9 @@ ucs_status_t print_ucp_info(int print_opts,
     if (!(dev_type_bitmap & UCS_BIT(UCT_DEVICE_TYPE_NET))) {
         ucp_config_modify(config, "NET_DEVICES", "");
     }
+    if (!(dev_type_bitmap & UCS_BIT(UCT_DEVICE_TYPE_ACC))) {
+        ucp_config_modify(config, "ACC_DEVICES", "");
+    }
 
     status = ucp_init(&params, config, &context);
     if (status != UCS_OK) {
