@@ -205,7 +205,7 @@ AC_DEFUN([DETECT_UARCH],
 # CHECK_COMPILER_FLAG
 # Usage: CHECK_COMPILER_FLAG([name], [flag], [program], [if-true], [if-false])
 #
-# The macro checks if program may be compiled using specified flag
+# The macro checks if program may be compiled and linked using specified flag
 #
 AC_DEFUN([CHECK_COMPILER_FLAG],
 [
@@ -214,15 +214,15 @@ AC_DEFUN([CHECK_COMPILER_FLAG],
          SAVE_CXXFLAGS="$CFLAGS"
          CFLAGS="$BASE_CFLAGS $CFLAGS $2"
          CXXFLAGS="$BASE_CXXFLAGS $CXXFLAGS $2"
-         AC_COMPILE_IFELSE([$3],
-                           [AC_MSG_RESULT([yes])
-                            CFLAGS="$SAVE_CFLAGS"
-                            CXXFLAGS="$SAVE_CXXFLAGS"
-                            $4],
-                           [AC_MSG_RESULT([no])
-                            CFLAGS="$SAVE_CFLAGS"
-                            CXXFLAGS="$SAVE_CXXFLAGS"
-                            $5])
+         AC_LINK_IFELSE([$3],
+                        [AC_MSG_RESULT([yes])
+                         CFLAGS="$SAVE_CFLAGS"
+                         CXXFLAGS="$SAVE_CXXFLAGS"
+                         $4],
+                        [AC_MSG_RESULT([no])
+                         CFLAGS="$SAVE_CFLAGS"
+                         CXXFLAGS="$SAVE_CXXFLAGS"
+                         $5])
 ])
 
 

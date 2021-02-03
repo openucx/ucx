@@ -524,7 +524,9 @@ protected:
 
 private:
     struct region_comparator {
-        bool operator()(ucs_pgt_region_t* region1, ucs_pgt_region_t* region2) {
+        bool
+        operator()(ucs_pgt_region_t *region1, ucs_pgt_region_t *region2) const
+        {
             return region1->end <= region2->start;
         }
     };
