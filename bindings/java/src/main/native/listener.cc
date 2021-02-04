@@ -44,7 +44,7 @@ Java_org_openucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jclass cls,
         field = env->GetFieldID(jucx_listener_param_class,
                                 "connectionHandler", "Lorg/openucx/jucx/ucp/UcpListenerConnectionHandler;");
         jobject jucx_conn_handler = env->GetObjectField(ucp_listener_params, field);
-        params.conn_handler.arg = env->NewGlobalRef(jucx_conn_handler);
+        params.conn_handler.arg = env->NewWeakGlobalRef(jucx_conn_handler);
         params.conn_handler.cb = jucx_connection_handler;
     }
 
