@@ -14,12 +14,13 @@ public class UcpListenerParams extends UcxParams {
     public UcpListenerParams clear() {
         super.clear();
         sockAddr = null;
+        connectionHandler = null;
         return this;
     }
 
     private InetSocketAddress sockAddr;
 
-    private UcpListenerConnectionHandler connectionHandler;
+    UcpListenerConnectionHandler connectionHandler;
 
     /**
      *  An address, on which {@link UcpListener} would bind.
