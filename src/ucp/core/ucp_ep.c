@@ -498,22 +498,18 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     }
 
-    if (sa_data->addr_mode == UCP_WIREUP_SA_DATA_CM_ADDR) {
-        addr_flags = UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
-    } else {
-        addr_flags = UCP_ADDRESS_PACK_FLAGS_ALL;
+    if (sa_data->addr_mode != UCP_WIREUP_SA_DATA_CM_ADDR) {
+        ucs_fatal("client sockaddr data contains invalid address mode %d",
+                  sa_data->addr_mode);
     }
+
+    addr_flags = UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
 
     /* coverity[overrun-local] */
     status = ucp_address_unpack(worker, sa_data + 1, addr_flags, &remote_addr);
     if (status != UCS_OK) {
         ucp_listener_reject(conn_request->listener, conn_request);
         return status;
-    }
-
-    if (sa_data->addr_mode != UCP_WIREUP_SA_DATA_CM_ADDR) {
-        ucs_fatal("client sockaddr data contains invalid address mode %d",
-                  sa_data->addr_mode);
     }
 
     for (i = 0; i < remote_addr.address_count; ++i) {

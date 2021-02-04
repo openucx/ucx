@@ -658,10 +658,8 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
 {
     ucp_tl_md_t *md = &context->tl_mds[md_index];
     uct_tl_resource_desc_t *tl_resources;
-    uct_tl_resource_desc_t sa_rsc;
     ucp_tl_resource_desc_t *tmp;
     unsigned num_tl_resources;
-    unsigned num_sa_resources;
     ucs_status_t status;
     ucp_rsc_index_t i;
 
@@ -674,18 +672,14 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
         goto err;
     }
 
-    /* If the md supports client-server connection establishment via sockaddr,
-       add a new tl resource here for the client side iface. */
-    num_sa_resources = !!(md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR);
-
-    if ((num_tl_resources == 0) && (!num_sa_resources)) {
+    if (num_tl_resources == 0) {
         ucs_debug("No tl resources found for md %s", md->rsc.md_name);
         goto out_free_resources;
     }
 
     tmp = ucs_realloc(context->tl_rscs,
                       sizeof(*context->tl_rscs) *
-                      (context->num_tls + num_tl_resources + num_sa_resources),
+                      (context->num_tls + num_tl_resources),
                       "ucp resources");
     if (tmp == NULL) {
         ucs_error("Failed to allocate resources");
@@ -701,25 +695,12 @@ static ucs_status_t ucp_add_tl_resources(ucp_context_h context,
     /* copy only the resources enabled by user configuration */
     context->tl_rscs = tmp;
     for (i = 0; i < num_tl_resources; ++i) {
-        if (!(md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR)) {
-            ucs_string_set_addf(&avail_devices[tl_resources[i].dev_type],
-                                "'%s'(%s)", tl_resources[i].dev_name,
-                                context->tl_cmpts[md->cmpt_index].attr.name);
-            ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
-        }
+        ucs_string_set_addf(&avail_devices[tl_resources[i].dev_type],
+                            "'%s'(%s)", tl_resources[i].dev_name,
+                            context->tl_cmpts[md->cmpt_index].attr.name);
+        ucs_string_set_add(avail_tls, tl_resources[i].tl_name);
         ucp_add_tl_resource_if_enabled(context, md, md_index, config,
                                        &tl_resources[i], 0, num_resources_p,
-                                       dev_cfg_masks, tl_cfg_mask);
-    }
-
-    /* add sockaddr dummy resource, if md supports it */
-    if (md->attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-        sa_rsc.dev_type   = UCT_DEVICE_TYPE_NET;
-        sa_rsc.sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
-        ucs_snprintf_zero(sa_rsc.tl_name, UCT_TL_NAME_MAX, "%s", md->rsc.md_name);
-        ucs_snprintf_zero(sa_rsc.dev_name, UCT_DEVICE_NAME_MAX, "sockaddr");
-        ucp_add_tl_resource_if_enabled(context, md, md_index, config, &sa_rsc,
-                                       UCP_TL_RSC_FLAG_SOCKADDR, num_resources_p,
                                        dev_cfg_masks, tl_cfg_mask);
     }
 
