@@ -108,6 +108,12 @@ protected:
                        const ucs_log_component_config_t *comp_conf,
                        const char *message, va_list ap);
 
+    static ucs_log_func_rc_t
+    wrap_warns_logger(const char *file, unsigned line, const char *function,
+                      ucs_log_level_t level,
+                      const ucs_log_component_config_t *comp_conf,
+                      const char *message, va_list ap);
+
     unsigned num_errors();
 
     unsigned num_warnings();

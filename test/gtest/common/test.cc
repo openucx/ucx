@@ -276,7 +276,16 @@ test_base::wrap_errors_logger(const char *file, unsigned line,
                          function, level, comp_conf, message, ap);
 }
 
+ucs_log_func_rc_t
+test_base::wrap_warns_logger(const char *file, unsigned line,
+                             const char *function, ucs_log_level_t level,
+                             const ucs_log_component_config_t *comp_conf,
+                             const char *message, va_list ap)
+{
+    return common_logger(UCS_LOG_LEVEL_WARN, true, m_warnings, 1000, file, line,
+                         function, level, comp_conf, message, ap);
 }
+
 
 unsigned test_base::num_errors()
 {
