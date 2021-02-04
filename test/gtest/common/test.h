@@ -136,6 +136,14 @@ private:
                                               const std::string& message,
                                               const size_t limit);
 
+    static ucs_log_func_rc_t
+    common_logger(ucs_log_level_t log_level_to_handle, bool print,
+                  std::vector<std::string> &messages_vec, size_t limit,
+                  const char *file, unsigned line, const char *function,
+                  ucs_log_level_t level,
+                  const ucs_log_component_config_t *comp_conf,
+                  const char *message, va_list ap);
+
     static void *thread_func(void *arg);
 
     pthread_barrier_t    m_barrier;
