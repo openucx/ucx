@@ -162,9 +162,9 @@ UCS_PROFILE_FUNC_VOID(ucp_am_data_release, (worker, data),
 
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
         /* Don't use UCS_PTR_BYTE_OFFSET here due to coverity false
-         * positive report. Need to step back by first_header size, where
+         * positive report. Need to step back by am_malloc_offset, where
          * originally allocated pointer resides. */
-        ucs_free((char*)rdesc - rdesc->payload_offset);
+        ucs_free((char*)rdesc - rdesc->am_malloc_offset);
         return;
     }
 
@@ -1332,10 +1332,10 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
      *                                                       needed anymore,
      *                                                       can overwrite)
      */
-    desc_offset                 = first_rdesc->payload_offset;
-    first_rdesc                 = (ucp_recv_desc_t*)msg - 1;
-    first_rdesc->flags          = UCP_RECV_DESC_FLAG_MALLOC;
-    first_rdesc->payload_offset = desc_offset;
+    desc_offset                   = first_rdesc->payload_offset;
+    first_rdesc                   = (ucp_recv_desc_t*)msg - 1;
+    first_rdesc->flags            = UCP_RECV_DESC_FLAG_MALLOC;
+    first_rdesc->am_malloc_offset = desc_offset;
 
     return;
 }
