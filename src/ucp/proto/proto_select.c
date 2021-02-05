@@ -368,6 +368,7 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
 
     init_params.worker        = worker;
     init_params.select_param  = select_param;
+    init_params.ep_cfg_index  = ep_cfg_index;
     init_params.ep_config_key = &worker->ep_config[ep_cfg_index].key;
 
     if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {

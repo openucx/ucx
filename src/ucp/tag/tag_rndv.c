@@ -11,6 +11,8 @@
 #include "tag_rndv.h"
 #include "tag_match.inl"
 
+#include <ucp/rndv/proto_rndv.h>
+
 
 void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
                           const ucp_tag_rndv_rts_hdr_t *rts_hdr)
@@ -121,3 +123,11 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     return status;
 }
 
+static ucp_proto_t ucp_tag_rndv_proto = {
+    .name       = "tag/rndv",
+    .flags      = 0,
+    .init       = ucp_proto_rndv_rts_init,
+    .config_str = ucp_proto_rndv_ctrl_config_str,
+    .progress   = (uct_pending_callback_t)ucs_empty_function_do_assert,
+};
+UCP_PROTO_REGISTER(&ucp_tag_rndv_proto);

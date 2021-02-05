@@ -69,6 +69,9 @@ typedef enum {
     UCP_OP_ID_TAG_SEND_SYNC,
     UCP_OP_ID_PUT,
     UCP_OP_ID_GET,
+    UCP_OP_ID_API_LAST,
+
+    UCP_OP_ID_RNDV_RECV = UCP_OP_ID_API_LAST,
     UCP_OP_ID_LAST
 } ucp_operation_id_t;
 
