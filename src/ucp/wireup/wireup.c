@@ -1050,29 +1050,61 @@ ucp_wireup_get_reachable_mds(ucp_ep_h ep, unsigned ep_init_flags,
 }
 
 static void
-ucp_wireup_check_config_intersect(ucp_ep_h ep,
-                                  ucp_ep_config_key_t *new_key,
+ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
+                                  const ucp_unpacked_address_t *remote_address,
+                                  const unsigned *addr_indices,
                                   ucp_lane_index_t *connect_lane_bitmap,
                                   ucs_queue_head_t *replay_pending_queue)
 {
-    ucp_worker_h worker                            = ep->worker;
-    uct_ep_h new_uct_eps[UCP_MAX_LANES]            = { NULL };
-    ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES] = { UCP_NULL_LANE };
+    ucp_worker_h worker                                = ep->worker;
+    uct_ep_h new_uct_eps[UCP_MAX_LANES]                = { NULL };
+    ucp_lane_index_t reuse_lane_map[UCP_MAX_LANES]     = { UCP_NULL_LANE };
+    ucp_rsc_index_t old_dst_rsc_indices[UCP_MAX_LANES] = { UCP_NULL_RESOURCE };
+    ucp_rsc_index_t new_dst_rsc_indices[UCP_MAX_LANES] = { UCP_NULL_RESOURCE };
+    ucp_wireup_ep_t *cm_wireup_ep                      = NULL;
     ucp_ep_config_key_t *old_key;
     ucp_lane_index_t lane, reuse_lane;
-    ucp_wireup_ep_t *cm_wireup_ep;
+    ucp_address_entry_t *ae;
+    unsigned addr_index;
+    ucp_rsc_index_t dst_rsc_index;
 
     *connect_lane_bitmap = UCS_MASK(new_key->num_lanes);
     ucs_queue_head_init(replay_pending_queue);
 
-    if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        !ucp_ep_has_cm_lane(ep)) {
+    if (!ucp_ep_has_cm_lane(ep) ||
+        (ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL)) {
+        /* nothing to intersect with */
         return;
+    }
+
+    cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    ucs_assert(cm_wireup_ep != NULL);
+
+    memcpy(old_dst_rsc_indices, cm_wireup_ep->dst_rsc_indices,
+           sizeof(old_dst_rsc_indices));
+    for (lane = 0; lane < new_key->num_lanes; ++lane) {
+        addr_index = addr_indices[lane];
+
+        if (lane == ucp_ep_get_cm_lane(ep)) {
+            ucs_assert(addr_index == UINT_MAX);
+            dst_rsc_index = UCP_NULL_RESOURCE;
+        } else {
+            ucs_assert(addr_index != UINT_MAX);
+            ae = &remote_address->address_list[addr_index];
+            dst_rsc_index = ae->iface_attr.dst_rsc_index;
+            ucs_assert(dst_rsc_index != UCP_NULL_RESOURCE);
+        }
+
+        /* save destination resource index in the CM wireup EP for doing
+         * futher intersections, if needed */
+        cm_wireup_ep->dst_rsc_indices[lane] = dst_rsc_index;
+        new_dst_rsc_indices[lane]           = dst_rsc_index;
     }
 
     old_key = &ucp_ep_config(ep)->key;
 
-    ucp_ep_config_lanes_intersect(old_key, new_key, reuse_lane_map);
+    ucp_ep_config_lanes_intersect(old_key, old_dst_rsc_indices, new_key,
+                                  new_dst_rsc_indices, reuse_lane_map);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         ucs_assert(ep->uct_eps[lane] != NULL);
@@ -1095,7 +1127,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep,
         /* previous wireup lane is not part of new configuration, so add it as
          * auxiliary endpoint inside cm lane, to be able to continue wireup
          * messages exchange */
-        cm_wireup_ep             = ucp_ep_get_cm_wireup_ep(ep);
+        ucs_assert(cm_wireup_ep != NULL);
+
         new_key->wireup_msg_lane = new_key->cm_lane;
         reuse_lane               = old_key->wireup_msg_lane;
         ucp_wireup_ep_set_aux(cm_wireup_ep, ep->uct_eps[reuse_lane],
@@ -1172,7 +1205,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         return status;
     }
 
-    ucp_wireup_check_config_intersect(ep, &key, &connect_lane_bitmap,
+    ucp_wireup_check_config_intersect(ep, &key, remote_address, addr_indices,
+                                      &connect_lane_bitmap,
                                       &replay_pending_queue);
 
     /* Get all reachable MDs from full remote address list and join with

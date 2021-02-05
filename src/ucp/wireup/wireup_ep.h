@@ -47,6 +47,9 @@ struct ucp_wireup_ep {
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
     unsigned                  ep_init_flags; /**< UCP wireup EP init flags */
+    /**< Destination resource indicies used for checking intersection between
+         between two configurations in case of CM */
+    ucp_rsc_index_t           dst_rsc_indices[UCP_MAX_LANES];
 };
 
 
