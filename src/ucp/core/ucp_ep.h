@@ -582,6 +582,8 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 
 void ucp_ep_discard_lanes(ucp_ep_h ucp_ep, ucs_status_t status);
 
+ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
+
 /**
  * @brief Do keepalive operation.
  *

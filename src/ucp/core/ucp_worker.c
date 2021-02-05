@@ -631,15 +631,11 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
         ucp_ep = ucp_ep_from_ext_gen(ep_ext);
-        for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
-            if ((uct_ep == ucp_ep->uct_eps[lane]) ||
-                ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
-                ret_status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep,
-                                                                    lane,
-                                                                    uct_ep,
-                                                                    status);
-                goto out;
-            }
+        lane = ucp_ep_lookup_lane(ucp_ep, uct_ep);
+        if (lane != UCP_NULL_LANE) {
+            ret_status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane,
+                                                                uct_ep, status);
+            goto out;
         }
     }
 
@@ -2786,11 +2782,11 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
 
-    if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
-        return;
-    }
+    ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
 
-    if (!ucp_worker_keepalive_is_enabled(worker)) {
+    if ((ep->flags & UCP_EP_FLAG_INTERNAL) ||
+        (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
+        !ucp_worker_keepalive_is_enabled(worker)) {
         return;
     }
 
@@ -2804,6 +2800,8 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
+
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
     if (!ucp_worker_keepalive_is_enabled(worker)) {
         ucs_assert(worker->keepalive.iter == &worker->all_eps);

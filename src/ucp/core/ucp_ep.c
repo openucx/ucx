@@ -214,9 +214,9 @@ static void ucp_ep_delete(ucp_ep_h ep)
                             ucp_wireup_msg_ack_cb_pred, ep);
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucp_worker_keepalive_remove_ep(ep);
+        ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     }
 
-    ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
         ucp_ep_release_id(ep);
     }
@@ -1028,6 +1028,20 @@ void ucp_ep_destroy(ucp_ep_h ep)
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return;
+}
+
+ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep)
+{
+    ucp_lane_index_t lane;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ucp_ep); ++lane) {
+        if ((uct_ep == ucp_ep->uct_eps[lane]) ||
+            ucp_wireup_ep_is_owner(ucp_ep->uct_eps[lane], uct_ep)) {
+            return lane;
+        }
+    }
+
+    return UCP_NULL_LANE;
 }
 
 static int
