@@ -557,6 +557,7 @@ ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *
     uint64_t header = 0;
     size_t length;
     void *buffer;
+    ucs_iov_iter_t iov_iter;
     size_t offset;
     ucs_status_t status;
 
@@ -567,7 +568,8 @@ ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *
         buffer = ucs_alloca(length);
     }
 
-    uct_iov_to_buffer(iov, iovcnt, 0, buffer, SIZE_MAX);
+    ucs_iov_iter_init(&iov_iter);
+    uct_iov_to_buffer(iov, iovcnt, &iov_iter, buffer, SIZE_MAX);
 
     /* There is uint64_t header in the parameter list of uct_ep_am_short. Thus the
      * minmum message size is 8b. If the total length of iov is less than 8b, the

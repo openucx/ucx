@@ -504,6 +504,32 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     uct_rc_txqp_posted(txqp, &iface->super, res_count, fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE);
 }
 
+static UCS_F_ALWAYS_INLINE void uct_rc_mlx5_txqp_inline_iov_post(
+        uct_rc_mlx5_iface_common_t *iface, uct_rc_txqp_t *txqp,
+        uct_ib_mlx5_txwq_t *txwq, const uct_iov_t *iov, size_t iovcnt,
+        size_t iov_length, uint8_t am_id)
+{
+    struct mlx5_wqe_ctrl_seg *ctrl = txwq->curr;
+    struct mlx5_wqe_inl_data_seg *inl;
+    uct_rc_mlx5_hdr_t *rch;
+    size_t wqe_size, ctrl_size;
+    unsigned fm_ce_se;
+
+    ctrl_size       = sizeof(*ctrl);
+    wqe_size        = ctrl_size + sizeof(*inl) + sizeof(*rch) + iov_length;
+    inl             = UCS_PTR_BYTE_OFFSET(ctrl, ctrl_size);
+    inl             = uct_ib_mlx5_txwq_wrap_none(txwq, inl);
+    inl->byte_count = htonl((iov_length + sizeof(*rch)) | MLX5_INLINE_SEG);
+    rch             = (uct_rc_mlx5_hdr_t*)(inl + 1);
+    fm_ce_se        = MLX5_WQE_CTRL_SOLICITED | uct_rc_iface_tx_moderation(
+            &iface->super, txqp, MLX5_WQE_CTRL_CQ_UPDATE);
+
+    uct_rc_mlx5_am_hdr_fill(rch, am_id);
+    uct_ib_mlx5_inline_iov_copy(rch + 1, iov, iovcnt, iov_length, txwq);
+    uct_rc_mlx5_common_post_send(iface, IBV_QPT_RC, txqp, txwq,
+                                 MLX5_OPCODE_SEND, 0, fm_ce_se, wqe_size, NULL,
+                                 NULL, 0, INT_MAX, NULL);
+}
 
 /*
  * Generic function that setups and posts WQE with inline segment
@@ -1535,7 +1561,7 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     memcpy(cache->bytes + hdr_len, payload, head);
 
     UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->bytes));
-    UCS_STATIC_ASSERT(ucs_static_array_size(log_sge->sg_list) >= 2);
+    UCS_STATIC_ASSERT(sizeof(log_sge->sg_list) / sizeof(log_sge->sg_list[0]) >= 2);
 
     /* condition is static-evaluated */
     if (cache && hdr_len) {
@@ -1567,19 +1593,85 @@ uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hd
     }
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
-uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
-                                uct_rc_mlx5_dm_copy_data_t *cache,
-                                size_t hdr_len, const void *payload,
-                                unsigned length,
-                                uct_rc_iface_send_desc_t **desc_p,
-                                void **buffer_p, uct_ib_log_sge_t *log_sge)
+static void UCS_F_ALWAYS_INLINE uct_rc_mlx5_iface_copy_iov_to_dm(
+        uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len, const uct_iov_t *iov,
+        size_t iovcnt, void *dm, uct_ib_log_sge_t *log_sge)
+{
+    typedef uint64_t misaligned_t UCS_V_ALIGNED(1);
+
+    ucs_iov_iter_t iov_iter;
+    uint64_t word;
+    size_t to_copy;
+    void *src;
+
+    ucs_assert(cache != NULL);
+    ucs_assert(hdr_len != 0);
+    ucs_assert(sizeof(cache->bytes) >= hdr_len);
+    ucs_iov_iter_init(&iov_iter);
+
+    /* copy head of iov to tail of cache */
+    uct_iov_to_buffer(iov, iovcnt, &iov_iter,
+                      UCS_PTR_BYTE_OFFSET(cache->bytes, hdr_len),
+                      sizeof(cache->bytes) - hdr_len);
+
+    UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->bytes));
+    UCS_STATIC_ASSERT(ucs_static_array_size(log_sge->sg_list) >= 2);
+
+    /* atomically by 8 bytes copy data to DM */
+    /* cache buffer must be aligned, so, source data type is aligned */
+    UCS_WORD_COPY(volatile uint64_t, dm, uint64_t, cache->bytes,
+                  sizeof(cache->bytes));
+    dm = UCS_PTR_BYTE_OFFSET(dm, sizeof(cache->bytes));
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+        log_sge->sg_list[0].addr   = (uint64_t)cache;
+        log_sge->sg_list[0].length = (uint32_t)hdr_len;
+
+        log_sge->sg_list[1].addr   = (uint64_t)iov->buffer;
+        log_sge->sg_list[1].length = (uint32_t)iov->length;
+
+        log_sge->num_sge = 2;
+    } else {
+        log_sge->num_sge = 0;
+    }
+
+    while (iov_iter.iov_index < iovcnt) {
+        to_copy = ucs_align_down(
+                iov[iov_iter.iov_index].length - iov_iter.buffer_offset,
+                sizeof(word));
+        src     = UCS_PTR_BYTE_OFFSET(iov[iov_iter.iov_index].buffer,
+                                      iov_iter.buffer_offset);
+        UCS_WORD_COPY(volatile uint64_t, dm, misaligned_t, src, to_copy);
+
+        dm                      = UCS_PTR_BYTE_OFFSET(dm, to_copy);
+        iov_iter.buffer_offset += to_copy;
+
+        if (iov_iter.buffer_offset < iov[iov_iter.iov_index].length) {
+            /* copy remainder of the current iov buffer, and partially next
+             * buffer(s) to fill word if there is smth left to copy */
+            word = 0;
+            uct_iov_to_buffer(iov, iovcnt, &iov_iter, &word, sizeof(word));
+            UCS_WORD_COPY(volatile uint64_t, dm, uint64_t, &word, sizeof(word));
+            dm = UCS_PTR_BYTE_OFFSET(dm, sizeof(word));
+        } else {
+            ++iov_iter.iov_index;
+            iov_iter.buffer_offset = 0;
+        }
+    }
+}
+
+static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
+        uct_rc_mlx5_iface_common_t *iface, uct_rc_mlx5_dm_copy_data_t *cache,
+        size_t hdr_len, const void *payload, unsigned length,
+        const uct_iov_t *iov, size_t iovcnt, uct_rc_iface_send_desc_t **desc_p,
+        void **buffer_p, uct_ib_log_sge_t *log_sge)
 {
     uct_rc_iface_send_desc_t *desc;
     void *buffer;
+    ucs_iov_iter_t iov_iter;
 
     ucs_assert(iface->dm.dm != NULL);
     ucs_assert(log_sge != NULL);
+    ucs_assert((length == 0) || (iovcnt == 0));
 
     desc = ucs_mpool_get_inline(&iface->dm.dm->mp);
     if (ucs_unlikely(desc == NULL)) {
@@ -1593,6 +1685,9 @@ uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
             memcpy(buffer, cache->bytes, hdr_len);
         }
         memcpy(UCS_PTR_BYTE_OFFSET(buffer, hdr_len), payload, length);
+        ucs_iov_iter_init(&iov_iter);
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter,
+                          UCS_PTR_BYTE_OFFSET(buffer, hdr_len), SIZE_MAX);
         log_sge->num_sge = 0;
     } else {
         /* desc must be partially initialized by mpool.
@@ -1601,8 +1696,14 @@ uct_rc_mlx5_common_dm_make_data(uct_rc_mlx5_iface_common_t *iface,
         ucs_assert(desc->super.buffer != NULL);
         buffer = (void*)UCS_PTR_BYTE_DIFF(iface->dm.dm->start_va, desc->super.buffer);
 
-        uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, payload,
-                                            length, desc->super.buffer, log_sge);
+        if (iovcnt > 0) {
+            uct_rc_mlx5_iface_copy_iov_to_dm(cache, hdr_len, iov, iovcnt,
+                                             desc->super.buffer, log_sge);
+        } else {
+            uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, payload, length,
+                                                desc->super.buffer, log_sge);
+        }
+
         if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
             log_sge->sg_list[0].lkey = log_sge->sg_list[1].lkey = desc->lkey;
             log_sge->inline_bitmap = 0;

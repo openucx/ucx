@@ -114,7 +114,7 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                const void *payload, unsigned length)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    UCT_RC_MLX5_CHECK_AM_SHORT(id, length, 0);
+    UCT_RC_MLX5_CHECK_AM_SHORT(id, uct_rc_mlx5_am_short_hdr_t, length, 0);
     UCT_RC_CHECK_RES_AND_FC(&iface->super, &ep->super, id);
 
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
@@ -128,6 +128,21 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  INT_MAX);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
     UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+    return UCS_OK;
+}
+
+static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_ep_am_short_iov_inline(
+        uct_ep_h tl_ep, uint8_t id, const uct_iov_t *iov, size_t iovcnt,
+        size_t iov_length)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    UCT_RC_MLX5_CHECK_AM_SHORT(id, uct_rc_mlx5_hdr_t, iov_length, 0);
+    UCT_RC_CHECK_RES_AND_FC(&iface->super, &ep->super, id);
+    uct_rc_mlx5_txqp_inline_iov_post(iface, &ep->super.txqp, &ep->tx.wq, iov,
+                                     iovcnt, iov_length, id);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, iov_length);
+    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+
     return UCS_OK;
 }
 
@@ -146,7 +161,8 @@ uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
     uct_ib_log_sge_t log_sge;
 
     status = uct_rc_mlx5_common_dm_make_data(iface, cache, hdr_len, payload,
-                                             length, &desc, &buffer, &log_sge);
+                                             length, NULL, 0, &desc, &buffer,
+                                             &log_sge);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
     }
@@ -156,6 +172,35 @@ uct_rc_mlx5_ep_short_dm(uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache,
                                 rdma_raddr, rdma_rkey, fm_ce_se,
                                 0, desc, buffer,
                                 log_sge.num_sge ? &log_sge : NULL);
+    return UCS_OK;
+}
+
+static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_ep_short_iov_dm(
+        uct_rc_mlx5_ep_t *ep, uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
+        const uct_iov_t *iov, size_t iovcnt, size_t iov_length)
+{
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
+            ep->super.super.super.iface, uct_rc_mlx5_iface_common_t);
+    uct_rc_iface_send_desc_t *desc    = NULL;
+    /* pass dummy pointer as 0-length payload to avoid static check issue */
+    char dummy                        = 0;
+    void *buffer;
+    ucs_status_t status;
+    uct_ib_log_sge_t log_sge;
+
+    status = uct_rc_mlx5_common_dm_make_data(iface, cache, hdr_len, &dummy, 0,
+                                             iov, iovcnt, &desc, &buffer,
+                                             &log_sge);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        return status;
+    }
+
+    uct_rc_mlx5_txqp_bcopy_post(
+            iface, &ep->super.txqp, &ep->tx.wq, MLX5_OPCODE_SEND,
+            hdr_len + iov_length, 0, 0,
+            MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE, 0, desc, buffer,
+            (log_sge.num_sge > 0) ? &log_sge : NULL);
+
     return UCS_OK;
 }
 #endif
@@ -327,6 +372,47 @@ uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(cache.am_hdr) + length);
     UCT_RC_UPDATE_FC(rc_iface, &ep->super, id);
+    return UCS_OK;
+#endif
+}
+
+ucs_status_t uct_rc_mlx5_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                         const uct_iov_t *iov, size_t iovcnt)
+{
+    size_t iov_length = uct_iov_total_length(iov, iovcnt);
+#if HAVE_IBV_DM
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+    uct_rc_iface_t *rc_iface = &iface->super;
+    ucs_status_t status;
+    uct_rc_mlx5_dm_copy_data_t cache;
+
+    if (ucs_likely((sizeof(uct_rc_mlx5_hdr_t) + iov_length <=
+                    UCT_IB_MLX5_AM_MAX_SHORT(0)) ||
+                   !iface->dm.dm)) {
+#endif
+        return uct_rc_mlx5_ep_am_short_iov_inline(tl_ep, id, iov, iovcnt,
+                                                  iov_length);
+#if HAVE_IBV_DM
+    }
+
+    UCT_CHECK_LENGTH(iov_length + sizeof(uct_rc_mlx5_hdr_t), 0,
+                     iface->dm.seg_len, "am_short_iov");
+    UCT_CHECK_AM_ID(id);
+    UCT_RC_CHECK_RES_AND_FC(&iface->super, &ep->super, id);
+
+    uct_rc_mlx5_am_hdr_fill(&cache.am_hdr.rc_hdr, id);
+
+    status = uct_rc_mlx5_ep_short_iov_dm(ep, &cache,
+                                         sizeof(cache.am_hdr.rc_hdr), iov,
+                                         iovcnt, iov_length);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        return status;
+    }
+
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT,
+                      sizeof(cache.am_hdr.rc_hdr) + iov_length);
+    UCT_RC_UPDATE_FC(rc_iface, &ep->super, id);
+
     return UCS_OK;
 #endif
 }
