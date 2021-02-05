@@ -819,10 +819,11 @@ ucp_invoke_uct_completion(uct_completion_t *comp, ucs_status_t status)
     }
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_request_invoke_uct_completion(ucp_request_t *req, ucs_status_t status)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_request_invoke_uct_completion_success(ucp_request_t *req)
 {
-    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, UCS_OK);
+    return UCS_OK;
 }
 
 #endif

@@ -155,10 +155,11 @@ ucp_proto_eager_bcopy_multi_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
 
-    return ucp_proto_multi_bcopy_progress(req, req->send.proto_config->priv,
-                                          ucp_proto_eager_multi_request_init,
-                                          ucp_proto_eager_bcopy_multi_send_func,
-                                          ucp_proto_request_bcopy_complete);
+    return ucp_proto_multi_bcopy_progress(
+            req, req->send.proto_config->priv,
+            ucp_proto_eager_multi_request_init,
+            ucp_proto_eager_bcopy_multi_send_func,
+            ucp_proto_request_bcopy_complete_success);
 }
 
 static ucp_proto_t ucp_eager_bcopy_multi_proto = {
@@ -201,16 +202,16 @@ ucp_proto_eager_sync_bcopy_multi_send_func(
             sizeof(ucp_eager_sync_first_hdr_t));
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_eager_sync_bcopy_send_completed(ucp_request_t *req,
-                                          ucs_status_t status)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_eager_sync_bcopy_send_completed(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UINT_MAX);
 
     req->flags |= UCP_REQUEST_FLAG_LOCAL_COMPLETED;
     if (req->flags & UCP_REQUEST_FLAG_REMOTE_COMPLETED) {
-        ucp_request_complete_send(req, status);
+        ucp_request_complete_send(req, UCS_OK);
     }
+    return UCS_OK;
 }
 
 void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,

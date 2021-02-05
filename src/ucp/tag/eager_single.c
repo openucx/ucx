@@ -102,12 +102,9 @@ static ucs_status_t ucp_eager_bcopy_single_progress(uct_pending_req_t *self)
                                                             send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
 
-    return ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_EAGER_ONLY,
-                                              spriv->super.lane,
-                                              ucp_eager_single_pack, req,
-                                              SIZE_MAX,
-                                              ucp_proto_request_bcopy_complete,
-                                              ucp_proto_request_bcopy_complete);
+    return ucp_proto_am_bcopy_single_progress(
+            req, UCP_AM_ID_EAGER_ONLY, spriv->super.lane, ucp_eager_single_pack,
+            req, SIZE_MAX, ucp_proto_request_bcopy_complete_success);
 }
 
 static ucs_status_t

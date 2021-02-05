@@ -14,20 +14,21 @@
 #include <ucp/core/ucp_request.inl>
 
 
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_request_bcopy_complete(ucp_request_t *req, ucs_status_t status)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UINT_MAX);
-    ucp_request_complete_send(req, status);
+    ucp_request_complete_send(req, UCS_OK);
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_request_completion_init(ucp_request_t *req,
-                                  uct_completion_callback_t comp_func)
+ucp_proto_completion_init(uct_completion_t *comp,
+                          uct_completion_callback_t comp_func)
 {
-    req->send.state.uct_comp.func   = comp_func;
-    req->send.state.uct_comp.count  = 1;
-    req->send.state.uct_comp.status = UCS_OK;
+    comp->func   = comp_func;
+    comp->count  = 1;
+    comp->status = UCS_OK;
     /* extra ref to be decremented when all sent */
 }
 
@@ -41,7 +42,7 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
     ucp_trace_req(req, "ucp_proto_zcopy_request_init for %s",
                   req->send.proto_config->proto->name);
 
-    ucp_proto_request_completion_init(req, comp_func);
+    ucp_proto_completion_init(&req->send.state.uct_comp, comp_func);
 
     status = ucp_datatype_iter_mem_reg(ep->worker->context,
                                        &req->send.state.dt_iter,
@@ -78,6 +79,13 @@ ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucp_proto_request_zcopy_cleanup(req);
     ucp_request_complete_send(req, status);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_request_zcopy_complete_success(ucp_request_t *req)
+{
+    ucp_proto_request_zcopy_complete(req, UCS_OK);
+    return UCS_OK;
 }
 
 /* Select protocol for the request and initialize protocol-related fields */
