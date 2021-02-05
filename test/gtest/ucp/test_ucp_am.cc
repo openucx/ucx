@@ -620,6 +620,78 @@ UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_rts_reply_am_on_closed_ep, "RNDV_THRESH
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_closed_ep)
 
 
+class test_ucp_am_nbx_eager_data_release : public test_ucp_am_nbx {
+public:
+    test_ucp_am_nbx_eager_data_release()
+    {
+        modify_config("RNDV_THRESH", "inf");
+        modify_config("ZCOPY_THRESH", "inf");
+        m_data_ptr = NULL;
+    }
+
+    virtual ucs_status_t
+    am_data_handler(const void *header, size_t header_length, void *data,
+                    size_t length, const ucp_am_recv_param_t *rx_param)
+    {
+        EXPECT_FALSE(m_am_received);
+
+        ucs_status_t status;
+
+        if (rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA) {
+            m_data_ptr = data;
+            status     = UCS_INPROGRESS;
+        } else {
+            m_data_ptr = NULL;
+            status     = UCS_OK;
+        }
+
+        m_am_received = true;
+
+        return status;
+    }
+
+    void test_data_release(size_t size)
+    {
+        size_t hdr_size = ucs_min(max_am_hdr(), 8);
+        test_am_send_recv(size);
+        if (m_data_ptr != NULL) {
+            ucp_am_data_release(receiver().worker(), m_data_ptr);
+        }
+
+        test_am_send_recv(size, hdr_size);
+        if (m_data_ptr != NULL) {
+            ucp_am_data_release(receiver().worker(), m_data_ptr);
+        }
+    }
+
+    size_t fragment_size()
+    {
+        return ucp_ep_config(sender().ep())->am.max_bcopy -
+               sizeof(ucp_am_hdr_t);
+    }
+
+private:
+    void *m_data_ptr;
+};
+
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, short)
+{
+    test_data_release(1);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single)
+{
+    test_data_release(fragment_size() / 2);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi)
+{
+    test_data_release(fragment_size() * 2);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_eager_data_release)
+
+
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx {
 public:
     static const uint64_t dts_bitmap = UCS_BIT(UCP_DATATYPE_CONTIG) |

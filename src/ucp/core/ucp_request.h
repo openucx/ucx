@@ -382,8 +382,14 @@ struct ucp_recv_desc {
         ucs_queue_elem_t    am_mid_queue;    /* AM middle fragments queue */
     };
     uint32_t                length;          /* Received length */
-    uint32_t                payload_offset;  /* Offset from end of the descriptor
+    union {
+        uint32_t            payload_offset;  /* Offset from end of the descriptor
                                               * to AM data */
+        uint32_t            am_malloc_offset; /* Offset from rdesc, holding
+                                                 assembled multi-fragment active
+                                                 message, to the originally
+                                                 malloc'd buffer pointer */
+    };
     uint16_t                flags;           /* Flags */
     int16_t                 uct_desc_offset; /* Offset which needs to be
                                                 substructed from rdesc when
