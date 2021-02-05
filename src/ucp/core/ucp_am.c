@@ -162,9 +162,9 @@ UCS_PROFILE_FUNC_VOID(ucp_am_data_release, (worker, data),
 
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_MALLOC)) {
         /* Don't use UCS_PTR_BYTE_OFFSET here due to coverity false
-         * positive report. Need to step back by first_header size, where
+         * positive report. Need to step back by am_malloc_offset, where
          * originally allocated pointer resides. */
-        ucs_free((char*)rdesc - sizeof(ucp_am_first_hdr_t));
+        ucs_free((char*)rdesc - rdesc->am_malloc_offset);
         return;
     }
 
@@ -1155,6 +1155,7 @@ ucp_am_handler_common(ucp_worker_h worker, ucp_am_hdr_t *am_hdr, size_t hdr_size
     ucp_am_entry_t *am_cb = &ucs_array_elem(&worker->am, am_hdr->am_id);
     void *data            = ucp_am_data_ptr(am_hdr, hdr_size);
     ucs_status_t status;
+    size_t payload_offset;
 
     ucs_assert(total_length >= am_hdr->header_length + hdr_size);
 
@@ -1168,10 +1169,10 @@ ucp_am_handler_common(ucp_worker_h worker, ucp_am_hdr_t *am_hdr, size_t hdr_size
          * right before the data, where user header resides).
          */
         status = ucp_recv_desc_init(worker, data,
-                                    total_length - hdr_size - am_hdr->header_length,
-                                    0,
-                                    0, /* pass as a const */
-                                    0, 0, -hdr_size, &desc);
+                                    total_length - hdr_size -
+                                        am_hdr->header_length,
+                                    0, 0, /* pass as a const */
+                                    0, 0, 0, &desc);
         if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
             goto err;
         }
@@ -1201,11 +1202,11 @@ ucp_am_handler_common(ucp_worker_h worker, ucp_am_hdr_t *am_hdr, size_t hdr_size
         return UCS_OK;
     }
 
-    status = ucp_recv_desc_init(worker, data,
-                                total_length - hdr_size - am_hdr->header_length,
-                                0,
-                                UCT_CB_PARAM_FLAG_DESC, /* pass as a const */
-                                0, 0, -hdr_size, &desc);
+    payload_offset = hdr_size + am_hdr->header_length;
+    status         = ucp_recv_desc_init(worker, data,
+                                        total_length - payload_offset, 0,
+                                        UCT_CB_PARAM_FLAG_DESC, /* pass as a const */
+                                        0, 0, -payload_offset, &desc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         goto err;
     }
@@ -1296,6 +1297,7 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
     ucs_status_t status;
     void *msg;
     uint64_t recv_flags;
+    size_t desc_offset;
 
     ucp_am_copy_data_fragment(first_rdesc, data, length, offset);
 
@@ -1332,10 +1334,10 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
      *                                                       needed anymore,
      *                                                       can overwrite)
      */
-    msg                = UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
-                                             first_rdesc->payload_offset);
-    first_rdesc        = (ucp_recv_desc_t*)msg - 1;
-    first_rdesc->flags = UCP_RECV_DESC_FLAG_MALLOC;
+    desc_offset                   = first_rdesc->payload_offset;
+    first_rdesc                   = (ucp_recv_desc_t*)msg - 1;
+    first_rdesc->flags            = UCP_RECV_DESC_FLAG_MALLOC;
+    first_rdesc->am_malloc_offset = desc_offset;
 
     return;
 }
