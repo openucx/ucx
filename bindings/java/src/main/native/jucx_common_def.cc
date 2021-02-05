@@ -377,7 +377,6 @@ void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
     jmethodID on_conn_request = env->GetMethodID(jucx_conn_hndl_cls, "onConnectionRequest",
                                                  "(Lorg/openucx/jucx/ucp/UcpConnectionRequest;)V");
     env->CallVoidMethod(jucx_conn_handler, on_conn_request, jucx_conn_request);
-    env->DeleteGlobalRef(jucx_conn_handler);
 }
 
 jobject new_rkey_instance(JNIEnv *env, ucp_rkey_h rkey)
