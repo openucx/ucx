@@ -28,10 +28,10 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
     ucs_assert(rkey->cache.ep_cfg_index == ep->cfg_index);
     ucs_assert(rkey->cache.rma_lane == lane);
 
-    if ((req->send.length <= rma_config->max_put_short) ||
+    if (((ssize_t)req->send.length <= rma_config->max_put_short) ||
         (req->send.length <= ucp_ep_config(ep)->bcopy_thresh))
     {
-        packed_len = ucs_min(req->send.length, rma_config->max_put_short);
+        packed_len = ucs_min((ssize_t)req->send.length, rma_config->max_put_short);
         status = UCS_PROFILE_CALL(uct_ep_put_short,
                                   ep->uct_eps[lane],
                                   req->send.buffer,
@@ -87,7 +87,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
     ucs_assert(rkey->cache.ep_cfg_index == ep->cfg_index);
     ucs_assert(rkey->cache.rma_lane == lane);
 
-    if (ucs_likely(req->send.length < rma_config->get_zcopy_thresh)) {
+    if (ucs_likely((ssize_t)req->send.length < rma_config->get_zcopy_thresh)) {
         frag_length = ucs_min(rma_config->max_get_bcopy, req->send.length);
         status = UCS_PROFILE_CALL(uct_ep_get_bcopy,
                                   ep->uct_eps[lane],
