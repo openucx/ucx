@@ -403,6 +403,10 @@ unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
         pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
     }
 
+    if (iface->config.path_mtu != IBV_MTU_4096) {
+        pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
+    }
+
     return pack_flags;
 }
 
@@ -424,8 +428,8 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
     params.gid       = iface->gid_info.gid;
     params.lid       = uct_ib_iface_port_attr(iface)->lid;
     params.roce_info = iface->gid_info.roce_info;
+    params.path_mtu  = iface->config.path_mtu;
     /* to suppress gcc 4.3.4 warning */
-    params.path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
     params.gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
     params.pkey      = iface->pkey;
     uct_ib_address_pack(&params, ib_addr);
