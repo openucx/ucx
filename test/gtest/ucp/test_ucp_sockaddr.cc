@@ -424,9 +424,10 @@ public:
         return get_ep_params();
     }
 
-    void client_ep_connect()
+    void client_ep_connect_basic(const ucp_ep_params_t &base_ep_params)
     {
-        ucp_ep_params_t ep_params = get_ep_params();
+        ucp_ep_params_t ep_params = base_ep_params;
+
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
                                      UCP_EP_PARAM_FIELD_SOCK_ADDR |
                                      UCP_EP_PARAM_FIELD_USER_DATA;
@@ -434,7 +435,13 @@ public:
         ep_params.sockaddr.addr    = m_test_addr.get_sock_addr_ptr();
         ep_params.sockaddr.addrlen = m_test_addr.get_addr_size();
         ep_params.user_data        = &sender();
+
         sender().connect(&receiver(), ep_params);
+    }
+
+    void client_ep_connect()
+    {
+        client_ep_connect_basic(get_ep_params());
     }
 
     void connect_and_send_recv(bool wakeup, uint64_t flags)
@@ -520,6 +527,42 @@ public:
 
         sender().close_ep_req_free(sender_ep_close_req);
         receiver().close_ep_req_free(receiver_ep_close_req);
+    }
+
+    void setup_unreachable_listener()
+    {
+        ucs::sock_addr_storage listen_addr(m_test_addr.to_ucs_sock_addr());
+        ucs_status_t status = receiver().listen(cb_type(),
+                                                m_test_addr.get_sock_addr_ptr(),
+                                                m_test_addr.get_addr_size(),
+                                                get_server_ep_params());
+        if (status == UCS_ERR_UNREACHABLE) {
+            UCS_TEST_SKIP_R("cannot listen to " + m_test_addr.to_str());
+        }
+
+        /* make the client try to connect to a non-existing port on the server
+         * side */
+        m_test_addr.set_port(1);
+    }
+
+    static ucs_log_func_rc_t
+    detect_fail_no_err_cb(const char *file, unsigned line, const char *function,
+                          ucs_log_level_t level,
+                          const ucs_log_component_config_t *comp_conf,
+                          const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            std::string err_str = format_message(message, ap);
+
+            if (err_str.find("on CM lane will not be handled since no error"
+                             " callback is installed") != std::string::npos) {
+                UCS_TEST_MESSAGE << "< " << err_str << " >";
+                ++m_err_count;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
     static void close_completion(void *request, ucs_status_t status,
@@ -734,25 +777,38 @@ UCS_TEST_P(test_ucp_sockaddr, listener_query) {
     EXPECT_EQ(m_test_addr, listener_attr.sockaddr);
 }
 
-UCS_TEST_P(test_ucp_sockaddr, err_handle) {
-
-    ucs::sock_addr_storage listen_addr(m_test_addr.to_ucs_sock_addr());
-    ucs_status_t status = receiver().listen(cb_type(),
-                                            m_test_addr.get_sock_addr_ptr(),
-                                            m_test_addr.get_addr_size(),
-                                            get_server_ep_params());
-    if (status == UCS_ERR_UNREACHABLE) {
-        UCS_TEST_SKIP_R("cannot listen to " + m_test_addr.to_str());
-    }
-
-    /* make the client try to connect to a non-existing port on the server side */
-    m_test_addr.set_port(1);
+UCS_TEST_P(test_ucp_sockaddr, err_handle)
+{
+    setup_unreachable_listener();
 
     {
         scoped_log_handler slh(wrap_errors_logger);
         client_ep_connect();
         /* allow for the unreachable event to arrive before restoring errors */
         wait_for_flag(&sender().get_err_num());
+    }
+
+    EXPECT_EQ(1u, sender().get_err_num());
+}
+
+UCS_TEST_P(test_ucp_sockaddr, err_handle_without_err_cb)
+{
+    setup_unreachable_listener();
+
+    {
+        scoped_log_handler slh(detect_fail_no_err_cb);
+        ucp_ep_params_t ep_params = ucp_test::get_ep_params();
+
+        ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
+
+        client_ep_connect_basic(ep_params);
+
+        /* allow for the unreachable event to arrive before restoring errors */
+        wait_for_flag(&m_err_count);
+        if (m_err_count > 0) {
+            sender().add_err(UCS_ERR_CONNECTION_RESET);
+        }
     }
 
     EXPECT_EQ(1u, sender().get_err_num());

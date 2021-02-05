@@ -485,12 +485,13 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
                                       uct_ep_h uct_ep, ucp_lane_index_t lane,
                                       ucs_status_t status)
 {
-    uct_worker_cb_id_t          prog_id    = UCS_CALLBACKQ_ID_NULL;
-    ucs_status_t                ret_status = UCS_OK;
-    ucp_rsc_index_t             rsc_index;
-    uct_tl_resource_desc_t      *tl_rsc;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+    ucs_status_t ret_status    = UCS_OK;
+    char lane_info_str[64];
+    ucp_rsc_index_t rsc_index;
+    uct_tl_resource_desc_t *tl_rsc;
     ucp_worker_err_handle_arg_t *err_handle_arg;
-    ucs_log_level_t             log_level;
+    ucs_log_level_t log_level;
 
     /* In case if this is a local failure we need to notify remote side */
     if (ucp_ep_is_cm_local_connected(ucp_ep)) {
@@ -536,18 +537,26 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
                     UCS_LOG_LEVEL_ERROR;
 
         if (lane != UCP_NULL_LANE) {
-            rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
-            tl_rsc    = &worker->context->tl_rscs[rsc_index].tl_rsc;
-            ucs_log(log_level, "error '%s' will not be handled for ep %p - "
-                    UCT_TL_RESOURCE_DESC_FMT " since no error callback is installed",
-                    ucs_status_string(status), ucp_ep,
-                    UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+            if (lane == ucp_ep_get_cm_lane(ucp_ep)) {
+                ucs_strncpy_safe(lane_info_str, "CM lane",
+                                 sizeof(lane_info_str));
+            } else {
+                rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
+                tl_rsc    = &worker->context->tl_rscs[rsc_index].tl_rsc;
+
+                ucs_snprintf_safe(lane_info_str, sizeof(lane_info_str),
+                                  UCT_TL_RESOURCE_DESC_FMT,
+                                  UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+            }
         } else {
             ucs_assert(uct_ep == NULL);
-            ucs_log(log_level, "error '%s' occurred on wireup will not be "
-                    "handled for ep %p since no error callback is installed",
-                    ucs_status_string(status), ucp_ep);
+            ucs_strncpy_safe(lane_info_str, "wireup lane",
+                             sizeof(lane_info_str));
         }
+
+        ucs_log(log_level, "ep %p: error '%s' on %s will not be handled since"
+                " no error callback is installed",
+                ucp_ep, ucs_status_string(status), lane_info_str);
         ret_status = status;
         goto out;
     }
