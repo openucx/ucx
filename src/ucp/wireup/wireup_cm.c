@@ -128,6 +128,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
     void *ucp_addr;
     size_t ucp_addr_size;
     ucp_unpacked_address_t unpacked_addr;
+    ucp_address_entry_t *ae;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
 
@@ -151,6 +152,12 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
                                 &unpacked_addr);
     if (status != UCS_OK) {
         goto free_ucp_addr;
+    }
+
+    /* Update destination MD and RSC indicies in the unpacked address list */
+    ucp_unpacked_address_for_each(ae, &unpacked_addr) {
+        ae->md_index                 = UCP_NULL_RESOURCE;
+        ae->iface_attr.dst_rsc_index = UCP_NULL_RESOURCE;
     }
 
     ucs_assert(unpacked_addr.address_count <= UCP_MAX_RESOURCES);

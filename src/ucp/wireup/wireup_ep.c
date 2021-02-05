@@ -410,6 +410,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
         .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_no_resource,
         .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_no_resource
     };
+    ucp_lane_index_t lane;
 
     UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
 
@@ -422,6 +423,10 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->progress_id      = UCS_CALLBACKQ_ID_NULL;
     self->cm_idx           = UCP_NULL_RESOURCE;
     ucs_queue_head_init(&self->pending_q);
+
+    for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
+        self->dst_rsc_indices[lane] = UCP_NULL_RESOURCE;
+    }
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
     ucp_worker_flush_ops_count_inc(ucp_ep->worker);
