@@ -15,6 +15,7 @@
 #include <ucp/core/ucp_request.inl>
 
 #include <ucp/proto/proto_common.inl>
+#include <ucp/proto/proto_am.inl>
 
 
 static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
@@ -84,12 +85,14 @@ static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
         if (ucs_unlikely(status != UCS_ERR_NO_RESOURCE)) {
             /* completed with error */
             ucp_request_complete_send(req, status);
+            return UCS_OK;
         }
     }
 
     /* If completed with UCS_OK, it means that get request packet sent,
      * complete the request object when all data arrives */
-    ucs_assert((status != UCS_OK) || (packed_len == sizeof(ucp_get_req_hdr_t)));
+    ucs_assert((status == UCS_ERR_NO_RESOURCE) ||
+               (packed_len == sizeof(ucp_get_req_hdr_t)));
     return status;
 }
 
@@ -102,27 +105,26 @@ ucp_rma_proto_t ucp_rma_sw_proto = {
 static size_t ucp_rma_sw_pack_rma_ack(void *dest, void *arg)
 {
     ucp_cmpl_hdr_t *hdr = dest;
-    ucp_request_t *req = arg;
+    ucp_request_t *req  = arg;
 
-    hdr->ep_id = ucp_send_request_get_ep_remote_id(req);
-    return sizeof(*hdr);
+    hdr->ep_id                = ucp_send_request_get_ep_remote_id(req);
+    req->send.state.dt.offset = sizeof(*hdr);
+
+    return req->send.state.dt.offset;
 }
 
 static ucs_status_t ucp_progress_rma_cmpl(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep       = req->send.ep;
-    ssize_t packed_len;
+    ucs_status_t status;
 
-    req->send.lane = ucp_ep_get_am_lane(ep);
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_CMPL,
+                                    ucp_rma_sw_pack_rma_ack);
+    UCP_AM_BCOPY_HANDLE_STATUS(0, status);
 
-    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_CMPL,
-                                 ucp_rma_sw_pack_rma_ack, req, 0);
-    if (packed_len < 0) {
-        return (ucs_status_t)packed_len;
-    }
+    ucs_assert((status != UCS_OK) ||
+               (req->send.state.dt.offset == sizeof(ucp_cmpl_hdr_t)));
 
-    ucs_assert(packed_len == sizeof(ucp_cmpl_hdr_t));
     ucp_request_put(req);
     return UCS_OK;
 }
@@ -140,6 +142,10 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
     req->flags         = 0;
     req->send.ep       = ep;
     req->send.uct.func = ucp_progress_rma_cmpl;
+
+    ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
+    req->send.state.dt.offset = 0;
+
     ucp_request_send(req, 0);
 }
 
@@ -180,44 +186,39 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flag
 static size_t ucp_rma_sw_pack_get_reply(void *dest, void *arg)
 {
     ucp_rma_rep_hdr_t *hdr = dest;
-    ucp_request_t *req    = arg;
+    ucp_request_t *req     = arg;
     size_t length;
 
-    length      = ucs_min(req->send.length,
+    length      = ucs_min(req->send.length - req->send.state.dt.offset,
                           ucp_ep_config(req->send.ep)->am.max_bcopy -
                           sizeof(*hdr));
     hdr->req_id = req->send.get_reply.req_id;
-    ucp_dt_contig_pack(req->send.ep->worker, hdr + 1, req->send.buffer, length,
+    ucp_dt_contig_pack(req->send.ep->worker, hdr + 1,
+                       req->send.buffer + req->send.state.dt.offset, length,
                        req->send.mem_type);
 
-    return sizeof(*hdr) + length;
+    req->send.state.dt.offset += length;
+
+    return length + sizeof(*hdr);
 }
 
 static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep       = req->send.ep;
-    ssize_t packed_len, payload_len;
+    ucs_status_t status;
 
-    req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_GET_REP,
-                                 ucp_rma_sw_pack_get_reply, req, 0);
-    if (packed_len < 0) {
-        return (ucs_status_t)packed_len;
-    }
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_GET_REP,
+                                    ucp_rma_sw_pack_get_reply);
+    UCP_AM_BCOPY_HANDLE_STATUS(0, status);
 
-    payload_len = packed_len - sizeof(ucp_rma_rep_hdr_t);
-    ucs_assert(payload_len >= 0);
+    ucs_assert(req->send.state.dt.offset <= req->send.length);
 
-    req->send.buffer  = UCS_PTR_BYTE_OFFSET(req->send.buffer, payload_len);
-    req->send.length -= payload_len;
-
-    if (req->send.length == 0) {
+    if ((status != UCS_OK) || (req->send.state.dt.offset == req->send.length)) {
         ucp_request_put(req);
         return UCS_OK;
-    } else {
-        return UCS_INPROGRESS;
     }
+
+    return UCS_INPROGRESS;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags),
@@ -250,6 +251,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
     } else {
         req->send.mem_type     = UCS_MEMORY_TYPE_HOST;
     }
+
+    ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
+    req->send.state.dt.offset = 0;
 
     ucp_request_send(req, 0);
     return UCS_OK;

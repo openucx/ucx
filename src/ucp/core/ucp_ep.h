@@ -562,6 +562,8 @@ void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker);
 
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
+size_t ucp_ep_get_cm_wireup_ep_max_bcopy(ucp_ep_h ep);
+
 uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep);
 
 uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep);

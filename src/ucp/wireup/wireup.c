@@ -97,8 +97,8 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_h ep = req->send.ep;
-    ssize_t packed_len;
+    ucp_ep_h ep        = req->send.ep;
+    ucs_status_t status;
     unsigned am_flags;
 
     if (req->send.wireup.type == UCP_WIREUP_MSG_REQUEST) {
@@ -123,13 +123,12 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.wireup, sizeof(req->send.wireup));
     VALGRIND_CHECK_MEM_IS_DEFINED(req->send.buffer, req->send.length);
 
-    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_WIREUP,
-                                 ucp_wireup_msg_pack, req, am_flags);
-    UCP_AM_BCOPY_HANDLE_STATUS(0, (ucs_status_t)packed_len);
-    if (ucs_unlikely(packed_len < 0)) {
-        ucs_assert((ucs_status_t)packed_len != UCS_ERR_NO_RESOURCE);
-        ucs_error("failed to send wireup: %s",
-                  ucs_status_string((ucs_status_t)packed_len));
+    status = ucp_do_am_bcopy_single_common(req, UCP_AM_ID_WIREUP,
+                                           ucp_wireup_msg_pack, am_flags);
+    UCP_AM_BCOPY_HANDLE_STATUS(0, status);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_assert(status != UCS_ERR_NO_RESOURCE);
+        ucs_error("failed to send wireup: %s", ucs_status_string(status));
         return UCS_OK;
     }
 

@@ -14,6 +14,8 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
 
+#include <ucp/proto/proto_am.inl>
+
 
 static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
 {
@@ -75,6 +77,7 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
              * - with error if a fetch operation
              * - either with error or with success if a post operation */
             ucp_request_complete_send(req, status);
+            return UCS_OK;
         }
     }
 
@@ -115,24 +118,24 @@ static size_t ucp_amo_sw_pack_atomic_reply(void *dest, void *arg)
         ucs_fatal("invalid atomic length: %zu", req->send.length);
     }
 
-    return sizeof(*hdr) + req->send.length;
+    req->send.state.dt.offset = sizeof(*hdr) + req->send.length;
+
+    return req->send.state.dt.offset;
 }
 
 static ucs_status_t ucp_progress_atomic_reply(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_t *ep       = req->send.ep;
-    ssize_t packed_len;
+    ucs_status_t status;
 
-    req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_ATOMIC_REP,
-                                 ucp_amo_sw_pack_atomic_reply, req, 0);
+    status = ucp_do_am_bcopy_single(self, UCP_AM_ID_ATOMIC_REP,
+                                    ucp_amo_sw_pack_atomic_reply);
+    UCP_AM_BCOPY_HANDLE_STATUS(0, status);
 
-    if (packed_len < 0) {
-        return (ucs_status_t)packed_len;
-    }
+    ucs_assert((status != UCS_OK) ||
+               (req->send.state.dt.offset ==
+                (sizeof(ucp_rma_rep_hdr_t) + req->send.length)));
 
-    ucs_assert(packed_len == sizeof(ucp_rma_rep_hdr_t) + req->send.length);
     ucp_request_put(req);
     return UCS_OK;
 }
@@ -260,6 +263,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
         req->send.atomic_reply.req_id = atomicreqh->req.req_id;
         req->send.length              = atomicreqh->length;
         req->send.uct.func            = ucp_progress_atomic_reply;
+
+        ucp_request_send_state_init(req, ucp_dt_make_contig(1), 0);
+        req->send.state.dt.offset = 0;
+
         ucp_request_send(req, 0);
     }
 

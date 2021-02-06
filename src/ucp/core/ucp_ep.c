@@ -2308,6 +2308,22 @@ ucp_wireup_ep_t* ucp_ep_get_cm_wireup_ep(ucp_ep_h ep)
     return (uct_ep != NULL) ? ucp_wireup_ep(uct_ep) : NULL;
 }
 
+size_t ucp_ep_get_cm_wireup_ep_max_bcopy(ucp_ep_h ep)
+{
+    ucp_worker_h worker           = ep->worker;
+    ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    ucp_rsc_index_t rsc_idx;
+
+    ucs_assert(cm_wireup_ep != NULL);
+    ucs_assert(cm_wireup_ep->aux_ep != NULL);
+    ucs_assert(ucp_ep_get_cm_lane(ep) == ucp_ep_get_wireup_msg_lane(ep));
+
+    rsc_idx = cm_wireup_ep->aux_rsc_index;
+    ucs_assert(rsc_idx != UCP_NULL_RESOURCE);
+
+    return ucp_worker_iface_get_attr(worker, rsc_idx)->cap.am.max_bcopy;
+}
+
 uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
 {
     ucp_lane_index_t lane;

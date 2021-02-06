@@ -41,29 +41,45 @@
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
-                       uct_pack_callback_t pack_cb)
+static UCS_F_ALWAYS_INLINE size_t ucp_proto_am_bcopy_get_max(ucp_request_t *req)
 {
-    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
+    return (req->send.lane == ucp_ep_get_cm_lane(req->send.ep)) ?
+           ucp_ep_get_cm_wireup_ep_max_bcopy(req->send.ep) :
+           ucp_ep_get_max_bcopy(req->send.ep, req->send.lane);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_do_am_bcopy_single_common(ucp_request_t *req, uint8_t am_id,
+                              uct_pack_callback_t pack_cb, unsigned am_flags)
+{
     ucp_ep_t *ep         = req->send.ep;
     ucp_dt_state_t state = req->send.state.dt;
     ssize_t packed_len;
 
-    req->send.lane = ucp_ep_get_am_lane(ep);
-    packed_len     = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id, pack_cb,
-                                     req, 0);
+    ucs_assert(req->send.lane != UCP_NULL_LANE);
+    packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], am_id, pack_cb,
+                                 req, am_flags);
     if (ucs_unlikely(packed_len < 0)) {
         /* Reset the state to the previous one */
         req->send.state.dt = state;
         return (ucs_status_t)packed_len;
     }
 
-    ucs_assertv((size_t)packed_len <= ucp_ep_get_max_bcopy(ep, req->send.lane),
+    ucs_assertv((size_t)packed_len <= ucp_proto_am_bcopy_get_max(req),
                 "packed_len=%zd max_bcopy=%zu",
-                packed_len, ucp_ep_get_max_bcopy(ep, req->send.lane));
+                packed_len, ucp_proto_am_bcopy_get_max(req));
 
     return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
+                       uct_pack_callback_t pack_cb)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    req->send.lane = ucp_ep_get_am_lane(req->send.ep);
+    return ucp_do_am_bcopy_single_common(req, am_id, pack_cb, 0);
 }
 
 static UCS_F_ALWAYS_INLINE
