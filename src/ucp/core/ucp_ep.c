@@ -957,6 +957,9 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 
     UCS_ASYNC_BLOCK(&worker->async);
 
+    ucs_debug("ep %p flags 0x%x cfg_index %d: close_nbx(flags=0x%x)", ep,
+              ep->flags, ep->cfg_index, ucp_request_param_flags(param));
+
     if (ep->flags & UCP_EP_FLAG_CLOSED) {
         ucs_error("ep %p has already been closed", ep);
         request = UCS_STATUS_PTR(UCS_ERR_NOT_CONNECTED);
@@ -2390,6 +2393,8 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
 
     ucs_for_each_bit(lane, check_lanes) {
         ucs_assert(lane < UCP_MAX_LANES);
+        ucs_trace("ep %p flags 0x%x: send keepalive on lane[%d]=%p", ep,
+                  ep->flags, lane, ep->uct_eps[lane]);
         /* coverity[overrun-local] */
         status = uct_ep_check(ep->uct_eps[lane], 0, NULL);
         if (status == UCS_OK) {

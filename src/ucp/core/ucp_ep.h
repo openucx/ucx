@@ -71,8 +71,11 @@ enum {
     UCP_EP_FLAG_CONNECT_REQ_IGNORED    = UCS_BIT(19),/* DEBUG: Connection request was ignored */
     UCP_EP_FLAG_CONNECT_PRE_REQ_SENT   = UCS_BIT(20),/* DEBUG: Connection pre-request was sent */
     UCP_EP_FLAG_FLUSH_STATE_VALID      = UCS_BIT(21),/* DEBUG: flush_state is valid */
-    UCP_EP_FLAG_DISCONNECTED_CM_LANE   = UCS_BIT(22) /* DEBUG: CM lane was disconnected, i.e.
+    UCP_EP_FLAG_DISCONNECTED_CM_LANE   = UCS_BIT(22),/* DEBUG: CM lane was disconnected, i.e.
                                                         @uct_ep_disconnect was called for CM EP */
+    UCP_EP_FLAG_CLIENT_CONNECT_CB      = UCS_BIT(23),/* DEBUG: Client connect callback invoked */
+    UCP_EP_FLAG_SERVER_NOTIFY_CB       = UCS_BIT(24),/* DEBUG: Server notify callback invoked */
+    UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(25) /* DEBUG: Got disconnect notification */
 };
 
 

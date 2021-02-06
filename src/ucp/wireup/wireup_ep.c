@@ -515,9 +515,12 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
 
     ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
 
-    ucs_debug("ep %p: created next_ep %p to %s using " UCT_TL_RESOURCE_DESC_FMT,
-              ucp_ep, wireup_ep->super.uct_ep, ucp_ep_peer_name(ucp_ep),
-              UCT_TL_RESOURCE_DESC_ARG(&worker->context->tl_rscs[rsc_index].tl_rsc));
+    ucs_debug("ep %p: wireup_ep %p created next_ep %p to %s "
+              "using " UCT_TL_RESOURCE_DESC_FMT,
+              ucp_ep, wireup_ep, wireup_ep->super.uct_ep,
+              ucp_ep_peer_name(ucp_ep),
+              UCT_TL_RESOURCE_DESC_ARG(
+                      &worker->context->tl_rscs[rsc_index].tl_rsc));
 
     /* we need to create an auxiliary transport only for active messages */
     if (connect_aux) {
@@ -546,6 +549,8 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
     ucs_assert(!ucp_wireup_ep_test(next_ep));
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
     ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
+    ucs_debug("ep %p: wireup_ep %p set next_ep %p", wireup_ep->super.ucp_ep,
+              wireup_ep, wireup_ep->super.uct_ep);
 }
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)

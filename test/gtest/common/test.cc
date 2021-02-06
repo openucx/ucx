@@ -318,6 +318,7 @@ void test_base::TearDownProxy() {
 
     m_errors.clear();
 
+    ucs_assert(ucs_log_get_current_indent() == 0);
     if (ucs_log_num_handlers() > m_num_log_handlers_before) {
         ucs_log_pop_handler();
     }

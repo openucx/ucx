@@ -235,16 +235,26 @@ ucp_wireup_check_keepalive(const ucp_wireup_select_params_t *select_params,
                            char *reason, size_t max)
 {
     ucp_worker_h worker = select_params->ep->worker;
+    char title_keepalive[128];
+    char title_ep_check[128];
+
+    ucs_snprintf_safe(title_keepalive, sizeof(title_keepalive),
+                      "%s with keepalive", title);
+    ucs_snprintf_safe(title_ep_check, sizeof(title_ep_check),
+                      "%s with ep_check", title);
     return /* if error handling and keepalive were requested, UCT iface has to
             * support peer failure (i.e. UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)
             * and either built-in keepalive (i.e. UCT_IFACE_FLAG_EP_KEEPALIVE)
             * or EP checking (i.e. UCT_IFACE_FLAG_EP_CHECK) */
-           !ucp_worker_keepalive_is_enabled(worker) ||
-           !(select_params->ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ||
-           ucp_wireup_check_flags(resource, flags, UCT_IFACE_FLAG_EP_KEEPALIVE, title,
-                                  ucp_wireup_iface_flags, reason, max) ||
-           ucp_wireup_check_flags(resource, flags, UCT_IFACE_FLAG_EP_CHECK, title,
-                                  ucp_wireup_iface_flags, reason, max);
+            !ucp_worker_keepalive_is_enabled(worker) ||
+            !(select_params->ep_init_flags &
+              UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ||
+            ucp_wireup_check_flags(resource, flags, UCT_IFACE_FLAG_EP_KEEPALIVE,
+                                   title_keepalive, ucp_wireup_iface_flags,
+                                   reason, max) ||
+            ucp_wireup_check_flags(resource, flags, UCT_IFACE_FLAG_EP_CHECK,
+                                   title_ep_check, ucp_wireup_iface_flags,
+                                   reason, max);
 }
 
 static void

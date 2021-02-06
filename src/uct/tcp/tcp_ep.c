@@ -423,6 +423,8 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
     uct_tcp_ep_mod_events(ep, 0, ep->events);
 
     if (ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) {
+        ucs_debug("tcp_ep %p: calling error handler (flags: %x)", ep,
+                  ep->flags);
         uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
         uct_iface_handle_ep_err(ep->super.super.iface, &ep->super.super,
                                 UCS_ERR_ENDPOINT_TIMEOUT);
