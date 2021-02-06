@@ -366,6 +366,10 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     key.am_lane             = 0;
     if (ucp_ep_init_flags_has_cm(ep_init_flags)) {
         key.cm_lane         = 0;
+        /* Send keepalive on wireup_ep (which will send on aux_ep/tmp_ep) */
+        if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
+            key.ep_check_map |= UCS_BIT(key.cm_lane);
+        }
     } else {
         key.wireup_msg_lane = 0;
     }

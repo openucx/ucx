@@ -99,6 +99,8 @@ uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 
 void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep);
 
+void ucp_wireup_ep_mark_ready(uct_ep_h uct_ep);
+
 void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep);
 
 int ucp_wireup_ep_test(uct_ep_h uct_ep);

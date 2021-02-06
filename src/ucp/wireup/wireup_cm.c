@@ -423,10 +423,12 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_unpacked_address_t addr;
     uint64_t tl_bitmap;
     ucp_rsc_index_t dev_index;
+    ucp_lane_index_t lane;
     ucp_rsc_index_t UCS_V_UNUSED rsc_index;
     unsigned addr_idx;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
+    ucp_ep_h tmp_ep;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -454,18 +456,18 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_ep_update_remote_id(ucp_ep, progress_arg->sa_data->ep_id);
 
     /* get tl bitmap from tmp_ep, because it contains initial configuration */
-    tl_bitmap = ucp_ep_get_tl_bitmap(wireup_ep->tmp_ep);
+    tmp_ep    = wireup_ep->tmp_ep;
+    tl_bitmap = ucp_ep_get_tl_bitmap(tmp_ep);
     dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, tl_bitmap);
 
     tl_bitmap = ucp_context_dev_idx_tl_bitmap(context, dev_index);
-    status    = ucp_wireup_init_lanes(wireup_ep->tmp_ep,
-                                      wireup_ep->ep_init_flags, tl_bitmap,
-                                      &addr, addr_indices);
+    status    = ucp_wireup_init_lanes(tmp_ep, wireup_ep->ep_init_flags,
+                                      tl_bitmap, &addr, addr_indices);
     if (status != UCS_OK) {
         goto out_free_addr;
     }
 
-    status = ucp_wireup_connect_local(wireup_ep->tmp_ep, &addr, NULL);
+    status = ucp_wireup_connect_local(tmp_ep, &addr, NULL);
     if (status != UCS_OK) {
         goto out_free_addr;
     }
@@ -477,12 +479,27 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         goto out_free_addr;
     }
 
-    if (!context->config.ext.cm_use_all_devices) {
+    if (context->config.ext.cm_use_all_devices) {
+        /* Connect tmp_ep so it will send keepalive messages while the new lanes
+         * are being connected */
+        ucp_ep_update_remote_id(tmp_ep, progress_arg->sa_data->ep_id);
+        for (lane = 0; lane < ucp_ep_num_lanes(tmp_ep); ++lane) {
+            if (ucp_ep_config(tmp_ep)->key.cm_lane != lane) {
+                ucs_assert(ucp_wireup_ep_test(tmp_ep->uct_eps[lane]));
+                ucp_wireup_ep_mark_ready(tmp_ep->uct_eps[lane]);
+            }
+        }
+    } else {
         /* restore initial configuration from tmp_ep created for packing local
          * addresses */
         ucp_cm_client_restore_ep(wireup_ep, ucp_ep);
         ucp_wireup_remote_connected(ucp_ep);
     }
+
+    /* Add the client ep to worker's keeaplive, since init_lanes was called on
+     * wireup_ep->tmp_ep, which is INTERNAL, so did not add it to keepalive.
+     */
+    ucp_worker_keepalive_add_ep(ucp_ep);
 
 out_free_addr:
     ucs_free(addr.address_list);

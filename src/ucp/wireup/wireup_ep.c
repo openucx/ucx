@@ -152,7 +152,7 @@ ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
     ucp_request_t   *req;
 
     ucs_atomic_sub32(&wireup_ep->pending_count, 1);
- 
+
     if (proxy_req->send.proxy.req->func == ucp_wireup_msg_progress) {
         req = ucs_container_of(proxy_req->send.proxy.req, ucp_request_t,
                                send.uct);
@@ -340,7 +340,7 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
     ucp_lane_index_t lane;
     ucp_worker_iface_t *wiface;
 
-    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED) {
+    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         return uct_ep_check(wireup_ep->super.uct_ep, flags, comp);
     }
 
@@ -572,19 +572,28 @@ void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep)
     ucs_assert(wireup_ep->flags == 0);
 }
 
-void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep)
+void ucp_wireup_ep_mark_ready(uct_ep_h uct_ep)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
-    ucp_ep_h ucp_ep;
 
     ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->super.uct_ep != NULL);
     ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);
 
-    ucp_ep = wireup_ep->super.ucp_ep;
-
-    ucs_trace("ep %p: wireup ep %p is remote-connected", ucp_ep, wireup_ep);
+    ucs_trace("ep %p: wireup ep %p is ready", wireup_ep->super.ucp_ep,
+              wireup_ep);
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY;
+}
+
+void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep)
+{
+    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_ep_h ucp_ep;
+
+    ucp_wireup_ep_mark_ready(uct_ep);
+
+    ucp_ep = wireup_ep->super.ucp_ep;
+    ucs_trace("ep %p: wireup ep %p is remote-connected", ucp_ep, wireup_ep);
     uct_worker_progress_register_safe(ucp_ep->worker->uct,
                                       ucp_wireup_ep_progress, wireup_ep, 0,
                                       &wireup_ep->progress_id);
@@ -628,8 +637,9 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
         return 1;
     }
 
+    /* Check if owned_ep belongs to tmp_ep */
     if (wireup_ep->tmp_ep != NULL) {
-        return ucp_ep_lookup_lane(wireup_ep->tmp_ep, uct_ep) != UCP_NULL_LANE;
+        return ucp_ep_lookup_lane(wireup_ep->tmp_ep, owned_ep) != UCP_NULL_LANE;
     }
 
     return 0;
