@@ -207,68 +207,85 @@ void test_base::push_debug_message_with_limit(std::vector<std::string>& vec,
 }
 
 ucs_log_func_rc_t
-test_base::hide_errors_logger(const char *file, unsigned line, const char *function,
-                              ucs_log_level_t level,
-                              const ucs_log_component_config_t *comp_conf,
-                              const char *message, va_list ap)
+test_base::common_logger(ucs_log_level_t log_level_to_handle, bool print,
+                         std::vector<std::string> &messages_vec, size_t limit,
+                         const char *file, unsigned line, const char *function,
+                         ucs_log_level_t level,
+                         const ucs_log_component_config_t *comp_conf,
+                         const char *message, va_list ap)
 {
-    if (level == UCS_LOG_LEVEL_ERROR) {
-        pthread_mutex_lock(&m_logger_mutex);
-        va_list ap2;
-        va_copy(ap2, ap);
-        m_errors.push_back(format_message(message, ap2));
-        va_end(ap2);
-        level = UCS_LOG_LEVEL_DEBUG;
-        pthread_mutex_unlock(&m_logger_mutex);
+    if (level != log_level_to_handle) {
+        return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
-    ucs_log_default_handler(file, line, function, level,
-                            &ucs_global_opts.log_component, message, ap);
+    // dump the formatted message to a stringstream
+    va_list ap2;
+    va_copy(ap2, ap);
+    std::istringstream iss(format_message(message, ap2));
+    va_end(ap2);
+
+    // save each line of the message to messages_vec, and print it if reqeusted
+    pthread_mutex_lock(&m_logger_mutex);
+    std::string message_line;
+    while (getline(iss, message_line, '\n')) {
+        push_debug_message_with_limit(messages_vec, message_line, limit);
+        if (print) {
+            UCS_TEST_MESSAGE << "< " << message_line << " >";
+        }
+    }
+    pthread_mutex_unlock(&m_logger_mutex);
+
+    // if the message was not printed, pass it to default handler in debug level
+    if (!print) {
+        ucs_log_default_handler(file, line, function, UCS_LOG_LEVEL_DEBUG,
+                                comp_conf, message, ap);
+    }
+
     return UCS_LOG_FUNC_RC_STOP;
 }
 
 ucs_log_func_rc_t
-test_base::hide_warns_logger(const char *file, unsigned line, const char *function,
-                             ucs_log_level_t level,
+test_base::hide_errors_logger(const char *file, unsigned line,
+                              const char *function, ucs_log_level_t level,
+                              const ucs_log_component_config_t *comp_conf,
+                              const char *message, va_list ap)
+{
+    return common_logger(UCS_LOG_LEVEL_ERROR, false, m_errors,
+                         std::numeric_limits<size_t>::max(), file, line,
+                         function, level, comp_conf, message, ap);
+}
+
+ucs_log_func_rc_t
+test_base::hide_warns_logger(const char *file, unsigned line,
+                             const char *function, ucs_log_level_t level,
                              const ucs_log_component_config_t *comp_conf,
                              const char *message, va_list ap)
 {
-    if (level == UCS_LOG_LEVEL_WARN) {
-        pthread_mutex_lock(&m_logger_mutex);
-        va_list ap2;
-        va_copy(ap2, ap);
-        m_warnings.push_back(format_message(message, ap2));
-        va_end(ap2);
-        level = UCS_LOG_LEVEL_DEBUG;
-        pthread_mutex_unlock(&m_logger_mutex);
-    }
-
-    ucs_log_default_handler(file, line, function, level,
-                            &ucs_global_opts.log_component, message, ap);
-    return UCS_LOG_FUNC_RC_STOP;
+    return common_logger(UCS_LOG_LEVEL_WARN, false, m_warnings,
+                         std::numeric_limits<size_t>::max(), file, line,
+                         function, level, comp_conf, message, ap);
 }
 
 ucs_log_func_rc_t
-test_base::wrap_errors_logger(const char *file, unsigned line, const char *function,
-                              ucs_log_level_t level,
+test_base::wrap_errors_logger(const char *file, unsigned line,
+                              const char *function, ucs_log_level_t level,
                               const ucs_log_component_config_t *comp_conf,
                               const char *message, va_list ap)
 {
-    /* Ignore warnings about empty memory pool */
-    if (level == UCS_LOG_LEVEL_ERROR) {
-        pthread_mutex_lock(&m_logger_mutex);
-        std::istringstream iss(format_message(message, ap));
-        std::string text;
-        while (getline(iss, text, '\n')) {
-            push_debug_message_with_limit(m_errors, text, 1000);
-            UCS_TEST_MESSAGE << "< " << text << " >";
-        }
-        pthread_mutex_unlock(&m_logger_mutex);
-        return UCS_LOG_FUNC_RC_STOP;
-    }
-
-    return UCS_LOG_FUNC_RC_CONTINUE;
+    return common_logger(UCS_LOG_LEVEL_ERROR, true, m_errors, 1000, file, line,
+                         function, level, comp_conf, message, ap);
 }
+
+ucs_log_func_rc_t
+test_base::wrap_warns_logger(const char *file, unsigned line,
+                             const char *function, ucs_log_level_t level,
+                             const ucs_log_component_config_t *comp_conf,
+                             const char *message, va_list ap)
+{
+    return common_logger(UCS_LOG_LEVEL_WARN, true, m_warnings, 1000, file, line,
+                         function, level, comp_conf, message, ap);
+}
+
 
 unsigned test_base::num_errors()
 {

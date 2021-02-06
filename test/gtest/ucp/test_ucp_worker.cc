@@ -58,7 +58,7 @@ protected:
 
             pending_reqs.push_back(req);
 
-            if (func == ucp_wireup_msg_progress) {               
+            if (func == ucp_wireup_msg_progress) {
                 req->send.ep = &m_fake_ep;
             }
 
@@ -462,3 +462,88 @@ UCS_TEST_P(test_ucp_worker_discard, wireup_ep_flush_ok_not_wait_comp) {
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_discard, all, "all")
+
+
+class test_ucp_worker_request_leak : public ucp_test {
+public:
+    enum {
+        LEAK_CHECK,
+        LEAK_IGNORE
+    };
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, LEAK_CHECK,
+                               "leak_check");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, LEAK_IGNORE,
+                               "leak_ignore");
+    }
+
+    bool ignore_leak()
+    {
+        return get_variant_value(0) == LEAK_IGNORE;
+    }
+
+    /// @override
+    virtual ucp_worker_params_t get_worker_params()
+    {
+        ucp_worker_params_t params = ucp_test::get_worker_params();
+        if (ignore_leak()) {
+            params.field_mask |= UCP_WORKER_PARAM_FIELD_FLAGS;
+            params.flags      |= UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK;
+        }
+        return params;
+    }
+
+    /// @override
+    virtual void init()
+    {
+        ucp_test::init();
+        sender().connect(&receiver(), get_ep_params());
+    }
+
+    /// @override
+    virtual void cleanup()
+    {
+        if (ignore_leak()) {
+            // Should not have warnings if leak check is off
+            ucp_test::cleanup();
+        } else {
+            scoped_log_handler wrap_warn(wrap_warns_logger);
+            ucp_test::cleanup();
+            check_leak_warnings(); // Leak check is enabled - expect warnings
+        }
+    }
+
+private:
+    void check_leak_warnings()
+    {
+        EXPECT_EQ(2u, m_warnings.size());
+        for (size_t i = 0; i < m_warnings.size(); ++i) {
+            std::string::size_type pos = m_warnings[i].find(
+                    "not returned to mpool ucp_requests");
+            EXPECT_NE(std::string::npos, pos);
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_worker_request_leak, tag_send_recv)
+{
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    void *sreq         = ucp_tag_send_nbx(sender().ep(), NULL, 0, 0, &param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sreq));
+
+    void *rreq = ucp_tag_recv_nbx(receiver().worker(), NULL, 0, 0, 0, &param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(rreq));
+
+    UCS_TEST_MESSAGE << "send req: " << sreq << ", recv req: " << rreq;
+    while ((ucp_request_check_status(sreq) != UCS_OK) ||
+           (ucp_request_check_status(rreq) != UCS_OK)) {
+        progress();
+    }
+
+    // Exit the test without releasing the requests
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_request_leak, all, "all")

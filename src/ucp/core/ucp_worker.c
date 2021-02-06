@@ -1808,7 +1808,8 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->rkey_mp, 1);
-    ucs_mpool_cleanup(&worker->req_mp, 1);
+    ucs_mpool_cleanup(&worker->req_mp,
+                      !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
 
 /* All the ucp endpoints will share the configurations. No need for every ep to
@@ -1985,7 +1986,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     uct_thread_mode = UCS_THREAD_MODE_SINGLE;
-    worker->flags   = 0;
+
+    /* copy user flags, and mask-out unsupported flags for compatibility */
+    worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
+                    UCS_MASK(UCP_WORKER_INTERNAL_FLAGS_SHIFT);
+    UCS_STATIC_ASSERT(UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK <
+                      UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT));
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) {
 #if ENABLE_MT
