@@ -1201,6 +1201,13 @@ enum {
     UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B  = 0x2
 };
 
+enum {
+    UCT_IB_MLX5_QP_OPTPAR_RRE        = 1 << 1,
+    UCT_IB_MLX5_QP_OPTPAR_RAE        = 1 << 2,
+    UCT_IB_MLX5_QP_OPTPAR_RWE        = 1 << 3,
+    UCT_IB_MLX5_QP_OPTPAR_LAG_TX_AFF = 1 << 15
+};
+
 static inline unsigned uct_ib_mlx5_qpc_cs_res(unsigned size, int dc)
 {
     return (size > 32) ? UCT_IB_MLX5_QPC_CS_RES_UP_TO_64B :
