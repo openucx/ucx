@@ -141,8 +141,6 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep_control_ext;
     }
 
-    ucs_list_head_init(&ucp_ep_ext_gen(ep)->ep_list);
-
     *ep_p = ep;
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
     return UCS_OK;
