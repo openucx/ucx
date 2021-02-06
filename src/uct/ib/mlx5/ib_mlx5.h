@@ -174,9 +174,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK      = UCS_BIT(6),
     /* Device has LAG */
     UCT_IB_MLX5_MD_FLAG_LAG              = UCS_BIT(7),
+    /* Device supports CQE V1 */
+    UCT_IB_MLX5_MD_FLAG_CQE_V1           = UCS_BIT(8),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 8,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 9,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -335,6 +337,7 @@ typedef struct uct_ib_mlx5_res_domain {
 typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_qp_attr_t            super;
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
+    uint32_t                    uidx;
 } uct_ib_mlx5_qp_attr_t;
 
 

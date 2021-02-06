@@ -64,7 +64,8 @@ typedef enum {
 
 
 typedef enum {
-    UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE = UCS_BIT(0) /**< keepalive dci is created */
+    UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE = UCS_BIT(0), /**< keepalive dci is created */
+    UCT_DC_MLX5_IFACE_FLAG_UIDX      = UCS_BIT(1), /**< uidx is set to dci idx */
 } uct_dc_mlx5_iface_flags_t;
 
 

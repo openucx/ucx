@@ -143,6 +143,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
             uct_ib_mlx5_qpc_cs_res(attr->super.max_inl_cqe[UCT_IB_DIR_RX], 0));
     UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
     UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
+    UCT_IB_MLX5DV_SET(qpc, qpc, user_index, attr->uidx);
 
     if (qp->devx.wq_buf == NULL) {
         UCT_IB_MLX5DV_SET(qpc, qpc, no_sq, true);
