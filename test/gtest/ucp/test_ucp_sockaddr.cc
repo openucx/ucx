@@ -62,6 +62,7 @@ public:
 
     void init() {
         m_err_count = 0;
+        modify_config("KEEPALIVE_INTERVAL", "10s");
         get_sockaddr();
         ucp_test::init();
         skip_loopback();
