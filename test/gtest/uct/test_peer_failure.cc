@@ -428,6 +428,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
                       !check_caps(m_required_caps)),
                      "RC_TM_ENABLE?=n")
 {
+    /* with DC peer failure may stuck peer DCRs and cause very long DCT close */
     ucs_time_t timeout  = ucs_get_time() +
                           ucs_time_from_sec(300 * ucs::test_time_multiplier());
 
