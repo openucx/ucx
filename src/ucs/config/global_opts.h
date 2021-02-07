@@ -115,6 +115,9 @@ typedef struct {
     /* statistics format options */
     ucs_stats_formats_t        stats_format;
 
+    /* Enable VFS monitoring */
+    int                        vfs_enable;
+
     /* registration cache checks if physical pages are not moved */
     unsigned                   rcache_check_pfn;
 
