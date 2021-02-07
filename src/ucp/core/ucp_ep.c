@@ -2385,9 +2385,12 @@ int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
 
 void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
 {
-    ucp_lane_map_t check_lanes = *lane_map;
+    ucp_lane_map_t check_lanes;
     ucp_lane_index_t lane;
     ucs_status_t status;
+
+    /* Take updated ep_check_map, in case ep configuration has changed */
+    check_lanes = *lane_map & ucp_ep_config(ep)->key.ep_check_map;
 
     ucs_for_each_bit(lane, check_lanes) {
         ucs_assert(lane < UCP_MAX_LANES);
@@ -2398,8 +2401,10 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
         if (status == UCS_OK) {
             *lane_map &= ~UCS_BIT(lane);
         } else if (status != UCS_ERR_NO_RESOURCE) {
-            ucs_warn("unexpected return status from uct_ep_check(ep=%p): %s",
-                     ep, ucs_status_string(status));
+            *lane_map &= ~UCS_BIT(lane);
+            ucs_warn("unexpected return status from uct_ep_check(ep=%p, "
+                     "lane[%d]=%p): %s",
+                     ep, lane, ep->uct_eps[lane], ucs_status_string(status));
         }
     }
 }
