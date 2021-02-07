@@ -364,6 +364,10 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     key.am_lane             = 0;
     if (ucp_ep_init_flags_has_cm(ep_init_flags)) {
         key.cm_lane         = 0;
+        /* Send keepalive on wireup_ep (which will send on aux_ep/tmp_ep) */
+        if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
+            key.ep_check_map |= UCS_BIT(key.cm_lane);
+        }
     } else {
         key.wireup_msg_lane = 0;
     }
@@ -950,6 +954,9 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
+
+    ucs_debug("ep %p flags 0x%x cfg_index %d: close_nbx(flags=0x%x)", ep,
+              ep->flags, ep->cfg_index, ucp_request_param_flags(param));
 
     if (ep->flags & UCP_EP_FLAG_CLOSED) {
         ucs_error("ep %p has already been closed", ep);
@@ -2384,6 +2391,8 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
 
     ucs_for_each_bit(lane, check_lanes) {
         ucs_assert(lane < UCP_MAX_LANES);
+        ucs_trace("ep %p flags 0x%x: send keepalive on lane[%d]=%p", ep,
+                  ep->flags, lane, ep->uct_eps[lane]);
         /* coverity[overrun-local] */
         status = uct_ep_check(ep->uct_eps[lane], 0, NULL);
         if (status == UCS_OK) {

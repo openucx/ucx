@@ -314,6 +314,7 @@ ucp_wireup_connect_local(ucp_ep_h ep,
     ucs_status_t status;
 
     ucs_trace("ep %p: connect local transports", ep);
+    ucs_log_indent(1);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (!ucp_ep_is_lane_p2p(ep, lane)) {
@@ -327,16 +328,20 @@ ucp_wireup_connect_local(ucp_ep_h ep,
         if (status != UCS_OK) {
             ucs_error("ep %p: no remote ep address for lane[%d]->remote_lane[%d]",
                       ep, lane, remote_lane);
-           return status;
+            goto out;
         }
 
         status = uct_ep_connect_to_ep(ep->uct_eps[lane], dev_addr, ep_addr);
         if (status != UCS_OK) {
-            return status;
+            goto out;
         }
     }
 
-    return UCS_OK;
+    status = UCS_OK;
+
+out:
+    ucs_log_indent(-1);
+    return status;
 }
 
 void ucp_wireup_remote_connected(ucp_ep_h ep)
@@ -905,14 +910,17 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
     }
 
     ucs_log(log_level,
-            "%s: am_lane %s wireup_msg_lane %s cm_lane %s reachable_mds 0x%"PRIx64,
-            title, ucp_wireup_get_lane_index_str(key->am_lane, am_lane_str,
-                                                 sizeof(am_lane_str)),
-            ucp_wireup_get_lane_index_str(key->wireup_msg_lane, wireup_msg_lane_str,
+            "%s: am_lane %s wireup_msg_lane %s cm_lane %s reachable_mds "
+            "0x%" PRIx64 " ep_check_map 0x%x",
+            title,
+            ucp_wireup_get_lane_index_str(key->am_lane, am_lane_str,
+                                          sizeof(am_lane_str)),
+            ucp_wireup_get_lane_index_str(key->wireup_msg_lane,
+                                          wireup_msg_lane_str,
                                           sizeof(wireup_msg_lane_str)),
             ucp_wireup_get_lane_index_str(key->cm_lane, cm_lane_str,
                                           sizeof(cm_lane_str)),
-            key->reachable_md_map);
+            key->reachable_md_map, key->ep_check_map);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
         if (lane == key->cm_lane) {
@@ -1122,6 +1130,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucs_assert(tl_bitmap != 0);
 
     ucs_trace("ep %p: initialize lanes", ep);
+    ucs_log_indent(1);
 
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
@@ -1129,7 +1138,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     status = ucp_wireup_select_lanes(ep, ep_init_flags, tl_bitmap,
                                      remote_address, addr_indices, &key);
     if (status != UCS_OK) {
-        return status;
+        goto out;
     }
 
     ucp_wireup_check_config_intersect(ep, &key, &connect_lane_bitmap,
@@ -1144,7 +1153,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     /* Load new configuration */
     status = ucp_worker_get_ep_config(worker, &key, 1, &new_cfg_index);
     if (status != UCS_OK) {
-        return status;
+        goto out;
     }
 
     if (ep->cfg_index == new_cfg_index) {
@@ -1153,7 +1162,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
             ucs_assert(ep->uct_eps[lane] != NULL);
         }
 #endif
-        return UCS_OK; /* No change */
+        status = UCS_OK; /* No change */
+        goto out;
     }
 
     cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
@@ -1201,7 +1211,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                                              key.lanes[lane].path_index,
                                              remote_address, addr_indices[lane]);
             if (status != UCS_OK) {
-                return status;
+                goto out;
             }
         }
 
@@ -1216,7 +1226,11 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
 
     ucp_worker_keepalive_add_ep(ep);
-    return UCS_OK;
+    status = UCS_OK;
+
+out:
+    ucs_log_indent(-1);
+    return status;
 }
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)

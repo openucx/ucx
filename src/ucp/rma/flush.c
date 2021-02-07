@@ -82,8 +82,10 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         }
     }
 
-    ucs_trace("ep %p: progress flush req %p, started_lanes 0x%x count %d", ep,
-              req, req->send.flush.started_lanes, req->send.state.uct_comp.count);
+    ucs_trace("ep %p flags 0x%x: progress flush req %p, started_lanes 0x%x "
+              "count %d",
+              ep, ep->flags, req, req->send.flush.started_lanes,
+              req->send.state.uct_comp.count);
 
     while (req->send.flush.started_lanes < all_lanes) {
 

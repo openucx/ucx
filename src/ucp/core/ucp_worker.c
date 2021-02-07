@@ -493,6 +493,9 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
     ucp_worker_err_handle_arg_t *err_handle_arg;
     ucs_log_level_t log_level;
 
+    ucs_debug("ep %p: set_ep_failed status %s on lane[%d]=%p", ucp_ep,
+              ucs_status_string(status), lane, uct_ep);
+
     /* In case if this is a local failure we need to notify remote side */
     if (ucp_ep_is_cm_local_connected(ucp_ep)) {
         ucp_ep_cm_disconnect_cm_lane(ucp_ep);
@@ -639,9 +642,9 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         }
     }
 
-    ucs_error("UCT EP %p isn't associated with UCP EP and was not scheduled "
-              "to be discarded on UCP Worker %p",
-              uct_ep, worker);
+    ucs_error("worker %p: uct_ep %p isn't associated with any ucp endpoint and "
+              "was not scheduled to be discarded",
+              worker, uct_ep);
     ret_status = UCS_ERR_NO_ELEM;
 
 out:
@@ -2328,7 +2331,7 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker)
 
 void ucp_worker_destroy(ucp_worker_h worker)
 {
-    ucs_trace_func("worker=%p", worker);
+    ucs_debug("destroy worker %p", worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
@@ -2735,8 +2738,11 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
         return 0;
     }
 
+    ucs_trace("worker %p: keepalive round", worker);
+
     if (ucs_unlikely(ucs_list_is_empty(&worker->all_eps))) {
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
+        ucs_trace("worker %p: keepalive ep list is empty - disabling", worker);
         uct_worker_progress_unregister_safe(worker->uct,
                                             &worker->keepalive.cb_id);
         return 0;
@@ -2753,6 +2759,8 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
      * (linked list) */
     do {
         ep = ucp_worker_keepalive_current_ep(worker);
+        ucs_trace("worker %p: do keepalive on ep %p lane_map 0x%x", worker, ep,
+                  worker->keepalive.lane_map);
         ucp_ep_do_keepalive(ep, &worker->keepalive.lane_map);
         if (worker->keepalive.lane_map != 0) {
             /* in case if EP has no resources to send keepalive message
@@ -2766,6 +2774,8 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
     } while ((iter_begin != worker->keepalive.iter) &&
              (worker->keepalive.ep_count < worker->context->config.ext.keepalive_num_eps));
 
+    ucs_trace("worker %p: sent keepalive on %u endpoints", worker,
+              worker->keepalive.ep_count);
     worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
 
@@ -2791,11 +2801,17 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
     ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
 
     if ((ep->flags & UCP_EP_FLAG_INTERNAL) ||
-        (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
+        (ucp_ep_config(ep)->key.ep_check_map == 0) ||
         !ucp_worker_keepalive_is_enabled(worker)) {
+        ucs_trace("ep %p flags 0x%x cfg_index %d: not using keepalive, "
+                  "err_mode %d ep_check_map 0x%x",
+                  ep, ep->flags, ep->cfg_index, ucp_ep_config(ep)->key.err_mode,
+                  ucp_ep_config(ep)->key.ep_check_map);
         return;
     }
 
+    ucs_trace("ep %p flags 0x%x: adding to keepalive lane_map 0x%x", ep,
+              ep->flags, ucp_ep_config(ep)->key.ep_check_map);
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_worker_keepalive_progress, worker,
                                       UCS_CALLBACKQ_FLAG_FAST,
