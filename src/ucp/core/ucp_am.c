@@ -23,8 +23,8 @@
 #include <ucs/datastruct/array.inl>
 
 
-#define UCP_AM_SHORT_REPLY_MAX_SIZE  (UCS_ALLOCA_MAX_SIZE - \
-                                      sizeof(ucs_ptr_map_key_t))
+#define UCP_AM_SHORT_REPLY_MAX_SIZE  ((ssize_t)(UCS_ALLOCA_MAX_SIZE - \
+                                      sizeof(ucs_ptr_map_key_t)))
 
 UCS_ARRAY_IMPL(ucp_am_cbs, unsigned, ucp_am_entry_t, static)
 
