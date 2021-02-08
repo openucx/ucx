@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 
@@ -628,6 +629,8 @@ public class UcpEndpointTest extends UcxTest {
         UcpEndpoint ep = worker2.newEndpoint(
             new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
 
+        AtomicReference<UcpEndpoint> cachedEp = new AtomicReference<>();
+
         // Test rndv flow
         worker1.setAmRecvHandler(0, (headerAddress, headerSize12, amData, replyEp) -> {
             assertFalse(amData.isDataValid());
@@ -642,6 +645,12 @@ public class UcpEndpointTest extends UcxTest {
             requests[2] = replyEp.sendTaggedNonBlocking(header, null);
             requests[3] = amData.receive(UcxUtils.getAddress(recvData), null);
 
+            if (cachedEp.get() != null) {
+                assertEquals(cachedEp.get(), replyEp);
+            } else {
+                cachedEp.set(replyEp);
+            }
+
             return UcsConstants.STATUS.UCS_OK;
         });
 
@@ -654,6 +663,12 @@ public class UcpEndpointTest extends UcxTest {
                         .asCharBuffer().toString().trim());
             } catch (Exception e) {
                 e.printStackTrace();
+            }
+
+            if (cachedEp.get() != null) {
+                assertEquals(cachedEp.get(), replyEp);
+            } else {
+                cachedEp.set(replyEp);
             }
             return UcsConstants.STATUS.UCS_OK;
         });
@@ -689,6 +704,6 @@ public class UcpEndpointTest extends UcxTest {
         worker1.removeAmRecvHandler(0);
         worker1.removeAmRecvHandler(1);
 
-        Collections.addAll(resources, context1, context2, worker1, worker2, ep);
+        Collections.addAll(resources, context1, context2, worker1, worker2, ep, cachedEp.get());
     }
 }

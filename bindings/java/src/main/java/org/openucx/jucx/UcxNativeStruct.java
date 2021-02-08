@@ -11,6 +11,26 @@ package org.openucx.jucx;
 public abstract class UcxNativeStruct {
     private Long nativeId;
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        UcxNativeStruct that = (UcxNativeStruct) o;
+
+        return this.nativeId.equals(that.nativeId);
+    }
+
+    @Override
+    public int hashCode() {
+        return nativeId.hashCode();
+    }
+
     /**
      * Getter for native pointer as long.
      * @return long integer representing native pointer
