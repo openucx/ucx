@@ -505,20 +505,21 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
 }
 
 static UCS_F_ALWAYS_INLINE void uct_rc_mlx5_txqp_inline_iov_post(
-        uct_rc_mlx5_iface_common_t *iface, uct_rc_txqp_t *txqp,
+        uct_rc_mlx5_iface_common_t *iface, int qp_type, uct_rc_txqp_t *txqp,
         uct_ib_mlx5_txwq_t *txwq, const uct_iov_t *iov, size_t iovcnt,
-        size_t iov_length, uint8_t am_id)
+        size_t iov_length, uint8_t am_id, uct_ib_mlx5_base_av_t *av,
+        struct mlx5_grh_av *grh_av, size_t av_size)
 {
     struct mlx5_wqe_ctrl_seg *ctrl = txwq->curr;
     struct mlx5_wqe_inl_data_seg *inl;
     uct_rc_mlx5_hdr_t *rch;
-    size_t wqe_size, ctrl_size;
+    size_t wqe_size, ctrl_av_size;
     unsigned fm_ce_se;
 
-    ctrl_size       = sizeof(*ctrl);
-    wqe_size        = ctrl_size + sizeof(*inl) + sizeof(*rch) + iov_length;
-    inl             = UCS_PTR_BYTE_OFFSET(ctrl, ctrl_size);
-    inl             = uct_ib_mlx5_txwq_wrap_none(txwq, inl);
+    ctrl_av_size    = sizeof(*ctrl) + av_size;
+    wqe_size        = ctrl_av_size + sizeof(*inl) + sizeof(*rch) + iov_length;
+    inl             = UCS_PTR_BYTE_OFFSET(ctrl, ctrl_av_size);
+    inl             = uct_ib_mlx5_txwq_wrap_exact(txwq, inl);
     inl->byte_count = htonl((iov_length + sizeof(*rch)) | MLX5_INLINE_SEG);
     rch             = (uct_rc_mlx5_hdr_t*)(inl + 1);
     fm_ce_se        = MLX5_WQE_CTRL_SOLICITED | uct_rc_iface_tx_moderation(
@@ -526,9 +527,9 @@ static UCS_F_ALWAYS_INLINE void uct_rc_mlx5_txqp_inline_iov_post(
 
     uct_rc_mlx5_am_hdr_fill(rch, am_id);
     uct_ib_mlx5_inline_iov_copy(rch + 1, iov, iovcnt, iov_length, txwq);
-    uct_rc_mlx5_common_post_send(iface, IBV_QPT_RC, txqp, txwq,
-                                 MLX5_OPCODE_SEND, 0, fm_ce_se, wqe_size, NULL,
-                                 NULL, 0, INT_MAX, NULL);
+    uct_rc_mlx5_common_post_send(iface, qp_type, txqp, txwq, MLX5_OPCODE_SEND,
+                                 0, fm_ce_se, wqe_size, av, grh_av, 0, INT_MAX,
+                                 NULL);
 }
 
 /*

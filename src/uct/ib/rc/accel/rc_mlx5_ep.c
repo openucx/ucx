@@ -138,8 +138,9 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_ep_am_short_iov_inline(
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     UCT_RC_MLX5_CHECK_AM_SHORT(id, uct_rc_mlx5_hdr_t, iov_length, 0);
     UCT_RC_CHECK_RES_AND_FC(&iface->super, &ep->super, id);
-    uct_rc_mlx5_txqp_inline_iov_post(iface, &ep->super.txqp, &ep->tx.wq, iov,
-                                     iovcnt, iov_length, id);
+    uct_rc_mlx5_txqp_inline_iov_post(iface, IBV_QPT_RC, &ep->super.txqp,
+                                     &ep->tx.wq, iov, iovcnt, iov_length, id,
+                                     NULL, NULL, 0);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, iov_length);
     UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
 
