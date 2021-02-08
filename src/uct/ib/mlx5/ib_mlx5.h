@@ -172,9 +172,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_RMP              = UCS_BIT(5),
     /* Device supports querying bitmask of OOO (AR) states per SL */
     UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK      = UCS_BIT(6),
+    /* Device has LAG */
+    UCT_IB_MLX5_MD_FLAG_LAG              = UCS_BIT(7),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 7,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 8,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
