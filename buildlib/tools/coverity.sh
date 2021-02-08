@@ -56,7 +56,7 @@ run_coverity() {
 
 	${WORKSPACE}/autogen.sh
 	${WORKSPACE}/contrib/configure-$ucx_build_type --prefix=$ucx_inst --with-cuda --with-gdrcopy --with-java $with_xpmem
-	cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
+	cov_build_id="cov_build_${ucx_build_type}"
 	cov_build="$WORKSPACE/$cov_build_id"
 	rm -rf $cov_build
 	cov-build --dir $cov_build $MAKEP all
