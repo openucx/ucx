@@ -625,7 +625,7 @@ protected:
                               ucp_ep_config_key_t *key2, ucp_lane_index_t lane2) {
         EXPECT_TRUE(((lane1 == UCP_NULL_LANE) && (lane2 == UCP_NULL_LANE)) ||
                     ((lane1 != UCP_NULL_LANE) && (lane2 != UCP_NULL_LANE) &&
-                     ucp_ep_config_lane_is_peer_equal(key1, lane1, key2, lane2)));
+                     ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane2)));
     }
 
 protected:
@@ -913,6 +913,77 @@ UCS_TEST_P(test_ucp_sockaddr, connect_and_fail_wireup)
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
+
+
+class test_ucp_sockaddr_different_tl_rsc : public test_ucp_sockaddr
+{
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        uint64_t features = UCP_FEATURE_STREAM | UCP_FEATURE_TAG;
+        test_ucp_sockaddr::get_test_variants_mt(variants, features,
+                                                UNSET_SELF_DEVICES,
+                                                "unset_self_devices");
+        test_ucp_sockaddr::get_test_variants_mt(variants, features,
+                                                UNSET_SHM_DEVICES,
+                                                "unset_shm_devices");
+        test_ucp_sockaddr::get_test_variants_mt(variants, features,
+                                                UNSET_SELF_DEVICES |
+                                                UNSET_SHM_DEVICES,
+                                                "unset_self_shm_devices");
+    }
+
+protected:
+    enum {
+        UNSET_SELF_DEVICES = UCS_BIT(0),
+        UNSET_SHM_DEVICES  = UCS_BIT(1)
+    };
+
+    void init()
+    {
+        m_err_count = 0;
+        get_sockaddr();
+        test_base::init();
+        // entities will be created in a test
+    }
+};
+
+
+UCS_TEST_P(test_ucp_sockaddr_different_tl_rsc, unset_devices_and_communicate)
+{
+    int variants = get_variant_value();
+
+    // create entities with different set of MDs and TL resources on a client
+    // and on a server to test non-homogeneous setups
+    if (variants & UNSET_SELF_DEVICES) {
+        if (is_self()) {
+            UCS_TEST_SKIP_R("unable to run test for self transport with unset"
+                            " self devices");
+        }
+
+        modify_config("SELF_DEVICES", "");
+    }
+    if (variants & UNSET_SHM_DEVICES) {
+        modify_config("SHM_DEVICES", "");
+    }
+    push_config();
+
+    // create a client with restrictions
+    create_entity();
+
+    pop_config();
+
+    // create a server without restrictions
+    if (!is_self()) {
+        create_entity();
+    }
+
+    skip_loopback();
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_different_tl_rsc, all, "all")
+
 
 class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
 public:

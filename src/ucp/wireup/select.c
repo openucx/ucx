@@ -44,13 +44,12 @@ typedef struct ucp_wireup_atomic_flag {
 
 
 typedef struct {
-    ucp_rsc_index_t       rsc_index;
-    ucp_rsc_index_t       dst_rsc_index;
-    unsigned              addr_index;
-    unsigned              path_index;
-    ucp_md_index_t        dst_md_index;
-    ucp_lane_type_mask_t  lane_types;
-    double                score[UCP_LANE_TYPE_LAST];
+    ucp_rsc_index_t      rsc_index;
+    unsigned             addr_index;
+    unsigned             path_index;
+    ucp_md_index_t       dst_md_index;
+    ucp_lane_type_mask_t lane_types;
+    double               score[UCP_LANE_TYPE_LAST];
 } ucp_wireup_lane_desc_t;
 
 
@@ -319,7 +318,8 @@ ucp_wireup_select_transport(const ucp_wireup_select_params_t *select_params,
             ucs_trace("addr[%d]: not in use, because on device[%d]",
                       addr_index, ae->dev_index);
             continue;
-        } else if (!(remote_md_map & UCS_BIT(ae->md_index))) {
+        } else if ((ae->md_index != UCP_NULL_RESOURCE) &&
+                   !(remote_md_map & UCS_BIT(ae->md_index))) {
             ucs_trace("addr[%d]: not in use, because on md[%d]", addr_index,
                       ae->md_index);
             continue;
@@ -512,9 +512,7 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
 
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
-                         ucp_md_index_t dst_md_index,
-                         ucp_rsc_index_t dst_rsc_index,
-                         ucp_lane_type_t lane_type,
+                         ucp_md_index_t dst_md_index, ucp_lane_type_t lane_type,
                          ucp_wireup_select_context_t *select_ctx)
 {
     ucp_wireup_lane_desc_t *lane_desc;
@@ -531,9 +529,6 @@ ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
             (lane_desc->path_index == select_info->path_index))
         {
             lane = lane_desc - select_ctx->lane_descs;
-            ucs_assertv_always(dst_rsc_index == lane_desc->dst_rsc_index,
-                               "lane[%d].dst_rsc_index=%d, dst_rsc_index=%d",
-                               lane, lane_desc->dst_rsc_index, dst_rsc_index);
             ucs_assertv_always(dst_md_index == lane_desc->dst_md_index,
                                "lane[%d].dst_md_index=%d, dst_md_index=%d",
                                lane, lane_desc->dst_md_index, dst_md_index);
@@ -557,12 +552,11 @@ ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
     lane_desc = &select_ctx->lane_descs[select_ctx->num_lanes];
     ++select_ctx->num_lanes;
 
-    lane_desc->rsc_index     = select_info->rsc_index;
-    lane_desc->dst_rsc_index = dst_rsc_index;
-    lane_desc->addr_index    = select_info->addr_index;
-    lane_desc->path_index    = select_info->path_index;
-    lane_desc->dst_md_index  = dst_md_index;
-    lane_desc->lane_types    = UCS_BIT(lane_type);
+    lane_desc->rsc_index    = select_info->rsc_index;
+    lane_desc->addr_index   = select_info->addr_index;
+    lane_desc->path_index   = select_info->path_index;
+    lane_desc->dst_md_index = dst_md_index;
+    lane_desc->lane_types   = UCS_BIT(lane_type);
     for (lane_type_iter = UCP_LANE_TYPE_FIRST;
          lane_type_iter < UCP_LANE_TYPE_LAST;
          ++lane_type_iter) {
@@ -581,15 +575,12 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
                     ucp_lane_type_t lane_type,
                     ucp_wireup_select_context_t *select_ctx)
 {
-    ucp_md_index_t dst_md_index;
-    ucp_rsc_index_t dst_rsc_index;
+    ucp_address_entry_t *addr_list = select_params->address->address_list;
+    unsigned addr_index            = select_info->addr_index;
+    ucp_md_index_t dst_md_index    = addr_list[addr_index].md_index;
 
-    dst_md_index  = select_params->address->address_list
-                        [select_info->addr_index].md_index;
-    dst_rsc_index = select_params->address->address_list
-                        [select_info->addr_index].iface_attr.dst_rsc_index;
-    return ucp_wireup_add_lane_desc(select_info, dst_md_index, dst_rsc_index,
-                                    lane_type, select_ctx);
+    return ucp_wireup_add_lane_desc(select_info, dst_md_index, lane_type,
+                                    select_ctx);
 }
 
 static int ucp_wireup_compare_score(const void *elem1, const void *elem2,
@@ -835,8 +826,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
 
     /* server is not a proxy because it can create all lanes connected */
     return ucp_wireup_add_lane_desc(&select_info, UCP_NULL_RESOURCE,
-                                    UCP_NULL_RESOURCE, UCP_LANE_TYPE_CM,
-                                    select_ctx);
+                                    UCP_LANE_TYPE_CM, select_ctx);
 }
 
 static ucs_status_t
@@ -1615,12 +1605,11 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
      */
     for (lane = 0; lane < key->num_lanes; ++lane) {
         ucs_assert(select_ctx->lane_descs[lane].lane_types != 0);
-        key->lanes[lane].rsc_index     = select_ctx->lane_descs[lane].rsc_index;
-        key->lanes[lane].dst_rsc_index = select_ctx->lane_descs[lane].dst_rsc_index;
-        key->lanes[lane].dst_md_index  = select_ctx->lane_descs[lane].dst_md_index;
-        key->lanes[lane].path_index    = select_ctx->lane_descs[lane].path_index;
-        key->lanes[lane].lane_types    = select_ctx->lane_descs[lane].lane_types;
-        addr_indices[lane]             = select_ctx->lane_descs[lane].addr_index;
+        key->lanes[lane].rsc_index    = select_ctx->lane_descs[lane].rsc_index;
+        key->lanes[lane].dst_md_index = select_ctx->lane_descs[lane].dst_md_index;
+        key->lanes[lane].path_index   = select_ctx->lane_descs[lane].path_index;
+        key->lanes[lane].lane_types   = select_ctx->lane_descs[lane].lane_types;
+        addr_indices[lane]            = select_ctx->lane_descs[lane].addr_index;
 
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_CM)) {
             ucs_assert(key->cm_lane == UCP_NULL_LANE);
