@@ -1028,6 +1028,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     ucp_ep_config_key_t *old_key;
     ucp_lane_index_t lane, reuse_lane;
     ucp_address_entry_t *ae;
+    unsigned addr_index;
+    ucp_rsc_index_t dst_rsc_index;
 
     *connect_lane_bitmap = UCS_MASK(new_key->num_lanes);
     ucs_queue_head_init(replay_pending_queue);
@@ -1053,13 +1055,22 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         memcpy(old_dst_rsc_indices, cm_wireup_ep->dst_rsc_indices,
                sizeof(old_dst_rsc_indices));
         for (lane = 0; lane < new_key->num_lanes; ++lane) {
-            ae = &remote_address->address_list[addr_indices[lane]];
+            addr_index = addr_indices[lane];
+
+            if (lane == ucp_ep_get_cm_lane(ep)) {
+                ucs_assert(addr_index == UINT_MAX);
+                dst_rsc_index = UCP_NULL_RESOURCE;
+            } else {
+                ucs_assert(addr_index != UINT_MAX);
+                ae            = &remote_address->address_list[addr_index];
+                dst_rsc_index = ae->iface_attr.dst_rsc_index;
+                ucs_assert(dst_rsc_index != UCP_NULL_RESOURCE);
+            }
 
             /* save destination resource index in the CM wireup EP for doing
              * futher intersections, if needed */
-            ucs_assert(ae->iface_attr.dst_rsc_index != UCP_NULL_RESOURCE);
-            cm_wireup_ep->dst_rsc_indices[lane] = ae->iface_attr.dst_rsc_index;
-            new_dst_rsc_indices[lane]           = ae->iface_attr.dst_rsc_index;
+            cm_wireup_ep->dst_rsc_indices[lane] = dst_rsc_index;
+            new_dst_rsc_indices[lane]           = dst_rsc_index;
         }
     }
 

@@ -822,7 +822,8 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
         return UCS_OK;
     }
 
-    ucp_wireup_init_select_info(0., 0, UCP_NULL_RESOURCE, 0, &select_info);
+    ucp_wireup_init_select_info(0., UINT_MAX, UCP_NULL_RESOURCE, 0,
+                                &select_info);
 
     /* server is not a proxy because it can create all lanes connected */
     return ucp_wireup_add_lane_desc(&select_info, UCP_NULL_RESOURCE,
