@@ -97,9 +97,10 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep        = req->send.ep;
     ssize_t packed_len;
     unsigned am_flags;
+    ucs_status_t status;
 
     if (req->send.wireup.type == UCP_WIREUP_MSG_REQUEST) {
         if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
@@ -125,11 +126,11 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     packed_len = uct_ep_am_bcopy(ep->uct_eps[req->send.lane], UCP_AM_ID_WIREUP,
                                  ucp_wireup_msg_pack, req, am_flags);
-    UCP_AM_BCOPY_HANDLE_STATUS(0, (ucs_status_t)packed_len);
-    if (ucs_unlikely(packed_len < 0)) {
-        ucs_assert((ucs_status_t)packed_len != UCS_ERR_NO_RESOURCE);
-        ucs_error("failed to send wireup: %s",
-                  ucs_status_string((ucs_status_t)packed_len));
+    status     = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
+    UCP_AM_BCOPY_HANDLE_STATUS(0, status);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_assert(status != UCS_ERR_NO_RESOURCE);
+        ucs_error("failed to send wireup: %s", ucs_status_string(status));
         return UCS_OK;
     }
 
