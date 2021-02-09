@@ -34,6 +34,6 @@ jobs:
           displayName: ${{ mode }}
         - task: PublishPipelineArtifact@1
           inputs:
-            targetPath: variables['cov_error_folder']
+            targetPath: $(cov_error_folder)
             artifactName: coverity_${{ mode }}
-          condition: eq(variables['reportExists'], True)
+          condition: eq(variables['reportExists'], 'True')
