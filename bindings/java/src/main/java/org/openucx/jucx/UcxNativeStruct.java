@@ -10,6 +10,10 @@ package org.openucx.jucx;
  */
 public abstract class UcxNativeStruct {
     private Long nativeId;
+    /**
+     * To use for hashCode and equals
+     */
+    private Long nativeIdCached;
 
     @Override
     public boolean equals(Object o) {
@@ -23,12 +27,12 @@ public abstract class UcxNativeStruct {
 
         UcxNativeStruct that = (UcxNativeStruct) o;
 
-        return this.nativeId.equals(that.nativeId);
+        return this.nativeIdCached.equals(that.nativeIdCached);
     }
 
     @Override
     public int hashCode() {
-        return nativeId.hashCode();
+        return nativeIdCached.hashCode();
     }
 
     /**
@@ -42,6 +46,7 @@ public abstract class UcxNativeStruct {
     private void setNativeId(long nativeId) {
         if (nativeId > 0) {
             this.nativeId = nativeId;
+            this.nativeIdCached = nativeId;
         } else {
             this.nativeId = null;
         }
@@ -51,6 +56,10 @@ public abstract class UcxNativeStruct {
         if (nativeId != null && nativeId < 0) {
             throw new UcxException("UcxNativeStruct.setNativeId: invalid native pointer: "
                 + nativeId);
+        }
+
+        if (nativeIdCached == null) {
+            this.nativeIdCached = nativeId;
         }
         this.nativeId = nativeId;
     }
