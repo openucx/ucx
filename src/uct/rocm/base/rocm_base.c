@@ -22,6 +22,14 @@ static struct agents {
     int num_gpu;
 } uct_rocm_base_agents;
 
+typedef struct uct_rocm_mem_attr {
+    uct_mem_attr_t super;
+    void *base_address;
+    size_t length;
+    /* TODO what rocm memory attributes do we need? */
+} uct_rocm_mem_attr_t;
+
+
 int uct_rocm_base_get_gpu_agents(hsa_agent_t **agents)
 {
     *agents = uct_rocm_base_agents.gpu_agents;
@@ -170,63 +178,115 @@ hsa_status_t uct_rocm_base_get_ptr_info(void *ptr, size_t size,
     return HSA_STATUS_SUCCESS;
 }
 
-ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
-                                              size_t length,
-                                              ucs_memory_type_t *mem_type_p)
+static int uct_rocm_mem_attr_cmp(const uct_mem_attr_h mem_attr1,
+                                const uct_mem_attr_h mem_attr2)
 {
-    hsa_status_t status;
-    hsa_amd_pointer_info_t info;
-
-    *mem_type_p = UCS_MEMORY_TYPE_HOST;
-    if (addr == NULL) {
-        return UCS_OK;
-    }
-
-    info.size = sizeof(hsa_amd_pointer_info_t);
-    status = hsa_amd_pointer_info((void*)addr, &info, NULL, NULL, NULL);
-    if ((status == HSA_STATUS_SUCCESS) &&
-        (info.type == HSA_EXT_POINTER_TYPE_HSA)) {
-        hsa_device_type_t dev_type;
-
-        status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE, &dev_type);
-        if ((status == HSA_STATUS_SUCCESS) &&
-            (dev_type == HSA_DEVICE_TYPE_GPU)) {
-            *mem_type_p = UCS_MEMORY_TYPE_ROCM;
-            return UCS_OK;
-        }
-    }
-
-    return UCS_ERR_INVALID_ADDR;
+    /* TODO how should we compare two rocm memory attributes? */
+    return 0;
 }
 
-ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
-                                     const size_t length,
-                                     uct_md_mem_attr_t *mem_attr_p)
+static void uct_rocm_mem_attr_destroy(uct_mem_attr_h mem_attr)
 {
-    ucs_status_t status;
-    ucs_memory_type_t mem_type;
+    uct_rocm_mem_attr_t *rocm_mem_attr;
+    rocm_mem_attr = ucs_derived_of(mem_attr, uct_rocm_mem_attr_t);
+    ucs_free(rocm_mem_attr);
+}
 
-    status = uct_rocm_base_detect_memory_type(md, addr, length, &mem_type);
+UCS_PROFILE_FUNC(ucs_status_t, uct_rocm_mem_attr_query,
+                 (address, length, mem_attr_p),
+                 const void *address, size_t length,
+                 uct_mem_attr_h *mem_attr_p)
+{
+    hsa_status_t status;
+    hsa_amd_pointer_info_t info = {
+        .size = sizeof(hsa_amd_pointer_info_t),
+    };
+    uct_rocm_mem_attr_t *rocm_mem_attr;
+
+    if (address == NULL) {
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    status = hsa_amd_pointer_info((void*)address, &info, NULL, NULL, NULL);
+    if ((status != HSA_STATUS_SUCCESS) ||
+        (info.type != HSA_EXT_POINTER_TYPE_HSA)) {
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    hsa_device_type_t dev_type;
+    status = hsa_agent_get_info(info.agentOwner, HSA_AGENT_INFO_DEVICE, &dev_type);
+    if ((status != HSA_STATUS_SUCCESS) ||
+        (dev_type != HSA_DEVICE_TYPE_GPU)) {
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    rocm_mem_attr = ucs_malloc(sizeof(*rocm_mem_attr), "rocmmem_attr");
+    if (rocm_mem_attr == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+    rocm_mem_attr->base_address   = address;
+    rocm_mem_attr->alloc_length   = length;
+    rocm_mem_attr->super.mem_type = UCS_MEMORY_TYPE_ROCM;
+    rocm_mem_attr->super.sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
+    rocm_mem_attr->super.cmp      = uct_rocm_mem_attr_cmp;
+    rocm_mem_attr->super.destroy  = uct_rocm_mem_attr_destroy;
+
+    return UCS_OK;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, uct_rocm_base_mem_query,
+                 (md, address, length, mem_attr),
+                 uct_md_h md, const void *address, size_t length,
+                 uct_md_mem_attr_t *mem_attr)
+{
+    uct_mem_attr_h mem_attr_h;
+    uct_rocm_mem_attr_t *rocm_mem_attr;
+    ucs_status_t status;
+
+    status = uct_rocm_mem_attr_query(address, length, &mem_attr_h);
     if (status != UCS_OK) {
         return status;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
-        mem_attr_p->mem_type = mem_type;
+    rocm_mem_attr = ucs_derived_of(mem_attr_h, uct_rocm_mem_attr_t);
+
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+        mem_attr->sys_dev = rocm_mem_attr->super.sys_dev;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
-        mem_attr_p->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
+        mem_attr->mem_type = rocm_mem_attr->super.mem_type;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
-        mem_attr_p->base_address = addr;
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+        mem_attr->base_address = rocm_mem_attr->base_address;
     }
 
-    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
-        mem_attr_p->alloc_length = length;
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+        mem_attr->alloc_length = rocm_mem_attr->alloc_length;
     }
 
+    uct_mem_attr_destroy(mem_attr_h);
+    return UCS_OK;
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, uct_rocm_base_detect_memory_type,
+                 (md, address, length, mem_type_p),
+                 uct_md_h md, const void *address, size_t length,
+                 ucs_memory_type_t *mem_type)
+{
+    /* self-initializing to suppress wrong maybe-uninitialized error */
+    uct_md_mem_attr_t mem_attr = mem_attr;
+    ucs_status_t status;
+
+    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
+    status              = uct_rocm_base_mem_query(md, address, length,
+                                                  &mem_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *mem_type_p = mem_attr.mem_type;
     return UCS_OK;
 }
 
@@ -291,3 +351,5 @@ UCS_MODULE_INIT() {
     UCS_MODULE_FRAMEWORK_LOAD(uct_rocm, 0);
     return UCS_OK;
 }
+
+UCT_MEM_QUERY_REGISTER(uct_rocm_mem_attr_query, UCS_MEMORY_TYPE_ROCM);

@@ -214,4 +214,54 @@ static inline ucs_log_level_t uct_md_reg_log_lvl(unsigned flags)
             UCS_LOG_LEVEL_ERROR;
 }
 
+typedef struct uct_mem_attr *uct_mem_attr_h;
+typedef struct uct_mem_attr {
+    ucs_memory_type_t mem_type;
+    ucs_sys_device_t sys_dev;
+    int (*cmp)(uct_mem_attr_h mem_attr1, uct_mem_attr_h mem_attr2);
+    void (*destroy)(uct_mem_attr_h mem_attr);
+} uct_mem_attr_t;
+
+typedef ucs_status_t (*uct_mem_query_func_t)(const void *addr, size_t length,
+                                             uct_mem_attr_h *mem_attr_p);
+
+ucs_status_t uct_mem_attr_query(const void *address, size_t length,
+                                uct_mem_attr_h *mem_attr_p);
+
+/* Getting the type directly from address and length */
+ucs_status_t uct_mem_attr_query_type(const void *address, size_t length,
+                                     ucs_memory_type_t *mem_type);
+
+static inline ucs_memory_type_t
+uct_mem_attr_get_type(uct_mem_attr_h mem_attr)
+{
+    return mem_attr->mem_type;
+}
+
+static inline ucs_sys_device_t
+uct_mem_attr_get_sys_dev(uct_mem_attr_h mem_attr)
+{
+    return mem_attr->sys_dev;
+}
+
+static inline int
+uct_mem_attr_cmp(uct_mem_attr_h mem_attr1, uct_mem_attr_h mem_attr2)
+{
+    if (mem_attr1->mem_type == mem_attr2->mem_type) {
+        return mem_attr1->cmp(mem_attr1, mem_attr2);
+    }
+    return 1;
+}
+
+static inline void uct_mem_attr_destroy(uct_mem_attr_h mem_attr)
+{
+    mem_attr->destroy(mem_attr);
+}
+
+#define UCT_MEM_QUERY_REGISTER(_mem_query_func, _mem_type) \
+    extern uct_mem_query_func_t mqf[]; \
+    UCS_STATIC_INIT { \
+        mqf[_mem_type] = _mem_query_func; \
+    }
+
 #endif
