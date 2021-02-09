@@ -27,6 +27,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: |
               set -eE
@@ -62,6 +63,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: |
               source ./buildlib/az-helpers.sh
@@ -93,6 +95,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: ./autogen.sh
             displayName: Setup autotools
@@ -149,6 +152,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: ./autogen.sh
             displayName: Setup autotools
@@ -177,6 +181,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: ./autogen.sh
             displayName: Setup autotools
