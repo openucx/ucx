@@ -52,9 +52,13 @@
 #include <errno.h>   /* errno */
 #include <time.h>
 #include <signal.h>  /* raise */
+#include <assert.h>
 
 struct msg {
     uint64_t        data_len;
+    uint64_t        remote_addr;
+    size_t          remote_len;
+    size_t          rkey_buffer_size;
 };
 
 struct ucx_context {
@@ -79,6 +83,7 @@ static struct err_handling {
     failure_mode_t          failure_mode;
 } err_handling_opt;
 
+static rma_op_t test_rma_type   = TEST_RMA_LAST;
 static ucs_status_t ep_status   = UCS_OK;
 static uint16_t server_port     = 13337;
 static long test_string_length  = 16;
@@ -104,6 +109,32 @@ static void request_init(void *request)
     struct ucx_context *contex = (struct ucx_context *)request;
 
     contex->completed = 0;
+}
+
+static void worker_flush_handler(void *request, ucs_status_t status, void *ctx)
+{
+    struct ucx_context *context     = (struct ucx_context *)request;
+    struct ucx_context *rma_request = (struct ucx_context *)ctx;
+
+    assert(rma_request->completed == 1);
+
+    context->completed = 1;
+
+    printf("[0x%x] worker_flush handler with status %d (%s)\n",
+           (unsigned int)pthread_self(), status,
+           ucs_status_string(status));
+}
+
+static void rma_handler(void *request, ucs_status_t status, void *ctx)
+{
+    struct ucx_context *context = (struct ucx_context *)request;
+    const char *str             = (const char *)ctx;
+
+    context->completed = 1;
+
+    printf("[0x%x] rma handler called for \"%s\" with status %d (%s)\n",
+           (unsigned int)pthread_self(), str, status,
+           ucs_status_string(status));
 }
 
 static void send_handler(void *request, ucs_status_t status, void *ctx)
@@ -211,7 +242,40 @@ err:
     return ret;
 }
 
-static int run_ucx_client(ucp_worker_h ucp_worker)
+static ucs_status_t map_mem(void *buf, size_t size, ucs_memory_type_t mem_type,
+                            ucp_context_h ucp_context, void **rkey_buffer,
+                            size_t *rkey_buffer_size, ucp_mem_h *ucp_memh)
+{
+    ucs_status_t status;
+    ucp_mem_map_params_t ucp_memmap_params;
+
+    ucp_memmap_params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS     |
+                                    UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE |
+                                    UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    ucp_memmap_params.address     = (void *)buf;
+    ucp_memmap_params.memory_type = mem_type;
+    ucp_memmap_params.length      = size;
+
+    status = ucp_mem_map(ucp_context, &ucp_memmap_params, ucp_memh);
+    CHKERR_JUMP(status != UCS_OK, "ucp_mem_map\n", err);
+
+    status = ucp_rkey_pack(ucp_context, *ucp_memh, rkey_buffer, rkey_buffer_size);
+    CHKERR_JUMP(status != UCS_OK, "ucp_rkey_pack\n", err);
+
+    return UCS_OK;
+
+err:
+    return status;
+}
+
+static ucs_status_t unmap_mem(ucp_context_h ucp_context, void *rkey_buffer,
+                              ucp_mem_h ucp_memh)
+{
+    ucp_rkey_buffer_release(rkey_buffer);
+    return ucp_mem_unmap(ucp_context, ucp_memh);
+}
+
+static int run_ucx_client(ucp_worker_h ucp_worker, ucp_context_h ucp_context)
 {
     struct msg *msg = NULL;
     size_t msg_len  = 0;
@@ -224,6 +288,18 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     ucp_ep_params_t ep_params;
     struct ucx_context *request;
     char *str;
+    ucp_mem_h memh;
+    void *rma_buffer;
+    void *rkey_buffer;
+    size_t rkey_buffer_size;
+
+    if (test_rma_type != TEST_RMA_LAST) {
+        rma_buffer = mem_type_malloc(test_string_length);
+        CHKERR_JUMP(rma_buffer == NULL, "allocate memory\n", err_ep);
+        status = map_mem(rma_buffer, (size_t)test_string_length, test_mem_type,
+                         ucp_context, &rkey_buffer, &rkey_buffer_size, &memh);
+        CHKERR_JUMP(status != UCS_OK, "mem_map\n", err);
+    }
 
     /* Send client UCX address to server */
     ep_params.field_mask      = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS |
@@ -246,6 +322,23 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
 
     msg->data_len = local_addr_len;
     memcpy(msg + 1, local_addr, local_addr_len);
+
+    if (test_rma_type != TEST_RMA_LAST) {
+        msg->remote_addr      = (uint64_t)rma_buffer;
+        msg->remote_len       = (size_t)test_string_length;
+        msg->rkey_buffer_size = rkey_buffer_size;
+        msg_len              += rkey_buffer_size;
+
+        msg = realloc(msg, msg_len);
+        CHKERR_JUMP(msg == NULL, "realloc\n", err_ep);
+
+        memcpy(msg + 1 + local_addr_len, rkey_buffer, rkey_buffer_size);
+
+        if (test_rma_type == TEST_RMA_GET) {
+            ret = generate_test_string(rma_buffer, test_string_length);
+            CHKERR_JUMP(ret < 0, "generate test string", err_ep);
+        }
+    }
 
     send_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                               UCP_OP_ATTR_FIELD_USER_DATA;
@@ -328,6 +421,25 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
 
     mem_type_free(msg);
 
+    if (test_rma_type != TEST_RMA_LAST) {
+        if (test_rma_type == TEST_RMA_PUT) {
+            str = calloc(1, test_string_length);
+            if (str != NULL) {
+                mem_type_memcpy(str, rma_buffer, test_string_length);
+                printf("\n\n----- UCP RMA TEST SUCCESS ----\n\n");
+                printf("%s", str);
+                printf("\n\n---------------------------\n\n");
+                free(str);
+            } else {
+                fprintf(stderr, "Memory allocation failed\n");
+                goto err_ep;
+            }
+        }
+
+        unmap_mem(ucp_context, rkey_buffer, memh);
+        mem_type_free(rma_buffer);
+    }
+
     ret = 0;
 
 err_ep:
@@ -364,18 +476,27 @@ static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
     }
 }
 
-static int run_ucx_server(ucp_worker_h ucp_worker)
+static int run_ucx_server(ucp_worker_h ucp_worker, ucp_context_h ucp_context)
 {
     struct msg *msg             = NULL;
     struct ucx_context *request = NULL;
     size_t msg_len              = 0;
     ucp_request_param_t send_param;
+    ucp_request_param_t rma_param;
+    ucp_request_param_t worker_param;
     ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
     ucp_ep_h client_ep;
     ucp_ep_params_t ep_params;
     int ret;
+    char *str;
+    void *rma_buffer;
+    void *rkey_buffer;
+    uint64_t remote_addr;
+    ucp_rkey_h rkey;
+    size_t rkey_buffer_size;
+    size_t remote_len;
 
     /* Receive client UCX address */
     do {
@@ -416,6 +537,17 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
 
     memcpy(peer_addr, msg + 1, peer_addr_len);
 
+    if (test_rma_type != TEST_RMA_LAST) {
+        rkey_buffer_size = msg->rkey_buffer_size;
+        remote_len       = msg->remote_len;
+        remote_addr      = (uint64_t)msg->remote_addr;
+        rkey_buffer      = malloc(msg->rkey_buffer_size);
+        CHKERR_JUMP(rkey_buffer == NULL, "rkey buffer alloc", err);
+        memcpy(rkey_buffer, msg + 1 + msg->data_len, msg->rkey_buffer_size);
+        printf("remote_addr = %p remote_len = %ld rkey_buffer_size = %ld\n",
+                (void*)remote_addr, remote_len, rkey_buffer_size);
+    }
+
     free(msg);
 
     /* Send test string to client */
@@ -451,6 +583,77 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     }
 
     ucp_worker_progress(ucp_worker);
+
+    if (test_rma_type != TEST_RMA_LAST) {
+        rma_buffer = mem_type_malloc(remote_len);
+        CHKERR_ACTION(rma_buffer == NULL, "allocate memory\n", ret = -1; goto err_ep);
+
+        if (test_rma_type == TEST_RMA_PUT) {
+            ret = generate_test_string((char *)rma_buffer, remote_len);
+            CHKERR_JUMP(ret < 0, "generate test string", err_ep);
+        }
+
+        status = ucp_ep_rkey_unpack(client_ep, rkey_buffer, &rkey);
+        CHKERR_JUMP(status != UCS_OK, "ucp_ep_rkey_unpack\n", err);
+
+        rma_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
+                                 UCP_OP_ATTR_FIELD_USER_DATA |
+                                 UCP_OP_ATTR_FIELD_MEMORY_TYPE;
+        rma_param.user_data    = (void*)data_msg_str;
+        rma_param.memory_type  = test_mem_type;
+        rma_param.cb.send      = rma_handler;
+
+        if (test_rma_type == TEST_RMA_PUT) {
+            request = ucp_put_nbx(client_ep, rma_buffer, remote_len,
+                                  (uint64_t)remote_addr, rkey, &rma_param);
+        } else {
+            request = ucp_get_nbx(client_ep, rma_buffer, remote_len,
+                                  (uint64_t)remote_addr, rkey, &rma_param);
+        }
+
+        if (request == UCS_OK) {
+            printf("rma op complete\n");
+        } else if (UCS_PTR_IS_ERR(request)) {
+            fprintf(stderr, "unable to perform RMA op\n");
+            goto err_ep;
+        } else {
+            worker_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                                        UCP_OP_ATTR_FIELD_USER_DATA;
+            worker_param.user_data    = request;
+            worker_param.cb.send      = worker_flush_handler;
+
+            request = ucp_worker_flush_nbx(ucp_worker, &worker_param);
+
+            status  = ucx_wait(ucp_worker, request, "worker_flush", data_msg_str);
+            if (status != UCS_OK) {
+                fprintf(stderr, "unable to flush worker\n");
+                goto err_ep;
+            }
+
+            status  = ucx_wait(ucp_worker, worker_param.user_data, "rma", data_msg_str);
+            if (status != UCS_OK) {
+                fprintf(stderr, "unable to perform rma\n");
+                goto err_ep;
+            }
+        }
+
+        ucp_rkey_destroy(rkey);
+        CHKERR_JUMP(status != UCS_OK, "ucp_rkey_destroy\n", err_ep);
+
+        if (test_rma_type == TEST_RMA_GET) {
+            str = calloc(1, remote_len);
+            if (str != NULL) {
+                mem_type_memcpy(str, rma_buffer, remote_len);
+                printf("\n\n----- UCP RMA TEST SUCCESS ----\n\n");
+                printf("%s", str);
+                printf("\n\n---------------------------\n\n");
+                free(str);
+            } else {
+                fprintf(stderr, "Memory allocation failed\n");
+                goto err_ep;
+            }
+        }
+    }
 
     send_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
                               UCP_OP_ATTR_FIELD_USER_DATA |
@@ -499,12 +702,13 @@ err:
     return ret;
 }
 
-static int run_test(const char *client_target_name, ucp_worker_h ucp_worker)
+static int run_test(const char *client_target_name, ucp_worker_h ucp_worker,
+                    ucp_context_h ucp_context)
 {
     if (client_target_name != NULL) {
-        return run_ucx_client(ucp_worker);
+        return run_ucx_client(ucp_worker, ucp_context);
     } else {
-        return run_ucx_server(ucp_worker);
+        return run_ucx_server(ucp_worker, ucp_context);
     }
 }
 
@@ -543,6 +747,9 @@ int main(int argc, char **argv)
     ucp_params.features     = UCP_FEATURE_TAG;
     if (ucp_test_mode == TEST_MODE_WAIT || ucp_test_mode == TEST_MODE_EVENTFD) {
         ucp_params.features |= UCP_FEATURE_WAKEUP;
+    }
+    if (test_rma_type != TEST_RMA_LAST) {
+        ucp_params.features |= UCP_FEATURE_RMA;
     }
     ucp_params.request_size    = sizeof(struct ucx_context);
     ucp_params.request_init    = request_init;
@@ -598,7 +805,7 @@ int main(int argc, char **argv)
                            err_peer_addr, ret);
     }
 
-    ret = run_test(client_target_name, ucp_worker);
+    ret = run_test(client_target_name, ucp_worker, ucp_context);
 
     if (!ret && (err_handling_opt.failure_mode != FAILURE_MODE_NONE)) {
         /* Make sure remote is disconnected before destroying local worker */
@@ -653,7 +860,7 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
     err_handling_opt.ucp_err_mode = UCP_ERR_HANDLING_MODE_NONE;
     err_handling_opt.failure_mode = FAILURE_MODE_NONE;
 
-    while ((c = getopt(argc, argv, "wfbe:n:p:s:m:h")) != -1) {
+    while ((c = getopt(argc, argv, "wfbe:n:p:s:m:o:h")) != -1) {
         switch (c) {
         case 'w':
             ucp_test_mode = TEST_MODE_WAIT;
@@ -697,6 +904,12 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
         case 'm':
             test_mem_type = parse_mem_type(optarg);
             if (test_mem_type == UCS_MEMORY_TYPE_LAST) {
+                return UCS_ERR_UNSUPPORTED;
+            }
+            break;
+        case 'o':
+            test_rma_type = parse_rma_type(optarg);
+            if (test_rma_type == TEST_RMA_LAST) {
                 return UCS_ERR_UNSUPPORTED;
             }
             break;
