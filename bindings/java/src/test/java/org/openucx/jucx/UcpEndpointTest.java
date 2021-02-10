@@ -486,7 +486,7 @@ public class UcpEndpointTest extends UcxTest {
             sendAddresses[i] = sendBuffers[i].getAddress();
             sizes[i] = bufferSize;
 
-            ByteBuffer buf = UcxUtils.getByteBufferView(sendAddresses[i], (int)bufferSize);
+            ByteBuffer buf = UcxUtils.getByteBufferView(sendAddresses[i], bufferSize);
             buf.putInt(0, (i + 1));
 
             recvBuffers[i] = context2.memoryMap(memMapParams);
@@ -504,7 +504,7 @@ public class UcpEndpointTest extends UcxTest {
         assertEquals(totalSize, recv.getRecvSize());
 
         for (int i = 0; i < NUM_IOV; i++) {
-            ByteBuffer buf = UcxUtils.getByteBufferView(recvAddresses[i], (int)sizes[i]);
+            ByteBuffer buf = UcxUtils.getByteBufferView(recvAddresses[i], sizes[i]);
             assertEquals((i + 1), buf.getInt(0));
             recvBuffers[i].deregister();
         }
@@ -532,7 +532,7 @@ public class UcpEndpointTest extends UcxTest {
         }
 
         assertEquals(totalSize, recv.getRecvSize());
-        ByteBuffer buf = UcxUtils.getByteBufferView(recvAddresses[0], (int)recvSizes[0]);
+        ByteBuffer buf = UcxUtils.getByteBufferView(recvAddresses[0], recvSizes[0]);
         assertEquals(1, buf.getInt(0));
 
         Collections.addAll(resources, context1, context2, worker1, worker2, ep);

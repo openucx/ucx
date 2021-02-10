@@ -69,6 +69,11 @@ function get_ip() {
     echo "$ip"
 }
 
+# Get active RDMA interfaces
+function get_rdma_interfaces() {
+    echo `ibdev2netdev | grep Up | awk '{print $5}'`
+}
+
 # Prepend each line with a timestamp
 function add_timestamp() {
     set +x

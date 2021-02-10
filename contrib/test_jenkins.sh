@@ -375,22 +375,6 @@ build_docs() {
 }
 
 #
-# Building java docs
-#
-build_java_docs() {
-	echo " ==== Building java docs ===="
-	if module_load dev/jdk && module_load dev/mvn
-	then
-		../configure --prefix=$ucx_inst --with-java
-		$MAKE -C ../build-test/bindings/java/src/main/native docs
-		module unload dev/jdk
-		module unload dev/mvn
-	else
-		log_warning "No jdk and mvn module, failed to build docs".
-	fi
-}
-
-#
 # Build without verbs
 #
 build_no_verbs() {
@@ -660,28 +644,6 @@ build_gcc_latest() {
 		log_warning "==== Not building with gcc compiler ===="
 		log_warning "Required glibc version is too old ($ldd_ver)"
 		echo "ok 1 - # SKIP because glibc version is older than 2.14" >> build_gcc_latest.tap
-	fi
-}
-
-#
-# Builds jucx
-#
-build_jucx() {
-	echo 1..1 > build_jucx.tap
-	if module_load dev/jdk && module_load dev/mvn
-	then
-		echo "==== Building JUCX bindings (java api for ucx) ===="
-		../contrib/configure-release --prefix=$ucx_inst --with-java
-		make_clean
-		$MAKEP
-		$MAKEP install
-		make_clean distclean
-		echo "ok 1 - build successful " >> build_jucx.tap
-		module unload dev/jdk
-		module unload dev/mvn
-	else
-		echo "==== No jdk and mvn modules ==== "
-		echo "ok 1 - # SKIP because dev/jdk and dev/mvn modules are not available" >> build_jucx.tap
 	fi
 }
 
@@ -1403,67 +1365,6 @@ test_malloc_hook() {
 	fi
 }
 
-test_jucx() {
-	echo "==== Running jucx test ===="
-	echo "1..2" > jucx_tests.tap
-	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
-	if [ -z "$iface" ]
-	then
-		echo "Failed to find active ib devices." >> jucx_tests.tap
-		return
-	elif module_load dev/jdk && module_load dev/mvn
-	then
-		jucx_port=$((20000 + EXECUTOR_NUMBER))
-		export JUCX_TEST_PORT=$jucx_port
-		export UCX_MEM_EVENTS=no
-		$MAKE -C bindings/java/src/main/native test
-		ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
-		if [ -n "$ifaces" ]
-		then
-			$MAKE -C bindings/java/src/main/native package
-		fi
-		for iface in $ifaces
-		do
-			if [ -n "$iface" ]
-			then
-				server_ip=$(get_ifaddr ${iface})
-			fi
-
-			if [ -z "$server_ip" ]
-			then
-				echo "Interface $iface has no IPv4"
-				continue
-			fi
-
-			echo "Running standalone benchamrk on $iface"
-
-			java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
-			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
-			  org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
-			     s=$server_ip p=$JUCX_TEST_PORT t=1000000 &
-			     java_pid=$!
-
-			sleep 10
-
-			java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
-			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*"  \
-			  org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
-			     s=$server_ip p=$JUCX_TEST_PORT t=1000000
-			wait $java_pid
-		done
-
-		unset JUCX_TEST_PORT
-		unset UCX_MEM_EVENTS
-		module unload dev/jdk
-		module unload dev/mvn
-		echo "ok 1 - jucx test" >> jucx_tests.tap
-	else
-		echo "Failed to load dev/jdk and dev/mvn modules." >> jucx_tests.tap
-	fi
-}
-
 #
 # Run Coverity and report errors
 # The argument is a UCX build type: devel or release
@@ -1741,7 +1642,6 @@ run_tests() {
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
 	do_distributed_task 1 4 build_gcc_latest
-	do_distributed_task 0 4 build_jucx
 
 	# all are running mpi tests
 	run_mpi_tests
@@ -1763,7 +1663,6 @@ run_tests() {
 	do_distributed_task 2 4 run_ucx_perftest
 	do_distributed_task 1 4 run_io_demo
 	do_distributed_task 3 4 test_profiling
-	do_distributed_task 0 4 test_jucx
 	do_distributed_task 1 4 test_ucs_dlopen
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
@@ -1785,7 +1684,6 @@ run_tests() {
 prepare
 try_load_cuda_env
 do_distributed_task 0 4 build_docs
-do_distributed_task 0 4 build_java_docs
 do_distributed_task 0 4 build_disable_numa
 do_distributed_task 1 4 build_no_verbs
 do_distributed_task 2 4 build_release_pkg

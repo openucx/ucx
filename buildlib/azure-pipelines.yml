@@ -15,6 +15,6 @@ resources:
 stages:
   - stage: Build
     jobs:
-      - template: jucx-publish.yml
+      - template: jucx/jucx-publish.yml
         parameters:
           target: publish-snapshot

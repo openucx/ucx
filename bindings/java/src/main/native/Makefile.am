@@ -25,7 +25,8 @@ JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConstants.h             \
                          org_openucx_jucx_ucp_UcpRemoteKey.h             \
                          org_openucx_jucx_ucp_UcpWorker.h                \
                          org_openucx_jucx_ucs_UcsConstants_ThreadMode.h  \
-                         org_openucx_jucx_ucs_UcsConstants.h
+                         org_openucx_jucx_ucs_UcsConstants.h             \
+                         org_openucx_jucx_UcxUtils.h
 
 BUILT_SOURCES = $(JUCX_GENERATED_H_FILES)
 
