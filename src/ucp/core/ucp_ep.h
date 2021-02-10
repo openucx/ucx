@@ -114,6 +114,15 @@ enum {
     UCS_STATS_UPDATE_COUNTER((_ep)->stats, UCP_EP_STAT_TAG_TX_##_op, 1);
 
 
+typedef struct ucp_ep_config_key_lane {
+    ucp_rsc_index_t      rsc_index; /* Resource index */
+    ucp_md_index_t       dst_md_index; /* Destination memory domain index */
+    uint8_t              path_index; /* Device path index */
+    ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
+                                        was selected for */
+} ucp_ep_config_key_lane_t;
+
+
 /*
  * Endpoint configuration key.
  * This is filled by to the transport selection logic, according to the local
@@ -122,15 +131,7 @@ enum {
 struct ucp_ep_config_key {
 
     ucp_lane_index_t         num_lanes;       /* Number of active lanes */
-
-    struct {
-        ucp_rsc_index_t      rsc_index;       /* Resource index */
-        ucp_rsc_index_t      dst_rsc_index;   /* Destination resource index */
-        ucp_md_index_t       dst_md_index;    /* Destination memory domain index */
-        uint8_t              path_index;      /* Device path index */
-        ucp_lane_type_mask_t lane_types;      /* Which types of operations this lane
-                                                 was selected for */
-    } lanes[UCP_MAX_LANES];
+    ucp_ep_config_key_lane_t lanes[UCP_MAX_LANES]; /* Active lanes */
 
     ucp_lane_index_t         am_lane;         /* Lane for AM (can be NULL) */
     ucp_lane_index_t         tag_lane;        /* Lane for tag matching offload (can be NULL) */
@@ -553,13 +554,15 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
 void ucp_ep_config_cleanup(ucp_worker_h worker, ucp_ep_config_t *config);
 
-int ucp_ep_config_lane_is_peer_equal(const ucp_ep_config_key_t *key1,
+int ucp_ep_config_lane_is_peer_match(const ucp_ep_config_key_t *key1,
                                      ucp_lane_index_t lane1,
                                      const ucp_ep_config_key_t *key2,
                                      ucp_lane_index_t lane2);
 
 void ucp_ep_config_lanes_intersect(const ucp_ep_config_key_t *key1,
+                                   const ucp_rsc_index_t *dst_rsc_indices1,
                                    const ucp_ep_config_key_t *key2,
+                                   const ucp_rsc_index_t *dst_rsc_indices2,
                                    ucp_lane_index_t *lane_map);
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,

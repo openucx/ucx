@@ -23,16 +23,16 @@
 #define UCP_AM_BCOPY_HANDLE_STATUS(_multi, _status) \
     do { \
         if (_multi) { \
-            if (_status == UCS_INPROGRESS) { \
+            if ((_status) == UCS_INPROGRESS) { \
                 return UCS_INPROGRESS; \
-            } else if (ucs_unlikely(_status == UCP_STATUS_PENDING_SWITCH)) { \
+            } else if (ucs_unlikely((_status) == UCP_STATUS_PENDING_SWITCH)) { \
                 return UCS_OK; \
             } \
         } else { \
-            ucs_assert(_status != UCS_INPROGRESS); \
+            ucs_assert((_status) != UCS_INPROGRESS); \
         } \
         \
-        if (ucs_unlikely(_status == UCS_ERR_NO_RESOURCE)) { \
+        if (ucs_unlikely((_status) == UCS_ERR_NO_RESOURCE)) { \
             return UCS_ERR_NO_RESOURCE; \
         } \
     } while (0)
