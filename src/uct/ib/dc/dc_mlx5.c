@@ -203,9 +203,9 @@ static void uct_dc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
 static UCS_F_ALWAYS_INLINE unsigned
 uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 {
+    uint32_t qp_num = 0xffffff;
     uint8_t dci;
     struct mlx5_cqe64 *cqe;
-    uint32_t qp_num;
     uint16_t hw_ci;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
@@ -218,8 +218,12 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
 
     ucs_memory_cpu_load_fence();
 
-    qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    dci = uct_dc_mlx5_iface_dci_find(iface, qp_num);
+    if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_UIDX) {
+        dci = cqe->srqn_uidx >> UCT_IB_UIDX_SHIFT;
+    } else {
+        qp_num = ntohl(cqe->sop_drop_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
+        dci    = uct_dc_mlx5_iface_dci_find(iface, qp_num);
+    }
     txqp = &iface->tx.dcis[dci].txqp;
     txwq = &iface->tx.dcis[dci].txwq;
     hw_ci = ntohs(cqe->wqe_counter);
@@ -271,7 +275,8 @@ static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 
 static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
-                                                 uct_dc_dci_t *dci)
+                                                 uct_dc_dci_t *dci,
+                                                 int ndci)
 {
     uct_ib_iface_t *ib_iface           = &iface->super.super.super;
     uct_ib_mlx5_qp_attr_t attr         = {};
@@ -288,6 +293,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
                                 &iface->super.rx.srq);
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI) {
+        attr.uidx                             = htonl(ndci) >> UCT_IB_UIDX_SHIFT;
         attr.super.max_inl_cqe[UCT_IB_DIR_RX] = 0;
         status = uct_ib_mlx5_devx_create_qp(ib_iface, &dci->txwq.super,
                                             &dci->txwq, &attr);
@@ -784,7 +790,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
 
     iface->tx.stack_top = 0;
     for (i = 0; i < iface->tx.ndci; i++) {
-        status = uct_dc_mlx5_iface_create_dci(iface, &iface->tx.dcis[i]);
+        status = uct_dc_mlx5_iface_create_dci(iface, &iface->tx.dcis[i], i);
         if (status != UCS_OK) {
             goto err;
         }
@@ -1224,6 +1230,11 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         goto err_destroy_dct;
     }
 
+    if (ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_DEVX_DCI |
+                                      UCT_IB_MLX5_MD_FLAG_CQE_V1)) {
+        self->flags |= UCT_DC_MLX5_IFACE_FLAG_UIDX;
+    }
+
     ucs_debug("dc iface %p: using '%s' policy with %d dcis and %d cqes, dct 0x%x",
               self, uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
               init_attr.cq_len[UCT_IB_DIR_TX], UCT_RC_MLX5_TM_ENABLED(&self->super) ?
@@ -1359,7 +1370,9 @@ ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
 
     ucs_assert(iface->tx.ndci <= UCT_DC_MLX5_IFACE_MAX_USER_DCIS);
 
-    status = uct_dc_mlx5_iface_create_dci(iface, &iface->tx.dcis[iface->tx.ndci]);
+    status = uct_dc_mlx5_iface_create_dci(iface,
+                                          &iface->tx.dcis[iface->tx.ndci],
+                                          iface->tx.ndci);
     if (status != UCS_OK) {
         return status;
     }

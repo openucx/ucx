@@ -718,6 +718,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         md->flags |= UCT_IB_MLX5_MD_FLAG_LAG;
     }
 
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_version)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_CQE_V1;
+    }
+
     status = uct_ib_mlx5_devx_check_odp(md, md_config, cap);
     if (status != UCS_OK) {
         goto err_free;
