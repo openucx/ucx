@@ -52,12 +52,16 @@ static void usage() {
     printf("                    'shm'  : shared memory devices only\n");
     printf("                    'net'  : network devices only\n");
     printf("                    'self' : self transport only\n");
+    /* TODO: add IPv6 support */
+    printf("  -A <ipv4>       Local IPv4 device address to use for creating\n"
+           "                  endpoint in client/server mode");
     printf("  -h              Show this help message\n");
     printf("\n");
 }
 
 int main(int argc, char **argv)
 {
+    char *ip_addr = NULL;
     ucs_config_print_flags_t print_flags;
     ucp_ep_params_t ucp_ep_params;
     unsigned dev_type_bitmap;
@@ -78,7 +82,8 @@ int main(int argc, char **argv)
     mem_size                 = NULL;
     dev_type_bitmap          = UINT_MAX;
     ucp_ep_params.field_mask = 0;
-    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:m:N:")) != -1) {
+
+    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:m:N:A:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -168,6 +173,9 @@ int main(int argc, char **argv)
                 return -1;
             }
             break;
+        case 'A':
+            ip_addr = optarg;
+            break;
         case 'h':
             usage();
             return 0;
@@ -219,7 +227,7 @@ int main(int argc, char **argv)
 
         return print_ucp_info(print_opts, print_flags, ucp_features,
                               &ucp_ep_params, ucp_num_eps, ucp_num_ppn,
-                              dev_type_bitmap, mem_size);
+                              dev_type_bitmap, mem_size, ip_addr);
     }
 
     return 0;

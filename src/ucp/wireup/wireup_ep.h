@@ -40,9 +40,6 @@ struct ucp_wireup_ep {
     struct sockaddr_storage   cm_remote_sockaddr;  /**< sockaddr of the remote peer -
                                                         used only on the client side
                                                         in a client-server flow */
-    ucp_rsc_index_t           cm_idx;        /**< If this ucp_wireup_ep wraps a CM ep,
-                                                  this is the index of the CM resource
-                                                  on which it was created */
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
