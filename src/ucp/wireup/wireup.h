@@ -27,6 +27,8 @@ enum {
     UCP_WIREUP_MSG_REQUEST,
     UCP_WIREUP_MSG_REPLY,
     UCP_WIREUP_MSG_ACK,
+    UCP_WIREUP_MSG_EP_CHECK,
+    UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_LAST
 };
 
@@ -87,6 +89,9 @@ typedef struct {
     uint8_t         priority;
 } ucp_wireup_select_info_t;
 
+
+ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
+                                 const ucp_lane_index_t *lanes2remote);
 
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
 

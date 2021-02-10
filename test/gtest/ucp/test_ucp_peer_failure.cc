@@ -108,7 +108,8 @@ void test_ucp_peer_failure::set_timeouts() {
 
 void test_ucp_peer_failure::err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
     test_ucp_peer_failure *self = reinterpret_cast<test_ucp_peer_failure*>(arg);
-    EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
+    EXPECT_TRUE((UCS_ERR_CONNECTION_RESET == status) ||
+                (UCS_ERR_ENDPOINT_TIMEOUT == status));
     self->m_err_status = status;
     ++self->m_err_count;
 }
@@ -489,6 +490,8 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     scoped_log_handler err_handler(wrap_errors_logger);
     scoped_log_handler warn_handler(hide_warns_logger);
 
+    /* initiate p2p pairing */
+    ucp_ep_resolve_remote_id(failing_sender(), 0);
     smoke_test(true); /* allow wireup to complete */
     smoke_test(false);
 
@@ -509,7 +512,6 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
 
     /* kill EPs & ifaces */
     failing_receiver().close_all_eps(*this, 0, UCP_EP_CLOSE_MODE_FORCE);
-    failing_receiver().destroy_worker(0);
     wait_for_flag(&m_err_count);
 
     /* dump warnings */
