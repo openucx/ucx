@@ -15,6 +15,7 @@ jobs:
       steps:
         - checkout: self
           clean: true
+          fetchDepth: 100
         - bash: |
             ./buildlib/tools/coverity.sh ${{ mode }}
             res=$?
