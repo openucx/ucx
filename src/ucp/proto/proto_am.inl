@@ -249,30 +249,27 @@ ucs_status_t ucp_am_zcopy_common(ucp_request_t *req, const void *hdr,
     ucp_ep_t *ep          = req->send.ep;
     ucp_md_index_t md_idx = ucp_ep_md_index(ep, req->send.lane);
     size_t iovcnt         = 0ul;
-    unsigned user_hdr_iov_cnt;
+
+    ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt,
+            max_iov - !!user_hdr_size, state, req->send.buffer,
+            req->send.datatype, max_length - user_hdr_size, md_idx, NULL);
 
     if (user_hdr_size != 0) {
         ucs_assert((req->send.length == 0) || (max_length > user_hdr_size));
         ucs_assert(max_iov > 1);
 
-        iov[0].buffer    = user_hdr_desc + 1;
-        iov[0].length    = user_hdr_size;
-        iov[0].memh      = ucp_memh2uct(user_hdr_desc->memh, md_idx);
-        iov[0].stride    = 0;
-        iov[0].count     = 1;
-        user_hdr_iov_cnt = 1;
-    } else {
-        user_hdr_iov_cnt = 0;
+        ucs_assert(user_hdr_desc != NULL);
+
+        iov[iovcnt].buffer = user_hdr_desc + 1;
+        iov[iovcnt].length = user_hdr_size;
+        iov[iovcnt].memh   = ucp_memh2uct(user_hdr_desc->memh, md_idx);
+        iov[iovcnt].stride = 0;
+        iov[iovcnt].count  = 1;
+        ++iovcnt;
     }
 
-    ucp_dt_iov_copy_uct(ep->worker->context, iov + user_hdr_iov_cnt, &iovcnt,
-                        max_iov - user_hdr_iov_cnt, state, req->send.buffer,
-                        req->send.datatype, max_length - user_hdr_size,
-                        md_idx, NULL);
-
     return uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
-                           hdr_size, iov, iovcnt + user_hdr_iov_cnt, 0,
-                           &req->send.state.uct_comp);
+                           hdr_size, iov, iovcnt, 0, &req->send.state.uct_comp);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
