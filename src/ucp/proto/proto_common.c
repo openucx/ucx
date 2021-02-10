@@ -522,7 +522,8 @@ void ucp_proto_request_zcopy_completion(uct_completion_t *self)
     /* request should NOT be on pending queue because when we decrement the last
      * refcount the request is not on the pending queue any more
      */
-    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
+    ucp_proto_request_zcopy_cleanup(req);
+    ucp_request_complete_send(req, req->send.state.uct_comp.status);
 }
 
 void ucp_proto_request_select_error(ucp_request_t *req,
@@ -543,4 +544,17 @@ void ucp_proto_request_select_error(ucp_request_t *req,
               req, ep, ucp_ep_peer_name(ep),
               ucs_string_buffer_cstr(&sel_param_strb), msg_length,
               ucs_string_buffer_cstr(&proto_select_strb));
+}
+
+void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)
+{
+    ucs_assert(UCS_STATUS_IS_ERR(status));
+    /*
+     * TODO add a method to ucp_proto_t to abort a request (which is currently
+     * not scheduled to a pending queue). The method should wait for UCT
+     * completions and release associated resources, such as memory handles,
+     * remote keys, request ID, etc.
+     */
+    ucs_fatal("abort request %p proto %s status %s: unimplemented", req,
+              req->send.proto_config->proto->name, ucs_status_string(status));
 }

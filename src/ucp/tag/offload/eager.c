@@ -102,9 +102,9 @@ ucp_proto_eager_tag_offload_bcopy_progress(uct_pending_req_t *self)
                                         ucp_eager_tag_offload_pack, req, 0);
     status     = ucs_likely(packed_len >= 0) ? UCS_OK : packed_len;
 
-    return ucp_proto_single_status_handle(req, ucp_proto_request_bcopy_complete,
-                                          ucp_proto_request_bcopy_complete,
-                                          spriv->super.lane, status);
+    return ucp_proto_single_status_handle(
+            req, ucp_proto_request_bcopy_complete_success, spriv->super.lane,
+            status);
 }
 
 static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init(
