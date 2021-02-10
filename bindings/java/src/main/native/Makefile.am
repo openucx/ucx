@@ -62,7 +62,7 @@ libjucx_la_SOURCES = context.cc \
                      ucs_constants.cc \
                      worker.cc
 
-libjucx_la_CXXFLAGS = -fPIC -DPIC -Werror -std=gnu++98
+libjucx_la_CXXFLAGS = $(BASE_CXXFLAGS) -std=gnu++98
 
 libjucx_la_LIBADD = $(topdir)/src/ucs/libucs.la \
                     $(topdir)/src/uct/libuct.la \
