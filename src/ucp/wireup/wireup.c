@@ -63,6 +63,10 @@ static const char* ucp_wireup_msg_str(uint8_t msg_type)
         return "REP";
     case UCP_WIREUP_MSG_ACK:
         return "ACK";
+    case UCP_WIREUP_MSG_EP_CHECK:
+        return "EP_CHECK";
+    case UCP_WIREUP_MSG_EP_REMOVED:
+        return "EP_REMOVED";
     default:
         return "<unknown>";
     }
@@ -158,9 +162,8 @@ out:
 /*
  * @param [in] rsc_tli  Resource index for every lane.
  */
-static ucs_status_t
-ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
-                    const ucp_lane_index_t *lanes2remote)
+ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, uint64_t tl_bitmap,
+                                 const ucp_lane_index_t *lanes2remote)
 {
     ucp_request_t* req;
     ucs_status_t status;
@@ -627,6 +630,56 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     }
 }
 
+static UCS_F_NOINLINE void
+ucp_wireup_process_ep_check(ucp_worker_h worker, ucp_ep_h ep,
+                            const ucp_wireup_msg_t *msg,
+                            const ucp_unpacked_address_t *remote_address)
+{
+    ucs_status_t status;
+    ucp_ep_h reply_ep;
+    unsigned addr_indices[UCP_MAX_LANES];
+    ucs_status_ptr_t req;
+
+    if (ep != NULL) {
+        /* if EP exists then do not send reply */
+        return;
+    }
+
+    /* if endpoint does not exist - create a temporary endpoint to send a
+     * UCP_WIREUP_MSG_EP_REMOVED reply */
+    status = ucp_worker_create_ep(worker, 0, remote_address->name,
+                                  "wireup ep_check reply", &reply_ep);
+    if (status != UCS_OK) {
+        ucs_error("failed to create EP: %s", ucs_status_string(status));
+        return;
+    }
+
+    /* Initialize lanes (possible destroy existing lanes) */
+    status = ucp_wireup_init_lanes_by_request(worker, reply_ep, 0,
+                                              remote_address, addr_indices);
+    if (status != UCS_OK) {
+        goto failed_destroy_ep;
+    }
+
+    ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
+    status = ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_EP_REMOVED, 0, NULL);
+    if (status != UCS_OK) {
+        goto failed_destroy_ep;
+    }
+
+    req = ucp_ep_flush_internal(reply_ep, UCP_REQUEST_FLAG_RELEASED,
+                                &ucp_request_null_param, NULL,
+                                ucp_ep_register_disconnect_progress, "close");
+    if (!UCS_PTR_IS_PTR(req)) {
+        ucp_ep_disconnected(ep, 0);
+    }
+
+    return;
+
+failed_destroy_ep:
+    ucp_ep_destroy_internal(reply_ep);
+}
+
 static UCS_F_NOINLINE
 void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
                             const ucp_wireup_msg_t *msg)
@@ -660,10 +713,11 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     UCS_ASYNC_BLOCK(&worker->async);
 
     if (msg->dst_ep_id != UCP_EP_ID_INVALID) {
-        UCP_WORKER_GET_EP_BY_ID(&ep, worker, msg->dst_ep_id, goto out,
-                                "WIREUP message (%d src_ep_id 0x%" PRIx64
-                                " sn %d)",
-                                msg->type, msg->src_ep_id, msg->conn_sn);
+        UCP_WORKER_GET_EP_BY_ID(
+                &ep, worker, msg->dst_ep_id,
+                if (msg->type != UCP_WIREUP_MSG_EP_CHECK) { goto out; },
+                "WIREUP message (%d src_ep_id 0x%" PRIx64 " sn %d)", msg->type,
+                msg->src_ep_id, msg->conn_sn);
     }
 
     status = ucp_address_unpack(worker, msg + 1,
@@ -683,6 +737,13 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_process_request(worker, ep, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_REPLY) {
         ucp_wireup_process_reply(worker, ep, msg, &remote_address);
+    } else if (msg->type == UCP_WIREUP_MSG_EP_CHECK) {
+        ucs_assert(msg->dst_ep_id != UCP_EP_ID_INVALID);
+        ucp_wireup_process_ep_check(worker, ep, msg, &remote_address);
+    } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
+        ucs_assert(msg->dst_ep_id != UCP_EP_ID_INVALID);
+        ucp_worker_set_ep_failed(worker, ep, NULL, UCP_NULL_LANE,
+                                 UCS_ERR_CONNECTION_RESET);
     } else {
         ucs_bug("invalid wireup message");
     }

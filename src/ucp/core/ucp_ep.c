@@ -819,6 +819,22 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
     ep->flags                            |= UCP_EP_FLAG_CLOSE_REQ_VALID;
 }
 
+void ucp_ep_register_disconnect_progress(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+
+    /* If a flush is completed from a pending/completion callback, we need to
+     * schedule slow-path callback to release the endpoint later, since a UCT
+     * endpoint cannot be released from pending/completion callback context.
+     */
+    ucs_trace("adding slow-path callback to destroy ep %p", ep);
+    req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
+    uct_worker_progress_register_safe(ep->worker->uct,
+                                      ucp_ep_local_disconnect_progress, req,
+                                      UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &req->send.disconnect.prog_id);
+}
+
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
 {
     ucp_ep_h ep                = req->send.ep;
@@ -850,16 +866,7 @@ static void ucp_ep_close_flushed_callback(ucp_request_t *req)
     UCS_ASYNC_UNBLOCK(async);
 
 out:
-    /* If a flush is completed from a pending/completion callback, we need to
-     * schedule slow-path callback to release the endpoint later, since a UCT
-     * endpoint cannot be released from pending/completion callback context.
-     */
-    ucs_trace("adding slow-path callback to destroy ep %p", ep);
-    req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
-    uct_worker_progress_register_safe(ep->worker->uct,
-                                      ucp_ep_local_disconnect_progress,
-                                      req, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &req->send.disconnect.prog_id);
+    ucp_ep_register_disconnect_progress(req);
 }
 
 ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
@@ -2391,28 +2398,54 @@ int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
            (config->key.cm_lane  != UCP_NULL_LANE);
 }
 
+static UCS_F_ALWAYS_INLINE int
+ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_lane_index_t lane)
+{
+    /* if we have ep2iface transport we need to send an active-message based
+     * keepalive message to check the remote endpoint still exists */
+    return (ep->flags & UCP_EP_FLAG_REMOTE_ID) && /* remote ID defined */
+           (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) && /* wireup completed */
+           (ucp_ep_get_iface_attr(ep, lane)->cap.flags &
+            UCT_IFACE_FLAG_CONNECT_TO_IFACE); /* connect-to-iface */
+}
+
 void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
 {
     ucp_lane_map_t check_lanes;
     ucp_lane_index_t lane;
     ucs_status_t status;
+    ucp_rsc_index_t rsc_index;
+
+    if (ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED)) {
+        *lane_map = 0;
+        return;
+    }
 
     /* Take updated ep_check_map, in case ep configuration has changed */
     check_lanes = *lane_map & ucp_ep_config(ep)->key.ep_check_map;
 
     ucs_for_each_bit(lane, check_lanes) {
         ucs_assert(lane < UCP_MAX_LANES);
-        ucs_trace("ep %p flags 0x%x: send keepalive on lane[%d]=%p", ep,
-                  ep->flags, lane, ep->uct_eps[lane]);
-        /* coverity[overrun-local] */
-        status = uct_ep_check(ep->uct_eps[lane], 0, NULL);
-        if (status == UCS_OK) {
+        /* in case if remote ID is defined, wireup is completed and EP is
+         * in connect-to-iface mode then use UCP/AM keepalive */
+        if (ucp_ep_is_am_keepalive(ep, lane)) {
+            rsc_index = ucp_ep_get_rsc_index(ep, lane);
+            status    = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_EP_CHECK,
+                                            UCS_BIT(rsc_index), NULL);
+            ucs_assert(status == UCS_OK);
             *lane_map &= ~UCS_BIT(lane);
-        } else if (status != UCS_ERR_NO_RESOURCE) {
-            *lane_map &= ~UCS_BIT(lane);
-            ucs_warn("unexpected return status from uct_ep_check(ep=%p, "
-                     "lane[%d]=%p): %s",
-                     ep, lane, ep->uct_eps[lane], ucs_status_string(status));
+        } else {
+            /* coverity[overrun-local] */
+            status = uct_ep_check(ep->uct_eps[lane], 0, NULL);
+            if (status == UCS_OK) {
+                *lane_map &= ~UCS_BIT(lane);
+            } else if (status != UCS_ERR_NO_RESOURCE) {
+                *lane_map &= ~UCS_BIT(lane);
+                ucs_warn("unexpected return status from uct_ep_check(ep=%p, "
+                         "lane[%d]=%p): %s",
+                         ep, lane, ep->uct_eps[lane],
+                         ucs_status_string(status));
+            }
         }
     }
 }
