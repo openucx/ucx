@@ -205,7 +205,7 @@ stages:
     jobs:
       - template: coverity.yml
         parameters:
-          demands: ucx_instinct -equals yes
+          demands: ucx_docker -equals yes
           container: coverity_rh7
 
   - stage: Tests
