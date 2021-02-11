@@ -355,9 +355,9 @@ print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
         status = print_ucp_ep_info(worker, base_ep_params, ip_addr);
     }
 
-out_destroy_worker:
     ucp_worker_destroy(worker);
-out_cleanup_context:
+
+ out_cleanup_context:
     ucp_cleanup(context);
 out_release_config:
     ucp_config_release(config);
