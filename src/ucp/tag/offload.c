@@ -543,6 +543,7 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     ucp_rndv_rts_hdr_t *rndv_rts_hdr;
     unsigned rndv_hdr_len;
     size_t packed_len;
+    ucs_status_t status;
 
     ucs_assert((UCP_DT_IS_CONTIG(req->send.datatype) &&
                (req->send.length > ucp_ep_config(ep)->tag.offload.max_rndv_zcopy)) ||
@@ -556,9 +557,10 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     rndv_rts_hdr = ucs_alloca(rndv_hdr_len);
     packed_len   = ucp_tag_rndv_rts_pack(rndv_rts_hdr, req);
 
-    return uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane],
-                                   req->send.msg_proto.tag.tag,
-                                   rndv_rts_hdr, packed_len, 0);
+    status = uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane],
+                                     req->send.msg_proto.tag.tag,
+                                     rndv_rts_hdr, packed_len, 0);
+    return ucp_rndv_rts_handle_status_from_pending(req, status);
 }
 
 static void ucp_tag_offload_rndv_zcopy_completion(uct_completion_t *self)
@@ -579,6 +581,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
     size_t iovcnt      = 0;
     ucp_dt_state_t dt_state;
     void *rndv_op;
+    ucs_status_t status;
 
 
     ucp_tag_offload_unexp_rndv_hdr_t rndv_hdr = {
@@ -601,9 +604,11 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
                                     req->send.msg_proto.tag.tag, &rndv_hdr,
                                     sizeof(rndv_hdr), iov, iovcnt, 0,
                                     &req->send.state.uct_comp);
-    if (UCS_PTR_IS_ERR(rndv_op)) {
-        return UCS_PTR_STATUS(rndv_op);
+    if (ucs_unlikely(UCS_PTR_IS_ERR(rndv_op))) {
+        status = UCS_PTR_STATUS(rndv_op);
+        return ucp_rndv_rts_handle_status_from_pending(req, status);
     }
+
     ucp_request_send_state_advance(req, &dt_state,
                                    UCP_REQUEST_SEND_PROTO_RNDV_GET,
                                    UCS_INPROGRESS);
