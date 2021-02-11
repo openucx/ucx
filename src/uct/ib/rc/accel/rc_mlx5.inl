@@ -909,6 +909,26 @@ void uct_rc_mlx5_txqp_dptr_post_iov(uct_rc_mlx5_iface_common_t *iface, int qp_ty
                                  max_log_sge, NULL);
 }
 
+/*
+ * Helper function for buffer-copy post.
+ * Adds the descriptor to the callback queue.
+ */
+static UCS_F_ALWAYS_INLINE void uct_rc_mlx5_common_txqp_bcopy_post(
+        uct_rc_mlx5_iface_common_t *iface, int qp_type, uct_rc_txqp_t *txqp,
+        uct_ib_mlx5_txwq_t *txwq, unsigned opcode, unsigned length,
+        uint64_t rdma_raddr, uct_rkey_t rdma_rkey, uct_ib_mlx5_base_av_t *av,
+        struct mlx5_grh_av *grh_av, size_t av_size, uint8_t fm_ce_se,
+        uint32_t imm_val_be, uct_rc_iface_send_desc_t *desc, const void *buffer,
+        uct_ib_log_sge_t *log_sge)
+{
+    desc->super.sn = txwq->sw_pi;
+    uct_rc_mlx5_txqp_dptr_post(iface, qp_type, txqp, txwq, opcode, buffer,
+                               length, &desc->lkey, rdma_raddr, rdma_rkey, 0, 0,
+                               0, 0, av, grh_av, av_size, fm_ce_se, imm_val_be,
+                               INT_MAX, log_sge);
+    uct_rc_txqp_add_send_op(txqp, &desc->super);
+}
+
 #if IBV_HW_TM
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
@@ -1713,6 +1733,71 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
 
     *desc_p   = desc;
     *buffer_p = buffer;
+    return UCS_OK;
+}
+
+static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_dm(
+        uct_rc_mlx5_iface_common_t *iface, int qp_type,
+        uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len, const void *payload,
+        unsigned length, unsigned opcode, uint8_t fm_ce_se, uint64_t rdma_raddr,
+        uct_rkey_t rdma_rkey, uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
+        uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av, size_t av_size)
+{
+    uct_rc_iface_send_desc_t *desc = NULL;
+    void *buffer;
+    ucs_status_t status;
+    uct_ib_log_sge_t log_sge;
+
+    status = uct_rc_mlx5_common_dm_make_data(iface, cache, hdr_len, payload,
+                                             length, NULL, 0, &desc, &buffer,
+                                             &log_sge);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        return status;
+    }
+
+    uct_rc_mlx5_common_txqp_bcopy_post(iface, qp_type, txqp, txwq, opcode,
+                                       hdr_len + length, rdma_raddr, rdma_rkey,
+                                       av, grh_av, av_size, fm_ce_se, 0, desc,
+                                       buffer,
+                                       (log_sge.num_sge > 0) ? &log_sge : NULL);
+
+    return UCS_OK;
+}
+
+static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_am_short_iov_dm(
+        uct_base_ep_t *ep, uint8_t am_id, uct_rc_mlx5_iface_common_t *iface,
+        const uct_iov_t *iov, size_t iovcnt, size_t iov_length, int qp_type,
+        uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
+        uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av, size_t av_size)
+{
+    uct_rc_iface_send_desc_t *desc = NULL;
+    /* pass dummy pointer as 0-length payload to avoid static check issue */
+    char dummy                     = 0;
+    uct_rc_mlx5_dm_copy_data_t cache;
+    void *buffer;
+    uct_ib_log_sge_t log_sge;
+    ucs_status_t status;
+
+    UCT_CHECK_LENGTH(sizeof(cache.am_hdr.rc_hdr) + iov_length, 0,
+                     iface->dm.seg_len, "am_short_iov");
+
+    uct_rc_mlx5_am_hdr_fill(&cache.am_hdr.rc_hdr, am_id);
+    status = uct_rc_mlx5_common_dm_make_data(iface, &cache,
+                                             sizeof(cache.am_hdr.rc_hdr),
+                                             &dummy, 0, iov, iovcnt, &desc,
+                                             &buffer, &log_sge);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        return status;
+    }
+
+    uct_rc_mlx5_common_txqp_bcopy_post(
+            iface, qp_type, txqp, txwq, MLX5_OPCODE_SEND,
+            sizeof(cache.am_hdr.rc_hdr) + iov_length, 0, 0, av, grh_av, av_size,
+            MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE, 0, desc, buffer,
+            (log_sge.num_sge > 0) ? &log_sge : NULL);
+
+    UCT_TL_EP_STAT_OP(ep, AM, SHORT, sizeof(cache.am_hdr.rc_hdr) + iov_length);
+
     return UCS_OK;
 }
 #endif
