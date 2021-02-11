@@ -499,7 +499,8 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     VALGRIND_MAKE_MEM_DEFINED(packet, len);
 
     if (!uct_ud_iface_check_grh(&iface->super, packet,
-                                uct_ib_mlx5_cqe_is_grh_present(cqe))) {
+                                uct_ib_mlx5_cqe_is_grh_present(cqe),
+                                cqe->flags_rqpn & 0xFF)) {
         ucs_mpool_put_inline(desc);
         goto out;
     }
