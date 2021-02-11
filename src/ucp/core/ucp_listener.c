@@ -29,9 +29,13 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
     ucs_free(conn_request->remote_dev_addr);
     ucs_free(conn_request);
 
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+
     ep->flags |= UCP_EP_FLAG_USED;
     ucp_stream_ep_activate(ep);
     ucp_ep_flush_state_reset(ep);
+
+    UCS_ASYNC_UNBLOCK(&ep->worker->async);
 
     listener->accept_cb(ep, listener->arg);
     return 1;
