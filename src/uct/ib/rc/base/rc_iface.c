@@ -410,8 +410,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         if (status == UCS_ERR_NO_RESOURCE){
             /* force add request to group & schedule group to eliminate
              * FC deadlock */
-            uct_pending_req_arb_group_push_head(&iface->tx.arbiter,
-                                                &ep->arb_group, &fc_req->super);
+            uct_pending_req_arb_group_push_head(&ep->arb_group, &fc_req->super);
             ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
         } else {
             ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",

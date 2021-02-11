@@ -664,7 +664,7 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                  (iface->config.roce_path_factor * path_index);
         /* Workaround rdma-core issue of calling rand() which affects global
          * random state in glibc */
-        ah_attr->grh.flow_label = 1;
+        ah_attr->grh.flow_label = ah_attr->dlid;
     } else {
         /* TODO iface->path_bits should be removed and replaced by path_index */
         path_bits              = iface->path_bits[path_index %
