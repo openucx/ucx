@@ -332,33 +332,46 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
     return UCS_ERR_NO_RESOURCE;
 }
 
+static ucs_status_t
+ucp_wireup_ep_do_check(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                       ucp_rsc_index_t rsc_idx, unsigned flags,
+                       uct_completion_t *comp)
+{
+    ucp_worker_h worker = ucp_ep->worker;
+    ucp_worker_iface_t *wiface;
+
+    ucs_assert(rsc_idx != UCP_NULL_RESOURCE);
+
+    wiface = ucp_worker_iface(worker, rsc_idx);
+    if (wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_CHECK) {
+        return ucp_ep_do_uct_ep_keepalive(ucp_ep, uct_ep, rsc_idx, flags,
+                                          comp);
+    }
+
+    /* if EP_CHECK is not supported by UCT transport, it has to support a
+     * built-in keepalive mechanism to be able to detect peer failure during
+     * wireup
+     */
+    ucs_assert(wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_KEEPALIVE);
+    return UCS_OK;
+}
+
 static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
                                         uct_completion_t *comp)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
-    ucp_worker_h worker        = wireup_ep->super.ucp_ep->worker;
+    ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
     ucp_ep_h tmp_ep            = wireup_ep->tmp_ep;
     ucp_lane_index_t lane;
-    ucp_worker_iface_t *wiface;
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         return uct_ep_check(wireup_ep->super.uct_ep, flags, comp);
     }
 
     if (wireup_ep->aux_ep != NULL) {
-        ucs_assert(wireup_ep->aux_rsc_index != UCP_NULL_RESOURCE);
-
-        wiface = ucp_worker_iface(worker, wireup_ep->aux_rsc_index);
-        if (wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_CHECK) {
-            return uct_ep_check(wireup_ep->aux_ep, flags, comp);
-        }
-
-        /* if EP_CHECK is not supported by auxiliary transport, it has to
-         * support a built-in keepalive mechanism to be able to detect peer
-         * failure during wireup
-         */
-        ucs_assert(wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_KEEPALIVE);
-        return UCS_OK;
+        return ucp_wireup_ep_do_check(ucp_ep, wireup_ep->aux_ep,
+                                      wireup_ep->aux_rsc_index,
+                                      flags, comp);
     }
 
     if ((tmp_ep != NULL) && (ucp_ep_config(tmp_ep)->key.ep_check_map != 0)) {
@@ -373,7 +386,10 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
         }
 
         wireup_ep->tmp_ep_check_map &= ~UCS_BIT(lane);
-        return uct_ep_check(tmp_ep->uct_eps[lane], flags, comp);
+        ucs_assert(ucp_ep_remote_id(tmp_ep) == ucp_ep_remote_id(ucp_ep));
+        return ucp_wireup_ep_do_check(tmp_ep, tmp_ep->uct_eps[lane],
+                                      ucp_ep_get_rsc_index(tmp_ep, lane),
+                                      flags, comp);
     }
 
     return UCS_OK;

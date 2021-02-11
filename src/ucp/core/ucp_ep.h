@@ -585,6 +585,8 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 
 int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
 
+ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self);
+
 void ucp_ep_flush_completion(uct_completion_t *self);
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
@@ -594,6 +596,21 @@ void ucp_ep_discard_lanes(ucp_ep_h ucp_ep, ucs_status_t status);
 void ucp_ep_register_disconnect_progress(ucp_request_t *req);
 
 ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
+
+/**
+ * @brief Do keepalive operation for a specific UCT EP.
+ *
+ * @param [in] ucp_ep  UCP Endpoint object to operate keepalive.
+ * @param [in] uct_ep  UCT Endpoint object to do keepalive on.
+ * @param [in] rsc_idx Resource index to check. 
+ * @param [in] flags   Flags for keepalive operation.
+ * @param [in] comp    Pointer to keepalive completion object.
+ *
+ * @return Status of keepalive operation.
+ */
+ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                        ucp_rsc_index_t rsc_idx, unsigned flags,
+                                        uct_completion_t *comp);
 
 /**
  * @brief Do keepalive operation.

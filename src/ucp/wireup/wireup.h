@@ -90,9 +90,6 @@ typedef struct {
 } ucp_wireup_select_info_t;
 
 
-ucs_status_t ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
-                                 const ucp_lane_index_t *lanes2remote);
-
 ucs_status_t ucp_wireup_send_request(ucp_ep_h ep);
 
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep);
@@ -110,7 +107,16 @@ double ucp_wireup_amo_score_func(ucp_context_h context,
                                  const uct_iface_attr_t *iface_attr,
                                  const ucp_address_iface_attr_t *remote_iface_attr);
 
+size_t ucp_wireup_msg_pack(void *dest, void *arg);
+
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
+
+ucs_status_t
+ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
+                       const ucp_tl_bitmap_t *tl_bitmap,
+                       const ucp_lane_index_t *lanes2remote,
+                       ucp_wireup_msg_t *msg_hdr, void **address_p,
+                       size_t *address_length_p);
 
 int ucp_wireup_msg_ack_cb_pred(const ucs_callbackq_elem_t *elem, void *arg);
 
