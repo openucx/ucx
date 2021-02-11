@@ -20,23 +20,6 @@
 
 #define UCP_STATUS_PENDING_SWITCH (UCS_ERR_LAST - 1)
 
-#define UCP_AM_BCOPY_HANDLE_STATUS(_multi, _status) \
-    do { \
-        if (_multi) { \
-            if ((_status) == UCS_INPROGRESS) { \
-                return UCS_INPROGRESS; \
-            } else if (ucs_unlikely((_status) == UCP_STATUS_PENDING_SWITCH)) { \
-                return UCS_OK; \
-            } \
-        } else { \
-            ucs_assert((_status) != UCS_INPROGRESS); \
-        } \
-        \
-        if (ucs_unlikely((_status) == UCS_ERR_NO_RESOURCE)) { \
-            return UCS_ERR_NO_RESOURCE; \
-        } \
-    } while (0)
-
 
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
@@ -570,7 +553,19 @@ ucp_am_bcopy_handle_status_from_pending(uct_pending_req_t *self, int multi,
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    UCP_AM_BCOPY_HANDLE_STATUS(multi, status);
+    if (multi) {
+        if (status == UCS_INPROGRESS) {
+            return UCS_INPROGRESS;
+        } else if (ucs_unlikely(status == UCP_STATUS_PENDING_SWITCH)) {
+            return UCS_OK;
+        }
+    } else {
+        ucs_assert(status != UCS_INPROGRESS);
+    }
+
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
 
     ucp_request_send_generic_dt_finish(req);
     if (tag_sync) {

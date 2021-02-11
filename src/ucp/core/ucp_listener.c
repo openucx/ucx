@@ -30,10 +30,14 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
                               UCP_EP_FLAG_FLUSH_STATE_VALID)));
     ucs_assert(ep->flags   & UCP_EP_FLAG_LISTENER);
 
+    UCS_ASYNC_BLOCK(&ep->worker->async);
+
     ep->flags &= ~UCP_EP_FLAG_LISTENER;
     ep->flags |= UCP_EP_FLAG_USED;
     ucp_stream_ep_activate(ep);
     ucp_ep_flush_state_reset(ep);
+
+    UCS_ASYNC_UNBLOCK(&ep->worker->async);
 
     /*
      * listener is NULL if the EP was created with UCP_EP_PARAM_FIELD_EP_ADDR
