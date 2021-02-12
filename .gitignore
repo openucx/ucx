@@ -91,3 +91,5 @@ compile_commands.json
 .externalToolBuilders
 .classpath
 .vscode
+src/tools/vfs/ucx_vfs
+test/apps/test_init_mt
