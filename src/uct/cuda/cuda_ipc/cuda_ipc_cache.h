@@ -9,16 +9,16 @@
 
 #include <ucs/datastruct/pgtable.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/type/init_once.h>
+#include <ucs/type/spinlock.h>
 #include "cuda_ipc_md.h"
 #include <cuda.h>
 #include <cuda_runtime.h>
 
 
-typedef struct uct_cuda_ipc_cache         uct_cuda_ipc_cache_t;
-typedef struct uct_cuda_ipc_cache_region  uct_cuda_ipc_cache_region_t;
-
-
-typedef struct uct_cuda_ipc_rem_memh uct_cuda_ipc_rem_memh_t;
+typedef struct uct_cuda_ipc_cache        uct_cuda_ipc_cache_t;
+typedef struct uct_cuda_ipc_cache_region uct_cuda_ipc_cache_region_t;
+typedef struct uct_cuda_ipc_rem_memh     uct_cuda_ipc_rem_memh_t;
 
 
 struct uct_cuda_ipc_cache_region {
@@ -44,8 +44,8 @@ ucs_status_t uct_cuda_ipc_create_cache(uct_cuda_ipc_cache_t **cache,
 void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache);
 
 
-ucs_status_t uct_cuda_ipc_map_memhandle(void *arg, uct_cuda_ipc_key_t *key,
-                                        void **mapped_addr);
-ucs_status_t uct_cuda_ipc_unmap_memhandle(void *rem_cache, uintptr_t d_bptr,
+ucs_status_t
+uct_cuda_ipc_map_memhandle(const uct_cuda_ipc_key_t *key, void **mapped_addr);
+ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
                                           void *mapped_addr, int cache_enabled);
 #endif
