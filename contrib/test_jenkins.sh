@@ -479,7 +479,7 @@ build_pgi() {
 	pgi_test_file=$(mktemp ./XXXXXX).c
 	echo "int main() {return 0;}" > ${pgi_test_file}
 
-	if module_load pgi/latest && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
+	if module_load pgi/19.7 && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
 	then
 		echo "==== Build with PGI compiler ===="
 		# PGI failed to build valgrind headers, disable it for now
@@ -497,7 +497,7 @@ build_pgi() {
 	fi
 
 	rm -rf ${pgi_test_file} ${pgi_test_file}.out
-	module_unload pgi/latest
+	module_unload pgi/19.7
 }
 
 #
@@ -613,10 +613,10 @@ build_clang() {
 }
 
 #
-# Build with gcc-latest module
+# Build with actual gcc module
 #
-build_gcc_latest() {
-	echo 1..1 > build_gcc_latest.tap
+build_gcc() {
+	echo 1..1 > build_gcc.tap
 	#If the glibc version on the host is older than 2.14, don't run
 	#check the glibc version with the ldd version since it comes with glibc
 	#see https://www.linuxquestions.org/questions/linux-software-2/how-to-check-glibc-version-263103/
@@ -625,7 +625,7 @@ build_gcc_latest() {
 	ldd_ver="$(ldd --version | awk '/ldd/{print $NF}')"
 	if (echo "2.14"; echo $ldd_ver) | sort -CV
 	then
-		if module_load dev/gcc-latest
+		if module_load dev/gcc-10.1.0
 		then
 			echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
 			../contrib/configure-devel --prefix=$ucx_inst
@@ -634,16 +634,16 @@ build_gcc_latest() {
 			$MAKEP install
 			UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
 			make_clean distclean
-			echo "ok 1 - build successful " >> build_gcc_latest.tap
-			module unload dev/gcc-latest
+			echo "ok 1 - build successful " >> build_gcc.tap
+			module unload dev/gcc-10.1.0
 		else
 			log_warning "==== Not building with latest gcc compiler ===="
-			echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
+			echo "ok 1 - # SKIP because dev/gcc-10.1.0 module is not available" >> build_gcc.tap
 		fi
 	else
 		log_warning "==== Not building with gcc compiler ===="
 		log_warning "Required glibc version is too old ($ldd_ver)"
-		echo "ok 1 - # SKIP because glibc version is older than 2.14" >> build_gcc_latest.tap
+		echo "ok 1 - # SKIP because glibc version is older than 2.14" >> build_gcc.tap
 	fi
 }
 
@@ -654,7 +654,7 @@ build_armclang() {
 	echo 1..1 > build_armclang.tap
 	armclang_test_file=$(mktemp ./XXXXXX).c
 	echo "int main() {return 0;}" > ${armclang_test_file}
-	if module_load arm-compiler/latest && armclang --version && armclang ${armclang_test_file} -o ${armclang_test_file}.out
+	if module_load arm-compiler/armcc-19.0 && armclang --version && armclang ${armclang_test_file} -o ${armclang_test_file}.out
 	then
 		echo "==== Build with armclang compiler ===="
 		../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
@@ -670,7 +670,7 @@ build_armclang() {
 	fi
 
 	rm -rf ${armclang_test_file} ${armclang_test_file}.out
-	module_unload arm-compiler/latest
+	module_unload arm-compiler/armcc-19.0
 }
 
 check_inst_headers() {
@@ -1526,12 +1526,12 @@ run_gtest() {
 		# Load newer valgrind if naative is older than 3.10
 		if ! (echo "valgrind-3.10.0"; valgrind --version) | sort -CV
 		then
-			module load tools/valgrind-latest
+			module load tools/valgrind-3.12.0
 		fi
 
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
 		(cd test/gtest && rename_files .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
-		module unload tools/valgrind-latest
+		module unload tools/valgrind-3.12.0
 	else
 		echo "==== Not running valgrind tests with $compiler_name compiler ===="
 		echo "1..1"                                          > vg_skipped.tap
@@ -1641,7 +1641,7 @@ run_tests() {
 	do_distributed_task 1 4 build_ugni
 	do_distributed_task 3 4 build_clang
 	do_distributed_task 0 4 build_armclang
-	do_distributed_task 1 4 build_gcc_latest
+	do_distributed_task 1 4 build_gcc
 
 	# all are running mpi tests
 	run_mpi_tests
