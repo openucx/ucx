@@ -102,6 +102,7 @@ struct ucx_perf_context {
             ucp_mem_h                  recv_memh;
             ucp_dt_iov_t               *send_iov;
             ucp_dt_iov_t               *recv_iov;
+            void                       *am_hdr;
         } ucp;
     };
 };
