@@ -7,12 +7,13 @@
 ##
 #
 
-## 1.10.0-rc2 (February 2, 2021)
+## 1.10.0-rc3 (February 15, 2021)
 ### Features:
 #### Core
 * Added support for Nvidia HPC SDK
 * Added support for latest PGI and Clang
 * Added support for ROCM-3.7+ (warning generated if older version detected)
+* Added support for GCC11
 #### Architecture
 * Added Arm SVE memcpy()
 * Redesigned Arm WFE support
@@ -70,6 +71,7 @@
 * Added detection for  ConnectX-6, ConnectX-7 and BlueField-1/2 devices
 * Added support for connection matching for UD
 * Added a check for AM ordering
+* Added better support for non-4K MTU values
 #### Java (preview)
 * Added support for a different javadoc executable path for different java versions
 * Added UCS memory type constants
@@ -93,6 +95,7 @@
 ### Bugfixes:
 #### Portability
 * Fixes in print functions to use format string like PRIx64, etc.
+* Fixes for Arm v8 cross compilation support
 #### Continues Integration:
 * Fixes in Github release flow
 * Fixes in docker image
@@ -103,6 +106,7 @@
 * Fixes in documentation for ucp_am_recv_data_nbx
 * Fixes in quick start example
 * Fixes in installation instruction
+* Fixes in updates in author list
 #### Tests
 * Fixes for failures under valgrind runtime
 * Fixes in mmap tests for 0-length RMA
@@ -112,6 +116,11 @@
 * Fixes in tcp_sockcm test
 #### UCP
 * Fixes in worker cleanup flow
+* Fixes in RNDV RTS flow
+* Fix in length check condition for RMA PUT short
+* Fixes in handling failures from AM Bcopy
+* Fix in a release flow of deferred data
+* Fixes for invalid ID and handling of status in RNDV
 #### CUDA
 * Fixes in managed memory support
 #### RDMA CORE (IB, ROCE, etc.)
@@ -122,6 +131,8 @@
 * Fixes for SL selection
 * Fixes in create STRICT_ORDER key
 * Fixes addressing performance degradation in UD transport due to excess async events
+* Fixes in QP destroy
+* Fixes for CQ creation failure using old Verbs API
 #### UGNI
 * Fixing disable logic in config
 * Fixing clang 11 warnings
