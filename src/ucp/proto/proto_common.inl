@@ -178,4 +178,29 @@ out_put_request:
     return UCS_STATUS_PTR(status);
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_request_pack_rkey(ucp_request_t *req, void *rkey_buffer)
+{
+    ssize_t packed_rkey_size;
+
+    /* For contiguous buffer, pack one rkey
+     * TODO to support IOV datatype write N [address+length] records,
+     */
+    ucs_assert(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG);
+    ucs_assert(req->send.state.dt_iter.type.contig.reg.md_map != 0);
+
+    packed_rkey_size = ucp_rkey_pack_uct(req->send.ep->worker->context,
+                                         req->send.state.dt_iter.type.contig.reg.md_map,
+                                         req->send.state.dt_iter.type.contig.reg.memh,
+                                         req->send.state.dt_iter.mem_info.type,
+                                         rkey_buffer);
+    if (packed_rkey_size < 0) {
+        ucs_error("failed to pack remote key: %s",
+                  ucs_status_string((ucs_status_t)packed_rkey_size));
+        return 0;
+    }
+
+    return packed_rkey_size;
+}
+
 #endif

@@ -9,6 +9,7 @@
 #endif
 
 #include "rndv.h"
+#include "proto_rndv.inl"
 
 /* TODO: Avoid dependency on tag (or other API) specifics, since this is common
  * basic rendezvous implementation.
@@ -261,6 +262,7 @@ ucp_rndv_adjust_zcopy_length(size_t min_zcopy, size_t max_zcopy, size_t align,
 
 static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
 {
+    ucs_assert(!sreq->send.ep->worker->context->config.ext.proto_enable);
     ucp_request_send_generic_dt_finish(sreq);
     ucp_request_send_buffer_dereg(sreq);
     ucp_request_complete_send(sreq, status);
@@ -275,7 +277,7 @@ void ucp_rndv_req_send_ack(ucp_request_t *ack_req, ucp_request_t *req,
                     "req=%p offset=%zu length=%zu", req,
                     req->send.state.dt.offset, req->send.length);
     }
-    
+
     ucp_trace_req(req, "%s remote_req_id 0x%"PRIxPTR, ack_str, remote_req_id);
     UCS_PROFILE_REQUEST_EVENT(req, ack_str, 0);
 
@@ -1436,6 +1438,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
     ucp_worker_h worker      = arg;
     ucp_reply_hdr_t *rep_hdr = data;
     ucp_request_t *sreq;
+
+    if (worker->context->config.ext.proto_enable) {
+        return ucp_proto_rndv_ats_handler(arg, data, length, flags);
+    }
 
     UCP_WORKER_EXTRACT_REQUEST_BY_ID(&sreq, worker, rep_hdr->req_id,
                                      return UCS_OK, "RNDV ATS %p", rep_hdr);
