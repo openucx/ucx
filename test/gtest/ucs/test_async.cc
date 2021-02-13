@@ -139,7 +139,7 @@ protected:
     }
 
 private:
-    int          m_timer_id;
+    unsigned m_timer_id;
 };
 
 
@@ -323,7 +323,7 @@ protected:
     int thread_run(unsigned index) {
         LOCAL* le;
         m_ev[index] = le = new LOCAL(GetParam());
-  
+
         check_is_blocked(le, false);
 
         barrier();
@@ -435,7 +435,7 @@ UCS_TEST_P(test_async, many_timers) {
     const int max_iters  = ucs_max(200, 4010 / ucs::test_time_multiplier());
     const int max_timers = ucs_max(10, 250 / ucs::test_time_multiplier());
 
-    std::vector<int> timers;
+    std::vector<unsigned> timers;
     timers.reserve(max_timers);
 
     for (int count = 0; count < max_iters; ++count) {

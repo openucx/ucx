@@ -20,7 +20,11 @@
 #include <ucs/sys/sys.h>
 #include <signal.h>
 
-#define UCS_SIGNAL_MAX_TIMERQS  64
+#define UCS_SIGNAL_MAX_TIMERQS      (64)
+#define UCS_SIGNAL_TIMERQ_UID_SHIFT (24)
+#define UCS_SIGNAL_CALC_HANDLE_ID(_timerq_uid, _timer_idx) \
+        ((_timerq_uid << UCS_SIGNAL_TIMERQ_UID_SHIFT) | \
+         (_timer_idx & UCS_MASK(UCS_SIGNAL_TIMERQ_UID_SHIFT)))
 
 /*
  * Per-thread system timer and software timer queue. We can dispatch timers only
@@ -179,7 +183,9 @@ static ucs_status_t ucs_async_signal_dispatch_timer(int uid)
         return UCS_OK;
     }
 
-    return ucs_async_dispatch_timerq(&timer->timerq, ucs_get_time());
+    return ucs_async_dispatch_timerq(&timer->timerq,
+                                     UCS_SIGNAL_CALC_HANDLE_ID(uid, 0),
+                                     ucs_get_time());
 }
 
 static inline int ucs_signal_map_to_events(int si_code)
@@ -453,23 +459,22 @@ static void ucs_timer_reset_if_empty(ucs_async_signal_timer_t *timer)
 /* Add a timer, possible initializing the timerq */
 static ucs_status_t
 ucs_async_signal_timerq_add_timer(ucs_async_signal_timer_t *timer, int tid,
-                                  ucs_time_t interval, int *timer_id_p)
+                                  ucs_time_t interval, unsigned *timer_id_p)
 {
+    int uid = timer - ucs_async_signal_global_context.timers;
     ucs_time_t sys_interval;
     ucs_status_t status;
-    int uid;
+
+    ucs_assert(uid <= UCS_SIGNAL_MAX_TIMERQS);
 
     if (timer->tid == 0) {
         timer->tid = tid;
         ucs_timerq_init(&timer->timerq, "async_signal");
-
-        uid = (timer - ucs_async_signal_global_context.timers);
         status = ucs_async_signal_sys_timer_create(uid, timer->tid,
                                                    &timer->sys_timer_id);
         if (status != UCS_OK) {
             goto err;
         }
-
     }
 
     status = ucs_timerq_add(&timer->timerq, interval, timer_id_p);
@@ -484,6 +489,8 @@ ucs_async_signal_timerq_add_timer(ucs_async_signal_timer_t *timer, int tid,
         goto err_remove;
     }
 
+    *timer_id_p = UCS_SIGNAL_CALC_HANDLE_ID(uid, *timer_id_p);
+
     return UCS_OK;
 
 err_remove:
@@ -496,9 +503,14 @@ err:
 /* Remove a timer, possible resetting the timerq */
 static ucs_status_t
 ucs_async_signal_timerq_remove_timer(ucs_async_signal_timer_t *timer,
-                                     int timer_id)
+                                     unsigned timer_id)
 {
     ucs_status_t status;
+
+    ucs_assert((timer_id >> UCS_SIGNAL_TIMERQ_UID_SHIFT) ==
+               (timer - ucs_async_signal_global_context.timers));
+
+    timer_id &= UCS_MASK(UCS_SIGNAL_TIMERQ_UID_SHIFT);
 
     status = ucs_timerq_remove(&timer->timerq, timer_id);
     if (status != UCS_OK) {
@@ -526,7 +538,8 @@ static ucs_async_signal_timer_t *ucs_async_signal_find_timer(pid_t tid)
 }
 
 static ucs_status_t ucs_async_signal_add_timer(ucs_async_context_t *async,
-                                               ucs_time_t interval, int *timer_id_p)
+                                               ucs_time_t interval,
+                                               unsigned *timer_id_p)
 {
     ucs_async_signal_timer_t *timer;
     ucs_status_t status;
@@ -555,7 +568,8 @@ static ucs_status_t ucs_async_signal_add_timer(ucs_async_context_t *async,
     if (timer == NULL) {
         status = UCS_ERR_EXCEEDS_LIMIT;
     } else {
-        status = ucs_async_signal_timerq_add_timer(timer, tid, interval, timer_id_p);
+        status = ucs_async_signal_timerq_add_timer(timer, tid, interval,
+                                                   timer_id_p);
     }
 
     pthread_mutex_unlock(&ucs_async_signal_global_context.timers_lock);
@@ -574,12 +588,12 @@ err:
 }
 
 static ucs_status_t ucs_async_signal_remove_timer(ucs_async_context_t *async,
-                                                  int timer_id)
+                                                  unsigned timer_id)
 {
     ucs_async_signal_timer_t *timer;
     ucs_status_t status;
 
-    ucs_trace_func("async=%p timer_id=%d", async, timer_id);
+    ucs_trace_func("async=%p timer_id=%u", async, timer_id);
 
     UCS_ASYNC_SIGNAL_CHECK_THREAD(async);
 
