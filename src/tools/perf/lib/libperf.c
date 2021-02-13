@@ -986,7 +986,8 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (params->flags & UCX_PERF_TEST_FLAG_WAKEUP) {
+    if ((params->flags & UCX_PERF_TEST_FLAG_WAKEUP) ||
+        (params->wait_mode == UCX_PERF_WAIT_MODE_SLEEP)) {
         ucp_params->features |= UCP_FEATURE_WAKEUP;
     }
 
