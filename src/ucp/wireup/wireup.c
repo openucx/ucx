@@ -78,8 +78,10 @@ static ucp_lane_index_t ucp_wireup_get_msg_lane(ucp_ep_h ep, uint8_t msg_type)
     ucp_ep_config_t *ep_config        = ucp_ep_config(ep);
     ucp_lane_index_t lane             = UCP_NULL_LANE;
 
-    if (msg_type != UCP_WIREUP_MSG_ACK) {
-        /* for request/response, try wireup_msg_lane first */
+    if (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED)) {
+        ucs_assert(msg_type != UCP_WIREUP_MSG_ACK);
+        /* for pre-request/request/reply and ep_check/ep_remove (if UCP EP is
+         * not REMOTE_CONNECTED) messages try wireup_msg_lane first */
         lane = ep_config->key.wireup_msg_lane;
     }
 
