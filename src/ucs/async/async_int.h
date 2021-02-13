@@ -11,14 +11,14 @@
 #include "async.h"
 
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/time/timerq.h>
 
 
 /* Async event handler */
 typedef struct ucs_async_handler ucs_async_handler_t;
 struct ucs_async_handler {
-    int                        id;       /* Event/Timer ID */
-    int                        timer_id; /* Timer ID (unused for events) */
+    khint_t                    id;       /* Event/Timer ID */
     ucs_async_mode_t           mode;     /* Event delivery mode */
     ucs_event_set_types_t      events;   /* Bitmap of events */
     pthread_t                  caller;   /* Thread which invokes the callback */
@@ -82,10 +82,10 @@ typedef ucs_status_t (*ucs_async_modify_event_fd_t)(ucs_async_context_t *async,
 
 typedef ucs_status_t (*ucs_async_add_timer_t)(ucs_async_context_t *async,
                                               ucs_time_t interval,
-                                              int *timer_id_p);
+                                              unsigned *timer_id_p);
 
 typedef ucs_status_t (*ucs_async_remove_timer_t)(ucs_async_context_t *async,
-                                                 int timer_id);
+                                                 unsigned timer_id);
 
 
 /**

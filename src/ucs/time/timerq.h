@@ -21,7 +21,6 @@
 typedef struct ucs_timer {
     ucs_time_t                 expiration;/* Absolute timer expiration time */
     ucs_time_t                 interval;  /* Re-scheduling interval */
-    int                        id;
 } ucs_timer_t;
 
 
@@ -56,8 +55,8 @@ void ucs_timerq_cleanup(ucs_timer_queue_t *timerq);
  * @param interval   Timer interval.
  * @param timer_id_p Filled with the ID of the new timer in the queue.
  */
-ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq,
-                            ucs_time_t interval, int *timer_id_p);
+ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, ucs_time_t interval,
+                            unsigned *timer_id_p);
 
 /**
  * Remove a timer.
@@ -65,7 +64,7 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq,
  * @param timerq     Time queue this timer was scheduled on.
  * @param timer_id   Timer ID to remove.
  */
-ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, int timer_id);
+ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, unsigned timer_id);
 
 
 /**

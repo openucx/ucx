@@ -389,7 +389,8 @@ static void ucs_async_thread_mutex_unblock(ucs_async_context_t *async)
 }
 
 static ucs_status_t ucs_async_thread_add_timer(ucs_async_context_t *async,
-                                               ucs_time_t interval, int *timer_id_p)
+                                               ucs_time_t interval,
+                                               unsigned *timer_id_p)
 {
     ucs_async_thread_t *thread;
     ucs_status_t status;
@@ -420,7 +421,7 @@ err:
 }
 
 static ucs_status_t ucs_async_thread_remove_timer(ucs_async_context_t *async,
-                                                  int timer_id)
+                                                  unsigned timer_id)
 {
     ucs_async_thread_t *thread = ucs_async_thread_global_context.thread;
     ucs_timerq_remove(&thread->timerq, timer_id);

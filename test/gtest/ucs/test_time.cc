@@ -55,8 +55,8 @@ UCS_TEST_SKIP_COND_F(test_time, get_time,
 #endif
 
 UCS_TEST_F(test_time, timerq) {
-    int timer_id1;
-    int timer_id2;
+    unsigned timer_id1;
+    unsigned timer_id2;
 
     ucs_timer_queue_t timerq;
     ucs_status_t status;
@@ -92,8 +92,8 @@ UCS_TEST_F(test_time, timerq) {
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
             ucs_timerq_for_each_expired(timer, &timerq, current_time, {
-                if (timer->id == timer_id1) ++counter1;
-                if (timer->id == timer_id2) ++counter2;
+                if (_index == timer_id1) ++counter1;
+                if (_index == timer_id2) ++counter2;
             })
         }
         EXPECT_NEAR(test_time / interval1, counter1, 1);
@@ -109,8 +109,8 @@ UCS_TEST_F(test_time, timerq) {
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
             ucs_timerq_for_each_expired(timer, &timerq, current_time, {
-                if (timer->id == timer_id1) ++counter1;
-                if (timer->id == timer_id2) ++counter2;
+                if (_index == timer_id1) ++counter1;
+                if (_index == timer_id2) ++counter2;
             })
         }
         EXPECT_EQ(0u, counter1);
@@ -127,8 +127,8 @@ UCS_TEST_F(test_time, timerq) {
         for (unsigned count = 0; count < test_time; ++count) {
             ++current_time;
             ucs_timerq_for_each_expired(timer, &timerq, current_time, {
-                if (timer->id == timer_id1) ++counter1;
-                if (timer->id == timer_id2) ++counter2;
+                if (_index == timer_id1) ++counter1;
+                if (_index == timer_id2) ++counter2;
             })
         }
         EXPECT_NEAR(test_time / interval1, counter1, 1);
