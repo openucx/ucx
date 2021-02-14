@@ -1560,100 +1560,48 @@ done:
  * processor cache issues. To make this used uct_rc_mlx5_dm_copy_data_t
  * datatype where first hdr_len bytes are filled by message header
  * and tail is filled by head of message. */
-static void UCS_F_ALWAYS_INLINE
-uct_rc_mlx5_iface_common_copy_to_dm(uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len,
-                                    const void *payload, size_t length, void *dm,
-                                    uct_ib_log_sge_t *log_sge)
-{
-    typedef uint64_t misaligned_t UCS_V_ALIGNED(1);
-
-    uint64_t padding = 0; /* init by 0 to suppress valgrind error */
-    size_t head      = (cache && hdr_len) ? ucs_min(length, sizeof(*cache) - hdr_len) : 0;
-    size_t body      = ucs_align_down(length - head, sizeof(padding));
-    size_t tail      = length - (head + body);
-    char   *dst      = dm;
-    int i            = 0;
-
-    ucs_assert(sizeof(*cache) >= hdr_len);
-    ucs_assert(head + body + tail == length);
-    ucs_assert(tail < sizeof(padding));
-
-    /* copy head of payload to tail of cache */
-    memcpy(cache->bytes + hdr_len, payload, head);
-
-    UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->bytes));
-    UCS_STATIC_ASSERT(sizeof(log_sge->sg_list) / sizeof(log_sge->sg_list[0]) >= 2);
-
-    /* condition is static-evaluated */
-    if (cache && hdr_len) {
-        /* atomically by 8 bytes copy data to DM */
-        /* cache buffer must be aligned, so, source data type is aligned */
-        UCS_WORD_COPY(volatile uint64_t, dst, uint64_t, cache->bytes, sizeof(cache->bytes));
-        dst += sizeof(cache->bytes);
-        if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
-            log_sge->sg_list[0].addr   = (uint64_t)cache;
-            log_sge->sg_list[0].length = (uint32_t)hdr_len;
-            i++;
-        }
-    }
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
-        log_sge->sg_list[i].addr   = (uint64_t)payload;
-        log_sge->sg_list[i].length = (uint32_t)length;
-        i++;
-    }
-    log_sge->num_sge = i;
-
-    /* copy payload to DM */
-    UCS_WORD_COPY(volatile uint64_t, dst, misaligned_t,
-                  UCS_PTR_BYTE_OFFSET(payload, head), body);
-    if (tail) {
-        dst += body;
-        memcpy(&padding, UCS_PTR_BYTE_OFFSET(payload, head + body), tail);
-        /* use uint64_t for source datatype because it is aligned buffer on stack */
-        UCS_WORD_COPY(volatile uint64_t, dst, uint64_t, &padding, sizeof(padding));
-    }
-}
-
-static void UCS_F_ALWAYS_INLINE uct_rc_mlx5_iface_copy_iov_to_dm(
+static void UCS_F_ALWAYS_INLINE uct_rc_mlx5_iface_common_copy_to_dm(
         uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len, const uct_iov_t *iov,
         size_t iovcnt, void *dm, uct_ib_log_sge_t *log_sge)
 {
     typedef uint64_t misaligned_t UCS_V_ALIGNED(1);
 
+    size_t head = ((cache != NULL) && (hdr_len > 0)) ?
+                  sizeof(cache->bytes) - hdr_len : 0;
+    int i       = 0;
     ucs_iov_iter_t iov_iter;
     uint64_t word;
     size_t to_copy;
     void *src;
 
-    ucs_assert(cache != NULL);
-    ucs_assert(hdr_len != 0);
     ucs_assert(sizeof(cache->bytes) >= hdr_len);
     ucs_iov_iter_init(&iov_iter);
 
     /* copy head of iov to tail of cache */
     uct_iov_to_buffer(iov, iovcnt, &iov_iter,
-                      UCS_PTR_BYTE_OFFSET(cache->bytes, hdr_len),
-                      sizeof(cache->bytes) - hdr_len);
+                      UCS_PTR_BYTE_OFFSET(cache->bytes, hdr_len), head);
 
-    UCS_STATIC_ASSERT(sizeof(*cache) == sizeof(cache->bytes));
     UCS_STATIC_ASSERT(ucs_static_array_size(log_sge->sg_list) >= 2);
 
-    /* atomically by 8 bytes copy data to DM */
-    /* cache buffer must be aligned, so, source data type is aligned */
-    UCS_WORD_COPY(volatile uint64_t, dm, uint64_t, cache->bytes,
-                  sizeof(cache->bytes));
-    dm = UCS_PTR_BYTE_OFFSET(dm, sizeof(cache->bytes));
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
-        log_sge->sg_list[0].addr   = (uint64_t)cache;
-        log_sge->sg_list[0].length = (uint32_t)hdr_len;
-
-        log_sge->sg_list[1].addr   = (uint64_t)iov->buffer;
-        log_sge->sg_list[1].length = (uint32_t)iov->length;
-
-        log_sge->num_sge = 2;
-    } else {
-        log_sge->num_sge = 0;
+    /* condition is static-evaluated */
+    if ((cache != NULL) && (hdr_len > 0)) {
+        /* atomically by 8 bytes copy data to DM */
+        /* cache buffer must be aligned, so, source data type is aligned */
+        UCS_WORD_COPY(volatile uint64_t, dm, uint64_t, cache->bytes,
+                      sizeof(cache->bytes));
+        dm = UCS_PTR_BYTE_OFFSET(dm, sizeof(cache->bytes));
+        if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+            log_sge->sg_list[i].addr   = (uint64_t)cache;
+            log_sge->sg_list[i].length = (uint32_t)hdr_len;
+            ++i;
+        }
     }
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
+        log_sge->sg_list[i].addr   = (uint64_t)iov->buffer;
+        log_sge->sg_list[i].length = (uint32_t)iov->length;
+        ++i;
+    }
+    log_sge->num_sge = i;
 
     while (iov_iter.iov_index < iovcnt) {
         to_copy = ucs_align_down(
@@ -1682,9 +1630,9 @@ static void UCS_F_ALWAYS_INLINE uct_rc_mlx5_iface_copy_iov_to_dm(
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
         uct_rc_mlx5_iface_common_t *iface, uct_rc_mlx5_dm_copy_data_t *cache,
-        size_t hdr_len, const void *payload, unsigned length,
-        const uct_iov_t *iov, size_t iovcnt, uct_rc_iface_send_desc_t **desc_p,
-        void **buffer_p, uct_ib_log_sge_t *log_sge)
+        size_t hdr_len, const uct_iov_t *iov, size_t iovcnt,
+        uct_rc_iface_send_desc_t **desc_p, void **buffer_p,
+        uct_ib_log_sge_t *log_sge)
 {
     uct_rc_iface_send_desc_t *desc;
     void *buffer;
@@ -1692,7 +1640,6 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
 
     ucs_assert(iface->dm.dm != NULL);
     ucs_assert(log_sge != NULL);
-    ucs_assert((length == 0) || (iovcnt == 0));
 
     desc = ucs_mpool_get_inline(&iface->dm.dm->mp);
     if (ucs_unlikely(desc == NULL)) {
@@ -1705,7 +1652,6 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
         if (cache && hdr_len) {
             memcpy(buffer, cache->bytes, hdr_len);
         }
-        memcpy(UCS_PTR_BYTE_OFFSET(buffer, hdr_len), payload, length);
         ucs_iov_iter_init(&iov_iter);
         uct_iov_to_buffer(iov, iovcnt, &iov_iter,
                           UCS_PTR_BYTE_OFFSET(buffer, hdr_len), SIZE_MAX);
@@ -1715,15 +1661,11 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
          * hint to valgrind to make it defined */
         VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
         ucs_assert(desc->super.buffer != NULL);
-        buffer = (void*)UCS_PTR_BYTE_DIFF(iface->dm.dm->start_va, desc->super.buffer);
+        buffer = (void*)UCS_PTR_BYTE_DIFF(iface->dm.dm->start_va,
+                                          desc->super.buffer);
 
-        if (iovcnt > 0) {
-            uct_rc_mlx5_iface_copy_iov_to_dm(cache, hdr_len, iov, iovcnt,
-                                             desc->super.buffer, log_sge);
-        } else {
-            uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, payload, length,
-                                                desc->super.buffer, log_sge);
-        }
+        uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, iov, iovcnt,
+                                            desc->super.buffer, log_sge);
 
         if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) {
             log_sge->sg_list[0].lkey = log_sge->sg_list[1].lkey = desc->lkey;
@@ -1736,6 +1678,34 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
     return UCS_OK;
 }
 
+static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_iov_dm(
+        uct_rc_mlx5_iface_common_t *iface, int qp_type,
+        uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len, const uct_iov_t *iov,
+        size_t iovcnt, size_t iov_length, unsigned opcode, uint8_t fm_ce_se,
+        uint64_t rdma_raddr, uct_rkey_t rdma_rkey, uct_rc_txqp_t *txqp,
+        uct_ib_mlx5_txwq_t *txwq, uct_ib_mlx5_base_av_t *av,
+        struct mlx5_grh_av *grh_av, size_t av_size)
+{
+    uct_rc_iface_send_desc_t *desc = NULL;
+    void *buffer;
+    ucs_status_t status;
+    uct_ib_log_sge_t log_sge;
+
+    status = uct_rc_mlx5_common_dm_make_data(iface, cache, hdr_len, iov, iovcnt,
+                                             &desc, &buffer, &log_sge);
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        return status;
+    }
+
+    uct_rc_mlx5_common_txqp_bcopy_post(iface, qp_type, txqp, txwq, opcode,
+                                       hdr_len + iov_length, rdma_raddr,
+                                       rdma_rkey, av, grh_av, av_size, fm_ce_se,
+                                       0, desc, buffer,
+                                       (log_sge.num_sge > 0) ? &log_sge : NULL);
+
+    return UCS_OK;
+}
+
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_dm(
         uct_rc_mlx5_iface_common_t *iface, int qp_type,
         uct_rc_mlx5_dm_copy_data_t *cache, size_t hdr_len, const void *payload,
@@ -1743,25 +1713,16 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_short_dm(
         uct_rkey_t rdma_rkey, uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
         uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av, size_t av_size)
 {
-    uct_rc_iface_send_desc_t *desc = NULL;
-    void *buffer;
-    ucs_status_t status;
-    uct_ib_log_sge_t log_sge;
+    uct_iov_t iov;
 
-    status = uct_rc_mlx5_common_dm_make_data(iface, cache, hdr_len, payload,
-                                             length, NULL, 0, &desc, &buffer,
-                                             &log_sge);
-    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
-        return status;
-    }
+    iov.buffer = (void*)payload;
+    iov.count  = 1;
+    iov.length = length;
 
-    uct_rc_mlx5_common_txqp_bcopy_post(iface, qp_type, txqp, txwq, opcode,
-                                       hdr_len + length, rdma_raddr, rdma_rkey,
-                                       av, grh_av, av_size, fm_ce_se, 0, desc,
-                                       buffer,
-                                       (log_sge.num_sge > 0) ? &log_sge : NULL);
-
-    return UCS_OK;
+    return uct_rc_mlx5_common_ep_short_iov_dm(iface, qp_type, cache, hdr_len,
+                                              &iov, 1, length, opcode, fm_ce_se,
+                                              rdma_raddr, rdma_rkey, txqp, txwq,
+                                              av, grh_av, av_size);
 }
 
 static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_am_short_iov_dm(
@@ -1770,31 +1731,21 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_ep_am_short_iov_dm(
         uct_rc_txqp_t *txqp, uct_ib_mlx5_txwq_t *txwq,
         uct_ib_mlx5_base_av_t *av, struct mlx5_grh_av *grh_av, size_t av_size)
 {
-    uct_rc_iface_send_desc_t *desc = NULL;
-    /* pass dummy pointer as 0-length payload to avoid static check issue */
-    char dummy                     = 0;
     uct_rc_mlx5_dm_copy_data_t cache;
-    void *buffer;
-    uct_ib_log_sge_t log_sge;
     ucs_status_t status;
 
     UCT_CHECK_LENGTH(sizeof(cache.am_hdr.rc_hdr) + iov_length, 0,
                      iface->dm.seg_len, "am_short_iov");
 
     uct_rc_mlx5_am_hdr_fill(&cache.am_hdr.rc_hdr, am_id);
-    status = uct_rc_mlx5_common_dm_make_data(iface, &cache,
-                                             sizeof(cache.am_hdr.rc_hdr),
-                                             &dummy, 0, iov, iovcnt, &desc,
-                                             &buffer, &log_sge);
+    status = uct_rc_mlx5_common_ep_short_iov_dm(
+            iface, qp_type, &cache, sizeof(cache.am_hdr.rc_hdr), iov, iovcnt,
+            iov_length, MLX5_OPCODE_SEND,
+            MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE, 0, 0, txqp, txwq,
+            av, grh_av, av_size);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return status;
     }
-
-    uct_rc_mlx5_common_txqp_bcopy_post(
-            iface, qp_type, txqp, txwq, MLX5_OPCODE_SEND,
-            sizeof(cache.am_hdr.rc_hdr) + iov_length, 0, 0, av, grh_av, av_size,
-            MLX5_WQE_CTRL_SOLICITED | MLX5_WQE_CTRL_CQ_UPDATE, 0, desc, buffer,
-            (log_sge.num_sge > 0) ? &log_sge : NULL);
 
     UCT_TL_EP_STAT_OP(ep, AM, SHORT, sizeof(cache.am_hdr.rc_hdr) + iov_length);
 
