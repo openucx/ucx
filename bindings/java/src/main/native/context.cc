@@ -182,3 +182,19 @@ Java_org_openucx_jucx_ucp_UcpContext_memoryMapNative(JNIEnv *env, jobject ctx,
     /* coverity[leaked_storage] */
     return jucx_mem;
 }
+
+JNIEXPORT jlong JNICALL
+Java_org_openucx_jucx_ucp_UcpContext_queryMemTypesNative(JNIEnv *env, jclass cls,
+                                                         jlong ucp_context_ptr)
+{
+    ucp_context_attr_t params;
+
+    params.field_mask = UCP_ATTR_FIELD_MEMORY_TYPES;
+
+    ucs_status_t status = ucp_context_query((ucp_context_h)ucp_context_ptr, &params);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+
+    return params.memory_types;
+}

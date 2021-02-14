@@ -6,6 +6,7 @@
 package org.openucx.jucx.ucs;
 
 import org.openucx.jucx.NativeLibs;
+import org.openucx.jucx.ucp.UcpContext;
 
 public class UcsConstants {
     static {
@@ -75,6 +76,15 @@ public class UcsConstants {
     public static class MEMORY_TYPE {
         static {
             load();
+        }
+
+        /**
+         * Checks whether context's memory type mask
+         * (received via {@link UcpContext#getMemoryTypesMask()})
+         * supports particular memory type.
+         */
+        public static boolean isMemTypeSupported(long mask, int memoryType) {
+            return ((1L << memoryType) & mask) != 0;
         }
 
         public static int UCS_MEMORY_TYPE_HOST;          // Default system memory
