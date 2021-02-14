@@ -5,9 +5,6 @@
 
 #include "jucx_common_def.h"
 #include "org_openucx_jucx_ucp_UcpContext.h"
-extern "C" {
-#include <ucp/core/ucp_mm.h>
-}
 
 /**
  * Iterates through entries of java's hash map and apply
@@ -155,27 +152,35 @@ Java_org_openucx_jucx_ucp_UcpContext_memoryMapNative(JNIEnv *env, jobject ctx,
         params.flags = env->GetLongField(jucx_mmap_params, field);;
     }
 
+    if (params.field_mask & UCP_MEM_MAP_PARAM_FIELD_PROT) {
+        field = env->GetFieldID(jucx_mmap_class, "prot", "J");
+        params.prot = env->GetLongField(jucx_mmap_params, field);;
+    }
+
+    if (params.field_mask & UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE) {
+        field = env->GetFieldID(jucx_mmap_class, "memType", "I");
+        params.memory_type =
+            static_cast<ucs_memory_type_t>(env->GetIntField(jucx_mmap_params, field));
+    }
+
     ucs_status_t status =  ucp_mem_map((ucp_context_h)ucp_context_ptr, &params, &memh);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
     }
 
+    ucp_mem_attr_t attr = {0};
+
+    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS | UCP_MEM_ATTR_FIELD_LENGTH |
+                      UCP_MEM_ATTR_FIELD_MEM_TYPE;
+
+    ucp_mem_query(memh, &attr);
+
     // Construct UcpMemory class
     jclass jucx_mem_cls = env->FindClass("org/openucx/jucx/ucp/UcpMemory");
-    jmethodID constructor = env->GetMethodID(jucx_mem_cls, "<init>", "(J)V");
-    jobject jucx_mem = env->NewObject(jucx_mem_cls, constructor, (native_ptr)memh);
-
-    // Set UcpContext pointer
-    field = env->GetFieldID(jucx_mem_cls, "context", "Lorg/openucx/jucx/ucp/UcpContext;");
-    env->SetObjectField(jucx_mem, field, ctx);
-
-    // Set address
-    field =  env->GetFieldID(jucx_mem_cls, "address", "J");
-    env->SetLongField(jucx_mem, field, (native_ptr)memh->address);
-
-    // Set length
-    field =  env->GetFieldID(jucx_mem_cls, "length", "J");
-    env->SetLongField(jucx_mem, field, memh->length);
+    jmethodID constructor = env->GetMethodID(jucx_mem_cls, "<init>",
+                                             "(JLorg/openucx/jucx/ucp/UcpContext;JJI)V");
+    jobject jucx_mem = env->NewObject(jucx_mem_cls, constructor, (native_ptr)memh, ctx,
+                                      attr.address, attr.length, attr.mem_type);
 
     /* Coverity thinks that memh is a leaked object here,
      * but it's stored in a UcpMemory object */

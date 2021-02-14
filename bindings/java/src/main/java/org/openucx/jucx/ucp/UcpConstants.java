@@ -105,6 +105,8 @@ public class UcpConstants {
     static long UCP_MEM_MAP_PARAM_FIELD_ADDRESS;
     static long UCP_MEM_MAP_PARAM_FIELD_LENGTH;
     static long UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    static long UCP_MEM_MAP_PARAM_FIELD_PROT;
+    static long UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
 
     /**
      *  The enumeration list describes the memory mapping flags.
@@ -112,6 +114,15 @@ public class UcpConstants {
     static long UCP_MEM_MAP_NONBLOCK;
     static long UCP_MEM_MAP_ALLOCATE;
     static long UCP_MEM_MAP_FIXED;
+
+    /**
+     * The enumeration list describes the memory mapping protections supported by
+     * {@link UcpContext#memoryMap(UcpMemMapParams)}
+     */
+    public static long UCP_MEM_MAP_PROT_LOCAL_READ;
+    public static long UCP_MEM_MAP_PROT_LOCAL_WRITE;
+    public static long UCP_MEM_MAP_PROT_REMOTE_READ;
+    public static long UCP_MEM_MAP_PROT_REMOTE_WRITE;
 
     /**
      * The enumeration defines behavior of

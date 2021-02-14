@@ -384,9 +384,11 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
     status = ucp_mem_map(sender().ucph(), &params, &memh);
     ASSERT_UCS_OK(status);
 
-    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS | UCP_MEM_ATTR_FIELD_LENGTH;
+    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS | UCP_MEM_ATTR_FIELD_LENGTH |
+                      UCP_MEM_ATTR_FIELD_MEM_TYPE;
     status = ucp_mem_query(memh, &attr);
     ASSERT_UCS_OK(status);
+    EXPECT_EQ(attr.mem_type, UCS_MEMORY_TYPE_HOST);
     EXPECT_GE(attr.length, size);
 
     advise_params.field_mask = UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS |
@@ -442,7 +444,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     advise_params.address    = mem_attr.address;
     advise_params.length     = size;
     advise_params.advice     = UCP_MADV_WILLNEED;
-    status = ucp_mem_advise(sender().ucph(), memh, &advise_params); 
+    status = ucp_mem_advise(sender().ucph(), memh, &advise_params);
     ASSERT_UCS_OK(status);
     is_dummy = (size == 0);
     test_rkey_management(&sender(), memh, is_dummy, is_tl_rdma());

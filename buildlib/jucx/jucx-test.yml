@@ -32,9 +32,11 @@ jobs:
           if [ $res -ne 0 ]; then
             exit 0;
           fi
+          try_load_cuda_env
           set -eE
           ./autogen.sh
-          ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install --with-java --enable-gtest=no
+          ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
+            --with-java --enable-gtest=no --with-cuda=$have_cuda
           make -j`nproc`
           make install
         displayName: Build UCX
@@ -42,6 +44,7 @@ jobs:
           set -x
           source buildlib/az-helpers.sh
           az_init_modules
+          try_load_cuda_env
           res=0
           az_module_load dev/mvn
           res=$(($res+$?))

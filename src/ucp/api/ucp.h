@@ -1361,7 +1361,7 @@ typedef struct ucp_mem_map_params {
       * - Memory registration: This field specifies the type of memory which is
       *    pointed by @ref ucp_mem_map_params.address. If it's not set (along with its
       *    corresponding bit in the field_mask - @ref UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE),
-      *    or set to @ref UCS_MEMORY_TYPE_UNKNOWN, the memory type will be dectected
+      *    or set to @ref UCS_MEMORY_TYPE_UNKNOWN, the memory type will be detected
       *    internally.
       */
      ucs_memory_type_t      memory_type;
