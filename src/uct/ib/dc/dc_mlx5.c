@@ -136,11 +136,6 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     }
 }
 
-static void uct_dc_mlx5_ep_destroy(uct_ep_h tl_ep)
-{
-    uct_dc_mlx5_ep_cleanup(tl_ep, &UCS_CLASS_NAME(uct_dc_mlx5_ep_t));
-}
-
 static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
@@ -871,7 +866,7 @@ static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *ifa
 {
     int i;
 
-    if (iface->tx.fc_grants) {
+    if (kh_size(&iface->tx.fc_hash) != 0) {
         /* If some ep is waiting for grant it may have some pending
          * operations, while all QP resources are available. */
         return UCS_INPROGRESS;
@@ -980,11 +975,13 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                                           uint32_t imm_data, uint16_t lid, unsigned flags)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
-    uint8_t             fc_hdr = uct_rc_fc_get_fc_hdr(hdr->am_id);
+    uint8_t fc_hdr             = uct_rc_fc_get_fc_hdr(hdr->am_id);
+    uct_dc_fc_sender_data_t *sender;
     uct_dc_fc_request_t *dc_req;
-    int16_t             cur_wnd;
-    ucs_status_t        status;
-    uct_dc_mlx5_ep_t    *ep;
+    int16_t cur_wnd;
+    ucs_status_t status;
+    uct_dc_mlx5_ep_t *ep;
+    khiter_t it;
 
     ucs_assert(rc_iface->config.fc_enabled);
 
@@ -1014,22 +1011,25 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                                ucs_status_string(status));
         }
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
-        ep = *((uct_dc_mlx5_ep_t**)(hdr + 1));
+        sender = (uct_dc_fc_sender_data_t *)(hdr + 1);
 
-        if (!(ep->flags & UCT_DC_MLX5_EP_FLAG_VALID)) {
-            /* Just remove ep now, no need to clear waiting for grant state
-             * (it was done in destroy_ep func) */
-            uct_dc_mlx5_ep_release(ep);
+        it = kh_get(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, sender->ep);
+        if ((it == kh_end(&iface->tx.fc_hash)) ||
+            (kh_value(&iface->tx.fc_hash, it) != sender->payload.seq)) {
+            /* Just ignore, ep was removed. We either not expecting grant on
+             * this EP or this is not the same grant sequence number we are
+             * expecting. */
             return UCS_OK;
         }
 
+        ep      = (uct_dc_mlx5_ep_t *)sender->ep;
         cur_wnd = ep->fc.fc_wnd;
 
         /* Peer granted resources, so update wnd */
         ep->fc.fc_wnd = rc_iface->config.fc_wnd_size;
 
-        /* Clear the flag for flush to complete  */
-        uct_dc_mlx5_ep_clear_fc_grant_flag(iface, ep);
+        /* Remove entry for flush to complete  */
+        kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
 
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
         UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
@@ -1138,7 +1138,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_event_fd_get       = uct_ib_iface_event_fd_get,
     .iface_event_arm          = uct_rc_iface_event_arm,
     .ep_create                = uct_dc_mlx5_ep_create_connected,
-    .ep_destroy               = uct_dc_mlx5_ep_destroy,
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_ep_t),
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t),
     .iface_query              = uct_dc_mlx5_iface_query,
     .iface_get_device_address = uct_ib_iface_get_device_address,
@@ -1208,10 +1208,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     self->tx.ndci                          = config->ndci;
     self->tx.policy                        = (uct_dc_tx_policy_t)config->tx_policy;
-    self->tx.fc_grants                     = 0;
+    self->tx.fc_seq                        = 0;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
     self->flags                            = 0;
-    ucs_list_head_init(&self->tx.gc_list);
+    kh_init_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
 
     self->tx.rand_seed = config->rand_seed ? config->rand_seed : time(NULL);
     self->tx.pend_cb   = uct_dc_mlx5_iface_is_dci_rand(self) ?
@@ -1269,19 +1269,13 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
 {
-    uct_dc_mlx5_ep_t *ep, *tmp;
-
     ucs_trace_func("");
     uct_base_iface_progress_disable(&self->super.super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     uct_dc_mlx5_iface_cleanup_dcis(self);
 
     uct_dc_mlx5_destroy_dct(self);
-
-    ucs_list_for_each_safe(ep, tmp, &self->tx.gc_list, list) {
-        uct_dc_mlx5_ep_release(ep);
-    }
-
+    kh_destroy_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
     uct_dc_mlx5_iface_dcis_destroy(self, uct_dc_mlx5_iface_total_ndci(self));
     uct_dc_mlx5_iface_cleanup_fc_ep(self);
     ucs_arbiter_cleanup(&self->tx.dci_arbiter);

@@ -156,9 +156,10 @@ typedef struct uct_dc_dci {
 typedef struct uct_dc_fc_sender_data {
     uint64_t                      ep;
     struct {
+        uint64_t                  seq;
         int                       is_global;
         union ibv_gid             gid;
-    } UCS_S_PACKED global;
+    } UCS_S_PACKED payload;
 } UCS_S_PACKED uct_dc_fc_sender_data_t;
 
 typedef struct uct_dc_fc_request {
@@ -171,6 +172,8 @@ typedef struct uct_dc_fc_request {
     uint16_t                      lid;
 } uct_dc_fc_request_t;
 
+
+KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uint64_t);
 
 struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t    super;
@@ -192,11 +195,11 @@ struct uct_dc_mlx5_iface {
         /* Used to send grant messages for all peers */
         uct_dc_mlx5_ep_t          *fc_ep;
 
-        /* List of destroyed endpoints waiting for credit grant */
-        ucs_list_link_t           gc_list;
+        /* Hash of expected FC grants */
+        khash_t(uct_dc_mlx5_fc_hash) fc_hash;
 
-        /* Number of expected FC grants */
-        unsigned                  fc_grants;
+        /* Sequence number of expected FC grants */
+        uint64_t                  fc_seq;
 
         /* Seed used for random dci allocation */
         unsigned                  rand_seed;
