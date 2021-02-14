@@ -10,11 +10,10 @@ import org.openucx.jucx.ucp.*;
 import org.openucx.jucx.ucs.UcsConstants;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 
@@ -628,6 +627,8 @@ public class UcpEndpointTest extends UcxTest {
         UcpEndpoint ep = worker2.newEndpoint(
             new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
 
+        Set<UcpEndpoint> cachedEp = new HashSet<>();
+
         // Test rndv flow
         worker1.setAmRecvHandler(0, (headerAddress, headerSize12, amData, replyEp) -> {
             assertFalse(amData.isDataValid());
@@ -642,6 +643,12 @@ public class UcpEndpointTest extends UcxTest {
             requests[2] = replyEp.sendTaggedNonBlocking(header, null);
             requests[3] = amData.receive(UcxUtils.getAddress(recvData), null);
 
+            if (!cachedEp.isEmpty()) {
+                assertTrue(cachedEp.contains(replyEp));
+            } else {
+                cachedEp.add(replyEp);
+            }
+
             return UcsConstants.STATUS.UCS_OK;
         });
 
@@ -655,6 +662,13 @@ public class UcpEndpointTest extends UcxTest {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+
+            if (!cachedEp.isEmpty()) {
+                assertTrue(cachedEp.contains(replyEp));
+            } else {
+                cachedEp.add(replyEp);
+            }
+
             return UcsConstants.STATUS.UCS_OK;
         });
 
@@ -671,7 +685,8 @@ public class UcpEndpointTest extends UcxTest {
 
         requests[1] = worker2.recvTaggedNonBlocking(recvHeader, null);
         requests[4] = ep.sendAmNonBlocking(1, 0L, 0L,
-            UcxUtils.getAddress(data), dataSize, UcpConstants.UCP_AM_SEND_FLAG_EAGER, null);
+            UcxUtils.getAddress(data), dataSize,
+            UcpConstants.UCP_AM_SEND_FLAG_REPLY | UcpConstants.UCP_AM_SEND_FLAG_EAGER, null);
 
 
         while (!Arrays.stream(requests).allMatch(r -> (r != null) && r.isCompleted())) {
@@ -689,6 +704,8 @@ public class UcpEndpointTest extends UcxTest {
         worker1.removeAmRecvHandler(0);
         worker1.removeAmRecvHandler(1);
 
-        Collections.addAll(resources, context1, context2, worker1, worker2, ep);
+        Collections.addAll(resources, context1, context2, worker1, worker2, ep,
+            cachedEp.iterator().next());
+        cachedEp.clear();
     }
 }
