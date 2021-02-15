@@ -359,6 +359,10 @@ const char *ucp_feature_str[] = {
 };
 
 
+const ucp_tl_bitmap_t ucp_tl_bitmap_max = {{UINT64_MAX, UINT64_MAX}};
+const ucp_tl_bitmap_t ucp_tl_bitmap_min = UCS_BITMAP_ZERO;
+
+
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
 {
@@ -791,8 +795,9 @@ static ucs_status_t ucp_check_tl_names(ucp_context_t *context)
     return UCS_OK;
 }
 
-const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
-                              char *str, size_t max_str_len)
+const char *ucp_tl_bitmap_str(ucp_context_h context,
+                              const ucp_tl_bitmap_t *tl_bitmap, char *str,
+                              size_t max_str_len)
 {
     ucp_rsc_index_t i;
     char *p, *endp;
@@ -800,7 +805,7 @@ const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
     p    = str;
     endp = str + max_str_len;
 
-    ucs_for_each_bit(i, tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(*tl_bitmap, i) {
         ucs_snprintf_zero(p, endp - p, "%s ",
                           context->tl_rscs[i].tl_rsc.tl_name);
         p += strlen(p);
@@ -950,8 +955,8 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
                                             const char **sockaddr_cm_names,
                                             ucp_rsc_index_t num_sockaddr_cms)
 {
-    uint64_t cm_cmpts_bitmap = context->config.cm_cmpts_bitmap;
-    uint64_t cm_cmpts_bitmap_safe;
+    ucp_tl_bitmap_t cm_cmpts_bitmap = context->config.cm_cmpts_bitmap;
+    ucp_tl_bitmap_t cm_cmpts_bitmap_safe;
     ucp_rsc_index_t cmpt_idx, cm_idx;
 
     memset(&context->config.cm_cmpt_idxs, UCP_NULL_RESOURCE, UCP_MAX_RESOURCES);
@@ -963,13 +968,13 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
          * sockaddr CMs bitmap. Save the cmpt_idx for the client/server usage
          * later */
         cm_cmpts_bitmap_safe = cm_cmpts_bitmap;
-        ucs_for_each_bit(cmpt_idx, cm_cmpts_bitmap_safe) {
+        UCS_BITMAP_FOR_EACH_BIT(cm_cmpts_bitmap_safe, cmpt_idx) {
             if (!strcmp(sockaddr_cm_names[cm_idx], "*") ||
                 !strncmp(sockaddr_cm_names[cm_idx],
                          context->tl_cmpts[cmpt_idx].attr.name,
                          UCT_COMPONENT_NAME_MAX)) {
                 context->config.cm_cmpt_idxs[context->config.num_cm_cmpts++] = cmpt_idx;
-                cm_cmpts_bitmap &= ~UCS_BIT(cmpt_idx);
+                UCS_BITMAP_UNSET(cm_cmpts_bitmap, cmpt_idx);
             }
         }
     }
@@ -1131,7 +1136,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_mem_type_detect_mds = 0;
 
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
-        context->mem_type_access_tls[i] = 0;
+        UCS_BITMAP_CLEAR(&context->mem_type_access_tls[i]);
     }
 
     ucs_string_set_init(&avail_tls);
@@ -1165,7 +1170,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto out_release_components;
     }
 
-    context->config.cm_cmpts_bitmap = 0;
+    UCS_BITMAP_CLEAR(&context->config.cm_cmpts_bitmap);
 
     max_mds = 0;
     for (i = 0; i < context->num_cmpts; ++i) {
@@ -1182,13 +1187,14 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         }
 
         if (context->tl_cmpts[i].attr.flags & UCT_COMPONENT_FLAG_CM) {
-            context->config.cm_cmpts_bitmap |= UCS_BIT(i);
+            UCS_BITMAP_SET(context->config.cm_cmpts_bitmap, i);
         }
 
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
     }
 
-    if (context->config.cm_cmpts_bitmap == 0) {
+    if (UCS_BITMAP_IS_ZERO(context->config.cm_cmpts_bitmap,
+                           UCP_MAX_RESOURCES)) {
         ucs_debug("there are no UCT components with CM capability");
         status = UCS_ERR_UNSUPPORTED;
         goto err_free_resources;
@@ -1227,7 +1233,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
      * Then the worker will open all available transport resources and will
      * select only the best ones for each particular device.
      */
-    context->tl_bitmap = config->ctx.unified_mode ? 0 : UCS_MASK(context->num_tls);
+    UCS_BITMAP_MASK(&context->tl_bitmap,
+                    config->ctx.unified_mode ? 0 : context->num_tls);
 
     /* Warn about devices and transports which were specified explicitly in the
      * configuration, but are not available
@@ -1533,9 +1540,10 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
-    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%"PRIx64
-              " tl bitmap 0x%"PRIx64, context, context->num_mds,
-              context->num_tls, context->config.features, context->tl_bitmap);
+    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%" PRIx64
+              " tl bitmap " UCT_TL_BITMAP_FMT,
+              context, context->num_mds, context->num_tls,
+              context->config.features, UCT_TL_BITMAP_ARG(&context->tl_bitmap));
 
     *context_p = context;
     return UCS_OK;
@@ -1703,35 +1711,32 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
     ucp_memory_info_set_host(mem_info);
 }
 
-uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)
+ucp_tl_bitmap_t
+ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)
 {
-    uint64_t        tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucp_rsc_index_t tl_idx;
 
-    tl_bitmap = 0;
-
-    ucs_for_each_bit(tl_idx, context->tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_idx) {
         if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
             continue;
         }
 
-        tl_bitmap |= UCS_BIT(tl_idx);
+        UCS_BITMAP_SET(tl_bitmap, tl_idx);
     }
 
     return tl_bitmap;
 }
 
-uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
-                                       ucp_rsc_index_t dev_idx)
+ucp_tl_bitmap_t
+ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx)
 {
-    uint64_t        tl_bitmap;
+    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucp_rsc_index_t tl_idx;
 
-    tl_bitmap = 0;
-
-    ucs_for_each_bit(tl_idx, context->tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_idx) {
         if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
-            tl_bitmap |= UCS_BIT(tl_idx);
+            UCS_BITMAP_SET(tl_bitmap, tl_idx);
         }
     }
 

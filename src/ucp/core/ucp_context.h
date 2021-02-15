@@ -18,6 +18,7 @@
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
+#include <ucs/datastruct/bitmap.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
@@ -199,13 +200,13 @@ typedef struct ucp_context {
     ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
-    uint64_t                      tl_bitmap;  /* Cached map of tl resources used by workers.
+    ucp_tl_bitmap_t               tl_bitmap;  /* Cached map of tl resources used by workers.
                                                * Not all resources may be used if unified
                                                * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
 
     /* Mask of memory type communication resources */
-    uint64_t                      mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
+    ucp_tl_bitmap_t               mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
 
     struct {
 
@@ -236,7 +237,7 @@ typedef struct ucp_context {
         unsigned                  num_alloc_methods;
 
         /* Cached map of components which support CM capability */
-        uint64_t                  cm_cmpts_bitmap;
+        ucp_tl_bitmap_t           cm_cmpts_bitmap;
 
         /* Array of CMs indexes. The indexes appear in the configured priority
          * order. */
@@ -372,8 +373,9 @@ void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum);
 
-const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
-                              char *str, size_t max_str_len);
+const char *ucp_tl_bitmap_str(ucp_context_h context,
+                              const ucp_tl_bitmap_t *tl_bitmap, char *str,
+                              size_t max_str_len);
 
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
@@ -489,10 +491,14 @@ out_host_mem:
     ucp_memory_info_set_host(mem_info);
 }
 
-uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
 
-uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
-                                       ucp_rsc_index_t dev_idx);
+ucp_tl_bitmap_t
+ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
+
+
+ucp_tl_bitmap_t
+ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx);
+
 
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
 

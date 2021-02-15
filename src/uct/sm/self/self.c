@@ -48,6 +48,16 @@ static ucs_config_field_t uct_self_iface_config_table[] = {
     {NULL}
 };
 
+static ucs_config_field_t uct_self_md_config_table[] = {
+    {"", "", NULL, ucs_offsetof(uct_self_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+
+    {"NUM_DEVICES", "1", "Number of \"self\" devices to create",
+     ucs_offsetof(uct_self_md_config_t, num_devices), UCS_CONFIG_TYPE_INT},
+
+    {NULL}
+};
+
 
 static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
@@ -221,10 +231,27 @@ static ucs_status_t
 uct_self_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                           unsigned *num_tl_devices_p)
 {
-    return uct_single_device_resource(md, UCT_SM_DEVICE_NAME,
-                                      UCT_DEVICE_TYPE_SELF,
-                                      UCS_SYS_DEVICE_ID_UNKNOWN,
-                                      tl_devices_p, num_tl_devices_p);
+    uct_self_md_t *self_md = ucs_derived_of(md, uct_self_md_t);
+    int i;
+    uct_tl_device_resource_t *devices;
+
+    devices = ucs_calloc(self_md->num_devices, sizeof(*devices),
+                         "device resource");
+    if (NULL == devices) {
+        ucs_error("failed to allocate device resource");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    for (i = 0; i < self_md->num_devices; i++) {
+        ucs_snprintf_zero(devices[i].name, sizeof(devices->name), "%s%d",
+                          UCT_SM_DEVICE_NAME, i);
+        devices[i].type       = UCT_DEVICE_TYPE_SELF;
+        devices[i].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    *tl_devices_p     = devices;
+    *num_tl_devices_p = self_md->num_devices;
+    return UCS_OK;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_self_ep_t, const uct_ep_params_t *params)
@@ -373,6 +400,8 @@ static ucs_status_t uct_self_mem_reg(uct_md_h md, void *address, size_t length,
 static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_name,
                                      const uct_md_config_t *config, uct_md_h *md_p)
 {
+    uct_self_md_config_t *md_config = ucs_derived_of(config,
+                                                     uct_self_md_config_t);
     static uct_md_ops_t md_ops = {
         .close              = ucs_empty_function,
         .query              = uct_self_md_query,
@@ -381,12 +410,14 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
         .mem_dereg          = ucs_empty_function_return_success,
         .detect_memory_type = ucs_empty_function_return_unsupported
     };
-    static uct_md_t md = {
-        .ops          = &md_ops,
-        .component    = &uct_self_component
-    };
 
-    *md_p = &md;
+    static uct_self_md_t md;
+
+    md.super.ops       = &md_ops;
+    md.super.component = &uct_self_component;
+    md.num_devices     = md_config->num_devices;
+
+    *md_p = &md.super;
     return UCS_OK;
 }
 
@@ -411,7 +442,12 @@ static uct_component_t uct_self_component = {
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_SELF_NAME,
-    .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
+    .md_config          = {
+        .name           = "Self memory domain",
+        .prefix         = "SELF_",
+        .table          = uct_self_md_config_table,
+        .size           = sizeof(uct_self_md_config_t),
+    },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component),
     .flags              = 0

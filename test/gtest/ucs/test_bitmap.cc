@@ -20,7 +20,8 @@ protected:
         int i;
 
         UCS_BITMAP_FOR_EACH_BIT(*bitmap, i) {
-            dest[UCS_BITMAP_WORD_INDEX(i)] |= UCS_BIT(i % UCS_BITMAP_BITS_IN_WORD);
+            dest[UCS_BITMAP_WORD_INDEX(*bitmap, i)] |= UCS_BIT(
+                    i % UCS_BITMAP_BITS_IN_WORD);
         }
     }
 
@@ -62,6 +63,9 @@ UCS_TEST_F(test_ucs_bitmap, test_popcount_upto_index) {
 }
 
 UCS_TEST_F(test_ucs_bitmap, test_mask) {
+    /* coverity[unsigned_compare] */
+    UCS_BITMAP_MASK(&bitmap, 0);
+    EXPECT_EQ(UCS_BITMAP_IS_ZERO_INPLACE(&bitmap), true);
     UCS_BITMAP_SET(bitmap, 64 + 42);
     UCS_BITMAP_MASK(&bitmap, 64 + 42);
 
@@ -98,10 +102,10 @@ UCS_TEST_F(test_ucs_bitmap, test_ffs) {
 }
 
 UCS_TEST_F(test_ucs_bitmap, test_is_zero) {
-    EXPECT_EQ(UCS_BITMAP_IS_ZERO(bitmap), true);
+    EXPECT_TRUE(UCS_BITMAP_IS_ZERO_INPLACE(&bitmap));
 
     UCS_BITMAP_SET(bitmap, 71);
-    EXPECT_EQ(UCS_BITMAP_IS_ZERO(bitmap), false);
+    EXPECT_FALSE(UCS_BITMAP_IS_ZERO_INPLACE(&bitmap));
 }
 
 UCS_TEST_F(test_ucs_bitmap, test_get_set_clear)
@@ -198,9 +202,8 @@ UCS_TEST_F(test_ucs_bitmap, test_or)
 
 UCS_TEST_F(test_ucs_bitmap, test_xor)
 {
-    ucs_bitmap_t(128) bitmap2, bitmap3;
+    ucs_bitmap_t(128) bitmap2 = UCS_BITMAP_ZERO, bitmap3 = UCS_BITMAP_ZERO;
 
-    UCS_BITMAP_CLEAR(&bitmap2);
     bitmap.bits[0]  = 1;
     bitmap.bits[1]  = UINT64_MAX;
     bitmap2.bits[0] = UINT64_MAX;
@@ -216,7 +219,7 @@ UCS_TEST_F(test_ucs_bitmap, test_xor)
 
 UCS_TEST_F(test_ucs_bitmap, test_copy)
 {
-    ucs_bitmap_t(128) bitmap2;
+    ucs_bitmap_t(128) bitmap2 = UCS_BITMAP_ZERO;
 
     UCS_BITMAP_SET(bitmap, 1);
     UCS_BITMAP_SET(bitmap, 25);

@@ -149,7 +149,8 @@ struct ucp_unpacked_address {
  *                            released by ucs_free().
  */
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
-                              uint64_t tl_bitmap, unsigned pack_flags,
+                              const ucp_tl_bitmap_t *tl_bitmap,
+                              unsigned pack_flags,
                               const ucp_lane_index_t *lanes2remote,
                               size_t *size_p, void **buffer_p);
 

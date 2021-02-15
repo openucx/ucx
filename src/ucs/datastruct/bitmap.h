@@ -12,6 +12,8 @@
 #include <stdint.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/debug/assert.h>
+#include <ucs/sys/preprocessor.h>
 
 BEGIN_C_DECLS
 
@@ -37,14 +39,23 @@ typedef uint64_t ucs_bitmap_word_t;
 
 
 /**
- * Word index of a bit in bitmap
+ * Word index of a bit in bitmap. Assert the bitmap is big enough
  *
+ * @param _bitmap    Index of this bit relative to the bitmap
  * @param _bit_index Index of this bit relative to the bitmap
  *
  * @return Index of the word this bit belongs to
  */
-#define UCS_BITMAP_WORD_INDEX(_bit_index) \
-    ((_bit_index) / UCS_BITMAP_BITS_IN_WORD)
+#define UCS_BITMAP_WORD_INDEX(_bitmap, _bit_index) \
+    _ucs_bitmap_word_index(_UCS_BITMAP_NUM_WORDS(_bitmap), (_bit_index))
+
+
+static UCS_F_ALWAYS_INLINE size_t
+_ucs_bitmap_word_index(size_t bitmap_words, size_t bit_index)
+{
+    ucs_assert(bit_index < (bitmap_words * UCS_BITMAP_BITS_IN_WORD));
+    return bit_index / UCS_BITMAP_BITS_IN_WORD;
+}
 
 
 #define _UCS_BITMAP_BIT_IN_WORD_INDEX(_bit_index) \
@@ -62,6 +73,10 @@ typedef uint64_t ucs_bitmap_word_t;
 #define _UCS_BITMAP_WORD(_bitmap, _word_index) ((_bitmap).bits[_word_index])
 
 
+#define _UCS_BITMAP_INDEX_IN_BOUNDS_CONDITION(_bitmap, _bit_index) \
+    ((_bit_index) < _UCS_BITMAP_NUM_WORDS(_bitmap) * UCS_BITMAP_BITS_IN_WORD)
+
+
 /**
  * Given a bitmap and a bit index, get the whole word that contains it
  *
@@ -71,7 +86,7 @@ typedef uint64_t ucs_bitmap_word_t;
  * @return The word which containt
  */
 #define _UCS_BITMAP_WORD_BY_BIT(_bitmap, _bit_index) \
-    _UCS_BITMAP_WORD((_bitmap), UCS_BITMAP_WORD_INDEX(_bit_index))
+    _UCS_BITMAP_WORD((_bitmap), UCS_BITMAP_WORD_INDEX(_bitmap, _bit_index))
 
 
 #define _UCS_BITMAP_WORD_INDEX0(_bit_index) \
@@ -85,6 +100,17 @@ typedef uint64_t ucs_bitmap_word_t;
 #define _UCS_BITMAP_FOR_EACH_WORD(_bitmap, _word_index) \
     for (_word_index = 0; _word_index < _UCS_BITMAP_NUM_WORDS(_bitmap); \
          _word_index++)
+
+
+/**
+ * Check whether all bits of a given lvalue bitmap are set to 0.
+ *
+ * @param _bitmap Check bits of this bitmap
+ *
+ * @return Whether this bitmap consists only of bits set to 0
+ */
+#define UCS_BITMAP_IS_ZERO_INPLACE(_bitmap) \
+    ucs_bitmap_is_zero((_bitmap), _UCS_BITMAP_NUM_WORDS(*(_bitmap)))
 
 
 /**
@@ -151,8 +177,8 @@ typedef uint64_t ucs_bitmap_word_t;
  *
  * @return Whether this bitmap consists only of bits set to 0
  */
-#define UCS_BITMAP_IS_ZERO(_bitmap) \
-    _ucs_bitmap_is_zero(&_bitmap, _UCS_BITMAP_NUM_WORDS(_bitmap))
+#define UCS_BITMAP_IS_ZERO(_bitmap, _length) \
+    UCS_PP_TOKENPASTE3(_ucs_bitmap_, _length, _is_zero)(_bitmap)
 
 
 /**
@@ -167,28 +193,38 @@ typedef uint64_t ucs_bitmap_word_t;
     } ucs_bitmap_t(_length); \
     \
     static inline ucs_bitmap_t(_length) \
-        _ucs_bitmap_##_length##_not(ucs_bitmap_t(_length) bitmap) \
+            _ucs_bitmap_##_length##_not(ucs_bitmap_t(_length) bitmap) \
     { \
         UCS_BITMAP_NOT_INPLACE(&bitmap); \
         return bitmap; \
     } \
     \
-    static inline ucs_bitmap_t(_length) _ucs_bitmap_##_length##_and( \
-        ucs_bitmap_t(_length) bitmap1, ucs_bitmap_t(_length) bitmap2) \
+    static inline bool _ucs_bitmap_##_length##_is_zero(ucs_bitmap_t(_length) \
+                                                               bitmap) \
+    { \
+        return ucs_bitmap_is_zero(&bitmap, \
+                                  _UCS_BITMAP_BITS_TO_WORDS(_length)); \
+    } \
+    \
+    static inline ucs_bitmap_t(_length) \
+            _ucs_bitmap_##_length##_and(ucs_bitmap_t(_length) bitmap1, \
+                                        ucs_bitmap_t(_length) bitmap2) \
     { \
         UCS_BITMAP_AND_INPLACE(&bitmap1, bitmap2); \
         return bitmap1; \
     } \
     \
-    static inline ucs_bitmap_t(_length) _ucs_bitmap_##_length##_or( \
-        ucs_bitmap_t(_length) bitmap1, ucs_bitmap_t(_length) bitmap2) \
+    static inline ucs_bitmap_t(_length) \
+            _ucs_bitmap_##_length##_or(ucs_bitmap_t(_length) bitmap1, \
+                                       ucs_bitmap_t(_length) bitmap2) \
     { \
         UCS_BITMAP_OR_INPLACE(&bitmap1, bitmap2); \
         return bitmap1; \
     } \
     \
-    static inline ucs_bitmap_t(_length) _ucs_bitmap_##_length##_xor( \
-        ucs_bitmap_t(_length) bitmap1, ucs_bitmap_t(_length) bitmap2) \
+    static inline ucs_bitmap_t(_length) \
+            _ucs_bitmap_##_length##_xor(ucs_bitmap_t(_length) bitmap1, \
+                                        ucs_bitmap_t(_length) bitmap2) \
     { \
         UCS_BITMAP_XOR_INPLACE(&bitmap1, bitmap2); \
         return bitmap1; \
@@ -206,7 +242,7 @@ typedef uint64_t ucs_bitmap_word_t;
  * ucs_bitmap_t(64) my_bitmap;
  * @endcode
  */
-#define ucs_bitmap_t(_length) ucs_bitmap_##_length##_t
+#define ucs_bitmap_t(_length) UCS_PP_TOKENPASTE3(ucs_bitmap_, _length, _t)
 
 
 /**
@@ -228,9 +264,11 @@ typedef uint64_t ucs_bitmap_word_t;
  * @param _bitmap     Set value in this bitmap
  * @param _bit_index  Bit index to set
  */
- #define UCS_BITMAP_SET(_bitmap, _bit_index) \
-    (_UCS_BITMAP_WORD_BY_BIT(_bitmap, _bit_index) |= \
-        (UCS_BIT(_UCS_BITMAP_BIT_IN_WORD_INDEX(_bit_index))));
+#define UCS_BITMAP_SET(_bitmap, _bit_index) \
+    ({ \
+        _UCS_BITMAP_WORD_BY_BIT(_bitmap, _bit_index) |= UCS_BIT( \
+                _UCS_BITMAP_BIT_IN_WORD_INDEX(_bit_index)); \
+    })
 
 
 /**
@@ -239,9 +277,11 @@ typedef uint64_t ucs_bitmap_word_t;
  * @param _bitmap    Unset value in this bitmap
  * @param _bit_index Bit index to unset
  */
- #define UCS_BITMAP_UNSET(_bitmap, _bit_index) \
-     (_UCS_BITMAP_WORD_BY_BIT(_bitmap, _bit_index) &= \
-        ~(UCS_BIT(_UCS_BITMAP_BIT_IN_WORD_INDEX(_bit_index))));
+#define UCS_BITMAP_UNSET(_bitmap, _bit_index) \
+    ({ \
+        _UCS_BITMAP_WORD_BY_BIT(_bitmap, _bit_index) &= ~( \
+                UCS_BIT(_UCS_BITMAP_BIT_IN_WORD_INDEX(_bit_index))); \
+    })
 
 
 /**
@@ -251,6 +291,16 @@ typedef uint64_t ucs_bitmap_word_t;
  */
 #define UCS_BITMAP_CLEAR(_bitmap) \
     memset((_bitmap)->bits, 0, sizeof((_bitmap)->bits))
+
+
+/**
+ * Initialize a bitmap by assigning all its bits to zero.
+ * Use with an assignment operator
+ */
+#define UCS_BITMAP_ZERO \
+    { \
+        .bits = { 0 } \
+    }
 
 
 /**
@@ -341,12 +391,15 @@ typedef uint64_t ucs_bitmap_word_t;
 #define UCS_BITMAP_MASK(_bitmap, _mask_index) \
     { \
         size_t _word_index = 0; \
+        \
+        ucs_assert((_mask_index) < \
+                   _UCS_BITMAP_NUM_WORDS(*_bitmap) * UCS_BITMAP_BITS_IN_WORD); \
         UCS_BITMAP_CLEAR(_bitmap); \
         _UCS_BITMAP_FOR_EACH_WORD(*_bitmap, _word_index) { \
             _UCS_BITMAP_WORD(*_bitmap, _word_index) = \
-                _UCS_BITMAP_MASK_WORD(*_bitmap, _word_index, _mask_index); \
+                    _UCS_BITMAP_MASK_WORD(*_bitmap, _word_index, (_mask_index)); \
         } \
-    } \
+    }
 
 
 /**
@@ -399,7 +452,7 @@ typedef uint64_t ucs_bitmap_word_t;
  * @return A new bitmap, which is the negation of the given one
  */
 #define UCS_BITMAP_NOT(_bitmap, _length) \
-    _ucs_bitmap_##_length##_not(_bitmap)
+    UCS_PP_TOKENPASTE3(_ucs_bitmap_, _length, _not)(_bitmap)
 
 
 /**
@@ -412,7 +465,8 @@ typedef uint64_t ucs_bitmap_word_t;
  * @return A new bitmap, which is the logical AND of the operands
  */
 #define UCS_BITMAP_AND(_bitmap1, _bitmap2, _length) \
-    _ucs_bitmap_##_length##_and(_bitmap1, _bitmap2)
+    UCS_PP_TOKENPASTE3(_ucs_bitmap_, _length, _and) \
+    (_bitmap1, _bitmap2)
 
 
 /**
@@ -425,7 +479,8 @@ typedef uint64_t ucs_bitmap_word_t;
  * @return A new bitmap, which is the logical OR of the operands
  */
 #define UCS_BITMAP_OR(_bitmap1, _bitmap2, _length) \
-    _ucs_bitmap_##_length##_or(_bitmap1, _bitmap2)
+    UCS_PP_TOKENPASTE3(_ucs_bitmap_, _length, _or) \
+    (_bitmap1, _bitmap2)
 
 
 /**
@@ -438,10 +493,12 @@ typedef uint64_t ucs_bitmap_word_t;
  * @return A new bitmap, which is the logical XOR of the operands
  */
 #define UCS_BITMAP_XOR(_bitmap1, _bitmap2, _length) \
-    _ucs_bitmap_##_length##_xor(_bitmap1, _bitmap2)
+    UCS_PP_TOKENPASTE3(_ucs_bitmap_, _length, _xor) \
+    (_bitmap1, _bitmap2)
 
 
-static UCS_F_ALWAYS_INLINE bool _ucs_bitmap_is_zero(const void *bitmap, size_t num_words)
+static UCS_F_ALWAYS_INLINE bool
+ucs_bitmap_is_zero(const void *bitmap, size_t num_words)
 {
     size_t i;
 

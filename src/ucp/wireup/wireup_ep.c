@@ -283,8 +283,9 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
     /* select an auxiliary transport which would be used to pass connection
      * establishment messages.
      */
-    status = ucp_wireup_select_aux_transport(ucp_ep, ep_init_flags, UINT64_MAX,
-                                             remote_address, &select_info);
+    status = ucp_wireup_select_aux_transport(ucp_ep, ep_init_flags,
+                                             ucp_tl_bitmap_max, remote_address,
+                                             &select_info);
     if (status != UCS_OK) {
         return status;
     }

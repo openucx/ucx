@@ -9,14 +9,6 @@ extern "C" {
 #include <ucs/sys/sys.h>
 }
 
-
-class test_ucp_context : public ucp_test {
-public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP);
-    }
-};
-
 UCS_TEST_P(test_ucp_context, minimal_field_mask) {
     ucs::handle<ucp_config_t*> config;
     UCS_TEST_CREATE_HANDLE(ucp_config_t*, config, ucp_config_release,

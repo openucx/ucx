@@ -221,7 +221,7 @@ typedef struct ucp_worker {
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
-    uint64_t                         atomic_tls;          /* Which resources can be used for atomics */
+    ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 
     int                              inprogress;
     char                             name[UCP_WORKER_NAME_MAX]; /* Worker name */
@@ -243,7 +243,7 @@ typedef struct ucp_worker {
                                                              one for each resource */
     unsigned                         num_ifaces;          /* Number of elements in ifaces array  */
     unsigned                         num_active_ifaces;   /* Number of activated ifaces  */
-    uint64_t                         scalable_tl_bitmap;  /* Map of scalable tl resources */
+    ucp_tl_bitmap_t                  scalable_tl_bitmap;  /* Map of scalable tl resources */
     ucp_worker_cm_t                  *cms;                /* Array of CMs, one for each component */
     ucs_mpool_t                      am_mp;               /* Memory pool for AM receives */
     ucs_mpool_t                      reg_mp;              /* Registered memory pool */

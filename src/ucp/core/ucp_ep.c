@@ -281,12 +281,13 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 
     ucs_memory_type_for_each(mem_type) {
         if (UCP_MEM_IS_HOST(mem_type) ||
-            !context->mem_type_access_tls[mem_type]) {
+            UCS_BITMAP_IS_ZERO_INPLACE(
+                    &context->mem_type_access_tls[mem_type])) {
             continue;
         }
 
         status = ucp_address_pack(worker, NULL,
-                                  context->mem_type_access_tls[mem_type],
+                                  &context->mem_type_access_tls[mem_type],
                                   UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT, NULL,
                                   &address_length, &address_buffer);
         if (status != UCS_OK) {
@@ -303,7 +304,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
         ucs_snprintf_zero(ep_name, UCP_WORKER_NAME_MAX, "mem_type_ep:%s",
                           ucs_memory_type_names[mem_type]);
 
-        status = ucp_ep_create_to_worker_addr(worker, UINT64_MAX,
+        status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max,
                                               &local_address,
                                               UCP_EP_INIT_FLAG_MEM_TYPE,
                                               ep_name,
@@ -392,11 +393,12 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     return UCS_OK;
 }
 
-ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
-                                          uint64_t local_tl_bitmap,
-                                          const ucp_unpacked_address_t *remote_address,
-                                          unsigned ep_init_flags,
-                                          const char *message, ucp_ep_h *ep_p)
+ucs_status_t
+ucp_ep_create_to_worker_addr(ucp_worker_h worker,
+                             const ucp_tl_bitmap_t *local_tl_bitmap,
+                             const ucp_unpacked_address_t *remote_address,
+                             unsigned ep_init_flags, const char *message,
+                             ucp_ep_h *ep_p)
 {
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
@@ -416,7 +418,10 @@ ucs_status_t ucp_ep_create_to_worker_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
-    ucs_assert(!(ucp_ep_get_tl_bitmap(ep) & ~local_tl_bitmap));
+    ucs_assert(UCS_BITMAP_IS_ZERO(
+        UCP_TL_BITMAP_AND_NOT(ucp_ep_get_tl_bitmap(ep),
+                           *local_tl_bitmap),
+            UCP_MAX_RESOURCES));
 
     *ep_p = ep;
     return UCS_OK;
@@ -601,7 +606,8 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out_free_address;
     }
 
-    status = ucp_ep_create_to_worker_addr(worker, UINT64_MAX, &remote_address,
+    status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max,
+                                          &remote_address,
                                           ucp_ep_init_flags(worker, params),
                                           "from api call", &ep);
     if (status != UCS_OK) {
@@ -2360,9 +2366,9 @@ int ucp_ep_is_cm_local_connected(ucp_ep_h ep)
     return ucp_ep_has_cm_lane(ep) && (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 }
 
-uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
+ucp_tl_bitmap_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
 {
-    uint64_t tl_bitmap = 0;
+    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_idx;
 
@@ -2376,7 +2382,7 @@ uint64_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
             continue;
         }
 
-        tl_bitmap |= UCS_BIT(rsc_idx);
+        UCS_BITMAP_SET(tl_bitmap, rsc_idx);
     }
 
     return tl_bitmap;
@@ -2424,6 +2430,7 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
     ucp_lane_index_t lane;
     ucs_status_t status;
     ucp_rsc_index_t rsc_index;
+    ucp_tl_bitmap_t tl_bitmap;
 
     if (ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED)) {
         *lane_map = 0;
@@ -2434,13 +2441,15 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
     check_lanes = *lane_map & ucp_ep_config(ep)->key.ep_check_map;
 
     ucs_for_each_bit(lane, check_lanes) {
+        UCS_BITMAP_CLEAR(&tl_bitmap);
         ucs_assert(lane < UCP_MAX_LANES);
         /* in case if remote ID is defined, wireup is completed and EP is
          * in connect-to-iface mode then use UCP/AM keepalive */
         if (ucp_ep_is_am_keepalive(ep, lane)) {
             rsc_index = ucp_ep_get_rsc_index(ep, lane);
+            UCS_BITMAP_SET(tl_bitmap, rsc_index);
             status    = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_EP_CHECK,
-                                            UCS_BIT(rsc_index), NULL);
+                                            &tl_bitmap, NULL);
             ucs_assert(status == UCS_OK);
             *lane_map &= ~UCS_BIT(lane);
         } else {
