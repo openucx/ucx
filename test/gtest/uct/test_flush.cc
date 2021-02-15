@@ -615,7 +615,6 @@ public:
         }
 
         iov.buffer = (char*)sendbuf.ptr() + header_length;
-        iov.count  = 1;
         iov.length = size - header_length;
         iov.memh   = sendbuf.memh();
         return uct_ep_am_zcopy(s->m_e->ep(0), 0, sendbuf.ptr(), header_length,

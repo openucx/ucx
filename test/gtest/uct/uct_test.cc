@@ -1373,8 +1373,6 @@ uct_test::mapped_buffer::mapped_buffer(size_t size, uint64_t seed,
     }
     m_iov.buffer = ptr();
     m_iov.length = length();
-    m_iov.count  = 1;
-    m_iov.stride = 0;
     m_iov.memh   = memh();
 
     m_entity.rkey_unpack(&m_mem, &m_rkey);

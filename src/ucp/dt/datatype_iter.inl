@@ -256,8 +256,6 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
 
     iov[0].length   = ucp_datatype_iter_next_ptr(dt_iter, max_length, next_iter,
                                                  &iov[0].buffer);
-    iov[0].stride   = 0;
-    iov[0].count    = 1;
 }
 
 /*

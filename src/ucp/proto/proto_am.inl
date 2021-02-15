@@ -170,8 +170,6 @@ size_t ucp_dt_iov_copy_iov_uct(uct_iov_t *iov, size_t *iovcnt,
                 ucs_assert(state->dt.iov.dt_reg == NULL);
                 iov[dst_it].memh = UCT_MEM_HANDLE_NULL;
             }
-            iov[dst_it].stride   = 0;
-            iov[dst_it].count    = 1;
             length_it           += iov[dst_it].length;
 
             ++dst_it;
@@ -221,8 +219,6 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
         }
         iov[0].buffer = UCS_PTR_BYTE_OFFSET(src_iov, state->offset);
         iov[0].length = length_max;
-        iov[0].stride = 0;
-        iov[0].count  = 1;
 
         *iovcnt   = 1;
         length_it = iov[0].length;
@@ -258,8 +254,6 @@ ucs_status_t ucp_am_zcopy_common(ucp_request_t *req, const void *hdr,
         iov[0].buffer    = user_hdr_desc + 1;
         iov[0].length    = user_hdr_size;
         iov[0].memh      = ucp_memh2uct(user_hdr_desc->memh, md_idx);
-        iov[0].stride    = 0;
-        iov[0].count     = 1;
         user_hdr_iov_cnt = 1;
     } else {
         user_hdr_iov_cnt = 0;

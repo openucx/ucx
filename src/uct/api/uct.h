@@ -2654,10 +2654,8 @@ UCT_INLINE_API ucs_status_t uct_ep_am_short(uct_ep_h ep, uint8_t id, uint64_t he
  *                             The @a iov pointer must be a valid address of an array
  *                             of @ref ::uct_iov_t structures. A particular structure
  *                             pointer must be a valid address. A NULL terminated
- *                             array is not required. @a stride and @a count fields in
- *                             @ref ::uct_iov_t structure are ignored in current
- *                             implementation. The total size of the data buffers in
- *                             the array is limited by
+ *                             array is not required. The total size of the data
+ *                             buffers in the array is limited by
  *                             @ref uct_iface_attr_cap_am_max_short
  *                             "uct_iface_attr::cap::am::max_short".
  * @param [in] iovcnt          Size of the @a iov data @ref ::uct_iov_t structures

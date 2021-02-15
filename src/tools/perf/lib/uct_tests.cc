@@ -84,8 +84,6 @@ public:
             iov[iov_it].buffer = (char *)buffer + iov_length_it + header_size;
             iov[iov_it].length = perf->params.msg_size_list[iov_it] - header_size;
             iov[iov_it].memh   = memh;
-            iov[iov_it].stride = 0;
-            iov[iov_it].count  = 1;
 
             if (perf->params.iov_stride) {
                 iov_length_it += perf->params.iov_stride - header_size;

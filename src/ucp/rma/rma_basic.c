@@ -57,7 +57,6 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
         /* TODO: use ucp_dt_iov_copy_uct */
         iov.buffer = (void *)req->send.buffer;
         iov.length = packed_len;
-        iov.count  = 1;
         iov.memh   = req->send.state.dt.dt.contig.memh[0];
 
         status = UCS_PROFILE_CALL(uct_ep_put_zcopy,
@@ -102,7 +101,6 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
         frag_length = ucs_min(req->send.length, rma_config->max_get_zcopy);
         iov.buffer  = (void *)req->send.buffer;
         iov.length  = frag_length;
-        iov.count   = 1;
         iov.memh    = req->send.state.dt.dt.contig.memh[0];
 
         status = UCS_PROFILE_CALL(uct_ep_get_zcopy,
