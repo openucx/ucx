@@ -7,6 +7,10 @@ GDRCOPY_MODULE="dev/gdrcopy-latest"
 JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-latest"
+PGI_MODULE="pgi/19.7"
+GCC_MODULE="dev/gcc-10.1.0"
+ARM_MODULE="arm-compiler/armcc-19.0"
+INTEL_MODULE="intel/ics-19.1.1"
 
 #
 # Parallel build command runs with 4 tasks, or number of cores on the system,

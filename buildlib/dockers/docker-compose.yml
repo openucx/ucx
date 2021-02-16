@@ -1,0 +1,67 @@
+version: "3"
+
+services:
+  centos7-mofed5.1-cuda11.1:
+    image: centos7-mofed5.1-cuda11.1
+    build:
+      context: .
+      network: host
+      dockerfile: centos-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.1-2.5.8.0
+        MOFED_OS: rhel7.6
+        CUDA_VERSION: 11.1
+        OS_VERSION: 7
+  centos8-mofed5.1-cuda11.1:
+    image: centos8-mofed5.1-cuda11.1
+    build:
+      context: .
+      network: host
+      dockerfile: centos8-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.1-2.5.8.0
+        MOFED_OS: rhel8.3
+        CUDA_VERSION: 11.1
+        OS_VERSION: 8
+  ubuntu18.04-mofed5.1-cuda11.1:
+    image: ubuntu18.04-mofed5.1-cuda11.1
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.1-2.5.8.0
+        UBUNTU_VERSION: 18.04
+        CUDA_VERSION: 11.1
+  ubuntu20.04-mofed5.1-cuda11.1:
+    image: ubuntu20.04-mofed5.1-cuda11.1
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.1-2.5.8.0
+        UBUNTU_VERSION: 20.04
+        CUDA_VERSION: 11.1
+  ubuntu20.10-mofed5.1-cuda11.1:
+    image: ubuntu20.10-mofed5.1-cuda11.1
+    build:
+      context: .
+      network: host
+      dockerfile: ubuntu-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.1-2.5.8.0
+        UBUNTU_VERSION: 20.10
+        CUDA_VERSION: 11.1
+        MOFED_OS: ubuntu20.04
+  fedora31-mofed5.1-cuda11.1:
+    image: fedora31-mofed5.1-cuda11.1
+    build:
+      context: .
+      network: host
+      dockerfile: fedora-release.Dockerfile
+      args:
+        MOFED_VERSION: 5.1-2.5.8.0
+        OS_VERSION: 31
+        CUDA_VERSION: 11.1
+        MOFED_OS: fc31

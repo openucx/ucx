@@ -16,6 +16,27 @@ resources:
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel74
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel82
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu2004
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu1804
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles15sp2
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles12sp5
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
 
 stages:
   - stage: Codestyle
@@ -84,6 +105,37 @@ stages:
 
   - stage: Build
     jobs:
+      - job: build_source
+        pool:
+          name: MLNX
+          demands:
+            - ucx_iodemo_build -equals yes
+        strategy:
+          matrix:
+            rhel76:
+              CONTAINER: rhel76
+            ubuntu2004:
+              CONTAINER: ubuntu2004
+            ubuntu1804:
+              CONTAINER: ubuntu1804
+            sles15sp2:
+              CONTAINER: sles15sp2
+            #sles12sp5:
+            #  CONTAINER: sles12sp5
+            rhel82:
+              CONTAINER: rhel82
+        container: $[ variables['CONTAINER'] ]
+        timeoutInMinutes: 360
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+
+          - bash: |
+              ./buildlib/tools/builds.sh
+            displayName: Build
+
       - job: static_checks
         displayName: Static checks
         pool:
