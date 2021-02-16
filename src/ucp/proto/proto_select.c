@@ -545,6 +545,8 @@ static ucs_status_t ucp_proto_select_elem_init_thresh(
 
         proto_config                 = &thresholds[i].proto_config;
         proto_config->select_param   = *proto_init->select_param;
+        proto_config->ep_cfg_index   = ep_cfg_index;
+        proto_config->rkey_cfg_index = rkey_cfg_index;
         proto_config->proto          = ucp_protocols[proto_id];
         proto_config->priv           = UCS_PTR_BYTE_OFFSET(select_elem->priv_buf,
                                                            priv_offset);

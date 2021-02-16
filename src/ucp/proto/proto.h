@@ -52,8 +52,9 @@ typedef uint64_t ucp_proto_id_mask_t;
 enum {
     UCP_PROTO_FLAG_AM_SHORT  = UCS_BIT(0), /* The protocol uses only uct_ep_am_short() */
     UCP_PROTO_FLAG_PUT_SHORT = UCS_BIT(1), /* The protocol uses only uct_ep_put_short() */
-    UCP_PROTO_FLAG_TAG_SHORT = UCS_BIT(2)  /* The protocol uses only
+    UCP_PROTO_FLAG_TAG_SHORT = UCS_BIT(2), /* The protocol uses only
                                               uct_ep_tag_eager_short() */
+    UCP_PROTO_FLAG_INVALID   = UCS_BIT(3)  /* The protocol is a placeholder */
 };
 
 
@@ -79,6 +80,11 @@ typedef struct {
 typedef struct {
     const ucp_proto_t        *proto;       /* Protocol definition */
     const void               *priv;        /* Protocol private configuration space */
+    ucp_worker_cfg_index_t   ep_cfg_index; /* Endpoint configuration index this
+                                              protocol was selected on */
+    ucp_worker_cfg_index_t   rkey_cfg_index; /* Remote key configuration index
+                                                this protocol was elected on
+                                                (can be UCP_WORKER_CFG_INDEX_NULL) */
     ucp_proto_select_param_t select_param; /* Copy of protocol selection parameters,
                                               used to re-select protocol for existing
                                               in-progress request */

@@ -102,11 +102,17 @@ ucp_proto_request_set_proto(ucp_worker_h worker, ucp_ep_h ep,
 
     thresh_elem = ucp_proto_select_lookup(worker, proto_select, ep->cfg_index,
                                           rkey_cfg_index, sel_param, msg_length);
-    if (ucs_unlikely(thresh_elem == NULL)) {
+    if (UCS_ENABLE_ASSERT && (thresh_elem == NULL)) {
+        /* We expect that a protocol will always be found, or we will fallback
+           to 'reconfig' placeholder */
         ucp_proto_request_select_error(req, proto_select, rkey_cfg_index,
                                        sel_param, msg_length);
         return UCS_ERR_UNREACHABLE;
     }
+
+    /* Set pointer to request's protocol configuration */
+    ucs_assert(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index);
+    ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
 
     proto                  = thresh_elem->proto_config.proto;
     req->send.proto_config = &thresh_elem->proto_config;
