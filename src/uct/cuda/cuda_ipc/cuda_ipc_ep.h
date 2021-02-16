@@ -12,9 +12,6 @@
 #include "cuda_ipc_md.h"
 #include "cuda_ipc_cache.h"
 
-typedef struct uct_cuda_ipc_ep_addr {
-    int                ep_id;
-} uct_cuda_ipc_ep_addr_t;
 
 typedef struct uct_cuda_ipc_ep {
     uct_base_ep_t                   super;
