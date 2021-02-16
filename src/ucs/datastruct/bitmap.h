@@ -362,6 +362,7 @@ _ucs_bitmap_word_index(size_t bitmap_words, size_t bit_index)
                 _popcount += ucs_popcount( \
                     _UCS_BITMAP_WORD(_bitmap, _word_index) & \
                     (UCS_MASK((_bit_index) % UCS_BITMAP_BITS_IN_WORD))); \
+                    break; \
             } \
         } \
         _popcount; \
