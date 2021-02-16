@@ -2034,8 +2034,7 @@ uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     uct_tcp_am_hdr_t *hdr  = NULL; /* init to suppress build warning */
     ucs_status_t status;
 
-    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
-    UCT_CHECK_PARAM(flags == 0, "Unsupported flags: %x", flags);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
     status = uct_tcp_ep_am_prepare(iface, ep, UCT_TCP_EP_KEEPALIVE_AM_ID, &hdr);
     if (status != UCS_OK) {

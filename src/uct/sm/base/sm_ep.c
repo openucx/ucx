@@ -235,8 +235,7 @@ ucs_status_t uct_sm_ep_check(const char *proc, ucs_time_t starttime,
     ucs_time_t createtime;
     ucs_status_t status;
 
-    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
-    UCT_CHECK_PARAM(flags == 0, "Unsupported flags: %u", flags);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
     status = ucs_sys_get_file_time(proc, UCS_SYS_FILE_TIME_CTIME, &createtime);
     if ((status != UCS_OK) || (starttime != createtime)) {
