@@ -2233,7 +2233,9 @@ ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 
     if (self->status == UCS_ERR_CANCELED) {
         /* we run from EP cleanup - just release request */
+        UCS_ASYNC_BLOCK(&worker->async);
         ucp_worker_put_flush_req(req);
+        UCS_ASYNC_UNBLOCK(&worker->async);
         return;
     }
 

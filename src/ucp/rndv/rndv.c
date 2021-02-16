@@ -1499,14 +1499,23 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
         /* send a single bcopy message */
         status = ucp_do_am_bcopy_single(self, UCP_AM_ID_RNDV_DATA,
                                         ucp_rndv_pack_data);
+        ucs_assert(status != UCS_INPROGRESS);
     } else {
         status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_RNDV_DATA,
                                        UCP_AM_ID_RNDV_DATA,
                                        ucp_rndv_pack_data,
                                        ucp_rndv_pack_data, 1);
+        
+        if (status == UCS_INPROGRESS) {
+            return UCS_INPROGRESS;
+        } else if (ucs_unlikely(status == UCP_STATUS_PENDING_SWITCH)) {
+            return UCS_OK;
+        }
     }
 
-    UCP_AM_BCOPY_HANDLE_STATUS(!single, status);
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
 
     ucp_rndv_complete_send(sreq, status);
 
