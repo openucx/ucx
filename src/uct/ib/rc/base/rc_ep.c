@@ -430,61 +430,52 @@ ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self)
     return status;
 }
 
-void uct_rc_txqp_purge_outstanding_op(uct_rc_iface_t *iface,
-                                      uct_rc_iface_send_op_t *op,
-                                      ucs_status_t status, int warn)
-{
-    uct_rc_iface_send_desc_t *desc;
-
-    if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
-        /* Allow clean flush cancel op from destroy flow */
-        if (warn && (op->handler != uct_rc_ep_flush_op_completion_handler)) {
-            ucs_warn("destroying uncompleted operation %p handler %s",
-                     op, ucs_debug_get_symbol_name(op->handler));
-        }
-
-        if (op->user_comp != NULL) {
-            /* This must be uct_rc_ep_get_bcopy_handler,
-             * uct_rc_ep_get_bcopy_handler_no_completion,
-             * uct_rc_ep_get_zcopy_completion_handler,
-             * uct_rc_ep_flush_op_completion_handler or
-             * one of the atomic handlers,
-             * so invoke user completion */
-            uct_invoke_completion(op->user_comp, status);
-        }
-
-        /* Need to release rdma_read resources taken by get operations  */
-        if ((op->handler == uct_rc_ep_get_bcopy_handler) ||
-            (op->handler == uct_rc_ep_get_bcopy_handler_no_completion)) {
-            uct_rc_op_release_get_bcopy(op);
-            uct_rc_iface_update_reads(iface);
-        } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
-            uct_rc_op_release_get_zcopy(op);
-            uct_rc_iface_update_reads(iface);
-        }
-    }
-
-    op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
-                   UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
-    if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
-        (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
-        uct_rc_iface_put_send_op(op);
-    } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
-        ucs_mpool_put(op);
-    } else {
-        desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
-        ucs_mpool_put(desc);
-    }
-}
-
 void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                                    ucs_status_t status, uint16_t sn, int warn)
 {
     uct_rc_iface_send_op_t *op;
+    uct_rc_iface_send_desc_t *desc;
 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        uct_rc_txqp_purge_outstanding_op(iface, op, status, warn);
+        if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
+            /* Allow clean flush cancel op from destroy flow */
+            if (warn && (op->handler != uct_rc_ep_flush_op_completion_handler)) {
+                ucs_warn("destroying txqp %p with uncompleted operation %p handler %s",
+                         txqp, op, ucs_debug_get_symbol_name(op->handler));
+            }
+
+            if (op->user_comp != NULL) {
+                /* This must be uct_rc_ep_get_bcopy_handler,
+                 * uct_rc_ep_get_bcopy_handler_no_completion,
+                 * uct_rc_ep_get_zcopy_completion_handler,
+                 * uct_rc_ep_flush_op_completion_handler or
+                 * one of the atomic handlers,
+                 * so invoke user completion */
+                uct_invoke_completion(op->user_comp, status);
+            }
+
+            /* Need to release rdma_read resources taken by get operations  */
+            if ((op->handler == uct_rc_ep_get_bcopy_handler) ||
+                (op->handler == uct_rc_ep_get_bcopy_handler_no_completion)) {
+                uct_rc_op_release_get_bcopy(op);
+                uct_rc_iface_update_reads(iface);
+            } else if (op->handler == uct_rc_ep_get_zcopy_completion_handler) {
+                uct_rc_op_release_get_zcopy(op);
+                uct_rc_iface_update_reads(iface);
+            }
+        }
+        op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
+                       UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+        if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
+            (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
+            uct_rc_iface_put_send_op(op);
+        } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
+            ucs_mpool_put(op);
+        } else {
+            desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
+            ucs_mpool_put(desc);
+        }
     }
 }
 

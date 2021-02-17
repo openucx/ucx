@@ -277,10 +277,6 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 
-void uct_rc_txqp_purge_outstanding_op(uct_rc_iface_t *iface,
-                                      uct_rc_iface_send_op_t *op,
-                                      ucs_status_t status, int warn);
-
 void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                                    ucs_status_t status, uint16_t sn, int warn);
 

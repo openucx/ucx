@@ -694,7 +694,6 @@ UCS_TEST_P(test_dc_fc_deadlock, basic, "DC_NUM_DCI=1")
     validate_grant(m_e2);
 
     // Restore m_e1 for proper cleanup
-    ucs_derived_of(m_e1->iface(), uct_dc_mlx5_iface_t)->tx.fc_grants = 0;
     uct_ep_pending_purge(m_e1->ep(0), NULL, NULL);
 }
 

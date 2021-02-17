@@ -23,23 +23,17 @@ enum uct_dc_mlx5_ep_flags {
     UCT_DC_MLX5_EP_FLAG_GRH                 = UCS_BIT(1), /* ep has GRH address. Used by
                                                              dc_mlx5 endpoint */
     UCT_DC_MLX5_EP_FLAG_VALID               = UCS_BIT(2), /* ep is a valid endpoint */
-    /* Indicates that FC grant has been requested, but is not received yet.
-     * Flush will not complete until an outgoing grant request is acked.
-     * It is needed to avoid the following cases:
-     * 1) Grant arrives for the recently deleted ep.
-     * 2) QP resources are available, but there are some pending requests. */
-    UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT   = UCS_BIT(3),
 
     /* Keepalive Request scheduled: indicates that keepalive request
      * is scheduled in outstanding queue and no more keepalive actions
      * are needed */
-    UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED    = UCS_BIT(4),
+    UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED    = UCS_BIT(3),
 
     /* Flush cancel was executed on EP */
-    UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL        = UCS_BIT(5),
+    UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL        = UCS_BIT(4),
 
     /* Error handler already called or flush(CANCEL) disabled it */
-    UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(6),
+    UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(5),
 };
 
 
@@ -82,6 +76,7 @@ UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
                   const uct_dc_mlx5_iface_addr_t *,
                   uct_ib_mlx5_base_av_t *, struct mlx5_grh_av *);
 
+UCS_CLASS_DECLARE_DELETE_FUNC(uct_dc_mlx5_ep_t, uct_ep_t);
 
 ucs_status_t uct_dc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *payload,
                                       unsigned length, uint64_t remote_addr,
@@ -214,10 +209,6 @@ void uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface,
                                    uct_dc_mlx5_ep_t *ep, uct_pending_req_t *r,
                                    unsigned flags, int push_to_head);
 
-void uct_dc_mlx5_ep_cleanup(uct_ep_h tl_ep, ucs_class_t *cls);
-
-void uct_dc_mlx5_ep_release(uct_dc_mlx5_ep_t *ep);
-
 ucs_status_t
 uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
@@ -268,16 +259,6 @@ uct_dc_mlx5_ep_from_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci)
      * be used by many eps */
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
     return iface->tx.dcis[dci].ep;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_dc_mlx5_ep_clear_fc_grant_flag(uct_dc_mlx5_iface_t *iface,
-                                   uct_dc_mlx5_ep_t *ep)
-{
-    ucs_assert((ep->flags & UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT) &&
-               iface->tx.fc_grants);
-    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT;
-    --iface->tx.fc_grants;
 }
 
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
@@ -512,11 +493,6 @@ out_no_res:
     /* we will have to wait until someone releases dci */
     UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
     return UCS_ERR_NO_RESOURCE;
-}
-
-static UCS_F_ALWAYS_INLINE int uct_dc_mlx5_ep_fc_wait_for_grant(uct_dc_mlx5_ep_t *ep)
-{
-    return ep->flags & UCT_DC_MLX5_EP_FLAG_FC_WAIT_FOR_GRANT;
 }
 
 ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep);
