@@ -81,20 +81,23 @@ enum {
  * Receive descriptor flags.
  */
 enum {
-    UCP_RECV_DESC_FLAG_UCT_DESC       = UCS_BIT(0), /* Descriptor allocated by UCT */
-    UCP_RECV_DESC_FLAG_EAGER          = UCS_BIT(1), /* Eager tag message */
-    UCP_RECV_DESC_FLAG_EAGER_ONLY     = UCS_BIT(2), /* Eager tag message with single fragment */
-    UCP_RECV_DESC_FLAG_EAGER_SYNC     = UCS_BIT(3), /* Eager tag message which requires reply */
-    UCP_RECV_DESC_FLAG_EAGER_OFFLOAD  = UCS_BIT(4), /* Eager tag from offload */
-    UCP_RECV_DESC_FLAG_EAGER_LAST     = UCS_BIT(5), /* Last fragment of eager tag message.
-                                                       Used by tag offload protocol. */
-    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(6), /* Rendezvous request */
-    UCP_RECV_DESC_FLAG_RNDV_STARTED   = UCS_BIT(7), /* Rendezvous receive was initiated
-                                                       (in AM API) */
-    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(8), /* Descriptor was allocated with malloc
-                                                       and must be freed, not returned to the
-                                                       memory pool or UCT */
-    UCP_RECV_DESC_FLAG_COMPLETED      = UCS_BIT(9)  /* Descriptor is no longer needed */
+    UCP_RECV_DESC_FLAG_UCT_DESC         = UCS_BIT(0), /* Descriptor allocated by UCT */
+    UCP_RECV_DESC_FLAG_EAGER            = UCS_BIT(1), /* Eager tag message */
+    UCP_RECV_DESC_FLAG_EAGER_ONLY       = UCS_BIT(2), /* Eager tag message with single fragment */
+    UCP_RECV_DESC_FLAG_EAGER_SYNC       = UCS_BIT(3), /* Eager tag message which requires reply */
+    UCP_RECV_DESC_FLAG_EAGER_OFFLOAD    = UCS_BIT(4), /* Eager tag from offload */
+    UCP_RECV_DESC_FLAG_EAGER_LAST       = UCS_BIT(5), /* Last fragment of eager tag message.
+                                                         Used by tag offload protocol. */
+    UCP_RECV_DESC_FLAG_RNDV             = UCS_BIT(6), /* Rendezvous request */
+    UCP_RECV_DESC_FLAG_RECV_STARTED     = UCS_BIT(7), /* Receive operation on this descriptor
+                                                         was initiated by ucp_am_recv_data_nbx */
+    UCP_RECV_DESC_FLAG_MALLOC           = UCS_BIT(8), /* Descriptor was allocated with malloc
+                                                         and must be freed, not returned to the
+                                                         memory pool or UCT */
+    UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS = UCS_BIT(9)  /* Descriptor should not be released,
+                                                         because UCT AM callback is still in
+                                                         the call stack and desciptor is not
+                                                         initialized yet. */
 };
 
 
