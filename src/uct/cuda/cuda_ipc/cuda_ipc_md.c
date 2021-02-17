@@ -78,6 +78,7 @@ ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
     int i;
     int num_devices;
     int original_capacity, new_capacity;
+    int original_count, new_count;
 
     for (i = 0; i < md->uuid_map_size; i++) {
         if (uct_cuda_ipc_uuid_equals(&rkey->uuid, &md->uuid_map[i])) {
@@ -92,6 +93,8 @@ ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
         original_capacity     = md->uuid_map_capacity;
         new_capacity          = md->uuid_map_capacity ?
                                 (md->uuid_map_capacity * 2) : 16;
+        original_count        = original_capacity * num_devices;
+        new_count             = new_capacity * num_devices;
         md->uuid_map_capacity = new_capacity;
         md->uuid_map          = ucs_realloc(md->uuid_map,
                                             new_capacity * sizeof(CUuuid),
@@ -101,14 +104,14 @@ ucs_status_t uct_cuda_ipc_get_unique_index_for_uuid(int* idx,
         }
 
         md->peer_accessible_cache = ucs_realloc(md->peer_accessible_cache,
-                                                new_capacity * num_devices *
+                                                new_count *
                                                 sizeof(ucs_ternary_auto_value_t),
                                                 "uct_cuda_ipc_peer_accessible_cache");
         if (md->peer_accessible_cache == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
 
-        for (i = original_capacity; i < new_capacity; i++) {
+        for (i = original_count; i < new_count; i++) {
             md->peer_accessible_cache[i] = UCS_TRY;
         }
     }
