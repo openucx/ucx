@@ -2374,10 +2374,13 @@ void ucp_worker_destroy(ucp_worker_h worker)
 ucs_status_t ucp_worker_query(ucp_worker_h worker,
                               ucp_worker_attr_t *attr)
 {
-    ucp_context_h context = worker->context;
-    ucs_status_t status   = UCS_OK;
+    ucp_context_h context  = worker->context;
+    ucs_status_t status    = UCS_OK;
+    uint32_t address_flags = UCP_ATTR_VALUE(WORKER, attr, address_flags,
+                                            BANDWIDTH, 0);
     ucp_tl_bitmap_t tl_bitmap;
     ucp_rsc_index_t tl_id;
+    ucp_worker_iface_t *wiface;
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
         if (worker->flags & UCP_WORKER_FLAG_MT) {
@@ -2392,13 +2395,12 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
          * pack all tl addresses */
         UCS_BITMAP_SET_ALL(tl_bitmap);
 
-        if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) {
-            if (attr->address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
-                UCS_BITMAP_CLEAR(&tl_bitmap);
-                UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
-                    if (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
-                        UCS_BITMAP_SET(tl_bitmap, tl_id);
-                    }
+        if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
+            UCS_BITMAP_CLEAR(&tl_bitmap);
+            UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
+                if (context->tl_rscs[tl_id].tl_rsc.dev_type ==
+                    UCT_DEVICE_TYPE_NET) {
+                    UCS_BITMAP_SET(tl_bitmap, tl_id);
                 }
             }
         }
@@ -2411,6 +2413,24 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER) {
         attr->max_am_header = ucp_am_max_header_size(worker);
+    }
+
+    if (attr->field_mask & UCP_WORKER_ATTR_FIELD_BANDWIDTH) {
+        attr->bandwidth = 0;
+
+        UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
+            /* If only network devices are requested and this is not a network
+               device - skip it */
+            if ((address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) &&
+                (context->tl_rscs[tl_id].tl_rsc.dev_type !=
+                 UCT_DEVICE_TYPE_NET)) {
+                continue;
+            }
+
+            wiface           = ucp_worker_iface(worker, tl_id);
+            attr->bandwidth += ucp_tl_iface_bandwidth(context,
+                                                      &wiface->attr.bandwidth);
+        }
     }
 
     return status;

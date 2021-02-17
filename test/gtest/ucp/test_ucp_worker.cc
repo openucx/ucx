@@ -547,3 +547,32 @@ UCS_TEST_P(test_ucp_worker_request_leak, tag_send_recv)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_request_leak, all, "all")
+
+
+class test_ucp_worker_query : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+};
+
+UCS_TEST_P(test_ucp_worker_query, test_ucp_worker_query_bandwidth)
+{
+    ucp_worker_attr_t attr;
+    double all_bandwidth;
+
+    attr.field_mask = UCP_WORKER_ATTR_FIELD_BANDWIDTH;
+    ASSERT_UCS_OK(ucp_worker_query(sender().worker(), &attr));
+    ASSERT_GT(attr.bandwidth, 0);
+    all_bandwidth = attr.bandwidth;
+
+    attr.field_mask    = UCP_WORKER_ATTR_FIELD_BANDWIDTH |
+                         UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS;
+    attr.address_flags = UCP_WORKER_ADDRESS_FLAG_NET_ONLY;
+    ASSERT_UCS_OK(ucp_worker_query(sender().worker(), &attr));
+
+    ASSERT_LE(attr.bandwidth, all_bandwidth);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_worker_query)

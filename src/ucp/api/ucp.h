@@ -390,8 +390,9 @@ enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_THREAD_MODE   = UCS_BIT(0), /**< UCP thread mode */
     UCP_WORKER_ATTR_FIELD_ADDRESS       = UCS_BIT(1), /**< UCP address */
     UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS = UCS_BIT(2), /**< UCP address flags */
-    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER = UCS_BIT(3)  /**< Maximal header size
+    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER = UCS_BIT(3), /**< Maximal header size
                                                            used by UCP AM API */
+    UCP_WORKER_ATTR_FIELD_BANDWIDTH     = UCS_BIT(4)  /**< Bandwidth */
 };
 
 
@@ -1086,6 +1087,11 @@ typedef struct ucp_worker_attr {
      * Maximal allowed header size for @ref ucp_am_send_nbx routine
      */
     size_t                max_am_header;
+
+    /**
+     * Cumulative bandwidth this worker is able to provide
+     */
+    double                bandwidth;
 } ucp_worker_attr_t;
 
 

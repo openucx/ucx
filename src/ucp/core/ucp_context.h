@@ -349,9 +349,19 @@ typedef struct ucp_tl_iface_atomic_flags {
     } while (0)
 
 
+#define UCP_OPTIONAL_FIELD_VALUE(_obj, _params, _name, _flag, _default, \
+                                 _field) \
+    (((_params)->field_mask & (UCP_##_obj##_##_field##_FIELD_##_flag)) ? \
+             (_params)->_name : \
+             (_default))
+
+
 #define UCP_PARAM_VALUE(_obj, _params, _name, _flag, _default) \
-    (((_params)->field_mask & (UCP_##_obj##_PARAM_FIELD_##_flag)) ? \
-                    (_params)->_name : (_default))
+    UCP_OPTIONAL_FIELD_VALUE(_obj, _params, _name, _flag, _default, PARAM)
+
+
+#define UCP_ATTR_VALUE(_obj, _params, _name, _flag, _default) \
+    UCP_OPTIONAL_FIELD_VALUE(_obj, _params, _name, _flag, _default, ATTR)
 
 
 #define ucp_assert_memtype(_context, _buffer, _length, _mem_type) \
