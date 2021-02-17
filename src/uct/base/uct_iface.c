@@ -586,3 +586,55 @@ ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *
 
     return status;
 }
+
+int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid)
+{
+    ucs_assert((buffer != NULL) || (max_len == 0));
+    /* cppcheck-suppress nullPointer */
+    /* cppcheck-suppress ctunullpointer */
+    return snprintf(buffer, max_len, "/proc/%d", (int)pid);
+}
+
+uct_keepalive_info_t* uct_ep_keepalive_create(pid_t pid, ucs_time_t start_time)
+{
+    uct_keepalive_info_t *ka;
+    int proc_len;
+
+    proc_len = uct_ep_get_process_proc_dir(NULL, 0, pid);
+    if (proc_len <= 0) {
+        ucs_error("failed to get length to hold path to a process directory");
+        return NULL;
+    }
+
+    ka = ucs_malloc(sizeof(*ka) + proc_len + 1, "keepalive");
+    if (ka == NULL) {
+        ucs_error("failed to allocate keepalive info");
+        return NULL;
+    }
+
+    ka->start_time = start_time;
+    uct_ep_get_process_proc_dir(ka->proc, proc_len + 1, pid);
+
+    return ka;
+}
+
+ucs_status_t
+uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
+                       uct_completion_t *comp)
+{
+    ucs_status_t status;
+    ucs_time_t create_time;
+
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+
+    ucs_assert(ka != NULL);
+
+    status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
+                                   &create_time);
+    if (ucs_unlikely((status != UCS_OK) || (ka->start_time != create_time))) {
+        return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
+                                       UCS_ERR_ENDPOINT_TIMEOUT);;
+    }
+
+    return UCS_OK;
+}

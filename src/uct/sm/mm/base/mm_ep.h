@@ -18,13 +18,6 @@ KHASH_INIT(uct_mm_remote_seg, uintptr_t, uct_mm_remote_seg_t, 1,
            kh_int64_hash_func, kh_int64_hash_equal)
 
 
-/* owner of segment process information. we have to cache this value
- * because some transports terminate segment when process gone (xpmem) */
-typedef struct uct_mm_keepalive_info {
-    ucs_time_t starttime; /* Process starttime */
-    char       proc[];    /* Process owner proc dir */
-} uct_mm_keepalive_info_t;
-
 /**
  * MM transport endpoint
  */
@@ -55,8 +48,7 @@ typedef struct uct_mm_ep {
        the interface as long as one of the endpoints is unable to send */
     ucs_arbiter_elem_t         arb_elem;
 
-    /* keepalive info */
-    uct_mm_keepalive_info_t    *keepalive;
+    uct_keepalive_info_t       *keepalive; /* keepalive info */
 } uct_mm_ep_t;
 
 

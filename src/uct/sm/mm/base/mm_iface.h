@@ -130,7 +130,7 @@ typedef struct uct_mm_fifo_ctl {
     volatile uint64_t         tail;           /* How much was consumed */
     struct {
         pid_t                 pid;            /* Process owner pid */
-        ucs_time_t            starttime;      /* Process starttime */
+        ucs_time_t            start_time;     /* Process starttime */
     } owner;
 } UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE) uct_mm_fifo_ctl_t;
 

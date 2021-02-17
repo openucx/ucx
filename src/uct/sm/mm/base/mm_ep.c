@@ -523,37 +523,16 @@ ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
 ucs_status_t
 uct_mm_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
-    uct_mm_ep_t *ep    = ucs_derived_of(tl_ep, uct_mm_ep_t);
-    uct_iface_h  iface = ep->super.super.iface;
-    ucs_status_t status;
-    int proc_len;
+    uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    if (ep->keepalive == NULL) {
-        proc_len = uct_sm_ep_get_process_proc_dir(NULL, 0,
-                                                  ep->fifo_ctl->owner.pid);
-        if (proc_len <= 0) {
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        ep->keepalive = ucs_malloc(sizeof(*ep->keepalive) + proc_len + 1,
-                                   "mm_ep->keepalive");
+    if (ucs_unlikely(ep->keepalive == NULL)) {
+        ep->keepalive = uct_ep_keepalive_create(ep->fifo_ctl->owner.pid,
+                                                ep->fifo_ctl->owner.start_time);
         if (ep->keepalive == NULL) {
-            status = UCS_ERR_NO_MEMORY;
-            goto err_set_ep_failed;
+            return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
+                                           UCS_ERR_NO_MEMORY);
         }
-
-        ep->keepalive->starttime = ep->fifo_ctl->owner.starttime;
-        uct_sm_ep_get_process_proc_dir(ep->keepalive->proc, proc_len + 1,
-                                       ep->fifo_ctl->owner.pid);
     }
 
-    status = uct_sm_ep_check(ep->keepalive->proc, ep->keepalive->starttime,
-                             flags, comp);
-    if (status != UCS_OK) {
-        goto err_set_ep_failed;
-    }
-    return UCS_OK;
-
-err_set_ep_failed:
-    return uct_iface_handle_ep_err(iface, &ep->super.super, status);
+    return uct_ep_keepalive_check(tl_ep, ep->keepalive, flags, comp);
 }

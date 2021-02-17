@@ -41,9 +41,4 @@ ucs_status_t uct_sm_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uct_completion_t *comp);
 
-ucs_status_t uct_sm_ep_check(const char *proc, ucs_time_t starttime,
-                             unsigned flags, uct_completion_t *comp);
-
-int uct_sm_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid);
-
 #endif
