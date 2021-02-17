@@ -60,6 +60,9 @@ UCS_TEST_F(test_ucs_bitmap, test_popcount_upto_index) {
     UCS_BITMAP_SET(bitmap, 121);
     popcount = UCS_BITMAP_POPCOUNT_UPTO_INDEX(bitmap, 110);
     EXPECT_EQ(popcount, 2);
+
+    popcount = UCS_BITMAP_POPCOUNT_UPTO_INDEX(bitmap, 20);
+    EXPECT_EQ(popcount, 1);
 }
 
 UCS_TEST_F(test_ucs_bitmap, test_mask) {
