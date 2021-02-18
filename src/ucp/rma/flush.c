@@ -201,7 +201,7 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
     return 0;
 }
 
-static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
+ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_lane_index_t lane = req->send.lane;

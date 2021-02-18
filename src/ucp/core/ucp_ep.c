@@ -726,7 +726,6 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
     ucp_ep_cleanup_lanes(ep);
     if (ep->flags & UCP_EP_FLAG_INTERNAL) {
         /* it's failed tmp ep of main ep */
-        ucs_assert(ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID);
         ucp_ep_destroy_base(ep);
     } else {
         ucp_ep_delete(ep);
@@ -763,16 +762,36 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     }
 }
 
+static int
+ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
+                                               void *arg)
+{
+    ucp_ep_h ep = (ucp_ep_h)arg;
+    ucp_request_t *req;
+
+    if (elem->cb != ucp_ep_local_disconnect_progress) {
+        return 0;
+    }
+
+    req = (ucp_request_t*)elem->arg;
+    if (ep != req->send.ep) {
+        return 0;
+    }
+
+    /* we expect that only EP flush request can be remained in the callback
+     * queue, because reply UCP EP created for sending WIREUP_MSG/EP_REMOVED
+     * message is not exposed to a user */
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RELEASED);
+    ucs_assert(req->send.uct.func == ucp_ep_flush_progress_pending);
+
+    ucp_request_complete_send(req, UCS_OK);
+    return 1;
+}
+
 /* Must be called with async lock held */
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
-    /* remove pending slow-path progress in case it wasn't removed yet */
-    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
-                            ucp_worker_err_handle_remove_filter, ep);
-
-    /* remove pending slow-path function if it wasn't removed yet */
-    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
-                            ucp_listener_accept_cb_remove_filter, ep);
+    ucp_worker_h worker = ep->worker;
 
     ucp_ep_cm_slow_cbq_cleanup(ep);
 
@@ -791,8 +810,24 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
         return;
     }
 
-    ucp_ep_match_remove_ep(ep->worker, ep);
+    ucp_ep_match_remove_ep(worker, ep);
     ucp_ep_destroy_internal(ep);
+
+    /* remove pending slow-path functions after EP cleanup, because it does
+     * cleanup lanes which purges all outstanding operation and purged
+     * operations could add callbacks on the progress */
+
+    /* remove pending slow-path progress in case it wasn't removed yet */
+    ucs_callbackq_remove_if(&worker->uct->progress_q,
+                            ucp_worker_err_handle_remove_filter, ep);
+
+    /* remove pending slow-path function if it wasn't removed yet */
+    ucs_callbackq_remove_if(&worker->uct->progress_q,
+                            ucp_listener_accept_cb_remove_filter, ep);
+
+    /* remove pending slow-path disconnect progress if it wasn't removed yet */
+    ucs_callbackq_remove_if(&worker->uct->progress_q,
+                            ucp_ep_local_disconnect_progress_remove_filter, ep);
 }
 
 unsigned ucp_ep_local_disconnect_progress(void *arg)
@@ -2413,15 +2448,64 @@ int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
            (config->key.cm_lane  != UCP_NULL_LANE);
 }
 
+/* if we have ep2iface transport we need to send an active-message based
+ * keepalive message to check the remote endpoint still exists */
 static UCS_F_ALWAYS_INLINE int
-ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_lane_index_t lane)
+ucp_ep_is_am_keepalive(ucp_ep_h ucp_ep, ucp_rsc_index_t rsc_idx)
 {
-    /* if we have ep2iface transport we need to send an active-message based
-     * keepalive message to check the remote endpoint still exists */
-    return (ep->flags & UCP_EP_FLAG_REMOTE_ID) && /* remote ID defined */
-           (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) && /* wireup completed */
-           (ucp_ep_get_iface_attr(ep, lane)->cap.flags &
-            UCT_IFACE_FLAG_CONNECT_TO_IFACE); /* connect-to-iface */
+    ucp_worker_iface_t *wiface;
+
+    if (!(ucp_ep->flags & UCP_EP_FLAG_REMOTE_ID) ||
+        (rsc_idx == UCP_NULL_RESOURCE)) {
+        /* if remote ID isn't defined or rsc index is NULL (i.e. it is CM lane),
+         * don't do AM keepalive */
+        return 0;
+    }
+
+    wiface = ucp_worker_iface(ucp_ep->worker, rsc_idx);
+    return ucs_test_all_flags(wiface->attr.cap.flags,
+                              UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                              UCT_IFACE_FLAG_AM_BCOPY);
+}
+
+ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                        ucp_rsc_index_t rsc_idx, unsigned flags,
+                                        uct_completion_t *comp)
+{
+    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
+    ucs_status_t status;
+    ssize_t packed_len;
+    struct iovec wireup_msg_iov[2];
+    ucp_wireup_msg_t wireup_msg;
+
+    ucs_assert((rsc_idx == UCP_NULL_RESOURCE) ||
+               (ucp_worker_iface(ucp_ep->worker, rsc_idx)->attr.cap.flags &
+                UCT_IFACE_FLAG_EP_CHECK));
+
+    if (!ucp_ep_is_am_keepalive(ucp_ep, rsc_idx)) {
+        return uct_ep_check(uct_ep, flags, comp);
+    }
+
+    ucs_assert(ucp_worker_iface(ucp_ep->worker, rsc_idx)->attr.cap.flags &
+               UCT_IFACE_FLAG_AM_BCOPY);
+
+    UCS_BITMAP_SET(tl_bitmap, rsc_idx);
+
+    status = ucp_wireup_msg_prepare(ucp_ep, UCP_WIREUP_MSG_EP_CHECK,
+                                    &tl_bitmap, NULL, &wireup_msg,
+                                    &wireup_msg_iov[1].iov_base,
+                                    &wireup_msg_iov[1].iov_len);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    wireup_msg_iov[0].iov_base = &wireup_msg;
+    wireup_msg_iov[0].iov_len  = sizeof(wireup_msg);
+
+    packed_len = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_WIREUP,
+                                 ucp_wireup_msg_pack, wireup_msg_iov, 0);
+    ucs_free(wireup_msg_iov[1].iov_base);
+    return (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
 }
 
 void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
@@ -2430,9 +2514,8 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
     ucp_lane_index_t lane;
     ucs_status_t status;
     ucp_rsc_index_t rsc_index;
-    ucp_tl_bitmap_t tl_bitmap;
 
-    if (ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_CLOSED)) {
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
         *lane_map = 0;
         return;
     }
@@ -2441,29 +2524,22 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
     check_lanes = *lane_map & ucp_ep_config(ep)->key.ep_check_map;
 
     ucs_for_each_bit(lane, check_lanes) {
-        UCS_BITMAP_CLEAR(&tl_bitmap);
         ucs_assert(lane < UCP_MAX_LANES);
-        /* in case if remote ID is defined, wireup is completed and EP is
-         * in connect-to-iface mode then use UCP/AM keepalive */
-        if (ucp_ep_is_am_keepalive(ep, lane)) {
-            rsc_index = ucp_ep_get_rsc_index(ep, lane);
-            UCS_BITMAP_SET(tl_bitmap, rsc_index);
-            status    = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_EP_CHECK,
-                                            &tl_bitmap, NULL);
-            ucs_assert(status == UCS_OK);
-            *lane_map &= ~UCS_BIT(lane);
-        } else {
-            /* coverity[overrun-local] */
-            status = uct_ep_check(ep->uct_eps[lane], 0, NULL);
-            if (status == UCS_OK) {
-                *lane_map &= ~UCS_BIT(lane);
-            } else if (status != UCS_ERR_NO_RESOURCE) {
-                *lane_map &= ~UCS_BIT(lane);
-                ucs_warn("unexpected return status from uct_ep_check(ep=%p, "
-                         "lane[%d]=%p): %s",
-                         ep, lane, ep->uct_eps[lane],
-                         ucs_status_string(status));
-            }
+        rsc_index = ucp_ep_get_rsc_index(ep, lane);
+        ucs_assert((rsc_index != UCP_NULL_RESOURCE) ||
+                   (lane == ucp_ep_get_cm_lane(ep)));
+
+        status = ucp_ep_do_uct_ep_keepalive(ep, ep->uct_eps[lane], rsc_index, 0,
+                                            NULL);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            continue;
+        } else if (status != UCS_OK) {
+            ucs_warn("unexpected return status from doing keepalive(ep=%p, "
+                     "lane[%d]=%p): %s",
+                     ep, lane, ep->uct_eps[lane],
+                     ucs_status_string(status));
         }
+
+        *lane_map &= ~UCS_BIT(lane);
     }
 }

@@ -331,6 +331,9 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
         goto out_check_err;
     }
 
+    ucp_ep_ext_control(cm_wireup_ep->tmp_ep)->local_ep_id =
+            ucp_ep_ext_control(ep)->local_ep_id;
+
     cm_wireup_ep->tmp_ep->flags |= UCP_EP_FLAG_INTERNAL;
     ucs_debug("ep %p: created tmp_ep %p", ep, cm_wireup_ep->tmp_ep);
 
