@@ -774,35 +774,49 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
 
 void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 {
+    uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
 
     ucs_debug("ep %p: cleanup lanes", ep);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ep->uct_eps[lane];
-        if (uct_ep != NULL) {
-            ucs_debug("ep %p: purge uct_ep[%d]=%p", ep, lane, uct_ep);
-            uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ep);
-        }
-    }
+        uct_ep        = ep->uct_eps[lane];
+        uct_eps[lane] = uct_ep;
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = ep->uct_eps[lane];
-        if (uct_ep == NULL) {
-            continue;
-        }
+        /* an attempt to destroy UCT lanes can be done several times inside
+         * ucp_ep_cleanup_lanes()/ucp_ep_discard_lanes(), i.e. discarding lanes
+         * and then cleanup lanes during UCP EP close - so, if it happens, UCT
+         * lane has to be already set to '&ucp_failed_tl_ep' and UCP EP's
+         * 'ref_cnt' can be >= 1, when UCP EP is going to be destroyed.
+         * Otherwise - UCT lane is set to a real UCT EP and it means that
+         * discarding of UCT lanes was not started yet,  i.e. called from UCP EP
+         * destroy function and UCP EP's ref_cnt has to be '1'.
+         * If UCT lane is destroyed, but some operations are still in-progress,
+         * acompletions can be received for his UCT EP - this will lead to
+         * undefined behavior, because a real UCT EP was already destroyed */
+        ucs_assert((uct_ep == &ucp_failed_tl_ep) || (ep->ref_cnt == 1));
 
-        ucs_debug("ep %p: destroy uct_ep[%d]=%p", ep, lane, uct_ep);
-        uct_ep_destroy(uct_ep);
-    }
-
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        /* set UCT EP to failed UCT EP to make sure if UCP EP won't be destoyed
+        /* set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
          * due to some UCT EP discarding procedures are in-progress and UCP EP
          * may get some operation completions which could try to dereference
          * its lanes */
         ep->uct_eps[lane] = &ucp_failed_tl_ep;
+    }
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = uct_eps[lane];
+
+        if (uct_ep == NULL) {
+            continue;
+        }
+
+        ucs_debug("ep %p: purge & destroy uct_ep[%d]=%p", ep, lane, uct_ep);
+        uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ep);
+        /* coverity wrongly resolves ucp_failed_tl_ep's no-op EP destroy
+         * function to 'ucp_proxy_ep_destroy' */
+        /* coverity[incorrect_free] */
+        uct_ep_destroy(uct_ep);
     }
 }
 
@@ -975,7 +989,7 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
             continue;
         }
 
-        ucs_trace("ep %p: discard uct_ep[%d]=%p", ep, lane,
+        ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane,
                   ep->uct_eps[lane]);
         ucp_worker_discard_uct_ep(ep, ep->uct_eps[lane],
                                   UCT_FLUSH_FLAG_CANCEL,
