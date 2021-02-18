@@ -59,16 +59,22 @@ static inline int uct_rdmacm_cm_get_timeout(uct_rdmacm_cm_t *cm)
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t);
 
+ucs_status_t
+uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
+                                size_t priv_data_length);
+
+ucs_status_t uct_rdmacm_cm_ep_connect(uct_ep_h ep,
+                                      const uct_ep_connect_params_t *params);
+
 ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags);
 
 ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep);
 
 ucs_status_t uct_rdmacm_cm_ep_pack_cb(uct_rdmacm_cm_ep_t *cep,
-                                      struct rdma_conn_param *conn_param);
+                                      void *private_data,
+                                      size_t *priv_data_length);
 
-ucs_status_t
-uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
-                            uct_rdmacm_cm_ep_t *cep);
+ucs_status_t uct_rdmacm_cm_ep_resolve_cb(uct_rdmacm_cm_ep_t *cep);
 
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
                                uct_cm_remote_data_t *remote_data,

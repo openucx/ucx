@@ -6,6 +6,7 @@
 
 #include "test_helpers.h"
 
+#include <ucs/async/async.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
@@ -746,6 +747,17 @@ message_stream::~message_stream() {
 }
 
 } // detail
+
+scoped_async_lock::scoped_async_lock(ucs_async_context_t &async) :
+    m_async(async)
+{
+    UCS_ASYNC_BLOCK(&m_async);
+}
+
+scoped_async_lock::~scoped_async_lock()
+{
+    UCS_ASYNC_UNBLOCK(&m_async);
+}
 
 std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs() {
     static std::vector<std::vector<ucs_memory_type_t> > result;

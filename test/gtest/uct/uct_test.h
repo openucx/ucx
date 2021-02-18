@@ -201,15 +201,9 @@ protected:
 
         void flush() const;
 
-        size_t                   max_conn_priv;
+        ucs_async_context_t &async() const;
 
-        class scoped_async_lock {
-        public:
-            scoped_async_lock(entity &e);
-            ~scoped_async_lock();
-        private:
-            entity &m_entity;
-        };
+        size_t                   max_conn_priv;
 
     private:
         class async_wrapper {
