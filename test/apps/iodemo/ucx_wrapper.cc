@@ -546,8 +546,12 @@ UcxConnection::~UcxConnection()
         UCX_CONN_LOG << "waiting for " << ucs_list_length(&_all_requests) <<
                         " uncompleted requests";
     }
+
     while (!ucs_list_is_empty(&_all_requests)) {
-        ucp_worker_progress(_context.worker());
+        // while waiting for request completion, progress other queues, e.g.
+        // conn_reqs queue which can get stuck for a while and client can fail
+        // a connection establishment
+        _context.progress();
     }
 
     UCX_CONN_LOG << "released";
