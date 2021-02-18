@@ -102,6 +102,36 @@ extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM *jvm, void *reserved) {
     }
 }
 
+jobject c2jInetSockAddr(JNIEnv *env, const sockaddr_storage* ss)
+{
+    jbyteArray buff;
+    int port = 0;
+
+    // 1. Construct InetAddress object
+    jclass inet_address_cls = env->FindClass("java/net/InetAddress");
+    jmethodID getByAddress = env->GetStaticMethodID(inet_address_cls, "getByAddress",
+                                                    "([B)Ljava/net/InetAddress;");
+    if(ss->ss_family == AF_INET6) {
+        const sockaddr_in6* sin6 = reinterpret_cast<const sockaddr_in6*>(ss);
+        buff = env->NewByteArray(16);
+        env->SetByteArrayRegion(buff, 0, 16, (jbyte*)&sin6->sin6_addr.s6_addr);
+        port = ntohs(sin6->sin6_port);
+    } else {
+        const sockaddr_in* sin = reinterpret_cast<const sockaddr_in*>(ss);
+        buff = env->NewByteArray(4);
+        env->SetByteArrayRegion(buff, 0, 4, (jbyte*)&sin->sin_addr);
+        port = ntohs(sin->sin_port);
+    }
+
+    jobject inet_address_obj = env->CallStaticObjectMethod(inet_address_cls, getByAddress, buff);
+    // 2. Construct InetSocketAddress object from InetAddress, port
+    jclass inet_socket_address_cls = env->FindClass("java/net/InetSocketAddress");
+    jmethodID inetSocketAddress_constructor = env->GetMethodID(inet_socket_address_cls,
+                                              "<init>", "(Ljava/net/InetAddress;I)V");
+
+    return env->NewObject(inet_socket_address_cls, inetSocketAddress_constructor, inet_address_obj, port);
+}
+
 bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss,  socklen_t& sa_len)
 {
     jfieldID field;
@@ -362,15 +392,24 @@ void process_request(JNIEnv *env, jobject jucx_request, ucs_status_ptr_t status)
 
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
 {
-    jobject jucx_conn_handler = reinterpret_cast<jobject>(arg);
+    jobject client_address = NULL;
 
+    jobject jucx_conn_handler = reinterpret_cast<jobject>(arg);
     JNIEnv *env = get_jni_env();
+    ucp_conn_request_attr_t attr;
+    attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+    ucs_status_t status = ucp_conn_request_query(conn_request, &attr);
+
+    if (status == UCS_OK) {
+        client_address = c2jInetSockAddr(env, &attr.client_address);
+    }
 
     // Construct connection request class instance
     jclass conn_request_cls = env->FindClass("org/openucx/jucx/ucp/UcpConnectionRequest");
-    jmethodID conn_request_constructor = env->GetMethodID(conn_request_cls, "<init>", "(J)V");
+    jmethodID conn_request_constructor = env->GetMethodID(conn_request_cls, "<init>",
+                                                          "(JLjava/net/InetSocketAddress;)V");
     jobject jucx_conn_request = env->NewObject(conn_request_cls, conn_request_constructor,
-                                               (native_ptr)conn_request);
+                                               (native_ptr)conn_request, client_address);
 
     // Call onConnectionRequest method
     jclass jucx_conn_hndl_cls = env->FindClass("org/openucx/jucx/ucp/UcpListenerConnectionHandler");
