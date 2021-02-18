@@ -10,6 +10,7 @@
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
 #include <hsa.h>
+#include <hsa_ext_amd.h>
 
 
 hsa_status_t uct_rocm_base_init(void);
@@ -32,5 +33,6 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
 ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
                                      const size_t length,
                                      uct_md_mem_attr_t *mem_attr_p);
+ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *type);
 
 #endif
