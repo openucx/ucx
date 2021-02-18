@@ -2377,7 +2377,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     ucp_context_h context  = worker->context;
     ucs_status_t status    = UCS_OK;
     uint32_t address_flags = UCP_ATTR_VALUE(WORKER, attr, address_flags,
-                                            BANDWIDTH, 0);
+                                            ADDRESS_FLAGS, 0);
     ucp_tl_bitmap_t tl_bitmap;
     ucp_rsc_index_t tl_id;
     ucp_worker_iface_t *wiface;

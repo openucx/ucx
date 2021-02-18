@@ -1089,7 +1089,9 @@ typedef struct ucp_worker_attr {
     size_t                max_am_header;
 
     /**
-     * Cumulative bandwidth this worker is able to provide
+     * Cumulative bandwidth this worker is able to provide.
+     * If @ref UCP_WORKER_ADDRESS_FLAG_NET_ONLY is in address_flags, only
+     * network devices are used for bandwidth calculation.
      */
     double                bandwidth;
 } ucp_worker_attr_t;
