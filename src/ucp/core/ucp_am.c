@@ -612,7 +612,7 @@ static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
     ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_FIRST,
                                                 UCP_AM_ID_MIDDLE,
                                                 ucp_am_bcopy_pack_args_first,
-                                                ucp_am_bcopy_pack_args_mid, 0);
+                                                ucp_am_bcopy_pack_args_mid, 1);
 
     return ucp_am_bcopy_handle_status_from_pending(self, 1, 0, status);
 }
