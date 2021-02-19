@@ -1866,6 +1866,12 @@ static ucs_status_t ucx_perf_thread_run_test(void* arg)
     ucx_perf_params_t* params       = &perf->params;
     ucs_status_t status;
 
+    /* new threads need explicit device association */
+    status = perf->allocator->init(perf);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
     if (params->warmup_iter > 0) {
         ucx_perf_set_warmup(perf, params);
         status = ucx_perf_funcs[params->api].run(perf);

@@ -10,17 +10,19 @@
 #include <uct/base/uct_md.h>
 #include <uct/cuda/base/cuda_md.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <ucs/type/spinlock.h>
+#include <ucs/config/types.h>
 
 
 /**
  * @brief cuda ipc MD descriptor
  */
 typedef struct uct_cuda_ipc_md {
-    struct uct_md super;   /**< Domain info */
-    CUuuid*       uuid_map;
-    char*         peer_accessible_cache;
-    int           uuid_map_size;
-    int           uuid_map_capacity;
+    struct uct_md            super;   /**< Domain info */
+    CUuuid*                  uuid_map;
+    ucs_ternary_auto_value_t *peer_accessible_cache;
+    int                      uuid_map_size;
+    int                      uuid_map_capacity;
 } uct_cuda_ipc_md_t;
 
 /**
@@ -45,11 +47,12 @@ typedef struct uct_cuda_ipc_md_config {
  * @brief cuda_ipc packed and remote key for put/get
  */
 typedef struct uct_cuda_ipc_key {
-    CUipcMemHandle ph;           /* Memory handle of GPU memory */
-    CUdeviceptr    d_bptr;       /* Allocation base address */
-    size_t         b_len;        /* Allocation size */
-    int            dev_num;      /* GPU Device number */
-    CUuuid         uuid;         /* GPU Device UUID */
+    CUipcMemHandle ph;      /* Memory handle of GPU memory */
+    pid_t          pid;     /* PID as key to resolve peer_map hash */
+    CUdeviceptr    d_bptr;  /* Allocation base address */
+    size_t         b_len;   /* Allocation size */
+    int            dev_num; /* GPU Device number */
+    CUuuid         uuid;    /* GPU Device UUID */
 } uct_cuda_ipc_key_t;
 
 
