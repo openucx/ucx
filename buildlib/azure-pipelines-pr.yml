@@ -106,10 +106,12 @@ stages:
   - stage: Build
     jobs:
       - job: build_source
+        workspace:
+          clean: all
         pool:
           name: MLNX
           demands:
-            - ucx_iodemo_build -equals yes
+            - ucx_docker -equals yes
         strategy:
           matrix:
             rhel76:
