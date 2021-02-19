@@ -18,6 +18,7 @@ jobs:
 
     steps:
       - checkout: self
+        fetchDepth: 100
         clean: true
         displayName: Checkout
       - bash: |

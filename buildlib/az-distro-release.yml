@@ -45,6 +45,7 @@ jobs:
     steps:
       - checkout: self
         clean: true
+        fetchDepth: 100
         path: "we/need/to/go/deeper"
         # ^ Avoid rpmbuild error: Dest dir longer than base dir is not supported
 

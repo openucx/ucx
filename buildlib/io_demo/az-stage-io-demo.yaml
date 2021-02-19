@@ -23,7 +23,7 @@ steps:
     echo "corrupter_pid=$corrupter_pid"
     azure_set_variable "corrupter_pid" "$corrupter_pid"
   displayName: Start network corrupter
-  timeoutInMinutes: 15
+  timeoutInMinutes: 2
 
 - bash: |
     set -eEx
