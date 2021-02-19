@@ -93,6 +93,9 @@ int main(int argc, char **argv) {
     ucs_global_opts.warn_unused_env_vars = 0; /* Avoid warnings if not all
                                                  config vars are being used */
 
+    /* set gpu context for tests that need it */
+    mem_buffer::set_device_context();
+
     ret = ucs::watchdog_start();
     if (ret != 0) {
         ADD_FAILURE() << "Unable to start watchdog - abort";
