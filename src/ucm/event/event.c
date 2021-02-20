@@ -171,6 +171,7 @@ void ucm_event_leave()
     pthread_rwlock_unlock(&ucm_event_lock);
 }
 
+UCS_F_NOINLINE
 void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
     ucm_event_t event;
@@ -203,6 +204,7 @@ void *ucm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     return event.mmap.result;
 }
 
+UCS_F_NOINLINE
 int ucm_munmap(void *addr, size_t length)
 {
     ucm_event_t event;
@@ -243,6 +245,7 @@ void ucm_vm_munmap(void *addr, size_t length)
     ucm_event_leave();
 }
 
+UCS_F_NOINLINE
 void *ucm_mremap(void *old_address, size_t old_size, size_t new_size, int flags)
 {
     ucm_event_t event;
@@ -290,6 +293,7 @@ static int ucm_shm_del_entry_from_khash(const void *addr, size_t *size)
     return 0;
 }
 
+UCS_F_NOINLINE
 void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
 {
 #ifdef SHM_REMAP
@@ -339,6 +343,7 @@ void *ucm_shmat(int shmid, const void *shmaddr, int shmflg)
     return event.shmat.result;
 }
 
+UCS_F_NOINLINE
 int ucm_shmdt(const void *shmaddr)
 {
     ucm_event_t event;
@@ -363,6 +368,7 @@ int ucm_shmdt(const void *shmaddr)
     return event.shmdt.result;
 }
 
+UCS_F_NOINLINE
 void *ucm_sbrk(intptr_t increment)
 {
     ucm_event_t event;
@@ -392,6 +398,7 @@ void *ucm_sbrk(intptr_t increment)
     return event.sbrk.result;
 }
 
+UCS_F_NOINLINE
 int ucm_brk(void *addr)
 {
     ptrdiff_t increment;
@@ -426,6 +433,7 @@ int ucm_brk(void *addr)
     return event.brk.result;
 }
 
+UCS_F_NOINLINE
 int ucm_madvise(void *addr, size_t length, int advice)
 {
     ucm_event_t event;
