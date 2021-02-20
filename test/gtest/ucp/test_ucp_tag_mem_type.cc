@@ -126,14 +126,14 @@ size_t test_ucp_tag_mem_type::do_xfer(const void *sendbuf, void *recvbuf,
     }
 
     if (expected) {
-        rreq = recv_nb(recvbuf, recv_count, recv_dt, RECV_TAG, RECV_MASK);
-        sreq = send_nb(sendbuf, send_count, send_dt, SENDER_TAG);
+        rreq = recv_nb(recvbuf, recv_count, recv_dt, RECV_TAG, RECV_MASK, NULL, 0, m_recv_mem_type);
+        sreq = send_nb(sendbuf, send_count, send_dt, SENDER_TAG, NULL, 0, m_send_mem_type);
     } else {
-        sreq = send_nb(sendbuf, send_count, send_dt, SENDER_TAG);
+        sreq = send_nb(sendbuf, send_count, send_dt, SENDER_TAG, NULL, 0, m_send_mem_type);
 
         wait_for_unexpected_msg(receiver().worker(), 10.0);
 
-        rreq = recv_nb(recvbuf, recv_count, recv_dt, RECV_TAG, RECV_MASK);
+        rreq = recv_nb(recvbuf, recv_count, recv_dt, RECV_TAG, RECV_MASK, NULL, 0, m_recv_mem_type);
     }
 
     /* progress both sender and receiver */
@@ -217,6 +217,37 @@ UCS_TEST_P(test_ucp_tag_mem_type, xfer_mismatch_length)
                            length, type, type, true, false, true);
     ASSERT_EQ(length / 2,  recvd);
 
+}
+
+UCS_TEST_P(test_ucp_tag_mem_type, ucp_mmaped_buffers)
+{
+    ucp_datatype_t type = ucp_dt_make_contig(1);
+    size_t max_length = 4096;
+    ucp_mem_map_params_t mmap_params;
+    ucp_mem_h m_send_mem_buf;
+    ucp_mem_h m_recv_mem_buf;
+
+    mmap_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                             UCP_MEM_MAP_PARAM_FIELD_FLAGS  |
+                             UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+    mmap_params.length = max_length;
+    mmap_params.flags  = UCP_MEM_MAP_ALLOCATE;
+    mmap_params.memory_type = m_send_mem_type;
+
+    UCS_TEST_MESSAGE << "TEST: "
+                     << ucs_memory_type_names[m_send_mem_type] << " <-> "
+                     << ucs_memory_type_names[m_recv_mem_type];
+
+    ucp_mem_map(sender().worker()->context, &mmap_params, &m_send_mem_buf);
+    mmap_params.memory_type = m_recv_mem_type;
+
+    ucp_mem_map(receiver().worker()->context, &mmap_params, &m_recv_mem_buf);
+
+    do_basic_send(m_send_mem_buf->address,m_recv_mem_buf->address, max_length, type,
+                  m_send_mem_type, m_recv_mem_type);
+
+    ucp_mem_unmap(sender().worker()->context, m_send_mem_buf);
+    ucp_mem_unmap(receiver().worker()->context, m_recv_mem_buf);
 }
 
 

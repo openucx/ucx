@@ -199,7 +199,7 @@ int test_ucp_tag::get_worker_index(int buf_index)
 test_ucp_tag::request *
 test_ucp_tag::send(entity &sender, send_type_t type, const void *buffer,
                    size_t count, ucp_datatype_t datatype, ucp_tag_t tag,
-                   void *user_data, int buf_index)
+                   void *user_data, int buf_index, ucs_memory_type_t mem_type)
 {
     int worker_index = get_worker_index(buf_index);
     request *req;
@@ -207,6 +207,11 @@ test_ucp_tag::send(entity &sender, send_type_t type, const void *buffer,
 
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
     param.datatype     = datatype;
+
+    if (mem_type != UCS_MEMORY_TYPE_UNKNOWN) {
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMORY_TYPE;
+        param.memory_type = mem_type;
+    }
 
     switch (type) {
     case SEND_B:
@@ -260,10 +265,10 @@ test_ucp_tag::send(entity &sender, send_type_t type, const void *buffer,
 
 test_ucp_tag::request *
 test_ucp_tag::send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                      ucp_tag_t tag, void *user_data, int buf_index)
+                      ucp_tag_t tag, void *user_data, int buf_index, ucs_memory_type_t mem_type)
 {
     return send(sender(), SEND_NB, buffer, count, datatype, tag, user_data,
-                buf_index);
+                buf_index, mem_type);
 }
 
 test_ucp_tag::request *
@@ -294,7 +299,8 @@ test_ucp_tag::request*
 test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
                    size_t count, ucp_datatype_t datatype,
                    ucp_tag_t tag, ucp_tag_t tag_mask,
-                   ucp_tag_recv_info_t *info, void *user_data, int buf_index)
+                   ucp_tag_recv_info_t *info, void *user_data, int buf_index,
+                   ucs_memory_type_t mem_type)
 {
     int worker_index = get_worker_index(buf_index);
     request *req;
@@ -304,6 +310,11 @@ test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
     param.datatype     = datatype;
+
+    if (mem_type != UCS_MEMORY_TYPE_UNKNOWN) {
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMORY_TYPE;
+        param.memory_type = mem_type;
+    }
 
     switch (type) {
     case RECV_B:
@@ -373,11 +384,11 @@ test_ucp_tag::recv(entity &receiver, recv_type_t type, void *buffer,
 test_ucp_tag::request*
 test_ucp_tag::recv_nb(void *buffer, size_t count, ucp_datatype_t datatype,
                       ucp_tag_t tag, ucp_tag_t tag_mask, void *user_data,
-                      int buf_index)
+                      int buf_index, ucs_memory_type_t mem_type)
 {
     recv_type_t type = is_external_request() ? RECV_NBR : RECV_NB;
     return recv(receiver(), type, buffer, count, datatype,
-                tag, tag_mask, NULL, user_data, buf_index);
+                tag, tag_mask, NULL, user_data, buf_index, mem_type);
 }
 
 ucs_status_t

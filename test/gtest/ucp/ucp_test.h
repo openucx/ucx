@@ -393,7 +393,7 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
 /**
  * The list of GPU copy TLs
  */
-#define UCP_TEST_GPU_COPY_TLS "cuda_copy,rocm_copy"
+#define UCP_TEST_GPU_COPY_TLS "cuda_copy,rocm_copy,gdr_copy"
 
 
 /**

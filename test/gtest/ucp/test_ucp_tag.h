@@ -69,10 +69,12 @@ protected:
 
     request* send(entity &sender, send_type_t type, const void *buffer,
                   size_t count, ucp_datatype_t datatype, ucp_tag_t tag,
-                  void *user_data = NULL, int ep_index = 0);
+                  void *user_data = NULL, int ep_index = 0,
+                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_UNKNOWN);
 
     request* send_nb(const void *buffer, size_t count, ucp_datatype_t datatype,
-                     ucp_tag_t tag, void *user_data = NULL, int ep_index = 0);
+                     ucp_tag_t tag, void *user_data = NULL, int ep_index = 0,
+                     ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_UNKNOWN);
 
     request* send_nbr(const void *buffer, size_t count, ucp_datatype_t datatype,
                       ucp_tag_t tag, void *user_data = NULL, int ep_index = 0);
@@ -86,11 +88,12 @@ protected:
     request* recv(entity &receiver, recv_type_t type, void *buffer,
                   size_t count, ucp_datatype_t dt, ucp_tag_t tag,
                   ucp_tag_t tag_mask, ucp_tag_recv_info_t *info,
-                  void *user_data = NULL, int buf_index = 0);
+                  void *user_data = NULL, int buf_index = 0,
+                  ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_UNKNOWN);
 
     request* recv_nb(void *buffer, size_t count, ucp_datatype_t dt,
                      ucp_tag_t tag, ucp_tag_t tag_mask, void *user_data = NULL,
-                     int buf_index = 0);
+                     int buf_index = 0, ucs_memory_type_t mem_type = UCS_MEMORY_TYPE_UNKNOWN);
 
     request* recv_req_nb(void *buffer, size_t count, ucp_datatype_t dt,
                          ucp_tag_t tag, ucp_tag_t tag_mask, void *user_data = NULL,
