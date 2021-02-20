@@ -8,7 +8,7 @@
 
 #include "ucp_test.h"
 
-#include <gtest/common/test_perf.h>
+#include <common/test_perf.h>
 
 
 #define MB   pow(1024.0, -2)
@@ -214,7 +214,8 @@ const test_perf::test_spec test_ucp_perf::tests[] =
 };
 
 
-UCS_TEST_P(test_ucp_perf, envelope) {
+UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
+{
     bool check_perf = true;
     size_t max_iter = std::numeric_limits<size_t>::max();
 
@@ -233,15 +234,6 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     for (const test_spec *test_iter = tests; test_iter->title != NULL;
          ++test_iter) {
         test_spec test = *test_iter;
-
-        /* FIXME: ud, shm, self are all hanging when wakeup mode is enabled so
-         * skipping wakeup tests when these transports are used for now */
-        if ((has_transport("ud_x") || has_transport("ud_v") ||
-             has_transport("ud") || has_transport("shm") ||
-             has_transport("self")) &&
-            (test.wait_mode == UCX_PERF_WAIT_MODE_SLEEP)) {
-            continue;
-        }
 
         if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
             test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
