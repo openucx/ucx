@@ -51,6 +51,10 @@ typedef struct uct_mm_ep {
     /* group that holds this ep's pending operations */
     ucs_arbiter_group_t        arb_group;
 
+    /* placeholder arbiter element to make sure that we would not be able to arm
+       the interface as long as one of the endpoints is unable to send */
+    ucs_arbiter_elem_t         arb_elem;
+
     /* keepalive info */
     uct_mm_keepalive_info_t    *keepalive;
 } uct_mm_ep_t;

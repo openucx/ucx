@@ -361,6 +361,12 @@ uct_mm_iface_event_fd_arm(uct_iface_h tl_iface, unsigned events)
     uint64_t head, prev_head;
     int ret;
 
+    if ((events & UCT_EVENT_SEND_COMP) &&
+        !ucs_arbiter_is_empty(&iface->arbiter)) {
+        /* if we have outstanding send operations, can't go to sleep */
+        return UCS_ERR_BUSY;
+    }
+
     if (!(events & UCT_EVENT_RECV)) {
         /* Nothing to do anymore */
         return UCS_OK;

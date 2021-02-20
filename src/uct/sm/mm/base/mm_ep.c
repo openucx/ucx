@@ -164,6 +164,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
     uct_mm_iface_set_fifo_ptrs(fifo_ptr, &self->fifo_ctl, &self->fifo_elems);
     self->cached_tail = self->fifo_ctl->tail;
     self->keepalive   = NULL;
+    ucs_arbiter_elem_init(&self->arb_elem);
 
     ucs_debug("created mm ep %p, connected to remote FIFO id 0x%"PRIx64,
               self, addr->fifo_seg_id);
@@ -257,6 +258,10 @@ retry:
             /* update the local copy of the tail to its actual value on the remote peer */
             uct_mm_ep_update_cached_tail(ep);
             if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
+                ucs_arbiter_group_push_head_elem_always(&ep->arb_group,
+                                                        &ep->arb_elem);
+                ucs_arbiter_group_schedule_nonempty(&iface->arbiter,
+                                                    &ep->arb_group);
                 UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES,
                                          1);
                 return UCS_ERR_NO_RESOURCE;
@@ -419,9 +424,9 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg)
 {
-    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     uct_mm_ep_t *ep        = ucs_container_of(group, uct_mm_ep_t, arb_group);
     unsigned *count        = (unsigned*)arg;
+    uct_pending_req_t *req;
     ucs_status_t status;
 
     /* update the local tail with its actual value from the remote peer
@@ -431,6 +436,12 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
     if (!uct_mm_ep_has_tx_resources(ep)) {
         return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
     }
+
+    if (elem == &ep->arb_elem) {
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
+    req = ucs_container_of(elem, uct_pending_req_t, priv);
 
     ucs_trace_data("progressing pending request %p", req);
     status = req->func(req);
@@ -459,16 +470,21 @@ static ucs_arbiter_cb_result_t uct_mm_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter
 {
     uct_mm_ep_t *ep                 = ucs_container_of(group, uct_mm_ep_t,
                                                        arb_group);
-    uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t,
-                                                       priv);
     uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
+    uct_pending_req_t *req;
 
+    if (elem == &ep->arb_elem) {
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
+    req = ucs_container_of(elem, uct_pending_req_t, priv);
     if (cb != NULL) {
         cb(req, cb_args->arg);
     } else {
         ucs_warn("ep=%p canceling user pending request %p", ep, req);
     }
+
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
