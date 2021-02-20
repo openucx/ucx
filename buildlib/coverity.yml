@@ -6,6 +6,8 @@ parameters:
 jobs:
   - ${{each mode in parameters.modes }}:
     - job: coverity_${{ mode }}
+      workspace:
+        clean: all
       pool:
         name: MLNX
         demands: ${{ parameters.demands }}
