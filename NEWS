@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.10.0-rc3 (February 15, 2021)
+## 1.10.0-rc4 (February 20, 2021)
 ### Features:
 #### Core
 * Added support for Nvidia HPC SDK
@@ -22,6 +22,7 @@
 #### CI
 * Added release builds on CUDA 11
 * Enabled performance validation in gtest
+* Added new OS for release CI
 #### UCP
 * Added locality awareness to the transport selection logic for GPU devices
 * Added put/offload/short and put/offload/zcopy protocols
@@ -43,6 +44,7 @@
 * Added a new parameter to control the CM listener's backlog
 * Added support sending AM RTS over short message protocol
 * Added support for shared memory multi-lane when CM is used
+* Added missing async locks
 #### UCT
 * Added API for keepalive_timeout value
 * Added add uct_completion.status
@@ -61,6 +63,8 @@
 * Improved logging
 * Added optimization for namespace processing
 * Fixes for connection matching functionality
+#### CUDA
+* Added support for global IPC cache
 #### RDMA CORE (IB, ROCE, etc.)
 * Added support for auto detection of adapative routing settings
 * Added an option to poll TX CQ every progress iteration
@@ -123,6 +127,7 @@
 * Fixes for invalid ID and handling of status in RNDV
 #### CUDA
 * Fixes in managed memory support
+* Fixes in topology detection
 #### RDMA CORE (IB, ROCE, etc.)
 * Fixes in assert definitions
 * Fixes in printing an error about invalid AM Bcopy length for UD
