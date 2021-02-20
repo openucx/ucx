@@ -100,15 +100,21 @@ public class UcpListenerTest  extends UcxTest {
         // Create listener and set connection handler
         UcpListenerParams listenerParams = new UcpListenerParams()
             .setConnectionHandler(conRequest::set);
-        UcpListener listener = tryBindListener(serverWorker1, listenerParams);
+        UcpListener serverListener = tryBindListener(serverWorker1, listenerParams);
+        UcpListener clientListener = tryBindListener(clientWorker, listenerParams);
 
         UcpEndpoint clientToServer = clientWorker.newEndpoint(new UcpEndpointParams()
-            .setSocketAddress(listener.getAddress()));
+            .setSocketAddress(serverListener.getAddress()));
 
         while (conRequest.get() == null) {
             serverWorker1.progress();
             clientWorker.progress();
         }
+
+        assertNotNull(conRequest.get().getClientAddress());
+        UcpEndpoint serverToClientListener = serverWorker2.newEndpoint(
+            new UcpEndpointParams().setSocketAddress(conRequest.get().getClientAddress()));
+        serverWorker2.progressRequest(serverToClientListener.closeNonBlockingForce());
 
         // Create endpoint from another worker from pool.
         UcpEndpoint serverToClient = serverWorker2.newEndpoint(
@@ -118,7 +124,7 @@ public class UcpListenerTest  extends UcxTest {
         for (int i = 0; i < 10; i++) {
             conRequest.set(null);
             UcpEndpoint tmpEp = clientWorker.newEndpoint(new UcpEndpointParams()
-                .setSocketAddress(listener.getAddress()).setPeerErrorHandlingMode()
+                .setSocketAddress(serverListener.getAddress()).setPeerErrorHandlingMode()
                 .setErrorHandler((ep, status, errorMsg) -> {
 
                 }));
@@ -174,7 +180,7 @@ public class UcpListenerTest  extends UcxTest {
         }
 
         Collections.addAll(resources, context2, context1, clientWorker, serverWorker1,
-            serverWorker2, listener);
+            serverWorker2, serverListener, clientListener);
         closeResources();
     }
 }
