@@ -47,11 +47,20 @@ typedef struct {
 
 
 /*
- * Private data for rendezvous protocol which sends the bulk data
+ * Private data for rendezvous protocol which sends an acknowledgement packet
  */
 typedef struct {
     /* Lane to send completion message (ATP, RTS, ATS) */
-    ucp_lane_index_t       am_lane;
+    ucp_lane_index_t lane;
+} ucp_proto_rndv_ack_priv_t;
+
+
+/*
+ * Private data for rendezvous protocol which sends bulk data followed by an
+ * acknowledgement packet
+ */
+typedef struct {
+    ucp_proto_rndv_ack_priv_t super;
 
     /*
      * Multi-lane common part.
@@ -99,11 +108,30 @@ ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params);
 
 
 ucs_status_t
+ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params);
+
+
+ucs_linear_func_t
+ucp_proto_rndv_ack_time(const ucp_proto_init_params_t *init_params);
+
+
+void ucp_proto_rndv_ack_config_str(size_t min_length, size_t max_length,
+                                   const void *priv, ucs_string_buffer_t *strb);
+
+
+ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params);
+
+
+size_t ucp_proto_rndv_pack_ack(void *dest, void *arg);
 
 
 void ucp_proto_rndv_bulk_config_str(size_t min_length, size_t max_length,
                                     const void *priv,
                                     ucs_string_buffer_t *strb);
+
+
+void ucp_proto_rndv_receive(ucp_worker_h worker, ucp_request_t *recv_req,
+                            const ucp_rndv_rts_hdr_t *rts, size_t hdr_len);
 
 #endif
