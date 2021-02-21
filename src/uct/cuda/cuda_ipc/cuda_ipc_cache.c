@@ -111,7 +111,7 @@ static ucs_status_t uct_cuda_ipc_open_memhandle(const uct_cuda_ipc_key_t *key,
         status = UCS_OK;
     } else {
         cuGetErrorString(cuerr, &cu_err_str);
-        ucs_error("cuIpcOpenMemHandle() failed: %s", cu_err_str);
+        ucs_debug("cuIpcOpenMemHandle() failed: %s", cu_err_str);
         status = (cuerr == CUDA_ERROR_ALREADY_MAPPED) ? UCS_ERR_ALREADY_EXISTS :
                                                         UCS_ERR_INVALID_PARAM;
     }
