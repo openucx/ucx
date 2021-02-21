@@ -29,6 +29,10 @@
 #define UCP_WORKER_HEADROOM_PRIV_SIZE 32
 
 
+#define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(_worker) \
+    ucs_assert(ucs_async_is_blocked(&(_worker)->async))
+
+
 #if ENABLE_MT
 
 #define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)                 \
@@ -47,10 +51,18 @@
     } while (0)
 
 
+#define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(_worker) \
+    do { \
+        if ((_worker)->flags & UCP_WORKER_FLAG_MT) { \
+            UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(_worker); \
+        } \
+    } while (0)
+
 #else
 
 #define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)
 #define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)
+#define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(_worker)
 
 #endif
 
@@ -344,10 +356,10 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                 ucp_worker_cfg_index_t config_idx, char *info,
                                 size_t max);
 
-/* must be called with async lock held */
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_flush_ops_count_inc(ucp_worker_h worker)
 {
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
     ucs_assert(worker->flush_ops_count < UINT_MAX);
     ++worker->flush_ops_count;
 }
@@ -356,6 +368,7 @@ ucp_worker_flush_ops_count_inc(ucp_worker_h worker)
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_flush_ops_count_dec(ucp_worker_h worker)
 {
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
     ucs_assert(worker->flush_ops_count > 0);
     --worker->flush_ops_count;
 }

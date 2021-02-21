@@ -156,6 +156,18 @@ static UCS_F_ALWAYS_INLINE ucp_ep_ext_control_t* ucp_ep_ext_control(ucp_ep_h ep)
     return ucp_ep_ext_gen(ep)->control_ext;
 }
 
+static UCS_F_ALWAYS_INLINE void ucp_ep_update_flags(
+        ucp_ep_h ep, uint32_t flags_add, uint32_t flags_remove)
+{
+    ucp_ep_flags_t ep_flags_add    = (ucp_ep_flags_t)flags_add;
+    ucp_ep_flags_t ep_flags_remove = (ucp_ep_flags_t)flags_remove;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
+    ucs_assert((ep_flags_add & ep_flags_remove) == 0);
+
+    ep->flags = (ep->flags | ep_flags_add) & ~ep_flags_remove;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_remote_id(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT
@@ -198,7 +210,7 @@ static inline void ucp_ep_update_remote_id(ucp_ep_h ep,
 
     ucs_assert(remote_id != UCP_EP_ID_INVALID);
     ucs_trace("ep %p: set remote_id to 0x%" PRIxPTR, ep, remote_id);
-    ep->flags                           |= UCP_EP_FLAG_REMOTE_ID;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_ID, 0);
     ucp_ep_ext_control(ep)->remote_ep_id = remote_id;
 }
 
@@ -224,13 +236,13 @@ static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
     flush_state->send_sn = 0;
     flush_state->cmpl_sn = 0;
     ucs_queue_head_init(&flush_state->reqs);
-    ep->flags |= UCP_EP_FLAG_FLUSH_STATE_VALID;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
 }
 
 static inline void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
 {
     ucs_assert(ucs_queue_is_empty(&ucp_ep_flush_state(ep)->reqs));
-    ep->flags &= ~UCP_EP_FLAG_FLUSH_STATE_VALID;
+    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_FLUSH_STATE_VALID);
 }
 
 /* get index of the local component which can reach a remote memory domain */

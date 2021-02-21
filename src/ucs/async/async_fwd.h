@@ -16,6 +16,10 @@ BEGIN_C_DECLS
 
 /** @file async_fwd.h */
 
+
+#define UCS_ASYNC_PTHREAD_ID_NULL ((pthread_t)-1)
+
+
 typedef struct ucs_async_context ucs_async_context_t;
 
 

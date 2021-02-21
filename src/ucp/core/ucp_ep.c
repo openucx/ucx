@@ -226,7 +226,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         ((worker->context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
          (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
          !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE))) {
-        ep->flags |= UCP_EP_FLAG_INDIRECT_ID;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_INDIRECT_ID, 0);
     }
 
     status = ucs_ptr_map_put(&worker->ptr_map, ep,
@@ -237,7 +237,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
     }
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
-        ep->flags |= UCP_EP_FLAG_INTERNAL;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_INTERNAL, 0);
     } else {
         ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
     }
@@ -354,11 +354,15 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
         ucs_snprintf_zero(ep_name, UCP_WORKER_NAME_MAX, "mem_type_ep:%s",
                           ucs_memory_type_names[mem_type]);
 
+        /* create memtype UCP EPs after blocking async context, because they set
+         * INTERNAL flag (setting EP flags is expected to be guarded) */
+        UCS_ASYNC_BLOCK(&worker->async);
         status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max,
                                               &local_address,
                                               UCP_EP_INIT_FLAG_MEM_TYPE,
                                               ep_name,
                                               &worker->mem_type_ep[mem_type]);
+        UCS_ASYNC_UNBLOCK(&worker->async);
         if (status != UCS_OK) {
             goto err_free_address_list;
         }
@@ -431,7 +435,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
 
     ep->am_lane = key.am_lane;
     if (!ucp_ep_has_cm_lane(ep)) {
-        ep->flags |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
 
     status = ucp_wireup_ep_create(ep, &ep->uct_eps[0]);
@@ -729,8 +733,8 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     }
 
     if (status == UCS_OK) {
-        ep->flags |= UCP_EP_FLAG_USED;
-        *ep_p      = ep;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
+        *ep_p = ep;
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -863,17 +867,18 @@ ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
     return 1;
 }
 
-/* Must be called with async lock held */
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
     ucp_worker_h worker = ep->worker;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
 
     ucp_ep_cm_slow_cbq_cleanup(ep);
 
     ucp_stream_ep_cleanup(ep);
     ucp_am_ep_cleanup(ep);
 
-    ep->flags &= ~UCP_EP_FLAG_USED;
+    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_USED);
 
     if ((ep->flags & (UCP_EP_FLAG_CONNECT_REQ_QUEUED |
                       UCP_EP_FLAG_REMOTE_CONNECTED)) && !force) {
@@ -933,7 +938,7 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
 
     ucp_ep_flush_state_invalidate(ep);
     ucp_ep_ext_control(ep)->close_req.req = request;
-    ep->flags                            |= UCP_EP_FLAG_CLOSE_REQ_VALID;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSE_REQ_VALID, 0);
 }
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req)
@@ -1009,7 +1014,7 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
         ucp_ep_release_id(ep);
     }
 
-    ep->flags |= UCP_EP_FLAG_FAILED;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, 0);
 
     /* flush CANCEL mustn't be called for EPs without error handling support */
     ucs_assert(ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER);
@@ -1059,7 +1064,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
         goto out;
     }
 
-    ep->flags |= UCP_EP_FLAG_CLOSED;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSED, 0);
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
         /* FIXME: there is a potential issue with flush completion after an EP
@@ -2484,7 +2489,7 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
     ucs_debug("ep %p: calling user error callback %p with arg %p and status %s",
               ep, ucp_ep_ext_control(ep)->err_cb, ucp_ep_ext_gen(ep)->user_data,
               ucs_status_string(status));
-    ep->flags |= UCP_EP_FLAG_ERR_HANDLER_INVOKED;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_ERR_HANDLER_INVOKED, 0);
     ucp_ep_ext_control(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
 }
 

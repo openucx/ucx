@@ -157,16 +157,16 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
     switch (req->send.wireup.type) {
     case UCP_WIREUP_MSG_PRE_REQUEST:
-        ep->flags |= UCP_EP_FLAG_CONNECT_PRE_REQ_SENT;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_PRE_REQ_SENT, 0);
         break;
     case UCP_WIREUP_MSG_REQUEST:
-        ep->flags |= UCP_EP_FLAG_CONNECT_REQ_SENT;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_SENT, 0);
         break;
     case UCP_WIREUP_MSG_REPLY:
-        ep->flags |= UCP_EP_FLAG_CONNECT_REP_SENT;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REP_SENT, 0);
         break;
     case UCP_WIREUP_MSG_ACK:
-        ep->flags |= UCP_EP_FLAG_CONNECT_ACK_SENT;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_ACK_SENT, 0);
         break;
     }
 
@@ -406,7 +406,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
          * (don't set REMOTE_CONNECTED flag to avoid possible wrong behavior
          * in ucp_ep_close_flushed_callback() when a peer was already
          * disconnected, but we set REMOTE_CONNECTED flag again) */
-        ep->flags |= UCP_EP_FLAG_REMOTE_CONNECTED;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED, 0);
     }
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
@@ -538,9 +538,10 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
          * instead of each other. We use the uniqueness of worker uuid to decide
          * which connect request should be ignored.
          */
-        if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) && (remote_uuid > worker->uuid)) {
+        if ((ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED) &&
+            (remote_uuid > worker->uuid)) {
             ucs_trace("ep %p: ignoring simultaneous connect request", ep);
-            ep->flags |= UCP_EP_FLAG_CONNECT_REQ_IGNORED;
+            ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_IGNORED, 0);
             return;
         }
     }
@@ -586,7 +587,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
         tl_bitmap  = ucp_wireup_get_ep_tl_bitmap(ep,
                                                  ucp_ep_config(ep)->p2p_lanes);
-        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
 
         ucs_assert(send_reply);
     }
@@ -657,7 +658,7 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
             return;
         }
 
-        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
         ack = 1;
     } else {
         ack = 0;
@@ -1359,7 +1360,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 
     /* If we don't have a p2p transport, we're connected */
     if (!ucp_ep_config(ep)->p2p_lanes) {
-        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     }
 
     ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
@@ -1390,7 +1391,7 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     ucs_debug("ep %p: send wireup request (flags=0x%x)", ep, ep->flags);
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_REQUEST, &tl_bitmap, NULL);
 
-    ep->flags |= UCP_EP_FLAG_CONNECT_REQ_QUEUED;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
 
     return status;
 }
@@ -1416,7 +1417,8 @@ ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
     status = ucp_wireup_msg_send(ep, UCP_WIREUP_MSG_PRE_REQUEST,
                                  &ucp_tl_bitmap_max, NULL);
 
-    ep->flags |= UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED, 0);
+
     return status;
 }
 

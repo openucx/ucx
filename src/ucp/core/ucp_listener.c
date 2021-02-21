@@ -31,7 +31,7 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
 
-    ep->flags |= UCP_EP_FLAG_USED;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
     ucp_stream_ep_activate(ep);
     ucp_ep_flush_state_reset(ep);
 

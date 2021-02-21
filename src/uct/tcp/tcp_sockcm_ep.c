@@ -279,15 +279,14 @@ static void uct_tcp_sockcm_ep_mark_tx_completed(uct_tcp_sockcm_ep_t *cep)
     }
 }
 
-/**
- * This function should be called with the lock held.
- */
 ucs_status_t uct_tcp_sockcm_ep_progress_send(uct_tcp_sockcm_ep_t *cep)
 {
+    uct_tcp_sockcm_t UCS_V_UNUSED *tcp_sockcm = uct_tcp_sockcm_ep_get_cm(cep);
     ucs_status_t status;
     size_t sent_length;
     ucs_event_set_types_t events;
 
+    ucs_assert(ucs_async_is_blocked(tcp_sockcm->super.iface.worker->async));
     ucs_assert(ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_CLIENT      |
                                               UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED) ||
                ucs_test_all_flags(cep->state, UCT_TCP_SOCKCM_EP_ON_SERVER      |

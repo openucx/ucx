@@ -156,9 +156,11 @@ protected:
             uct_ep_h discard_ep        = *iter;
             unsigned purged_reqs_count = 0;
 
+            UCS_ASYNC_BLOCK(&sender().worker()->async);
             ucp_worker_discard_uct_ep(&ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
                                       ep_pending_purge_count_reqs_cb,
                                       &purged_reqs_count);
+            UCS_ASYNC_UNBLOCK(&sender().worker()->async);
 
             if (ep_pending_purge_func == (void*)ep_pending_purge_func_iter_reqs) {
                 EXPECT_EQ(m_pending_purge_reqs_count, purged_reqs_count);
