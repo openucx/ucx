@@ -27,11 +27,17 @@ public class UcpMemory extends UcxNativeStruct implements Closeable {
 
     private long length;
 
+    private int memType;
+
     /**
      * To prevent construct outside of JNI.
      */
-    private UcpMemory(long nativeId) {
+    private UcpMemory(long nativeId, UcpContext context, long address, long length, int memType) {
         setNativeId(nativeId);
+        this.address = address;
+        this.length = length;
+        this.memType = memType;
+        this.context = context;
     }
 
     /**
@@ -94,6 +100,13 @@ public class UcpMemory extends UcxNativeStruct implements Closeable {
      */
     public long getLength() {
         return length;
+    }
+
+    /**
+     * Type of allocated memory.
+     */
+    public int getMemType() {
+        return memType;
     }
 
     private static native void unmapMemoryNative(long contextId, long memoryId);

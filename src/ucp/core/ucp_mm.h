@@ -28,7 +28,7 @@ typedef struct ucp_mem {
     void                          *address;     /* Region start address */
     size_t                        length;       /* Region length */
     uct_alloc_method_t            alloc_method; /* Method used to allocate the memory */
-    ucs_memory_type_t             mem_type;     /**< type of allocated memory */
+    ucs_memory_type_t             mem_type;     /* Type of allocated or registered memory */
     uct_md_h                      alloc_md;     /* MD used to allocated the memory */
     ucp_md_map_t                  md_map;       /* Which MDs have valid memory handles */
     uct_mem_h                     uct[0];       /* Valid memory handles, as popcount(md_map) */

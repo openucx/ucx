@@ -10,6 +10,7 @@
 #ifndef UCP_DEF_H_
 #define UCP_DEF_H_
 
+#include <ucs/memory/memory_type.h>
 #include <ucs/type/status.h>
 #include <ucs/config/types.h>
 #include <stddef.h>
@@ -197,6 +198,11 @@ typedef struct ucp_mem_attr {
      * Size of the memory segment.
      */
      size_t                 length;
+
+     /**
+      * Type of allocated or registered memory
+      */
+     ucs_memory_type_t      mem_type;
 } ucp_mem_attr_t;
 
 
@@ -208,8 +214,9 @@ typedef struct ucp_mem_attr {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_mem_attr_field {
-    UCP_MEM_ATTR_FIELD_ADDRESS = UCS_BIT(0), /**< Virtual address */
-    UCP_MEM_ATTR_FIELD_LENGTH  = UCS_BIT(1)  /**< The size of memory region */
+    UCP_MEM_ATTR_FIELD_ADDRESS  = UCS_BIT(0), /**< Virtual address */
+    UCP_MEM_ATTR_FIELD_LENGTH   = UCS_BIT(1), /**< The size of memory region */
+    UCP_MEM_ATTR_FIELD_MEM_TYPE = UCS_BIT(2)  /**< Type of allocated or registered memory */
 };
 
 

@@ -562,6 +562,10 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
         attr->length = memh->length;
     }
 
+    if (attr->field_mask & UCP_MEM_ATTR_FIELD_MEM_TYPE) {
+        attr->mem_type = memh->mem_type;
+    }
+
     return UCS_OK;
 }
 
