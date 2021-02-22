@@ -501,6 +501,8 @@ static void* ucs_stats_thread_func(void *arg)
     unsigned flags;
     long nsec;
 
+    ucs_log_set_thread_name("stats");
+
     if (ucs_stats_context.interval > 0) {
         nsec = (long)(ucs_stats_context.interval * UCS_NSEC_PER_SEC + 0.5);
         timeout.tv_sec  = nsec / UCS_NSEC_PER_SEC;
