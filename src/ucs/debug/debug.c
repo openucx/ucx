@@ -521,7 +521,7 @@ static void ucs_debug_print_source_file(const char *file, unsigned line,
         return;
     }
 
-    n = 0;
+    n = 1;
     fprintf(stream, "\n");
     fprintf(stream, "%s: [ %s() ]\n", file, function);
     if (line > context) {
