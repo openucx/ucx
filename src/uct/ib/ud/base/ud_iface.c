@@ -888,6 +888,8 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 
     status = uct_ib_iface_pre_arm(&iface->super);
     if (status != UCS_OK) {
+        ucs_trace("iface %p: pre arm failed status %s", iface,
+                  ucs_status_string(status));
         goto out;
     }
 
@@ -895,21 +897,35 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     if ((events & (UCT_EVENT_RECV | UCT_EVENT_RECV_SIG)) &&
         !ucs_queue_is_empty(&iface->rx.pending_q))
     {
-        status = UCS_ERR_BUSY;
-        goto out;
-    }
-
-    /* Check if some send completions were not delivered yet */
-    if ((events & UCT_EVENT_SEND_COMP) &&
-        !ucs_queue_is_empty(&iface->tx.async_comp_q))
-    {
+        ucs_trace("iface %p: arm failed, has %lu unhandled receives", iface,
+                  ucs_queue_length(&iface->rx.pending_q));
         status = UCS_ERR_BUSY;
         goto out;
     }
 
     if (events & UCT_EVENT_SEND_COMP) {
+        /* Check if some send completions were not delivered yet */
+        if (!ucs_queue_is_empty(&iface->tx.async_comp_q)) {
+            ucs_trace("iface %p: arm failed, has %lu async send comp", iface,
+                      ucs_queue_length(&iface->tx.async_comp_q));
+            status = UCS_ERR_BUSY;
+            goto out;
+        }
+
+        /* Check if we have pending operations which need to be progressed */
+        if (iface->tx.async_before_pending) {
+            ucs_trace("iface %p: arm failed, has async-before-pending flag",
+                      iface);
+            status = UCS_ERR_BUSY;
+            goto out;
+        }
+    }
+
+    if (events & UCT_EVENT_SEND_COMP) {
         status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_TX, 0);
         if (status != UCS_OK) {
+            ucs_trace("iface %p: arm cq failed status %s", iface,
+                      ucs_status_string(status));
             goto out;
         }
     }
@@ -918,10 +934,13 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
         /* we may get send completion through ACKs as well */
         status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 0);
         if (status != UCS_OK) {
+            ucs_trace("iface %p: arm cq failed status %s", iface,
+                      ucs_status_string(status));
             goto out;
         }
     }
 
+    ucs_trace("iface %p: arm cq ok", iface);
     status = UCS_OK;
 out:
     uct_ud_leave(iface);
