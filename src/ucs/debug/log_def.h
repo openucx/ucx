@@ -147,7 +147,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
 /**
  * Show a fatal error
  */
-void ucs_log_fatal_error(const char *format, ...);
+void ucs_log_fatal_error(const char *format, ...) UCS_F_PRINTF(1, 2);
 
 
 /**
@@ -191,6 +191,14 @@ int ucs_log_get_current_indent();
  * @param level          Log level.
  */
 void ucs_log_print_backtrace(ucs_log_level_t level);
+
+
+/**
+ * Set the name fo current thread, to appear in log messages
+ *
+ * @param name           Thread name to set
+ */
+void ucs_log_set_thread_name(const char *format, ...) UCS_F_PRINTF(1, 2);
 
 END_C_DECLS
 
