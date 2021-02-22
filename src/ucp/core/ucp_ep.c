@@ -772,13 +772,10 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
     }
 }
 
-void ucp_ep_cleanup_lanes(ucp_ep_h ep)
+static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
 {
-    uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
-
-    ucs_debug("ep %p: cleanup lanes", ep);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         uct_ep        = ep->uct_eps[lane];
@@ -799,14 +796,24 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 
         /* set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
          * due to some UCT EP discarding procedures are in-progress and UCP EP
-         * may get some operation completions which could try to dereference
-         * its lanes */
+         * may get some operation completions which could try to dereference its
+         * lanes */
         ep->uct_eps[lane] = &ucp_failed_tl_ep;
     }
+}
+
+void ucp_ep_cleanup_lanes(ucp_ep_h ep)
+{
+    uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
+    ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
+
+    ucs_debug("ep %p: cleanup lanes", ep);
+
+    ucp_ep_set_lanes_failed(ep, uct_eps);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         uct_ep = uct_eps[lane];
-
         if (uct_ep == NULL) {
             continue;
         }
@@ -982,17 +989,22 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 
 void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
 {
+    uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
     ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
+
+    ucs_debug("ep %p: discarding lanes", ep);
+
+    ucp_ep_set_lanes_failed(ep, uct_eps);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ep->uct_eps[lane] == NULL) {
+        uct_ep = uct_eps[lane];
+        if (uct_ep == NULL) {
             continue;
         }
 
-        ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane,
-                  ep->uct_eps[lane]);
-        ucp_worker_discard_uct_ep(ep, ep->uct_eps[lane],
-                                  UCT_FLUSH_FLAG_CANCEL,
+        ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
+        ucp_worker_discard_uct_ep(ep, uct_ep, UCT_FLUSH_FLAG_CANCEL,
                                   ucp_ep_err_pending_purge,
                                   UCS_STATUS_PTR(status));
         /* UCT CM lane mustn't be scheduled on worker progress when discarding,
@@ -1002,10 +1014,8 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
          * functionality. So, UCP EP will passed as a corrupted argument to
          * ucp_cm_disconnect_cb() */
         if (lane == ucp_ep_get_cm_lane(ep)) {
-            ucs_assert(!ucp_worker_is_uct_ep_discarding(ep->worker,
-                                                        ep->uct_eps[lane]));
+            ucs_assert(!ucp_worker_is_uct_ep_discarding(ep->worker, uct_ep));
         }
-        ep->uct_eps[lane] = &ucp_failed_tl_ep;
     }
 }
 
