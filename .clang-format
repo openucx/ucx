@@ -106,6 +106,8 @@ Standard: Cpp11
 AccessModifierOffset: -4
 AlwaysBreakTemplateDeclarations: false
 BreakBeforeInheritanceComma: false
+BreakInheritanceList: AfterColon
+BreakConstructorInitializers: AfterColon
 CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
 ConstructorInitializerIndentWidth: 4
