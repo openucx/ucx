@@ -87,8 +87,12 @@ stages:
 
           - bash: |
               source ./buildlib/az-helpers.sh
-              echo "Checking code format on diff remotes/origin/${SYSTEM_PULLREQUEST_TARGETBRANCH}..${BUILD_SOURCEVERSION}"
-              git-clang-format --diff remotes/origin/${SYSTEM_PULLREQUEST_TARGETBRANCH} ${BUILD_SOURCEVERSION} > format.patch
+              set -x
+              git log -1 HEAD
+              git log -1 HEAD^
+              BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+              echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
+              git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
               echo "Generated patch file:"
               cat format.patch
               if [ "`cat format.patch`" = "no modified files to format" ]; then
@@ -127,7 +131,7 @@ stages:
             rhel82:
               CONTAINER: rhel82
         container: $[ variables['CONTAINER'] ]
-        timeoutInMinutes: 360
+        timeoutInMinutes: 240
 
         steps:
           - checkout: self

@@ -99,7 +99,9 @@ function az_module_load() {
         module load $module
         return 0
     else
-        azure_log_warning "Module $module cannot be load"
+        echo "MODULEPATH='${MODULEPATH}'"
+        module avail || true
+        azure_log_warning "Module $module cannot be loaded"
         return 1
     fi
 }

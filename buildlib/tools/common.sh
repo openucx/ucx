@@ -2,11 +2,11 @@
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
-CUDA_MODULE="dev/cuda-latest"
-GDRCOPY_MODULE="dev/gdrcopy-latest"
+CUDA_MODULE="dev/cuda11.1.1"
+GDRCOPY_MODULE="dev/gdrcopy2.1_cuda11.1.1"
 JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
-XPMEM_MODULE="dev/xpmem-latest"
+XPMEM_MODULE="dev/xpmem-90a95a4"
 PGI_MODULE="pgi/19.7"
 GCC_MODULE="dev/gcc-10.1.0"
 ARM_MODULE="arm-compiler/armcc-19.0"
