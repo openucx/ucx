@@ -31,7 +31,9 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->cap.alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
@@ -85,9 +87,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 
     result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
                                    (CUdeviceptr)(address));
-    if ((result == CUDA_SUCCESS) && (memType == CU_MEMORYTYPE_HOST)) {
-        /* memory is allocated with cudaMallocHost which is already registered */
-        *memh_p = NULL;
+    if ((result == CUDA_SUCCESS) && ((memType == CU_MEMORYTYPE_HOST)    ||
+                                     (memType == CU_MEMORYTYPE_UNIFIED) ||
+                                     (memType == CU_MEMORYTYPE_DEVICE))) {
+        /* only host memory not allocated by cuda needs to be registered */
+        /* using deadbeef as VA to avoid gtest error */
+        UCS_STATIC_ASSERT((uint64_t)0xdeadbeef != (uint64_t)UCT_MEM_HANDLE_NULL);
+        *memh_p = (void *)0xdeadbeef;
         return UCS_OK;
     }
 
@@ -110,7 +116,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
     void *address = (void *)memh;
     ucs_status_t status;
 
-    if (address == NULL) {
+    if (address == (void*)0xdeadbeef) {
         return UCS_OK;
     }
 
