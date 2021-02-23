@@ -97,13 +97,16 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
         return UCS_OK;
     }
 
-        *memh_p = address;
-    } else {
-        /* memory recognized by UVA and need not be registered */
-        UCS_STATIC_ASSERT((uint64_t)0xdeadbeef != (uint64_t)UCT_MEM_HANDLE_NULL);
-        *memh_p = (void *) 0xdeadbeef;
+    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                UCS_LOG_LEVEL_ERROR;
+    status    = UCT_CUDA_FUNC(cudaHostRegister(address, length,
+                                               cudaHostRegisterPortable),
+                              log_level);
+    if (status != UCS_OK) {
+        return status;
     }
 
+    *memh_p = address;
     return UCS_OK;
 }
 
