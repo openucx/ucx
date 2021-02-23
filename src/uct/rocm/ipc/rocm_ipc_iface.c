@@ -27,6 +27,26 @@ static ucs_config_field_t uct_rocm_ipc_iface_config_table[] = {
     {NULL}
 };
 
+static double uct_rocm_ipc_iface_get_bw()
+{
+    double bw = 30.0 * UCS_GBYTE;
+    hsa_amd_link_info_type_t type;
+
+    uct_rocm_base_get_link_type(&type);
+    switch (type) {
+    case HSA_AMD_LINK_INFO_TYPE_PCIE:
+        bw = 200.0 * UCS_GBYTE;
+        break;
+    case HSA_AMD_LINK_INFO_TYPE_XGMI:
+        bw = 400.0 * UCS_GBYTE;
+        break;
+    default:
+        bw = 100.0 * UCS_GBYTE;
+        break;
+    }
+    return bw;
+}
+
 static uint64_t uct_rocm_ipc_iface_node_guid(uct_base_iface_t *iface)
 {
     return ucs_machine_guid() *
@@ -87,11 +107,11 @@ static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_PENDING   |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
 
-    /* TODO: get accurate info */
-    iface_attr->latency                 = ucs_linear_func_make(80e-9, 0);
-    iface_attr->bandwidth.dedicated     = 10.0 * UCS_GBYTE; /* 10 GB */
-    iface_attr->bandwidth.shared        = 0;
-    iface_attr->overhead                = 0.4e-6; /* 0.4 us */
+    iface_attr->latency                 = ucs_linear_func_make(1e-9, 0);
+    iface_attr->bandwidth.dedicated     = 0;
+    iface_attr->bandwidth.shared        = uct_rocm_ipc_iface_get_bw();
+    iface_attr->overhead                = 0;
+    iface_attr->priority                = 0;
 
     return UCS_OK;
 }

@@ -20,6 +20,7 @@
 
 #define UCP_STATUS_PENDING_SWITCH (UCS_ERR_LAST - 1)
 
+
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
 
@@ -231,30 +232,27 @@ ucs_status_t ucp_am_zcopy_common(ucp_request_t *req, const void *hdr,
     ucp_ep_t *ep          = req->send.ep;
     ucp_md_index_t md_idx = ucp_ep_md_index(ep, req->send.lane);
     size_t iovcnt         = 0ul;
-    unsigned user_hdr_iov_cnt;
+
+    ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt,
+            max_iov - !!user_hdr_size, state, req->send.buffer,
+            req->send.datatype, max_length - user_hdr_size, md_idx, NULL);
 
     if (user_hdr_size != 0) {
         ucs_assert((req->send.length == 0) || (max_length > user_hdr_size));
         ucs_assert(max_iov > 1);
 
-        iov[0].buffer    = user_hdr_desc + 1;
-        iov[0].length    = user_hdr_size;
-        iov[0].memh      = ucp_memh2uct(user_hdr_desc->memh, md_idx);
-        iov[0].stride    = 0;
-        iov[0].count     = 1;
-        user_hdr_iov_cnt = 1;
-    } else {
-        user_hdr_iov_cnt = 0;
+        ucs_assert(user_hdr_desc != NULL);
+
+        iov[iovcnt].buffer = user_hdr_desc + 1;
+        iov[iovcnt].length = user_hdr_size;
+        iov[iovcnt].memh   = ucp_memh2uct(user_hdr_desc->memh, md_idx);
+        iov[iovcnt].stride = 0;
+        iov[iovcnt].count  = 1;
+        ++iovcnt;
     }
 
-    ucp_dt_iov_copy_uct(ep->worker->context, iov + user_hdr_iov_cnt, &iovcnt,
-                        max_iov - user_hdr_iov_cnt, state, req->send.buffer,
-                        req->send.datatype, max_length - user_hdr_size,
-                        md_idx, NULL);
-
     return uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,
-                           hdr_size, iov, iovcnt + user_hdr_iov_cnt, 0,
-                           &req->send.state.uct_comp);
+                           hdr_size, iov, iovcnt, 0, &req->send.state.uct_comp);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -345,9 +343,12 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
 
     if (enable_am_bw && (req->send.state.dt.offset != 0)) {
         req->send.lane = ucp_send_request_get_am_bw_lane(req);
-        ucp_send_request_add_reg_lane(req, req->send.lane);
     } else {
         req->send.lane = ucp_ep_get_am_lane(ep);
+    }
+
+    if (enable_am_bw || (req->send.state.dt.offset == 0)) {
+        ucp_send_request_add_reg_lane(req, req->send.lane);
     }
 
     uct_ep     = ep->uct_eps[req->send.lane];
@@ -527,22 +528,32 @@ ucp_proto_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*
-ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucs_ptr_map_key_t ep_id)
+ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucp_ep_h ep)
 {
-    ucp_request_t *req;
-
-    req = ucp_request_get(worker);
+    ucp_request_t *req = ucp_request_get(worker);
     if (req == NULL) {
+        ucs_error("failed to allocate UCP request");
         return NULL;
     }
 
     req->flags              = 0;
-    req->send.ep            = ucp_worker_get_ep_by_id(worker, ep_id);
+    req->send.ep            = ep;
     req->send.uct.func      = ucp_proto_progress_am_single;
     req->send.proto.comp_cb = ucp_request_put;
     req->send.proto.status  = UCS_OK;
 
     return req;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_am_short_handle_status_from_pending(ucp_request_t *req, ucs_status_t status)
+{
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    ucp_request_complete_send(req, status);
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -554,9 +565,7 @@ ucp_am_bcopy_handle_status_from_pending(uct_pending_req_t *self, int multi,
     if (multi) {
         if (status == UCS_INPROGRESS) {
             return UCS_INPROGRESS;
-        }
-
-        if (ucs_unlikely(status == UCP_STATUS_PENDING_SWITCH)) {
+        } else if (ucs_unlikely(status == UCP_STATUS_PENDING_SWITCH)) {
             return UCS_OK;
         }
     } else {

@@ -146,7 +146,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_zcopy        = 0;
     iface_attr->cap.am.opt_zcopy_align  = UCS_SYS_CACHE_LINE_SIZE;
     iface_attr->cap.am.align_mtu        = iface_attr->cap.am.opt_zcopy_align;
-    iface_attr->cap.am.max_iov          = 1;
+    iface_attr->cap.am.max_iov          = SIZE_MAX;
 
     iface_attr->iface_addr_len          = sizeof(uct_mm_iface_addr_t) +
                                           md->iface_addr_len;
@@ -400,7 +400,7 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .ep_put_bcopy             = uct_sm_ep_put_bcopy,
     .ep_get_bcopy             = uct_sm_ep_get_bcopy,
     .ep_am_short              = uct_mm_ep_am_short,
-    .ep_am_short_iov          = uct_base_ep_am_short_iov,
+    .ep_am_short_iov          = uct_mm_ep_am_short_iov,
     .ep_am_bcopy              = uct_mm_ep_am_bcopy,
     .ep_atomic_cswap64        = uct_sm_ep_atomic_cswap64,
     .ep_atomic64_post         = uct_sm_ep_atomic64_post,

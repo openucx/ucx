@@ -118,7 +118,7 @@ static const char *size_limit_to_str(size_t min_size, size_t max_size)
 static void print_iface_info(uct_worker_h worker, uct_md_h md,
                              uct_tl_resource_desc_t *resource)
 {
-    char buf[200]                   = {0};
+    char buf[256]                   = {0};
     uct_iface_params_t iface_params = {
         .field_mask            = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
                                  UCT_IFACE_PARAM_FIELD_DEVICE      |
@@ -291,12 +291,14 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
         }
 
         buf[0] = '\0';
-        if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF   |
-                                    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF   |
-                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF   |
-                                    UCT_IFACE_FLAG_ERRHANDLE_AM_ID       |
-                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM  |
-                                    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)) {
+        if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF    |
+                                    UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF    |
+                                    UCT_IFACE_FLAG_ERRHANDLE_ZCOPY_BUF    |
+                                    UCT_IFACE_FLAG_ERRHANDLE_AM_ID        |
+                                    UCT_IFACE_FLAG_ERRHANDLE_REMOTE_MEM   |
+                                    UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                    UCT_IFACE_FLAG_EP_CHECK               |
+                                    UCT_IFACE_FLAG_EP_KEEPALIVE)) {
 
             if (iface_attr.cap.flags & (UCT_IFACE_FLAG_ERRHANDLE_SHORT_BUF |
                                         UCT_IFACE_FLAG_ERRHANDLE_BCOPY_BUF |
@@ -322,6 +324,12 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
             }
             if (iface_attr.cap.flags & UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE) {
                 strncat(buf, " peer failure,", sizeof(buf) - strlen(buf) - 1);
+            }
+            if (iface_attr.cap.flags & UCT_IFACE_FLAG_EP_CHECK) {
+                strncat(buf, " ep_check,", sizeof(buf) - strlen(buf) - 1);
+            }
+            if (iface_attr.cap.flags & UCT_IFACE_FLAG_EP_KEEPALIVE) {
+                strncat(buf, " keepalive,", sizeof(buf) - strlen(buf) - 1);
             }
             buf[strlen(buf) - 1] = '\0';
         } else {
@@ -443,9 +451,6 @@ static void print_md_info(uct_component_h component,
         }
         if (md_attr.cap.flags & UCT_MD_FLAG_RKEY_PTR) {
             printf("#           rkey_ptr is supported\n");
-        }
-        if (md_attr.cap.flags & UCT_MD_FLAG_SOCKADDR) {
-            printf("#           supports client-server connection establishment via sockaddr\n");
         }
     }
 

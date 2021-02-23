@@ -33,4 +33,10 @@ ucp_contig_cuda_mng_stream_bw        -t stream_bw  -r recv_data -m cuda-managed
 ucp_contig_cuda_mng_stream_lat       -t stream_lat -r recv_data -m cuda-managed
 ucp_contig_cuda_mng_stream_bw        -t stream_bw  -r recv -m cuda-managed
 ucp_contig_cuda_mng_stream_lat       -t stream_lat -r recv -m cuda-managed
-
+#CUDA wakeup mode
+ucp_contig_contig_cuda_tag_lat -I -E sleep  -t tag_lat -D contig,contig -m cuda,cuda
+ucp_contig_contig_cuda_tag_lat -I -E sleep  -t tag_lat -D contig,contig -m cuda,host
+ucp_contig_contig_cuda_tag_lat -I -E sleep  -t tag_lat -D contig,contig -m host,cuda
+ucp_contig_contig_cuda_tag_bw  -I -E sleep  -t tag_bw  -D contig,contig -m cuda,cuda
+ucp_contig_contig_cuda_tag_bw  -I -E sleep  -t tag_bw  -D contig,contig -m cuda,host
+ucp_contig_contig_cuda_tag_bw  -I -E sleep  -t tag_bw  -D contig,contig -m host,cuda

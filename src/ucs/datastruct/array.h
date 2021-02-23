@@ -52,6 +52,14 @@ BEGIN_C_DECLS
 
 
 /**
+ * Dynamic array initializer. The array storage should be released explicitly by
+ * calling @ref ucs_array_cleanup_dynamic()
+ */
+#define UCS_ARRAY_DYNAMIC_INITIALIZER \
+    { NULL, 0, 0 }
+
+
+/**
  * Static initializer to create a fixed-length array with existing static buffer
  * as backing storage. Such array can track the number of elements and check for
  * overrun, and does not have to be released.

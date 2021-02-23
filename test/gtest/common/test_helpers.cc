@@ -9,6 +9,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/config/global_opts.h>
 #include <ucs/config/parser.h>
 
 #include <set>
@@ -716,6 +717,17 @@ auto_buffer::~auto_buffer()
 void* auto_buffer::operator*() const {
     return m_ptr;
 };
+
+scoped_log_level::scoped_log_level(ucs_log_level_t level)
+    : m_prev_level(ucs_global_opts.log_component.log_level)
+{
+    ucs_global_opts.log_component.log_level = level;
+}
+
+scoped_log_level::~scoped_log_level()
+{
+    ucs_global_opts.log_component.log_level = m_prev_level;
+}
 
 namespace detail {
 

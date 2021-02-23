@@ -42,11 +42,12 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     select_param.op_flags   = 0;
     select_param.dt_class   = UCP_DATATYPE_CONTIG;
     select_param.mem_type   = UCS_MEMORY_TYPE_HOST;
-    select_param.sys_dev    = 0;
+    select_param.sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
     select_param.sg_count   = 1;
     select_param.padding[0] = 0;
     select_param.padding[1] = 0;
 
+    ucs_string_buffer_init(&strb);
     ucp_proto_select_param_str(&select_param, &strb);
     UCS_TEST_MESSAGE << ucs_string_buffer_cstr(&strb);
     ucs_string_buffer_cleanup(&strb);
@@ -66,7 +67,6 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
     rkey_config_key.ep_cfg_index = 0;
     rkey_config_key.md_map       = 0;
     rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     ucs_status_t status;
 
@@ -84,7 +84,6 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
     rkey_config_key.ep_cfg_index = 0;
     rkey_config_key.md_map       = 1;
     rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     /* different configuration should return different index */
     ucp_worker_cfg_index_t cfg_index3;
@@ -92,6 +91,24 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
     ASSERT_UCS_OK(status);
 
     EXPECT_NE(static_cast<int>(cfg_index1), static_cast<int>(cfg_index3));
+}
+
+
+UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
+{
+    ucp_rkey_config_key_t rkey_config_key;
+
+    rkey_config_key.ep_cfg_index = 0;
+    rkey_config_key.md_map       = 0;
+    rkey_config_key.mem_type     = UCS_MEMORY_TYPE_HOST;
+
+    /* similar configurations should return same index */
+    ucp_worker_cfg_index_t cfg_index;
+    ucs_status_t status = ucp_worker_get_rkey_config(worker(), &rkey_config_key,
+                                                     &cfg_index);
+    ASSERT_UCS_OK(status);
+
+    ucp_worker_print_info(worker(), stdout);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_proto)

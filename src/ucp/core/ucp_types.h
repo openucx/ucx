@@ -9,6 +9,7 @@
 
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
+#include <ucs/datastruct/bitmap.h>
 #include <ucs/sys/preprocessor.h>
 #include <stdint.h>
 
@@ -18,7 +19,7 @@
 #define UCP_FEATURE_AMO              (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)
 
 /* Resources */
-#define UCP_MAX_RESOURCES            64 /* up to 64 only due to tl_bitmap usage */
+#define UCP_MAX_RESOURCES            128
 #define UCP_NULL_RESOURCE            ((ucp_rsc_index_t)-1)
 typedef uint8_t                      ucp_rsc_index_t;
 
@@ -62,6 +63,43 @@ typedef struct ucp_proto                ucp_proto_t;
 
 
 /**
+ * UCP TL bitmap
+ *
+ * Bitmap type for representing which TL resources are in use.
+ */
+typedef ucs_bitmap_t(UCP_MAX_RESOURCES) ucp_tl_bitmap_t;
+
+
+/**
+ * Max possible value of TL bitmap (all bits are 1)
+ */
+extern const ucp_tl_bitmap_t ucp_tl_bitmap_max;
+
+
+/**
+ * Min possible value of TL bitmap (all bits are 0)
+ */
+extern const ucp_tl_bitmap_t ucp_tl_bitmap_min;
+
+
+#define UCT_TL_BITMAP_FMT          "0x%lx 0x%lx"
+#define UCT_TL_BITMAP_ARG(_bitmap) (_bitmap)->bits[0], (_bitmap)->bits[1]
+
+
+/**
+ * Perform bitwise AND on a TL bitmap and a negation of a bitmap and return the result
+ *
+ * @param _bitmap1 First operand
+ * @param _bitmap2 Second operand
+ *
+ * @return A new bitmap, which is the logical AND NOT of the operands
+ */
+#define UCP_TL_BITMAP_AND_NOT(_bitmap1, _bitmap2) \
+    UCS_BITMAP_AND(_bitmap1, UCS_BITMAP_NOT(_bitmap2, UCP_MAX_RESOURCES), \
+                   UCP_MAX_RESOURCES)
+
+
+/**
  * Operation for which protocol is selected
  */
 typedef enum {
@@ -69,6 +107,9 @@ typedef enum {
     UCP_OP_ID_TAG_SEND_SYNC,
     UCP_OP_ID_PUT,
     UCP_OP_ID_GET,
+    UCP_OP_ID_API_LAST,
+
+    UCP_OP_ID_RNDV_RECV = UCP_OP_ID_API_LAST,
     UCP_OP_ID_LAST
 } ucp_operation_id_t;
 

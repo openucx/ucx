@@ -168,8 +168,10 @@ void test_perf::set_affinity(int cpu)
 void* test_perf::thread_func(void *arg)
 {
     thread_arg *a = (thread_arg*)arg;
+    rte *r        = reinterpret_cast<rte*>(a->params.rte_group);
     test_result *result;
 
+    ucs_log_set_thread_name("perf-%d", r->index());
     set_affinity(a->cpu);
     result = new test_result();
     result->status = ucx_perf_run(&a->params, &result->result);
@@ -185,13 +187,13 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
 
     ucx_perf_params_t params;
     memset(&params, 0, sizeof(params));
-    params.api = test.api;
+    params.api             = test.api;
     params.command         = test.command;
     params.test_type       = test.test_type;
     params.thread_mode     = UCS_THREAD_MODE_SINGLE;
     params.async_mode      = UCS_ASYNC_THREAD_LOCK_TYPE;
     params.thread_count    = 1;
-    params.wait_mode       = UCX_PERF_WAIT_MODE_LAST;
+    params.wait_mode       = test.wait_mode;
     params.flags           = test.test_flags | flags;
     params.am_hdr_size     = 8;
     params.alignment       = ucs_get_page_size();

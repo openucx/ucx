@@ -1,10 +1,11 @@
 # C
 BasedOnStyle: LLVM
-AlignEscapedNewlines: DontAlign
+AlignEscapedNewlines: Indent
 AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: true
+AlignConsecutiveDeclarations: false
 AlignConsecutiveStructMembers: true
 AlignConsecutiveMacros: true
+AlignDeclarationByPointer: true
 AlignAfterOpenBracket: true
 AlignOperands: true
 PointerAlignment: Right
@@ -17,10 +18,16 @@ AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowDesignatedInitializersOnASingleLine: false
 AlwaysBreakAfterReturnType: None
-PenaltyReturnTypeOnItsOwnLine: 100
+PenaltyReturnTypeOnItsOwnLine: 20
 PenaltyBreakAssignment: 100
-PenaltyExcessCharacter: 10
+PenaltyExcessCharacter: 100
+PenaltyBreakBeforeFirstCallParameter: 100
+PenaltyBreakMemberAccess: 250
+PenaltyBreakLastMemberAccess: 300
+PenaltyIndentedWhitespace: 0
 ColumnLimit: 80
 AlwaysBreakBeforeMultilineStrings: false
 BinPackArguments: true
@@ -45,7 +52,7 @@ BraceWrapping:
 BreakBeforeBinaryOperators: false
 BreakBeforeTernaryOperators: false
 BreakStringLiterals: true
-ContinuationIndentWidth: 4
+ContinuationIndentWidth: 8
 IncludeBlocks: Regroup
 IndentCaseLabels: false
 IndentWidth: 4
@@ -60,7 +67,8 @@ SpaceBeforeParens: ControlStatementsExceptForEachMacros
 SpaceBeforeAssignmentOperators: true
 SpaceAfterCStyleCast: false
 SortIncludes: false
-ForEachMacros: ['FOR_EACH_ENTITY',
+ForEachMacros: ['_UCS_BITMAP_FOR_EACH_WORD',
+                'FOR_EACH_ENTITY',
                 'kh_foreach',
                 'kh_foreach_key',
                 'kh_foreach_value',
@@ -89,20 +97,27 @@ ForEachMacros: ['FOR_EACH_ENTITY',
                 'UCS_INIT_ONCE',
                 'UCS_TEST_F',
                 'UCX_PERF_TEST_FOREACH']
+StatementMacros : []
+TypenameMacros: ['khash_t', 'ucs_array_t']
+WhitespaceSensitiveMacros: []
 
 # CPP
 Standard: Cpp11
 AccessModifierOffset: -4
 AlwaysBreakTemplateDeclarations: false
 BreakBeforeInheritanceComma: false
+BreakInheritanceList: AfterColon
+BreakConstructorInitializers: AfterColon
 CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
 ConstructorInitializerIndentWidth: 4
 Cpp11BracedListStyle: true
+Cpp11BracedListLineBreak: true
 FixNamespaceComments: true
 NamespaceIndentation: None
 UseTab: Never
-ReflowComments: true
+ReflowComments: false
+SortIncludes: false
 IncludeCategories:
  - Regex: '^"'
    Priority: 1

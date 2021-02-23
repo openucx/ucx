@@ -53,6 +53,7 @@ typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t         super;
     uct_ud_iface_common_config_t  ud_common;
     double                        peer_timeout;
+    double                        min_poke_time;
     double                        timer_tick;
     double                        timer_backoff;
     double                        event_timer_tick;
@@ -179,6 +180,7 @@ struct uct_ud_iface {
     } tx;
     struct {
         ucs_time_t           peer_timeout;
+        ucs_time_t           min_poke_time;
         unsigned             tx_qp_len;
         unsigned             max_inline;
         int                  check_grh_dgid;
@@ -380,18 +382,9 @@ static UCS_F_ALWAYS_INLINE void uct_ud_leave(uct_ud_iface_t *iface)
 }
 
 
-static UCS_F_ALWAYS_INLINE unsigned
-uct_ud_grh_get_dgid_len(struct ibv_grh *grh)
-{
-    static const uint8_t ipmask = 0xf0;
-    uint8_t ipver               = ((*(uint8_t*)grh) & ipmask);
-
-    return (ipver == (6 << 4)) ? UCS_IPV6_ADDR_LEN : UCS_IPV4_ADDR_LEN;
-}
-
-
 static UCS_F_ALWAYS_INLINE int
-uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present)
+uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present,
+                       uint8_t roce_pkt_type)
 {
     struct ibv_grh *grh = (struct ibv_grh *)packet;
     size_t gid_len;
@@ -408,7 +401,25 @@ uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present)
         return 1;
     }
 
-    gid_len = uct_ud_grh_get_dgid_len(grh);
+    /*
+     * Take the packet type from CQE, because:
+     * 1. According to Annex17_RoCEv2 (A17.4.5.1):
+     * For UD, the Completion Queue Entry (CQE) includes remote address
+     * information (InfiniBand Specification Vol. 1 Rev 1.2.1 Section 11.4.2.1).
+     * For RoCEv2, the remote address information comprises the source L2
+     * Address and a flag that indicates if the received frame is an IPv4,
+     * IPv6 or RoCE packet.
+     * 2. According to PRM, for responder UD/DC over RoCE sl represents RoCE
+     * packet type as:
+     * bit 3    : when set R-RoCE frame contains an UDP header otherwise not
+     * Bits[2:0]: L3_Header_Type, as defined below
+     *     - 0x0 : GRH - (RoCE v1.0)
+     *     - 0x1 : IPv6 - (RoCE v1.5/v2.0)
+     *     - 0x2 : IPv4 - (RoCE v1.5/v2.0)
+     */
+    gid_len = ((roce_pkt_type & UCT_IB_CQE_SL_PKTYPE_MASK) == 0x2) ?
+              UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN;
+
     if (ucs_likely((gid_len == iface->gid_table.last_len) &&
                     uct_ud_gid_equal(&grh->dgid, &iface->gid_table.last,
                                      gid_len))) {

@@ -150,14 +150,24 @@ static void uct_tcp_ep_cleanup(uct_tcp_ep_t *ep)
     ucs_close_fd(&ep->stale_fd);
 }
 
+static void uct_tcp_ep_ptr_map_verify(uct_tcp_ep_t *ep, int on_ptr_map)
+{
+    ucs_assert(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP);
+    if (on_ptr_map) {
+        ucs_assert(ep->flags & UCT_TCP_EP_FLAG_ON_PTR_MAP);
+    } else {
+        ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_PTR_MAP));
+    }
+    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
+}
+
 static void uct_tcp_ep_ptr_map_add(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
     ucs_status_t status;
 
-    ucs_assert(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP);
-    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
+    uct_tcp_ep_ptr_map_verify(ep, 0);
 
     status = ucs_ptr_map_put(&iface->ep_ptr_map, ep, 1,
                              &ep->cm_id.ptr_map_key);
@@ -166,35 +176,55 @@ static void uct_tcp_ep_ptr_map_add(uct_tcp_ep_t *ep)
     ep->flags |= UCT_TCP_EP_FLAG_ON_PTR_MAP;
 }
 
+static void uct_tcp_ep_ptr_map_removed(uct_tcp_ep_t *ep)
+{
+    uct_tcp_ep_ptr_map_verify(ep, 1);
+    ep->flags &= ~UCT_TCP_EP_FLAG_ON_PTR_MAP;
+}
+
 static void uct_tcp_ep_ptr_map_del(uct_tcp_ep_t *ep)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
     ucs_status_t status;
 
-    ucs_assert(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP);
-    ucs_assert(ep->flags & UCT_TCP_EP_FLAG_ON_PTR_MAP);
-    ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
-
     status = ucs_ptr_map_del(&iface->ep_ptr_map, ep->cm_id.ptr_map_key);
     ucs_assert_always(status == UCS_OK);
-
-    ep->flags &= ~UCT_TCP_EP_FLAG_ON_PTR_MAP;
+    uct_tcp_ep_ptr_map_removed(ep);
 }
 
-uct_tcp_ep_t* uct_tcp_ep_ptr_map_retrieve(uct_tcp_iface_t *iface,
-                                          ucs_ptr_map_key_t ptr_map_key)
+static uct_tcp_ep_t *
+uct_tcp_ep_ptr_map_get(uct_tcp_iface_t *iface, ucs_ptr_map_key_t ptr_map_key)
 {
+    ucs_status_t status;
     uct_tcp_ep_t *ep;
+    void *ptr;
 
-    ep = ucs_ptr_map_get(&iface->ep_ptr_map, ptr_map_key);
-    if (ep != NULL) {
-        ucs_assert(ep->flags & UCT_TCP_EP_FLAG_ON_PTR_MAP);
-        ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
-        uct_tcp_ep_ptr_map_del(ep);
+    status = ucs_ptr_map_get(&iface->ep_ptr_map, ptr_map_key, 0, &ptr);
+    if (ucs_likely(status == UCS_OK)) {
+        ep = ptr;
+        uct_tcp_ep_ptr_map_verify(ep, 1);
+        return ep;
     }
 
-    return ep;
+    return NULL;
+}
+
+uct_tcp_ep_t *uct_tcp_ep_ptr_map_retrieve(uct_tcp_iface_t *iface,
+                                          ucs_ptr_map_key_t ptr_map_key)
+{
+    ucs_status_t status;
+    uct_tcp_ep_t *ep;
+    void *ptr;
+
+    status = ucs_ptr_map_get(&iface->ep_ptr_map, ptr_map_key, 1, &ptr);
+    if (ucs_likely(status == UCS_OK)) {
+        ep = ptr;
+        uct_tcp_ep_ptr_map_removed(ep);
+        return ep;
+    }
+
+    return NULL;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_ep_t, uct_tcp_iface_t *iface,
@@ -393,6 +423,8 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
     uct_tcp_ep_mod_events(ep, 0, ep->events);
 
     if (ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) {
+        ucs_debug("tcp_ep %p: calling error handler (flags: %x)", ep,
+                  ep->flags);
         uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CLOSED);
         uct_iface_handle_ep_err(ep->super.super.iface, &ep->super.super,
                                 UCS_ERR_ENDPOINT_TIMEOUT);
@@ -585,7 +617,7 @@ static ucs_status_t uct_tcp_ep_connect(uct_tcp_ep_t *ep)
         }
     } else {
         /* EP that connects to self or EP created using CONNECT_TO_EP mustn't
-         * go here and always create socket and conenct to a peer */
+         * go here and always create socket and connect to a peer */
         ucs_assert(!uct_tcp_ep_is_self(ep) &&
                    !(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP));
         ucs_assert((peer_ep != NULL) && (peer_ep->fd != -1) &&
@@ -704,19 +736,33 @@ ucs_status_t uct_tcp_ep_connect_to_ep(uct_ep_h tl_ep,
         return UCS_OK;
     }
 
+    if (uct_tcp_ep_ptr_map_get(iface, ep->cm_id.ptr_map_key) == NULL) {
+        /* If the EP doesn't exist anymore in the local EP PTR MAP, it means the
+         * EP was already connected to a peer's EP and removed from the EP PTR
+         * MAP as a part of CONN_REQ handling (only not connected yet EPs are
+         * contained in a PTR MAP) and then disconnected before a user called
+         * uct_ep_connect_to_ep() for the EP.
+         * So, just report to a caller that the connection was already reset */
+        ucs_assert(uct_tcp_cm_ep_accept_conn(ep));
+        ucs_assert(ep->conn_state == UCT_TCP_EP_CONN_STATE_CLOSED);
+        ucs_assert(ep->conn_retries > 0);
+        return UCS_ERR_CONNECTION_RESET;
+    }
+
     uct_tcp_ep_set_dest_addr(dev_addr, (uct_iface_addr_t*)&addr->iface_addr,
                              &ep->peer_addr);
 
     if (!uct_tcp_cm_ep_accept_conn(ep)) {
         ucs_assert(ep->conn_state == UCT_TCP_EP_CONN_STATE_CLOSED);
-        /* EP that are created as CONNECT_TO_EP has to be full-duplex, set RX
+        /* EPs which are created as CONNECT_TO_EP has to be full-duplex, set RX
          * capability as well as TX (that's set in uct_tcp_ep_connect()) */
         uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_RX);
 
         uct_tcp_ep_ptr_map_del(ep);
 
-        /* Use remote peer connection sequence number value, since the EP has to
-         * send the CONN_REQ to the peer has to find its EP in the EP PTR map */
+        /* Use the peer's EP PTR map key, since the EP has to send the CONN_REQ
+         * to the peer which has to find an EP created for this connection in
+         * the EP PTR map */
         ep->cm_id.ptr_map_key = addr->ptr_map_key;
         return uct_tcp_ep_connect(ep);
     }
@@ -1988,8 +2034,7 @@ uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     uct_tcp_am_hdr_t *hdr  = NULL; /* init to suppress build warning */
     ucs_status_t status;
 
-    UCT_CHECK_PARAM(comp == NULL, "Unsupported completion on ep_check");
-    UCT_CHECK_PARAM(flags == 0, "Unsupported flags: %x", flags);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
     status = uct_tcp_ep_am_prepare(iface, ep, UCT_TCP_EP_KEEPALIVE_AM_ID, &hdr);
     if (status != UCS_OK) {

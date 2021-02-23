@@ -311,6 +311,34 @@ UCS_TEST_P(test_ucp_tag_offload, connect)
     e->connect(&receiver(), get_ep_params());
 }
 
+// Send small chunk of data to be scattered to CQE on the receiver. Post bigger
+// chunk of memory for receive operation, so it would be posted to the HW.
+UCS_TEST_P(test_ucp_tag_offload, eager_send_less, "RNDV_THRESH=inf",
+           "TM_THRESH=0", "TM_MAX_BB_SIZE=0")
+{
+    activate_offload(sender());
+
+    uint8_t              send_data = 0;
+    size_t               length    = 4 * UCS_KBYTE;
+    ucp_tag_t            tag       = 0x11;
+    std::vector<uint8_t> recvbuf(length);
+
+    request *rreq = recv_nb_exp(&recvbuf[0], length, ucp_dt_make_contig(1), tag,
+                                UCP_TAG_MASK_FULL);
+
+    request *sreq = (request*)ucp_tag_send_nb(sender().ep(), &send_data,
+                                              sizeof(send_data),
+                                              ucp_dt_make_contig(1), tag,
+                                              send_callback);
+    if (UCS_PTR_IS_ERR(sreq)) {
+        ASSERT_UCS_OK(UCS_PTR_STATUS(sreq));
+    } else if (sreq != NULL) {
+        request_wait(sreq);
+    }
+
+    request_wait(rreq);
+}
+
 UCS_TEST_P(test_ucp_tag_offload, small_rndv, "RNDV_THRESH=0", "TM_THRESH=0")
 {
     activate_offload(sender());
@@ -510,12 +538,12 @@ UCS_TEST_P(test_ucp_tag_offload_selection, tag_lane)
     ucp_ep_config_t *ep_config = ucp_ep_config(ep);
 
     if (has_tag_offload && !has_shm_or_self) {
-        EXPECT_TRUE(ucp_ep_is_tag_offload_enabled(ep_config));
+        EXPECT_TRUE(ucp_ep_config_key_has_tag_lane(&ep_config->key));
         EXPECT_EQ(ep_config->key.tag_lane, ep_config->tag.lane);
     } else {
         // If shm or self transports exist they would be used for tag matching
         // rather than network offload
-        EXPECT_FALSE(ucp_ep_is_tag_offload_enabled(ep_config));
+        EXPECT_FALSE(ucp_ep_config_key_has_tag_lane(&ep_config->key));
         EXPECT_EQ(ep_config->key.am_lane, ep_config->tag.lane);
     }
 }
@@ -584,8 +612,8 @@ UCS_TEST_P(test_ucp_tag_offload_gpu, rx_scatter_to_cqe, "TM_THRESH=1")
     wait_and_validate(sreq);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_gpu, rc_dc_gpu,
-                              "dc_x,rc_x," UCP_TEST_GPU_COPY_TLS)
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_tag_offload_gpu, rc_dc_gpu,
+                                        "dc_x,rc_x")
 
 class test_ucp_tag_offload_status : public test_ucp_tag {
 public:
@@ -836,7 +864,7 @@ UCS_TEST_P(test_ucp_tag_offload_stats_gpu, block_gpu_no_gpu_direct,
     req_cancel(receiver(), rreq);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_offload_stats_gpu, rc_dc_gpu,
-                              "dc_x,rc_x," UCP_TEST_GPU_COPY_TLS)
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_tag_offload_stats_gpu,
+                                        rc_dc_gpu, "dc_x,rc_x")
 
 #endif

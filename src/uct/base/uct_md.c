@@ -450,11 +450,17 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
     ucs_status_t status;
 
     if ((length == 0) || (address == NULL)) {
+        uct_md_log_mem_reg_error(flags,
+                                 "uct_md_mem_reg(address=%p length=%zu): "
+                                 "invalid parameters", address, length);
         return UCS_ERR_INVALID_PARAM;
     }
 
     status = uct_mem_check_flags(flags);
     if (status != UCS_OK) {
+        uct_md_log_mem_reg_error(flags,
+                                 "uct_md_mem_reg(flags=0x%x): invalid flags",
+                                 flags);
         return status;
     }
 
@@ -466,10 +472,10 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
     return md->ops->mem_dereg(md, memh);
 }
 
-ucs_status_t uct_md_mem_query(uct_md_h md, const void *addr, const size_t length,
-                              uct_md_mem_attr_t *mem_attr_p)
+ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
+                              uct_md_mem_attr_t *mem_attr)
 {
-    return md->ops->mem_query(md, addr, length, mem_attr_p);
+    return md->ops->mem_query(md, address, length, mem_attr);
 }
 
 int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,

@@ -18,7 +18,6 @@ typedef struct uct_cuda_ipc_ep_addr {
 
 typedef struct uct_cuda_ipc_ep {
     uct_base_ep_t                   super;
-    uct_cuda_ipc_cache_t            *remote_memh_cache;
 } uct_cuda_ipc_ep_t;
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_cuda_ipc_ep_t, uct_ep_t, const uct_ep_params_t *);

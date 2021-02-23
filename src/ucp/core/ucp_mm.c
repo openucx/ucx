@@ -126,7 +126,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             }
 
             level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
-                    UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
+                    UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
 
             ucs_log(level,
                     "failed to register address %p mem_type bit 0x%lx length %zu on "
@@ -308,8 +308,7 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
             goto err_free_memh;
         }
     } else {
-        memh->mem_type     = ucp_get_memory_type(context, address, length,
-                                                 memory_type);
+        memh->mem_type     = memory_type;
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
@@ -390,10 +389,11 @@ out:
 ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *params,
                          ucp_mem_h *memh_p)
 {
-    ucs_status_t status;
-    void         *address;
-    unsigned     flags;
     ucs_memory_type_t memory_type;
+    ucs_memory_info_t mem_info;
+    ucs_status_t status;
+    unsigned flags;
+    void *address;
 
     /* always acquire context lock */
     UCP_THREAD_CS_ENTER(&context->mt_lock);
@@ -405,11 +405,8 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         goto out;
     }
 
-    address     = UCP_PARAM_VALUE(MEM_MAP, params, address, ADDRESS, NULL);
-    flags       = UCP_PARAM_VALUE(MEM_MAP, params, flags, FLAGS, 0);
-    memory_type = UCP_PARAM_VALUE(MEM_MAP, params, memory_type, MEMORY_TYPE,
-                                  (flags & UCP_MEM_MAP_ALLOCATE) ?
-                                  UCS_MEMORY_TYPE_HOST : UCS_MEMORY_TYPE_UNKNOWN);
+    address = UCP_PARAM_VALUE(MEM_MAP, params, address, ADDRESS, NULL);
+    flags   = UCP_PARAM_VALUE(MEM_MAP, params, flags, FLAGS, 0);
 
     if ((flags & UCP_MEM_MAP_FIXED) &&
         ((uintptr_t)address % ucs_get_page_size())) {
@@ -436,6 +433,22 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
         *memh_p = &ucp_mem_dummy_handle;
         status  = UCS_OK;
         goto out;
+    }
+
+    if (flags & UCP_MEM_MAP_ALLOCATE) {
+        memory_type = UCS_MEMORY_TYPE_HOST;
+    } else if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE) ||
+               (params->memory_type == UCS_MEMORY_TYPE_UNKNOWN)) {
+        ucp_memory_detect(context, address, params->length, &mem_info);
+        memory_type = mem_info.type;
+    } else {
+        if (params->memory_type > UCS_MEMORY_TYPE_LAST) {
+            ucs_error("invalid memory type %d", params->memory_type);
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
+        }
+
+        memory_type = params->memory_type;
     }
 
     status = ucp_mem_map_common(context, address, params->length, memory_type,
@@ -547,6 +560,10 @@ ucs_status_t ucp_mem_query(const ucp_mem_h memh, ucp_mem_attr_t *attr)
 
     if (attr->field_mask & UCP_MEM_ATTR_FIELD_LENGTH) {
         attr->length = memh->length;
+    }
+
+    if (attr->field_mask & UCP_MEM_ATTR_FIELD_MEM_TYPE) {
+        attr->mem_type = memh->mem_type;
     }
 
     return UCS_OK;

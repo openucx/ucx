@@ -24,6 +24,11 @@
 #include <malloc.h>
 #include <dlfcn.h>
 
+#ifdef HAVE_CUDA
+#include <cuda.h>
+#include <cuda_runtime.h>
+#endif
+
 #define ALIGNMENT           4096
 #define BUSY_PROGRESS_COUNT 1000
 
@@ -67,25 +72,26 @@ typedef struct {
     bool                     verbose;
     bool                     validate;
     bool                     use_am;
+    ucs_memory_type_t        memory_type;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
 #define LOG         UcxLog(LOG_PREFIX)
 #define VERBOSE_LOG UcxLog(LOG_PREFIX, _test_opts.verbose)
 
-
-template<class T, bool use_offcache = false>
-class MemoryPool {
+template<class BufferType, bool use_offcache = false> class ObjectPool {
 public:
-    MemoryPool(size_t buffer_size, const std::string& name, size_t offcache = 0) :
-        _num_allocated(0), _buffer_size(buffer_size), _name(name) {
-
+    ObjectPool(size_t buffer_size, const std::string &name,
+               size_t offcache = 0) :
+        _buffer_size(buffer_size), _num_allocated(0), _name(name)
+    {
         for (size_t i = 0; i < offcache; ++i) {
             _offcache_queue.push(get_free());
         }
     }
 
-    ~MemoryPool() {
+    ~ObjectPool()
+    {
         while (!_offcache_queue.empty()) {
             _free_stack.push_back(_offcache_queue.front());
             _offcache_queue.pop();
@@ -101,8 +107,9 @@ public:
         }
     }
 
-    inline T* get() {
-        T* item = get_free();
+    inline BufferType *get()
+    {
+        BufferType *item = get_free();
 
         if (use_offcache && !_offcache_queue.empty()) {
             _offcache_queue.push(item);
@@ -113,7 +120,8 @@ public:
         return item;
     }
 
-    inline void put(T* item) {
+    inline void put(BufferType *item)
+    {
         _free_stack.push_back(item);
     }
 
@@ -121,12 +129,26 @@ public:
         return _num_allocated;
     }
 
+    virtual ucs_memory_type_t memory_type() const
+    {
+        return UCS_MEMORY_TYPE_HOST;
+    }
+
+protected:
+    size_t buffer_size() const
+    {
+        return _buffer_size;
+    }
+
+    virtual BufferType *construct() = 0;
+
 private:
-    inline T* get_free() {
-        T* item;
+    inline BufferType *get_free()
+    {
+        BufferType *item;
 
         if (_free_stack.empty()) {
-            item = new T(_buffer_size, *this);
+            item = construct();
             _num_allocated++;
         } else {
             item = _free_stack.back();
@@ -136,11 +158,52 @@ private:
     }
 
 private:
-    std::vector<T*> _free_stack;
-    std::queue<T*>  _offcache_queue;
-    uint32_t        _num_allocated;
-    size_t          _buffer_size;
-    std::string     _name;
+    size_t                   _buffer_size;
+    std::vector<BufferType*> _free_stack;
+    std::queue<BufferType*>  _offcache_queue;
+    uint32_t                 _num_allocated;
+    std::string              _name;
+};
+
+template<class BufferType, bool use_offcache = false>
+class MemoryPool : public ObjectPool<BufferType, use_offcache> {
+public:
+    MemoryPool(size_t buffer_size, const std::string &name,
+               size_t offcache = 0) :
+        ObjectPool<BufferType, use_offcache>::ObjectPool(buffer_size, name,
+                                                         offcache)
+    {
+    }
+
+public:
+    virtual BufferType *construct()
+    {
+        return new BufferType(this->buffer_size(), *this);
+    }
+};
+
+template<typename BufferType>
+class BufferMemoryPool : public ObjectPool<BufferType, true> {
+public:
+    BufferMemoryPool(size_t buffer_size, const std::string &name,
+                     ucs_memory_type_t memory_type, size_t offcache = 0) :
+        ObjectPool<BufferType, true>(buffer_size, name, offcache),
+        _memory_type(memory_type)
+    {
+    }
+
+    virtual BufferType *construct()
+    {
+        return BufferType::allocate(this->buffer_size(), *this, _memory_type);
+    }
+
+    virtual ucs_memory_type_t memory_type() const
+    {
+        return _memory_type;
+    }
+
+private:
+    ucs_memory_type_t _memory_type;
 };
 
 /**
@@ -172,21 +235,66 @@ public:
         }
     }
 
-    static inline void fill(unsigned &seed, void *buffer, size_t size) {
+    static void *get_host_fill_buffer(void *buffer, size_t size,
+                                      ucs_memory_type_t memory_type)
+    {
+        static std::vector<uint8_t> _buffer;
+
+        if (memory_type == UCS_MEMORY_TYPE_CUDA) {
+            _buffer.resize(size);
+            return _buffer.data();
+        }
+
+        return buffer;
+    }
+
+    static void fill_commit(void *buffer, void *fill_buffer, size_t size,
+                            ucs_memory_type_t memory_type)
+    {
+#ifdef HAVE_CUDA
+        if (memory_type == UCS_MEMORY_TYPE_CUDA) {
+            cudaMemcpy(buffer, fill_buffer, size, cudaMemcpyDefault);
+        }
+#endif
+    }
+
+    static inline void fill(unsigned &seed, void *buffer, size_t size,
+                            ucs_memory_type_t memory_type)
+    {
+        void *fill_buffer = get_host_fill_buffer(buffer, size, memory_type);
         size_t body_count = size / sizeof(uint64_t);
         size_t tail_count = size & (sizeof(uint64_t) - 1);
-        uint64_t *body    = reinterpret_cast<uint64_t*>(buffer);
+        uint64_t *body    = reinterpret_cast<uint64_t*>(fill_buffer);
         uint8_t *tail     = reinterpret_cast<uint8_t*>(body + body_count);
 
         fill(seed, body, body_count);
         fill(seed, tail, tail_count);
+
+        fill_commit(buffer, fill_buffer, size, memory_type);
+    }
+
+    static const void *get_host_validate_buffer(const void *buffer, size_t size,
+                                                ucs_memory_type_t memory_type)
+    {
+#ifdef HAVE_CUDA
+        static std::vector<uint8_t> _buffer;
+
+        if (memory_type == UCS_MEMORY_TYPE_CUDA) {
+            _buffer.resize(size);
+            cudaMemcpy(_buffer.data(), buffer, size, cudaMemcpyDefault);
+            return _buffer.data();
+        }
+#endif
+        return buffer;
     }
 
     static inline size_t validate(unsigned &seed, const void *buffer,
-                                  size_t size) {
+                                  size_t size, ucs_memory_type_t memory_type)
+    {
         size_t body_count    = size / sizeof(uint64_t);
         size_t tail_count    = size & (sizeof(uint64_t) - 1);
-        const uint64_t *body = reinterpret_cast<const uint64_t*>(buffer);
+        const uint64_t *body = reinterpret_cast<const uint64_t*>(
+                get_host_validate_buffer(buffer, size, memory_type));
         const uint8_t *tail  = reinterpret_cast<const uint8_t*>(body + body_count);
 
         size_t err_pos = validate(seed, body, body_count);
@@ -203,15 +311,17 @@ public:
     }
 
 private:
-    template <typename T>
-    static inline void fill(unsigned &seed, T *buffer, size_t count) {
+    template<typename T>
+    static inline void fill(unsigned &seed, T *buffer, size_t count)
+    {
         for (size_t i = 0; i < count; ++i) {
             buffer[i] = rand<T>(seed);
         }
     }
 
-    template <typename T>
-    static inline size_t validate(unsigned &seed, const T *buffer, size_t count) {
+    template<typename T>
+    static inline size_t validate(unsigned &seed, const T *buffer, size_t count)
+    {
         for (size_t i = 0; i < count; ++i) {
             if (buffer[i] != rand<T>(seed)) {
                 return i;
@@ -248,47 +358,113 @@ protected:
 
     class Buffer {
     public:
-        Buffer(size_t size, MemoryPool<Buffer, true>& pool) :
-            _capacity(size), _buffer(memalign(ALIGNMENT, size)), _size(0),
-            _pool(pool) {
-            if (_buffer == NULL) {
+        Buffer(void *buffer, size_t size, BufferMemoryPool<Buffer> &pool,
+               ucs_memory_type_t memory_type = UCS_MEMORY_TYPE_HOST) :
+            _capacity(size),
+            _buffer(buffer),
+            _size(0),
+            _pool(pool),
+            _memory_type(memory_type)
+        {
+        }
+
+        static Buffer *allocate(size_t size, BufferMemoryPool<Buffer> &pool,
+                                ucs_memory_type_t memory_type)
+        {
+#ifdef HAVE_CUDA
+            cudaError_t cerr;
+#endif
+            void *buffer;
+
+            switch (memory_type) {
+#ifdef HAVE_CUDA
+            case UCS_MEMORY_TYPE_CUDA:
+                cerr = cudaMalloc(&buffer, size);
+                if (cerr != cudaSuccess) {
+                    buffer = NULL;
+                }
+                break;
+            case UCS_MEMORY_TYPE_CUDA_MANAGED:
+                cerr = cudaMallocManaged(&buffer, size, cudaMemAttachGlobal);
+                if (cerr != cudaSuccess) {
+                    buffer = NULL;
+                }
+                break;
+#endif
+            case UCS_MEMORY_TYPE_HOST:
+                buffer = memalign(ALIGNMENT, size);
+                break;
+            default:
+                LOG << "ERROR: Unsupported memory type requested: "
+                    << ucs_memory_type_names[memory_type];
+                abort();
+            }
+            if (buffer == NULL) {
                 throw std::bad_alloc();
+            }
+
+            return new Buffer(buffer, size, pool, memory_type);
+        }
+
+        ~Buffer()
+        {
+            switch (_memory_type) {
+#ifdef HAVE_CUDA
+            case UCS_MEMORY_TYPE_CUDA:
+            case UCS_MEMORY_TYPE_CUDA_MANAGED:
+                cudaFree(_buffer);
+                break;
+#endif
+            case UCS_MEMORY_TYPE_HOST:
+                free(_buffer);
+                break;
+            default:
+                /* Unreachable - would fail in ctor */
+                abort();
             }
         }
 
-        ~Buffer() {
-            free(_buffer);
+        inline size_t capacity() const
+        {
+            return _capacity;
         }
 
-        void release() {
+        void release()
+        {
             _pool.put(this);
         }
 
-        inline void *buffer(size_t offset = 0) const {
+        inline void *buffer(size_t offset = 0) const
+        {
             return (uint8_t*)_buffer + offset;
         }
 
-        inline void resize(size_t size) {
+        inline void resize(size_t size)
+        {
             assert(size <= _capacity);
             _size = size;
         }
 
-        inline size_t size() const {
+        inline size_t size() const
+        {
             return _size;
         }
 
     public:
-        const size_t         _capacity;
+        const size_t             _capacity;
 
     private:
-        void*                     _buffer;
-        size_t                    _size;
-        MemoryPool<Buffer, true>& _pool;
+        void                     *_buffer;
+        size_t                   _size;
+        BufferMemoryPool<Buffer> &_pool;
+        ucs_memory_type_t        _memory_type;
     };
 
     class BufferIov {
     public:
-        BufferIov(size_t size, MemoryPool<BufferIov>& pool) : _pool(pool) {
+        BufferIov(size_t size, MemoryPool<BufferIov> &pool) :
+            _memory_type(UCS_MEMORY_TYPE_UNKNOWN), _pool(pool)
+        {
             _iov.reserve(size);
         }
 
@@ -296,12 +472,14 @@ protected:
             return _iov.size();
         }
 
-        void init(size_t data_size, MemoryPool<Buffer, true> &chunk_pool,
-                  uint32_t sn, bool validate) {
+        void init(size_t data_size, BufferMemoryPool<Buffer> &chunk_pool,
+                  uint32_t sn, bool validate)
+        {
             assert(_iov.empty());
 
+            _memory_type  = chunk_pool.memory_type();
             Buffer *chunk = chunk_pool.get();
-            _iov.resize(get_chunk_cnt(data_size, chunk->_capacity));
+            _iov.resize(get_chunk_cnt(data_size, chunk->capacity()));
 
             size_t remaining = init_chunk(0, chunk, data_size);
             for (size_t i = 1; i < _iov.size(); ++i) {
@@ -311,11 +489,12 @@ protected:
             assert(remaining == 0);
 
             if (validate) {
-                fill_data(sn);
+                fill_data(sn, _memory_type);
             }
         }
 
-        inline Buffer& operator[](size_t i) const {
+        inline Buffer &operator[](size_t i) const
+        {
             return *_iov[i];
         }
 
@@ -334,7 +513,8 @@ protected:
             for (size_t iov_err_pos = 0, i = 0; i < _iov.size(); ++i) {
                 size_t buf_err_pos = IoDemoRandom::validate(seed,
                                                             _iov[i]->buffer(),
-                                                            _iov[i]->size());
+                                                            _iov[i]->size(),
+                                                            _memory_type);
                 iov_err_pos       += buf_err_pos;
                 if (buf_err_pos < _iov[i]->size()) {
                     return iov_err_pos;
@@ -351,17 +531,20 @@ protected:
     private:
         size_t init_chunk(size_t i, Buffer *chunk, size_t remaining) {
             _iov[i] = chunk;
-            _iov[i]->resize(std::min(_iov[i]->_capacity, remaining));
+            _iov[i]->resize(std::min(_iov[i]->capacity(), remaining));
             return remaining - _iov[i]->size();
         }
 
-        void fill_data(unsigned seed) {
+        void fill_data(unsigned seed, ucs_memory_type_t memory_type)
+        {
             for (size_t i = 0; i < _iov.size(); ++i) {
-                IoDemoRandom::fill(seed, _iov[i]->buffer(), _iov[i]->size());
+                IoDemoRandom::fill(seed, _iov[i]->buffer(), _iov[i]->size(),
+                                   memory_type);
             }
         }
 
         static const size_t    _npos = static_cast<size_t>(-1);
+        ucs_memory_type_t _memory_type;
         std::vector<Buffer*>   _iov;
         MemoryPool<BufferIov>& _pool;
     };
@@ -387,7 +570,7 @@ protected:
             if (validate) {
                 void *tail       = reinterpret_cast<void*>(m + 1);
                 size_t tail_size = _io_msg_size - sizeof(*m);
-                IoDemoRandom::fill(sn, tail, tail_size);
+                IoDemoRandom::fill(sn, tail, tail_size, UCS_MEMORY_TYPE_HOST);
             }
         }
 
@@ -454,15 +637,18 @@ protected:
         MemoryPool<SendCompleteCallback>& _pool;
     };
 
-    P2pDemoCommon(const options_t& test_opts) :
-        UcxContext(test_opts.iomsg_size, test_opts.connect_timeout, test_opts.use_am),
+    P2pDemoCommon(const options_t &test_opts) :
+        UcxContext(test_opts.iomsg_size, test_opts.connect_timeout,
+                   test_opts.use_am),
         _test_opts(test_opts),
         _io_msg_pool(test_opts.iomsg_size, "io messages"),
         _send_callback_pool(0, "send callbacks"),
         _data_buffers_pool(get_chunk_cnt(test_opts.max_data_size,
-                                         test_opts.chunk_size), "data iovs"),
+                                         test_opts.chunk_size),
+                           "data iovs"),
         _data_chunks_pool(test_opts.chunk_size, "data chunks",
-                          test_opts.num_offcache_buffers) {
+                          test_opts.memory_type)
+    {
     }
 
     const options_t& opts() const {
@@ -522,7 +708,8 @@ protected:
         const void *buf = msg + 1;
         size_t buf_size = iomsg_size - sizeof(*msg);
 
-        size_t err_pos  = IoDemoRandom::validate(seed, buf, buf_size);
+        size_t err_pos = IoDemoRandom::validate(seed, buf, buf_size,
+                                                UCS_MEMORY_TYPE_HOST);
         if (err_pos < buf_size) {
             LOG << "ERROR: io msg data corruption at " << err_pos << " position";
             abort();
@@ -564,7 +751,7 @@ protected:
     MemoryPool<IoMessage>            _io_msg_pool;
     MemoryPool<SendCompleteCallback> _send_callback_pool;
     MemoryPool<BufferIov>            _data_buffers_pool;
-    MemoryPool<Buffer, true>         _data_chunks_pool;
+    BufferMemoryPool<Buffer> _data_chunks_pool;
 };
 
 class DemoServer : public P2pDemoCommon {
@@ -926,12 +1113,17 @@ public:
         MemoryPool<IoReadResponseCallback>& _pool;
     };
 
-    DemoClient(const options_t& test_opts) :
+    DemoClient(const options_t &test_opts) :
         P2pDemoCommon(test_opts),
         _num_active_servers_to_use(0),
-        _prev_connect_time(0), _num_sent(0), _num_completed(0),
-        _status(OK), _start_time(get_time()),
-        _read_callback_pool(opts().iomsg_size, "read callbacks") {
+        _prev_connect_time(0),
+        _num_sent(0),
+        _num_completed(0),
+        _status(OK),
+        _start_time(get_time()),
+        _read_callback_pool(opts().iomsg_size, "read callbacks",
+                            UCS_MEMORY_TYPE_HOST)
+    {
     }
 
     virtual ~DemoClient() {
@@ -1741,14 +1933,16 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->num_offcache_buffers  = 0;
     test_opts->iomsg_size            = 256;
     test_opts->iter_count            = 1000;
-    test_opts->window_size           = 1;
-    test_opts->conn_window_size      = 1;
+    test_opts->window_size           = 16;
+    test_opts->conn_window_size      = 16;
     test_opts->random_seed           = std::time(NULL);
     test_opts->verbose               = false;
     test_opts->validate              = false;
     test_opts->use_am                = false;
+    test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqAHP:")) != -1) {
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqAHPm:")) !=
+           -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -1869,39 +2063,60 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'P':
             test_opts->print_interval = atof(optarg);
             break;
+        case 'm':
+            if (!strcmp(optarg, "host")) {
+                test_opts->memory_type = UCS_MEMORY_TYPE_HOST;
+#ifdef HAVE_CUDA
+            } else if (!strcmp(optarg, "cuda")) {
+                test_opts->memory_type = UCS_MEMORY_TYPE_CUDA;
+            } else if (!strcmp(optarg, "cuda-managed")) {
+                test_opts->memory_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+#endif
+            } else {
+                std::cout << "Invalid '" << optarg << "' value for memory type"
+                          << std::endl;
+                return -1;
+            }
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
             std::cout << "       or io_demo [options] [server_address0:port0] [server_address1:port1]..." << std::endl;
             std::cout << "" << std::endl;
             std::cout << "Supported options are:" << std::endl;
-            std::cout << "  -p <port>                  TCP port number to use" << std::endl;
-            std::cout << "  -n <connect timeout>       Timeout for connecting to the peer (or \"inf\")" << std::endl;
-            std::cout << "  -o <op1,op2,...,opN>       Comma-separated string of IO operations [read|write]" << std::endl;
-            std::cout << "                             NOTE: if using several IO operations, performance" << std::endl;
-            std::cout << "                                   measurments may be inaccurate" << std::endl;
-            std::cout << "  -d <min>:<max>             Range that should be used to get data" << std::endl;
-            std::cout << "                             size of IO payload" << std::endl;
-            std::cout << "  -b <number of buffers>     Number of offcache IO buffers" << std::endl;
-            std::cout << "  -i <iterations-count>      Number of iterations to run communication" << std::endl;
-            std::cout << "  -w <window-size>           Number of outstanding requests" << std::endl;
-            std::cout << "  -a <conn-window-size>      Number of outstanding requests per connection" << std::endl;
-            std::cout << "  -k <chunk-size>            Split the data transfer to chunks of this size" << std::endl;
-            std::cout << "  -r <io-request-size>       Size of IO request packet" << std::endl;
-            std::cout << "  -t <client timeout>        Client timeout (or \"inf\")" << std::endl;
-            std::cout << "  -c <retries>               Number of connection retries on client or " << std::endl;
-            std::cout << "                             listen retries on server" << std::endl;
-            std::cout << "                             (or \"inf\") for failure" << std::endl;
-            std::cout << "  -y <retry interval>        Retry interval" << std::endl;
-            std::cout << "  -l <client run-time limit> Time limit to run the IO client (or \"inf\")" << std::endl;
-            std::cout << "                             Examples: -l 17.5s; -l 10m; 15.5h" << std::endl;
-            std::cout << "  -s <random seed>           Random seed to use for randomizing" << std::endl;
-            std::cout << "  -v                         Set verbose mode" << std::endl;
-            std::cout << "  -q                         Enable data integrity and transaction check" << std::endl;
-            std::cout << "  -A                         Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
-            std::cout << "  -H                         Use human-readable timestamps" << std::endl;
-            std::cout << "  -P <interval>              Set report printing interval"  << std::endl;
+            std::cout << "  -p <port>                   TCP port number to use" << std::endl;
+            std::cout << "  -n <connect timeout>        Timeout for connecting to the peer (or \"inf\")" << std::endl;
+            std::cout << "  -o <op1,op2,...,opN>        Comma-separated string of IO operations [read|write]" << std::endl;
+            std::cout << "                              NOTE: if using several IO operations, performance" << std::endl;
+            std::cout << "                                    measurments may be inaccurate" << std::endl;
+            std::cout << "  -d <min>:<max>              Range that should be used to get data" << std::endl;
+            std::cout << "                              size of IO payload" << std::endl;
+            std::cout << "  -b <number of buffers>      Number of offcache IO buffers" << std::endl;
+            std::cout << "  -i <iterations-count>       Number of iterations to run communication" << std::endl;
+            std::cout << "  -w <window-size>            Number of outstanding requests" << std::endl;
+            std::cout << "  -a <conn-window-size>       Number of outstanding requests per connection" << std::endl;
+            std::cout << "  -k <chunk-size>             Split the data transfer to chunks of this size" << std::endl;
+            std::cout << "  -r <io-request-size>        Size of IO request packet" << std::endl;
+            std::cout << "  -t <client timeout>         Client timeout (or \"inf\")" << std::endl;
+            std::cout << "  -c <retries>                Number of connection retries on client or " << std::endl;
+            std::cout << "                              listen retries on server" << std::endl;
+            std::cout << "                              (or \"inf\") for failure" << std::endl;
+            std::cout << "  -y <retry interval>         Retry interval" << std::endl;
+            std::cout << "  -l <client run-time limit>  Time limit to run the IO client (or \"inf\")" << std::endl;
+            std::cout << "                              Examples: -l 17.5s; -l 10m; 15.5h" << std::endl;
+            std::cout << "  -s <random seed>            Random seed to use for randomizing" << std::endl;
+            std::cout << "  -v                          Set verbose mode" << std::endl;
+            std::cout << "  -q                          Enable data integrity and transaction check" << std::endl;
+            std::cout << "  -A                          Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
+            std::cout << "  -H                          Use human-readable timestamps" << std::endl;
+            std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
             std::cout << "" << std::endl;
+            std::cout << "  -q                          Validate data in buffers" << std::endl;
+            std::cout << "  -m <memory_type>            Memory type to use. Possible values: host"
+#ifdef HAVE_CUDA
+                      << ", cuda, cuda-managed"
+#endif
+                      << std::endl;
             return -1;
         }
     }

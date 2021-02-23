@@ -82,6 +82,8 @@ test_md::test_md()
 
 void test_md::init()
 {
+    const std::vector<ucs_memory_type_t>
+        supported_mem_types = mem_buffer::supported_mem_types();
     ucs::test_base::init();
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
                            GetParam().component, GetParam().md_name.c_str(),
@@ -237,6 +239,7 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
     size_t size, orig_size;
     ucs_status_t status;
     void *address;
+    unsigned mem_type;
     uct_allocated_memory_t mem;
     uct_mem_alloc_params_t params;
 
@@ -247,30 +250,36 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
                              UCT_MEM_ALLOC_PARAM_FIELD_NAME;
     params.flags           = UCT_MD_MEM_ACCESS_ALL;
     params.name            = "test";
-    params.mem_type        = UCS_MEMORY_TYPE_HOST;
     params.mds.mds         = &md_ref;
     params.mds.count       = 1;
 
-    for (unsigned i = 0; i < 300; ++i) {
-        size = orig_size = ucs::rand() % 65536;
-        if (size == 0) {
-            continue;
+    ucs_for_each_bit(mem_type, md_attr().cap.alloc_mem_types) {
+        for (unsigned i = 0; i < 300; ++i) {
+            size = orig_size = ucs::rand() % 65536;
+            if (size == 0) {
+                continue;
+            }
+
+            address         = NULL;
+            params.address  = address;
+            params.mem_type = (ucs_memory_type_t)mem_type;
+
+            status = uct_mem_alloc(size, &method, 1, &params, &mem);
+
+            EXPECT_GT(mem.length, 0ul);
+            address = mem.address;
+            size    = mem.length;
+
+            ASSERT_UCS_OK(status);
+            EXPECT_GE(size, orig_size);
+            EXPECT_TRUE(address != NULL);
+            EXPECT_TRUE(mem.memh != UCT_MEM_HANDLE_NULL);
+
+            if (mem_type == UCS_MEMORY_TYPE_HOST) {
+                memset(address, 0xBB, size);
+            }
+            uct_mem_free(&mem);
         }
-
-        address        = NULL;
-        params.address = address;
-        status = uct_mem_alloc(size, &method, 1, &params, &mem);
-        EXPECT_GT(mem.length, 0ul);
-        address = mem.address;
-        size    = mem.length;
-
-        ASSERT_UCS_OK(status);
-        EXPECT_GE(size, orig_size);
-        EXPECT_TRUE(address != NULL);
-        EXPECT_TRUE(mem.memh != UCT_MEM_HANDLE_NULL);
-
-        memset(address, 0xBB, size);
-        uct_mem_free(&mem);
     }
 }
 
@@ -310,8 +319,8 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
         ucs_topo_sys_device_bdf_name(mem_attr.sys_dev, sys_dev_name,
                                      sizeof(sys_dev_name));
         UCS_TEST_MESSAGE << ucs_memory_type_names[alloc_mem_type] << ": "
-                         << "sys_dev[" << mem_attr.sys_dev << "] "
-                         << "(" << sys_dev_name << ")";
+                         << "sys_dev[" << static_cast<int>(mem_attr.sys_dev)
+                         << "] (" << sys_dev_name << ")";
     }
 }
 
@@ -574,53 +583,28 @@ UCS_TEST_SKIP_COND_P(test_md, reg_multi_thread,
     pthread_join(thread_id, NULL);
 }
 
-UCS_TEST_SKIP_COND_P(test_md, sockaddr_accessibility,
-                     !check_caps(UCT_MD_FLAG_SOCKADDR)) {
+UCS_TEST_P(test_md, sockaddr_accessibility) {
     ucs_sock_addr_t sock_addr;
     struct ifaddrs *ifaddr, *ifa;
-    bool found_rdma = false;
-    bool found_ip   = false;
 
+    /* currently we don't have MDs with deprecated capability */
+    ASSERT_FALSE(check_caps(UCT_MD_FLAG_SOCKADDR));
+    ASSERT_NE(NULL, uintptr_t(md()));
     ASSERT_TRUE(getifaddrs(&ifaddr) != -1);
-
     /* go through a linked list of available interfaces */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ucs::is_inet_addr(ifa->ifa_addr) &&
             ucs_netif_flags_is_active(ifa->ifa_flags)) {
             sock_addr.addr = ifa->ifa_addr;
 
-            found_ip = true;
-
-            if (GetParam().md_name == "rdmacm") {
-                if (ucs::is_rdmacm_netdev(ifa->ifa_name)) {
-                    UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
-                                        ucs::sockaddr_to_str(ifa->ifa_addr);
-                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                              UCT_SOCKADDR_ACC_LOCAL));
-                    ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                              UCT_SOCKADDR_ACC_REMOTE));
-                    found_rdma = true;
-                }
-            } else {
-                UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with " <<
-                                    ucs::sockaddr_to_str(ifa->ifa_addr);
-                ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                          UCT_SOCKADDR_ACC_LOCAL));
-                ASSERT_TRUE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                          UCT_SOCKADDR_ACC_REMOTE));
-            }
+            UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with "
+                             << ucs::sockaddr_to_str(ifa->ifa_addr);
+            ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                       UCT_SOCKADDR_ACC_LOCAL));
+            ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                       UCT_SOCKADDR_ACC_REMOTE));
         }
     }
-
-    if (GetParam().md_name == "rdmacm") {
-        if (!found_rdma) {
-            UCS_TEST_MESSAGE <<
-                "Cannot find an IPoIB/RoCE interface with an IPv4 address on the host";
-        }
-    } else if (!found_ip) {
-        UCS_TEST_MESSAGE << "Cannot find an IPv4/IPv6 interface on the host";
-    }
-
     freeifaddrs(ifaddr);
 }
 

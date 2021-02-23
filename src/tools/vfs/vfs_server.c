@@ -75,9 +75,12 @@ static void vfs_server_log_context(int events)
         p += strlen(p);
     }
 
-    *(p - 1) = '\0';
-
-    vfs_log("%s", log_message);
+    if (p == log_message) {
+        vfs_log("<no open sockets>");
+    } else {
+        *(p - 1) = '\0';
+        vfs_log("%s", log_message);
+    }
 }
 
 static int vfs_server_poll_events()

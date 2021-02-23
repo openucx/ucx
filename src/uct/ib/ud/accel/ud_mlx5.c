@@ -224,18 +224,20 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_mlx5_ep_t, uct_ep_t);
  * Generic inline+iov post-send function
  * The caller should check that header size + sg list would not exceed WQE size.
  */
-static UCS_F_ALWAYS_INLINE ucs_status_t
-uct_ud_mlx5_ep_inline_iov_post(uct_ep_h tl_ep, uint8_t am_id,
-                               /* inl. header */ const void *header, size_t header_size,
-                               /* inl. data */   const void *data, size_t data_size,
-                               /* iov data */    const uct_iov_t *iov, size_t iovcnt,
-                               uint32_t packet_flags, uct_completion_t *comp,
-                               unsigned stat_ops_counter, unsigned stat_bytes_counter,
-                               const char *func_name)
+static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
+        uct_ep_h tl_ep, uint8_t am_id,
+        /* inl. header */ const void *header, size_t header_size,
+        /* inl. data */ const void *data, size_t data_size,
+        /* inl. iov */ const uct_iov_t *inl_iov, size_t inl_iovcnt,
+        /* iov data */ const uct_iov_t *iov, size_t iovcnt,
+        uint32_t packet_flags, uct_completion_t *comp,
+        unsigned stat_ops_counter, unsigned stat_bytes_counter,
+        const char *func_name)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                 uct_ud_mlx5_iface_t);
     uct_ud_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_mlx5_ep_t);
+    size_t inl_iov_size        = uct_iov_total_length(inl_iov, inl_iovcnt);
     struct mlx5_wqe_inl_data_seg *inl;
     struct mlx5_wqe_ctrl_seg *ctrl;
     size_t inline_size, wqe_size;
@@ -243,6 +245,7 @@ uct_ud_mlx5_ep_inline_iov_post(uct_ep_h tl_ep, uint8_t am_id,
     uct_ud_send_skb_t *skb;
     ucs_status_t status;
     uct_ud_neth_t *neth;
+    ucs_iov_iter_t iov_iter;
 
     UCT_CHECK_AM_ID(am_id);
     UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_size + data_size,
@@ -260,7 +263,7 @@ uct_ud_mlx5_ep_inline_iov_post(uct_ep_h tl_ep, uint8_t am_id,
     ctrl            = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &wqe_size,
                                                   &next_seg);
     inl             = next_seg;
-    inline_size     = sizeof(*neth) + header_size + data_size;
+    inline_size     = sizeof(*neth) + header_size + data_size + inl_iov_size;
     inl->byte_count = htonl(inline_size | MLX5_INLINE_SEG);
     wqe_size       += sizeof(*inl) + inline_size;
     skb->len        = inline_size;
@@ -287,6 +290,13 @@ uct_ud_mlx5_ep_inline_iov_post(uct_ep_h tl_ep, uint8_t am_id,
     /* copy inline "data" */
     uct_ib_mlx5_inline_copy(wqe_data, data, data_size, &iface->tx.wq);
 
+    /* copy inline iov */
+    if (inl_iovcnt > 0) {
+        ucs_assert(data_size == 0);
+        uct_ib_mlx5_inline_iov_copy(wqe_data, inl_iov, inl_iovcnt, inl_iov_size,
+                                    &iface->tx.wq);
+    }
+
     /* set iov to dptr */
     if (iovcnt > 0) {
         wqe_size  = ucs_align_up_pow2(wqe_size, UCT_IB_MLX5_WQE_SEG_SIZE);
@@ -300,7 +310,12 @@ uct_ud_mlx5_ep_inline_iov_post(uct_ep_h tl_ep, uint8_t am_id,
 
     memcpy(skb->neth, neth, sizeof(*neth) + header_size);
     memcpy(UCS_PTR_BYTE_OFFSET(skb->neth + 1, header_size), data, data_size);
-
+    if (inl_iovcnt > 0) {
+        ucs_assert((data_size == 0) && (header_size == 0));
+        ucs_iov_iter_init(&iov_iter);
+        uct_iov_to_buffer(inl_iov, inl_iovcnt, &iov_iter, skb->neth + 1,
+                          SIZE_MAX);
+    }
     if (iovcnt > 0) {
         uct_ud_skb_set_zcopy_desc(skb, iov, iovcnt, comp);
         status = UCS_INPROGRESS;
@@ -313,8 +328,8 @@ uct_ud_mlx5_ep_inline_iov_post(uct_ep_h tl_ep, uint8_t am_id,
 
     UCS_STATS_UPDATE_COUNTER(ep->super.super.stats, stat_ops_counter, 1);
     UCS_STATS_UPDATE_COUNTER(ep->super.super.stats, stat_bytes_counter,
-                             header_size + data_size +
-                             uct_iov_total_length(iov, iovcnt));
+                             header_size + data_size + inl_iov_size +
+                                     uct_iov_total_length(iov, iovcnt));
 out:
     uct_ud_leave(&iface->super);
     return status;
@@ -329,15 +344,14 @@ uct_ud_mlx5_ep_short_common(uct_ep_h tl_ep, uint8_t am_id,
 {
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_size + data_size, 0,
                      uct_ud_mlx5_max_inline(), func_name);
-    return uct_ud_mlx5_ep_inline_iov_post(tl_ep, am_id,
-                                          header, header_size,
+
+    return uct_ud_mlx5_ep_inline_iov_post(tl_ep, am_id, header, header_size,
                                           data, data_size,
-                                          /* iov */ NULL, 0,
-                                          packet_flags,
+                                          /* inline iov */ NULL, 0,
+                                          /* iov */ NULL, 0, packet_flags,
                                           /* completion */ NULL,
                                           stat_ops_counter,
-                                          UCT_EP_STAT_BYTES_SHORT,
-                                          func_name);
+                                          UCT_EP_STAT_BYTES_SHORT, func_name);
 }
 
 static ucs_status_t
@@ -350,6 +364,28 @@ uct_ud_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                        /* packet flags */ UCT_UD_PACKET_FLAG_AM,
                                        UCT_EP_STAT_AM,
                                        "uct_ud_mlx5_ep_am_short");
+}
+
+static ucs_status_t uct_ud_mlx5_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                                const uct_iov_t *iov,
+                                                size_t iovcnt)
+{
+    char dummy = 0; /* pass dummy pointer to 0-length header and data to avoid
+                     * compiler warnings */
+
+    UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + uct_iov_total_length(iov, iovcnt),
+                     0, uct_ud_mlx5_max_inline(),
+                     "uct_ud_mlx5_ep_am_short_iov");
+
+    return uct_ud_mlx5_ep_inline_iov_post(
+            tl_ep, id,
+            /* inl. header */ &dummy, 0,
+            /* inl. data */ &dummy, 0,
+            /* inl. iov */ iov, iovcnt,
+            /* iov */ NULL, 0,
+            /* packet flags */ UCT_UD_PACKET_FLAG_AM,
+            /* completion */ NULL, UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_SHORT,
+            "uct_ud_mlx5_ep_am_short_iov");
 }
 
 static ssize_t uct_ud_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
@@ -401,15 +437,17 @@ uct_ud_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     UCT_CHECK_LENGTH(sizeof(uct_ud_neth_t) + header_length, 0,
                      UCT_IB_MLX5_AM_ZCOPY_MAX_HDR(UCT_IB_MLX5_AV_FULL_SIZE),
                      "am_zcopy header");
-    return uct_ud_mlx5_ep_inline_iov_post(tl_ep, id,
-                                          /* inl. header */  &dummy, 0,
-                                          /* inl. data */    header, header_length,
-                                          /* iov */          iov, iovcnt,
-                                          /* packet flags */ UCT_UD_PACKET_FLAG_AM |
-                                                             UCT_UD_PACKET_FLAG_ACK_REQ,
-                                          /* completion */   comp,
-                                          UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_ZCOPY,
-                                          "uct_ud_mlx5_ep_am_zcopy");
+
+    return uct_ud_mlx5_ep_inline_iov_post(
+            tl_ep, id,
+            /* inl. header */ &dummy, 0,
+            /* inl. data */ header, header_length,
+            /* inl. iov */ NULL, 0,
+            /* iov */ iov, iovcnt,
+            /* packet flags */ UCT_UD_PACKET_FLAG_AM |
+                    UCT_UD_PACKET_FLAG_ACK_REQ,
+            /* completion */ comp, UCT_EP_STAT_AM, UCT_EP_STAT_BYTES_ZCOPY,
+            "uct_ud_mlx5_ep_am_zcopy");
 }
 
 static ucs_status_t
@@ -461,7 +499,8 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
     VALGRIND_MAKE_MEM_DEFINED(packet, len);
 
     if (!uct_ud_iface_check_grh(&iface->super, packet,
-                                uct_ib_mlx5_cqe_is_grh_present(cqe))) {
+                                uct_ib_mlx5_cqe_is_grh_present(cqe),
+                                cqe->flags_rqpn & 0xFF)) {
         ucs_mpool_put_inline(desc);
         goto out;
     }
@@ -691,7 +730,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     {
     .ep_put_short             = uct_ud_mlx5_ep_put_short,
     .ep_am_short              = uct_ud_mlx5_ep_am_short,
-    .ep_am_short_iov          = uct_base_ep_am_short_iov,
+    .ep_am_short_iov          = uct_ud_mlx5_ep_am_short_iov,
     .ep_am_bcopy              = uct_ud_mlx5_ep_am_bcopy,
     .ep_am_zcopy              = uct_ud_mlx5_ep_am_zcopy,
     .ep_pending_add           = uct_ud_ep_pending_add,

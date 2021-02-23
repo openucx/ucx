@@ -99,6 +99,19 @@ UCS_TEST_P(test_rc, tx_cq_moderation) {
     EXPECT_EQ(init_rsc, rc_ep(m_e1)->txqp.available);
 }
 
+UCS_TEST_P(test_rc, flush_fc, "FLUSH_MODE?=fc") {
+    send_am_messages(m_e1, 1, UCS_OK);
+
+    ucs_status_t status;
+    do {
+        status = uct_ep_flush(m_e1->ep(0), 0, NULL);
+        short_progress_loop();
+        if (status != UCS_ERR_NO_RESOURCE) {
+            ASSERT_UCS_OK_OR_INPROGRESS(status);
+        }
+    } while (status != UCS_OK);
+}
+
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc)
 
 
@@ -905,3 +918,83 @@ UCS_TEST_SKIP_COND_P(test_rc_keepalive, pending,
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
+
+
+#ifdef HAVE_MLX5_HW
+
+class test_rc_srq : public test_rc {
+public:
+    test_rc_srq() : m_buf8b(NULL), m_buf8k(NULL)
+    {
+    }
+
+    void init()
+    {
+        test_rc::init();
+
+        m_buf8b = new mapped_buffer(8, 0x1, *m_e1);
+        m_buf8k = new mapped_buffer(8 * UCS_KBYTE, 0x2, *m_e1);
+    }
+
+    void connect()
+    {
+        test_rc::connect();
+
+        m_e1->connect(0, *m_e2, 0);
+        m_e2->connect(0, *m_e1, 0);
+        m_e1->connect(1, *m_e2, 1);
+        m_e2->connect(1, *m_e1, 1);
+    }
+
+    bool send(int ep, void *buf)
+    {
+        ssize_t status;
+
+        status = uct_ep_am_bcopy(m_e1->ep(ep), 0, mapped_buffer::pack, buf, 0);
+        if (status == UCS_ERR_NO_RESOURCE) {
+            short_progress_loop();
+            return false;
+        } else if (status < 0) {
+            ASSERT_UCS_OK((ucs_status_t)status);
+        }
+
+        return true;
+    }
+
+    void test_reorder() {
+        unsigned i = 0;
+        ucs_time_t deadline = ucs::get_deadline();
+        while ((i < 10000) && (ucs_get_time() < deadline)) {
+            if (send(0, m_buf8k) && send(1, m_buf8b)) {
+                i++;
+            }
+        }
+    }
+
+    void cleanup() {
+        delete m_buf8b;
+        delete m_buf8k;
+        test_rc::cleanup();
+    }
+
+protected:
+    mapped_buffer *m_buf8b, *m_buf8k;
+};
+
+UCS_TEST_SKIP_COND_P(test_rc_srq, reorder_list,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "RC_SRQ_TOPO?=list")
+{
+    test_reorder();
+}
+
+UCS_TEST_SKIP_COND_P(test_rc_srq, reorder_cyclic,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY),
+                     "RC_SRQ_TOPO?=cyclic,cyclic_emulated")
+{
+    test_reorder();
+}
+
+UCT_INSTANTIATE_RC_DC_TEST_CASE(test_rc_srq);
+
+#endif

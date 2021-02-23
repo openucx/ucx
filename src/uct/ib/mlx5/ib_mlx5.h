@@ -172,13 +172,18 @@ enum {
     UCT_IB_MLX5_MD_FLAG_RMP              = UCS_BIT(5),
     /* Device supports querying bitmask of OOO (AR) states per SL */
     UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK      = UCS_BIT(6),
+    /* Device has LAG */
+    UCT_IB_MLX5_MD_FLAG_LAG              = UCS_BIT(7),
+    /* Device supports CQE V1 */
+    UCT_IB_MLX5_MD_FLAG_CQE_V1           = UCS_BIT(8),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 7,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 9,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
     UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCSRQ),
+    UCT_IB_MLX5_MD_FLAG_DEVX_DCI         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCI),
 };
 
 
@@ -268,7 +273,6 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t                           ready_idx;  /* what is ready to be posted to hw */
     uint16_t                           sw_pi;      /* what is posted to hw */
     uint16_t                           mask;
-    uint16_t                           tail;       /* tail in the driver */
     uint16_t                           stride;
     union {
         struct {
@@ -333,6 +337,7 @@ typedef struct uct_ib_mlx5_res_domain {
 typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_qp_attr_t            super;
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
+    uint32_t                    uidx;
 } uct_ib_mlx5_qp_attr_t;
 
 

@@ -1,11 +1,11 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h" /* Defines HAVE_RDMACM_QP_LESS */
+#  include "config.h"
 #endif
 
 #include "rdmacm_cm_ep.h"
@@ -139,10 +139,10 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
               event->id);
 
     if (rdma_resolve_route(event->id, uct_rdmacm_cm_get_timeout(cm))) {
-        ucs_error("%s: rdma_resolve_route failed: %m",
+        ucs_diag("%s: rdma_resolve_route failed: %m",
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN));
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_UNREACHABLE);
     }
 }
 
@@ -665,6 +665,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
                                                                  uct_rdmacm_cm_config_t);
     uct_priv_worker_t *worker_priv;
     ucs_status_t status;
+    ucs_log_level_t log_lvl;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_rdmacm_cm_ops,
                               &uct_rdmacm_cm_iface_ops, worker, component,
@@ -672,10 +673,20 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
 
     kh_init_inplace(uct_rdmacm_cm_cqs, &self->cqs);
 
-    self->ev_ch  = rdma_create_event_channel();
+    self->ev_ch = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
-        ucs_error("rdma_create_event_channel failed: %m");
-        status = UCS_ERR_IO_ERROR;
+        if (errno == ENODEV) {
+            status  = UCS_ERR_NO_DEVICE;
+            log_lvl = UCS_LOG_LEVEL_DIAG;
+        } else if (errno == ENOENT) {
+            status  = UCS_ERR_IO_ERROR;
+            log_lvl = UCS_LOG_LEVEL_WARN;
+        } else {
+            status  = UCS_ERR_IO_ERROR;
+            log_lvl = UCS_LOG_LEVEL_ERROR;
+        }
+
+        ucs_log(log_lvl, "rdma_create_event_channel failed: %m");
         goto err;
     }
 

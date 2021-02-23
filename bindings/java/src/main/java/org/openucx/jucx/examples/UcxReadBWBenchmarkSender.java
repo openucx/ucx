@@ -39,7 +39,7 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
         UcpMemory memory = context.memoryMap(allocationParams);
         resources.push(memory);
         ByteBuffer data = UcxUtils.getByteBufferView(memory.getAddress(),
-            (int)Math.min(Integer.MAX_VALUE, totalSize));
+            Math.min(Integer.MAX_VALUE, totalSize));
 
         // Send worker and memory address and Rkey to receiver.
         ByteBuffer rkeyBuffer = memory.getRemoteKeyBuffer();
@@ -68,9 +68,7 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
         }
 
         try {
-            UcpRequest closeRequest = endpoint.closeNonBlockingForce();
-            resources.push(closeRequest);
-            worker.progressRequest(closeRequest);
+            worker.progressRequest(endpoint.closeNonBlockingForce());
         } catch (Exception ignored) {
         } finally {
             closeResources();

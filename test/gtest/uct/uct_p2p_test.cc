@@ -43,7 +43,8 @@ std::vector<const resource*> uct_p2p_test::enum_resources(const std::string& tl_
         }
     }
 
-    return filter_resources(all_resources, tl_name);
+    return filter_resources<p2p_resource>(all_resources,
+                                          resource::is_equal_tl_name, tl_name);
 }
 
 uct_p2p_test::uct_p2p_test(size_t rx_headroom,

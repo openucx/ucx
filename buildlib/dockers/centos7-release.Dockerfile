@@ -1,4 +1,4 @@
-ARG CUDA_VERSION=10.1
+ARG CUDA_VERSION
 FROM nvidia/cuda:${CUDA_VERSION}-devel-centos7
 
 RUN yum install -y \
@@ -10,6 +10,7 @@ RUN yum install -y \
     git \
     glibc-devel \
     libtool \
+    librdmacm \
     make \
     maven \
     numactl-devel \
@@ -19,11 +20,13 @@ RUN yum install -y \
     tcsh \
     tk \
     wget \
+    libusbx \
+    fuse-libs \
     && yum clean all
 
 # MOFED
-ARG MOFED_VERSION=5.0-1.0.0.0
-ARG MOFED_OS=rhel7.6
+ARG MOFED_VERSION
+ARG MOFED_OS
 ENV MOFED_DIR MLNX_OFED_LINUX-${MOFED_VERSION}-${MOFED_OS}-x86_64
 ENV MOFED_SITE_PLACE MLNX_OFED-${MOFED_VERSION}
 ENV MOFED_IMAGE ${MOFED_DIR}.tgz
@@ -43,4 +46,3 @@ ENV CPATH /usr/local/cuda/include:${CPATH}
 ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LD_LIBRARY_PATH}
 ENV LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LIBRARY_PATH}
 ENV PATH /usr/local/cuda/compat:${PATH}
-

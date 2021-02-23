@@ -13,6 +13,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <string.h>
 #include <ctype.h>
@@ -93,6 +94,22 @@ out:
     ucs_assert(*ucs_array_end(&strb->str) == '\0');
 }
 
+void ucs_string_buffer_append_hex(ucs_string_buffer_t *strb, const void *data,
+                                  size_t size, size_t per_line)
+{
+    size_t prev_length    = ucs_array_length(&strb->str);
+    size_t hexdump_length = (size * 2) + (size / 4) + (size / per_line);
+    size_t new_length;
+
+    ucs_array_reserve(string_buffer, &strb->str, prev_length + hexdump_length);
+    ucs_str_dump_hex(data, size, ucs_array_end(&strb->str),
+                     ucs_array_available_length(&strb->str), per_line);
+
+    new_length = prev_length + strlen(ucs_array_end(&strb->str));
+    ucs_array_set_length(&strb->str, new_length);
+    ucs_assert(*ucs_array_end(&strb->str) == '\0');
+}
+
 void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
 {
     char *ptr = ucs_array_end(&strb->str);
@@ -123,4 +140,37 @@ const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb)
     c_str = ucs_array_begin(&strb->str);
     ucs_assert(c_str != NULL);
     return c_str;
+}
+
+void ucs_string_buffer_dump(const ucs_string_buffer_t *strb,
+                            const char *line_prefix, FILE *stream)
+{
+    const char *next_tok, *tok;
+    size_t size, remaining;
+
+    if (ucs_array_is_empty(&strb->str)) {
+        return;
+    }
+
+    tok      = ucs_array_begin(&strb->str);
+    next_tok = strchr(tok, '\n');
+    while (next_tok != NULL) {
+        fputs(line_prefix, stream);
+
+        /* Write the line, handle partial writes */
+        remaining = UCS_PTR_BYTE_DIFF(tok, next_tok + 1);
+        while (remaining > 0) {
+            size       = fwrite(tok, sizeof(*tok), remaining, stream);
+            tok        = UCS_PTR_BYTE_OFFSET(tok, size);
+            remaining -= size;
+        }
+
+        next_tok = strchr(tok, '\n');
+    }
+
+    /* Write last line */
+    if (*tok != '\0') {
+        fputs(line_prefix, stream);
+        fputs(tok, stream);
+    }
 }

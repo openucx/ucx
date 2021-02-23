@@ -276,12 +276,13 @@ static ucs_status_t uct_knem_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 }
 
 static uct_md_ops_t uct_knem_md_rcache_ops = {
-    .close              = uct_knem_md_close,
-    .query              = uct_knem_md_query,
-    .mkey_pack          = uct_knem_rkey_pack,
-    .mem_reg            = uct_knem_mem_rcache_reg,
-    .mem_dereg          = uct_knem_mem_rcache_dereg,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .close                  = uct_knem_md_close,
+    .query                  = uct_knem_md_query,
+    .mkey_pack              = uct_knem_rkey_pack,
+    .mem_reg                = uct_knem_mem_rcache_reg,
+    .mem_dereg              = uct_knem_mem_rcache_dereg,
+    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+    .detect_memory_type     = ucs_empty_function_return_unsupported,
 };
 
 

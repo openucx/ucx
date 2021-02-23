@@ -74,8 +74,24 @@ typedef struct {
 } ucp_proto_common_lane_priv_t;
 
 
+/**
+ * Called the first time the protocol starts sending a request, and only once
+ * per request.
+ *
+ * @param [in] req   Request which started to send.
+ */
 typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
-typedef void (*ucp_proto_complete_cb_t)(ucp_request_t *req, ucs_status_t status);
+
+
+/**
+ * Called when a protocol finishes sending (or queueing to the transport) all
+ * its data successfully.
+ *
+ * @param [in] req   Request which is finished sending.
+ *
+ * @return Status code to be returned from the progress function.
+ */
+typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
 
 
 void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
@@ -114,6 +130,10 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_index_t *lanes, ucp_md_map_t *reg_md_map_p);
 
 
+ucp_lane_index_t
+ucp_proto_common_find_am_bcopy_lane(const ucp_proto_init_params_t *params);
+
+
 void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
                                 const ucp_proto_common_perf_params_t *perf_params);
 
@@ -126,5 +146,7 @@ void ucp_proto_request_select_error(ucp_request_t *req,
                                     ucp_worker_cfg_index_t rkey_cfg_index,
                                     const ucp_proto_select_param_t *sel_param,
                                     size_t msg_length);
+
+void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
 #endif

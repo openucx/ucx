@@ -11,6 +11,7 @@
 #include "dt_generic.h"
 
 #include <ucp/api/ucp.h>
+#include <ucs/memory/memtype_cache.h>
 
 
 /*
@@ -18,10 +19,11 @@
  * into a receive buffer.
  */
 typedef struct {
-    ucp_dt_class_t                dt_class;   /* Datatype class (contig/iov/...) */
-    ucs_memory_type_t             mem_type;   /* Memory type, needed to pack/unpack */
-    size_t                        length;     /* Total packed flat length */
-    size_t                        offset;     /* Current flat offset */
+    ucp_dt_class_t    dt_class; /* Datatype class (contig/iov/...) */
+    ucs_memory_info_t mem_info; /* Memory type and locality, needed to
+                                   pack/unpack */
+    size_t            length; /* Total packed flat length */
+    size_t            offset; /* Current flat offset */
     union {
         struct {
             void                  *buffer;    /* Contiguous buffer pointer */

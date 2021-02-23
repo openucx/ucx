@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,6 +11,8 @@
 #include "rdmacm_cm_ep.h"
 #include "rdmacm_cm.h"
 #include <ucs/arch/bitops.h>
+#include <ucs/sys/sock.h>
+#include <ucs/async/async.h>
 
 
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
@@ -445,10 +447,11 @@ ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)
         goto out;
     }
 
-    ucs_debug("%s: (id=%p) disconnecting from peer :%s",
+    ucs_debug("%s: (id=%p) disconnected from peer %s",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-              cep->id, ucs_sockaddr_str(rdma_get_peer_addr(cep->id), ip_port_str,
-                                        UCS_SOCKADDR_STRING_LEN));
+              cep->id,
+              ucs_sockaddr_str(rdma_get_peer_addr(cep->id), ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN));
     status = UCS_OK;
 
 out:

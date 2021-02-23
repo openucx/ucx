@@ -51,6 +51,7 @@ static const char *uct_ib_devx_objs[] = {
     [UCT_IB_DEVX_OBJ_RCSRQ] = "rcsrq",
     [UCT_IB_DEVX_OBJ_DCT]   = "dct",
     [UCT_IB_DEVX_OBJ_DCSRQ] = "dcsrq",
+    [UCT_IB_DEVX_OBJ_DCI]   = "dci",
     NULL
 };
 
@@ -166,7 +167,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "DEVX support\n",
      ucs_offsetof(uct_ib_md_config_t, devx), UCS_CONFIG_TYPE_TERNARY},
 
-    {"MLX5_DEVX_OBJECTS", "rcqp,rcsrq,dct,dcsrq",
+    {"MLX5_DEVX_OBJECTS", "rcqp,rcsrq,dct,dcsrq,dci",
      "Objects to be created by DevX\n",
      ucs_offsetof(uct_ib_md_config_t, devx_objs),
      UCS_CONFIG_TYPE_BITMAP(uct_ib_devx_objs)},
@@ -801,6 +802,8 @@ static ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length
 
     memh = uct_ib_memh_alloc(md);
     if (memh == NULL) {
+        uct_md_log_mem_reg_error(flags,
+                                 "md %p: failed to allocate memory handle", md);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -998,13 +1001,14 @@ static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 }
 
 static uct_md_ops_t uct_ib_md_rcache_ops = {
-    .close              = uct_ib_md_close,
-    .query              = uct_ib_md_query,
-    .mem_reg            = uct_ib_mem_rcache_reg,
-    .mem_dereg          = uct_ib_mem_rcache_dereg,
-    .mem_advise         = uct_ib_mem_advise,
-    .mkey_pack          = uct_ib_mkey_pack,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .close                  = uct_ib_md_close,
+    .query                  = uct_ib_md_query,
+    .mem_reg                = uct_ib_mem_rcache_reg,
+    .mem_dereg              = uct_ib_mem_rcache_dereg,
+    .mem_advise             = uct_ib_mem_advise,
+    .mkey_pack              = uct_ib_mkey_pack,
+    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+    .detect_memory_type     = ucs_empty_function_return_unsupported,
 };
 
 static ucs_status_t uct_ib_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
@@ -1694,7 +1698,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     dev              = &md->dev;
     dev->ibv_context = ibv_open_device(ibv_device);
     if (dev->ibv_context == NULL) {
-        ucs_error("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
+        ucs_warn("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
         status = UCS_ERR_IO_ERROR;
         goto err;
     }

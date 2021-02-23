@@ -22,6 +22,7 @@ jobs:
 
       - checkout: self
         clean: true
+        fetchDepth: 100
 
       - bash: |
           source ./buildlib/az-helpers.sh
@@ -40,4 +41,3 @@ jobs:
           JENKINS_TEST_PERF: ${{ parameters.test_perf }}
           JENKINS_NO_VALGRIND: ${{ parameters.valgrind_disable }}
           RUNNING_IN_AZURE: yes
-

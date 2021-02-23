@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -9,6 +9,8 @@
 #endif
 
 #include "rdmacm_listener.h"
+
+#include <ucs/sys/sock.h>
 
 
 #define UCS_RDMACM_MAX_BACKLOG_PATH        "/proc/sys/net/rdma_ucm/max_backlog"
@@ -35,6 +37,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
                     const uct_listener_params_t *params)
 {
     uct_rdmacm_cm_t *rdmacm_cm  = ucs_derived_of(cm, uct_rdmacm_cm_t);
+    int id_reuse_optval         = 1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
     int backlog;
@@ -49,6 +52,15 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
         ucs_error("rdma_create_id() failed: %m");
         status = UCS_ERR_IO_ERROR;
         goto err;
+    }
+
+    if (rdmacm_cm->super.config.reuse_addr) {
+        if (rdma_set_option(self->id, RDMA_OPTION_ID, RDMA_OPTION_ID_REUSEADDR,
+                            &id_reuse_optval, sizeof(id_reuse_optval))) {
+            ucs_error("rdma_set_option(REUSEADDR) failed: %m");
+            status = UCS_ERR_IO_ERROR;
+            goto err_destroy_id;
+        }
     }
 
     if (rdma_bind_addr(self->id, (struct sockaddr*)saddr)) {

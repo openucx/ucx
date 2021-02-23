@@ -175,6 +175,36 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
 }
 
 
+/**
+ * Copy uct_iov_t array to inline segment, taking into account QP wrap-around.
+ *
+ * @param dest     Inline data in the WQE to copy to.
+ * @param iov      A pointer to an array of uct_iov_t elements.
+ * @param iov_cnt  A number of elements in iov array.
+ * @param length   A total size of data in iov array.
+ * @param wq       Send work-queue.
+ */
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_inline_iov_copy(void *restrict dest, const uct_iov_t *iov,
+                            size_t iovcnt, size_t length,
+                            uct_ib_mlx5_txwq_t *wq)
+{
+    ptrdiff_t remainder;
+    ucs_iov_iter_t iov_iter;
+
+    ucs_assert(dest != NULL);
+
+    ucs_iov_iter_init(&iov_iter);
+    remainder = UCS_PTR_BYTE_DIFF(dest, wq->qend);
+    if (ucs_likely(length <= remainder)) {
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter, dest, SIZE_MAX);
+    } else {
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter, dest, remainder);
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter, wq->qstart, SIZE_MAX);
+    }
+}
+
+
 /* wrapping of 'seg' should not happen */
 static UCS_F_ALWAYS_INLINE void*
 uct_ib_mlx5_txwq_wrap_none(uct_ib_mlx5_txwq_t *txwq, void *seg)

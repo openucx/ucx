@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -42,14 +42,15 @@ static inline ucp_lane_index_t ucp_ep_get_tag_lane(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.tag_lane;
 }
 
-static inline int ucp_ep_is_tag_offload_enabled(ucp_ep_config_t *config)
+static inline int ucp_ep_config_key_has_tag_lane(const ucp_ep_config_key_t *key)
 {
-    ucp_lane_index_t lane = config->key.tag_lane;
+    ucp_lane_index_t lane = key->tag_lane;
 
     if (lane != UCP_NULL_LANE) {
-        ucs_assert(config->key.lanes[lane].rsc_index != UCP_NULL_RESOURCE);
+        ucs_assert(key->lanes[lane].rsc_index != UCP_NULL_RESOURCE);
         return 1;
     }
+
     return 0;
 }
 
@@ -145,7 +146,6 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 {
     ucs_assert(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_LISTENER));
     ucs_assert(!(ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
     return &ucp_ep_ext_gen(ep)->flush_state;
 }
@@ -215,8 +215,7 @@ static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
 {
     ucp_ep_flush_state_t *flush_state = &ucp_ep_ext_gen(ep)->flush_state;
 
-    ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                              UCP_EP_FLAG_LISTENER)));
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
                ((flush_state->send_sn == 0) &&
                 (flush_state->cmpl_sn == 0) &&

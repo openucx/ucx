@@ -1,5 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) 2021 Broadcom. ALL RIGHTS RESERVED. The term “Broadcom”
+* refers to Broadcom Inc. and/or its subsidiaries.
 *
 * See file LICENSE for terms.
 */
@@ -401,6 +403,10 @@ unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
         pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
     }
 
+    if (iface->config.path_mtu != IBV_MTU_4096) {
+        pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
+    }
+
     return pack_flags;
 }
 
@@ -422,8 +428,8 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
     params.gid       = iface->gid_info.gid;
     params.lid       = uct_ib_iface_port_attr(iface)->lid;
     params.roce_info = iface->gid_info.roce_info;
+    params.path_mtu  = iface->config.path_mtu;
     /* to suppress gcc 4.3.4 warning */
-    params.path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
     params.gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
     params.pkey      = iface->pkey;
     uct_ib_address_pack(&params, ib_addr);
@@ -952,7 +958,7 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     }
 
     cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(dev->ibv_context, &cq_attr));
-    if (!cq && (errno == ENOSYS))
+    if (!cq && ((errno == EOPNOTSUPP) || (errno == ENOSYS)))
 #endif
     {
         iface->config.max_inl_cqe[dir] = 0;
@@ -1022,7 +1028,7 @@ uct_ib_iface_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
 out_unsetenv:
 #if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
-    iface->config.max_inl_cqe[dir] = cqe_size / 2;
+    iface->config.max_inl_cqe[dir] = (inl > 0) ? (cqe_size / 2) : 0;
     if (env_var_added) {
         /* if we created a new environment variable, remove it */
         ret = ibv_exp_unsetenv(dev->ibv_context, cqe_size_env_var);
@@ -1084,9 +1090,13 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
     if (config->num_paths == UCS_ULUNITS_AUTO) {
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
-            iface->num_paths =
-                    uct_ib_device_get_roce_lag_level(dev, iface->config.port_num,
-                                                     iface->gid_info.gid_index);
+            if (dev->lag_level == 0) {
+                iface->num_paths =
+                       uct_ib_device_get_roce_lag_level(dev, iface->config.port_num,	
+                                                        iface->gid_info.gid_index);
+            } else {
+                iface->num_paths = dev->lag_level;
+            }
         } else {
             /* IB - number of paths is LMC level */
             ucs_assert(iface->path_bits_count > 0);

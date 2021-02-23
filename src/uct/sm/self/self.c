@@ -9,6 +9,7 @@
 
 #include "self.h"
 
+#include <uct/base/uct_iov.inl>
 #include <uct/sm/base/sm_ep.h>
 #include <uct/sm/base/sm_iface.h>
 #include <ucs/type/class.h>
@@ -43,6 +44,16 @@ static ucs_config_field_t uct_self_iface_config_table[] = {
     {"SEG_SIZE", "8k",
      "Size of copy-out buffer",
      ucs_offsetof(uct_self_iface_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {NULL}
+};
+
+static ucs_config_field_t uct_self_md_config_table[] = {
+    {"", "", NULL, ucs_offsetof(uct_self_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+
+    {"NUM_DEVICES", "1", "Number of \"self\" devices to create",
+     ucs_offsetof(uct_self_md_config_t, num_devices), UCS_CONFIG_TYPE_INT},
 
     {NULL}
 };
@@ -106,7 +117,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
     attr->cap.am.opt_zcopy_align  = 1;
     attr->cap.am.align_mtu        = attr->cap.am.opt_zcopy_align;
     attr->cap.am.max_hdr          = 0;
-    attr->cap.am.max_iov          = 1;
+    attr->cap.am.max_iov          = SIZE_MAX;
 
     attr->latency                 = ucs_linear_func_make(0, 0);
     attr->bandwidth.dedicated     = 6911.0 * UCS_MBYTE;
@@ -220,10 +231,27 @@ static ucs_status_t
 uct_self_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                           unsigned *num_tl_devices_p)
 {
-    return uct_single_device_resource(md, UCT_SM_DEVICE_NAME,
-                                      UCT_DEVICE_TYPE_SELF,
-                                      UCS_SYS_DEVICE_ID_UNKNOWN,
-                                      tl_devices_p, num_tl_devices_p);
+    uct_self_md_t *self_md = ucs_derived_of(md, uct_self_md_t);
+    int i;
+    uct_tl_device_resource_t *devices;
+
+    devices = ucs_calloc(self_md->num_devices, sizeof(*devices),
+                         "device resource");
+    if (NULL == devices) {
+        ucs_error("failed to allocate device resource");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    for (i = 0; i < self_md->num_devices; i++) {
+        ucs_snprintf_zero(devices[i].name, sizeof(devices->name), "%s%d",
+                          UCT_SM_DEVICE_NAME, i);
+        devices[i].type       = UCT_DEVICE_TYPE_SELF;
+        devices[i].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    *tl_devices_p     = devices;
+    *num_tl_devices_p = self_md->num_devices;
+    return UCS_OK;
 }
 
 static UCS_CLASS_INIT_FUNC(uct_self_ep_t, const uct_ep_params_t *params)
@@ -264,6 +292,31 @@ ucs_status_t uct_self_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     return UCS_OK;
 }
 
+ucs_status_t uct_self_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                      const uct_iov_t *iov, size_t iovcnt)
+{
+    uct_self_iface_t *iface        = ucs_derived_of(tl_ep->iface,
+                                                    uct_self_iface_t);
+    uct_self_ep_t UCS_V_UNUSED *ep = ucs_derived_of(tl_ep, uct_self_ep_t);
+    void *send_buffer;
+    ucs_iov_iter_t iov_iter;
+    size_t length;
+
+    UCT_CHECK_AM_ID(id);
+    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), 0, iface->send_size,
+                     "am_short_iov");
+
+    ucs_iov_iter_init(&iov_iter);
+    send_buffer = UCT_SELF_IFACE_SEND_BUFFER_GET(iface);
+    length      = uct_iov_to_buffer(iov, iovcnt, &iov_iter, send_buffer,
+                                    SIZE_MAX);
+
+    UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, length);
+    uct_self_iface_sendrecv_am(iface, id, send_buffer, length, "SHORT_IOV");
+
+    return UCS_OK;
+}
+
 ssize_t uct_self_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                              uct_pack_callback_t pack_cb, void *arg,
                              unsigned flags)
@@ -290,7 +343,7 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .ep_put_bcopy             = uct_sm_ep_put_bcopy,
     .ep_get_bcopy             = uct_sm_ep_get_bcopy,
     .ep_am_short              = uct_self_ep_am_short,
-    .ep_am_short_iov          = uct_base_ep_am_short_iov,
+    .ep_am_short_iov          = uct_self_ep_am_short_iov,
     .ep_am_bcopy              = uct_self_ep_am_bcopy,
     .ep_atomic_cswap64        = uct_sm_ep_atomic_cswap64,
     .ep_atomic64_post         = uct_sm_ep_atomic64_post,
@@ -347,6 +400,8 @@ static ucs_status_t uct_self_mem_reg(uct_md_h md, void *address, size_t length,
 static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_name,
                                      const uct_md_config_t *config, uct_md_h *md_p)
 {
+    uct_self_md_config_t *md_config = ucs_derived_of(config,
+                                                     uct_self_md_config_t);
     static uct_md_ops_t md_ops = {
         .close              = ucs_empty_function,
         .query              = uct_self_md_query,
@@ -355,12 +410,14 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
         .mem_dereg          = ucs_empty_function_return_success,
         .detect_memory_type = ucs_empty_function_return_unsupported
     };
-    static uct_md_t md = {
-        .ops          = &md_ops,
-        .component    = &uct_self_component
-    };
 
-    *md_p = &md;
+    static uct_self_md_t md;
+
+    md.super.ops       = &md_ops;
+    md.super.component = &uct_self_component;
+    md.num_devices     = md_config->num_devices;
+
+    *md_p = &md.super;
     return UCS_OK;
 }
 
@@ -385,7 +442,12 @@ static uct_component_t uct_self_component = {
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_SELF_NAME,
-    .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
+    .md_config          = {
+        .name           = "Self memory domain",
+        .prefix         = "SELF_",
+        .table          = uct_self_md_config_table,
+        .size           = sizeof(uct_self_md_config_t),
+    },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component),
     .flags              = 0

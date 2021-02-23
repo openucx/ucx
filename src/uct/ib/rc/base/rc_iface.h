@@ -98,20 +98,19 @@ enum {
 
 /* flags for uct_rc_iface_send_op_t */
 enum {
-    UCT_RC_IFACE_SEND_OP_FLAG_FC_GRANT = UCS_BIT(11),
 #ifdef NVALGRIND
-    UCT_RC_IFACE_SEND_OP_FLAG_IOV      = 0,
+    UCT_RC_IFACE_SEND_OP_FLAG_IOV   = 0,
 #else
-    UCT_RC_IFACE_SEND_OP_FLAG_IOV      = UCS_BIT(12), /* save iovec to make mem defined */
+    UCT_RC_IFACE_SEND_OP_FLAG_IOV   = UCS_BIT(12), /* save iovec to make mem defined */
 #endif
 #if UCS_ENABLE_ASSERT
-    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY    = UCS_BIT(13), /* zcopy */
-    UCT_RC_IFACE_SEND_OP_FLAG_IFACE    = UCS_BIT(14), /* belongs to iface ops buffer */
-    UCT_RC_IFACE_SEND_OP_FLAG_INUSE    = UCS_BIT(15)  /* queued on a txqp */
+    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY = UCS_BIT(13), /* zcopy */
+    UCT_RC_IFACE_SEND_OP_FLAG_IFACE = UCS_BIT(14), /* belongs to iface ops buffer */
+    UCT_RC_IFACE_SEND_OP_FLAG_INUSE = UCS_BIT(15)  /* queued on a txqp */
 #else
-    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY    = 0,
-    UCT_RC_IFACE_SEND_OP_FLAG_IFACE    = 0,
-    UCT_RC_IFACE_SEND_OP_FLAG_INUSE    = 0
+    UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY = 0,
+    UCT_RC_IFACE_SEND_OP_FLAG_IFACE = 0,
+    UCT_RC_IFACE_SEND_OP_FLAG_INUSE = 0
 #endif
 };
 

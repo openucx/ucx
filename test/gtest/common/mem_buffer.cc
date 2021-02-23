@@ -11,6 +11,7 @@
 
 #include "mem_buffer.h"
 
+#include <sys/types.h>
 #include <ucp/core/ucp_mm.h>
 #include <ucs/debug/assert.h>
 #include <common/test_helpers.h>
@@ -87,6 +88,29 @@ const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
     }
 
     return vec;
+}
+
+void mem_buffer::set_device_context()
+{
+    static __thread bool device_set = false;
+
+    if (device_set) {
+        return;
+    }
+
+#if HAVE_CUDA
+    if (is_cuda_supported()) {
+        cudaSetDevice(0);
+    }
+#endif
+
+#if HAVE_ROCM
+    if (is_rocm_supported()) {
+        hipSetDevice(0);
+    }
+#endif
+
+    device_set = true;
 }
 
 void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)

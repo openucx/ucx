@@ -67,6 +67,9 @@ struct resource {
              const uct_md_attr_t& md_attr,
              const uct_md_resource_desc_t& md_resource,
              const uct_tl_resource_desc_t& tl_resource);
+    static bool is_equal_tl_name(const resource &rsc, const std::string &name);
+    static bool
+    is_equal_component_name(const resource &rsc, const std::string &name);
 };
 
 struct resource_speed : public resource {
@@ -110,12 +113,6 @@ public:
      */
     static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
-    /* By default generate test variant for all tls. If variant is specific to
-     * the particular transport tl_name need to be specified accordingly */
-    static void generate_test_variant(int variant,
-                                      const std::string &variant_name,
-                                      std::vector<resource>& test_res,
-                                      const std::string &tl_name="");
     uct_test();
     virtual ~uct_test();
 
@@ -231,8 +228,6 @@ protected:
             async_wrapper(const async_wrapper &);
         };
 
-        entity(const entity&);
-
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
         void cuda_mem_alloc(size_t length, uct_allocated_memory_t *mem) const;
@@ -309,16 +304,16 @@ protected:
         bool             aux_pipe_init;
     };
 
-    template <typename T>
-    static std::vector<const resource*> filter_resources(const std::vector<T>& resources,
-                                                         const std::string& tl_name)
+    template<typename T>
+    static std::vector<const resource*>
+    filter_resources(const std::vector<T> &resources,
+                     bool is_equal(const resource&, const std::string&),
+                     const std::string &filter)
     {
         std::vector<const resource*> result;
-        for (typename std::vector<T>::const_iterator iter = resources.begin();
-                        iter != resources.end(); ++iter)
-        {
-            if (tl_name.empty() || (iter->tl_name == tl_name)) {
-                result.push_back(&*iter);
+        for (size_t i = 0; i < resources.size(); ++i) {
+            if (filter.empty() || is_equal(resources[i], filter)) {
+                result.push_back(&resources[i]);
             }
         }
         return result;
@@ -449,8 +444,9 @@ protected:
     ud_mlx5,            \
     cm
 
-#define UCT_TEST_SOCKADDR_TLS \
-    sockaddr
+
+#define UCT_TEST_CMS rdmacm, tcp
+
 
 #define UCT_TEST_NO_SELF_TLS \
     UCT_TEST_IB_TLS,         \
@@ -505,8 +501,21 @@ protected:
 #define UCT_INSTANTIATE_NO_SELF_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_NO_SELF_TLS)
 
+
+/**
+ * Instantiate the parametrized test case for all sockaddr CMs.
+ *
+ * @param _test_case  Test case class, derived from @ref test_uct_sockaddr.
+ */
 #define UCT_INSTANTIATE_SOCKADDR_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_SOCKADDR_TLS)
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_CM_TEST_CASE, _test_case, UCT_TEST_CMS)
+
+
+#define _UCT_INSTANTIATE_CM_TEST_CASE(_test_case, _cm_name) \
+    INSTANTIATE_TEST_CASE_P(_cm_name, _test_case, \
+                            testing::ValuesIn(_test_case::enum_cm_resources( \
+                                    UCS_PP_QUOTE(_cm_name))));
+
 
 /**
  * Instantiate the parametrized test case for the RC/DC transports.

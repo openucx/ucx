@@ -7,8 +7,11 @@
 #ifndef UCX_INFO_H
 #define UCX_INFO_H
 
+#include <ucs/sys/sock.h>
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
+
+#include <arpa/inet.h>
 
 
 enum {
@@ -35,9 +38,11 @@ void print_uct_info(int print_opts, ucs_config_print_flags_t print_flags,
 
 void print_type_info(const char * tl_name);
 
-void print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
-                    uint64_t ctx_features, const ucp_ep_params_t *base_ep_params,
-                    size_t estimated_num_eps, size_t estimated_num_ppn,
-                    unsigned dev_type_bitmap, const char *mem_size);
+ucs_status_t
+print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
+               uint64_t ctx_features, const ucp_ep_params_t *base_ep_params,
+               size_t estimated_num_eps, size_t estimated_num_ppn,
+               unsigned dev_type_bitmap, const char *mem_size,
+               const char *ip_addr);
 
 #endif

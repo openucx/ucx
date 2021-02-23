@@ -9,13 +9,24 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
-#include <stddef.h>
 #include <ucs/datastruct/array.h>
+#include <stddef.h>
+#include <stdio.h>
 
 
 BEGIN_C_DECLS
 
 UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
+
+
+/**
+ * Dynamic string buffer initializer. The backing storage should be released
+ * explicitly by calling @ref ucs_string_buffer_cleanup()
+ */
+#define UCS_STRING_BUFFER_INITIALIZER \
+    { \
+        UCS_ARRAY_DYNAMIC_INITIALIZER \
+    }
 
 
 /**
@@ -131,6 +142,21 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
 
 
 /**
+ * Append a hex dump to the string buffer.
+ *
+ * @param [inout] strb       String buffer to append to.
+ * @param [in]    data       Raw data to hex-dump.
+ * @param [in]    size       Raw data size.
+ * @param [in]    per_line   Add a newline character after this number of bytes.
+ *
+ * @note If the string cannot grow to the required length, only some of the
+ *       characters would be appended.
+ */
+void ucs_string_buffer_append_hex(ucs_string_buffer_t *strb, const void *data,
+                                  size_t size, size_t per_line);
+
+
+/**
  * Remove specific characters from the end of the string.
  *
  * @param [inout] strb     String buffer remote characters from.
@@ -149,12 +175,22 @@ void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset);
  * buffer. The returned string is valid only as long as no other operation is
  * done on the string buffer (including append).
  *
- * @param [in]   strb   String buffer to convert to a C-style string
+ * @param [in]   strb   String buffer to convert to a C-style string.
  *
  * @return C-style string representing the data in the buffer.
  */
 const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb);
 
+
+/**
+ * Print the string buffer to a stream as multi-line text.
+ *
+ * @param [in]  strb          String buffer to print.
+ * @param [in]  line_prefix   Prefix to prepend to each output line.
+ * @param [in]  stream        Stream to print to.
+ */
+void ucs_string_buffer_dump(const ucs_string_buffer_t *strb,
+                            const char *line_prefix, FILE *stream);
 
 END_C_DECLS
 

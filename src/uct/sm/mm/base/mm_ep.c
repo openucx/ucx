@@ -12,6 +12,7 @@
 #include "mm_ep.h"
 #include "uct/sm/base/sm_ep.h"
 
+#include <uct/base/uct_iov.inl>
 #include <ucs/arch/atomic.h>
 
 
@@ -19,6 +20,7 @@
 typedef enum {
     UCT_MM_SEND_AM_BCOPY,
     UCT_MM_SEND_AM_SHORT,
+    UCT_MM_SEND_AM_SHORT_IOV
 } uct_mm_send_op_t;
 
 
@@ -225,20 +227,19 @@ static inline void uct_mm_ep_update_cached_tail(uct_mm_ep_t *ep)
 
 /* A common mm active message sending function.
  * The first parameter indicates the origin of the call.
- * is_short = 1 - perform AM short sending
- * is_short = 0 - perform AM bcopy sending
  */
-static UCS_F_ALWAYS_INLINE ssize_t
-uct_mm_ep_am_common_send(uct_mm_send_op_t send_op, uct_mm_ep_t *ep,
-                         uct_mm_iface_t *iface, uint8_t am_id, size_t length,
-                         uint64_t header, const void *payload,
-                         uct_pack_callback_t pack_cb, void *arg)
+static UCS_F_ALWAYS_INLINE ssize_t uct_mm_ep_am_common_send(
+        uct_mm_send_op_t send_op, uct_mm_ep_t *ep, uct_mm_iface_t *iface,
+        uint8_t am_id, size_t length, uint64_t header, const void *payload,
+        uct_pack_callback_t pack_cb, void *arg, const uct_iov_t *iov,
+        size_t iovcnt)
 {
     uct_mm_fifo_element_t *elem;
     ucs_status_t status;
     void *base_address;
     uint8_t elem_flags;
     uint64_t head;
+    ucs_iov_iter_t iov_iter;
 
     UCT_CHECK_AM_ID(am_id);
 
@@ -300,6 +301,15 @@ retry:
                            length, "TX: AM_BCOPY");
         UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);
         break;
+    case UCT_MM_SEND_AM_SHORT_IOV:
+        elem_flags   = UCT_MM_FIFO_ELEM_FLAG_INLINE;
+        ucs_iov_iter_init(&iov_iter);
+        elem->length = uct_iov_to_buffer(iov, iovcnt, &iov_iter, elem + 1,
+                                         SIZE_MAX);
+        uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,
+                           elem + 1, elem->length, "TX: AM_SHORT");
+        UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, elem->length);
+        break;
     }
 
     elem->am_id = am_id;
@@ -321,6 +331,7 @@ retry:
 
     switch (send_op) {
     case UCT_MM_SEND_AM_SHORT:
+    case UCT_MM_SEND_AM_SHORT_IOV:
         return UCS_OK;
     case UCT_MM_SEND_AM_BCOPY:
         return length;
@@ -341,7 +352,23 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_SEND_AM_SHORT, ep,
                                                   iface, id, length, header,
-                                                  payload, NULL, NULL);
+                                                  payload, NULL, NULL, NULL, 0);
+}
+
+ucs_status_t uct_mm_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                    const uct_iov_t *iov, size_t iovcnt)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
+    uct_mm_ep_t *ep       = ucs_derived_of(tl_ep, uct_mm_ep_t);
+
+    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), 0,
+                     iface->config.fifo_elem_size -
+                             sizeof(uct_mm_fifo_element_t),
+                     "am_short_iov");
+
+    return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_SEND_AM_SHORT_IOV, ep,
+                                                  iface, id, 0, 0, NULL, NULL,
+                                                  NULL, iov, iovcnt);
 }
 
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
@@ -351,7 +378,7 @@ ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
     return uct_mm_ep_am_common_send(UCT_MM_SEND_AM_BCOPY, ep, iface, id, 0, 0,
-                                    NULL, pack_cb, arg);
+                                    NULL, pack_cb, arg, NULL, 0);
 }
 
 static inline int uct_mm_ep_has_tx_resources(uct_mm_ep_t *ep)

@@ -82,8 +82,10 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
         }
     }
 
-    ucs_trace("ep %p: progress flush req %p, started_lanes 0x%x count %d", ep,
-              req, req->send.flush.started_lanes, req->send.state.uct_comp.count);
+    ucs_trace("ep %p flags 0x%x: progress flush req %p, started_lanes 0x%x "
+              "count %d",
+              ep, ep->flags, req, req->send.flush.started_lanes,
+              req->send.state.uct_comp.count);
 
     while (req->send.flush.started_lanes < all_lanes) {
 
@@ -199,7 +201,7 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
     return 0;
 }
 
-static ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
+ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_lane_index_t lane = req->send.lane;
@@ -603,7 +605,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_worker_fence, (worker), ucp_worker_h worker)
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    ucs_for_each_bit(rsc_index, worker->context->tl_bitmap) {
+    UCS_BITMAP_FOR_EACH_BIT(worker->context->tl_bitmap, rsc_index) {
         wiface = ucp_worker_iface(worker, rsc_index);
         if (wiface->iface == NULL) {
             continue;

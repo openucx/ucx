@@ -33,20 +33,21 @@ struct ucp_wireup_ep {
     ucp_proxy_ep_t            super;         /**< Derive from ucp_proxy_ep_t */
     ucs_queue_head_t          pending_q;     /**< Queue of pending operations */
     uct_ep_h                  aux_ep;        /**< Used to wireup the "real" endpoint */
-    uct_ep_h                  sockaddr_ep;   /**< Used for client-server wireup */
     ucp_ep_h                  tmp_ep;        /**< Used by the client for local tls setup */
+    ucp_lane_index_t          tmp_ep_check_map; /**< Bitmap of lanes to do
+                                                     ep_check keepalive
+                                                     operations */
     struct sockaddr_storage   cm_remote_sockaddr;  /**< sockaddr of the remote peer -
                                                         used only on the client side
                                                         in a client-server flow */
-    ucp_rsc_index_t           cm_idx;        /**< If this ucp_wireup_ep wraps a CM ep,
-                                                  this is the index of the CM resource
-                                                  on which it was created */
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
-    ucp_rsc_index_t           sockaddr_rsc_index; /**< Index of sockaddr transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
     unsigned                  ep_init_flags; /**< UCP wireup EP init flags */
+    /**< Destination resource indicies used for checking intersection between
+         between two configurations in case of CM */
+    ucp_rsc_index_t           dst_rsc_indices[UCP_MAX_LANES];
 };
 
 
@@ -81,9 +82,6 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ucp_ep_init_flags,
                                    unsigned path_index, int connect_aux,
                                    const ucp_unpacked_address_t *remote_address);
 
-ucs_status_t ucp_wireup_ep_connect_to_sockaddr(uct_ep_h uct_ep,
-                                               const ucp_ep_params_t *params);
-
 void ucp_wireup_ep_pending_queue_purge(uct_ep_h uct_ep,
                                        uct_pending_purge_callback_t cb,
                                        void *arg);
@@ -100,6 +98,8 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 
 void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep);
+
+void ucp_wireup_ep_mark_ready(uct_ep_h uct_ep);
 
 void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep);
 

@@ -81,7 +81,9 @@ static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_SHORT)]  = "tag eager short",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)]  = "tag eager bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)]  = "tag eager zcopy",
-    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy"
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_CHECK)]         = "ep check",
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_KEEPALIVE)]     = "ep keepalive"
 };
 
 static const char *perf_atomic_op[] = {
@@ -984,7 +986,8 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (params->flags & UCX_PERF_TEST_FLAG_WAKEUP) {
+    if ((params->flags & UCX_PERF_TEST_FLAG_WAKEUP) ||
+        (params->wait_mode == UCX_PERF_WAIT_MODE_SLEEP)) {
         ucp_params->features |= UCP_FEATURE_WAKEUP;
     }
 
@@ -1869,6 +1872,12 @@ static ucs_status_t ucx_perf_thread_run_test(void* arg)
     ucx_perf_context_t* perf        = &tctx->perf;
     ucx_perf_params_t* params       = &perf->params;
     ucs_status_t status;
+
+    /* new threads need explicit device association */
+    status = perf->allocator->init(perf);
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     if (params->warmup_iter > 0) {
         ucx_perf_set_warmup(perf, params);

@@ -54,9 +54,10 @@ EmptyCallback* EmptyCallback::get() {
 
 bool UcxLog::use_human_time = false;
 
-UcxLog::UcxLog(const char* prefix, bool enable) : _enable(enable)
+UcxLog::UcxLog(const char* prefix, bool enable)
 {
     if (!enable) {
+        _ss = NULL;
         return;
     }
 
@@ -70,13 +71,17 @@ UcxLog::UcxLog(const char* prefix, bool enable) : _enable(enable)
     } else {
         snprintf(str, sizeof(str), "[%lu.%06lu] ", tv.tv_sec, tv.tv_usec);
     }
-    std::cout << str << prefix << " ";
+
+    _ss = new std::stringstream();
+    (*_ss) << str << prefix << " ";
 }
 
 UcxLog::~UcxLog()
 {
-    if (_enable) {
-        std::cout << std::endl;
+    if (_ss != NULL) {
+        (*_ss) << std::endl;
+        std::cout << (*_ss).str();
+        delete _ss;
     }
 }
 
@@ -541,8 +546,12 @@ UcxConnection::~UcxConnection()
         UCX_CONN_LOG << "waiting for " << ucs_list_length(&_all_requests) <<
                         " uncompleted requests";
     }
+
     while (!ucs_list_is_empty(&_all_requests)) {
-        ucp_worker_progress(_context.worker());
+        // while waiting for request completion, progress other queues, e.g.
+        // conn_reqs queue which can get stuck for a while and client can fail
+        // a connection establishment
+        _context.progress();
     }
 
     UCX_CONN_LOG << "released";

@@ -148,10 +148,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
 {
     ucp_put_hdr_t *puth = data;
     ucp_worker_h worker = arg;
+    ucp_ep_h ep;
 
+    /* allow getting closed EP to be used for sending a completion to enable flush
+     * on a peer
+     */
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, puth->ep_id, return UCS_OK,
+                            "SW PUT request");
     ucp_dt_contig_unpack(worker, (void*)puth->address, puth + 1,
                          length - sizeof(*puth), puth->mem_type);
-    ucp_rma_sw_send_cmpl(ucp_worker_get_ep_by_id(worker, puth->ep_id));
+    ucp_rma_sw_send_cmpl(ep);
     return UCS_OK;
 }
 
@@ -160,8 +166,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flag
 {
     ucp_cmpl_hdr_t *putackh = data;
     ucp_worker_h worker     = arg;
-    ucp_ep_h ep             = ucp_worker_get_ep_by_id(worker, putackh->ep_id);
+    ucp_ep_h ep;
 
+    /* allow getting closed EP to be used for handling a completion to enable flush
+     * on a peer
+     */
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, putackh->ep_id, return UCS_OK,
+                            "SW RMA completion");
     ucp_ep_rma_remote_request_completed(ep);
     return UCS_OK;
 }
@@ -214,10 +225,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
 {
     ucp_get_req_hdr_t *getreqh = data;
     ucp_worker_h worker        = arg;
-    ucp_ep_h ep                = ucp_worker_get_ep_by_id(worker,
-                                                         getreqh->req.ep_id);
+    ucp_ep_h ep;
     ucp_request_t *req;
 
+    /* allow getting closed EP to be used for sending a GET operation data to enable
+     * flush on a peer
+     */
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, getreqh->req.ep_id, return UCS_OK,
+                            "SW GET request");
     req = ucp_request_get(worker);
     if (req == NULL) {
         ucs_error("failed to allocate get reply");
@@ -246,20 +261,22 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
     ucp_worker_h worker        = arg;
     ucp_rma_rep_hdr_t *getreph = data;
     size_t frag_length         = length - sizeof(*getreph);
-    ucp_request_t *req         = ucp_worker_get_request_by_id(worker,
-                                                              getreph->req_id);
-    ucp_ep_h ep                = req->send.ep;
+    ucp_request_t *req;
+    ucp_ep_h ep;
+    void *ptr;
 
+    UCP_WORKER_GET_REQUEST_BY_ID(&req, worker, getreph->req_id, return UCS_OK,
+                                 "GET reply data %p", getreph);
+    ep = req->send.ep;
     if (ep->worker->context->config.ext.proto_enable) {
         // TODO use dt_iter.inl unpack
-        ucp_dt_contig_unpack(ep->worker,
-                             req->send.state.dt_iter.type.contig.buffer +
-                             req->send.state.dt_iter.offset,
-                             getreph + 1, frag_length,
-                             req->send.state.dt_iter.mem_type);
+        ptr = UCS_PTR_BYTE_OFFSET(req->send.state.dt_iter.type.contig.buffer,
+                                  req->send.state.dt_iter.offset);
+        ucp_dt_contig_unpack(ep->worker, ptr, getreph + 1, frag_length,
+                             req->send.state.dt_iter.mem_info.type);
         req->send.state.dt_iter.offset += frag_length;
         if (req->send.state.dt_iter.offset == req->send.state.dt_iter.length) {
-            ucp_proto_request_bcopy_complete(req, UCS_OK);
+            ucp_proto_request_bcopy_complete_success(req);
             ucp_ep_rma_remote_request_completed(ep);
         }
     } else {

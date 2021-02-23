@@ -20,6 +20,10 @@
 #define UCP_PROTO_SELECT_OP_ATTR_MASK   UCP_OP_ATTR_FLAG_FAST_CMPL
 
 
+/** Maximal length of ucp_proto_select_param_str() */
+#define UCP_PROTO_SELECT_PARAM_STR_MAX 128
+
+
 /**
  * Entry which defines which protocol should be used for a message size range.
  */
@@ -80,9 +84,15 @@ ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
 void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
 
 
-void ucp_proto_select_dump(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
+void ucp_proto_select_dump(ucp_worker_h worker,
+                           ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
-                           ucp_proto_select_t *proto_select, FILE *stream);
+                           const ucp_proto_select_t *proto_select,
+                           ucs_string_buffer_t *strb);
+
+
+void ucp_proto_select_dump_short(const ucp_proto_select_short_t *select_short,
+                                 const char *name, ucs_string_buffer_t *strb);
 
 
 void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
@@ -100,10 +110,6 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
 const ucp_proto_threshold_elem_t*
 ucp_proto_thresholds_search_slow(const ucp_proto_threshold_elem_t *thresholds,
                                  size_t msg_length);
-
-
-void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
-                                ucs_string_buffer_t *strb);
 
 
 void ucp_proto_select_short_disable(ucp_proto_select_short_t *proto_short);

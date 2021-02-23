@@ -62,6 +62,8 @@ enum {
     UCT_IB_QPT_DCI = IBV_EXP_QPT_DC_INI,
 #elif HAVE_DC_DV
     UCT_IB_QPT_DCI = IBV_QPT_DRIVER,
+#else
+    UCT_IB_QPT_DCI = UCT_IB_QPT_UNKNOWN,
 #endif
 };
 

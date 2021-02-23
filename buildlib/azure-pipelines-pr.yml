@@ -9,10 +9,34 @@ pr:
 resources:
   containers:
     - container: centos7
-      image: ucfconsort.azurecr.io/ucx/centos7:1
-      endpoint: ucfconsort_registry
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.x-cuda11.1:1
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
+      options: --privileged
+    - container: coverity_rh7
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel74
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel82
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu2004
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu1804
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles15sp2
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles12sp5
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
 
 stages:
   - stage: Codestyle
@@ -23,6 +47,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: |
               set -eE
@@ -58,6 +83,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: |
               source ./buildlib/az-helpers.sh
@@ -79,6 +105,39 @@ stages:
 
   - stage: Build
     jobs:
+      - job: build_source
+        workspace:
+          clean: all
+        pool:
+          name: MLNX
+          demands:
+            - ucx_docker -equals yes
+        strategy:
+          matrix:
+            rhel76:
+              CONTAINER: rhel76
+            ubuntu2004:
+              CONTAINER: ubuntu2004
+            ubuntu1804:
+              CONTAINER: ubuntu1804
+            sles15sp2:
+              CONTAINER: sles15sp2
+            #sles12sp5:
+            #  CONTAINER: sles12sp5
+            rhel82:
+              CONTAINER: rhel82
+        container: $[ variables['CONTAINER'] ]
+        timeoutInMinutes: 360
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+
+          - bash: |
+              ./buildlib/tools/builds.sh
+            displayName: Build
+
       - job: static_checks
         displayName: Static checks
         pool:
@@ -89,6 +148,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: ./autogen.sh
             displayName: Setup autotools
@@ -136,6 +196,10 @@ stages:
       # Perform test builds on relevant distributions.
       - job: Distros
         displayName: Build for
+        pool:
+          name: MLNX
+          demands:
+          - ucx_instinct -equals yes
         strategy:
           matrix:
             centos7:
@@ -145,6 +209,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: ./autogen.sh
             displayName: Setup autotools
@@ -162,6 +227,18 @@ stages:
               make -s -j `nproc`
             displayName: Build for $(CONTAINER)
 
+          - bash: |
+              set -x
+              cd build
+              ./src/tools/info/ucx_info -e -u t 2>&1 | tee info.txt
+              grep -i error info.txt
+              retVal=$?
+              if [ $retVal -eq 0 ]; then
+                  exit 1;
+              fi
+              exit 0;
+            displayName: Test ucx_info
+
       # Test RPM build
       - job: build_rpm
         displayName: Build tarball and source rpm
@@ -173,6 +250,7 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: ./autogen.sh
             displayName: Setup autotools
@@ -190,6 +268,14 @@ stages:
                 echo "##vso[task.complete result=Failed;]"
               fi
             displayName: Configure source and build RPM
+
+  - stage: Coverity
+    dependsOn: [Codestyle]
+    jobs:
+      - template: coverity.yml
+        parameters:
+          demands: ucx_docker -equals yes
+          container: coverity_rh7
 
   - stage: Tests
     dependsOn: [Codestyle]
@@ -214,8 +300,25 @@ stages:
         name: hwi
         demands: ucx_hwi -equals yes
         test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: sputnik
+        demands: ucx_sputnik -equals yes
+        test_perf: 0
 
   - stage: io_demo
     dependsOn: [Codestyle]
     jobs:
     - template: io_demo/io-demo.yml
+
+  - stage: jucx
+    dependsOn: [Codestyle]
+    jobs:
+      - template: jucx/jucx-test.yml
+        parameters:
+          name: new
+          demands: ucx_new -equals yes
+      - template: jucx/jucx-test.yml
+        parameters:
+          name: gpu
+          demands: ucx_gpu -equals yes
