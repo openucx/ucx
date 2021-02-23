@@ -38,9 +38,9 @@ struct ibv_ravh {
 
 #define UCT_DC_MLX5_IFACE_MAX_USER_DCIS 15
 #define UCT_DC_MLX5_KEEPALIVE_NUM_DCIS  1
-#define UCT_DC_MLX5_IFACE_MAX_LAG_PORTS 2
+#define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 8
 #define UCT_DC_MLX5_IFACE_MAX_DCIS      ((UCT_DC_MLX5_IFACE_MAX_USER_DCIS * \
-                                          UCT_DC_MLX5_IFACE_MAX_LAG_PORTS) + \
+                                          UCT_DC_MLX5_IFACE_MAX_DCI_POOLS) + \
                                           UCT_DC_MLX5_KEEPALIVE_NUM_DCIS)
 
 #define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
@@ -132,7 +132,7 @@ typedef struct uct_dc_mlx5_iface_config {
 
 typedef void (*uct_dc_dci_handle_failure_func_t)(uct_dc_mlx5_iface_t *iface,
                                                  struct mlx5_cqe64 *cqe,
-                                                 uint8_t dci,
+                                                 uint8_t dci_index,
                                                  ucs_status_t status);
 
 
@@ -149,6 +149,7 @@ typedef struct uct_dc_dci {
                                                 processed. Better have dci num
                                                 groups scheduled than ep num. */
     };
+    uint8_t                       pool_index; /* DCI pool index. */
 #if UCS_ENABLE_ASSERT
     uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
 #endif
@@ -181,7 +182,8 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uint64_t);
 typedef struct {
     uint8_t       stack_top;                               /* dci stack top */
     uint8_t       stack[UCT_DC_MLX5_IFACE_MAX_USER_DCIS];  /* LIFO of indexes of available dcis */
-    ucs_arbiter_t arbiter;
+    ucs_arbiter_t arbiter;                                 /* queue of requests
+                                                              waiting for DCI */
 } uct_dc_mlx5_dci_pool_t;
 
 
@@ -196,8 +198,8 @@ struct uct_dc_mlx5_iface {
         int16_t                   available_quota;             /* if available tx is lower, let
                                                                   another endpoint use the dci */
         /* LIFO is only relevant for dcs allocation policy */
-        uct_dc_mlx5_dci_pool_t    dci_pool[UCT_DC_MLX5_IFACE_MAX_LAG_PORTS];
-        uint8_t                   num_lag_ports;
+        uct_dc_mlx5_dci_pool_t    dci_pool[UCT_DC_MLX5_IFACE_MAX_DCI_POOLS];
+        uint8_t                   num_dci_pools;
 
         /* DCI max elements */
         unsigned                  bb_max;
@@ -261,7 +263,7 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
-                                           uint8_t ndci);
+                                           uct_dc_dci_t *dci);
 
 void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
 
@@ -275,7 +277,7 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
 
 ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface);
 
-void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci);
+void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
 
 #if HAVE_DEVX
 
@@ -285,7 +287,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
 
 ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
                                                 uct_ib_mlx5_qp_t *qp,
-                                                uint8_t lag_port);
+                                                uint8_t pool_index);
 
 #else
 
@@ -320,10 +322,10 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 }
 #endif
 
-static inline uint8_t
+static UCS_F_ALWAYS_INLINE uint8_t
 uct_dc_mlx5_iface_total_ndci(uct_dc_mlx5_iface_t *iface)
 {
-    return (iface->tx.ndci * iface->tx.num_lag_ports) +
+    return (iface->tx.ndci * iface->tx.num_dci_pools) +
         ((iface->flags & UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE) ?
          UCT_DC_MLX5_KEEPALIVE_NUM_DCIS : 0);
 }
@@ -334,13 +336,13 @@ uct_dc_mlx5_iface_total_ndci(uct_dc_mlx5_iface_t *iface)
  * linear search is most probably the best way to go
  * because the number of dcis is usually small
  */
-static inline uint8_t uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface,
-                                                 struct mlx5_cqe64 *cqe)
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_dc_mlx5_iface_dci_find(uct_dc_mlx5_iface_t *iface, struct mlx5_cqe64 *cqe)
 {
     uint32_t qp_num;
     int i, ndci;
 
-    if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_UIDX) {
+    if (ucs_likely(iface->flags & UCT_DC_MLX5_IFACE_FLAG_UIDX)) {
         return cqe->srqn_uidx >> UCT_IB_UIDX_SHIFT;
     }
 
@@ -362,50 +364,54 @@ uct_dc_mlx5_iface_has_tx_resources(uct_dc_mlx5_iface_t *iface)
            (iface->super.super.tx.reads_available > 0);
 }
 
-static inline int uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+static UCS_F_ALWAYS_INLINE int
+uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface,
+                                       uint8_t dci_index)
 {
-    return uct_rc_txqp_available(&iface->tx.dcis[dci].txqp) > 0;
+    return uct_rc_txqp_available(&iface->tx.dcis[dci_index].txqp) > 0;
 }
 
 /* returns pending queue of eps waiting for tx resources */
-static inline ucs_arbiter_t *uct_dc_mlx5_iface_tx_waitq(uct_dc_mlx5_iface_t *iface)
+static UCS_F_ALWAYS_INLINE ucs_arbiter_t *
+uct_dc_mlx5_iface_tx_waitq(uct_dc_mlx5_iface_t *iface)
 {
     return &iface->super.super.tx.arbiter;
 }
 
 /* returns pending queue of eps waiting for the dci allocation */
-static inline ucs_arbiter_t *uct_dc_mlx5_iface_dci_waitq(uct_dc_mlx5_iface_t *iface,
-                                                         uint8_t lag_port)
+static UCS_F_ALWAYS_INLINE ucs_arbiter_t *
+uct_dc_mlx5_iface_dci_waitq(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 {
-    return &iface->tx.dci_pool[lag_port].arbiter;
+    return &iface->tx.dci_pool[pool_index].arbiter;
 }
 
-static inline int
-uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci)
+static UCS_F_ALWAYS_INLINE int
+uct_dc_mlx5_iface_dci_has_outstanding(uct_dc_mlx5_iface_t *iface, int dci_index)
 {
     uct_rc_txqp_t *txqp;
 
-    txqp = &iface->tx.dcis[dci].txqp;
+    txqp = &iface->tx.dcis[dci_index].txqp;
     return uct_rc_txqp_available(txqp) < (int16_t)iface->tx.bb_max;
 }
 
-static inline ucs_status_t uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *iface, int dci)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *iface, int dci_index)
 {
 
-    if (!uct_dc_mlx5_iface_dci_has_outstanding(iface, dci)) {
+    if (!uct_dc_mlx5_iface_dci_has_outstanding(iface, dci_index)) {
         return UCS_OK;
     }
-    ucs_trace_poll("dci %d is not flushed %d/%d", dci,
-                   iface->tx.dcis[dci].txqp.available, iface->tx.bb_max);
-    ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci].txqp) == 0,
+    ucs_trace_poll("dci %d is not flushed %d/%d", dci_index,
+                   iface->tx.dcis[dci_index].txqp.available, iface->tx.bb_max);
+    ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci_index].txqp) == 0,
                 "unsignalled send is not supported!!!");
     return UCS_INPROGRESS;
 }
 
-static inline int
-uct_dc_mlx5_iface_is_dci_keepalive(uct_dc_mlx5_iface_t *iface, int dci)
+static UCS_F_ALWAYS_INLINE int
+uct_dc_mlx5_iface_is_dci_keepalive(uct_dc_mlx5_iface_t *iface, int dci_index)
 {
-    return dci == iface->keepalive_dci;
+    return dci_index == iface->keepalive_dci;
 }
 
 #endif

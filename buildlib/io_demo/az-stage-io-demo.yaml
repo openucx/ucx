@@ -3,6 +3,8 @@ parameters:
   default: 'test'
 - name: iodemo_args
   default: ''
+- name: iodemo_tls
+  default: 'rc_x'
 
 steps:
 - bash: |
@@ -31,6 +33,7 @@ steps:
     mkdir -p $(workspace)/${{ parameters.name }}
     # set UCX environment variables
     export UCX_NET_DEVICES=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${roce_iface}' .*/\1:\2/p')
+    export UCX_TLS=${{ parameters.iodemo_tls }}
     export LD_LIBRARY_PATH=$(workspace)/install/lib:$LD_LIBRARY_PATH
     $(workspace)/test/apps/iodemo/run_io_demo.sh \
         -H $(agent_hosts) \

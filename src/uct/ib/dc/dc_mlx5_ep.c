@@ -593,7 +593,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     uct_dc_mlx5_ep_t    *ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
     uct_ib_mlx5_md_t    *md    = ucs_derived_of(iface->super.super.super.super.md,
                                                 uct_ib_mlx5_md_t);
-    uint8_t lag_port           = uct_dc_mlx5_ep_lag_port(ep);
+    uint8_t pool_index         = uct_dc_mlx5_ep_pool_index(ep);
     ucs_status_t        status;
     uint16_t            sn;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
@@ -603,7 +603,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        if (!uct_dc_mlx5_iface_dci_can_alloc(iface, lag_port)) {
+        if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
             return UCS_ERR_NO_RESOURCE; /* waiting for dci */
         } else {
             UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
@@ -1022,14 +1022,10 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
     self->atomic_mr_offset = uct_ib_md_atomic_offset(if_addr->atomic_mr_id);
     remote_dctn            = uct_ib_unpack_uint24(if_addr->qp_num);
 
+    ucs_assert(path_index < UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
     memcpy(&self->av, av, sizeof(*av));
     self->av.dqp_dct |= htonl(remote_dctn);
-    if ((iface->tx.num_lag_ports == 2) && (path_index > 0)) {
-        ucs_assert(path_index == 1);
-        self->flags = UCT_DC_MLX5_EP_FLAG_LAG_SECOND;
-    } else {
-        self->flags = 0;
-    }
+    self->flags       = path_index & UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
 }
@@ -1043,7 +1039,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     uct_dc_mlx5_ep_pending_purge(&self->super.super, NULL, NULL);
     uct_rc_fc_cleanup(&self->fc);
 
-    ucs_assert_always(self->flags & UCT_DC_MLX5_EP_FLAG_VALID);
     uct_dc_mlx5_ep_keepalive_cleanup(self);
 
     it = kh_get(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, (uint64_t)self);
@@ -1150,6 +1145,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    uint8_t pool_index         = uct_dc_mlx5_ep_pool_index(ep);
 
     /* ep can tx iff
      * - iface has resources: cqe and tx skb
@@ -1158,8 +1154,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
      */
     if (uct_dc_mlx5_iface_has_tx_resources(iface)) {
         if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-            if (uct_dc_mlx5_iface_dci_can_alloc(iface,
-                                                uct_dc_mlx5_ep_lag_port(ep)) &&
+            if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index) &&
                 (ep->fc.fc_wnd > 0)) {
                 return UCS_ERR_BUSY;
             }
@@ -1187,7 +1182,7 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
 {
     uct_dc_mlx5_ep_t *ep = ucs_container_of(group, uct_dc_mlx5_ep_t, arb_group);
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
-    uint8_t lag_port = uct_dc_mlx5_ep_lag_port(ep);
+    uint8_t pool_index = uct_dc_mlx5_ep_pool_index(ep);
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
@@ -1195,7 +1190,7 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
     }
 
-    if (!uct_dc_mlx5_iface_dci_can_alloc(iface, lag_port)) {
+    if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
         return UCS_ARBITER_CB_RESULT_STOP;
     }
     uct_dc_mlx5_iface_dci_alloc(iface, ep);
@@ -1328,7 +1323,7 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uint8_t lag_port           = uct_dc_mlx5_ep_lag_port(ep);
+    uint8_t pool_index         = uct_dc_mlx5_ep_pool_index(ep);
     void *priv_args[2]         = {ep, arg};
     uct_purge_cb_args_t args   = {cb, priv_args};
 
@@ -1340,7 +1335,7 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
     }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        ucs_arbiter_group_purge(uct_dc_mlx5_iface_dci_waitq(iface, lag_port),
+        ucs_arbiter_group_purge(uct_dc_mlx5_iface_dci_waitq(iface, pool_index),
                                 &ep->arb_group,
                                 uct_dc_mlx5_ep_arbiter_purge_cb, &args);
     } else {
@@ -1377,10 +1372,10 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 {
     struct mlx5_cqe64 *cqe     = arg;
     uct_iface_h tl_iface       = ep->super.super.iface;
-    uint8_t dci                = ep->dci;
+    uint8_t dci_index          = ep->dci;
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci].txqp;
-    uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci].txwq;
+    uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci_index].txqp;
+    uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci_index].txwq;
     uint16_t pi                = ntohs(cqe->wqe_counter);
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
@@ -1389,11 +1384,11 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
 
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-    uct_dc_mlx5_iface_dci_put(iface, dci);
+    uct_dc_mlx5_iface_dci_put(iface, dci_index);
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        uct_dc_mlx5_iface_reset_dci(iface, dci);
+        uct_dc_mlx5_iface_reset_dci(iface, dci_index);
     }
 }
 
