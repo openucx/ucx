@@ -2742,7 +2742,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
         return 0;
     }
 
-    ucs_trace("worker %p: keepalive round", worker);
+    ucs_trace_func("worker %p: keepalive round", worker);
 
     if (ucs_unlikely(ucs_list_is_empty(&worker->all_eps))) {
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
@@ -2763,8 +2763,8 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
      * (linked list) */
     do {
         ep = ucp_worker_keepalive_current_ep(worker);
-        ucs_trace("worker %p: do keepalive on ep %p lane_map 0x%x", worker, ep,
-                  worker->keepalive.lane_map);
+        ucs_trace_func("worker %p: do keepalive on ep %p lane_map 0x%x", worker, ep,
+                        worker->keepalive.lane_map);
         ucp_ep_do_keepalive(ep, &worker->keepalive.lane_map);
         if (worker->keepalive.lane_map != 0) {
             /* in case if EP has no resources to send keepalive message

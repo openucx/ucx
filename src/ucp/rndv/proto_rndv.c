@@ -117,7 +117,6 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucs_memory_info_t mem_info;
     ucp_md_index_t md_index;
     ucp_proto_caps_t *caps;
-    ucp_md_map_t md_map;
     ucs_status_t status;
     double rts_latency;
 
@@ -147,14 +146,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     }
 
     /* Initialize estimated memory registration map */
-    md_map = ucp_proto_rndv_ctrl_reg_md_map(params);
-    if (md_map == 0) {
-        ucs_trace("registration map is 0, memory type %s",
-                  ucs_memory_type_names[params->mem_info.type]);
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    rpriv->md_map           = md_map;
+    rpriv->md_map           = ucp_proto_rndv_ctrl_reg_md_map(params);
     rpriv->packed_rkey_size = ucp_rkey_packed_size(context, rpriv->md_map);
 
     /* Guess the protocol the remote side will select */
@@ -367,7 +359,8 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
     ucs_status_t status;
     ucp_rkey_h rkey;
 
-    ucs_assert(op_id == UCP_OP_ID_RNDV_RECV);
+    ucs_assert((op_id == UCP_OP_ID_RNDV_RECV) ||
+               (op_id == UCP_OP_ID_RNDV_SEND));
     ucs_assert(sg_count == 1);
 
     if (rkey_buffer == NULL) {
@@ -492,14 +485,112 @@ void ucp_proto_rndv_receive(ucp_worker_h worker, ucp_request_t *recv_req,
     }
 }
 
-int ucp_proto_rndv_check_params(const ucp_proto_init_params_t *init_params,
-                                ucp_operation_id_t op_id,
-                                ucp_rndv_mode_t rndv_mode)
+static ucs_status_t ucp_proto_rndv_send_start(ucp_worker_h worker,
+                                              ucp_request_t *req,
+                                              const ucp_rndv_rtr_hdr_t *rtr)
 {
-    ucp_context_h context = init_params->worker->context;
+    ucs_status_t status;
 
-    return (init_params->select_param->op_id == op_id) &&
-           (init_params->select_param->dt_class == UCP_DATATYPE_CONTIG) &&
-           ((context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) ||
-            (context->config.ext.rndv_mode == rndv_mode));
+    req->send.rndv.remote_address = rtr->address;
+    req->send.rndv.remote_req_id  = rtr->rreq_id;
+
+    status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_SEND, 1,
+                                       rtr + 1, rtr->size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t
+ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
+{
+    ucp_worker_h worker           = arg;
+    const ucp_rndv_rtr_hdr_t *rtr = data;
+    ucs_status_t status;
+    ucp_request_t *req;
+
+    UCP_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 0, return UCS_OK,
+                          "RTR %p", rtr);
+
+    if (rtr->address == 0) {
+        ucs_fatal("RTR without remote address is currently unsupported");
+    }
+
+    /* RTR covers the whole send request - use the send request directly */
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED);
+    ucs_assert(rtr->size == req->send.state.dt_iter.length);
+    ucs_assert(rtr->offset == 0);
+
+    req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    status      = ucp_proto_rndv_send_start(worker, req, rtr);
+    if (status != UCS_OK) {
+        goto err_request_fail;
+    }
+
+    return UCS_OK;
+
+err_request_fail:
+    ucp_proto_request_abort(req, status);
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_rtr_uct_comp_from_id(ucp_worker_h worker, uint64_t id,
+                                    int extract, uct_completion_t **uct_comp_p)
+{
+    ucs_status_t status;
+    void *ptr;
+
+    status = ucs_ptr_map_get(&worker->ptr_map, id, extract, &ptr);
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    *uct_comp_p = ptr;
+    return UCS_OK;
+}
+
+ucs_status_t
+ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
+{
+    ucp_worker_h worker                = arg;
+    ucp_rndv_data_hdr_t *rndv_data_hdr = data;
+    size_t recv_len                    = length - sizeof(*rndv_data_hdr);
+    ucp_request_t *req, *recv_req;
+    uct_completion_t *uct_comp;
+    ucs_status_t status;
+
+    status = ucp_proto_rndv_rtr_uct_comp_from_id(worker, rndv_data_hdr->rreq_id,
+                                                 0, &uct_comp);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucs_trace_data("worker %p: completion id 0x%" PRIx64
+                       " was not found, drop RNDV data %p",
+                       worker, rndv_data_hdr->rreq_id, rndv_data_hdr);
+        return UCS_OK;
+    }
+
+    req      = ucs_container_of(uct_comp, ucp_request_t, send.state.uct_comp);
+    recv_req = req->super_req;
+    UCS_PROFILE_REQUEST_EVENT(recv_req, "rndv_data_recv", recv_len);
+
+    ucs_assertv(recv_req->recv.remaining >= recv_len,
+                "req->recv.remaining=%zu recv_len=%zu",
+                recv_req->recv.remaining, recv_len);
+    recv_req->recv.remaining -= recv_len;
+
+    /* process data only if the request is not in error state */
+    if (ucs_likely(recv_req->status == UCS_OK)) {
+        recv_req->status = ucp_request_recv_data_unpack(
+                recv_req, rndv_data_hdr + 1, recv_len, rndv_data_hdr->offset,
+                recv_req->recv.remaining == 0);
+    }
+
+    if (recv_req->recv.remaining == 0) {
+        ucs_ptr_map_del(&worker->ptr_map, rndv_data_hdr->rreq_id);
+        ucp_proto_rndv_rtr_common_complete(req, recv_req->status);
+    }
+
+    return UCS_OK;
 }

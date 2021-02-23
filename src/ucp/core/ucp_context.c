@@ -44,10 +44,11 @@ static const char * ucp_device_type_names[] = {
     [UCT_DEVICE_TYPE_SELF] = "loopback",
 };
 
-static const char * ucp_rndv_modes[] = {
+static const char *ucp_rndv_modes[] = {
+    [UCP_RNDV_MODE_AUTO]      = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY] = "get_zcopy",
     [UCP_RNDV_MODE_PUT_ZCOPY] = "put_zcopy",
-    [UCP_RNDV_MODE_AUTO]      = "auto",
+    [UCP_RNDV_MODE_AM]        = "am",
     [UCP_RNDV_MODE_LAST]      = NULL,
 };
 
@@ -56,6 +57,7 @@ const char *ucp_operation_names[] = {
     [UCP_OP_ID_TAG_SEND_SYNC] = "tag_send_sync",
     [UCP_OP_ID_PUT]           = "put",
     [UCP_OP_ID_GET]           = "get",
+    [UCP_OP_ID_RNDV_SEND]     = "rndv_send",
     [UCP_OP_ID_RNDV_RECV]     = "rndv_recv",
     [UCP_OP_ID_LAST]          = NULL
 };

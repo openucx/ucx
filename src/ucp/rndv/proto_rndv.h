@@ -13,17 +13,6 @@
 
 
 /**
- * If the requested protocol parameters do not match expected rendezvous
- * protocol parameters, return UCS_ERR_UNSUPPORTED
- */
-#define UCP_PROTO_RNDV_CHECK_PARAMS(_init_params, _op_id, _rndv_mode) \
-    if (!ucp_proto_rndv_check_params((_init_params), (_op_id), \
-                                     (_rndv_mode))) { \
-        return UCS_ERR_UNSUPPORTED; \
-    }
-
-
-/**
  * Rendezvous protocol which sends a control message to the remote peer, and not
  * actually transferring bulk data. The remote peer is expected to perform the
  * "remote_proto" protocol to complete data transfer.
@@ -98,11 +87,6 @@ void ucp_proto_rndv_ctrl_config_str(size_t min_length, size_t max_length,
                                     ucs_string_buffer_t *strb);
 
 
-int ucp_proto_rndv_check_params(const ucp_proto_init_params_t *init_params,
-                                ucp_operation_id_t op_id,
-                                ucp_rndv_mode_t rndv_mode);
-
-
 ucs_status_t
 ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params);
 
@@ -133,5 +117,13 @@ void ucp_proto_rndv_bulk_config_str(size_t min_length, size_t max_length,
 
 void ucp_proto_rndv_receive(ucp_worker_h worker, ucp_request_t *recv_req,
                             const ucp_rndv_rts_hdr_t *rts, size_t hdr_len);
+
+
+ucs_status_t
+ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags);
+
+
+ucs_status_t ucp_proto_rndv_handle_data(void *arg, void *data, size_t length,
+                                        unsigned flags);
 
 #endif

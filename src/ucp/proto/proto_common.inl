@@ -23,6 +23,12 @@ ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_proto_msg_multi_request_init(ucp_request_t *req)
+{
+    req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_proto_completion_init(uct_completion_t *comp,
                           uct_completion_callback_t comp_func)
 {
@@ -123,6 +129,7 @@ ucp_proto_request_set_proto(ucp_worker_h worker, ucp_ep_h ep,
     req->send.uct.func     = proto->progress;
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+        ucs_string_buffer_init(&strb);
         ucp_proto_select_param_str(sel_param, &strb);
         ucp_trace_req(req, "selected protocol %s for %s length %zu",
                       proto->name, ucs_string_buffer_cstr(&strb), msg_length);
@@ -191,7 +198,6 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, void *rkey_buffer)
      * TODO to support IOV datatype write N [address+length] records,
      */
     ucs_assert(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG);
-    ucs_assert(req->send.state.dt_iter.type.contig.reg.md_map != 0);
 
     packed_rkey_size = ucp_rkey_pack_uct(req->send.ep->worker->context,
                                          req->send.state.dt_iter.type.contig.reg.md_map,

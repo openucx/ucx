@@ -15,12 +15,6 @@
 
 
 static UCS_F_ALWAYS_INLINE void
-ucp_proto_eager_multi_request_init(ucp_request_t *req)
-{
-    req->send.msg_proto.message_id = req->send.ep->worker->am_message_id++;
-}
-
-static UCS_F_ALWAYS_INLINE void
 ucp_proto_eager_set_first_hdr(ucp_request_t *req, ucp_eager_first_hdr_t *hdr)
 {
     hdr->super.super.tag = req->send.msg_proto.tag;
@@ -156,8 +150,7 @@ ucp_proto_eager_bcopy_multi_progress(uct_pending_req_t *uct_req)
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
 
     return ucp_proto_multi_bcopy_progress(
-            req, req->send.proto_config->priv,
-            ucp_proto_eager_multi_request_init,
+            req, req->send.proto_config->priv, ucp_proto_msg_multi_request_init,
             ucp_proto_eager_bcopy_multi_send_func,
             ucp_proto_request_bcopy_complete_success);
 }
@@ -232,7 +225,7 @@ void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_eager_sync_bcopy_request_init(ucp_request_t *req)
 {
-    ucp_proto_eager_multi_request_init(req);
+    ucp_proto_msg_multi_request_init(req);
     ucp_request_id_alloc(req);
 }
 
@@ -311,7 +304,7 @@ static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     return ucp_proto_multi_zcopy_progress(req, req->send.proto_config->priv,
-                                          ucp_proto_eager_multi_request_init,
+                                          ucp_proto_msg_multi_request_init,
                                           UCT_MD_MEM_ACCESS_LOCAL_READ,
                                           ucp_proto_eager_zcopy_multi_send_func,
                                           ucp_proto_request_zcopy_completion);

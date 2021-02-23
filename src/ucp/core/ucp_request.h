@@ -206,9 +206,16 @@ struct ucp_request {
                     ucs_ptr_map_key_t remote_req_id;
                     ucp_rkey_h        rkey;            /* key for remote send/receive buffer for
                                                           the GET/PUT operation */
-                    ucp_lane_map_t    lanes_map_all;   /* actual lanes map */
-                    uint8_t           lanes_count;     /* actual lanes count */
-                    uint8_t           rkey_index[UCP_MAX_LANES];
+                    union {
+                        struct {
+                            ucp_lane_map_t lanes_map_all; /* actual lanes map */
+                            uint8_t        lanes_count; /* actual lanes count */
+                            uint8_t        rkey_index[UCP_MAX_LANES];
+                        };
+                        struct {
+                            ucs_ptr_map_key_t rreq_id; /* id of receive request */
+                        } rtr;
+                    };
                 } rndv;
 
                 struct {

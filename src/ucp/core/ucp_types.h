@@ -109,7 +109,8 @@ typedef enum {
     UCP_OP_ID_GET,
     UCP_OP_ID_API_LAST,
 
-    UCP_OP_ID_RNDV_RECV = UCP_OP_ID_API_LAST,
+    UCP_OP_ID_RNDV_SEND = UCP_OP_ID_API_LAST,
+    UCP_OP_ID_RNDV_RECV,
     UCP_OP_ID_LAST
 } ucp_operation_id_t;
 
@@ -172,11 +173,13 @@ typedef enum {
  * Communication scheme in RNDV protocol.
  */
 typedef enum {
+    UCP_RNDV_MODE_AUTO, /* Runtime automatically chooses optimal scheme to use */
     UCP_RNDV_MODE_GET_ZCOPY, /* Use get_zcopy scheme in RNDV protocol */
     UCP_RNDV_MODE_PUT_ZCOPY, /* Use put_zcopy scheme in RNDV protocol */
-    UCP_RNDV_MODE_AUTO,      /* Runtime automatically chooses optimal scheme to use */
+    UCP_RNDV_MODE_AM, /* Use active-messages based RNDV protocol */
     UCP_RNDV_MODE_LAST
 } ucp_rndv_mode_t;
+
 
 /**
  * Active message tracer.

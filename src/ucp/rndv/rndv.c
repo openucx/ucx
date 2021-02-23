@@ -1530,7 +1530,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
                                        UCP_AM_ID_RNDV_DATA,
                                        ucp_rndv_pack_data,
                                        ucp_rndv_pack_data, 1);
-        
+
         if (status == UCS_INPROGRESS) {
             return UCS_INPROGRESS;
         } else if (ucs_unlikely(status == UCP_STATUS_PENDING_SWITCH)) {
@@ -1841,6 +1841,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
     int is_pipeline_rndv;
     uct_rkey_t uct_rkey;
 
+    if (context->config.ext.proto_enable) {
+        return ucp_proto_rndv_handle_rtr(arg, data, length, flags);
+    }
+
     UCP_REQUEST_GET_BY_ID(&sreq, arg, rndv_rtr_hdr->sreq_id, 0, return UCS_OK,
                           "RNDV RTR %p", rndv_rtr_hdr);
     ep        = sreq->send.ep;
@@ -1955,6 +1959,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     size_t recv_len;
     ucs_status_t status;
 
+    if (worker->context->config.ext.proto_enable) {
+        return ucp_proto_rndv_handle_data(arg, data, length, flags);
+    }
+
     UCP_REQUEST_GET_BY_ID(&rndv_req, worker, rndv_data_hdr->rreq_id, 0,
                           return UCS_OK, "RNDV data %p", rndv_data_hdr);
 
@@ -2036,10 +2044,13 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                  rep_hdr->req_id, ucs_status_string(rep_hdr->status));
         break;
     case UCP_AM_ID_RNDV_RTR:
-        snprintf(buffer, max, "RNDV_RTR sreq_id 0x%"PRIx64" rreq_id 0x%"PRIx64
-                 " address 0x%"PRIx64, rndv_rtr_hdr->sreq_id,
-                 rndv_rtr_hdr->rreq_id, rndv_rtr_hdr->address);
-        if (rndv_rtr_hdr->address) {
+        snprintf(buffer, max,
+                 "RNDV_RTR sreq_id 0x%" PRIx64 " rreq_id 0x%" PRIx64
+                 " address 0x%" PRIx64 " size %zu offset %zu",
+                 rndv_rtr_hdr->sreq_id, rndv_rtr_hdr->rreq_id,
+                 rndv_rtr_hdr->address, rndv_rtr_hdr->size,
+                 rndv_rtr_hdr->offset);
+        if (rndv_rtr_hdr->address != 0) {
             ucp_rndv_dump_rkey(rndv_rtr_hdr + 1, buffer + strlen(buffer),
                                max - strlen(buffer));
         }
