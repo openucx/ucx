@@ -81,15 +81,15 @@ static void uct_cuda_ipc_cache_purge(uct_cuda_ipc_cache_t *cache)
 {
     uct_cuda_ipc_cache_region_t *region, *tmp;
     ucs_list_link_t region_list;
-    int active;
+    void *ctx;
 
-    UCT_CUDADRV_CTX_ACTIVE(active);
+    UCT_CUDADRV_GET_CTX(ctx);
 
     ucs_list_head_init(&region_list);
     ucs_pgtable_purge(&cache->pgtable, uct_cuda_ipc_cache_region_collect_callback,
                       &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
-        if (active) {
+        if (ctx != NULL) {
             UCT_CUDADRV_FUNC_LOG_ERR(
                     cuIpcCloseMemHandle((CUdeviceptr)region->mapped_addr));
         }
