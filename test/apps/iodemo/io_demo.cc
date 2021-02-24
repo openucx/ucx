@@ -1941,7 +1941,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->use_am                = false;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqAHPm:")) !=
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqAHP:m:")) !=
            -1) {
         switch (c) {
         case 'p':
