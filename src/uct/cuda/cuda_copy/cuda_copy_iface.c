@@ -275,11 +275,9 @@ static void uct_cuda_copy_event_desc_init(ucs_mpool_t *mp, void *obj, void *chun
 static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_copy_event_desc_t *base = (uct_cuda_copy_event_desc_t *) obj;
-    void *ctx;
+    CUcontext ctx;
 
-    UCT_CUDADRV_GET_CTX(ctx);
-
-    if (ctx != NULL) {
+    if (UCS_OK == uct_cuda_base_get_ctx(&ctx)) {
         UCT_CUDA_FUNC_LOG_ERR(cudaEventDestroy(base->event));
     }
 }
@@ -342,14 +340,13 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
 {
-    void *ctx;
     int i;
-
-    UCT_CUDADRV_GET_CTX(ctx);
+    CUcontext ctx;
 
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    if (ctx != NULL) {
+
+    if (UCS_OK == uct_cuda_base_get_ctx(&ctx)) {
         for (i = 0; i < UCT_CUDA_COPY_STREAM_LAST; i++) {
             if (self->stream[i] != 0) {
                 ucs_assert(ucs_queue_is_empty(&self->outstanding_event_q[i]));
