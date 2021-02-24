@@ -44,6 +44,7 @@ steps:
         -i $(roce_iface) \
         $(io_demo_exe) \
             -d 512:524288 \
+            -P 2 \
             -o read,write \
             -i 0 \
             -w 16 \
