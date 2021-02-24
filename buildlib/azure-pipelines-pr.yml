@@ -78,7 +78,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_instinct -equals yes
+          - ucx_docker -equals yes
         container: fedora
         steps:
           - checkout: self
@@ -147,7 +147,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_instinct -equals yes
+          - ucx_docker -equals yes
         container: fedora
         steps:
           - checkout: self
@@ -203,7 +203,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_instinct -equals yes
+          - ucx_docker -equals yes
         strategy:
           matrix:
             centos7:
@@ -249,7 +249,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_instinct -equals yes
+          - ucx_docker -equals yes
         container: fedora
         steps:
           - checkout: self
