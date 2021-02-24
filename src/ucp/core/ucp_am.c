@@ -513,7 +513,6 @@ ucp_am_send_short_reply(ucp_ep_h ep, uint16_t id, uint16_t flags,
                         const void *header, size_t header_length,
                         const void *payload, size_t length)
 {
-    uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
     size_t tx_length;
     ucp_am_hdr_t hdr;
     const void *data;
@@ -552,7 +551,8 @@ ucp_am_send_short_reply(ucp_ep_h ep, uint16_t id, uint16_t flags,
     memcpy(UCS_PTR_BYTE_OFFSET(tx_buffer, sizeof(ucs_ptr_map_key_t)),
            data, tx_length);
 
-    return uct_ep_am_short(am_ep, UCP_AM_ID_SINGLE_REPLY, hdr.u64, tx_buffer,
+    return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_SINGLE_REPLY,
+                           hdr.u64, tx_buffer,
                            tx_length + sizeof(ucs_ptr_map_key_t));
 }
 
