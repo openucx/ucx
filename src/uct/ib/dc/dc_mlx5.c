@@ -215,9 +215,9 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     ucs_memory_cpu_load_fence();
 
     dci_index = uct_dc_mlx5_iface_dci_find(iface, cqe);
-    txqp = &iface->tx.dcis[dci_index].txqp;
-    txwq = &iface->tx.dcis[dci_index].txwq;
-    hw_ci = ntohs(cqe->wqe_counter);
+    txqp      = &iface->tx.dcis[dci_index].txqp;
+    txwq      = &iface->tx.dcis[dci_index].txwq;
+    hw_ci     = ntohs(cqe->wqe_counter);
 
     ucs_trace_poll("dc iface %p tx_cqe: dci[%d] txqp %p hw_ci %d",
                    iface, dci_index, txqp, hw_ci);
@@ -1232,7 +1232,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     if (ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_DEVX_DCI |
                                       UCT_IB_MLX5_MD_FLAG_CQE_V1)) {
-        self->flags |= UCT_DC_MLX5_IFACE_FLAG_UIDX;
+        self->flags           |= UCT_DC_MLX5_IFACE_FLAG_UIDX;
         self->tx.num_dci_pools = self->super.super.super.num_paths;
     }
     ucs_assert(self->tx.num_dci_pools <= UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);

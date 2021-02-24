@@ -194,13 +194,14 @@ struct uct_dc_mlx5_iface {
         uct_dc_dci_t              dcis[UCT_DC_MLX5_IFACE_MAX_DCIS];
 
         uint8_t                   ndci;                        /* Number of DCIs */
-        uct_dc_tx_policy_t        policy;                      /* dci selection algorithm */
-        int16_t                   available_quota;             /* if available tx is lower, let
-                                                                  another endpoint use the dci */
+
         /* LIFO is only relevant for dcs allocation policy */
         uct_dc_mlx5_dci_pool_t    dci_pool[UCT_DC_MLX5_IFACE_MAX_DCI_POOLS];
         uint8_t                   num_dci_pools;
 
+        uint8_t                   policy;                      /* dci selection algorithm */
+        int16_t                   available_quota;             /* if available tx is lower, let
+                                                                  another endpoint use the dci */
         /* DCI max elements */
         unsigned                  bb_max;
 
@@ -401,6 +402,7 @@ uct_dc_mlx5_iface_flush_dci(uct_dc_mlx5_iface_t *iface, int dci_index)
     if (!uct_dc_mlx5_iface_dci_has_outstanding(iface, dci_index)) {
         return UCS_OK;
     }
+
     ucs_trace_poll("dci %d is not flushed %d/%d", dci_index,
                    iface->tx.dcis[dci_index].txqp.available, iface->tx.bb_max);
     ucs_assertv(uct_rc_txqp_unsignaled(&iface->tx.dcis[dci_index].txqp) == 0,
