@@ -69,17 +69,14 @@
             cuDevicePrimaryCtxGetState(_dev, &_flags, &_state); \
             if (_state == 0) { \
                 /* need to retain for malloc purposes */ \
-                if (CUDA_SUCCESS == cuDevicePrimaryCtxRetain(&_ctx, _dev)) { \
-                    _ctx_ret = (void*)&_ctx; \
-                } else { \
+                if (CUDA_SUCCESS != cuDevicePrimaryCtxRetain(&_ctx, _dev)) { \
                     ucs_fatal("unable to retain ctx after detecting device"); \
                 } \
+            } \
+            if (CUDA_SUCCESS == cuCtxGetCurrent(&_ctx)) { \
+                _ctx_ret = (void*)&_ctx; \
             } else { \
-                if (CUDA_SUCCESS == cuCtxGetCurrent(&_ctx)) { \
-                    _ctx_ret = (void*)&_ctx; \
-                } else { \
-                    ucs_fatal("unable to get ctx after detecting device"); \
-                } \
+                ucs_fatal("unable to get ctx after detecting device"); \
             } \
         } \
     }
