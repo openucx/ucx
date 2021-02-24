@@ -519,6 +519,7 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
                            uint64_t access_flags, struct ibv_mr **mr_p,
                            int silent)
 {
+    ucs_time_t start_time = ucs_get_time();
     struct ibv_mr *mr;
 #if HAVE_DECL_IBV_EXP_REG_MR
     struct ibv_exp_reg_mr_in in = {};
@@ -538,6 +539,11 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
     }
 
     *mr_p = mr;
+
+    /* to prvent clang dead code */
+    (void)start_time;
+    ucs_trace("ibv_reg_mr(%p, %p, %zu) took %.3f msec", pd, addr, length,
+              ucs_time_to_msec(ucs_get_time() - start_time));
     return UCS_OK;
 }
 
