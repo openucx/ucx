@@ -64,6 +64,23 @@ static UCS_F_ALWAYS_INLINE cudaStream_t
     return stream;
 }
 
+static void uct_cuda_copy_get_mem_types(const void *src, const void *dst,
+                                        ucs_memory_type_t *src_type,
+                                        ucs_memory_type_t *dst_type)
+{
+    ucs_status_t status;
+
+    status = uct_cuda_base_detect_memory_type(NULL, src, 0, src_type);
+    if (UCS_OK != status) {
+        *src_type = UCS_MEMORY_TYPE_HOST;
+    }
+
+    status = uct_cuda_base_detect_memory_type(NULL, dst, 0, dst_type);
+    if (UCS_OK != status) {
+        *dst_type = UCS_MEMORY_TYPE_HOST;
+    }
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t length,
                                    uct_completion_t *comp)
@@ -80,21 +97,14 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
         return UCS_OK;
     }
 
-    status = uct_cuda_base_detect_memory_type(NULL, src, 0, &src_type);
-    if (UCS_OK != status) {
-        src_type = UCS_MEMORY_TYPE_HOST;
-    }
-
-    status = uct_cuda_base_detect_memory_type(NULL, dst, 0, &dst_type);
-    if (UCS_OK != status) {
-        dst_type = UCS_MEMORY_TYPE_HOST;
-    }
-
     cuda_event = ucs_mpool_get(&iface->cuda_event_desc);
     if (ucs_unlikely(cuda_event == NULL)) {
         ucs_error("Failed to allocate cuda event object");
         return UCS_ERR_NO_MEMORY;
     }
+
+    uct_cuda_copy_get_mem_types((const void*)src, (const void*)dst,
+                                &src_type, &dst_type);
 
     stream = uct_cuda_copy_get_stream(iface, src_type, dst_type);
     if (ucs_unlikely(stream == NULL)) {
@@ -167,21 +177,15 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
                  uct_ep_h tl_ep, const void *buffer, unsigned length,
                  uint64_t remote_addr, uct_rkey_t rkey)
 {
-    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                  uct_cuda_copy_iface_t);
     ucs_memory_type_t src_type;
     ucs_memory_type_t dst_type;
     cudaStream_t *stream;
     ucs_status_t status;
 
-    status = uct_cuda_base_detect_memory_type(NULL, buffer, 0, &src_type);
-    if (UCS_OK != status) {
-        src_type = UCS_MEMORY_TYPE_HOST;
-    }
-
-    status = uct_cuda_base_detect_memory_type(NULL, (void*)remote_addr, 0, &dst_type);
-    if (UCS_OK != status) {
-        dst_type = UCS_MEMORY_TYPE_HOST;
-    }
+    uct_cuda_copy_get_mem_types((const void*)buffer, (const void*)remote_addr,
+                                &src_type, &dst_type);
 
     stream = uct_cuda_copy_get_stream(iface, src_type, dst_type);
     if (ucs_unlikely(stream == NULL)) {
@@ -203,21 +207,15 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
                  uct_ep_h tl_ep, void *buffer, unsigned length,
                  uint64_t remote_addr, uct_rkey_t rkey)
 {
-    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                  uct_cuda_copy_iface_t);
     ucs_memory_type_t src_type;
     ucs_memory_type_t dst_type;
     cudaStream_t *stream;
     ucs_status_t status;
 
-    status = uct_cuda_base_detect_memory_type(NULL, (void*)remote_addr, 0, &src_type);
-    if (UCS_OK != status) {
-        src_type = UCS_MEMORY_TYPE_HOST;
-    }
-
-    status = uct_cuda_base_detect_memory_type(NULL, buffer, 0, &dst_type);
-    if (UCS_OK != status) {
-        dst_type = UCS_MEMORY_TYPE_HOST;
-    }
+    uct_cuda_copy_get_mem_types((const void*)remote_addr, (const void*)buffer,
+                                &src_type, &dst_type);
 
     stream = uct_cuda_copy_get_stream(iface, src_type, dst_type);
     if (ucs_unlikely(stream == NULL)) {
