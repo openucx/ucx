@@ -43,48 +43,25 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
      ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                     (_rkey))
 
-/* It is relatively inexpensive to query memory attributes compared to actual
- * cudaMemcpy cost. Query time is between 0.05 to 0.2 us on x86 but memcpy cost
- * is generally > 7 us */
-#define UCT_CUDA_COPY_GET_STREAM_EVENT_INDEX(_src_index, _dst_index, _src, _dst) { \
-    ucs_memory_type_t __src_type; \
-    ucs_memory_type_t __dst_type; \
-    ucs_status_t __status; \
-    __status = uct_cuda_base_detect_memory_type(NULL, _src, 0, &__src_type); \
-    if (UCS_OK != __status) { \
-        __src_type = UCS_MEMORY_TYPE_HOST; \
-    } \
-    __status = uct_cuda_base_detect_memory_type(NULL, _dst, 0, &__dst_type); \
-    if (UCS_OK != __status) { \
-        __dst_type = UCS_MEMORY_TYPE_HOST; \
-    } \
-    uct_cuda_copy_get_mem_type_index(__src_type, _src_index); \
-    uct_cuda_copy_get_mem_type_index(__dst_type, _dst_index); \
-    ucs_assert(__src_index != UCT_CUDA_COPY_LOC_LAST \
-               && __dst_index != UCT_CUDA_COPY_LOC_LAST); \
-}
 
-#define UCT_CUDA_COPY_GET_STREAM(_iface, _stream, _src, _dst) { \
-    int __src_index; \
-    int __dst_index; \
-    UCT_CUDA_COPY_GET_STREAM_EVENT_INDEX(__src_index, __dst_index, _src, _dst); \
-    if ((_iface)->stream[__src_index][__dst_index] == 0) { \
-        ucs_status_t __status; \
-        __status = \
-            UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(&(_iface)->stream[__src_index][__dst_index], \
-                                                                   cudaStreamNonBlocking)); \
-        if (UCS_OK != __status) { \
-            return UCS_ERR_IO_ERROR; \
-        } \
-    } \
-    _stream = &(_iface)->stream[__src_index][__dst_index]; \
-}
+static UCS_F_ALWAYS_INLINE cudaStream_t
+*uct_cuda_copy_get_stream(uct_cuda_copy_iface_t *iface,
+                         ucs_memory_type_t src_type,
+                         ucs_memory_type_t dst_type)
+{
+    cudaStream_t *stream;
+    ucs_status_t status;
 
-#define UCT_CUDA_COPY_GET_EVENT_Q(_iface, _event_q, _src, _dst) { \
-    int __src_index; \
-    int __dst_index; \
-    UCT_CUDA_COPY_GET_STREAM_EVENT_INDEX(__src_index, __dst_index, _src, _dst); \
-    _event_q = &(_iface)->outstanding_event_q[__src_index][__dst_index]; \
+    stream = &iface->stream[src_type][dst_type];
+    if (*stream == 0) {
+        status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(stream,
+                                                                 cudaStreamNonBlocking));
+        if (status != UCS_OK ) {
+            stream = NULL;
+        }
+    }
+
+    return stream;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -96,9 +73,21 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
     ucs_status_t status;
     cudaStream_t *stream;
     ucs_queue_head_t *event_q;
+    ucs_memory_type_t src_type;
+    ucs_memory_type_t dst_type;
 
     if (!length) {
         return UCS_OK;
+    }
+
+    status = uct_cuda_base_detect_memory_type(NULL, src, 0, &src_type);
+    if (UCS_OK != status) {
+        src_type = UCS_MEMORY_TYPE_HOST;
+    }
+
+    status = uct_cuda_base_detect_memory_type(NULL, dst, 0, &dst_type);
+    if (UCS_OK != status) {
+        dst_type = UCS_MEMORY_TYPE_HOST;
     }
 
     cuda_event = ucs_mpool_get(&iface->cuda_event_desc);
@@ -107,7 +96,10 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
         return UCS_ERR_NO_MEMORY;
     }
 
-    UCT_CUDA_COPY_GET_STREAM(iface, stream, src, dst);
+    stream = uct_cuda_copy_get_stream(iface, src_type, dst_type);
+    if (ucs_unlikely(stream == NULL)) {
+        return UCS_ERR_IO_ERROR;
+    }
 
     status = UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(dst, src, length, cudaMemcpyDefault,
                                                    *stream));
@@ -119,7 +111,8 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
-    UCT_CUDA_COPY_GET_EVENT_Q(iface, event_q, src, dst);
+
+    event_q = &iface->outstanding_event_q[src_type][dst_type];
     ucs_queue_push(event_q, &cuda_event->queue);
     cuda_event->comp = comp;
 
@@ -175,10 +168,25 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
                  uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
+    ucs_memory_type_t src_type;
+    ucs_memory_type_t dst_type;
     cudaStream_t *stream;
     ucs_status_t status;
 
-    UCT_CUDA_COPY_GET_STREAM(iface, stream, buffer, (void*)remote_addr);
+    status = uct_cuda_base_detect_memory_type(NULL, buffer, 0, &src_type);
+    if (UCS_OK != status) {
+        src_type = UCS_MEMORY_TYPE_HOST;
+    }
+
+    status = uct_cuda_base_detect_memory_type(NULL, (void*)remote_addr, 0, &dst_type);
+    if (UCS_OK != status) {
+        dst_type = UCS_MEMORY_TYPE_HOST;
+    }
+
+    stream = uct_cuda_copy_get_stream(iface, src_type, dst_type);
+    if (ucs_unlikely(stream == NULL)) {
+        return UCS_ERR_IO_ERROR;
+    }
 
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync((void*)remote_addr, buffer, length,
                                           cudaMemcpyDefault, *stream));
@@ -196,10 +204,25 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
                  uint64_t remote_addr, uct_rkey_t rkey)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
+    ucs_memory_type_t src_type;
+    ucs_memory_type_t dst_type;
     cudaStream_t *stream;
     ucs_status_t status;
 
-    UCT_CUDA_COPY_GET_STREAM(iface, stream, (void*)remote_addr, buffer);
+    status = uct_cuda_base_detect_memory_type(NULL, (void*)remote_addr, 0, &src_type);
+    if (UCS_OK != status) {
+        src_type = UCS_MEMORY_TYPE_HOST;
+    }
+
+    status = uct_cuda_base_detect_memory_type(NULL, buffer, 0, &dst_type);
+    if (UCS_OK != status) {
+        dst_type = UCS_MEMORY_TYPE_HOST;
+    }
+
+    stream = uct_cuda_copy_get_stream(iface, src_type, dst_type);
+    if (ucs_unlikely(stream == NULL)) {
+        return UCS_ERR_IO_ERROR;
+    }
 
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(buffer, (void*)remote_addr, length,
                                           cudaMemcpyDefault, *stream));
