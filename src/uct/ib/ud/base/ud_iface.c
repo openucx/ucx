@@ -810,8 +810,9 @@ uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface)
     return skb;
 }
 
-void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
+unsigned uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
 {
+    unsigned count = 0;
     uct_ud_comp_desc_t *cdesc;
     uct_ud_send_skb_t *skb;
 
@@ -820,7 +821,10 @@ void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
         cdesc = uct_ud_comp_desc(skb);
         uct_ud_iface_dispatch_comp(iface, cdesc->comp, cdesc->status);
         uct_ud_skb_release(skb, 0);
+        ++count;
     }
+
+    return count;
 }
 
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface)
@@ -832,31 +836,27 @@ static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface)
     }
 }
 
-ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface)
+unsigned uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface)
 {
-    int count;
+    unsigned max_poll = iface->super.config.rx_max_poll;
+    int count         = 0;
     uct_ud_recv_skb_t *skb;
     uct_ud_neth_t *neth;
-    unsigned max_poll = iface->super.config.rx_max_poll;
+    void *hdr;
 
-    count = 0;
     do {
-        skb = ucs_queue_pull_elem_non_empty(&iface->rx.pending_q, uct_ud_recv_skb_t, u.am.queue);
-        neth =  (uct_ud_neth_t *)((char *)uct_ib_iface_recv_desc_hdr(&iface->super,
-                                                                     (uct_ib_iface_recv_desc_t *)skb) +
-                                  UCT_IB_GRH_LEN);
-        uct_ib_iface_invoke_am_desc(&iface->super,
-                                    uct_ud_neth_get_am_id(neth),
-                                    neth + 1,
-                                    skb->u.am.len,
-                                    &skb->super);
-        count++;
-        if (count >= max_poll) {
-            return UCS_ERR_NO_RESOURCE;
-        }
-    } while (!ucs_queue_is_empty(&iface->rx.pending_q));
+        skb  = ucs_queue_pull_elem_non_empty(&iface->rx.pending_q,
+                                             uct_ud_recv_skb_t, u.am.queue);
+        hdr  = uct_ib_iface_recv_desc_hdr(&iface->super,
+                                          (uct_ib_iface_recv_desc_t*)skb);
+        neth = (uct_ud_neth_t*)UCS_PTR_BYTE_OFFSET(hdr, UCT_IB_GRH_LEN);
 
-    return UCS_OK;
+        uct_ib_iface_invoke_am_desc(&iface->super, uct_ud_neth_get_am_id(neth),
+                                    neth + 1, skb->u.am.len, &skb->super);
+        ++count;
+    } while ((count < max_poll) && !ucs_queue_is_empty(&iface->rx.pending_q));
+
+    return count;
 }
 
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface)
@@ -888,6 +888,8 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
 
     status = uct_ib_iface_pre_arm(&iface->super);
     if (status != UCS_OK) {
+        ucs_trace("iface %p: pre arm failed status %s", iface,
+                  ucs_status_string(status));
         goto out;
     }
 
@@ -895,21 +897,35 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
     if ((events & (UCT_EVENT_RECV | UCT_EVENT_RECV_SIG)) &&
         !ucs_queue_is_empty(&iface->rx.pending_q))
     {
-        status = UCS_ERR_BUSY;
-        goto out;
-    }
-
-    /* Check if some send completions were not delivered yet */
-    if ((events & UCT_EVENT_SEND_COMP) &&
-        !ucs_queue_is_empty(&iface->tx.async_comp_q))
-    {
+        ucs_trace("iface %p: arm failed, has %lu unhandled receives", iface,
+                  ucs_queue_length(&iface->rx.pending_q));
         status = UCS_ERR_BUSY;
         goto out;
     }
 
     if (events & UCT_EVENT_SEND_COMP) {
+        /* Check if some send completions were not delivered yet */
+        if (!ucs_queue_is_empty(&iface->tx.async_comp_q)) {
+            ucs_trace("iface %p: arm failed, has %lu async send comp", iface,
+                      ucs_queue_length(&iface->tx.async_comp_q));
+            status = UCS_ERR_BUSY;
+            goto out;
+        }
+
+        /* Check if we have pending operations which need to be progressed */
+        if (iface->tx.async_before_pending) {
+            ucs_trace("iface %p: arm failed, has async-before-pending flag",
+                      iface);
+            status = UCS_ERR_BUSY;
+            goto out;
+        }
+    }
+
+    if (events & UCT_EVENT_SEND_COMP) {
         status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_TX, 0);
         if (status != UCS_OK) {
+            ucs_trace("iface %p: arm cq failed status %s", iface,
+                      ucs_status_string(status));
             goto out;
         }
     }
@@ -918,10 +934,13 @@ ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events)
         /* we may get send completion through ACKs as well */
         status = iface->super.ops->arm_cq(&iface->super, UCT_IB_DIR_RX, 0);
         if (status != UCS_OK) {
+            ucs_trace("iface %p: arm cq failed status %s", iface,
+                      ucs_status_string(status));
             goto out;
         }
     }
 
+    ucs_trace("iface %p: arm cq ok", iface);
     status = UCS_OK;
 out:
     uct_ud_leave(iface);

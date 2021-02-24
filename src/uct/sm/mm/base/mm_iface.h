@@ -22,8 +22,12 @@
 
 
 enum {
-    UCT_MM_FIFO_ELEM_FLAG_OWNER  = UCS_BIT(0), /* new/old info */
-    UCT_MM_FIFO_ELEM_FLAG_INLINE = UCS_BIT(1), /* if inline or not */
+    /* FIFO element polarity, changes every cycle to indicate the element is
+       written by the sender */
+    UCT_MM_FIFO_ELEM_FLAG_OWNER  = UCS_BIT(0),
+
+    /* Whether the element data is inline or in receive descriptor */
+    UCT_MM_FIFO_ELEM_FLAG_INLINE = UCS_BIT(1),
 };
 
 
@@ -47,6 +51,19 @@ enum {
         uct_mm_md_t *md = ucs_derived_of((_iface)->super.super.md, uct_mm_md_t); \
         uct_mm_md_mapper_call(md, _func, ## __VA_ARGS__); \
     })
+
+
+#define uct_mm_iface_trace_am(_iface, _type, _flags, _am_id, _data, _length, \
+                              _elem_sn) \
+    uct_iface_trace_am(&(_iface)->super.super, _type, _am_id, _data, _length, \
+                       "%cX [%lu] %c%c", \
+                       ((_type) == UCT_AM_TRACE_TYPE_RECV) ? 'R' : \
+                       ((_type) == UCT_AM_TRACE_TYPE_SEND) ? 'T' : \
+                                                             '?', \
+                       (_elem_sn), \
+                       ((_flags) & UCT_MM_FIFO_ELEM_FLAG_OWNER) ? 'o' : '-', \
+                       ((_flags) & UCT_MM_FIFO_ELEM_FLAG_INLINE) ? 'i' : '-')
+
 
 /* AIMD (additive increase/multiplicative decrease) algorithm adopted for FIFO
  * polling mechanism to adjust FIFO polling window.

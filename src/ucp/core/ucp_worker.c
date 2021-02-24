@@ -2500,6 +2500,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     do {
         ret = read(worker->eventfd, &dummy, sizeof(dummy));
         if (ret == sizeof(dummy)) {
+            ucs_trace("worker %p: extracted queued event", worker);
             status = UCS_ERR_BUSY;
             goto out;
         } else if (ret == -1) {

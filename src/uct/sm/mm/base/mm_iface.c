@@ -219,17 +219,17 @@ uct_mm_assign_desc_to_fifo_elem(uct_mm_iface_t *iface,
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void
-uct_mm_iface_process_recv(uct_mm_iface_t *iface,
-                          uct_mm_fifo_element_t* elem)
+static UCS_F_ALWAYS_INLINE void uct_mm_iface_process_recv(uct_mm_iface_t *iface)
 {
+    uct_mm_fifo_element_t *elem = iface->read_index_elem;
     ucs_status_t status;
-    void         *data;
+    void *data;
 
     if (ucs_likely(elem->flags & UCT_MM_FIFO_ELEM_FLAG_INLINE)) {
         /* read short (inline) messages from the FIFO elements */
-        uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
-                           elem->am_id, elem + 1, elem->length, "RX: AM_SHORT");
+        uct_mm_iface_trace_am(iface, UCT_AM_TRACE_TYPE_RECV, elem->flags,
+                              elem->am_id, elem + 1, elem->length,
+                              iface->read_index);
         uct_mm_iface_invoke_am(iface, elem->am_id, elem + 1, elem->length, 0);
         return;
     }
@@ -243,9 +243,8 @@ uct_mm_iface_process_recv(uct_mm_iface_t *iface,
     /* read bcopy messages from the receive descriptors */
     data = elem->desc_data;
     VALGRIND_MAKE_MEM_DEFINED(data, elem->length);
-
-    uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_RECV,
-                       elem->am_id, data, elem->length, "RX: AM_BCOPY");
+    uct_mm_iface_trace_am(iface, UCT_AM_TRACE_TYPE_RECV, elem->flags,
+                          elem->am_id, data, elem->length, iface->read_index);
 
     status = uct_mm_iface_invoke_am(iface, elem->am_id, data, elem->length,
                                     UCT_CB_PARAM_FLAG_DESC);
@@ -279,7 +278,7 @@ uct_mm_iface_poll_fifo(uct_mm_iface_t *iface)
     ucs_assert(iface->read_index <=
                (iface->recv_fifo_ctl->head & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED));
 
-    uct_mm_iface_process_recv(iface, iface->read_index_elem);
+    uct_mm_iface_process_recv(iface);
 
     /* raise the read_index */
     iface->read_index++;
@@ -353,43 +352,74 @@ static ucs_status_t uct_mm_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
     return UCS_OK;
 }
 
-static ucs_status_t uct_mm_iface_event_fd_arm(uct_iface_h tl_iface,
-                                              unsigned events)
+
+static ucs_status_t
+uct_mm_iface_event_fd_arm(uct_iface_h tl_iface, unsigned events)
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     char dummy[UCT_MM_IFACE_MAX_SIG_EVENTS]; /* pop multiple signals at once */
     uint64_t head, prev_head;
     int ret;
 
+    if ((events & UCT_EVENT_SEND_COMP) &&
+        !ucs_arbiter_is_empty(&iface->arbiter)) {
+        /* if we have outstanding send operations, can't go to sleep */
+        return UCS_ERR_BUSY;
+    }
+
+    if (!(events & UCT_EVENT_RECV)) {
+        /* Nothing to do anymore */
+        return UCS_OK;
+    }
+
     /* Make the next sender which writes to the FIFO signal the receiver */
-    head      = iface->recv_fifo_ctl->head;
-    prev_head = ucs_atomic_cswap64(ucs_unaligned_ptr(&iface->recv_fifo_ctl->head),
-                                   head, head | UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED);
-    if (prev_head != head) {
-        /* race with sender; need to retry */
-        return UCS_ERR_BUSY;
-    }
-
+    head = iface->recv_fifo_ctl->head;
     if ((head & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED) > iface->read_index) {
-        /* 'read_index' is being written but not ready yet */
+        /* head element was not read yet */
+        ucs_trace("iface %p: cannot arm, head %" PRIu64 " read_index %" PRIu64,
+                  iface, head & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED,
+                  iface->read_index);
         return UCS_ERR_BUSY;
     }
 
+    if (!(head & UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED)) {
+        /* Try to mark the head index as armed in an atomic way; fail if any
+           sender managed to update the head at the same time */
+        prev_head = ucs_atomic_cswap64(
+                ucs_unaligned_ptr(&iface->recv_fifo_ctl->head), head,
+                head | UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED);
+        if (prev_head != head) {
+            /* race with sender; need to retry */
+            ucs_assert(!(prev_head & UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED));
+            ucs_trace("iface %p: cannot arm, head %" PRIu64
+                      " prev_head %" PRIu64,
+                      iface, head, prev_head);
+            return UCS_ERR_BUSY;
+        }
+    }
+
+    /* check for pending events */
     ret = recvfrom(iface->signal_fd, &dummy, sizeof(dummy), 0, NULL, 0);
     if (ret > 0) {
+        ucs_trace("iface %p: cannot arm, got a signal", iface);
         return UCS_ERR_BUSY;
     } else if (ret == -1) {
         if (errno == EAGAIN) {
+            ucs_trace("iface %p: armed head %" PRIu64 " read_index %" PRIu64,
+                      iface, head & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED,
+                      iface->read_index);
             return UCS_OK;
         } else if (errno == EINTR) {
             return UCS_ERR_BUSY;
         } else {
-            ucs_error("failed to retrieve message from signal pipe: %m");
+            ucs_error("iface %p: failed to retrieve message from socket: %m",
+                      iface);
             return UCS_ERR_IO_ERROR;
         }
     } else {
         ucs_assert(ret == 0);
-        return UCS_OK;
+        ucs_trace("iface %p: remote socket closed", iface);
+        return UCS_ERR_CONNECTION_RESET;
     }
 }
 
