@@ -662,9 +662,8 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
     if (uct_ib_iface_is_roce(iface)) {
         ah_attr->dlid          = UCT_IB_ROCE_UDP_SRC_PORT_BASE |
                                  (iface->config.roce_path_factor * path_index);
-        /* Workaround rdma-core issue of calling rand() which affects global
-         * random state in glibc */
-        ah_attr->grh.flow_label = 1;
+        /* Workaround rdma-core flow label to udp sport conversion */
+        ah_attr->grh.flow_label = ~(iface->config.roce_path_factor * path_index);
     } else {
         /* TODO iface->path_bits should be removed and replaced by path_index */
         path_bits              = iface->path_bits[path_index %

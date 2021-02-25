@@ -439,7 +439,7 @@ uct_pending_req_priv_arb_elem(uct_pending_req_t *req)
 /**
  * Add a pending request to the head of group in arbiter.
  */
-#define uct_pending_req_arb_group_push_head(_arbiter, _arbiter_group, _req) \
+#define uct_pending_req_arb_group_push_head(_arbiter_group, _req) \
     do { \
         ucs_arbiter_elem_init(uct_pending_req_priv_arb_elem(_req)); \
         ucs_arbiter_group_push_head_elem_always(_arbiter_group, \
