@@ -44,8 +44,8 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
                     (_rkey))
 
 
-static UCS_F_ALWAYS_INLINE cudaStream_t
-*uct_cuda_copy_get_stream(uct_cuda_copy_iface_t *iface,
+static UCS_F_ALWAYS_INLINE cudaStream_t *
+uct_cuda_copy_get_stream(uct_cuda_copy_iface_t *iface,
                          ucs_memory_type_t src_type,
                          ucs_memory_type_t dst_type)
 {

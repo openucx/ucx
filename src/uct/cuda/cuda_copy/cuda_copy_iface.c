@@ -126,7 +126,7 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
 
     uct_cuda_copy_for_each_event_q(iface, event_q, {
         if (!ucs_queue_is_empty(event_q)) {
-	    goto not_empty;
+	        goto not_empty;
         }
     });
 
@@ -368,7 +368,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
             if (*stream != 0) {
                 if (!ucs_queue_is_empty(event_q)) {
                     ucs_warn("stream destroyed but queue not empty");
-		        }
+                }
                 UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(*stream));
             }
         });
