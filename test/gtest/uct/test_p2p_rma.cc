@@ -90,7 +90,10 @@ void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
 
     src_mem_types.push_back(src_mem_type);
 
-    for (ucs_memory_type_t src_mem_type : src_mem_types) {
+    for (std::vector<ucs_memory_type_t>::const_iterator iter = src_mem_types.begin();
+         iter != src_mem_types.end(); ++iter) {
+
+        src_mem_type = *iter;
 
         mapped_buffer sendbuf(length, SEED1, sender(), 1, src_mem_type);
         mapped_buffer recvbuf(length, SEED2, receiver(), 3, mem_type);
