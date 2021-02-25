@@ -162,7 +162,13 @@ test_type_t tests[] = {
     {"stream_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
      "stream latency", "latency", 1},
 
-     {NULL}
+    {"ucp_am_lat", UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+     "am latency", "latency", 1},
+
+    {"ucp_am_bw", UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+     "am bandwidth / message rate", "overhead", 32},
+
+    {NULL}
 };
 
 static int sock_io(int sock, ssize_t (*sock_call)(int, void *, size_t, int),
@@ -323,6 +329,11 @@ static void print_header(struct perftest_context *ctx)
         printf("| Send memory:  %-60s               |\n", ucs_memory_type_names[ctx->params.super.send_mem_type]);
         printf("| Recv memory:  %-60s               |\n", ucs_memory_type_names[ctx->params.super.recv_mem_type]);
         printf("| Message size: %-60zu               |\n", ucx_perf_get_message_size(&ctx->params.super));
+        if ((test->api == UCX_PERF_API_UCP) &&
+            (test->command == UCX_PERF_CMD_AM)) {
+            printf("| AM header size: %-60zu             |\n",
+                   ctx->params.super.ucp.am_hdr_size);
+        }
     }
 
     if (ctx->flags & TEST_FLAG_PRINT_CSV) {
@@ -457,8 +468,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        iov      - scatter-gather list (iovec)\n");
     printf("     -W <count>     flow control window size, for active messages (%u)\n",
                                 ctx->params.super.uct.fc_window);
-    printf("     -H <size>      active message header size (%zu)\n",
-                                ctx->params.super.am_hdr_size);
+    printf("     -H <size>      active message header size (%zu), included in message size\n",
+                                ctx->params.super.uct.am_hdr_size);
     printf("     -A <mode>      asynchronous progress mode (thread_spinlock)\n");
     printf("                        thread_spinlock - separate progress thread with spin locking\n");
     printf("                        thread_mutex - separate progress thread with mutex locking\n");
@@ -482,6 +493,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -E <mode>      wait mode for tests\n");
     printf("                        poll       : repeatedly call worker_progress\n");
     printf("                        sleep      : go to sleep after posting requests\n");
+    printf("     -H <size>      active message header size (%zu), not included in message size\n",
+                                ctx->params.super.ucp.am_hdr_size);
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
     printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
@@ -597,7 +610,6 @@ static ucs_status_t init_test_params(perftest_params_t *params)
     params->super.wait_mode         = UCX_PERF_WAIT_MODE_LAST;
     params->super.max_outstanding   = 0;
     params->super.warmup_iter       = 10000;
-    params->super.am_hdr_size       = 8;
     params->super.alignment         = ucs_get_page_size();
     params->super.max_iter          = 1000000l;
     params->super.max_time          = 0.0;
@@ -605,12 +617,14 @@ static ucs_status_t init_test_params(perftest_params_t *params)
     params->super.flags             = UCX_PERF_TEST_FLAG_VERBOSE;
     params->super.uct.fc_window     = UCT_PERF_TEST_MAX_FC_WINDOW;
     params->super.uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
+    params->super.uct.am_hdr_size   = 8;
     params->super.send_mem_type     = UCS_MEMORY_TYPE_HOST;
     params->super.recv_mem_type     = UCS_MEMORY_TYPE_HOST;
     params->super.msg_size_cnt      = 1;
     params->super.iov_stride        = 0;
     params->super.ucp.send_datatype = UCP_PERF_DATATYPE_CONTIG;
     params->super.ucp.recv_datatype = UCP_PERF_DATATYPE_CONTIG;
+    params->super.ucp.am_hdr_size   = 0;
     strcpy(params->super.uct.dev_name, TL_RESOURCE_NAME_NONE);
     strcpy(params->super.uct.tl_name,  TL_RESOURCE_NAME_NONE);
 
@@ -702,7 +716,8 @@ static ucs_status_t parse_test_params(perftest_params_t *params, char opt,
     case 's':
         return parse_message_sizes_params(opt_arg, &params->super);
     case 'H':
-        params->super.am_hdr_size = atol(opt_arg);
+        params->super.uct.am_hdr_size = atol(opt_arg);
+        params->super.ucp.am_hdr_size = atol(opt_arg);
         return UCS_OK;
     case 'W':
         params->super.uct.fc_window = atoi(opt_arg);

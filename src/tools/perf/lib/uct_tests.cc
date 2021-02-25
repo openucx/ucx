@@ -105,7 +105,7 @@ public:
             (UCT_PERF_DATA_LAYOUT_SHORT_IOV == DATA)) {
             size_t start_iov_buffer_size = 0;
             if ((UCX_PERF_CMD_AM == CMD) && (UCT_PERF_DATA_LAYOUT_ZCOPY == DATA)) {
-                start_iov_buffer_size = m_perf.params.am_hdr_size;
+                start_iov_buffer_size = m_perf.params.uct.am_hdr_size;
             }
             uct_perf_get_buffer_iov(m_perf.uct.iov, m_perf.send_buffer,
                                     start_iov_buffer_size,
@@ -262,7 +262,7 @@ public:
                 return (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
                 set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn);
-                header_size = m_perf.params.am_hdr_size;
+                header_size = m_perf.params.uct.am_hdr_size;
                 return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID, buffer, header_size,
                                        m_perf.uct.iov, m_perf.params.msg_size_cnt,
                                        0, comp);

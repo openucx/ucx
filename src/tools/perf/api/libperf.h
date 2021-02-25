@@ -192,7 +192,6 @@ typedef struct ucx_perf_params {
     size_t                 iov_stride;      /* Distance between starting address
                                                of consecutive IOV entries. It is
                                                similar to UCT uct_iov_t type stride */
-    size_t                 am_hdr_size;     /* Active message header size (included in message size) */
     size_t                 alignment;       /* Message buffer alignment */
     unsigned               max_outstanding; /* Maximal number of outstanding sends */
     ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
@@ -210,12 +209,16 @@ typedef struct ucx_perf_params {
         char                   md_name[UCT_MD_NAME_MAX];      /* Memory domain name to use */
         uct_perf_data_layout_t data_layout; /* Data layout to use */
         unsigned               fc_window;   /* Window size for flow control <= UCX_PERF_TEST_MAX_FC_WINDOW */
+        size_t                 am_hdr_size; /* UCT Active Message header size
+                                               (included in message size) */
     } uct;
 
     struct {
         unsigned               nonblocking_mode; /* TBD */
         ucp_perf_datatype_t    send_datatype;
         ucp_perf_datatype_t    recv_datatype;
+        size_t                 am_hdr_size; /* UCP Active Message header size
+                                               (not included in message size) */
     } ucp;
 
 } ucx_perf_params_t;
