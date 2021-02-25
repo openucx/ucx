@@ -52,6 +52,7 @@ typedef struct uct_cuda_copy_iface {
     ucs_mpool_t                 cuda_event_desc;
     ucs_queue_head_t            outstanding_event_q[UCS_MEMORY_TYPE_LAST][UCS_MEMORY_TYPE_LAST];
     cudaStream_t                stream[UCS_MEMORY_TYPE_LAST][UCS_MEMORY_TYPE_LAST];
+    cudaStream_t                stream_short_ops; /* stream for short operations */
     struct {
         unsigned                max_poll;
         unsigned                max_cuda_events;

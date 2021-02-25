@@ -350,6 +350,13 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         *stream = 0;
     });
 
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(&self->stream_short_ops,
+                                                             cudaStreamNonBlocking));
+    if (status != UCS_OK ) {
+        ucs_error("error creating stream for short operations");
+        return UCS_ERR_IO_ERROR;
+    }
+
     return UCS_OK;
 }
 
@@ -364,6 +371,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
     uct_base_iface_progress_disable(&self->super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     if (active) {
+        UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(self->stream_short_ops));
+
         uct_cuda_copy_for_each_stream_event_q(self, stream, event_q, {
             if (*stream != 0) {
                 if (!ucs_queue_is_empty(event_q)) {

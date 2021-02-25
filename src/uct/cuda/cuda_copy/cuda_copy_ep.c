@@ -180,22 +180,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                   uct_cuda_copy_iface_t);
-    ucs_memory_type_t src_type;
-    ucs_memory_type_t dst_type;
-    cudaStream_t *stream;
     ucs_status_t status;
 
-    uct_cuda_copy_get_mem_types((const void*)buffer, (const void*)remote_addr,
-                                &src_type, &dst_type);
-
-    stream = uct_cuda_copy_get_stream(iface, src_type, dst_type);
-    if (ucs_unlikely(stream == NULL)) {
-        return UCS_ERR_IO_ERROR;
-    }
-
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync((void*)remote_addr, buffer, length,
-                                          cudaMemcpyDefault, *stream));
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(*stream));
+                                          cudaMemcpyDefault,
+                                          iface->stream_short_ops));
+    status =
+        UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(iface->stream_short_ops));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, SHORT, length);
     ucs_trace_data("PUT_SHORT size %d from %p to %p",
@@ -210,22 +201,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface,
                                                   uct_cuda_copy_iface_t);
-    ucs_memory_type_t src_type;
-    ucs_memory_type_t dst_type;
-    cudaStream_t *stream;
     ucs_status_t status;
 
-    uct_cuda_copy_get_mem_types((const void*)remote_addr, (const void*)buffer,
-                                &src_type, &dst_type);
-
-    stream = uct_cuda_copy_get_stream(iface, src_type, dst_type);
-    if (ucs_unlikely(stream == NULL)) {
-        return UCS_ERR_IO_ERROR;
-    }
-
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(buffer, (void*)remote_addr, length,
-                                          cudaMemcpyDefault, *stream));
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(*stream));
+                                          cudaMemcpyDefault,
+                                          iface->stream_short_ops));
+    status =
+        UCT_CUDA_FUNC_LOG_ERR(cudaStreamSynchronize(iface->stream_short_ops));
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, SHORT, length);
     ucs_trace_data("GET_SHORT size %d from %p to %p",
