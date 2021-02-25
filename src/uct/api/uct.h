@@ -1274,12 +1274,18 @@ struct uct_md_attr {
  * are present.
  */
 typedef enum uct_md_mem_attr_field {
-    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE = UCS_BIT(0), /**< Indicate if memory type
-                                                      is populated. E.g. CPU/GPU */
-    UCT_MD_MEM_ATTR_FIELD_SYS_DEV  = UCS_BIT(1)  /**< Indicate if details of
-                                                      system device backing
-                                                      the pointer are populated.
-                                                      E.g. NUMA/GPU */
+    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE     = UCS_BIT(0), /**< Indicate if memory type
+                                                          is populated. E.g. CPU/GPU */
+    UCT_MD_MEM_ATTR_FIELD_SYS_DEV      = UCS_BIT(1), /**< Indicate if details of
+                                                          system device backing
+                                                          the pointer are populated.
+                                                          E.g. NUMA/GPU */
+    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS = UCS_BIT(2), /**< Request base address of the
+                                                          allocation to which the buffer
+                                                          belongs. */
+    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH = UCS_BIT(3)  /**< Request the whole length of the
+                                                          allocation to which the buffer
+                                                          belongs. */
 } uct_md_mem_attr_field_t;
 
 
@@ -1294,22 +1300,37 @@ typedef enum uct_md_mem_attr_field {
 typedef struct uct_md_mem_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_md_mem_attr_field_t. Note that the field mask is
-     * populated upon return from uct_md_mem_query and not set by user.
-     * Subsequent use of members of the structure are valid after ensuring that
-     * relevant bits in the field_mask are set.
+     * @ref uct_md_mem_attr_field_t.
      */
     uint64_t          field_mask;
 
     /**
-     * The type of memory. E.g. CPU/GPU memory or some other valid type
+     * The type of memory. E.g. CPU/GPU memory or some other valid type.
+     * If the md does not support sys_dev query, then UCS_MEMORY_TYPE_UNKNOWN
+     * is returned.
      */
     ucs_memory_type_t mem_type;
 
     /**
      * Index of the system device on which the buffer resides. eg: NUMA/GPU
+     * If the md does not support sys_dev query, then UCS_SYS_DEVICE_ID_UNKNOWN
+     * is returned.
      */
     ucs_sys_device_t  sys_dev;
+
+    /**
+     * Base address of the allocation to which the provided buffer belongs to.
+     * If the md not support base address query, then the pointer passed to
+     * uct_md_mem_query is returned as is.
+     */
+    void              *base_address;
+
+    /**
+     * Length of the whole allocation to which the provided buffer belongs to.
+     * If the md not support querying allocation length, then the length passed
+     * to uct_md_mem_query is returned as is.
+     */
+    size_t            alloc_length;
 } uct_md_mem_attr_t;
 
 
@@ -1317,8 +1338,8 @@ typedef struct uct_md_mem_attr {
  * @ingroup UCT_MD
  * @brief Query attributes of a given pointer
  *
- * Return attributes such as memory type, and system device for the
- * given pointer of specific length.
+ * Return attributes such as memory type, base address, allocation length,
+ * and system device for the given pointer of specific length.
  *
  * @param [in]     md          Memory domain to run the query on. This function
  *                             returns an error if the md does not recognize the
@@ -1328,9 +1349,10 @@ typedef struct uct_md_mem_attr {
  * @param [in]     length      Length of the memory region to examine.
  *                             Must be nonzero else UCS_ERR_INVALID_PARAM error
  *                             is returned.
- * @param [out]    mem_attr    If successful, filled with ptr attributes.
+ * @param [inout]  mem_attr    If successful, filled with ptr attributes.
  *
- * @return Error code.
+ * @return UCS_OK if at least one attribute is successfully queried otherwise
+ *         an error code as defined by @ref ucs_status_t is returned.
  */
 ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
                               uct_md_mem_attr_t *mem_attr);
