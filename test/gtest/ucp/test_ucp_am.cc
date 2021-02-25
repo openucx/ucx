@@ -395,8 +395,8 @@ protected:
     {
         size_t small_hdr_size = 8;
 
-        test_am_send_recv(size, small_hdr_size, flags);
         test_am_send_recv(size, 0, flags);
+        test_am_send_recv(size, small_hdr_size, flags);
 
         if (max_am_hdr() > small_hdr_size) {
             test_am_send_recv(size, max_am_hdr(), flags);
@@ -698,6 +698,16 @@ public:
                                        UCS_BIT(UCP_DATATYPE_IOV) |
                                        UCS_BIT(UCP_DATATYPE_GENERIC);
 
+    virtual ucp_ep_params_t get_ep_params()
+    {
+        ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
+
+        ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.err_mode    = static_cast<ucp_err_handling_mode_t>(
+                                                          get_variant_value(2));
+        return ep_params;
+    }
+
     static void get_test_dts(std::vector<ucp_test_variant>& variants)
     {
         /* coverity[overrun-buffer-val] */
@@ -705,10 +715,18 @@ public:
                            dts_bitmap, ucp_datatype_class_names);
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    static void get_test_dts_reply(std::vector<ucp_test_variant>& variants)
     {
         add_variant_values(variants, get_test_dts, 0);
         add_variant_values(variants, get_test_dts, UCP_AM_SEND_REPLY, "reply");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant_values(variants, get_test_dts_reply,
+                           UCP_ERR_HANDLING_MODE_NONE);
+        add_variant_values(variants, get_test_dts_reply,
+                           UCP_ERR_HANDLING_MODE_PEER, "errh");
     }
 
     void init()
