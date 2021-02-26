@@ -1128,7 +1128,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSED, 0);
 
-    if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
+    if ((ep->flags & UCP_EP_FLAG_FAILED) || /* force closure for failed EP */
+        (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE)) {
         /* FIXME: there is a potential issue with flush completion after an EP
          * was forcibly closed from a user's error handling callback after
          * disconnect event was received, but some EP flush operation still
