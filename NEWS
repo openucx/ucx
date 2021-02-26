@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.10.0-rc4 (February 20, 2021)
+## 1.10.0-rc5 (February 26, 2021)
 ### Features:
 #### Core
 * Added support for Nvidia HPC SDK
@@ -125,6 +125,7 @@
 * Fixes in handling failures from AM Bcopy
 * Fix in a release flow of deferred data
 * Fixes for invalid ID and handling of status in RNDV
+* Fixes in short active message reply protocol
 #### CUDA
 * Fixes in managed memory support
 * Fixes in topology detection
