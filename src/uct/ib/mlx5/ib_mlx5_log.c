@@ -388,15 +388,15 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
             if (is_inline) {
                 inline_bitmap |= UCS_BIT(i-1);
             }
-            s += strlen(s);
         }
+        uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, sg_list, i,
+                                inline_bitmap, packet_dump_cb, max_sge, s,
+                                ends - s);
+    } else {
+        uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, log_sge->sg_list,
+                                log_sge->num_sge, log_sge->inline_bitmap,
+                                packet_dump_cb, log_sge->num_sge, s, ends - s);
     }
-
-    uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND,
-                            log_sge ? log_sge->sg_list : sg_list,
-                            log_sge ? log_sge->num_sge : ucs_min(i, max_sge),
-                            log_sge ? log_sge->inline_bitmap : inline_bitmap,
-                            packet_dump_cb, s, ends - s);
 }
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,

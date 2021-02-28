@@ -37,7 +37,7 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
                              struct ibv_sge *sg_list, int num_sge,
                              uint64_t inline_bitmap,
                              uct_log_data_dump_func_t data_dump,
-                             char *buf, size_t max);
+                             int data_dump_sge, char *buf, size_t max);
 
 void uct_ib_log_dump_remote_addr(uint64_t remote_addr, uint32_t rkey,
                                  char *buf, size_t max);
