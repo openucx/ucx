@@ -373,7 +373,6 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
                                         unsigned num_methods,
                                         const uct_mem_alloc_params_t *params)
 {
-    const uct_alloc_method_t *method;
     ucs_status_t status;
 
     if (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) {
@@ -402,19 +401,6 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
         ucs_debug("the length value for allocating memory is set to zero: %s",
                   ucs_status_string(UCS_ERR_INVALID_PARAM));
         return UCS_ERR_INVALID_PARAM;
-    }
-
-    for (method = methods;
-         method < methods + num_methods; ++method) {
-        if (*method == UCT_ALLOC_METHOD_MD) {
-            if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MDS) ||
-                (params->mds.count < 1)) {
-                ucs_debug("methods include UCT_ALLOC_METHOD but params->mds"
-                          " not populated correctly: %s",
-                          ucs_status_string(UCS_ERR_INVALID_PARAM));
-                return UCS_ERR_INVALID_PARAM;
-            }
-        }
     }
 
     return UCS_OK;
