@@ -43,7 +43,7 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
                              struct ibv_sge *sg_list, int num_sge,
                              uint64_t inline_bitmap,
                              uct_log_data_dump_func_t data_dump,
-                             char *buf, size_t max)
+                             int data_dump_sge, char *buf, size_t max)
 {
     char data[256];
     size_t total_len       = 0;
@@ -64,7 +64,7 @@ void uct_ib_log_dump_sg_list(uct_ib_iface_t *iface, uct_am_trace_type_t type,
 
         s               += strlen(s);
 
-        if (data_dump) {
+        if ((i < data_dump_sge) && data_dump) {
             len = ucs_min(sg_list[i].length,
                           UCS_PTR_BYTE_DIFF(md, data) + sizeof(data));
             memcpy(md, (void*)sg_list[i].addr, len);
@@ -213,9 +213,9 @@ static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
     s += strlen(s);
 
     uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, wr->sg_list,
-                            ucs_min(wr->num_sge, max_sge),
+                            wr->num_sge,
                             (wr->send_flags & IBV_SEND_INLINE) ? -1 : 0,
-                            data_dump, s, ends - s);
+                            data_dump, max_sge, s, ends - s);
 }
 
 void __uct_ib_log_post_send(const char *file, int line, const char *function,
