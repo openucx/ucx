@@ -131,7 +131,10 @@ public:
                                      void **recv_buffer)
     {
         *total_length = ucx_perf_get_message_size(&m_perf.params);
-        ucs_assert(*total_length >= sizeof(psn_t));
+
+        if (CMD == UCX_PERF_CMD_PUT) {
+            ucs_assert(*total_length >= sizeof(psn_t));
+        }
 
         ucp_perf_test_prepare_iov_buffers();
 
