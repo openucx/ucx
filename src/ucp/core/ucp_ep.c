@@ -97,6 +97,11 @@ static uct_ep_t ucp_failed_tl_ep = {
 };
 
 
+int ucp_is_uct_ep_failed(uct_ep_h uct_ep)
+{
+    return uct_ep == &ucp_failed_tl_ep;
+}
+
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
 {
     ucp_lane_index_t i;
@@ -258,6 +263,9 @@ static void ucp_ep_delete(ucp_ep_h ep)
 
     if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
         ucp_ep_release_id(ep);
+    } else {
+        /* If FAILED flag set, EP ID was already released */
+        ucs_assert(ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID);
     }
 
     ucp_ep_destroy_base(ep);
@@ -274,6 +282,8 @@ void ucp_ep_release_id(ucp_ep_h ep)
         ucs_warn("ep %p local id 0x%" PRIxPTR ": ucs_ptr_map_del failed: %s",
                  ep, ucp_ep_local_id(ep), ucs_status_string(status));
     }
+
+    ucp_ep_ext_control(ep)->local_ep_id = UCP_EP_ID_INVALID;
 }
 
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
@@ -792,7 +802,7 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
          * If UCT lane is destroyed, but some operations are still in-progress,
          * acompletions can be received for his UCT EP - this will lead to
          * undefined behavior, because a real UCT EP was already destroyed */
-        ucs_assert((uct_ep == &ucp_failed_tl_ep) || (ep->ref_cnt == 1));
+        ucs_assert(ucp_is_uct_ep_failed(uct_ep) || (ep->ref_cnt == 1));
 
         /* set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
          * due to some UCT EP discarding procedures are in-progress and UCP EP
@@ -995,6 +1005,14 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
 
     ucs_debug("ep %p: discarding lanes", ep);
 
+    if (!(ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_INTERNAL))) {
+        ucp_ep_release_id(ep);
+    }
+
+    ep->flags |= UCP_EP_FLAG_FAILED;
+
+    /* flush CANCEL mustn't be called for EPs without error handling support */
+    ucs_assert(ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER);
     ucp_ep_set_lanes_failed(ep, uct_eps);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
@@ -1026,7 +1044,6 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_request_t *close_req;
 
     if ((ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) &&
-        !ucp_ep_has_cm_lane(ep) &&
         (ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_PEER)) {
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
     }

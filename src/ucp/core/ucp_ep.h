@@ -476,6 +476,8 @@ typedef struct ucp_conn_request {
 } ucp_conn_request_t;
 
 
+int ucp_is_uct_ep_failed(uct_ep_h uct_ep);
+
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
 
 void ucp_ep_config_cm_lane_info_str(ucp_worker_h worker,
