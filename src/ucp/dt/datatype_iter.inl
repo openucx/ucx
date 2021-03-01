@@ -290,12 +290,13 @@ ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
-                          ucp_md_map_t md_map)
+                          ucp_md_map_t md_map, unsigned uct_flags)
 {
     /* TODO support IOV datatype */
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
+
     return ucp_mem_rereg_mds(context, md_map, dt_iter->type.contig.buffer,
-                             dt_iter->length, UCT_MD_MEM_ACCESS_RMA, NULL,
+                             dt_iter->length, uct_flags, NULL,
                              (ucs_memory_type_t)dt_iter->mem_info.type, NULL,
                              dt_iter->type.contig.reg.memh,
                              &dt_iter->type.contig.reg.md_map);

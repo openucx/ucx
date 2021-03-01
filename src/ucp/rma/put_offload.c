@@ -186,7 +186,7 @@ ucp_proto_put_offload_zcopy_progress(uct_pending_req_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     return ucp_proto_multi_zcopy_progress(req, req->send.proto_config->priv,
-                                          NULL,
+                                          NULL, UCT_MD_MEM_ACCESS_LOCAL_READ,
                                           ucp_proto_put_offload_zcopy_send_func,
                                           ucp_proto_request_zcopy_completion);
 }
