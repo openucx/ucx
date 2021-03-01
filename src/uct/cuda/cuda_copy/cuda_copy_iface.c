@@ -161,6 +161,7 @@ uct_cuda_copy_progress_event_queue(uct_cuda_copy_iface_t *iface,
                                cudaEventQuery(cuda_event->event) == cudaSuccess) {
         ucs_queue_remove(queue_head, &cuda_event->queue);
         if (cuda_event->comp != NULL) {
+            ucs_trace_data("cuda_copy event %p completed", cuda_event);
             uct_invoke_completion(cuda_event->comp, UCS_OK);
         }
         ucs_trace_poll("CUDA Event Done :%p", cuda_event);
