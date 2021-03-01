@@ -218,6 +218,7 @@ uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
         entry->flag = 1;
         if (entry->wait_ctx != NULL) {
             /* someone is waiting */
+            ucs_assert(entry->wait_ctx->cb_id == UCS_CALLBACKQ_ID_NULL);
             entry->wait_ctx->cb_id = ucs_callbackq_add_safe(
                     entry->wait_ctx->cbq, uct_ib_device_async_event_proxy,
                     entry->wait_ctx, UCS_CALLBACKQ_FLAG_ONESHOT);
