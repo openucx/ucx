@@ -12,50 +12,18 @@
 #include <pthread.h>
 
 
-#define uct_cuda_copy_for_each_stream(iface, stream_var, code) { \
-    int __i,__j; \
-    for (__i = 0; __i < UCS_MEMORY_TYPE_LAST; ++__i) { \
-        for (__j = 0; __j < UCS_MEMORY_TYPE_LAST; ++__j) { \
-            (stream_var) = &iface->stream[__i][__j]; \
-            code; \
-        } \
-    } \
-}
-
-#define uct_cuda_copy_for_each_event_q(iface, q_var, code) { \
-    int __i,__j; \
-    for (__i = 0; __i < UCS_MEMORY_TYPE_LAST; ++__i) { \
-        for (__j = 0; __j < UCS_MEMORY_TYPE_LAST; ++__j) { \
-            (q_var) = &iface->outstanding_event_q[__i][__j]; \
-            code; \
-        } \
-    } \
-}
-
-#define uct_cuda_copy_for_each_stream_event_q(iface, stream_var, q_var, code) { \
-    int __i,__j; \
-    for (__i = 0; __i < UCS_MEMORY_TYPE_LAST; ++__i) { \
-        for (__j = 0; __j < UCS_MEMORY_TYPE_LAST; ++__j) { \
-            (stream_var) = &iface->stream[__i][__j]; \
-            (q_var)      = &iface->outstanding_event_q[__i][__j]; \
-            code; \
-        } \
-    } \
-}
-
 typedef uint64_t uct_cuda_copy_iface_addr_t;
 
 
 typedef struct uct_cuda_copy_iface {
     uct_base_iface_t            super;
     uct_cuda_copy_iface_addr_t  id;
-    ucs_mpool_t                 cuda_event_desc;
-    ucs_queue_head_t            outstanding_event_q[UCS_MEMORY_TYPE_LAST][UCS_MEMORY_TYPE_LAST];
-    cudaStream_t                stream[UCS_MEMORY_TYPE_LAST][UCS_MEMORY_TYPE_LAST];
+    ucs_mpool_t                 cuda_completion_desc;
+    ucs_queue_head_t            outstanding_q;
     cudaStream_t                stream_short_ops; /* stream for short operations */
     struct {
         unsigned                max_poll;
-        unsigned                max_cuda_events;
+        unsigned                max_entries;
     } config;
     struct {
         void                    *event_arg;
@@ -67,14 +35,15 @@ typedef struct uct_cuda_copy_iface {
 typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
-    unsigned                max_cuda_events;
+    unsigned                max_entries;
 } uct_cuda_copy_iface_config_t;
 
 
-typedef struct uct_cuda_copy_event_desc {
+typedef struct uct_cuda_copy_completion_desc {
     cudaEvent_t event;
+    cudaStream_t stream;
     uct_completion_t *comp;
     ucs_queue_elem_t  queue;
-} uct_cuda_copy_event_desc_t;
+} uct_cuda_copy_completion_desc_t;
 
 #endif

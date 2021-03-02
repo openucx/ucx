@@ -43,92 +43,42 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
      ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
                     (_rkey))
 
-
-static UCS_F_ALWAYS_INLINE cudaStream_t *
-uct_cuda_copy_get_stream(uct_cuda_copy_iface_t *iface,
-                         ucs_memory_type_t src_type,
-                         ucs_memory_type_t dst_type)
-{
-    cudaStream_t *stream;
-    ucs_status_t status;
-
-    stream = &iface->stream[src_type][dst_type];
-    if (*stream == 0) {
-        status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(stream,
-                                                                 cudaStreamNonBlocking));
-        if (status != UCS_OK ) {
-            stream = NULL;
-        }
-    }
-
-    return stream;
-}
-
-static void uct_cuda_copy_get_mem_types(const void *src, const void *dst,
-                                        ucs_memory_type_t *src_type,
-                                        ucs_memory_type_t *dst_type)
-{
-    ucs_status_t status;
-
-    status = uct_cuda_base_detect_memory_type(NULL, src, 0, src_type);
-    if (UCS_OK != status) {
-        *src_type = UCS_MEMORY_TYPE_HOST;
-    }
-
-    status = uct_cuda_base_detect_memory_type(NULL, dst, 0, dst_type);
-    if (UCS_OK != status) {
-        *dst_type = UCS_MEMORY_TYPE_HOST;
-    }
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t length,
                                    uct_completion_t *comp)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
-    uct_cuda_copy_event_desc_t *cuda_event;
+    uct_cuda_copy_completion_desc_t *cuda_comp;
     ucs_status_t status;
-    cudaStream_t *stream;
-    ucs_queue_head_t *event_q;
-    ucs_memory_type_t src_type;
-    ucs_memory_type_t dst_type;
 
     if (!length) {
         return UCS_OK;
     }
 
-    cuda_event = ucs_mpool_get(&iface->cuda_event_desc);
-    if (ucs_unlikely(cuda_event == NULL)) {
+    cuda_comp = ucs_mpool_get(&iface->cuda_completion_desc);
+    if (ucs_unlikely(cuda_comp == NULL)) {
         ucs_error("Failed to allocate cuda event object");
         return UCS_ERR_NO_MEMORY;
     }
 
-    uct_cuda_copy_get_mem_types((const void*)src, (const void*)dst,
-                                &src_type, &dst_type);
-
-    stream = uct_cuda_copy_get_stream(iface, src_type, dst_type);
-    if (ucs_unlikely(stream == NULL)) {
-        return UCS_ERR_IO_ERROR;
-    }
-
     status = UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(dst, src, length, cudaMemcpyDefault,
-                                                   *stream));
+                                                   cuda_comp->stream));
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaEventRecord(cuda_event->event, *stream));
+    status = UCT_CUDA_FUNC_LOG_ERR(cudaEventRecord(cuda_comp->event,
+                                                   cuda_comp->stream));
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
 
-    event_q = &iface->outstanding_event_q[src_type][dst_type];
-    ucs_queue_push(event_q, &cuda_event->queue);
-    cuda_event->comp = comp;
+    ucs_queue_push(&iface->outstanding_q, &cuda_comp->queue);
+    cuda_comp->comp = comp;
 
-    ucs_trace("cuda async issued :%p dst:%p[%s], src:%p[%s] len:%ld",
-              cuda_event, dst, ucs_memory_type_names[dst_type], src,
-              ucs_memory_type_names[src_type], length);
+    ucs_trace("cuda async issued :%p dst: %p src:%p len:%ld", cuda_comp,
+                                                              dst, src, length);
+
     return UCS_INPROGRESS;
 }
 
@@ -214,4 +164,3 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
                    length, (void *)remote_addr, buffer);
     return status;
 }
-
