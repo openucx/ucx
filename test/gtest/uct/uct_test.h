@@ -185,24 +185,18 @@ protected:
         void revoke_ep(unsigned index);
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
-        void connect(unsigned index, entity& other, unsigned other_index,
-                     const ucs::sock_addr_storage &remote_addr,
-                     uct_cm_ep_priv_data_pack_callback_t pack_cb,
-                     uct_cm_ep_client_connect_callback_t connect_cb,
-                     uct_ep_disconnect_cb_t disconnect_cb,
-                     void *user_data);
         void connect_to_iface(unsigned index, entity& other);
         void connect_to_ep(unsigned index, entity& other,
                            unsigned other_index);
-        void connect_to_sockaddr(unsigned index, entity& other,
+        void connect_to_sockaddr(unsigned index,
                                  const ucs::sock_addr_storage &remote_addr,
                                  uct_cm_ep_priv_data_pack_callback_t pack_cb,
                                  uct_cm_ep_client_connect_callback_t connect_cb,
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_sata);
 
-        void listen(const ucs::sock_addr_storage &listen_addr,
-                    const uct_listener_params_t &params);
+        ucs_status_t listen(const ucs::sock_addr_storage &listen_addr,
+                            const uct_listener_params_t &params);
         void disconnect(uct_ep_h ep);
 
         void flush() const;

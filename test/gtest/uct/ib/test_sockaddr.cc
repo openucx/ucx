@@ -128,18 +128,27 @@ protected:
                                  UCT_LISTENER_PARAM_FIELD_USER_DATA;
         params.conn_request_cb = server_conn_req_cb;
         params.user_data       = static_cast<test_uct_sockaddr *>(this);
-        /* if origin port set in init() is busy, listen() will retry with another one */
-        m_server->listen(m_listen_addr, params);
 
-        /* the listen function may have changed the initial port on the listener's
-         * address. update this port for the address to connect to */
+        ucs_time_t deadline = ucs::get_deadline();
+        ucs_status_t status;
+        do {
+            status = m_server->listen(m_listen_addr, params);
+            if (status == UCS_ERR_BUSY) {
+                m_listen_addr.set_port(ucs::get_port());
+            } else {
+                break;
+            }
+        } while (ucs_get_time() < deadline);
+
+        ASSERT_EQ(UCS_OK, status);
         m_connect_addr.set_port(m_listen_addr.get_port());
     }
 
     void listen_and_connect() {
         start_listen(test_uct_sockaddr::conn_request_cb);
-        m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
-                          client_connect_cb, client_disconnect_cb, this);
+        m_client->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+                                      client_connect_cb, client_disconnect_cb,
+                                      this);
 
         wait_for_bits(&m_state, TEST_STATE_CONNECT_REQUESTED);
         EXPECT_TRUE(m_state & TEST_STATE_CONNECT_REQUESTED);
@@ -651,8 +660,9 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
     /* Connect */
     /* multiple clients, on the same cm, connecting to the same server */
     for (int i = 0; i < num_conns_on_client; ++i) {
-        m_client->connect(i, *m_server, 0, m_connect_addr, client_priv_data_cb,
-                          client_connect_cb, client_disconnect_cb, this);
+        m_client->connect_to_sockaddr(i, m_connect_addr, client_priv_data_cb,
+                                      client_connect_cb, client_disconnect_cb,
+                                      this);
     }
 
     /* wait for the server to connect to all the endpoints on the cm */
@@ -681,8 +691,9 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 UCS_TEST_P(test_uct_sockaddr, err_handle)
 {
     /* client - try to connect to a server that isn't listening */
-    m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
-                      client_connect_cb, client_disconnect_cb, this);
+    m_client->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+                                  client_connect_cb, client_disconnect_cb,
+                                  this);
 
     EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
 
@@ -707,8 +718,9 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server_port)
     scoped_log_handler slh(detect_reject_error_logger);
 
     /* client - try to connect to a non-existing port on the server side. */
-    m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
-                      client_connect_cb, client_disconnect_cb, this);
+    m_client->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+                                  client_connect_cb, client_disconnect_cb,
+                                  this);
 
     /* with the TCP port space (which is currently tested with rdmacm),
      * a REJECT event will be generated on the client side and since it's a
@@ -832,8 +844,9 @@ UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
     {
         scoped_log_handler slh(detect_addr_route_error_logger);
         /* client - try to connect to a non-existing IP */
-        m_client->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
-                          client_connect_cb, client_disconnect_cb, this);
+        m_client->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+                                      client_connect_cb, client_disconnect_cb,
+                                      this);
 
         wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE, 300);
         EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE);
@@ -970,8 +983,9 @@ UCS_TEST_P(test_uct_sockaddr_stress, many_clients_to_one_server)
         m_entities.push_back(client_test);
 
         client_test->max_conn_priv = client_test->cm_attr().max_conn_priv;
-        client_test->connect(0, *m_server, 0, m_connect_addr, client_priv_data_cb,
-                             client_connect_cb, client_disconnect_cb, this);
+        client_test->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+                                         client_connect_cb,
+                                         client_disconnect_cb, this);
     }
 
     /* wait for the server to connect to all the clients */
