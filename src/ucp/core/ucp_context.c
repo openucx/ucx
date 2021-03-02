@@ -1333,6 +1333,14 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
     } else {
         context->mt_lock.mt_type = UCP_MT_TYPE_NONE;
     }
+
+    if ((params->field_mask & UCP_PARAM_FIELD_NAME) && (params->name != NULL)) {
+        ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%s",
+                          params->name);
+    } else {
+        ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%s",
+                          "context_name");
+    }
 }
 
 static ucs_status_t ucp_fill_config(ucp_context_h context,
@@ -1540,9 +1548,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
-    ucs_debug("created ucp context %p [%d mds %d tls] features 0x%" PRIx64
+    ucs_debug("created ucp context %s %p [%d mds %d tls] features 0x%" PRIx64
               " tl bitmap " UCT_TL_BITMAP_FMT,
-              context, context->num_mds, context->num_tls,
+              context->name, context, context->num_mds, context->num_tls,
               context->config.features, UCT_TL_BITMAP_ARG(&context->tl_bitmap));
 
     *context_p = context;
@@ -1629,6 +1637,10 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
 
     if (attr->field_mask & UCP_ATTR_FIELD_MEMORY_TYPES) {
         attr->memory_types = context->mem_type_mask;
+    }
+
+    if (attr->field_mask & UCP_ATTR_FIELD_NAME) {
+        ucs_strncpy_safe(attr->name, context->name, UCP_CONTEXT_NAME_MAX);
     }
 
     return UCS_OK;
