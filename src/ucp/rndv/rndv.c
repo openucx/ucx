@@ -994,12 +994,19 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
 UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self),
                       uct_completion_t *self)
 {
-    ucp_request_t *freq     = ucs_container_of(self, ucp_request_t,
-                                               send.state.uct_comp);
-    ucp_request_t *rndv_req = freq->super_req;
-    ucp_request_t *rreq     = rndv_req->super_req;
-    uint64_t offset         = freq->send.rndv.remote_address -
-                              rndv_req->send.rndv.remote_address;
+    ucp_request_t *freq = ucs_container_of(self, ucp_request_t,
+                                           send.state.uct_comp);
+    ucp_request_t *rndv_req, *rreq;
+    uint64_t offset;
+
+    if (freq->send.state.dt.offset != freq->send.length) {
+        return;
+    }
+
+    rndv_req = freq->super_req;
+    rreq     = rndv_req->super_req;
+    offset   = freq->send.rndv.remote_address -
+               rndv_req->send.rndv.remote_address;
 
     ucs_trace_req("freq:%p: recv_frag_get done. rreq:%p length:%"PRIu64
                   " offset:%"PRIu64,
@@ -1600,16 +1607,21 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
 UCS_PROFILE_FUNC_VOID(ucp_rndv_send_frag_put_completion, (self),
                       uct_completion_t *self)
 {
-    ucp_request_t *freq  = ucs_container_of(self, ucp_request_t,
-                                            send.state.uct_comp);
-    ucp_request_t *fsreq = freq->super_req;
-    ucp_request_t *sreq  = fsreq->super_req;
+    ucp_request_t *freq = ucs_container_of(self, ucp_request_t,
+                                           send.state.uct_comp);
+    ucp_request_t *fsreq, *sreq;
+
+    if (freq->send.state.dt.offset != freq->send.length) {
+        return;
+    }
 
     /* release memory descriptor */
     if (freq->send.mdesc != NULL) {
         ucs_mpool_put_inline((void*)freq->send.mdesc);
     }
 
+    fsreq                        = freq->super_req;
+    sreq                         = fsreq->super_req;
     fsreq->send.state.dt.offset += freq->send.length;
     ucs_assert(fsreq->send.state.dt.offset <= fsreq->send.length);
 

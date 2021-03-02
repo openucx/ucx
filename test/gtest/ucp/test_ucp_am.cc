@@ -1095,17 +1095,13 @@ public:
         modify_config("RNDV_THRESH", "128");
 
         test_ucp_am_nbx::init();
-        m_rx_memtype = mem_type(1);
-    }
-
-    ucs_memory_type_t mem_type(int idx) {
-        return ucs::supported_mem_type_pairs()[get_variant_value()][idx];
+        m_rx_memtype = (ucs_memory_type_t)get_variant_value(1);
     }
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
-    test_am_send_recv(64 * UCS_KBYTE, 8, 0, mem_type(0));
+    test_am_send_recv(64 * UCS_KBYTE, 8, 0, (ucs_memory_type_t)get_variant_value(0));
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype);
