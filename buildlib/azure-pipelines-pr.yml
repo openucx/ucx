@@ -19,6 +19,9 @@ resources:
     - container: rhel76
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76_mofed47
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: rhel74
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
@@ -120,6 +123,8 @@ stages:
           matrix:
             rhel76:
               CONTAINER: rhel76
+            rhel76_mofed47:
+              CONTAINER: rhel76_mofed47
             ubuntu2004:
               CONTAINER: ubuntu2004
             ubuntu1804:
