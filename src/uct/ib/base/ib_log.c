@@ -325,9 +325,9 @@ static void uct_ib_dump_exp_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
 #endif
 
    uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, wr->sg_list,
-                           ucs_min(wr->num_sge, max_sge),
+                           wr->num_sge,
                            (wr->exp_send_flags & IBV_EXP_SEND_INLINE) ? -1 : 0,
-                           data_dump_cb, s, ends - s);
+                           data_dump_cb, max_sge, s, ends - s);
 }
 
 void __uct_ib_log_exp_post_send(const char *file, int line, const char *function,
