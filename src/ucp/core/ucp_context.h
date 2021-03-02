@@ -260,6 +260,8 @@ typedef struct ucp_context {
     /* All configurations about multithreading support */
     ucp_mt_lock_t                 mt_lock;
 
+    char                          name[UCP_CONTEXT_NAME_MAX];
+
 } ucp_context_t;
 
 

@@ -740,4 +740,12 @@ typedef struct ucp_ep_params {
 } ucp_ep_params_t;
 
 
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief Maximum size of the context name in @ref ucp_context_attr_t provided
+ * by @ref ucp_context_query.
+ */
+#define UCP_CONTEXT_NAME_MAX 32
+
+
 #endif
