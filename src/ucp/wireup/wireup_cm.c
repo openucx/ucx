@@ -419,7 +419,10 @@ void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep, ucp_ep_h ucp_ep)
         if (tmp_ep->uct_eps[lane_idx] != NULL) {
             ucs_assert(ucp_ep->uct_eps[lane_idx] == NULL);
             ucp_ep->uct_eps[lane_idx] = tmp_ep->uct_eps[lane_idx];
-            w_ep = ucs_derived_of(ucp_ep->uct_eps[lane_idx], ucp_wireup_ep_t);
+            tmp_ep->uct_eps[lane_idx] = NULL;
+
+            /* Change UCP EP owner of the WIREUP EP */
+            w_ep               = ucp_wireup_ep(ucp_ep->uct_eps[lane_idx]);
             w_ep->super.ucp_ep = ucp_ep;
         }
     }
