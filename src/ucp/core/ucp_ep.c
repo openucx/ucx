@@ -1076,15 +1076,6 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
         ucp_worker_discard_uct_ep(ep, uct_ep, UCT_FLUSH_FLAG_CANCEL,
                                   ucp_ep_err_pending_purge,
                                   UCS_STATUS_PTR(status));
-        /* UCT CM lane mustn't be scheduled on worker progress when discarding,
-         * since UCP EP will be destroyed due to peer failure and
-         * ucp_cm_disconnect_cb() could be invoked on async thread after UCP EP
-         * is destroyed and before UCT CM EP is destroyed from discarding
-         * functionality. So, UCP EP will passed as a corrupted argument to
-         * ucp_cm_disconnect_cb() */
-        if (lane == ucp_ep_get_cm_lane(ep)) {
-            ucs_assert(!ucp_worker_is_uct_ep_discarding(ep->worker, uct_ep));
-        }
     }
 }
 

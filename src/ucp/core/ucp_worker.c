@@ -2250,14 +2250,20 @@ ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 static ucs_status_t
 ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
+    ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
+    uct_ep_h uct_ep          = req->send.discard_uct_ep.uct_ep;
+    ucp_worker_h worker      = req->send.ep->worker;
+    uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
     ucs_status_t status;
 
     status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
                           &req->send.state.uct_comp);
     if (status == UCS_OK) {
-        ucp_worker_discard_uct_ep_destroy_progress(req);
+        /* don't destroy UCT EP from the pending callback, schedule a progress
+         * callback on the main thread to destroy UCT EP */
+        uct_worker_progress_register_safe(
+                worker->uct, ucp_worker_discard_uct_ep_destroy_progress, req,
+                UCS_CALLBACKQ_FLAG_ONESHOT, &cb_id);
         return UCS_OK;
     } else if (status == UCS_INPROGRESS) {
         return UCS_OK;
@@ -2313,10 +2319,13 @@ static void ucp_worker_discarded_uct_eps_cleanup(ucp_worker_h worker)
 {
     uct_ep_h uct_ep;
 
-    /* if ep owns the discard operation ep_destroy will cancel it.
-     * we are after uct_worker_progress_unregister_safe and
-     * ucp_worker_discard_remove_filter, so either we canceled req
-     * or it was finished and removed from kh before */
+    ucs_callbackq_remove_if(&worker->uct->progress_q,
+                            ucp_worker_discard_remove_filter, NULL);
+
+    /* If ep owns the discard operation ep_destroy will cancel it. We are after
+     * uct_worker_progress_unregister_safe and ucp_worker_discard_remove_filter,
+     * so either we canceled req or it was finished and removed from kh before
+     */
     kh_foreach_key(&worker->discard_uct_ep_hash, uct_ep, {
         uct_ep_destroy(uct_ep);
     })
@@ -2325,10 +2334,18 @@ static void ucp_worker_discarded_uct_eps_cleanup(ucp_worker_h worker)
 static void ucp_worker_destroy_eps(ucp_worker_h worker)
 {
     ucp_ep_ext_gen_t *ep_ext, *tmp;
+    ucp_ep_h ep;
 
     ucs_debug("worker %p: destroy all endpoints", worker);
     ucs_list_for_each_safe(ep_ext, tmp, &worker->all_eps, ep_list) {
-        ucp_ep_disconnected(ucp_ep_from_ext_gen(ep_ext), 1);
+        ep = ucp_ep_from_ext_gen(ep_ext);
+        if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+            /* Discard all lanes to cancel outstanding operations, because some
+             * transports (e.g. UD transports) can purge them only in UCT iface
+             * close when UCP EP is destroyed */
+            ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
+        }
+        ucp_ep_disconnected(ep, 1);
     }
 }
 
@@ -2338,8 +2355,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
-    ucs_callbackq_remove_if(&worker->uct->progress_q,
-                            ucp_worker_discard_remove_filter, NULL);
     ucp_worker_destroy_eps(worker);
     ucp_worker_remove_am_handlers(worker);
     ucp_am_cleanup(worker);
