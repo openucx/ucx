@@ -259,7 +259,7 @@ ucp_wireup_get_ep_tl_bitmap(ucp_ep_h ep, ucp_lane_map_t lane_map)
         if (ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE) {
             continue;
         }
-        
+
         UCS_BITMAP_SET(tl_bitmap, ucp_ep_get_rsc_index(ep, lane));
     }
 
@@ -679,6 +679,9 @@ static UCS_F_NOINLINE void
 ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
 {
+    /* Request a peer failure detection support from a reply EP to be able to do
+     * discarding of lanes when destroying all UCP EPs in UCP worker destroy */
+    unsigned ep_init_flags = UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     ucs_status_t status;
     ucp_ep_h reply_ep;
     unsigned addr_indices[UCP_MAX_LANES];
@@ -686,15 +689,15 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     /* if endpoint does not exist - create a temporary endpoint to send a
      * UCP_WIREUP_MSG_EP_REMOVED reply */
-    status = ucp_worker_create_ep(worker, 0, remote_address->name,
+    status = ucp_worker_create_ep(worker, ep_init_flags, remote_address->name,
                                   "wireup ep_check reply", &reply_ep);
     if (status != UCS_OK) {
         ucs_error("failed to create EP: %s", ucs_status_string(status));
         return;
     }
 
-    /* Initialize lanes (possible destroy existing lanes) */
-    status = ucp_wireup_init_lanes_by_request(worker, reply_ep, 0,
+    /* Initialize lanes of the reply EP */
+    status = ucp_wireup_init_lanes_by_request(worker, reply_ep, ep_init_flags,
                                               remote_address, addr_indices);
     if (status != UCS_OK) {
         goto destroy_ep;
