@@ -661,7 +661,7 @@ static uct_ib_mem_t *uct_ib_memh_alloc(uct_ib_md_t *md)
 static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
                                        size_t length)
 {
-    uint64_t access_flags = UCT_IB_MEM_ACCESS_FLAGS;
+    uint64_t access_flags = md->dev.access_flags;
 
     if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) && (length > 0) &&
         (length <= md->config.odp.max_size)) {

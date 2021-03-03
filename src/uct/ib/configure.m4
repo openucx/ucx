@@ -78,6 +78,14 @@ AC_ARG_WITH([dm],
 AC_ARG_WITH([devx], [], [], [with_devx=check])
 
 #
+# EFA DV Support
+#
+AC_ARG_WITH([efa-dv],
+            [AC_HELP_STRING([--with-efa-dv], [Compile with EFA device support])],
+            [],
+            [with_efa_dv=yes])
+
+#
 # Check basic IB support: User wanted at least one IB transport, and we found
 # verbs header file and library.
 #
@@ -418,6 +426,22 @@ AS_IF([test "x$with_ib" = "xyes"],
        AS_IF([test -d "$mlnx_valg_libdir"],
                [AC_MSG_NOTICE([Added $mlnx_valg_libdir to valgrind LD_LIBRARY_PATH])
                valgrind_libpath="$mlnx_valg_libdir:$valgrind_libpath"])
+
+       # EFA device support
+       AS_IF([test "x$with_efa_dv" != xno],
+             [AC_CHECK_HEADER([infiniband/efadv.h], [], [with_efa_dv=no])])
+
+       AS_IF([test "x$with_efa_dv" != xno],
+             [AC_CHECK_LIB([efa], [efadv_query_device],
+                           [AC_SUBST(LIB_EFA, [-lefa])
+                            AC_DEFINE([HAVE_EFA_DV], [1], [EFA device support])],
+                           [with_efa_dv=no], [-libverbs])])
+
+       AS_IF([test "x$with_efa_dv" != xno],
+             [AC_CHECK_DECLS([EFADV_DEVICE_ATTR_CAPS_RDMA_READ],
+                             [AC_DEFINE([HAVE_DECL_EFA_DV_RDMA_READ], [1], [HAVE EFA device with RDMA READ support])],
+                             [], [[#include <infiniband/efadv.h>]])])
+
        LDFLAGS="$save_LDFLAGS"
        CFLAGS="$save_CFLAGS"
        CPPFLAGS="$save_CPPFLAGS"
@@ -430,6 +454,7 @@ AS_IF([test "x$with_ib" = "xyes"],
         with_ud=no
         with_mlx5_hw=no
         with_mlx5_dv=no
+        with_efa_dv=no
     ])
 
 #
@@ -446,6 +471,7 @@ AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" = xyes])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
 AM_CONDITIONAL([HAVE_EXP],     [test "x$verbs_exp" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
+AM_CONDITIONAL([HAVE_EFA_DV],  [test "x$with_efa_dv" != xno])
 
 uct_ib_modules=""
 m4_include([src/uct/ib/rdmacm/configure.m4])
