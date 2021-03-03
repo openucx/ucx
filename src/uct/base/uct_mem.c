@@ -111,6 +111,10 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
 
         switch (*method) {
         case UCT_ALLOC_METHOD_MD:
+            if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MDS)) {
+                break;
+            }
+
             /* Allocate with one of the specified memory domains */
             for (md_index = 0; md_index < params->mds.count; ++md_index) {
                 alloc_length = length;
