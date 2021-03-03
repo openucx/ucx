@@ -321,6 +321,8 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
 
     dci->txwq.super.verbs.qp = qp;
     dci->txwq.super.qp_num = dci->txwq.super.verbs.qp->qp_num;
+
+init_qp:
 #else
     uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
                                 iface->super.super.config.tx_qp_len,
@@ -330,8 +332,6 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
         return status;
     }
 #endif
-
-init_qp:
     status = uct_rc_txqp_init(&dci->txqp, &iface->super.super,
                               dci->txwq.super.qp_num
                               UCS_STATS_ARG(iface->super.super.stats));
