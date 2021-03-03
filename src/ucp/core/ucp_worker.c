@@ -2854,6 +2854,12 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     int ret;
     khiter_t iter;
 
+    if (ucp_is_uct_ep_failed(uct_ep)) {
+        /* No need to discard failed TL EP, because it may lead to adding the
+         * same UCT EP to the hash of discarded UCT EPs */
+        return;
+    }
+
     req = ucp_request_get(worker);
     if (ucs_unlikely(req == NULL)) {
         ucs_error("unable to allocate request for discarding UCT EP %p "
