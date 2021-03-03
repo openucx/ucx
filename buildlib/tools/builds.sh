@@ -8,6 +8,10 @@ source ${realdir}/../az-helpers.sh
 # Build documentation
 #
 build_docs() {
+	if [ `cat /etc/system-release | grep -i "fedora release 34" | wc -l` -gt 0 ]; then
+		azure_log_warning "Skip build docs on Fedora 34"
+		return 0
+	fi
 	doxy_ready=0
 	doxy_target_version="1.8.11"
 	doxy_version="$(doxygen --version)" || true
