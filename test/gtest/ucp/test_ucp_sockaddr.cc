@@ -99,6 +99,7 @@ public:
                 /* when the "peer failure" error happens, it is followed by: */
                 stop_list.push_back("received event RDMA_CM_EVENT_UNREACHABLE");
                 stop_list.push_back("Connection reset by remote peer");
+                stop_list.push_back("failed to connect to");
                 stop_list.push_back(ucs_status_string(UCS_ERR_UNREACHABLE));
                 stop_list.push_back(ucs_status_string(UCS_ERR_UNSUPPORTED));
             }
@@ -555,8 +556,9 @@ public:
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
 
-            if (err_str.find("on CM lane will not be handled since no error"
-                             " callback is installed") != std::string::npos) {
+            if ((err_str.find("on CM lane will not be handled since no error"
+                              " callback is installed") != std::string::npos) ||
+                (err_str.find("failed to connect to") != std::string::npos)) {
                 UCS_TEST_MESSAGE << "< " << err_str << " >";
                 ++m_err_count;
                 return UCS_LOG_FUNC_RC_STOP;

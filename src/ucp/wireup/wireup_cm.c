@@ -78,15 +78,34 @@ static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
 
 static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
 {
-    ucp_worker_h worker         = ep->worker;
-    ucp_rsc_index_t cm_idx      = ucp_ep_ext_control(ep)->cm_idx;
-    ucp_rsc_index_t next_cm_idx = cm_idx + 1;
-    uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
+    ucp_worker_h worker          = ep->worker;
+    ucp_rsc_index_t cm_idx       = ucp_ep_ext_control(ep)->cm_idx;
+    ucp_rsc_index_t next_cm_idx  = cm_idx + 1;
+    uct_worker_cb_id_t prog_id   = UCS_CALLBACKQ_ID_NULL;
+    ucp_rsc_index_t num_cm_cmpts = ucp_worker_num_cm_cmpts(worker);
+    UCS_STRING_BUFFER_ONSTACK(cms_strb, 64);
+    char addr_str[UCS_SOCKADDR_STRING_LEN];
+    ucp_wireup_ep_t *cm_wireup_ep;
+    int i;
 
-    if (next_cm_idx >= ucp_worker_num_cm_cmpts(worker)) {
-        ucs_debug("reached the end of the cms priority list, no cms left to"
-                  " check (sockaddr_cm=%s, cm_idx=%d).",
-                  ucp_context_cm_name(worker->context, cm_idx), cm_idx);
+    if (next_cm_idx >= num_cm_cmpts) {
+        for (i = 0; i < num_cm_cmpts; ++i) {
+            ucs_string_buffer_appendf(&cms_strb, "%s,",
+                                      ucp_context_cm_name(worker->context, i));
+        }
+        ucs_string_buffer_rtrim(&cms_strb, ",");
+
+        cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+        ucs_assert_always(cm_wireup_ep != NULL);
+
+        ucs_error("client ep %p failed to connect to %s using %s cms, set "
+                  "UCX_LOG_LEVEL=diag for more details",
+                  ep,
+                  ucs_sockaddr_str(
+                          (struct sockaddr*)&cm_wireup_ep->cm_remote_sockaddr,
+                          addr_str, sizeof(addr_str)),
+                  ucs_string_buffer_cstr(&cms_strb));
+
         return 0;
     }
 
@@ -133,12 +152,19 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
     ucp_unpacked_address_t unpacked_addr;
     ucp_address_entry_t *ae;
     unsigned addr_indices[UCP_MAX_RESOURCES];
+    char addr_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
     ucs_assert_always(wireup_ep != NULL);
 
     if (UCS_BITMAP_IS_ZERO_INPLACE(&tl_bitmap)) {
-        ucs_debug("tl_bitmap for %s is empty", dev_name);
+        ucs_diag("client ep %p connect to %s failed: device %s is not enabled, "
+                 "enable it in UCX_NET_DEVICES or use corresponding ip address",
+                 ucp_ep,
+                 ucs_sockaddr_str(
+                         (struct sockaddr*)&wireup_ep->cm_remote_sockaddr,
+                         addr_str, sizeof(addr_str)),
+                 dev_name);
         return UCS_ERR_UNREACHABLE;
     }
 
