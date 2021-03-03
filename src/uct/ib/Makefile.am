@@ -145,6 +145,19 @@ endif # HAVE_MLX5_HW_UD
 
 endif # HAVE_TL_UD
 
+
+if HAVE_EFA_DV
+libuct_ib_la_LDFLAGS +=  $(LIB_EFA)
+
+noinst_HEADERS += \
+	efa/ib_efa.h \
+	efa/ib_efa_dv.h
+
+libuct_ib_la_SOURCES += \
+	efa/ib_efa_dv.c \
+	efa/ib_efa_md.c
+endif # HAVE_EFA_DV
+
 include $(top_srcdir)/config/module.am
 
 endif # HAVE_IB
