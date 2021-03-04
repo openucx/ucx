@@ -53,7 +53,7 @@ jobs:
           ./autogen.sh
           mkdir pkg-build
           cd pkg-build
-          ../contrib/configure-release --with-cuda
+          ../contrib/configure-release --with-cuda --with-java=no
         displayName: Configure
 
       - bash: |
