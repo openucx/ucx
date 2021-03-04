@@ -1,25 +1,30 @@
 # See https://aka.ms/yaml
 # This pipeline to be run on tags creation
 
-pr: none
 trigger:
   tags:
     include:
       - v*
+pr:
+  - master
+  - v*.*.x
 
 resources:
   containers:
     - container: centos7
-      image: ucfconsort.azurecr.io/ucx/centos7:2
-      endpoint: ucfconsort_registry
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.x-cuda11.1:1
     - container: centos7_cuda10_1
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.1:1
     - container: centos7_cuda10_2
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.2:1
-    - container: centos7_cuda11_1
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.x-cuda11.1:1
-    - container: centos8_cuda11_1
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5.x-cuda11.1:1
+    - container: centos7_cuda11_0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda11.0:2
+    - container: centos7_cuda11_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda11.2:2
+    - container: centos8_cuda11_0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5.0-cuda11.0:2
+    - container: centos8_cuda11_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5.1-cuda11.2:2
     - container: ubuntu16_cuda10_1
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5.0-cuda10.1:1
     - container: ubuntu16_cuda10_2
@@ -28,17 +33,47 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.1:1
     - container: ubuntu18_cuda10_2
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.2:1
-    - container: ubuntu18_cuda11_1
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda11.1:1
-    - container: ubuntu20_cuda11_1
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.x-cuda11.1:1
+    - container: ubuntu18_cuda11_0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda11.0:2
+    - container: ubuntu18_cuda11_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda11.2:2
+    - container: ubuntu20_cuda11_0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.0-cuda11.0:2
+    - container: ubuntu20_cuda11_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.0-cuda11.2:2
 
 stages:
+  - stage: Check_Commit
+    jobs:
+      - job: Check
+        steps:
+          - checkout: self
+            clean: true
+
+          - bash: |
+              set -eEx
+              echo "Get commit message target $(system.pullRequest.sourceCommitId)"
+              title=`git log -1 --format="%s" $(system.pullRequest.sourceCommitId)`
+              if [[ "$title" == "AZP/RELEASE: "* ]]
+              then
+                  echo Yes
+                  echo "##vso[task.setvariable variable=Title;isOutput=true]Yes"
+              else
+                  echo No
+                  echo "##vso[task.setvariable variable=Title;isOutput=true]No"
+              fi
+            name: Commit
   # Create an empty draft to avoid race condition in distro releases
   - stage: GitHubDraft
+    dependsOn: Check_Commit
     jobs:
       - job: DraftRelease
+        condition: or(eq(variables['Build.Reason'], 'ResourceTrigger'), and(eq(stageDependencies.Check_Commit.Check.outputs['Commit.Title'], 'Yes'), eq(variables['Build.Reason'], 'PullRequest')))
         container: centos7
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
         steps:
         - checkout: self
           clean: true
@@ -56,6 +91,7 @@ stages:
           displayName: Build tarball
 
         - task: GithubRelease@0
+          condition: eq(variables['Build.Reason'], 'ResourceTrigger')
           displayName: Create/edit GitHub Draft Release
           inputs:
             githubConnection: release
@@ -72,6 +108,7 @@ stages:
               ./rpm-dist/ucx-*.src.rpm
 
   - stage: Release
+    dependsOn: Check_Commit
     jobs:
       - template: az-distro-release.yml
       - template: jucx/jucx-publish.yml

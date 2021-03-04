@@ -54,7 +54,8 @@ stages:
 
           - bash: |
               set -eE
-              range="remotes/origin/$(System.PullRequest.TargetBranch)..$(Build.SourceVersion)"
+              BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+              range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
               ok=1
               for sha1 in `git log $range --format="%h"`
               do
