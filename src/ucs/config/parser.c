@@ -937,8 +937,8 @@ void ucs_config_help_allow_list(char *buf, size_t max, const void *arg)
 
     snprintf(
         buf,
-        max, "comma-separated list (use \"all\" for including \
-              all items or \'^\' for negation) of: ");
+        max, "comma-separated list (use \"all\" for including "
+             "all items or \'^\' for negation) of: ");
     array->parser.help(buf + strlen(buf), max - strlen(buf), array->parser.arg);
 }
 
