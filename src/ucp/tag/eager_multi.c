@@ -311,6 +311,7 @@ static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self
 
     return ucp_proto_multi_zcopy_progress(req, req->send.proto_config->priv,
                                           ucp_proto_eager_multi_request_init,
+                                          UCT_MD_MEM_ACCESS_LOCAL_READ,
                                           ucp_proto_eager_zcopy_multi_send_func,
                                           ucp_proto_request_zcopy_completion);
 }

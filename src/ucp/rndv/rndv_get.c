@@ -90,6 +90,7 @@ static ucs_status_t ucp_proto_rndv_get_zcopy_progress(uct_pending_req_t *self)
                                            ucp_proto_rndv_get_complete);
     } else {
         return ucp_proto_multi_zcopy_progress(req, &rpriv->mpriv, NULL,
+                                              UCT_MD_MEM_ACCESS_LOCAL_WRITE,
                                               ucp_proto_rndv_get_zcopy_send_func,
                                               ucp_proto_rndv_get_completion);
     }

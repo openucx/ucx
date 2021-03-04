@@ -146,18 +146,17 @@ ucp_proto_multi_bcopy_progress(ucp_request_t *req,
     return ucp_proto_multi_progress(req, mpriv, send_func, comp_func, UINT_MAX);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_multi_zcopy_progress(ucp_request_t *req,
-                               const ucp_proto_multi_priv_t *mpriv,
-                               ucp_proto_init_cb_t init_func,
-                               ucp_proto_send_multi_cb_t send_func,
-                               uct_completion_callback_t comp_func)
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
+        ucp_request_t *req, const ucp_proto_multi_priv_t *mpriv,
+        ucp_proto_init_cb_t init_func, unsigned uct_mem_flags,
+        ucp_proto_send_multi_cb_t send_func,
+        uct_completion_callback_t comp_func)
 {
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_proto_request_zcopy_init(req, mpriv->reg_md_map,
-                                              comp_func);
+        status = ucp_proto_request_zcopy_init(req, mpriv->reg_md_map, comp_func,
+                                              uct_mem_flags);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK; /* remove from pending after request is completed */

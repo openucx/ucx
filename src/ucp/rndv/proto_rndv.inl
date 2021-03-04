@@ -32,7 +32,9 @@ ucp_proto_rndv_rts_request_init(ucp_request_t *req)
     }
 
     status = ucp_datatype_iter_mem_reg(ep->worker->context,
-                                       &req->send.state.dt_iter, rpriv->md_map);
+                                       &req->send.state.dt_iter, rpriv->md_map,
+                                       UCT_MD_MEM_ACCESS_RMA |
+                                       UCT_MD_MEM_FLAG_HIDE_ERRORS);
     if (status != UCS_OK) {
         return status;
     }

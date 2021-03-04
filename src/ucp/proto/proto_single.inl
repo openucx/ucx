@@ -78,7 +78,7 @@ ucp_proto_am_bcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_zcopy_single_progress(ucp_request_t *req,
+ucp_proto_zcopy_single_progress(ucp_request_t *req, unsigned uct_mem_flags,
                                 ucp_proto_send_single_cb_t send_func,
                                 const char *name)
 {
@@ -93,7 +93,8 @@ ucp_proto_zcopy_single_progress(ucp_request_t *req,
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         md_map = (spriv->reg_md == UCP_NULL_RESOURCE) ? 0 : UCS_BIT(spriv->reg_md);
         status = ucp_proto_request_zcopy_init(req, md_map,
-                                              ucp_proto_request_zcopy_completion);
+                                              ucp_proto_request_zcopy_completion,
+                                              uct_mem_flags);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK; /* remove from pending after request is completed */

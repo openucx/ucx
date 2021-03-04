@@ -188,8 +188,9 @@ ucp_proto_eager_tag_offload_zcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    return ucp_proto_zcopy_single_progress(
-            req, ucp_proto_tag_offload_zcopy_send_func, "tag_eager_zcopy");
+    return ucp_proto_zcopy_single_progress(req, UCT_MD_MEM_ACCESS_LOCAL_READ,
+                                           ucp_proto_tag_offload_zcopy_send_func,
+                                           "tag_eager_zcopy");
 }
 
 static ucp_proto_t ucp_eager_zcopy_single_proto = {
