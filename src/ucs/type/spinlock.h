@@ -9,6 +9,7 @@
 #define UCS_SPINLOCK_H
 
 #include <ucs/type/status.h>
+#include <ucs/async/async_fwd.h>
 #include <pthread.h>
 #include <errno.h>
 
@@ -38,8 +39,6 @@ typedef struct ucs_recursive_spinlock {
     pthread_t      owner;
 } ucs_recursive_spinlock_t;
 
-#define UCS_SPINLOCK_OWNER_NULL ((pthread_t)-1)
-
 
 static ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock, int flags)
 {
@@ -63,7 +62,7 @@ static inline ucs_status_t
 ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock, int flags)
 {
     lock->count = 0;
-    lock->owner = UCS_SPINLOCK_OWNER_NULL;
+    lock->owner = UCS_ASYNC_PTHREAD_ID_NULL;
 
     return ucs_spinlock_init(&lock->super, flags);
 }
@@ -73,7 +72,8 @@ void ucs_spinlock_destroy(ucs_spinlock_t *lock);
 void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock);
 
 static inline int
-ucs_recursive_spin_is_owner(ucs_recursive_spinlock_t *lock, pthread_t self)
+ucs_recursive_spin_is_owner(const ucs_recursive_spinlock_t *lock,
+                            pthread_t self)
 {
     return lock->owner == self;
 }
@@ -133,7 +133,7 @@ static inline void ucs_recursive_spin_unlock(ucs_recursive_spinlock_t *lock)
 {
     --lock->count;
     if (lock->count == 0) {
-        lock->owner = UCS_SPINLOCK_OWNER_NULL;
+        lock->owner = UCS_ASYNC_PTHREAD_ID_NULL;
         ucs_spin_unlock(&lock->super);
     }
 }

@@ -90,12 +90,31 @@ static inline int ucs_async_check_miss(ucs_async_context_t *async)
     return 0;
 }
 
+/**
+ * Returns whether a context blocked or not.
+ *
+ * @param async Event context to check `is_blocked` status for.
+ */
+static inline int ucs_async_is_blocked(const ucs_async_context_t *async)
+{
+    if (async->mode == UCS_ASYNC_MODE_THREAD_SPINLOCK) {
+        return ucs_recursive_spin_is_owner(&async->thread.spinlock,
+                                           pthread_self());
+    } else if (async->mode == UCS_ASYNC_MODE_THREAD_MUTEX) {
+        return ucs_recursive_mutex_is_blocked(&async->thread.mutex);
+    } else if (async->mode == UCS_ASYNC_MODE_SIGNAL) {
+        return UCS_ASYNC_SIGNAL_IS_RECURSIVELY_BLOCKED(async);
+    }
+
+    return async->poll_block > 0;
+}
+
 
 /**
  * Block the async handler (if its currently running, wait until it exits and
  * block it then). Used to serialize accesses with the async handler.
  *
- * @param event Event context to block events for.
+ * @param _async Event context to block events for.
  * @note This function might wait until a currently running callback returns.
  */
 #define UCS_ASYNC_BLOCK(_async) \
@@ -103,7 +122,7 @@ static inline int ucs_async_check_miss(ucs_async_context_t *async)
         if ((_async)->mode == UCS_ASYNC_MODE_THREAD_SPINLOCK) { \
             ucs_recursive_spin_lock(&(_async)->thread.spinlock); \
         } else if ((_async)->mode == UCS_ASYNC_MODE_THREAD_MUTEX) { \
-            (void)pthread_mutex_lock(&(_async)->thread.mutex); \
+            ucs_recursive_mutex_block(&(_async)->thread.mutex); \
         } else if ((_async)->mode == UCS_ASYNC_MODE_SIGNAL) { \
             UCS_ASYNC_SIGNAL_BLOCK(_async); \
         } else { \
@@ -115,14 +134,14 @@ static inline int ucs_async_check_miss(ucs_async_context_t *async)
 /**
  * Unblock asynchronous event delivery, and invoke pending callbacks.
  *
- * @param event Event context to unblock events for.
+ * @param _async Event context to unblock events for.
  */
 #define UCS_ASYNC_UNBLOCK(_async) \
     do { \
         if ((_async)->mode == UCS_ASYNC_MODE_THREAD_SPINLOCK) { \
             ucs_recursive_spin_unlock(&(_async)->thread.spinlock); \
         } else if ((_async)->mode == UCS_ASYNC_MODE_THREAD_MUTEX) { \
-            (void)pthread_mutex_unlock(&(_async)->thread.mutex); \
+            ucs_recursive_mutex_unblock(&(_async)->thread.mutex); \
         } else if ((_async)->mode == UCS_ASYNC_MODE_SIGNAL) { \
             UCS_ASYNC_SIGNAL_UNBLOCK(_async); \
         } else { \
