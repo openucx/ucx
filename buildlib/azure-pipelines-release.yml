@@ -51,7 +51,7 @@ stages:
         - bash: |
             set -eE
             gcc --version
-            ./contrib/configure-release
+            ./contrib/configure-release --with-java=no
             ./contrib/buildrpm.sh -s -t -b
           displayName: Build tarball
 
