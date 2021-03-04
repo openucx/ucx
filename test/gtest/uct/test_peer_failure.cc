@@ -8,6 +8,12 @@
 
 #include "test_peer_failure.h"
 
+#if HAVE_CUDA
+extern "C" {
+#include <uct/cuda/cuda_ipc/cuda_ipc_ep.h>
+}
+#endif
+
 
 size_t test_uct_peer_failure::m_req_purge_count       = 0ul;
 const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
@@ -466,10 +472,78 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_multiple)
 
+class test_uct_keepalive : public ucs::test {
+public:
+    test_uct_keepalive()
+    {
+        m_ka        = NULL;
+        m_pid       = getpid();
+        m_starttime = 0;
+
+        uct_ep_get_process_proc_dir(m_proc, sizeof(m_proc), m_pid);
+        ucs_sys_get_file_time(m_proc, UCS_SYS_FILE_TIME_CTIME, &m_starttime);
+    }
+
+    void init()
+    {
+        m_err_handler_count = 0;
+
+        m_ka = uct_ep_keepalive_create(m_pid, m_starttime);
+        ASSERT_TRUE(m_ka != NULL);
+    }
+
+    void cleanup()
+    {
+        ucs_free(m_ka);
+    }
+
+    static ucs_status_t
+    err_handler_cb(void *arg, uct_ep_h ep, ucs_status_t status)
+    {
+        m_err_handler_count++;
+        return status;
+    }
+
+protected:
+    uct_keepalive_info_t *m_ka;
+    pid_t                m_pid;
+    char                 m_proc[32];
+    ucs_time_t           m_starttime;
+    static unsigned      m_err_handler_count;
+};
+
+
+unsigned test_uct_keepalive::m_err_handler_count = 0;
+
+
+UCS_TEST_F(test_uct_keepalive, ep_check)
+{
+    uct_base_iface_t iface = {};
+    uct_ep_t ep            = {};
+
+    iface.err_handler     = err_handler_cb;
+    iface.err_handler_arg = &m_err_handler_count;
+    ep.iface              = &iface.super;
+
+    for (unsigned i = 0; i < 10; ++i) {
+        ucs_status_t status = uct_ep_keepalive_check(&ep, m_ka, 0, NULL);
+        EXPECT_UCS_OK(status);
+    }
+
+    /* change start time saved in KA to force an error from EP check */
+    m_ka->start_time--;
+
+    ucs_status_t status = uct_ep_keepalive_check(&ep, m_ka, 0, NULL);
+    EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
+    EXPECT_EQ(1u, m_err_handler_count);
+}
+
+
 class test_uct_peer_failure_keepalive : public test_uct_peer_failure
 {
 public:
-    test_uct_peer_failure_keepalive() {
+    test_uct_peer_failure_keepalive()
+    {
         m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
     }
 
@@ -479,11 +553,25 @@ public:
          * peer EP, but instead we bit change process owner info to force
          * ep_check failure. Simulation of case when peer process is
          * terminated and PID is immediately reused by another process */
-        uct_ep_h tl_ep = ep0();
+        uct_ep_h tl_ep                = ep0();
+        uct_keepalive_info_t *ka_info = NULL;
+
         if (has_mm()) {
             uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
-            ASSERT_NE((void*)NULL, ep->keepalive);
-            ep->keepalive->starttime--;
+
+            ka_info = ep->keepalive;
+            ASSERT_TRUE(ka_info != NULL);
+        } else if (has_cuda_ipc()) {
+#if HAVE_CUDA
+            uct_cuda_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
+
+            ka_info = ep->keepalive;
+            ASSERT_TRUE(ka_info != NULL);
+#endif
+        }
+
+        if (ka_info != NULL) {
+            ka_info->start_time--;
         }
 
         test_uct_peer_failure::kill_receiver();
@@ -523,3 +611,4 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed,
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_peer_failure_keepalive)
+_UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_keepalive, cuda_ipc);

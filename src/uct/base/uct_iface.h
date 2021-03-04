@@ -249,6 +249,15 @@ typedef struct uct_failed_iface {
 
 
 /**
+ * Keepalive info used by EP
+ */
+typedef struct uct_keepalive_info {
+    ucs_time_t start_time; /* Process start time */
+    char       proc[]; /* Process owner proc dir */
+} uct_keepalive_info_t;
+
+
+/**
  * Base structure of all endpoints.
  */
 typedef struct uct_base_ep {
@@ -710,5 +719,13 @@ void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
 
 ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *iov,
                                       size_t iovcnt);
+
+int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid);
+
+uct_keepalive_info_t* uct_ep_keepalive_create(pid_t pid, ucs_time_t start_time);
+
+ucs_status_t
+uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
+                       uct_completion_t *comp);
 
 #endif

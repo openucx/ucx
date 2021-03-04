@@ -88,7 +88,7 @@ UCS_STATIC_CLEANUP {
     ucs_recursive_spinlock_destroy(&uct_xpmem_remote_mem_lock);
 }
 
-static ucs_status_t uct_xpmem_query()
+static ucs_status_t uct_xpmem_query(int *attach_shm_file_p)
 {
     int version;
 
@@ -100,6 +100,9 @@ static ucs_status_t uct_xpmem_query()
     }
 
     ucs_debug("xpmem version: %d", version);
+
+    *attach_shm_file_p = 0;
+
     return UCS_OK;
 }
 
@@ -538,12 +541,12 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
         .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
         .detect_memory_type     = ucs_empty_function_return_unsupported
     },
-   .query                       = uct_xpmem_query,
-   .iface_addr_length           = uct_xpmem_iface_addr_length,
-   .iface_addr_pack             = uct_xpmem_iface_addr_pack,
-   .mem_attach                  = uct_xpmem_mem_attach,
-   .mem_detach                  = uct_xpmem_mem_detach,
-   .is_reachable                = ucs_empty_function_return_one_int
+    .query             = uct_xpmem_query,
+    .iface_addr_length = uct_xpmem_iface_addr_length,
+    .iface_addr_pack   = uct_xpmem_iface_addr_pack,
+    .mem_attach        = uct_xpmem_mem_attach,
+    .mem_detach        = uct_xpmem_mem_detach,
+    .is_reachable      = ucs_empty_function_return_one_int
 };
 
 UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,

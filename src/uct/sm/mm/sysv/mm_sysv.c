@@ -139,6 +139,12 @@ uct_sysv_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
     return UCS_OK;
 }
 
+static ucs_status_t uct_sysv_query(int *attach_shm_file_p)
+{
+    *attach_shm_file_p = 1;
+    return UCS_OK;
+}
+
 static ucs_status_t uct_sysv_mem_attach(uct_mm_md_t *md, uct_mm_seg_id_t seg_id,
                                         size_t length, const void *iface_addr,
                                         uct_mm_remote_seg_t *rseg)
@@ -176,7 +182,7 @@ uct_sysv_rkey_release(uct_component_t *component, uct_rkey_t rkey, void *handle)
 }
 
 static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
-   .super = {
+    .super = {
         .close                  = uct_mm_md_close,
         .query                  = uct_sysv_md_query,
         .mem_alloc              = uct_sysv_mem_alloc,
@@ -188,12 +194,12 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
         .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
         .detect_memory_type     = ucs_empty_function_return_unsupported
     },
-   .query                       = ucs_empty_function_return_success,
-   .iface_addr_length           = ucs_empty_function_return_zero_size_t,
-   .iface_addr_pack             = ucs_empty_function_return_success,
-   .mem_attach                  = uct_sysv_mem_attach,
-   .mem_detach                  = uct_sysv_mem_detach,
-   .is_reachable                = ucs_empty_function_return_one_int
+    .query             = uct_sysv_query,
+    .iface_addr_length = ucs_empty_function_return_zero_size_t,
+    .iface_addr_pack   = ucs_empty_function_return_success,
+    .mem_attach        = uct_sysv_mem_attach,
+    .mem_detach        = uct_sysv_mem_detach,
+    .is_reachable      = ucs_empty_function_return_one_int
 };
 
 UCT_MM_TL_DEFINE(sysv, &uct_sysv_md_ops, uct_sysv_rkey_unpack,

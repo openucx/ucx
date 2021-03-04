@@ -120,6 +120,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uct_mm_md_t    *md    = ucs_derived_of(iface->super.super.md, uct_mm_md_t);
+    int attach_shm_file;
+    ucs_status_t status;
 
     uct_base_iface_query(&iface->super.super, iface_attr);
 
@@ -161,8 +163,20 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_AM_BCOPY            |
                                           UCT_IFACE_FLAG_PENDING             |
                                           UCT_IFACE_FLAG_CB_SYNC             |
-                                          UCT_IFACE_FLAG_EP_CHECK            |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+
+    status = uct_mm_md_mapper_ops(md)->query(&attach_shm_file);
+    ucs_assert_always(status == UCS_OK);
+    if (attach_shm_file) {
+        /*
+         * Only MM tranports with attaching to SHM file can support error
+         * handling mechanisms (e.g. EP checking) to check if a peer was down,
+         * there is no safe way to check a process existence (touching a shared
+         * memory block of a peer leads to "bus" error in case of a peer is
+         * down) */
+        iface_attr->cap.flags |= UCT_IFACE_FLAG_EP_CHECK;
+    }
+
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP     |
                                           UCT_IFACE_FLAG_EVENT_RECV          |
                                           UCT_IFACE_FLAG_EVENT_FD;
@@ -666,12 +680,12 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     self->read_index_elem          = UCT_MM_IFACE_GET_FIFO_ELEM(self,
                                                                 self->recv_fifo_elems,
                                                                 self->read_index);
-    uct_sm_ep_get_process_proc_dir(proc, sizeof(proc),
-                                   self->recv_fifo_ctl->owner.pid);
+    uct_ep_get_process_proc_dir(proc, sizeof(proc),
+                                self->recv_fifo_ctl->owner.pid);
     status = ucs_sys_get_file_time(proc, UCS_SYS_FILE_TIME_CTIME,
-                                   &self->recv_fifo_ctl->owner.starttime);
+                                   &self->recv_fifo_ctl->owner.start_time);
     if (status != UCS_OK) {
-        ucs_error("mm_iface failed to get process starttime");
+        ucs_error("mm_iface failed to get process start time");
         return status;
     }
 

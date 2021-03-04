@@ -82,6 +82,12 @@ static int uct_posix_use_shm_open(const uct_posix_md_config_t *posix_config)
     return !strcmp(posix_config->dir, UCT_POSIX_SHM_OPEN_DIR);
 }
 
+static ucs_status_t uct_posix_query(int *attach_shm_file_p)
+{
+    *attach_shm_file_p = 1;
+    return UCS_OK;
+}
+
 static size_t uct_posix_iface_addr_length(uct_mm_md_t *md)
 {
     const uct_posix_md_config_t *posix_config =
@@ -667,12 +673,12 @@ static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
         .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
         .detect_memory_type     = ucs_empty_function_return_unsupported
     },
-   .query                       = ucs_empty_function_return_success,
-   .iface_addr_length           = uct_posix_iface_addr_length,
-   .iface_addr_pack             = uct_posix_iface_addr_pack,
-   .mem_attach                  = uct_posix_mem_attach,
-   .mem_detach                  = uct_posix_mem_detach,
-   .is_reachable                = uct_posix_is_reachable
+    .query             = uct_posix_query,
+    .iface_addr_length = uct_posix_iface_addr_length,
+    .iface_addr_pack   = uct_posix_iface_addr_pack,
+    .mem_attach        = uct_posix_mem_attach,
+    .mem_detach        = uct_posix_mem_detach,
+    .is_reachable      = uct_posix_is_reachable
 };
 
 UCT_MM_TL_DEFINE(posix, &uct_posix_md_ops, uct_posix_rkey_unpack,

@@ -615,6 +615,10 @@ bool uct_test::has_mm() const {
             has_transport("xpmem"));
 }
 
+bool uct_test::has_cuda_ipc() const {
+    return has_transport("cuda_ipc");
+}
+
 bool uct_test::has_cma() const {
     return has_transport("cma");
 }
