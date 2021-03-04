@@ -24,6 +24,18 @@
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
 
+static UCS_F_ALWAYS_INLINE void
+ucp_add_uct_iov_elem(uct_iov_t *iov, void *buffer, size_t length,
+                     uct_mem_h memh, size_t *iov_cnt)
+{
+    iov[*iov_cnt].buffer = buffer;
+    iov[*iov_cnt].length = length;
+    iov[*iov_cnt].count  = 1;
+    iov[*iov_cnt].stride = 0;
+    iov[*iov_cnt].memh   = memh;
+    ++(*iov_cnt);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
                        uct_pack_callback_t pack_cb)
@@ -243,12 +255,9 @@ ucs_status_t ucp_am_zcopy_common(ucp_request_t *req, const void *hdr,
 
         ucs_assert(user_hdr_desc != NULL);
 
-        iov[iovcnt].buffer = user_hdr_desc + 1;
-        iov[iovcnt].length = user_hdr_size;
-        iov[iovcnt].memh   = ucp_memh2uct(user_hdr_desc->memh, md_idx);
-        iov[iovcnt].stride = 0;
-        iov[iovcnt].count  = 1;
-        ++iovcnt;
+        ucp_add_uct_iov_elem(iov, user_hdr_desc + 1, user_hdr_size,
+                             ucp_memh2uct(user_hdr_desc->memh, md_idx),
+                             &iovcnt);
     }
 
     return uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,

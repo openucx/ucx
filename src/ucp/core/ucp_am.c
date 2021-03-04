@@ -23,9 +23,6 @@
 #include <ucs/datastruct/array.inl>
 
 
-#define UCP_AM_SHORT_REPLY_MAX_SIZE  ((ssize_t)(UCS_ALLOCA_MAX_SIZE - \
-                                      sizeof(ucs_ptr_map_key_t)))
-
 UCS_ARRAY_IMPL(ucp_am_cbs, unsigned, ucp_am_entry_t, static)
 
 ucs_status_t ucp_am_init(ucp_worker_h worker)
@@ -491,74 +488,42 @@ ucp_am_bcopy_pack_args_mid(void *dest, void *arg)
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_send_short(ucp_ep_h ep, uint16_t id, uint16_t flags, const void *header,
-                  size_t header_length, const void *payload, size_t length)
+                  size_t header_length, const void *payload, size_t length,
+                  int is_reply)
 {
-    uct_ep_h am_ep = ucp_ep_get_am_uct_ep(ep);
-    ucp_am_hdr_t hdr;
-    void *sbuf;
-
-    /*
-     * short can't be used if both header and payload are provided
-     * (to avoid packing on fast path)
-     * TODO: enable short protocol for such cases when uct_am_short_iov is
-     * defined in UCT
-     */
-    ucs_assert((length == 0ul) || (header_length == 0ul));
-    ucs_assert(!(flags & UCP_AM_SEND_REPLY));
-    ucp_am_fill_short_header(&hdr, id, flags, header_length);
-
-    sbuf = (header_length != 0) ? (void*)header : (void*)payload;
-
-    return uct_ep_am_short(am_ep, UCP_AM_ID_SINGLE, hdr.u64, sbuf,
-                           length + header_length);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_am_send_short_reply(ucp_ep_h ep, uint16_t id, uint16_t flags,
-                        const void *header, size_t header_length,
-                        const void *payload, size_t length)
-{
-    size_t tx_length;
-    ucp_am_hdr_t hdr;
-    const void *data;
-    void *tx_buffer;
+    size_t iov_cnt = 0ul;
+    size_t am_hdr_size;
+    uct_iov_t iov[3];
+    uint8_t am_id;
+    ucp_am_reply_hdr_t am_hdr;
     ucs_status_t status;
 
-    ucs_assert(flags & UCP_AM_SEND_REPLY);
-    ucs_assert((length == 0ul) || (header_length == 0ul));
+    ucp_am_fill_short_header(&am_hdr.super, id, flags, header_length);
+    if (is_reply) {
+        status = ucp_ep_resolve_remote_id(ep, ep->am_lane);
+        if (ucs_unlikely(status != UCS_OK)) {
+            return status;
+        }
 
-    status = ucp_ep_resolve_remote_id(ep, ep->am_lane);
-    if (ucs_unlikely(status != UCS_OK)) {
-        return status;
+        am_hdr.ep_id = ucp_ep_remote_id(ep);
+        am_hdr_size  = sizeof(ucp_am_reply_hdr_t);
+        am_id        = UCP_AM_ID_SINGLE_REPLY;
+    } else {
+        am_hdr_size = sizeof(ucp_am_hdr_t);
+        am_id       = UCP_AM_ID_SINGLE;
     }
+
+    ucp_add_uct_iov_elem(iov, &am_hdr, am_hdr_size, UCT_MEM_HANDLE_NULL,
+                         &iov_cnt);
+    ucp_add_uct_iov_elem(iov, (void*)payload, length, UCT_MEM_HANDLE_NULL,
+                         &iov_cnt);
 
     if (header_length != 0) {
-        tx_length = header_length;
-        data      = header;
-    } else {
-        tx_length = length;
-        data      = payload;
+        ucp_add_uct_iov_elem(iov, (void*)header, header_length,
+                             UCT_MEM_HANDLE_NULL, &iov_cnt);
     }
 
-    /* Reply protocol carries ep_id in its header in addition to AM short
-     * header. UCT AM short protocol accepts only 8 bytes header, so add ep_id
-     * right before the data.
-     * TODO: Use uct_ep_am_short_iov instead, when it is defined in UCT
-     */
-    UCS_STATIC_ASSERT(ucs_offsetof(ucp_am_reply_hdr_t, ep_id) == sizeof(hdr));
-
-    tx_buffer = ucs_alloca(tx_length + sizeof(ucs_ptr_map_key_t));
-
-    *((ucs_ptr_map_key_t*)tx_buffer) = ucp_ep_remote_id(ep);
-
-    ucp_am_fill_short_header(&hdr, id, flags, header_length);
-
-    memcpy(UCS_PTR_BYTE_OFFSET(tx_buffer, sizeof(ucs_ptr_map_key_t)),
-           data, tx_length);
-
-    return uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_SINGLE_REPLY,
-                           hdr.u64, tx_buffer,
-                           tx_length + sizeof(ucs_ptr_map_key_t));
+    return uct_ep_am_short_iov(ucp_ep_get_am_uct_ep(ep), am_id, iov, iov_cnt);
 }
 
 static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
@@ -572,7 +537,7 @@ static ucs_status_t ucp_am_contig_short(uct_pending_req_t *self)
                                        req->send.msg_proto.am.flags,
                                        req->send.msg_proto.am.header,
                                        req->send.msg_proto.am.header_length,
-                                       req->send.buffer, req->send.length);
+                                       req->send.buffer, req->send.length, 0);
     return ucp_am_short_handle_status_from_pending(req, status);
 }
 
@@ -583,11 +548,11 @@ static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
     ucs_status_t status;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
-    status         = ucp_am_send_short_reply(ep, req->send.msg_proto.am.am_id,
-                                             req->send.msg_proto.am.flags,
-                                             req->send.msg_proto.am.header,
-                                             req->send.msg_proto.am.header_length,
-                                             req->send.buffer, req->send.length);
+    status         = ucp_am_send_short(ep, req->send.msg_proto.am.am_id,
+                                       req->send.msg_proto.am.flags,
+                                       req->send.msg_proto.am.header,
+                                       req->send.msg_proto.am.header_length,
+                                       req->send.buffer, req->send.length, 1);
     return ucp_am_short_handle_status_from_pending(req, status);
 }
 
@@ -910,28 +875,18 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
                       const void *header, size_t header_length,
-                      const void *buffer, size_t length)
+                      const void *buffer, size_t length,
+                      const ucp_memtype_thresh_t *max_eager_short)
 {
-    if (ucs_unlikely(((length != 0) && (header_length != 0)) ||
-                     (flags & UCP_AM_SEND_FLAG_RNDV))) {
-        goto out;
+    if (ucs_unlikely(flags & UCP_AM_SEND_FLAG_RNDV)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
-    if (ucs_unlikely(!ucp_proto_is_inline(ep,
-                                          &ucp_ep_config(ep)->am_u.max_eager_short,
-                                          length + header_length))) {
-        goto out;
+    if (ucp_proto_is_inline(ep, max_eager_short, header_length + length)) {
+        return ucp_am_send_short(ep, id, flags, header, header_length, buffer,
+                                 length, flags & UCP_AM_SEND_REPLY);
     }
 
-    if (!(flags & UCP_AM_SEND_REPLY)) {
-        return ucp_am_send_short(ep, id, flags, header, header_length,
-                                 buffer, length);
-    } else if ((length + header_length) < UCP_AM_SHORT_REPLY_MAX_SIZE) {
-        return ucp_am_send_short_reply(ep, id, flags, header, header_length,
-                                       buffer, length);
-    }
-
-out:
     return UCS_ERR_NO_RESOURCE;
 }
 
@@ -947,7 +902,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     ucp_request_t *req;
     uint32_t attr_mask;
     uint32_t flags;
-    ssize_t max_short;
+    ucp_memtype_thresh_t *max_short;
+    const ucp_request_send_proto_t *proto;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
@@ -959,9 +915,17 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     attr_mask = param->op_attr_mask &
                 (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
 
+    if (flags & UCP_AM_SEND_REPLY) {
+        max_short = &ucp_ep_config(ep)->am_u.max_reply_eager_short;
+        proto     = ucp_ep_config(ep)->am_u.reply_proto;
+    } else {
+        max_short = &ucp_ep_config(ep)->am_u.max_eager_short;
+        proto     = ucp_ep_config(ep)->am_u.proto;
+    }
+
     if (ucs_likely(attr_mask == 0)) {
         status = ucp_am_try_send_short(ep, id, flags, header, header_length,
-                                       buffer, count);
+                                       buffer, count, max_short);
         ucp_request_send_check_status(status, ret, goto out);
         datatype = ucp_dt_make_contig(1);
     } else if (attr_mask == UCP_OP_ATTR_FIELD_DATATYPE) {
@@ -970,7 +934,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
             status = ucp_am_try_send_short(ep, id, flags, header,
                                            header_length, buffer,
                                            ucp_contig_dt_length(datatype,
-                                                                count));
+                                                                count),
+                                           max_short);
             ucp_request_send_check_status(status, ret, goto out);
         }
     } else {
@@ -998,17 +963,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     /* Note that max_eager_short.memtype_on is always initialized to real
      * max_short value
      */
-    max_short = ucp_ep_config(ep)->am_u.max_eager_short.memtype_on;
-
-    if (flags & UCP_AM_SEND_REPLY) {
-        ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
-                              ucp_ep_config(ep)->am_u.reply_proto,
-                              ucs_min(max_short, UCP_AM_SHORT_REPLY_MAX_SIZE),
-                              flags);
-    } else {
-        ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
-                              ucp_ep_config(ep)->am_u.proto, max_short, flags);
-    }
+    ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param, proto,
+                          max_short->memtype_on, flags);
 
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
