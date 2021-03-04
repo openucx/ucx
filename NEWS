@@ -81,6 +81,7 @@
 * Added UCS memory type constants
 * Added support build on Java10+
 * Added support for io-vector datatype.
+* Removed libjucx from packages.
 #### Tests
 * Added CI for CUDA 11
 * Added test_ucp_sockaddr_protocols.stream_short
