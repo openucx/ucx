@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/vfs/sock/vfs_sock.h>
 }
 
@@ -105,4 +106,50 @@ UCS_TEST_F(test_vfs_sock, send_recv_nop) {
     ucs_vfs_sock_message_t msg_out = {};
     do_send_recv(UCS_VFS_SOCK_ACTION_NOP, m_sockets[0], m_sockets[1], -1,
                  &msg_out);
+}
+
+class test_vfs_obj : public ucs::test {
+public:
+    static void show_info(void *obj, ucs_string_buffer_t *strb)
+    {
+        ucs_string_buffer_appendf(strb, "info");
+    }
+};
+
+UCS_MT_TEST_F(test_vfs_obj, simple_obj_tree, 4) {
+    char obj1, obj2, obj3, obj4;
+
+    /**
+     * obj1
+     * |
+     * |____obj2
+     * |    |
+     * |    |____obj3
+     * |
+     * |____obj4
+     */
+
+    ucs_vfs_obj_add_dir(NULL, &obj1, "obj1");
+    ucs_vfs_obj_add_dir(&obj1, &obj2, "obj2");
+    ucs_vfs_obj_add_dir(&obj2, &obj3, "obj3");
+    ucs_vfs_obj_add_dir(&obj1, &obj4, "obj4");
+    ucs_vfs_obj_remove(&obj1);
+}
+
+UCS_MT_TEST_F(test_vfs_obj, add_ro_file, 4) {
+    char obj;
+
+    ucs_vfs_obj_add_dir(NULL, &obj, "obj");
+    ucs_vfs_obj_add_ro_file(&obj, test_vfs_obj::show_info, "info");
+    ucs_vfs_obj_remove(&obj);
+}
+
+UCS_MT_TEST_F(test_vfs_obj, remove_middle_obj, 4) {
+    char obj1, obj2, obj3;
+
+    ucs_vfs_obj_add_dir(NULL, &obj1, "obj1");
+    ucs_vfs_obj_add_dir(&obj1, &obj2, "subdir/obj2");
+    ucs_vfs_obj_add_dir(&obj2, &obj3, "obj3");
+    ucs_vfs_obj_remove(&obj2);
+    ucs_vfs_obj_remove(&obj1);
 }
