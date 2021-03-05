@@ -1070,10 +1070,31 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     ucs_list_head_init(&self->lru.list);
     ucs_spinlock_init(&self->lru.lock, 0);
 
+    if (ucs_global_opts.rcache_ext_validate == UCS_CONFIG_ON) {
+        self->ext_validate = 1;
+    } else {
+        /* auto might set this back to 1 based on memory hooks */
+        self->ext_validate = 0;
+    }
+
     status = ucm_set_event_handler(params->ucm_events, params->ucm_event_priority,
                                    ucs_rcache_unmapped_callback, self);
     if (status != UCS_OK) {
-        goto err_destroy_mp;
+        /* try again without MEM_TYPE events */
+        int sub_events = params->ucm_events &
+                         ~(UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE);
+        status = ucm_set_event_handler(sub_events, params->ucm_event_priority,
+                                       ucs_rcache_unmapped_callback, self);
+        if (status != UCS_OK) {
+            goto err_destroy_mp;
+        }
+        if (ucs_global_opts.rcache_ext_validate == UCS_CONFIG_OFF) {
+            ucs_error("failed to initialize rcache. Use a different "
+                      "memory hook mode, or set UCX_RCACHE_EXT_VALIDATE=auto");
+            status = UCS_ERR_UNSUPPORTED;
+            goto err_destroy_mp;
+        }
+        self->ext_validate = 1;
     }
 
     status = ucs_rcache_global_list_add(self);
