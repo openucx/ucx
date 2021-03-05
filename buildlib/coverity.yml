@@ -34,6 +34,8 @@ jobs:
               echo "##vso[task.complete result=Failed;]Coverity have errors"
             fi
           displayName: ${{ mode }}
+          env:
+            BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
         - task: PublishPipelineArtifact@1
           inputs:
             targetPath: $(cov_error_folder)
