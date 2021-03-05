@@ -880,7 +880,6 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
         /* EP is used, so reference count is the number of outstanding flush
          * operations and discards plus 1 */
         ucs_assert(ep->refcount == (num_inprog + 1));
-        ucs_assert(ep->discard_refcount == 0);
     }
 #endif
 }

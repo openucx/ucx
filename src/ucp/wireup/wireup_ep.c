@@ -469,9 +469,9 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
         ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker,
                                                         self->aux_rsc_index));
         ucs_queue_head_init(&tmp_pending_queue);
-        uct_ep_pending_purge(self->aux_ep, ucp_wireup_pending_purge_cb,
-                             &tmp_pending_queue);
-        uct_ep_destroy(self->aux_ep);
+        ucp_worker_discard_uct_ep(ucp_ep, self->aux_ep, UCT_FLUSH_FLAG_LOCAL,
+                                  ucp_wireup_pending_purge_cb,
+                                  &tmp_pending_queue);
         self->aux_ep = NULL;
         ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
     }
