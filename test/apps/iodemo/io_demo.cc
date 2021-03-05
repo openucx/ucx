@@ -2088,7 +2088,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -n <connect timeout>        Timeout for connecting to the peer (or \"inf\")" << std::endl;
             std::cout << "  -o <op1,op2,...,opN>        Comma-separated string of IO operations [read|write]" << std::endl;
             std::cout << "                              NOTE: if using several IO operations, performance" << std::endl;
-            std::cout << "                                    measurments may be inaccurate" << std::endl;
+            std::cout << "                                    measurements may be inaccurate" << std::endl;
             std::cout << "  -d <min>:<max>              Range that should be used to get data" << std::endl;
             std::cout << "                              size of IO payload" << std::endl;
             std::cout << "  -b <number of buffers>      Number of offcache IO buffers" << std::endl;
