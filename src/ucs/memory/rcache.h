@@ -88,6 +88,7 @@ struct ucs_rcache_ops {
     ucs_status_t           (*mem_reg)(void *context, ucs_rcache_t *rcache,
                                       void *arg, ucs_rcache_region_t *region,
                                       uint16_t flags);
+
    /**
     * Deregister a memory region.
     *
@@ -97,6 +98,30 @@ struct ucs_rcache_ops {
     */
     void                   (*mem_dereg)(void *context, ucs_rcache_t *rcache,
                                         ucs_rcache_region_t *region);
+
+    /**
+     * Same as @ref mem_reg, but it is called only when rcache requires
+     * external validation of its entries.
+     */
+    ucs_status_t           (*mem_reg_ext_validate)(void *context,
+                                                   ucs_rcache_t *rcache,
+                                                   void *arg,
+                                                   ucs_rcache_region_t *region,
+                                                   uint16_t flags);
+
+    /**
+     * Same as @ref mem_dereg, but it is called only when rcache requires
+     * external validation of its entries.
+     */
+    void                   (*mem_dereg_ext_validate)(void *context,
+                                                     ucs_rcache_t *rcache,
+                                                     ucs_rcache_region_t *region);
+    /**
+     * Validate a memory region for each cache hit when external validation of
+     * rcache entiries is required.
+     */
+    int                    (*mem_ext_validate)(void *context, ucs_rcache_t *rcache,
+                                               ucs_rcache_region_t *region);
 
     /**
      * Dump memory region information to a string buffer.
