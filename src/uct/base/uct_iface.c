@@ -558,27 +558,34 @@ ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *
     size_t length;
     void *buffer;
     ucs_iov_iter_t iov_iter;
-    size_t offset;
     ucs_status_t status;
 
     length = uct_iov_total_length(iov, iovcnt);
-    if (length > UCS_ALLOCA_MAX_SIZE) {
-        buffer = ucs_malloc(length, "uct_base_ep_am_short_iov buffer");
+
+    /* Copy first sizeof(header) bytes of iov to header. If the total length of
+     * iov is less than sizeof(header), the remainder of the header is filled
+     * with zeros. */
+    ucs_iov_iter_init(&iov_iter);
+    uct_iov_to_buffer(iov, iovcnt, &iov_iter, &header, sizeof(header));
+
+    /* If the total size of iov is greater than sizeof(header), then allocate
+       buffer and copy the remainder of iov to the buffer. */
+    if (length > sizeof(header)) {
+        length -= sizeof(header);
+
+        if (length > UCS_ALLOCA_MAX_SIZE) {
+            buffer = ucs_malloc(length, "uct_base_ep_am_short_iov buffer");
+        } else {
+            buffer = ucs_alloca(length);
+        }
+
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter, buffer, SIZE_MAX);
     } else {
-        buffer = ucs_alloca(length);
+        buffer = NULL;
+        length = 0;
     }
 
-    ucs_iov_iter_init(&iov_iter);
-    uct_iov_to_buffer(iov, iovcnt, &iov_iter, buffer, SIZE_MAX);
-
-    /* There is uint64_t header in the parameter list of uct_ep_am_short. Thus the
-     * minmum message size is 8b. If the total length of iov is less than 8b, the
-     * remainder of the header is filled with zeros. */
-    offset = ucs_min(sizeof(header), length);
-    memcpy(&header, buffer, offset);
-
-    status = uct_ep_am_short(ep, id, header, UCS_PTR_BYTE_OFFSET(buffer, offset),
-                             length - offset);
+    status = uct_ep_am_short(ep, id, header, buffer, length);
 
     if (length > UCS_ALLOCA_MAX_SIZE) {
         ucs_free(buffer);
