@@ -1720,6 +1720,12 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
         if (!(md_attr->cap.reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST))) {
             return UCS_ERR_UNSUPPORTED;
         }
+
+        /* check if mem type endpoint is exists */
+        if (!UCP_MEM_IS_HOST(sreq->send.mem_type) &&
+            worker->mem_type_ep[sreq->send.mem_type] == NULL) {
+            return UCS_ERR_UNSUPPORTED;
+        }
     }
 
     sreq->send.rndv.remote_address = rndv_rtr_hdr->address;
@@ -1859,7 +1865,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         if (is_pipeline_rndv) {
             status = ucp_rndv_send_start_put_pipeline(sreq, rndv_rtr_hdr);
             if (status != UCS_ERR_UNSUPPORTED) {
-                return status;
+                ucs_debug("pipeline_rndv is failed. fallback to PUT_ZCOPY or AM");
             }
             /* If we get here, it means that RNDV pipeline protocol is unsupported
              * and we have to use PUT_ZCOPY RNDV scheme instead */
