@@ -17,6 +17,7 @@
 #include <ucp/dt/datatype_iter.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/debug/assert.h>
 #include <ucp/dt/dt.h>
@@ -32,6 +33,31 @@
 #define ucp_trace_req(_sreq, _message, ...) \
     ucs_trace_req("req %p: " _message, (_sreq), ## __VA_ARGS__)
 
+#if ENABLE_DEBUG_DATA
+    #define ucp_debug_req(_req, _message, ...) \
+    { \
+        if (ucs_unlikely((_req)->debug_string != NULL)) { \
+            ucs_string_buffer_appendf((_req)->debug_string, _message, ## __VA_ARGS__); \
+        } \
+    }
+#else
+    #define ucp_debug_req(_req, _message, ...) { }
+#endif
+
+#if ENABLE_DEBUG_DATA
+    #define ucp_debug_req_device(_req, _ep, _lane, ...) \
+    { \
+        if (ucs_unlikely((_req)->debug_string != NULL)) { \
+            char lane_info[128] = {0}; \
+            ucp_ep_config_lane_info_str((_ep)->worker, &ucp_ep_config(_ep)->key, NULL, \
+                                        _lane, UCP_NULL_RESOURCE, lane_info, \
+                                        sizeof(lane_info)); \
+            ucp_debug_req(_req, " on %s", lane_info); \
+        } \
+    }
+#else
+    #define ucp_debug_req_device(_req, _ep, _lane, ...) { }
+#endif
 
 /**
  * Request flags
@@ -349,6 +375,10 @@ struct ucp_request {
             ucp_ep_ext_gen_t        *next_ep;   /* Next endpoint to flush */
         } flush_worker;
     };
+
+    #if ENABLE_DEBUG_DATA
+        ucs_string_buffer_t *debug_string;
+    #endif
 };
 
 

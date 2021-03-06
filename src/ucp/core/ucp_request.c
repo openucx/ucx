@@ -361,6 +361,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
     if ((ssize_t)length <= max_short) {
         /* short */
         req->send.uct.func = proto->contig_short;
+        ucp_debug_req(req, " contig_short");
         UCS_PROFILE_REQUEST_EVENT(req, "start_contig_short", req->send.length);
         return UCS_OK;
     } else if (length < zcopy_thresh) {
@@ -369,10 +370,12 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         ucs_assert(msg_config->max_bcopy >= proto->only_hdr_size);
         if (length <= (msg_config->max_bcopy - proto->only_hdr_size)) {
             req->send.uct.func = proto->bcopy_single;
+            ucp_debug_req(req, " bcopy_single");
             UCS_PROFILE_REQUEST_EVENT(req, "start_bcopy_single", req->send.length);
         } else {
             ucp_request_init_multi_proto(req, proto->bcopy_multi,
                                          "start_bcopy_multi");
+            ucp_debug_req(req, " bcopy_multi");
         }
 
         ucp_send_request_init_id(req);
@@ -402,9 +405,11 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         if (multi) {
             ucp_request_init_multi_proto(req, proto->zcopy_multi,
                                          "start_zcopy_multi");
+            ucp_debug_req(req, " zcopy_multi");
         } else {
             req->send.uct.func = proto->zcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
+            ucp_debug_req(req, " zcopy_single");
         }
 
         ucp_send_request_init_id(req);

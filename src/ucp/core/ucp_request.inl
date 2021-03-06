@@ -59,6 +59,7 @@
             ucs_trace_req("allocated request %p", _req); \
             UCS_PROFILE_REQUEST_NEW(_req, "ucp_request", 0); \
         } \
+        ucp_request_debug_string_null(_req); \
         _req; \
     })
 
@@ -97,6 +98,7 @@
         } else { \
             __req = ((ucp_request_t*)(_param)->request) - 1; \
         } \
+        ucp_request_debug_string_init(__req, (_param)); \
         __req; \
     })
 
@@ -155,10 +157,37 @@
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
     }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_request_debug_string_null(ucp_request_t *req)
+{
+    #if ENABLE_DEBUG_DATA
+        req->debug_string = NULL;
+    #endif
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_debug_string_init(ucp_request_t *req, const ucp_request_param_t *param)
+{
+    #if ENABLE_DEBUG_DATA
+        if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FIELD_DEBUG_INFO)) {
+            req->debug_string =
+                (ucs_string_buffer_t*)ucs_malloc(sizeof(ucs_string_buffer_t*), "request strb");
+            ucs_string_buffer_init_fixed(req->debug_string,
+                                         param->debug_info->debug_string,
+                                         param->debug_info->debug_string_size);
+        }
+    #endif
+}
 
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
+    #if ENABLE_DEBUG_DATA
+        if (ucs_unlikely(req->debug_string != NULL)) {
+            ucs_free(req->debug_string);
+            req->debug_string = NULL;
+        }
+    #endif
     ucs_trace_req("put request %p", req);
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_IN_PTR_MAP));
     UCS_PROFILE_REQUEST_FREE(req);

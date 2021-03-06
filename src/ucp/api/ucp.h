@@ -633,6 +633,7 @@ typedef enum {
     UCP_OP_ATTR_FIELD_REPLY_BUFFER  = UCS_BIT(5),  /**< reply_buffer field */
     UCP_OP_ATTR_FIELD_MEMORY_TYPE   = UCS_BIT(6),  /**< memory type field */
     UCP_OP_ATTR_FIELD_RECV_INFO     = UCS_BIT(7),  /**< recv_info field */
+    UCP_OP_ATTR_FIELD_DEBUG_INFO    = UCS_BIT(8),  /**< debug string field */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
@@ -1403,6 +1404,17 @@ struct ucp_tag_recv_info {
     size_t                                 length;
 };
 
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief Debug information about protocols and transports being used in request.
+ *
+ */
+typedef struct {
+    /** String that would be filled with procols and transports being used. */
+    char  *debug_string;
+    /** Size of the @ref debug_string */
+    size_t debug_string_size;
+} ucp_request_debug_info_t;
 
 /**
  * @ingroup UCP_CONTEXT
@@ -1515,6 +1527,13 @@ typedef struct {
                                           Relevant for @a ucp_tag_recv_nbx
                                           function. */
     } recv_info;
+
+    /**
+     * Pointer to @ref ucp_request_debug_info_t that would be filled with protocols
+     * and transport being used in this request.
+     */
+    ucp_request_debug_info_t *debug_info;
+
 } ucp_request_param_t;
 
 

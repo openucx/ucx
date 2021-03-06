@@ -118,6 +118,14 @@ ucp_proto_request_set_proto(ucp_worker_h worker, ucp_ep_h ep,
     req->send.proto_config = &thresh_elem->proto_config;
     req->send.uct.func     = proto->progress;
 
+    #if ENABLE_DEBUG_DATA
+        if (ucs_unlikely(req->debug_string != NULL)) {
+            ucs_string_buffer_appendf(req->debug_string,
+                                      "selected protocol %s for ", proto->name);
+            ucp_proto_select_param_str(sel_param, req->debug_string);
+        }
+    #endif
+
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         ucp_proto_select_param_str(sel_param, &strb);
         ucp_trace_req(req, "selected protocol %s for %s length %zu",

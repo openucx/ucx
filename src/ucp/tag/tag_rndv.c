@@ -109,6 +109,8 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
                   ucp_ep_peer_name(ep), sreq->send.buffer,
                   sreq->send.length, ucs_memory_type_names[sreq->send.mem_type]);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
+    ucp_debug_req(sreq, "rndv to %s length %zu mem_type:%s", ucp_ep_peer_name(ep),
+                  sreq->send.length, ucs_memory_type_names[sreq->send.mem_type]);
 
     status = ucp_ep_resolve_remote_id(ep, sreq->send.lane);
     if (status != UCS_OK) {

@@ -25,6 +25,8 @@ ucp_eager_expected_handler(ucp_worker_t *worker, ucp_request_t *req,
     ucs_trace_req("found req %p", req);
     UCS_PROFILE_REQUEST_EVENT(req, "eager_recv", recv_len);
 
+    ucp_debug_req(req, " expected eager");
+
     /* First fragment fills the receive information */
     UCP_WORKER_STAT_EAGER_MSG(worker, flags);
     UCP_WORKER_STAT_EAGER_CHUNK(worker, EXP);

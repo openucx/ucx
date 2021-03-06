@@ -69,6 +69,9 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->status = status;
         UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
 
+        ucp_debug_req(req, "eager_only_match memory_type: %s",
+                      ucs_memory_type_names[memory_type]);
+
         ucp_request_imm_cmpl_param(param, req, recv, &req->recv.tag.info);
     }
 
@@ -150,6 +153,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
     /* process first fragment */
     UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);
+    ucp_debug_req(req, " recv eager ");
     msg_id = eagerf_hdr->msg_id;
     status = ucp_tag_recv_request_process_rdesc(req, rdesc, 0);
     ucs_assert((status == UCS_OK) || (status == UCS_INPROGRESS) ||

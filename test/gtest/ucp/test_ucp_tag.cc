@@ -554,4 +554,48 @@ UCS_TEST_P(test_ucp_tag_nbx, external_request_free)
     wait_for_value(&m_completed, 2u);
 }
 
+UCS_TEST_P(test_ucp_tag_nbx, test_debug_string)
+{
+    ucp_request_param_t send_param;
+    ucp_request_param_t recv_param;
+    ucp_request_debug_info_t send_debug_info;
+    ucp_request_debug_info_t recv_debug_info;
+
+    const size_t debug_string_size = 1024;
+    char send_debug_string[debug_string_size] = {0};
+    char recv_debug_string[debug_string_size] = {0};
+
+    send_debug_info.debug_string = send_debug_string;
+    recv_debug_info.debug_string = recv_debug_string;
+    send_debug_info.debug_string_size = debug_string_size;
+    recv_debug_info.debug_string_size = debug_string_size;
+
+    send_param.op_attr_mask = recv_param.op_attr_mask = UCP_OP_ATTR_FIELD_DEBUG_INFO;
+    send_param.debug_info  = &send_debug_info;
+    recv_param.debug_info  = &recv_debug_info;
+
+    std::vector<char> send_buffer(MSG_SIZE);
+    std::vector<char> recv_buffer(MSG_SIZE);
+
+    ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
+                                                 &recv_buffer[0], MSG_SIZE,
+                                                 0, 0, &recv_param);
+
+    ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(), &send_buffer[0],
+                                                 MSG_SIZE, 0, &send_param);
+
+    wait_for_value(&m_completed, 2u);
+
+    ASSERT_GT(strlen(send_debug_info.debug_string), 0);
+    ASSERT_GT(strlen(recv_debug_info.debug_string), 0);
+
+    if (UCS_PTR_IS_PTR(send_req)) {
+        ucp_request_free(send_req);
+    }
+
+    if (UCS_PTR_IS_PTR(recv_req)) {
+        ucp_request_free(recv_req);
+    }
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_nbx)

@@ -364,6 +364,8 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     ucp_trace_req(rndv_req, "send rtr remote sreq_id 0x%"PRIxPTR" rreq %p",
                   sender_req_id, rreq);
 
+    ucp_debug_req(rreq, " rndv put_zcopy ");
+
     rndv_req->super_req                   = rreq;
     rndv_req->send.lane                   = ucp_ep_get_am_lane(rndv_req->
                                                                send.ep);
@@ -544,6 +546,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
     /* If can't perform get_zcopy - switch to active-message.
      * NOTE: we do not register memory and do not send our keys. */
     ucp_trace_req(rndv_req, "remote memory unreachable, switch to rtr");
+    ucp_debug_req(rndv_req->super_req, " remote memory unreachable, switch to rtr");
     ucp_rkey_destroy(rndv_req->send.rndv.rkey);
     ucp_rndv_recv_data_init(rndv_req->super_req, rndv_req->send.length);
     /* Update statistics counters from get_zcopy to rtr */
@@ -765,6 +768,8 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
 
     ucp_trace_req(rndv_req, "start rma_get rreq %p", rreq);
 
+    ucp_debug_req(rreq, " rndv rma_get_zcopy ");
+
     rndv_req->super_req                = rreq;
     rndv_req->send.uct.func            = ucp_rndv_progress_rma_get_zcopy;
     rndv_req->send.buffer              = rreq->recv.buffer;
@@ -797,6 +802,7 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
 
     UCP_WORKER_STAT_RNDV(ep->worker, GET_ZCOPY, 1);
     ucp_request_send(rndv_req, 0);
+    ucp_debug_req_device(rreq, rndv_req->send.ep, rndv_req->send.lane);
 
     return UCS_OK;
 }
@@ -820,7 +826,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
 
     /* rndv_req is NULL in case of put protocol */
     if (!is_put_proto) {
-        ucs_trace_req("freq:%p: recv_frag_put done, nrdv_req:%p rreq:%p ", freq,
+        ucs_trace_req("freq:%p: recv_frag_put done, rndv_req:%p rreq:%p ", freq,
                       rndv_req, rreq);
 
         rndv_req = freq->super_req;
@@ -1033,6 +1039,9 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
     ucs_status_t status;
     size_t max_frag_size, offset, length;
     size_t min_zcopy, max_zcopy;
+    #if ENABLE_DEBUG_DATA
+    int num_fragments;
+    #endif
 
     min_zcopy                          = config->rndv.get_zcopy.min;
     max_zcopy                          = config->rndv.get_zcopy.max;
@@ -1061,6 +1070,12 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
 
     ucp_rndv_req_init_zcopy_lane_map(rndv_req, rndv_req->send.mem_type,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
+
+    #if ENABLE_DEBUG_DATA
+        num_fragments = ucs_div_round_up(size, max_frag_size);
+        ucp_debug_req(rreq, " rndv fragmented get_zcopy pipeline num fragments: %d",
+                      num_fragments);
+    #endif
 
     offset = 0;
     while (offset != size) {
@@ -1100,6 +1115,9 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
 
     offset    = 0;
     num_frags = ucs_div_round_up(rndv_rts_hdr->size, max_frag_size);
+
+    ucp_debug_req(rreq, " rndv fragmented put_zcopy pipeline num_frags: %d",
+                  num_frags);
 
     for (i = 0; i < num_frags; i++) {
         frag_size = ucs_min(max_frag_size, (rndv_rts_hdr->size - offset));
@@ -1224,6 +1242,7 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     ucp_rkey_h rkey;
 
     ucp_trace_req(rndv_req, "start rkey_ptr rndv rreq %p", rreq);
+    ucp_debug_req(rreq, "rkey_ptr rndv");
 
     status = ucp_ep_rkey_unpack(ep, rkey_buf, &rkey);
     if (status != UCS_OK) {
@@ -1518,7 +1537,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
                                        UCP_AM_ID_RNDV_DATA,
                                        ucp_rndv_pack_data,
                                        ucp_rndv_pack_data, 1);
-        
+
         if (status == UCS_INPROGRESS) {
             return UCS_INPROGRESS;
         } else if (ucs_unlikely(status == UCP_STATUS_PENDING_SWITCH)) {
@@ -1736,6 +1755,9 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
     fsreq->send.mem_type        = sreq->send.mem_type;
     fsreq->send.state.dt.offset = 0;
 
+    ucp_debug_req(sreq, " put rndv pipeline protocol send mem type: %s size: %zu num_fragments: %zu ",
+                  ucs_memory_type_names[sreq->send.mem_type], rndv_size,
+                  ucs_div_round_up(rndv_size, max_frag_size));
     offset = 0;
     while (offset != rndv_size) {
         length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_frag_size, 0,
