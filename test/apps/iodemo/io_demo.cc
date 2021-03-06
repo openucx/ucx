@@ -235,6 +235,15 @@ public:
         }
     }
 
+    template <typename unsigned_type>
+    static inline unsigned_type urand(unsigned_type max)
+    {
+        assert(max < std::numeric_limits<unsigned_type>::max());
+        assert(unsigned_type(0) == std::numeric_limits<unsigned_type>::min());
+
+        return rand(_seed, unsigned_type(0), max);
+    }
+
     static void *get_host_fill_buffer(void *buffer, size_t size,
                                       ucs_memory_type_t memory_type)
     {
@@ -1897,6 +1906,16 @@ static void adjust_opts(options_t *test_opts) {
 
     test_opts->chunk_size = std::min(test_opts->chunk_size,
                                      test_opts->max_data_size);
+
+    // randomize servers to optimize startup
+    std::random_shuffle(test_opts->servers.begin(), test_opts->servers.end(),
+                        IoDemoRandom::urand<size_t>);
+
+    UcxLog vlog(LOG_PREFIX, test_opts->verbose);
+    vlog << "List of servers:";
+    for (size_t i = 0; i < test_opts->servers.size(); ++i) {
+        vlog << " " << test_opts->servers[i];
+    }
 }
 
 static int parse_window_size(const char *optarg, long &window_size,
@@ -1935,7 +1954,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->iter_count            = 1000;
     test_opts->window_size           = 16;
     test_opts->conn_window_size      = 16;
-    test_opts->random_seed           = std::time(NULL);
+    test_opts->random_seed           = std::time(NULL) ^ getpid();
     test_opts->verbose               = false;
     test_opts->validate              = false;
     test_opts->use_am                = false;
