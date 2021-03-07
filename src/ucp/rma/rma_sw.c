@@ -186,7 +186,7 @@ static size_t ucp_rma_sw_pack_get_reply(void *dest, void *arg)
     length      = ucs_min(req->send.length,
                           ucp_ep_config(req->send.ep)->am.max_bcopy -
                           sizeof(*hdr));
-    hdr->req_id = req->send.get_reply.req_id;
+    hdr->req_id = req->send.get_reply.remote_req_id;
     ucp_dt_contig_pack(req->send.ep->worker, hdr + 1, req->send.buffer, length,
                        req->send.mem_type);
 
@@ -239,16 +239,16 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
         return UCS_OK;
     }
 
-    req->flags                 = 0;
-    req->send.ep               = ep;
-    req->send.buffer           = (void*)getreqh->address;
-    req->send.length           = getreqh->length;
-    req->send.get_reply.req_id = getreqh->req.req_id;
-    req->send.uct.func         = ucp_progress_get_reply;
+    req->flags                        = 0;
+    req->send.ep                      = ep;
+    req->send.buffer                  = (void*)getreqh->address;
+    req->send.length                  = getreqh->length;
+    req->send.get_reply.remote_req_id = getreqh->req.req_id;
+    req->send.uct.func                = ucp_progress_get_reply;
     if (ep->worker->context->config.ext.proto_enable) {
-        req->send.mem_type     = getreqh->mem_type;
+        req->send.mem_type = getreqh->mem_type;
     } else {
-        req->send.mem_type     = UCS_MEMORY_TYPE_HOST;
+        req->send.mem_type = UCS_MEMORY_TYPE_HOST;
     }
 
     ucp_request_send(req, 0);
