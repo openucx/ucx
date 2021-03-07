@@ -152,12 +152,16 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ep->ref_cnt                          = 1;
+    ep->refcount                         = 1;
     ep->cfg_index                        = UCP_WORKER_CFG_INDEX_NULL;
     ep->worker                           = worker;
     ep->am_lane                          = UCP_NULL_LANE;
     ep->flags                            = 0;
     ep->conn_sn                          = UCP_EP_MATCH_CONN_SN_MAX;
+#if UCS_ENABLE_ASSERT
+    ep->flush_iter_refcount              = 0;
+    ep->discard_refcount                 = 0;
+#endif
     ucp_ep_ext_gen(ep)->user_data        = NULL;
     ucp_ep_ext_control(ep)->cm_idx       = UCP_NULL_RESOURCE;
     ucp_ep_ext_control(ep)->err_cb       = NULL;
@@ -232,7 +236,7 @@ static UCS_F_NOINLINE void ucp_ep_remove_progress_callbacks(ucp_ep_h ep)
     /* Remove pending slow-path functions after all UCT EP lanes are destroyed,
      * because cleanup lanes purges all outstanding operation and purged
      * operations could add callbacks on the progress */
-    ucs_assert(ep->ref_cnt == 0);
+    ucs_assert(ep->refcount == 0);
 
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
@@ -247,16 +251,34 @@ static UCS_F_NOINLINE void ucp_ep_remove_progress_callbacks(ucp_ep_h ep)
                             ucp_ep_local_disconnect_progress_remove_filter, ep);
 }
 
-void ucp_ep_destroy_base(ucp_ep_h ep)
+static void ucp_ep_destroy_base(ucp_ep_h ep)
 {
-    if (--ep->ref_cnt != 0) {
-        return;
-    }
+    ucs_assert(ep->refcount == 0);
+    ucs_assert(ep->flush_iter_refcount == 0);
+    ucs_assert(ep->discard_refcount == 0);
 
     ucp_ep_remove_progress_callbacks(ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ucp_ep_ext_control(ep));
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
+}
+
+void ucp_ep_add_ref(ucp_ep_h ep)
+{
+    ucs_assert(ep->refcount < UINT8_MAX);
+    ++ep->refcount;
+}
+
+/* Return 1 if the endpoint was destroyed, 0 if not */
+int ucp_ep_remove_ref(ucp_ep_h ep)
+{
+    ucs_assert(ep->refcount > 0);
+    if (--ep->refcount == 0) {
+        ucp_ep_destroy_base(ep);
+        return 1;
+    }
+
+    return 0;
 }
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
@@ -297,7 +319,7 @@ out:
     return UCS_OK;
 
 err_destroy_ep_base:
-    ucp_ep_destroy_base(ep);
+    ucp_ep_remove_ref(ep);
 err:
     return status;
 }
@@ -316,7 +338,7 @@ static void ucp_ep_delete(ucp_ep_h ep)
         ucs_assert(ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID);
     }
 
-    ucp_ep_destroy_base(ep);
+    ucp_ep_remove_ref(ep);
 }
 
 void ucp_ep_release_id(ucp_ep_h ep)
@@ -834,10 +856,41 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
     ucp_ep_delete(ep);
 }
 
+static void ucp_ep_check_lanes(ucp_ep_h ep)
+{
+#if UCS_ENABLE_ASSERT
+    uint8_t num_inprog       = ep->discard_refcount + ep->flush_iter_refcount;
+    uint8_t num_failed_tl_ep = 0;
+    ucp_lane_index_t lane;
+
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        num_failed_tl_ep += ucp_is_uct_ep_failed(ep->uct_eps[lane]);
+    }
+
+    ucs_assert((num_failed_tl_ep == 0) ||
+               (ucp_ep_num_lanes(ep) == num_failed_tl_ep));
+
+    if (num_failed_tl_ep != 0) {
+        /* EP reference count is the number of outstanding flush operations and
+         * discards, plus 1 if not destroyed yet */
+        ucs_assert((ep->refcount == num_inprog) ||
+                   (ep->refcount == (num_inprog + 1)));
+    } else {
+        /* EP is used, so reference count is the number of outstanding flush
+         * operations and discards plus 1 */
+        ucs_assert(ep->refcount == (num_inprog + 1));
+        ucs_assert(ep->discard_refcount == 0);
+    }
+#endif
+}
+
 static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
 {
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
+
+    ucp_ep_check_lanes(ep);
 
     if (!(ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_INTERNAL))) {
         ucp_ep_release_id(ep);
@@ -849,20 +902,7 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
         uct_ep        = ep->uct_eps[lane];
         uct_eps[lane] = uct_ep;
 
-        /* an attempt to destroy UCT lanes can be done several times inside
-         * ucp_ep_cleanup_lanes()/ucp_ep_discard_lanes(), i.e. discarding lanes
-         * and then cleanup lanes during UCP EP close - so, if it happens, UCT
-         * lane has to be already set to '&ucp_failed_tl_ep' and UCP EP's
-         * 'ref_cnt' can be >= 1, when UCP EP is going to be destroyed.
-         * Otherwise - UCT lane is set to a real UCT EP and it means that
-         * discarding of UCT lanes was not started yet,  i.e. called from UCP EP
-         * destroy function and UCP EP's ref_cnt has to be '1'.
-         * If UCT lane is destroyed, but some operations are still in-progress,
-         * acompletions can be received for his UCT EP - this will lead to
-         * undefined behavior, because a real UCT EP was already destroyed */
-        ucs_assert(ucp_is_uct_ep_failed(uct_ep) || (ep->ref_cnt == 1));
-
-        /* set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
+        /* Set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
          * due to some UCT EP discarding procedures are in-progress and UCP EP
          * may get some operation completions which could try to dereference its
          * lanes */

@@ -75,9 +75,9 @@ protected:
                              unsigned wireup_ep_count = 0,
                              unsigned wireup_aux_ep_count = 0) {
         uct_iface_ops_t ops                  = {0};
-        ucp_ep_t ucp_ep                      = {0};
         unsigned created_wireup_aux_ep_count = 0;
         unsigned total_ep_count              = ep_count + wireup_aux_ep_count;
+        ucp_ep_h ucp_ep;
         uct_iface_t iface;
         std::vector<uct_ep_t> eps(total_ep_count);
         std::vector<uct_ep_h> wireup_eps(wireup_ep_count);
@@ -86,8 +86,8 @@ protected:
         ASSERT_LE(wireup_ep_count, ep_count);
         ASSERT_LE(wireup_aux_ep_count, wireup_ep_count);
 
-        ucp_ep.worker  = sender().worker();
-        ucp_ep.ref_cnt = 1u;
+        status = ucp_ep_create_base(sender().worker(), "peer", "", &ucp_ep);
+        ASSERT_UCS_OK(status);
 
         ops.ep_flush         = (uct_ep_flush_func_t)ep_flush_func;
         ops.ep_pending_add   = (uct_ep_pending_add_func_t)ep_pending_add_func;
@@ -106,7 +106,7 @@ protected:
             std::vector<ucp_request_t*> pending_reqs;
 
             if (i < wireup_ep_count) {
-                status = ucp_wireup_ep_create(&ucp_ep, &discard_ep);
+                status = ucp_wireup_ep_create(ucp_ep, &discard_ep);
                 ASSERT_UCS_OK(status);
 
                 wireup_eps.push_back(discard_ep);
@@ -157,7 +157,7 @@ protected:
             unsigned purged_reqs_count = 0;
 
             UCS_ASYNC_BLOCK(&sender().worker()->async);
-            ucp_worker_discard_uct_ep(&ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
+            ucp_worker_discard_uct_ep(ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
                                       ep_pending_purge_count_reqs_cb,
                                       &purged_reqs_count);
             UCS_ASYNC_UNBLOCK(&sender().worker()->async);
@@ -170,6 +170,7 @@ protected:
         }
 
         if (!wait_for_comp) {
+            ucp_ep_remove_ref(ucp_ep);
             /* destroy sender's entity here to have an access to the valid
              * pointers */
             sender().cleanup();
@@ -239,7 +240,9 @@ protected:
             EXPECT_EQ(NULL, eps[i].iface);
         }
 
-        EXPECT_EQ(1u, ucp_ep.ref_cnt);
+        EXPECT_EQ(1u, ucp_ep->refcount);
+
+        ucp_ep_remove_ref(ucp_ep);
     }
 
     static void ep_destroy_func(uct_ep_h ep) {
