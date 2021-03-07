@@ -33,8 +33,6 @@ static size_t ucp_proto_get_am_bcopy_pack(void *dest, void *arg)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_get_am_bcopy_complete(ucp_request_t *req)
 {
-    ucp_worker_del_request_id(req->send.ep->worker, req,
-                              req->send.rma.sreq_id);
     ucp_ep_rma_remote_request_sent(req->send.ep);
     return UCS_OK;
 }

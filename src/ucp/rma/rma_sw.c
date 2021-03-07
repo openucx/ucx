@@ -276,6 +276,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
                              req->send.state.dt_iter.mem_info.type);
         req->send.state.dt_iter.offset += frag_length;
         if (req->send.state.dt_iter.offset == req->send.state.dt_iter.length) {
+            ucp_worker_del_request_id(req->send.ep->worker, req,
+                                      req->send.rma.sreq_id);
             ucp_proto_request_bcopy_complete_success(req);
             ucp_ep_rma_remote_request_completed(ep);
         }
