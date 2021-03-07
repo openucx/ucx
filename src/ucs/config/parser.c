@@ -18,6 +18,8 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/debug.h>
 #include <ucs/time/time.h>
+#include <ucs/config/ini.h>
+#include <ucs/type/init_once.h>
 #include <fnmatch.h>
 #include <ctype.h>
 
@@ -41,6 +43,8 @@ typedef UCS_CONFIG_ARRAY_FIELD(void, data) ucs_config_array_field_t;
 
 KHASH_SET_INIT_STR(ucs_config_env_vars)
 
+KHASH_MAP_INIT_STR(ucs_config_map, char*)
+
 
 /* Process environment variables */
 extern char **environ;
@@ -48,6 +52,7 @@ extern char **environ;
 
 UCS_LIST_HEAD(ucs_config_global_list);
 static khash_t(ucs_config_env_vars) ucs_config_parser_env_vars = {0};
+static khash_t(ucs_config_map) ucs_config_file_vars            = {0};
 static pthread_mutex_t ucs_config_parser_env_vars_hash_lock    = PTHREAD_MUTEX_INITIALIZER;
 static char ucs_config_parser_negate                           = '^';
 
@@ -1234,9 +1239,71 @@ out:
     pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
 }
 
-static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fields,
-                                             const char *prefix, const char *table_prefix,
-                                             int recurse, int ignore_errors)
+static char *ucs_config_get_value_from_config_file(const char *name)
+{
+    khiter_t iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
+
+    if (iter == kh_end(&ucs_config_file_vars)) {
+        return NULL;
+    }
+
+    return kh_val(&ucs_config_file_vars, iter);
+}
+
+static int ucs_config_parse_config_file_line(void *arg, const char *section,
+                                             const char *name,
+                                             const char *value)
+{
+    khiter_t iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
+    int override  = *(int*)arg;
+    int result;
+
+    if (iter != kh_end(&ucs_config_file_vars)) {
+        if (override) {
+            ucs_free(kh_val(&ucs_config_file_vars, iter));
+        } else {
+            ucs_error("found duplicate '%s' in config map", name);
+            return 0;
+        }
+    } else {
+        iter = kh_put(ucs_config_map, &ucs_config_file_vars,
+                      ucs_strdup(name, "config_var_name"), &result);
+        if (result == UCS_KH_PUT_FAILED) {
+            ucs_error("inserting '%s' to config map failed", name);
+            return 0;
+        }
+    }
+
+    kh_val(&ucs_config_file_vars, iter) = ucs_strdup(value, "config_value");
+    return 1;
+}
+
+ucs_status_t ucs_config_parse_config_file(const char *path, int override)
+{
+    ucs_status_t result = UCS_OK;
+    int parse_result;
+    FILE* file;
+
+    file = fopen(path, "r");
+    if (file == NULL) {
+        ucs_debug("Could not open config file: %s, skipping parsing", path);
+        return UCS_OK;
+    }
+
+    parse_result = ini_parse_file(file, ucs_config_parse_config_file_line,
+                                  &override);
+    if (parse_result != 0) {
+        result = UCS_ERR_INVALID_PARAM;
+    }
+
+    fclose(file);
+    return result;
+}
+
+static ucs_status_t
+ucs_config_apply_config_vars(void *opts, ucs_config_field_t *fields,
+                             const char *prefix, const char *table_prefix,
+                             int recurse, int ignore_errors)
 {
     ucs_config_field_t *field, *sub_fields;
     ucs_status_t status;
@@ -1260,8 +1327,9 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
 
             /* Parse with sub-table prefix */
             if (recurse) {
-                status = ucs_config_apply_env_vars(var, sub_fields, prefix,
-                                                   field->name, 1, ignore_errors);
+                status = ucs_config_apply_config_vars(var, sub_fields, prefix,
+                                                      field->name, 1,
+                                                      ignore_errors);
                 if (status != UCS_OK) {
                     return status;
                 }
@@ -1269,8 +1337,9 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
 
             /* Possible override with my prefix */
             if (table_prefix) {
-                status = ucs_config_apply_env_vars(var, sub_fields, prefix,
-                                                   table_prefix, 0, ignore_errors);
+                status = ucs_config_apply_config_vars(var, sub_fields, prefix,
+                                                      table_prefix, 0,
+                                                      ignore_errors);
                 if (status != UCS_OK) {
                     return status;
                 }
@@ -1278,7 +1347,13 @@ static ucs_status_t ucs_config_apply_env_vars(void *opts, ucs_config_field_t *fi
         } else {
             /* Read and parse environment variable */
             strncpy(buf + prefix_len, field->name, sizeof(buf) - prefix_len - 1);
+
+            /* Env variable has precedence over file config */
             env_value = getenv(buf);
+            if (env_value == NULL) {
+                env_value = ucs_config_get_value_from_config_file(buf);
+            }
+
             if (env_value == NULL) {
                 continue;
             }
@@ -1344,6 +1419,7 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
                                          int ignore_errors)
 {
     const char   *sub_prefix = NULL;
+    static ucs_init_once_t config_file_parse = UCS_INIT_ONCE_INITIALIZER;
     ucs_status_t status;
 
     /* Set default values */
@@ -1358,18 +1434,24 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
         goto err;
     }
 
+    UCS_INIT_ONCE(&config_file_parse) {
+        if (ucs_config_parse_config_file(UCX_CONF_FILE, 0) != UCS_OK) {
+            ucs_warn("could not parse config file: %s", UCX_CONF_FILE);
+        }
+    }
+
     /* Apply environment variables */
     if (sub_prefix != NULL) {
-        status = ucs_config_apply_env_vars(opts, fields, sub_prefix, table_prefix,
-                                           1, ignore_errors);
+        status = ucs_config_apply_config_vars(opts, fields, sub_prefix,
+                                              table_prefix, 1, ignore_errors);
         if (status != UCS_OK) {
             goto err_free;
         }
     }
 
     /* Apply environment variables with custom prefix */
-    status = ucs_config_apply_env_vars(opts, fields, env_prefix, table_prefix,
-                                        1, ignore_errors);
+    status = ucs_config_apply_config_vars(opts, fields, env_prefix,
+                                          table_prefix, 1, ignore_errors);
     if (status != UCS_OK) {
         goto err_free;
     }
@@ -1510,15 +1592,29 @@ static void __print_stream_cb(int num, const char *line, void *arg)
     fprintf(stream, "# %s\n", line);
 }
 
+static int ucs_config_parser_is_default(const char *env_prefix,
+                                        const char *prefix, const char *name)
+{
+    char var_name[128] = {0};
+    khiter_t iter;
+
+    ucs_snprintf_safe(var_name, sizeof(var_name) - 1, "%s%s%s", env_prefix,
+                      prefix, name);
+    iter = kh_get(ucs_config_map, &ucs_config_file_vars, name);
+    return (iter == kh_end(&ucs_config_file_vars)) &&
+           (getenv(var_name) == NULL);
+}
+
 static void
 ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_prefix,
                               ucs_list_link_t *prefix_list, const char *name,
                               const ucs_config_field_t *field, unsigned long flags,
                               const char *docstr, ...)
 {
-    ucs_config_parser_prefix_t *prefix, *head;
     char value_buf[128]  = {0};
     char syntax_buf[256] = {0};
+    ucs_config_parser_prefix_t *prefix, *head;
+    char *default_config_prefix;
     va_list ap;
 
     ucs_assert(!ucs_list_is_empty(prefix_list));
@@ -1533,6 +1629,13 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
                             (char*)opts + field->offset,
                             field->parser.arg);
         field->parser.help(syntax_buf, sizeof(syntax_buf) - 1, field->parser.arg);
+    }
+
+    if ((flags & UCS_CONFIG_PRINT_COMMENT_DEFAULT) &&
+        ucs_config_parser_is_default(env_prefix, head->prefix, name)) {
+        default_config_prefix = "# ";
+    } else {
+        default_config_prefix = "";
     }
 
     if (flags & UCS_CONFIG_PRINT_DOC) {
@@ -1570,7 +1673,8 @@ ucs_config_parser_print_field(FILE *stream, const void *opts, const char *env_pr
         fprintf(stream, "#\n");
     }
 
-    fprintf(stream, "%s%s%s%s\n", env_prefix, head->prefix, name, value_buf);
+    fprintf(stream, "%s%s%s%s%s\n", default_config_prefix, env_prefix,
+            head->prefix, name, value_buf);
 
     if (flags & UCS_CONFIG_PRINT_DOC) {
         fprintf(stream, "\n");
@@ -1654,6 +1758,11 @@ void ucs_config_parser_print_opts(FILE *stream, const char *title, const void *o
 {
     ucs_config_parser_prefix_t table_prefix_elem;
     UCS_LIST_HEAD(prefix_list);
+
+    if (flags & UCS_CONFIG_PRINT_DOC) {
+        fprintf(stream, "# UCX library configuration file\n");
+        fprintf(stream, "# Uncomment to modify values\n");
+    }
 
     if (flags & UCS_CONFIG_PRINT_HEADER) {
         fprintf(stream, "\n");
@@ -1838,9 +1947,16 @@ int ucs_config_names_search(ucs_config_names_array_t config_names,
 
 UCS_STATIC_CLEANUP {
     const char *key;
+    char *value;
 
     kh_foreach_key(&ucs_config_parser_env_vars, key, {
         ucs_free((void*)key);
     })
     kh_destroy_inplace(ucs_config_env_vars, &ucs_config_parser_env_vars);
+
+    kh_foreach(&ucs_config_file_vars, key, value, {
+        ucs_free((void*)key);
+        ucs_free(value);
+    })
+    kh_destroy_inplace(ucs_config_map, &ucs_config_file_vars);
 }

@@ -109,6 +109,10 @@ AS_IF([${LN_S} --relative symlinktest 2>/dev/null],
 #
 AC_DEFINE_UNQUOTED([UCX_CONFIGURE_FLAGS], ["$config_flags"], [UCX configure flags])
 
+#
+# Define path of ucx.conf configuration file
+#
+AC_SUBST([ucx_conf_dir], [${sysconfdir}/ucx])
 
 #
 # Provide the functionality of AS_VAR_APPEND if Autoconf does not have it.
@@ -395,6 +399,7 @@ AC_MSG_NOTICE([Building documents only])
 [
 AC_MSG_NOTICE([UCX build configuration:])
 AC_MSG_NOTICE([      Build prefix:   ${prefix}])
+AC_MSG_NOTICE([ Configuration dir:   ${ucx_conf_dir}])
 AC_MSG_NOTICE([Preprocessor flags:   ${BASE_CPPFLAGS}])
 AC_MSG_NOTICE([        C compiler:   ${CC} ${BASE_CFLAGS}])
 AC_MSG_NOTICE([      C++ compiler:   ${CXX} ${BASE_CXXFLAGS}])

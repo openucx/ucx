@@ -57,6 +57,7 @@ gtest_LDADD = \
 
 gtest_CPPFLAGS = \
 	$(BASE_CPPFLAGS) \
+	-DTOP_SRCDIR=\"$(top_srcdir)\" \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/test \
 	-I$(top_builddir)/src \
