@@ -1022,10 +1022,9 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
     self->atomic_mr_offset = uct_ib_md_atomic_offset(if_addr->atomic_mr_id);
     remote_dctn            = uct_ib_unpack_uint24(if_addr->qp_num);
 
-    ucs_assert(path_index < UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
     memcpy(&self->av, av, sizeof(*av));
     self->av.dqp_dct |= htonl(remote_dctn);
-    self->flags       = path_index & UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK;
+    self->flags       = path_index & (iface->tx.num_dci_pools - 1);
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
 }
