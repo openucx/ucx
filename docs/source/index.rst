@@ -1,4 +1,4 @@
-.. 
+..
 .. Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
 ..
 .. See file LICENSE for terms.
@@ -73,7 +73,7 @@ Documentation
 *************
 
 *  API doc: `HTML <https://openucx.github.io/ucx/api/v{VERSION}/html/index.html>`_ `PDF <https://openucx.github.io/ucx/api/v{VERSION}/ucx-v{VERSION}.pdf>`_
-* `Examples <https://github.com/openucx/ucx/tree/v{VERSION}.x/test/examples>`_
+* `Examples <https://github.com/openucx/ucx/tree/v{VERSION}.x/examples>`_
 
 
 Projects using UCX
