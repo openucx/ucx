@@ -176,9 +176,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_LAG              = UCS_BIT(7),
     /* Device supports CQE V1 */
     UCT_IB_MLX5_MD_FLAG_CQE_V1           = UCS_BIT(8),
+    /* Device supports ECE */
+    UCT_IB_MLX5_MD_FLAG_ECE              = UCS_BIT(9),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 9,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 10,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
@@ -361,6 +363,7 @@ typedef struct uct_ib_mlx5_qp {
             uct_ib_mlx5_dbrec_t        *dbrec;
             uct_ib_mlx5_devx_umem_t    mem;
             struct mlx5dv_devx_obj     *obj;
+            uint32_t                   ece;
         } devx;
 #endif
     };

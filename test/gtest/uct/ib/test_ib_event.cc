@@ -15,7 +15,6 @@ extern "C" {
 #if HAVE_MLX5_HW
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/rc/accel/rc_mlx5.h>
-#include <uct/ib/mlx5/exp/ib_exp.h>
 #endif
 #include <uct/ib/rc/verbs/rc_verbs.h>
 }
@@ -338,15 +337,10 @@ private:
         mlx5_qp(entity &e) : qp(e), m_txwq(), m_iface(), m_md() {
             m_iface = ucs_derived_of(m_e.iface(), uct_rc_mlx5_iface_common_t);
             m_md    = ucs_derived_of(m_e.md(), uct_ib_mlx5_md_t);
-            uct_ib_mlx5_qp_attr_t attr = {};
             ucs_status_t status;
 
-            uct_rc_mlx5_iface_fill_attr(m_iface, &attr,
-                                        m_iface->super.config.tx_qp_len,
-                                        &m_iface->rx.srq);
-            uct_ib_exp_qp_fill_attr(&m_iface->super.super, &attr.super);
-            status = uct_rc_mlx5_iface_create_qp(m_iface, &m_txwq.super,
-                                                 &m_txwq, &attr);
+            status = uct_rc_mlx5_iface_create_qp(m_iface, &m_txwq.super, &m_txwq,
+                                                 m_iface->super.config.tx_qp_len);
             ASSERT_UCS_OK(status);
 
             if (m_txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
@@ -357,7 +351,7 @@ private:
 
             struct ibv_ah_attr ah = ah_attr();
             status = uct_rc_mlx5_ep_connect_qp(m_iface, &m_txwq.super,
-                                               qp_num(), &ah, path_mtu(), 0);
+                                               qp_num(), &ah, path_mtu(), 0, 0);
             ASSERT_UCS_OK(status);
         }
 
@@ -398,8 +392,9 @@ private:
             ASSERT_UCS_OK(status);
 
             struct ibv_ah_attr ah = ah_attr();
+            uct_ib_ece ece        = {};
             status = uct_rc_iface_qp_connect(&m_iface->super, m_ibqp,
-                                             qp_num(), &ah, path_mtu());
+                                             qp_num(), &ah, path_mtu(), &ece);
             ASSERT_UCS_OK(status);
         }
 

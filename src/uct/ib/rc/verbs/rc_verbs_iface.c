@@ -32,7 +32,7 @@ static const char *uct_rc_verbs_flush_mode_names[] = {
 };
 
 static ucs_config_field_t uct_rc_verbs_iface_config_table[] = {
-  {"RC_", "", NULL,
+  {"RC_", "RC_PACK_ECE=off", NULL,
    ucs_offsetof(uct_rc_verbs_iface_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_rc_iface_config_table)},
 
@@ -215,6 +215,11 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
         iface_attr->ep_addr_len += sizeof(mr_id);
     }
 
+    if ((iface->config.flags & UCT_RC_VERBS_IFACE_FORCE_ECE) ||
+        uct_ib_ece_is_set(&iface->ece)) {
+        iface_attr->ep_addr_len += sizeof(uint64_t);
+    }
+
     return UCS_OK;
 }
 
@@ -259,6 +264,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, tl_md,
                               worker, params, &config->super.super, &init_attr);
 
+    self->config.flags               = 0;
     self->config.tx_max_wr           = ucs_min(config->tx_max_wr,
                                                self->super.config.tx_qp_len);
     self->super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
@@ -329,6 +335,16 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
+
+    if (config->super.super.pack_ece == UCS_CONFIG_OFF) {
+        memset(&self->ece, 0, sizeof(self->ece));
+    } else {
+        uct_ib_query_ece(qp, &self->ece);
+        if (config->super.super.pack_ece == UCS_CONFIG_ON) {
+            self->config.flags |= UCT_RC_VERBS_IFACE_FORCE_ECE;
+        }
+    }
+
     uct_ib_destroy_qp(qp);
 
     self->config.max_inline   = attr.cap.max_inline_data;

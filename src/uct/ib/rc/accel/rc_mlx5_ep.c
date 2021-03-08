@@ -14,7 +14,7 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
-#include <uct/ib/mlx5/exp/ib_exp.h>
+#include <uct/ib/mlx5/ece.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/sys/compiler.h>
 #include <arpa/inet.h> /* For htonl */
@@ -621,19 +621,74 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     return UCS_OK;
 }
 
+static void *uct_rc_mlx5_ep_pack_ece(uct_rc_mlx5_iface_common_t *iface,
+                                    uct_rc_mlx5_ep_address_t *rc_addr,
+                                    void *ptr, uint32_t ece, unsigned flag,
+                                    unsigned sr_flag)
+{
+    uct_ib_mlx5_ece_fields_t ece_fields;
+
+    if ((iface->config.flags & UCT_RC_MLX5_IFACE_FORCE_ECE) ||
+        (uct_ib_mlx5_decode_ece(ece, &ece_fields)) != UCS_OK) {
+        rc_addr->flags |= flag;
+        *(uint32_t*)ptr = ece;
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint32_t);
+    } else {
+        if (ece_fields.selective_repeat) {
+            rc_addr->flags |= sr_flag;
+        }
+    }
+
+    return ptr;
+}
+
+static const void *
+uct_rc_mlx5_ep_unpack_ece(uct_rc_mlx5_iface_common_t *iface,
+                          const uct_rc_mlx5_ep_address_t *rc_addr,
+                          const void *ptr, uint32_t *ece_p,
+                          unsigned flag, unsigned sr_flag)
+{
+    uct_ib_mlx5_ece_fields_t ece_fields = {};
+
+    if (rc_addr->flags & flag) {
+        *ece_p = *(uint32_t*)ptr;
+        ptr    = UCS_PTR_TYPE_OFFSET(ptr, uint32_t);
+    } else {
+        if (rc_addr->flags & sr_flag) {
+            ece_fields.selective_repeat = 1;
+        }
+
+        *ece_p = uct_ib_mlx5_encode_ece(&ece_fields);
+    }
+
+    return ptr;
+}
+
 ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_rc_mlx5_ep_address_t *rc_addr = (uct_rc_mlx5_ep_address_t*)addr;
     uct_ib_md_t *md                   = uct_ib_iface_md(ucs_derived_of(
                                         tl_ep->iface, uct_ib_iface_t));
+    void *ptr                         = rc_addr + 1;
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->tx.wq.super.qp_num);
     uct_ib_mlx5_md_get_atomic_mr_id(md, &rc_addr->atomic_mr_id);
+    rc_addr->flags = 0;
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp.qp_num);
+        rc_addr->flags |= UCT_RC_MLX5_EP_ADDR_TM_QP_NUM;
+        uct_ib_pack_uint24(*(uct_ib_uint24_t*)ptr, ep->tm_qp.qp_num);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uct_ib_uint24_t);
+
+        ptr = uct_rc_mlx5_ep_pack_ece(iface, rc_addr, ptr, iface->tx.tm_ece,
+                                      UCT_RC_MLX5_EP_ADDR_TM_ECE,
+                                      UCT_RC_MLX5_EP_ADDR_TM_SR);
     }
+
+    ptr = uct_rc_mlx5_ep_pack_ece(iface, rc_addr, ptr, iface->tx.ece,
+                                  UCT_RC_MLX5_EP_ADDR_ECE,
+                                  UCT_RC_MLX5_EP_ADDR_SR);
 
     return UCS_OK;
 }
@@ -681,18 +736,20 @@ ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
-                          uint8_t path_index)
+                          uint8_t path_index, uint32_t ece)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md, uct_ib_mlx5_md_t);
+    uct_ib_ece ibece;
 
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_rc_mlx5_iface_common_devx_connect_qp(iface, qp, qp_num,
                                                         ah_attr, path_mtu,
-                                                        path_index);
+                                                        path_index, ece);
     } else {
+        uct_ib_mlx5_set_ece(ece, &ibece);
         return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num,
-                                       ah_attr, path_mtu);
+                                       ah_attr, path_mtu, &ibece);
     }
 }
 
@@ -703,38 +760,52 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     const uct_rc_mlx5_ep_address_t *rc_addr = (const uct_rc_mlx5_ep_address_t*)ep_addr;
+    const void *ptr = rc_addr + 1;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
     ucs_status_t status;
+    uint32_t ece;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                         ep->super.path_index, &ah_attr,
                                         &path_mtu);
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
-    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+    if (rc_addr->flags & UCT_RC_MLX5_EP_ADDR_TM_QP_NUM) {
+        ucs_assert(UCT_RC_MLX5_TM_ENABLED(iface));
+
+        ptr = uct_rc_mlx5_ep_unpack_ece(iface, rc_addr, ptr, &ece,
+                                        UCT_RC_MLX5_EP_ADDR_TM_ECE,
+                                        UCT_RC_MLX5_EP_ADDR_TM_SR);
+
         /* For HW TM we need 2 QPs, one of which will be used by the device for
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
         status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tm_qp,
                                            uct_ib_unpack_uint24(rc_addr->qp_num),
                                            &ah_attr, path_mtu,
-                                           ep->super.path_index);
+                                           ep->super.path_index, ece);
         if (status != UCS_OK) {
             return status;
         }
 
+        ucs_assert(rc_addr->flags & UCT_RC_MLX5_EP_ADDR_TM_QP_NUM);
         /* Need to connect local ep QP to the one owned by device
          * (and bound to XRQ) on the peer. */
-        qp_num = uct_ib_unpack_uint24(rc_addr->tm_qp_num);
+        qp_num = uct_ib_unpack_uint24(*(uct_ib_uint24_t*)ptr);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uct_ib_uint24_t);
     } else {
         qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 
+    ptr = uct_rc_mlx5_ep_unpack_ece(iface, rc_addr, ptr, &ece,
+                                    UCT_RC_MLX5_EP_ADDR_ECE,
+                                    UCT_RC_MLX5_EP_ADDR_SR);
+
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tx.wq.super, qp_num,
                                        &ah_attr, path_mtu,
-                                       ep->super.path_index);
+                                       ep->super.path_index, ece);
     if (status != UCS_OK) {
         return status;
     }
@@ -923,14 +994,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
                                                        uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
                                                        uct_ib_mlx5_md_t);
-    uct_ib_mlx5_qp_attr_t attr = {};
     ucs_status_t status;
 
     /* Need to create QP before super constructor to get QP number */
-    uct_rc_mlx5_iface_fill_attr(iface, &attr, iface->super.config.tx_qp_len,
-                                &iface->rx.srq);
-    uct_ib_exp_qp_fill_attr(&iface->super.super, &attr.super);
-    status = uct_rc_mlx5_iface_create_qp(iface, &self->tx.wq.super, &self->tx.wq, &attr);
+    status = uct_rc_mlx5_iface_create_qp(iface, &self->tx.wq.super, &self->tx.wq,
+                                         iface->super.config.tx_qp_len);
     if (status != UCS_OK) {
         return status;
     }
@@ -957,10 +1025,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
          * such a QP to be initialized with zero send queue length. */
-        memset(&attr, 0, sizeof(attr));
-        uct_rc_mlx5_iface_fill_attr(iface, &attr, 0, &iface->rx.srq);
-        uct_ib_exp_qp_fill_attr(&iface->super.super, &attr.super);
-        status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, &attr);
+        status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, 0);
         if (status != UCS_OK) {
             goto err_unreg;
         }

@@ -95,6 +95,10 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "Otherwise poll TX completions only if no RX completions found.",
    ucs_offsetof(uct_rc_iface_common_config_t, tx.poll_always), UCS_CONFIG_TYPE_BOOL},
 
+  {"PACK_ECE", "auto",
+   "Whether to pass ECE in address.",
+   ucs_offsetof(uct_rc_iface_common_config_t, pack_ece), UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
   {NULL}
 };
 
@@ -781,7 +785,7 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
                                      struct ibv_ah_attr *ah_attr,
-                                     enum ibv_mtu path_mtu)
+                                     enum ibv_mtu path_mtu, uct_ib_ece *ece)
 {
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     struct ibv_exp_qp_attr qp_attr;
@@ -810,7 +814,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                     IBV_QP_RQ_PSN             |
                                     IBV_QP_MAX_DEST_RD_ATOMIC |
                                     IBV_QP_MIN_RNR_TIMER;
-
+    uct_ib_set_ece(qp, ece);
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     dev = uct_ib_iface_device(&iface->super);
     if (iface->config.ooo_rw && UCX_IB_DEV_IS_OOO_SUPPORTED(dev, rc)) {

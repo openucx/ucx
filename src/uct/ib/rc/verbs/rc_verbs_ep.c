@@ -528,15 +528,27 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_ib_md_t *md                    = uct_ib_iface_md(&iface->super.super);
     uct_rc_verbs_ep_address_t *rc_addr = (uct_rc_verbs_ep_address_t*)addr;
+    void *ptr                          = rc_addr + 1;
     uint8_t mr_id;
 
     rc_addr->flags      = 0;
     uct_ib_pack_uint24(rc_addr->qp_num, ep->qp->qp_num);
 
-    if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
-        rc_addr->flags          |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
-        *(uint8_t*)(rc_addr + 1) = mr_id;
+    if ((iface->config.flags & UCT_RC_VERBS_IFACE_FORCE_ECE) ||
+        uct_ib_ece_is_set(&iface->ece)) {
+        rc_addr->flags |= UCT_RC_VERBS_ADDR_ECE;
+        *(uint32_t*)ptr = iface->ece.vendor_id;
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint32_t);
+        *(uint32_t*)ptr = iface->ece.options;
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint32_t);
     }
+
+    if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
+        rc_addr->flags |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
+        *(uint8_t*)ptr  = mr_id;
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+    }
+
     return UCS_OK;
 }
 
@@ -551,6 +563,8 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     const uct_ib_address_t *ib_addr          = (const uct_ib_address_t *)dev_addr;
     const uct_rc_verbs_ep_address_t *rc_addr =
                                     (const uct_rc_verbs_ep_address_t*)ep_addr;
+    const void *ptr = rc_addr + 1;
+    uct_ib_ece ece  = {};
     ucs_status_t status;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
@@ -562,13 +576,23 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
     qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
-    status = uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu);
+
+    if (rc_addr->flags & UCT_RC_VERBS_ADDR_ECE) {
+        ece.vendor_id = *(uint32_t*)ptr;
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint32_t);
+        ece.options   = *(uint32_t*)ptr;
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint32_t);
+    }
+
+    status = uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu,
+                                     &ece);
     if (status != UCS_OK) {
         return status;
     }
 
     if (rc_addr->flags & UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR) {
-        ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(*(uint8_t*)(rc_addr + 1));
+        ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(*(uint8_t*)ptr);
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
     } else {
         ep->super.atomic_mr_offset = 0;
     }

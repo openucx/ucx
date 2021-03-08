@@ -327,7 +327,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uint32_t dest_qp_num,
                                          struct ibv_ah_attr *ah_attr,
                                          enum ibv_mtu path_mtu,
-                                         uint8_t path_index)
+                                         uint8_t path_index, uint32_t ece)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(uct_ib_iface_md(&iface->super.super),
                                           uct_ib_mlx5_md_t);
@@ -412,6 +412,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, iface->super.config.min_rnr_timer);
 
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, ece);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),

@@ -23,7 +23,8 @@
 
 
 enum {
-    UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR = UCS_BIT(0)
+    UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR = UCS_BIT(0),
+    UCT_RC_VERBS_ADDR_ECE           = UCS_BIT(1),
 };
 
 
@@ -38,6 +39,10 @@ enum {
 typedef struct uct_rc_verbs_ep_address {
     uint8_t          flags;
     uct_ib_uint24_t  qp_num;
+    /* Optional fields
+     * - uint64_t    ece
+     * - uint8_t     mr_id
+     */
 } UCS_S_PACKED uct_rc_verbs_ep_address_t;
 
 
@@ -70,6 +75,14 @@ typedef struct uct_rc_verbs_iface_config {
 
 
 /**
+ * RC verbs interface flags,
+ */
+typedef enum {
+    UCT_RC_VERBS_IFACE_FORCE_ECE = UCS_BIT(0),
+} uct_rc_verbs_iface_flags_t;
+
+
+/**
  * RC verbs interface.
  */
 typedef struct uct_rc_verbs_iface {
@@ -81,12 +94,14 @@ typedef struct uct_rc_verbs_iface {
     uct_rc_am_short_hdr_t       am_inl_hdr;
     ucs_mpool_t                 short_desc_mp;
     uct_rc_iface_send_desc_t    *fc_desc; /* used when max_inline is zero */
+    uct_ib_ece                  ece;
     struct {
         size_t                  short_desc_size;
         size_t                  max_inline;
         size_t                  max_send_sge;
         unsigned                tx_max_wr;
         uint8_t                 flush_by_fc;
+        uint8_t                 flags;  /* uct_rc_verbs_iface_flags_t */
     } config;
 } uct_rc_verbs_iface_t;
 
