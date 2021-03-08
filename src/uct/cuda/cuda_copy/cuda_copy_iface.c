@@ -16,6 +16,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/async/async.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/profile/profile.h>
 
 
 static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
@@ -157,18 +158,22 @@ uct_cuda_copy_progress_event_queue(uct_cuda_copy_iface_t *iface,
 {
     unsigned count = 0;
     uct_cuda_copy_completion_desc_t *cuda_comp;
+    ucs_queue_iter_t iter;
 
-    ucs_queue_for_each_extract(cuda_comp, queue_head, queue,
-                               cudaEventQuery(cuda_comp->event) == cudaSuccess) {
-        ucs_queue_remove(queue_head, &cuda_comp->queue);
-        if (cuda_comp->comp != NULL) {
-            uct_invoke_completion(cuda_comp->comp, UCS_OK);
-        }
-        ucs_trace_poll("CUDA completion done :%p", cuda_comp);
-        ucs_mpool_put(cuda_comp);
-        count++;
-        if (count >= max_events) {
-            break;
+    ucs_queue_for_each_safe(cuda_comp, iter, queue_head, queue) {
+        if (cudaEventQuery(cuda_comp->event) == cudaSuccess) {
+            ucs_queue_del_iter(queue_head, iter);
+            if (cuda_comp->comp != NULL) {
+                ucs_push_range("event comp", 9);
+                uct_invoke_completion(cuda_comp->comp, UCS_OK);
+                ucs_pop_range();
+            }
+            ucs_trace_poll("CUDA completion done :%p", cuda_comp);
+            ucs_mpool_put(cuda_comp);
+            count++;
+            if (count >= max_events) {
+                break;
+            }
         }
     }
     return count;
