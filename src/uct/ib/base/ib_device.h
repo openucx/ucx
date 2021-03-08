@@ -393,7 +393,8 @@ const char *uct_ib_roce_version_str(uct_ib_roce_version_t roce_ver);
 const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size);
 
 ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
-                                     unsigned gid_index, union ibv_gid *gid);
+                                     unsigned gid_index, union ibv_gid *gid,
+                                     ucs_log_level_t error_level);
 
 ucs_status_t uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
                                           uint8_t port_num, unsigned gid_index,
