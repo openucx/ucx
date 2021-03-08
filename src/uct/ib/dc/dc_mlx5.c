@@ -1236,6 +1236,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         self->tx.num_dci_pools = self->super.super.super.num_paths;
     }
     ucs_assert(self->tx.num_dci_pools <= UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
+    ucs_assert(ucs_is_pow2(self->tx.num_dci_pools));
 
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self);
