@@ -10,6 +10,7 @@
 ## 1.10.1 (TBD)
 ### Bugfixes:
 * Fix Infiniband port speed detection for HDR100
+* Fix build issues in gtest-all.cc and sock.c with GCC11
 
 ## 1.10.0 (March 9, 2021)
 ### Features:
