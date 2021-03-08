@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.10.0-rc5 (February 26, 2021)
+## 1.10.0 (March 8, 2021)
 ### Features:
 #### Core
 * Added support for Nvidia HPC SDK
