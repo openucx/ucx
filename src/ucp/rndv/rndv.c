@@ -355,6 +355,18 @@ static void ucp_rndv_recv_data_init(ucp_request_t *rreq, size_t size)
     rreq->recv.remaining = size;
 }
 
+ucs_status_t ucp_rndv_send_rts(ucp_request_t *sreq, uct_pack_callback_t pack_cb,
+                               size_t rts_size)
+{
+    size_t max_rts_size = ucp_ep_config(sreq->send.ep)->rndv.rkey_size +
+                          rts_size;
+    ucs_status_t status;
+
+    status = ucp_do_am_single(&sreq->send.uct, UCP_AM_ID_RNDV_RTS, pack_cb,
+                              max_rts_size);
+    return ucp_rndv_rts_handle_status_from_pending(sreq, status);
+}
+
 static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
                                   ucs_ptr_map_key_t sender_req_id,
                                   size_t recv_length, size_t offset)
