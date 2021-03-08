@@ -424,7 +424,6 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
 
     for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
         ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
-
         if (!(md_attr().cap.reg_mem_types & UCS_BIT(mem_type_id))) {
             UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
                              << "registration is not supported by "
