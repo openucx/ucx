@@ -171,7 +171,8 @@ static ucs_status_t uct_ib_mlx5_exp_md_umr_qp_create(uct_ib_mlx5_md_t *md)
     qp_attr.ah_attr.dlid             = port_attr->lid;
     qp_attr.ah_attr.is_global        = 1;
     if (uct_ib_device_query_gid(ibdev, port_num, UCT_IB_MD_DEFAULT_GID_INDEX,
-                                &qp_attr.ah_attr.grh.dgid) != UCS_OK) {
+                                &qp_attr.ah_attr.grh.dgid,
+                                UCS_LOG_LEVEL_ERROR) != UCS_OK) {
         goto err_destroy_qp;
     }
 

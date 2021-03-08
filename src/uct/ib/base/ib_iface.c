@@ -1152,7 +1152,8 @@ static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
     /* Fill the gid */
     status = uct_ib_device_query_gid(uct_ib_iface_device(iface),
                                      iface->config.port_num,
-                                     gid_info->gid_index, &gid_info->gid);
+                                     gid_info->gid_index, &gid_info->gid,
+                                     UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         goto out;
     }
