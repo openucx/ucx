@@ -28,7 +28,6 @@ typedef struct {
 int ucs_vfs_sock_get_address(struct sockaddr_un *un_addr)
 {
     struct passwd *pw;
-    int ret;
 
     pw = getpwuid(geteuid());
     if (pw == NULL) {
