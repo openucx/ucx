@@ -68,7 +68,7 @@ stages:
     dependsOn: Check_Commit
     jobs:
       - job: DraftRelease
-        condition: or(eq(variables['Build.Reason'], 'ResourceTrigger'), and(eq(stageDependencies.Check_Commit.Check.outputs['Commit.Title'], 'Yes'), eq(variables['Build.Reason'], 'PullRequest')))
+        condition: or(eq(variables['Build.Reason'], 'IndividualCI'), and(eq(stageDependencies.Check_Commit.Check.outputs['Commit.Title'], 'Yes'), eq(variables['Build.Reason'], 'PullRequest')))
         container: centos7
         pool:
           name: MLNX
@@ -91,7 +91,7 @@ stages:
           displayName: Build tarball
 
         - task: GithubRelease@0
-          condition: eq(variables['Build.Reason'], 'ResourceTrigger')
+          condition: eq(variables['Build.Reason'], 'IndividualCI')
           displayName: Create/edit GitHub Draft Release
           inputs:
             githubConnection: release
