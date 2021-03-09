@@ -338,6 +338,9 @@ struct ucp_ep_config {
 
         /* Maximal size for eager short */
         ucp_memtype_thresh_t             max_eager_short;
+
+        /* Maximal size for eager short with reply protocol */
+        ucp_memtype_thresh_t             max_reply_eager_short;
     } am_u;
 
     /* Protocol selection data */

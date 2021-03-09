@@ -160,7 +160,7 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     qp_init_attr.sq_sig_all          = 0;
     qp_init_attr.cap.max_send_wr     = config->super.tx.queue_len;
     qp_init_attr.cap.max_recv_wr     = config->super.rx.queue_len;
-    qp_init_attr.cap.max_send_sge    = 2;
+    qp_init_attr.cap.max_send_sge    = config->super.tx.min_sge + 1;
     qp_init_attr.cap.max_recv_sge    = 1;
     qp_init_attr.cap.max_inline_data = config->super.tx.min_inline;
 

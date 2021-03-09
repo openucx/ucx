@@ -423,6 +423,16 @@ protected:
         }
     }
 
+    void test_short_thresh(size_t max_short)
+    {
+        ucp_ep_config_t *ep_cfg = ucp_ep_config(sender().ep());
+
+        EXPECT_LE(max_short, ep_cfg->rndv.am_thresh.remote);
+        EXPECT_LE(max_short, ep_cfg->rndv.am_thresh.local);
+        EXPECT_LE(max_short, ep_cfg->rndv.rma_thresh.remote);
+        EXPECT_LE(max_short, ep_cfg->rndv.rma_thresh.local);
+    }
+
     virtual ucs_status_t am_data_handler(const void *header,
                                          size_t header_length,
                                          void *data, size_t length,
@@ -570,6 +580,39 @@ UCS_TEST_P(test_ucp_am_nbx, rx_persistent_data)
 
     ucp_am_data_release(receiver().worker(), rx_data);
     EXPECT_EQ(UCS_OK, request_wait(sptr));
+}
+
+// Check that max_short limits are adjusted when rndv threshold is set
+UCS_TEST_P(test_ucp_am_nbx, max_short_thresh_rndv, "RNDV_THRESH=0")
+{
+    ucp_ep_config_t *ep_cfg = ucp_ep_config(sender().ep());
+
+    size_t max_short = static_cast<size_t>(
+            ep_cfg->am_u.max_eager_short.memtype_on + 1);
+
+    test_short_thresh(max_short);
+
+    size_t max_reply_short = static_cast<size_t>(
+            ep_cfg->am_u.max_reply_eager_short.memtype_on + 1);
+
+    test_short_thresh(max_reply_short);
+}
+
+// Check that max_short limits are adjusted when zcopy threshold is set
+UCS_TEST_P(test_ucp_am_nbx, max_short_thresh_zcopy, "ZCOPY_THRESH=0")
+{
+    ucp_ep_config_t *ep_cfg = ucp_ep_config(sender().ep());
+
+    size_t max_short = static_cast<size_t>(
+            ep_cfg->am_u.max_eager_short.memtype_on + 1);
+
+    EXPECT_LE(max_short, ep_cfg->am.zcopy_thresh[0]);
+
+
+    size_t max_reply_short = static_cast<size_t>(
+            ep_cfg->am_u.max_reply_eager_short.memtype_on + 1);
+
+    EXPECT_LE(max_reply_short, ep_cfg->am.zcopy_thresh[0]);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
