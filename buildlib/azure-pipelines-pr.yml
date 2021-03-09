@@ -6,40 +6,43 @@ pr:
   - master
   - v*.*.x
 
+variables:
+  docker_common_key: --network=host -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+
 resources:
   containers:
     - container: centos7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.x-cuda11.1:1
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
-      options: --privileged
+      options: --privileged --network=host
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+      options: $(docker_common_key)
     - container: rhel76
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+      options: $(docker_common_key)
     - container: rhel76_mofed47
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+      options: $(docker_common_key)
     - container: rhel74
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+      options: $(docker_common_key)
     - container: rhel82
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+      options: $(docker_common_key)
     - container: ubuntu2004
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+      options: $(docker_common_key)
     - container: ubuntu1804
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+      options: $(docker_common_key)
     - container: sles15sp2
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+      options: $(docker_common_key)
     - container: sles12sp5
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+      options: $(docker_common_key)
 
 stages:
   - stage: Codestyle
