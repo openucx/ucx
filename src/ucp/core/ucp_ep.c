@@ -199,12 +199,61 @@ err:
     return status;
 }
 
+static int
+ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
+                                               void *arg)
+{
+    ucp_ep_h ep = (ucp_ep_h)arg;
+    ucp_request_t *req;
+
+    if (elem->cb != ucp_ep_local_disconnect_progress) {
+        return 0;
+    }
+
+    req = (ucp_request_t*)elem->arg;
+    if (ep != req->send.ep) {
+        return 0;
+    }
+
+    /* Expect that only EP flush request can be remained in the callback queue,
+     * because reply UCP EP created for sending WIREUP_MSG/EP_REMOVED message is
+     * not exposed to a user */
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_RELEASED);
+    ucs_assert(req->send.uct.func == ucp_ep_flush_progress_pending);
+
+    ucp_request_complete_send(req, UCS_OK);
+    return 1;
+}
+
+static UCS_F_NOINLINE void ucp_ep_remove_progress_callbacks(ucp_ep_h ep)
+{
+    ucp_worker_h worker = ep->worker;
+
+    /* Remove pending slow-path functions after all UCT EP lanes are destroyed,
+     * because cleanup lanes purges all outstanding operation and purged
+     * operations could add callbacks on the progress */
+    ucs_assert(ep->ref_cnt == 0);
+
+    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
+                            ucp_wireup_msg_ack_cb_pred, ep);
+
+    ucs_callbackq_remove_if(&worker->uct->progress_q,
+                            ucp_worker_err_handle_remove_filter, ep);
+
+    ucs_callbackq_remove_if(&worker->uct->progress_q,
+                            ucp_listener_accept_cb_remove_filter, ep);
+
+    ucs_callbackq_remove_if(&worker->uct->progress_q,
+                            ucp_ep_local_disconnect_progress_remove_filter, ep);
+}
+
 void ucp_ep_destroy_base(ucp_ep_h ep)
 {
     if (--ep->ref_cnt != 0) {
         return;
     }
 
+    ucp_ep_remove_progress_callbacks(ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ucp_ep_ext_control(ep));
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
@@ -254,8 +303,6 @@ err:
 
 static void ucp_ep_delete(ucp_ep_h ep)
 {
-    ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
-                            ucp_wireup_msg_ack_cb_pred, ep);
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucp_worker_keepalive_remove_ep(ep);
         ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
@@ -841,32 +888,6 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
     }
 }
 
-static int
-ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
-                                               void *arg)
-{
-    ucp_ep_h ep = (ucp_ep_h)arg;
-    ucp_request_t *req;
-
-    if (elem->cb != ucp_ep_local_disconnect_progress) {
-        return 0;
-    }
-
-    req = (ucp_request_t*)elem->arg;
-    if (ep != req->send.ep) {
-        return 0;
-    }
-
-    /* we expect that only EP flush request can be remained in the callback
-     * queue, because reply UCP EP created for sending WIREUP_MSG/EP_REMOVED
-     * message is not exposed to a user */
-    ucs_assert(req->flags & UCP_REQUEST_FLAG_RELEASED);
-    ucs_assert(req->send.uct.func == ucp_ep_flush_progress_pending);
-
-    ucp_request_complete_send(req, UCS_OK);
-    return 1;
-}
-
 void ucp_ep_disconnected(ucp_ep_h ep, int force)
 {
     ucp_worker_h worker = ep->worker;
@@ -892,22 +913,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     ucp_ep_match_remove_ep(worker, ep);
     ucp_ep_destroy_internal(ep);
-
-    /* remove pending slow-path functions after EP cleanup, because it does
-     * cleanup lanes which purges all outstanding operation and purged
-     * operations could add callbacks on the progress */
-
-    /* remove pending slow-path progress in case it wasn't removed yet */
-    ucs_callbackq_remove_if(&worker->uct->progress_q,
-                            ucp_worker_err_handle_remove_filter, ep);
-
-    /* remove pending slow-path function if it wasn't removed yet */
-    ucs_callbackq_remove_if(&worker->uct->progress_q,
-                            ucp_listener_accept_cb_remove_filter, ep);
-
-    /* remove pending slow-path disconnect progress if it wasn't removed yet */
-    ucs_callbackq_remove_if(&worker->uct->progress_q,
-                            ucp_ep_local_disconnect_progress_remove_filter, ep);
 }
 
 unsigned ucp_ep_local_disconnect_progress(void *arg)
