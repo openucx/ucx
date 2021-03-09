@@ -5,7 +5,7 @@ parameters:
 
 jobs:
   - job: jucx_release
-    condition: eq(variables['Build.Reason'], 'ResourceTrigger')
+    condition: eq(variables['Build.Reason'], 'IndividualCI')
     container: centos7
 
     steps:

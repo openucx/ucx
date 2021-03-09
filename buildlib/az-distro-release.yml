@@ -1,9 +1,9 @@
 jobs:
   - job: distro_release
-    condition: or(eq(variables['Build.Reason'], 'ResourceTrigger'), and(eq(stageDependencies.Check_Commit.Check.outputs['Commit.Title'], 'Yes'), eq(variables['Build.Reason'], 'PullRequest')))
+    condition: or(eq(variables['Build.Reason'], 'IndividualCI'), and(eq(stageDependencies.Check_Commit.Check.outputs['Commit.Title'], 'Yes'), eq(variables['Build.Reason'], 'PullRequest')))
     displayName: distro
     variables:
-      ${{ if eq(variables['Build.Reason'], 'ResourceTrigger') }}:
+      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
         POSTFIX: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}
       ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
         POSTFIX: ucx-test
@@ -101,7 +101,7 @@ jobs:
           AZ_ARTIFACT_NAME: $(artifact_name)
 
       - task: GithubRelease@0
-        condition: eq(variables['Build.Reason'], 'ResourceTrigger')
+        condition: eq(variables['Build.Reason'], 'IndividualCI')
         displayName: Upload artifacts to draft release
         inputs:
           githubConnection: release
