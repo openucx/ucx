@@ -17,6 +17,7 @@ extern "C" {
 #include <ucp/core/ucp_listener.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/core/ucp_request.inl>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/wireup/wireup_cm.h>
 }
@@ -1270,17 +1271,11 @@ protected:
             req->flags        |= UCP_REQUEST_FLAG_COMPLETED;
 
             ucp_request_t *req_from_id;
-            ucs_status_t status = ucp_worker_get_request_by_id(
-                    sender().worker(), req->send.msg_proto.sreq_id,
-                    &req_from_id);
+            ucs_status_t status = ucp_request_get_by_id(sender().worker(),
+                                                        req->id,&req_from_id,
+                                                        1);
             if (status == UCS_OK) {
                 EXPECT_EQ(req, req_from_id);
-                /* check PTR MAP flag only in this way, since it is debug
-                 * only flag has 0 value in a release mode */
-                EXPECT_TRUE((req->flags & UCP_REQUEST_FLAG_IN_PTR_MAP) ==
-                            UCP_REQUEST_FLAG_IN_PTR_MAP);
-                ucp_worker_del_request_id(sender().worker(), req,
-                                          req->send.msg_proto.sreq_id);
             }
         }
 

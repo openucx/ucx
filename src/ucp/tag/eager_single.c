@@ -27,7 +27,7 @@ static ucs_status_t ucp_eager_short_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     status = uct_ep_am_short(req->send.ep->uct_eps[spriv->super.lane],
-                             UCP_AM_ID_EAGER_ONLY, req->send.msg_proto.tag.tag,
+                             UCP_AM_ID_EAGER_ONLY, req->send.msg_proto.tag,
                              req->send.state.dt_iter.type.contig.buffer,
                              req->send.state.dt_iter.length);
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
@@ -89,7 +89,7 @@ static size_t ucp_eager_single_pack(void *dest, void *arg)
     size_t packed_size;
 
     ucs_assert(req->send.state.dt_iter.offset == 0);
-    hdr->super.tag = req->send.msg_proto.tag.tag;
+    hdr->super.tag = req->send.msg_proto.tag;
     packed_size    = ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
                                                  req->send.ep->worker,
                                                  SIZE_MAX, &next_iter, hdr + 1);
@@ -175,7 +175,7 @@ ucp_proto_eager_zcopy_send_func(ucp_request_t *req,
                                 const uct_iov_t *iov)
 {
     ucp_eager_hdr_t hdr = {
-        .super.tag = req->send.msg_proto.tag.tag
+        .super.tag = req->send.msg_proto.tag
     };
 
     return uct_ep_am_zcopy(req->send.ep->uct_eps[spriv->super.lane],

@@ -98,7 +98,7 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
         /* bcopy is the fast path */
         if (ucs_likely(req->send.state.uct_comp.count == 0)) {
             if (req_id != UCP_REQUEST_ID_INVALID) {
-                ucp_worker_del_request_id(req->send.ep->worker, req, req_id);
+                ucp_request_id_release(req);
             }
             ucp_request_send_buffer_dereg(req);
             ucp_request_complete_send(req, UCS_OK);

@@ -133,11 +133,14 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
     }
 }
 
-static void ucp_worker_request_init_proxy(ucs_mpool_t *mp, void *obj, void *chunk)
+static void
+ucp_worker_request_init_proxy(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, req_mp);
+    ucp_worker_h worker   = ucs_container_of(mp, ucp_worker_t, req_mp);
     ucp_context_h context = worker->context;
-    ucp_request_t *req = obj;
+    ucp_request_t *req    = obj;
+
+    ucp_request_id_reset(req);
 
     if (context->config.request.init != NULL) {
         context->config.request.init(req + 1);
@@ -146,9 +149,11 @@ static void ucp_worker_request_init_proxy(ucs_mpool_t *mp, void *obj, void *chun
 
 static void ucp_worker_request_fini_proxy(ucs_mpool_t *mp, void *obj)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, req_mp);
+    ucp_worker_h worker   = ucs_container_of(mp, ucp_worker_t, req_mp);
     ucp_context_h context = worker->context;
-    ucp_request_t *req = obj;
+    ucp_request_t *req    = obj;
+
+    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
 
     if (context->config.request.cleanup != NULL) {
         context->config.request.cleanup(req + 1);
@@ -338,14 +343,6 @@ void ucp_request_init_multi_proto(ucp_request_t *req,
     UCS_PROFILE_REQUEST_EVENT(req, multi_func_str, req->send.length);
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_send_request_init_id(ucp_request_t *req)
-{
-    if (req->flags & UCP_REQUEST_FLAG_SYNC) {
-        ucs_assert(req->flags & UCP_REQUEST_FLAG_SEND_TAG);
-        ucp_send_request_set_id(req);
-    }
-}
-
 ucs_status_t
 ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                        size_t zcopy_thresh, size_t zcopy_max,
@@ -375,7 +372,6 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                          "start_bcopy_multi");
         }
 
-        ucp_send_request_init_id(req);
         return UCS_OK;
     } else if (length < zcopy_max) {
         /* zcopy */
@@ -407,7 +403,6 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
         }
 
-        ucp_send_request_init_id(req);
         return UCS_OK;
     }
 

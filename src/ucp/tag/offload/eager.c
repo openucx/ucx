@@ -21,7 +21,7 @@ ucp_proto_eager_tag_offload_short_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     status = uct_ep_tag_eager_short(ep->uct_eps[spriv->super.lane],
-                                    req->send.msg_proto.tag.tag,
+                                    req->send.msg_proto.tag,
                                     req->send.state.dt_iter.type.contig.buffer,
                                     req->send.state.dt_iter.length);
     if (status == UCS_ERR_NO_RESOURCE) {
@@ -98,7 +98,7 @@ ucp_proto_eager_tag_offload_bcopy_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     packed_len = uct_ep_tag_eager_bcopy(req->send.ep->uct_eps[spriv->super.lane],
-                                        req->send.msg_proto.tag.tag, 0ul,
+                                        req->send.msg_proto.tag, 0ul,
                                         ucp_eager_tag_offload_pack, req, 0);
     status     = ucs_likely(packed_len >= 0) ? UCS_OK : packed_len;
 
@@ -179,7 +179,7 @@ ucp_proto_tag_offload_zcopy_send_func(ucp_request_t *req,
                                       const uct_iov_t *iov)
 {
     return uct_ep_tag_eager_zcopy(req->send.ep->uct_eps[spriv->super.lane],
-                                  req->send.msg_proto.tag.tag, 0ul, iov, 1, 0,
+                                  req->send.msg_proto.tag, 0ul, iov, 1, 0,
                                   &req->send.state.uct_comp);
 }
 

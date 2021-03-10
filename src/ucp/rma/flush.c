@@ -187,7 +187,7 @@ static int ucp_flush_check_completion(ucp_request_t *req)
 
     ucs_trace_req("flush req %p completed", req);
     ucp_ep_flush_slow_path_remove(req);
-    req->send.flush.flushed_cb(req);
+    req->send.flushed_cb(req);
     return 1;
 }
 
@@ -335,7 +335,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     req->status                     = UCS_OK;
     req->super_req                  = worker_req;
     req->send.ep                    = ep;
-    req->send.flush.flushed_cb      = flushed_cb;
+    req->send.flushed_cb            = flushed_cb;
     req->send.flush.prog_id         = UCS_CALLBACKQ_ID_NULL;
     req->send.flush.uct_flags       = UCT_FLUSH_FLAG_LOCAL;
     req->send.flush.sw_started      = 0;

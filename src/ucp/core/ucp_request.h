@@ -26,7 +26,7 @@
 #include <ucp/core/ucp_worker.h>
 
 
-#define UCP_REQUEST_ID_INVALID      0
+#define UCP_REQUEST_ID_INVALID ((ucs_ptr_map_key_t)0)
 
 
 #define ucp_trace_req(_sreq, _message, ...) \
@@ -55,12 +55,10 @@ enum {
     UCP_REQUEST_FLAG_RECV_TAG             = UCS_BIT(17),
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(18),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(19),
-    UCP_REQUEST_FLAG_IN_PTR_MAP           = UCS_BIT(20)
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(19)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0,
-    UCP_REQUEST_FLAG_IN_PTR_MAP           = 0
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
 #endif
 };
 
@@ -111,8 +109,13 @@ enum {
  * Request in progress.
  */
 struct ucp_request {
-    ucs_status_t                  status;     /* Operation status */
-    uint32_t                      flags;      /* Request flags */
+    /* Operation status */
+    ucs_status_t      status;
+    /* Request flags */
+    uint32_t          flags;
+    /* Local request ID taken from PTR MAP */
+    ucs_ptr_map_key_t id;
+
     union {
         void                      *user_data; /* Completion user data */
         ucp_request_t             *super_req; /* Super request that is used
@@ -125,7 +128,10 @@ struct ucp_request {
          * operations */
         struct {
             ucp_ep_h                ep;
-            void                    *buffer;    /* Send buffer */
+            union {
+                void                   *buffer; /* Send buffer */
+                ucp_request_callback_t flushed_cb; /* Called when flushed */
+            };
             ucp_datatype_t          datatype;   /* Send type */
             size_t                  length;     /* Total length, in bytes */
             ucp_send_nbx_callback_t cb;         /* Completion callback */
@@ -147,16 +153,10 @@ struct ucp_request {
                 ucp_wireup_msg_t  wireup;
 
                 struct {
-                    uint64_t               message_id;  /* used to identify matching parts
-                                                           of a large message */
-                    ucs_ptr_map_key_t      sreq_id;     /* send request ID on the
-                                                           sender side */
-
+                    /* Used to identify matching parts of a large message */
+                    uint64_t message_id;
                     union {
-                        struct {
-                            ucp_tag_t         tag;
-                            ucs_ptr_map_key_t req_id;
-                        } tag;
+                        ucp_tag_t tag;
 
                         struct {
                             union {
@@ -223,8 +223,6 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    /* Remote request ID received from a peer */
-                    ucs_ptr_map_key_t remote_req_id;
                     /* The length of the data that should be fetched from sender
                      * side */
                     size_t            length;
@@ -233,7 +231,6 @@ struct ucp_request {
                 } rndv_rtr;
 
                 struct {
-                    ucp_request_callback_t flushed_cb;/* Called when flushed */
                     ucs_hlist_link_t       list_elem; /* Element in the per-EP list of UCP
                                                          flush requests */
                     unsigned               uct_flags; /* Flags to pass to @ref uct_ep_flush */
@@ -258,7 +255,6 @@ struct ucp_request {
                 } discard_uct_ep;
 
                 struct {
-                    ucs_ptr_map_key_t     sreq_id;     /* Send request ID */
                     uint64_t              remote_addr; /* Remote address */
                     ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;       /* Atomic argument */
@@ -312,8 +308,8 @@ struct ucp_request {
             ssize_t               remaining;  /* How much more data
                                                * to be received */
 
-            /* Local request ID taken from PTR MAP */
-            ucs_ptr_map_key_t     rreq_id;
+            /* Remote request ID received from a peer */
+            ucs_ptr_map_key_t     remote_req_id;
 
             union {
                 struct {
