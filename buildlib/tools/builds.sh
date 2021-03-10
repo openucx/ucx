@@ -97,7 +97,7 @@ build_release_pkg() {
 	# extract version from configure.ac and convert to MAJOR.MINOR.PATCH representation
 	version=$(grep -P "define\S+ucx_ver" configure.ac | awk '{print $2}' | sed 's,),,' | xargs echo | tr ' ' '.')
 	if ! grep -q "$version" ucx.spec.in; then
-		log_error "Current UCX version ($version) is not present in ucx.spec.in changelog"
+		azure_log_error "Current UCX version ($version) is not present in ucx.spec.in changelog"
 		exit 1
 	fi
 	cd -
@@ -334,7 +334,7 @@ check_config_h() {
 	then
 		echo "Check successful "
 	else
-		log_error "Missing include config.h in files: $missing"
+		azure_log_error "Missing include config.h in files: $missing"
 		exit 1
 	fi
 }
