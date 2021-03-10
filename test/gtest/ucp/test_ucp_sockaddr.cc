@@ -1724,6 +1724,78 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_64k,
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols)
 
 
+class test_ucp_sockaddr_protocols_diff_config : public test_ucp_sockaddr_protocols
+{
+public:
+    void init() {
+        if (is_self()) {
+            UCS_TEST_SKIP_R("self - same config");
+        }
+
+        m_err_count = 0;
+        get_sockaddr();
+        test_base::init();
+    }
+
+    void init_entity(const char *num_paths) {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv num_paths_env("UCX_IB_NUM_PATHS", num_paths);
+        create_entity();
+    }
+
+    void create_entities_and_connect(bool server_less_num_paths) {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv max_eager_lanes_env("UCX_MAX_EAGER_LANES", "2");
+
+        if (server_less_num_paths) {
+            // create the client
+            init_entity("2");
+            // create the server
+            init_entity("1");
+        } else {
+            // create the client
+            init_entity("1");
+            // create the server
+            init_entity("2");
+        }
+
+        start_listener(cb_type());
+        client_ep_connect();
+    }
+};
+
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
+           diff_num_paths_small_msg_server_less_lanes)
+{
+    create_entities_and_connect(true);
+    test_tag_send_recv(4 * UCS_KBYTE, false, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
+           diff_num_paths_large_msg_server_less_lanes)
+{
+    create_entities_and_connect(true);
+    test_tag_send_recv(4 * UCS_MBYTE, false, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
+           diff_num_paths_small_msg_server_more_lanes)
+{
+    create_entities_and_connect(false);
+    test_tag_send_recv(4 * UCS_KBYTE, false, false);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_diff_config,
+           diff_num_paths_large_msg_server_more_lanes)
+{
+    create_entities_and_connect(false);
+    test_tag_send_recv(4 * UCS_MBYTE, false, false);
+}
+
+UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_diff_config)
+
+
 class test_ucp_sockaddr_protocols_err : public test_ucp_sockaddr_protocols {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
@@ -1753,7 +1825,6 @@ protected:
                                                         variants & RECV_STOP);
     }
 
-protected:
     ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
