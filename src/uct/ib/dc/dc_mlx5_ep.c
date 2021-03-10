@@ -1033,6 +1033,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
+    ucs_arbiter_t *waitq;
     khiter_t it;
 
     uct_dc_mlx5_ep_pending_purge(&self->super.super, NULL, NULL);
@@ -1044,6 +1045,9 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
     if (it != kh_end(&iface->tx.fc_hash)) {
         kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
     }
+
+    waitq = uct_dc_mlx5_iface_dci_waitq(iface, uct_dc_mlx5_ep_pool_index(self));
+    ucs_arbiter_group_desched(waitq, &self->arb_group);
 
     if ((self->dci == UCT_DC_MLX5_EP_NO_DCI) ||
         uct_dc_mlx5_iface_is_dci_rand(iface)) {
