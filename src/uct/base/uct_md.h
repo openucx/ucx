@@ -15,6 +15,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/config/parser.h>
+#include <ucs/memory/rcache.h>
 #include <string.h>
 
 
@@ -26,6 +27,8 @@ typedef struct uct_md_rcache_config {
     size_t               alignment;    /**< Force address alignment */
     unsigned             event_prio;   /**< Memory events priority */
     double               overhead;     /**< Lookup overhead estimation */
+    unsigned long        max_regions;  /**< Maximal number of rcache regions */
+    size_t               max_size;     /**< Maximal size of mapped memory */
 } uct_md_rcache_config_t;
 
 
@@ -197,6 +200,11 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
                                         const uct_alloc_method_t *methods,
                                         unsigned num_methods,
                                         const uct_mem_alloc_params_t *params);
+
+
+void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
+                              const uct_md_rcache_config_t *rcache_config);
+
 
 extern ucs_config_field_t uct_md_config_table[];
 

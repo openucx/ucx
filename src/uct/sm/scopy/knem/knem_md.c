@@ -354,11 +354,10 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
     }
 
     if (md_config->rcache_enable != UCS_NO) {
+        uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
         rcache_params.region_struct_size = sizeof(uct_knem_rcache_region_t);
-        rcache_params.alignment          = md_config->rcache.alignment;
         rcache_params.max_alignment      = ucs_get_page_size();
         rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
-        rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = knem_md;
         rcache_params.ops                = &uct_knem_rcache_ops;
         rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;

@@ -1266,15 +1266,14 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
 
     for (i = 0; i < md_config->reg_methods.count; ++i) {
         if (!strcasecmp(md_config->reg_methods.rmtd[i], "rcache")) {
+            uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
             rcache_params.region_struct_size = sizeof(ucs_rcache_region_t) +
                                                md->memh_struct_size;
-            rcache_params.alignment          = md_config->rcache.alignment;
             rcache_params.max_alignment      = ucs_get_page_size();
             rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
             if (md_attr->cap.reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
                 rcache_params.ucm_events     |= UCM_EVENT_MEM_TYPE_FREE;
             }
-            rcache_params.ucm_event_priority = md_config->rcache.event_prio;
             rcache_params.context            = md;
             rcache_params.ops                = &uct_ib_rcache_ops;
             rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
