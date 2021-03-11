@@ -1,6 +1,6 @@
 #
 # Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) NVIDIA Corporation. 2021. All rights reserved.
 #
 # See file LICENSE for terms.
 #
