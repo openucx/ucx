@@ -98,13 +98,12 @@ static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
         cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
         ucs_assert_always(cm_wireup_ep != NULL);
 
-        ucs_error("client ep %p failed to connect to %s using %s cms, set "
-                  "UCX_LOG_LEVEL=diag for more details",
-                  ep,
-                  ucs_sockaddr_str(
-                          (struct sockaddr*)&cm_wireup_ep->cm_remote_sockaddr,
-                          addr_str, sizeof(addr_str)),
-                  ucs_string_buffer_cstr(&cms_strb));
+        ucs_diag("client ep %p failed to connect to %s using %s cms",
+                 ep,
+                 ucs_sockaddr_str(
+                         (struct sockaddr*)&cm_wireup_ep->cm_remote_sockaddr,
+                         addr_str, sizeof(addr_str)),
+                 ucs_string_buffer_cstr(&cms_strb));
 
         return 0;
     }
