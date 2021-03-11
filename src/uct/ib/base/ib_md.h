@@ -339,6 +339,7 @@ typedef struct uct_ib_md_ops {
 typedef struct uct_ib_rcache_region {
     ucs_rcache_region_t  super;
     uct_ib_mem_t         memh;      /**<  mr exposed to the user as the memh */
+    uct_mem_attr_h       mem_attr;
 } uct_ib_rcache_region_t;
 
 
