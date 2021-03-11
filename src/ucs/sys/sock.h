@@ -370,8 +370,8 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr);
  * @param [out]  str         A string filled with the IP address.
  * @param [in]   max_size    Size of a string (considering '\0'-terminated symbol)
  *
- * @return ip_str if the sock_addr has a valid IP address or 'Invalid address'
- *         otherwise.
+ * @return '<null>' if NULL is specified or @a str if the sock_addr has a valid
+ *         IP address or 'Invalid address' otherwise.
  */
 const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
                              char *str, size_t max_size);

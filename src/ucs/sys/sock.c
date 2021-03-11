@@ -650,6 +650,11 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
     uint16_t port;
     size_t str_len;
 
+    if (sock_addr == NULL) {
+        ucs_strncpy_zero(str, "<null>", max_size);
+        return str;
+    }
+
     if (!ucs_sockaddr_is_known_af(sock_addr)) {
         ucs_strncpy_zero(str, "<invalid address family>", max_size);
         return str;
