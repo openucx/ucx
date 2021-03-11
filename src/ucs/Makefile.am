@@ -5,7 +5,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = vfs/sock . vfs/fuse
+SUBDIRS = vfs/sock . vfs/fuse nvtx
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
 lib_LTLIBRARIES     = libucs.la
