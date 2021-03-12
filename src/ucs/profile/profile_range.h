@@ -11,27 +11,50 @@ BEGIN_C_DECLS
 /** @file profile_range.h */
 
 /*
- * Store a new record with the given data.
- * SHOULD NOT be used directly - use UCS_PROFILE macros instead.
+ * Start a range trace on an arbitrary event in a potentially nested fashion.
+ * A range tracing can be started in a function and potentially end in an
+ * another function or a recursive invocation of the same function.
+ * A unique ID is returned to stop tracing the event.
  *
- * @param [in]     type        Location type.
- * @param [in]     name        Location name.
- * @param [in]     param32     custom 32-bit parameter.
- * @param [in]     param64     custom 64-bit parameter.
- * @param [in]     file        Source file name.
- * @param [in]     line        Source line number.
- * @param [in]     function    Calling function name.
- * @param [in,out] loc_id_p    Variable used to maintain the location ID.
+ * @param [in]     format      String name for the range.
+ *
+ * @return ID to be used to stop tracing a range
  */
-
 uint64_t ucs_profile_range_start(const char *format, ...);
 
+
+/*
+ * Stop range trace.
+ *
+ * @param [in]     id          id that was returned from range start.
+ *
+ */
 void ucs_profile_range_stop(uint64_t id);
 
+
+/*
+ * Add a marker on trace profiles.
+ *
+ * @param [in]     format      String name for the marker.
+ *
+ */
 void ucs_profile_range_add_marker(const char *format, ...);
 
+
+/*
+ * Start a range trace in a non-nested fashion. Range tracing must start and end
+ * in the same function.
+ *
+ * @param [in]     format      String name for the marker.
+ *
+ */
 void ucs_profile_range_push(const char *format, ...);
 
+
+/*
+ * Stop a range trace in a non-nested fashion.
+ *
+ */
 void ucs_profile_range_pop();
 
 
