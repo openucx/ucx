@@ -26,7 +26,7 @@ ucx_perftest_LDADD    = \
 if HAVE_NVTX
 ucx_perftest_LDADD   += \
     $(NVTX_LIBS) \
-   	$(abs_top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+    $(abs_top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
 endif
 
 perftestdir = $(pkgdatadir)/perftest

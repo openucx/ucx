@@ -45,7 +45,7 @@ test_link_map_LDADD    = -ldl $(top_builddir)/src/ucp/libucp.la
 if HAVE_NVTX
 test_link_map_LDADD   += \
     $(NVTX_LIBS) \
-   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
 endif
 
 test_dlopen_cfg_print_SOURCES  = test_dlopen_cfg_print.c
@@ -63,7 +63,7 @@ test_init_mt_LDADD    = $(top_builddir)/src/ucp/libucp.la
 if HAVE_NVTX
 test_init_mt_LDADD   += \
     $(NVTX_LIBS) \
-   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
 endif
 
 if HAVE_CUDA
@@ -80,7 +80,7 @@ test_cuda_hook_dynamic_LDADD    = $(top_builddir)/src/ucp/libucp.la \
 if HAVE_NVTX
 test_cuda_hook_dynamic_LDADD   += \
     $(NVTX_LIBS) \
-   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
 endif
 
 if HAVE_CUDA_STATIC
@@ -96,7 +96,7 @@ test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
 if HAVE_NVTX
 test_cuda_hook_static_LDADD    += \
     $(NVTX_LIBS) \
-   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
 endif
 
 endif

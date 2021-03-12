@@ -34,7 +34,7 @@ io_demo_LDADD    = \
 if HAVE_NVTX
 io_demo_LDADD   += \
     $(NVTX_LIBS) \
-   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
 endif
 
 io_demo_SOURCES = \

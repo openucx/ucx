@@ -57,7 +57,7 @@ gtest_LDADD = \
 if HAVE_NVTX
 gtest_LDADD += \
     $(NVTX_LIBS) \
-   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
 endif
 
 
