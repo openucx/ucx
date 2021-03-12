@@ -1170,6 +1170,9 @@ public:
         server_info_t& server_info = _server_info[server_index];
 
         assert(get_num_uncompleted(server_info) <= opts().conn_window_size);
+        assert(_server_index_lookup.find(server_info.conn) !=
+               _server_index_lookup.end());
+        assert(_num_completed < _num_sent);
 
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
             active_servers_make_used(server_info.active_index);
@@ -1344,9 +1347,15 @@ public:
     }
 
     long get_num_uncompleted(const server_info_t& server_info) const {
-        return server_info.num_sent -
-               (server_info.num_completed[IO_READ] +
-                server_info.num_completed[IO_WRITE]);
+        long num_uncompleted;
+
+        num_uncompleted = server_info.num_sent -
+                          (server_info.num_completed[IO_READ] +
+                           server_info.num_completed[IO_WRITE]);
+
+        assert(num_uncompleted >= 0);
+
+        return num_uncompleted;
     }
 
     long get_num_uncompleted(size_t server_index) const {
@@ -1371,12 +1380,10 @@ public:
 
     void close_server(size_t server_index, const char *reason) {
         server_info_t& server_info = _server_info[server_index];
+        std::map<const UcxConnection*, size_t>::key_type key = server_info.conn;
 
         LOG << "terminate connection " << server_info.conn << " due to "
             << reason;
-
-        // Remove connection pointer
-        _server_index_lookup.erase(server_info.conn);
 
         // Destroying the connection will complete its outstanding operations
         delete server_info.conn;
@@ -1384,7 +1391,12 @@ public:
         // Don't wait for any more completions on this connection
         _num_sent -= get_num_uncompleted(server_info);
 
+        // Remove connection pointer
+        _server_index_lookup.erase(key);
+
+        // Remove active servers entry
         active_servers_remove(server_info.active_index);
+
         reset_server_info(server_info);
     }
 
