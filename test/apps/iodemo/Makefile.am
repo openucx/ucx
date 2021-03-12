@@ -31,6 +31,12 @@ io_demo_LDADD    = \
 	$(top_builddir)/src/ucp/libucp.la \
 	$(io_demo_CUDA_LIBS)
 
+if HAVE_NVTX
+io_demo_LDADD   += \
+    $(NVTX_LIBS) \
+   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 io_demo_SOURCES = \
 	ucx_wrapper.cc \
 	io_demo.cc

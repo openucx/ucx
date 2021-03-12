@@ -54,6 +54,12 @@ gtest_LDADD = \
 	$(OPENMP_CFLAGS) \
 	$(GTEST_LIBS)
 
+if HAVE_NVTX
+gtest_LDADD += \
+    $(NVTX_LIBS) \
+   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 
 gtest_CPPFLAGS = \
 	$(BASE_CPPFLAGS) \

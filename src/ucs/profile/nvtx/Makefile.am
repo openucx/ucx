@@ -14,5 +14,6 @@ libucs_nvtx_la_LIBADD   = $(NVTX_LIBS) \
                           $(top_builddir)/src/ucs/libucs.la
 libucs_nvtx_la_LDFLAGS  = -version-info $(SOVERSION)
 libucs_nvtx_la_SOURCES  = nvtx.c
+include $(top_srcdir)/config/module.am
 
 endif

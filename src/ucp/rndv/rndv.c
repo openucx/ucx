@@ -19,6 +19,7 @@
 #include <ucp/tag/offload.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
+#include <ucs/profile/profile.h>
 
 
 static UCS_F_ALWAYS_INLINE int
@@ -1759,6 +1760,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
 
     offset = 0;
     while (offset != rndv_size) {
+        ucs_profile_range_push("put pipeline frag");
         length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_frag_size, 0,
                                               rndv_size, offset,
                                               rndv_size - offset);
@@ -1793,6 +1795,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
         }
 
         offset += length;
+        ucs_profile_range_pop();
     }
 
     return UCS_OK;

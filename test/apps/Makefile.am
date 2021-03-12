@@ -42,6 +42,12 @@ test_link_map_CPPFLAGS = $(BASE_CPPFLAGS)
 test_link_map_CFLAGS   = $(BASE_CFLAGS)
 test_link_map_LDADD    = -ldl $(top_builddir)/src/ucp/libucp.la
 
+if HAVE_NVTX
+test_link_map_LDADD   += \
+    $(NVTX_LIBS) \
+   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 test_dlopen_cfg_print_SOURCES  = test_dlopen_cfg_print.c
 test_dlopen_cfg_print_CPPFLAGS = $(BASE_CPPFLAGS) -g \
 	-DUCS_LIB_PATH=$(abs_top_builddir)/src/ucs/$(objdir)/libucs.so \
@@ -54,6 +60,12 @@ test_init_mt_CPPFLAGS = $(BASE_CPPFLAGS)
 test_init_mt_CFLAGS   = $(BASE_CFLAGS) $(OPENMP_CFLAGS)
 test_init_mt_LDADD    = $(top_builddir)/src/ucp/libucp.la
 
+if HAVE_NVTX
+test_init_mt_LDADD   += \
+    $(NVTX_LIBS) \
+   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 if HAVE_CUDA
 noinst_PROGRAMS                += test_cuda_hook_dynamic
 
@@ -65,6 +77,12 @@ test_cuda_hook_dynamic_LDADD    = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la \
                                   $(CUDA_LIBS)
 
+if HAVE_NVTX
+test_cuda_hook_dynamic_LDADD   += \
+    $(NVTX_LIBS) \
+   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 if HAVE_CUDA_STATIC
 noinst_PROGRAMS                += test_cuda_hook_static
 test_cuda_hook_static_SOURCES   = test_cuda_hook.c
@@ -74,6 +92,13 @@ test_cuda_hook_static_LDFLAGS   = $(CUDA_LDFLAGS)
 test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la \
                                   $(CUDA_STATIC_LIBS) -lcuda -lrt -ldl -lpthread
+
+if HAVE_NVTX
+test_cuda_hook_static_LDADD    += \
+    $(NVTX_LIBS) \
+   	$(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 endif
 
 endif
