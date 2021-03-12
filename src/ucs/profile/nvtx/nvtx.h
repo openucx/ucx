@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (C) NVIDIA Corporation. 2021.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 #include <nvToolsExt.h>
