@@ -1088,6 +1088,19 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
     }
 }
 
+void ucp_ep_close_force(ucp_ep_h ep)
+{
+    if (!(ep->flags & UCP_EP_FLAG_FAILED) &&
+        (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER)) {
+        /* Discard all lanes to cancel outstanding operations, because some
+         * transports (e.g. UD transports) can purge them only in UCT iface
+         * close when UCP EP is destroyed */
+        ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
+    }
+
+    ucp_ep_disconnected(ep, 1);
+}
+
 ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 {
     ucp_worker_h  worker = ep->worker;
@@ -1118,11 +1131,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
          * disconnect event was received, but some EP flush operation still
          * is in-progress, so, the destroyed EP will be touched upon flush
          * completion on some transport */
-        if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
-            ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
-        }
-
-        ucp_ep_disconnected(ep, 1);
+        ucp_ep_close_force(ep);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,
                                         ucp_ep_close_flushed_callback, "close");
