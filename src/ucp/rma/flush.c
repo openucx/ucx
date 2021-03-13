@@ -162,7 +162,7 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                 ucs_trace_req("flush request %p remote completions done", req);
             } else {
                 req->send.flush.cmpl_sn = flush_state->send_sn;
-                ucs_queue_push(&flush_state->reqs, &req->send.flush.queue);
+                ucs_hlist_add_tail(&flush_state->reqs, &req->send.flush.list_elem);
                 ucs_trace_req("added flush request %p to ep remote completion queue"
                               " with sn %d", req, req->send.flush.cmpl_sn);
             }
