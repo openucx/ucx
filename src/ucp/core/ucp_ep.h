@@ -377,10 +377,10 @@ typedef struct ucp_ep {
  * Status of protocol-level remote completions
  */
 typedef struct {
-    ucs_queue_head_t              reqs;         /* Queue of flush requests which
-                                                   are waiting for remote completion */
-    uint32_t                      send_sn;      /* Sequence number of sent operations */
-    uint32_t                      cmpl_sn;      /* Sequence number of completions */
+    ucs_hlist_head_t reqs; /* Queue of flush requests which
+                              are waiting for remote completion */
+    uint32_t         send_sn; /* Sequence number of sent operations */
+    uint32_t         cmpl_sn; /* Sequence number of completions */
 } ucp_ep_flush_state_t;
 
 

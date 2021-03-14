@@ -234,7 +234,8 @@ struct ucp_request {
 
                 struct {
                     ucp_request_callback_t flushed_cb;/* Called when flushed */
-                    ucs_queue_elem_t       queue;     /* Queue element in proto_status */
+                    ucs_hlist_link_t       list_elem; /* Element in the per-EP list of UCP
+                                                         flush requests */
                     unsigned               uct_flags; /* Flags to pass to @ref uct_ep_flush */
                     uct_worker_cb_id_t     prog_id;   /* Progress callback ID */
                     uint32_t               cmpl_sn;   /* Sequence number of the remote completion
