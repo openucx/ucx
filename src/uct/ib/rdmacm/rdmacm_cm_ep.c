@@ -256,7 +256,8 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
 {
     uct_cm_base_ep_t *cm_ep    = &cep->super;
     uct_rdmacm_cm_t *rdmacm_cm = uct_rdmacm_cm_ep_get_cm(cep);
-    char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char src_ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    char dst_ip_port_str[UCS_SOCKADDR_STRING_LEN];
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     ucs_status_t status;
 
@@ -291,9 +292,12 @@ static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,
     if (rdma_resolve_addr(cep->id, rdmacm_cm->config.src_addr,
                           (struct sockaddr*)params->sockaddr->addr,
                           uct_rdmacm_cm_get_timeout(rdmacm_cm))) {
-        ucs_error("rdma_resolve_addr() to dst addr %s failed: %m",
+        ucs_error("rdma_resolve_addr(src=%s, dst=%s) failed (%d): %m",
+                  ucs_sockaddr_str((struct sockaddr*)rdmacm_cm->config.src_addr,
+                                   src_ip_port_str, UCS_SOCKADDR_STRING_LEN),
                   ucs_sockaddr_str((struct sockaddr*)params->sockaddr->addr,
-                                   ip_port_str, UCS_SOCKADDR_STRING_LEN));
+                                   dst_ip_port_str, UCS_SOCKADDR_STRING_LEN),
+                  errno);
         status = UCS_ERR_IO_ERROR;
         goto err_destroy_id;
     }

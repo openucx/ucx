@@ -400,15 +400,28 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
     uct_rdmacm_cm_ep_server_conn_notify_cb(cep, UCS_OK);
 }
 
+static const char*
+uct_rdmacm_cm_event_status_str(const struct rdma_cm_event *event)
+{
+    if (event->event == RDMA_CM_EVENT_REJECTED) {
+        /* If it is REJECTED event, the status is some transport-specific reject
+         * reason */
+        return strerror(ECONNREFUSED);
+    }
+
+    /* RDMACM returns a negative errno as an event status */
+    return strerror(-event->status);
+}
+
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
 {
     uct_rdmacm_cm_ep_t   *cep = event->id->context;
     char                 ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
 
-    ucs_debug("%s got disconnect event, status %d",
+    ucs_debug("%s got disconnect event, status %s (%d)",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-              event->status);
+              uct_rdmacm_cm_event_status_str(event), event->status);
 
     cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT;
     /* calling error_cb instead of disconnect CB directly handles out-of-order
@@ -462,9 +475,10 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
         log_level = UCS_LOG_LEVEL_ERROR;
     }
 
-    ucs_log(log_level, "%s got error event %s, event status %d ",
+    ucs_log(log_level, "%s got error event %s, event status %s (%d)",
             uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-            rdma_event_str(event->event), event->status);
+            rdma_event_str(event->event), uct_rdmacm_cm_event_status_str(event),
+            event->status);
 
     if (uct_rdmacm_ep_is_connected(cep) &&
         !(cep->flags & UCT_RDMACM_CM_EP_FAILED)) {
@@ -485,10 +499,13 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
     uint8_t         ack_event                 = 1;
     char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    ucs_trace("rdmacm event (fd=%d cm_id %p cm %p event_channel %p status %s): %s. Peer: %s.",
-              cm->ev_ch->fd, event->id, cm, cm->ev_ch, strerror(event->status),
+    ucs_trace("rdmacm event (fd=%d cm_id %p cm %p event_channel %p status %s"
+              " (%d)): %s. Peer: %s.",
+              cm->ev_ch->fd, event->id, cm, cm->ev_ch,
+              uct_rdmacm_cm_event_status_str(event), event->status,
               rdma_event_str(event->event),
-              ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+              ucs_sockaddr_str(remote_addr, ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN));
 
     /* The following applies for rdma_cm_id of type RDMA_PS_TCP only */
     ucs_assert(event->id->ps == RDMA_PS_TCP);
