@@ -241,7 +241,7 @@ public:
         assert(max < std::numeric_limits<unsigned_type>::max());
         assert(unsigned_type(0) == std::numeric_limits<unsigned_type>::min());
 
-        return rand(_seed, unsigned_type(0), max);
+        return rand(_seed, unsigned_type(0), max - 1);
     }
 
     static void *get_host_fill_buffer(void *buffer, size_t size,
