@@ -1733,7 +1733,8 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     dev              = &md->dev;
     dev->ibv_context = ibv_open_device(ibv_device);
     if (dev->ibv_context == NULL) {
-        ucs_warn("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
+        ucs_diag("ibv_open_device(%s) failed: %m",
+                 ibv_get_device_name(ibv_device));
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
