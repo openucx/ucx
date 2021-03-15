@@ -96,6 +96,39 @@ void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_mlx5_iface_update_tx_res(uct_rc_iface_t *rc_iface,
+                                uct_rc_mlx5_ep_t *rc_mlx5_ep, uint16_t hw_ci)
+{
+    uct_ib_mlx5_txwq_t *txwq = &rc_mlx5_ep->tx.wq;
+    uct_rc_txqp_t *txqp = &rc_mlx5_ep->super.txqp;
+    uint16_t bb_num;
+
+    bb_num = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci) -
+             uct_rc_txqp_available(txqp);
+
+    /* Must always have positive number of released resources. The first
+     * completion will report bb_num=1 (because prev_sw_pi is initialized to -1)
+     * and all the rest report the amount of BBs the previous WQE has consumed.
+     */
+    ucs_assertv(bb_num > 0, "hw_ci=%d prev_sw_pi=%d available=%d bb_num=%d",
+                hw_ci, txwq->prev_sw_pi, txqp->available, bb_num);
+
+    uct_rc_txqp_available_add(txqp, bb_num);
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+
+    uct_rc_iface_update_reads(rc_iface);
+
+    rc_iface->tx.cq_available += bb_num;
+    ucs_assertv(rc_iface->tx.cq_available <= rc_iface->config.tx_cq_len,
+                "cq_available=%d tx_cq_len=%d bb_num=%d txwq=%p txqp=%p",
+                rc_iface->tx.cq_available, rc_iface->config.tx_cq_len, bb_num,
+                txwq, txqp);
+
+    ucs_arbiter_dispatch(&rc_iface->tx.arbiter, 1, uct_rc_ep_process_pending,
+                         NULL);
+}
+
 static UCS_F_ALWAYS_INLINE unsigned
 uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
 {
@@ -123,13 +156,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
                    qp_num, hw_ci);
 
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
-
-    uct_rc_mlx5_common_update_tx_res(&iface->super, &ep->tx.wq, &ep->super.txqp,
-                                     hw_ci);
-
-    ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
-    ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending,
-                         NULL);
+    uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
 
     return 1;
 }
@@ -216,8 +243,11 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     ucs_status_t       status;
 
     ucs_assert(ep != NULL);
-    uct_rc_mlx5_common_update_tx_res(iface, &ep->tx.wq, &ep->super.txqp, pi);
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+
+    /* Don't need to invoke UCT pending requests for a given UCT EP */
+    ucs_arbiter_group_desched(&iface->tx.arbiter, &ep->super.arb_group);
+    uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                            UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
