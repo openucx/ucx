@@ -200,7 +200,7 @@ uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
     ucs_status_t status;
 
     status = uct_rdmacm_cm_get_cq(uct_rdmacm_cm_ep_get_cm(cep), cep->id->verbs,
-                                  cep->id->pd->handle, &cq);
+                                  &cq);
     if (status != UCS_OK) {
         return status;
     }
