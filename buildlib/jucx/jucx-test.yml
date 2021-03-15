@@ -60,6 +60,8 @@ jobs:
               azure_log_warning "No active RDMA interfaces on machine"
               exit 0;
           fi
+          jucx_port=$((20000 + $RANDOM % 10000))
+          export JUCX_TEST_PORT=$jucx_port
           make -C bindings/java/src/main/native test
           make -C bindings/java/src/main/native package
           ipv4_found=0
@@ -69,7 +71,6 @@ jobs:
               if [ -z "$server_ip" ]; then
                   continue
               fi
-              jucx_port=$((20000 + $RANDOM % 10000))
               echo "Running standalone benchamrk on $iface:$jucx_port"
               java_cmd='java -XX:ErrorFile=$(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log  \
                   -XX:OnError="cat $(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log" \

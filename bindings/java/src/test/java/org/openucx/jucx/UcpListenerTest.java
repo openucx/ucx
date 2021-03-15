@@ -82,6 +82,7 @@ public class UcpListenerTest  extends UcxTest {
             } catch (UcxException ignored) { }
         }
         assertNotNull("Could not find socket address to start UcpListener", result);
+        System.out.println("Bound UcpListner on: " + result.getAddress());
         return result;
     }
 
