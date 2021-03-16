@@ -174,3 +174,17 @@ void ucs_string_buffer_dump(const ucs_string_buffer_t *strb,
         fputs(tok, stream);
     }
 }
+
+char *ucs_string_buffer_extract_mem(ucs_string_buffer_t *strb)
+{
+    char *c_str;
+
+    if (ucs_array_is_fixed(&strb->str)) {
+        c_str = ucs_strdup(ucs_array_begin(&strb->str), "ucs_string_buffer");
+    } else {
+        c_str = ucs_array_begin(&strb->str);
+        ucs_array_init_dynamic(&strb->str);
+    }
+
+    return c_str;
+}
