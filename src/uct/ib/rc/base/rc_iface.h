@@ -189,7 +189,7 @@ typedef struct uct_rc_iface_ops {
                                        uct_rc_hdr_t *hdr, unsigned length,
                                        uint32_t imm_data, uint16_t lid,
                                        unsigned flags);
-    void                 (*cleanup_qp)(uct_ib_async_event_wait_t *cleanup_ctx);
+    unsigned             (*cleanup_qp)(void *arg);
     void                 (*ep_post_check)(uct_ep_h tl_ep);
 } uct_rc_iface_ops_t;
 

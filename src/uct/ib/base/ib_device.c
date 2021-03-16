@@ -195,15 +195,6 @@ static void uct_ib_device_get_locality(const char *dev_name,
     *numa_node = (status == UCS_OK) ? n : -1;
 }
 
-static unsigned uct_ib_device_async_event_proxy(void *arg)
-{
-    uct_ib_async_event_wait_t *wait_ctx = arg;
-
-    wait_ctx->cb_id = UCS_CALLBACKQ_ID_NULL;
-    wait_ctx->cb(wait_ctx);
-    return 1;
-}
-
 static void
 uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
                                    const uct_ib_async_event_t *event)
@@ -220,8 +211,8 @@ uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
             /* someone is waiting */
             ucs_assert(entry->wait_ctx->cb_id == UCS_CALLBACKQ_ID_NULL);
             entry->wait_ctx->cb_id = ucs_callbackq_add_safe(
-                    entry->wait_ctx->cbq, uct_ib_device_async_event_proxy,
-                    entry->wait_ctx, UCS_CALLBACKQ_FLAG_ONESHOT);
+                    entry->wait_ctx->cbq, entry->wait_ctx->cb,
+                    entry->wait_ctx, 0);
         }
     }
     ucs_spin_unlock(&dev->async_event_lock);

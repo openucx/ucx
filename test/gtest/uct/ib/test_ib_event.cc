@@ -59,9 +59,12 @@ public:
         volatile bool             got;
     };
 
-    static void last_wqe_check_cb(uct_ib_async_event_wait_t *arg) {
-        event_ctx *event = ucs_derived_of(arg, event_ctx);
+    static unsigned last_wqe_check_cb(void *arg) {
+        event_ctx *event = (event_ctx *)arg;
         event->got       = true;
+        ucs_callbackq_remove_safe(event->super.cbq, event->super.cb_id);
+        event->super.cb_id = UCS_CALLBACKQ_ID_NULL;
+        return 1;
     }
 
     virtual void init_qp(entity &e) = 0;
