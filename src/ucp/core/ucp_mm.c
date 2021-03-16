@@ -102,24 +102,24 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             ucs_assert(alloc_md_memh_p != NULL);
             uct_memh[memh_index++] = *alloc_md_memh_p;
             new_md_map            |= UCS_BIT(md_index);
-        } else if (!length) {
+        } else if (length == 0) {
             /* don't register zero-length regions */
             continue;
         } else if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
-            if (!(md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
-                status = UCS_ERR_UNSUPPORTED;
-            } else {
-                ucs_assert(address && length);
+            ucs_assert(address != NULL);
 
-                /* MD supports registration, register new memh on it */
-                status = uct_md_mem_reg(context->tl_mds[md_index].md, address,
-                        length, uct_flags, &uct_memh[memh_index]);
+            if (!(md_attr->cap.reg_mem_types & UCS_BIT(mem_type))) {
+                continue;
             }
 
+            /* MD supports registration, register new memh on it */
+            status = uct_md_mem_reg(context->tl_mds[md_index].md, address,
+                                    length, uct_flags, &uct_memh[memh_index]);
             if (status == UCS_OK) {
-                ucs_trace("registered address %p length %zu on md[%d] memh[%d]=%p",
-                        address, length, md_index, memh_index,
-                        uct_memh[memh_index]);
+                ucs_trace("registered address %p length %zu on md[%d]"
+                          " memh[%d]=%p",
+                          address, length, md_index, memh_index,
+                          uct_memh[memh_index]);
                 new_md_map |= UCS_BIT(md_index);
                 ++memh_index;
                 continue;

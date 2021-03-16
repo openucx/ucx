@@ -91,7 +91,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "enough, such as of atomic operations and small reads, will be received inline.",
    ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_TX]), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TX_MIN_SGE", "3",
+  {"TX_MIN_SGE", "4",
    "Number of SG entries to reserve in the send WQE.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_sge), UCS_CONFIG_TYPE_UINT},
 
@@ -662,9 +662,8 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
     if (uct_ib_iface_is_roce(iface)) {
         ah_attr->dlid          = UCT_IB_ROCE_UDP_SRC_PORT_BASE |
                                  (iface->config.roce_path_factor * path_index);
-        /* Workaround rdma-core issue of calling rand() which affects global
-         * random state in glibc */
-        ah_attr->grh.flow_label = 1;
+        /* Workaround rdma-core flow label to udp sport conversion */
+        ah_attr->grh.flow_label = ~(iface->config.roce_path_factor * path_index);
     } else {
         /* TODO iface->path_bits should be removed and replaced by path_index */
         path_bits              = iface->path_bits[path_index %
@@ -758,7 +757,7 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
             /* take only the lower 15 bits for the comparison */
             ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey)) {
             if (!(pkey & UCT_IB_PKEY_MEMBERSHIP_MASK) &&
-                /* limited PKEY has not yet been found */ 
+                /* limited PKEY has not yet been found */
                 (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY)) {
                 lim_pkey_index = pkey_index;
                 lim_pkey       = pkey;
@@ -1091,9 +1090,8 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
         if (uct_ib_iface_is_roce(iface)) {
             /* RoCE - number of paths is RoCE LAG level */
             if (dev->lag_level == 0) {
-                iface->num_paths =
-                       uct_ib_device_get_roce_lag_level(dev, iface->config.port_num,	
-                                                        iface->gid_info.gid_index);
+                iface->num_paths = uct_ib_device_get_roce_lag_level(
+                        dev, iface->config.port_num, iface->gid_info.gid_index);
             } else {
                 iface->num_paths = dev->lag_level;
             }
@@ -1154,7 +1152,8 @@ static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
     /* Fill the gid */
     status = uct_ib_device_query_gid(uct_ib_iface_device(iface),
                                      iface->config.port_num,
-                                     gid_info->gid_index, &gid_info->gid);
+                                     gid_info->gid_index, &gid_info->gid,
+                                     UCS_LOG_LEVEL_ERROR);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1488,7 +1487,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     double numa_latency;
 
     uct_base_iface_query(&iface->super, iface_attr);
-    
+
     active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_attr(iface)->active_speed;
     active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;

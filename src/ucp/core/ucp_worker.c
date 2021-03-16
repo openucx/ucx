@@ -507,7 +507,7 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
     }
 
     ucp_ep_release_id(ucp_ep);
-    ucp_ep->flags |= UCP_EP_FLAG_FAILED;
+    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_FAILED, 0);
 
     if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
         /* NOTE: if user has not requested error handling on the endpoint,
@@ -2500,6 +2500,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     do {
         ret = read(worker->eventfd, &dummy, sizeof(dummy));
         if (ret == sizeof(dummy)) {
+            ucs_trace("worker %p: extracted queued event", worker);
             status = UCS_ERR_BUSY;
             goto out;
         } else if (ret == -1) {
@@ -2853,6 +2854,12 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     int ret;
     khiter_t iter;
 
+    if (ucp_is_uct_ep_failed(uct_ep)) {
+        /* No need to discard failed TL EP, because it may lead to adding the
+         * same UCT EP to the hash of discarded UCT EPs */
+        return;
+    }
+
     req = ucp_request_get(worker);
     if (ucs_unlikely(req == NULL)) {
         ucs_error("unable to allocate request for discarding UCT EP %p "
@@ -2931,20 +2938,20 @@ ucp_worker_discard_wireup_ep(ucp_ep_h ucp_ep, ucp_wireup_ep_t *wireup_ep,
     return is_owner ? uct_ep : NULL;
 }
 
-/* must be called with async lock held */
 int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep)
 {
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(worker);
     return kh_get(ucp_worker_discard_uct_ep_hash,
                   &worker->discard_uct_ep_hash, uct_ep) !=
            kh_end(&worker->discard_uct_ep_hash);
 }
 
-/* must be called with async lock held */
 void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                unsigned ep_flush_flags,
                                uct_pending_purge_callback_t purge_cb,
                                void *purge_arg)
 {
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
     ucs_assert(uct_ep != NULL);
     ucs_assert(purge_cb != NULL);
 

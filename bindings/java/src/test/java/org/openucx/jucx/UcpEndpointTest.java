@@ -217,6 +217,7 @@ public class UcpEndpointTest extends UcxTest {
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
             .setPeerErrorHandlingMode()
+            .setErrorHandler((errEp, status, errorMsg) -> { })
             .setUcpAddress(worker2.getAddress()));
 
         ByteBuffer src1 = ByteBuffer.allocateDirect(UcpMemoryTest.MEM_SIZE);

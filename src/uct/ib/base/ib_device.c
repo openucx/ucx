@@ -218,6 +218,7 @@ uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
         entry->flag = 1;
         if (entry->wait_ctx != NULL) {
             /* someone is waiting */
+            ucs_assert(entry->wait_ctx->cb_id == UCS_CALLBACKQ_ID_NULL);
             entry->wait_ctx->cb_id = ucs_callbackq_add_safe(
                     entry->wait_ctx->cbq, uct_ib_device_async_event_proxy,
                     entry->wait_ctx, UCS_CALLBACKQ_FLAG_ONESHOT);
@@ -747,6 +748,7 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     uint8_t required_dev_flags;
     ucs_status_t status;
     union ibv_gid gid;
+    int gid_index;
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
@@ -793,18 +795,18 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num)) {
-        status = uct_ib_device_query_gid(dev, port_num,
-                                         uct_ib_device_get_ib_gid_index(md), &gid);
-        if (status != UCS_OK) {
-            return status;
-        }
+    gid_index = uct_ib_device_get_ib_gid_index(md);
+    status    = uct_ib_device_query_gid(dev, port_num, gid_index, &gid,
+                                        UCS_LOG_LEVEL_DIAG);
+    if (status != UCS_OK) {
+        return status;
+    }
 
-        if (md->subnet_filter != gid.global.subnet_prefix) {
-            ucs_trace("%s:%d subnet_prefix does not match",
-                      uct_ib_device_name(dev), port_num);
-            return UCS_ERR_UNSUPPORTED;
-        }
+    if (md->check_subnet_filter && uct_ib_device_is_port_ib(dev, port_num) &&
+        (md->subnet_filter != gid.global.subnet_prefix)) {
+        ucs_trace("%s:%d subnet_prefix does not match", uct_ib_device_name(dev),
+                  port_num);
+        return UCS_ERR_UNSUPPORTED;
     }
 
     return UCS_OK;
@@ -1248,7 +1250,8 @@ int uct_ib_device_is_gid_raw_empty(uint8_t *gid_raw)
 }
 
 ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
-                                     unsigned gid_index, union ibv_gid *gid)
+                                     unsigned gid_index, union ibv_gid *gid,
+                                     ucs_log_level_t error_level)
 {
     uct_ib_device_gid_info_t gid_info;
     ucs_status_t status;
@@ -1260,8 +1263,8 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
     }
 
     if (uct_ib_device_is_gid_raw_empty(gid_info.gid.raw)) {
-        ucs_error("Invalid gid[%d] on %s:%d", gid_index,
-                  uct_ib_device_name(dev), port_num);
+        ucs_log(error_level, "invalid gid[%d] on %s:%d", gid_index,
+                uct_ib_device_name(dev), port_num);
         return UCS_ERR_INVALID_ADDR;
     }
 

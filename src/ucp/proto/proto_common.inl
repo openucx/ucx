@@ -34,7 +34,8 @@ ucp_proto_completion_init(uct_completion_t *comp,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
-                             uct_completion_callback_t comp_func)
+                             uct_completion_callback_t comp_func,
+                             unsigned uct_reg_flags)
 {
     ucp_ep_h ep = req->send.ep;
     ucs_status_t status;
@@ -46,7 +47,7 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
 
     status = ucp_datatype_iter_mem_reg(ep->worker->context,
                                        &req->send.state.dt_iter,
-                                       md_map);
+                                       md_map, uct_reg_flags);
     if (status != UCS_OK) {
         return status;
     }
@@ -60,7 +61,10 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
      * memory key for zero-copy operations. This assumption simplifies memory
      * key lookups during protocol progress.
      */
-    ucs_assert(req->send.state.dt_iter.type.contig.reg.md_map == md_map);
+    ucs_assertv((req->send.state.dt_iter.type.contig.reg.md_map == md_map) ||
+                        (req->send.state.dt_iter.length == 0),
+                "md_map=0x%" PRIx64 " reg.md_map=0x%" PRIx64, md_map,
+                req->send.state.dt_iter.type.contig.reg.md_map);
 
     return UCS_OK;
 }

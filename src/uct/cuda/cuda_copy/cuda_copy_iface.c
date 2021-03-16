@@ -106,9 +106,9 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_hdr          = 0;
     iface_attr->cap.am.max_iov          = 1;
 
-    iface_attr->latency                 = ucs_linear_func_make(10e-6, 0);
+    iface_attr->latency                 = ucs_linear_func_make(8e-6, 0);
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = 6911.0 * UCS_MBYTE;
+    iface_attr->bandwidth.shared        = 10000.0 * UCS_MBYTE;
     iface_attr->overhead                = 0;
     iface_attr->priority                = 0;
 
@@ -164,9 +164,7 @@ uct_cuda_copy_progress_event_queue(uct_cuda_copy_iface_t *iface,
         if (cudaEventQuery(cuda_comp->event) == cudaSuccess) {
             ucs_queue_del_iter(queue_head, iter);
             if (cuda_comp->comp != NULL) {
-                ucs_push_range("event comp", 9);
                 uct_invoke_completion(cuda_comp->comp, UCS_OK);
-                ucs_pop_range();
             }
             ucs_trace_poll("CUDA completion done :%p", cuda_comp);
             ucs_mpool_put(cuda_comp);

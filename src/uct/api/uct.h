@@ -134,14 +134,16 @@ BEGIN_C_DECLS
  * @ref uct_ep_create
  *      Connect to the client by creating an endpoint if the request is accepted.
  *      The server creates a new endpoint for every connection request that it accepts.
- * @ref uct_cm_ep_priv_data_pack_callback_t
- *      This callback is invoked by the UCT transport to fill auxiliary data in
- *      the connection acknowledgement or reject notification back to the client.
- *      Send the client a connection acknowledgement or reject notification.
- *      Wait for an acknowledgment from the client, indicating that it is connected.
  * @ref uct_cm_ep_server_conn_notify_callback_t
  *      This callback is invoked by the UCT transport to handle the connection
  *      notification from the client.
+ * @note The private data which the server should send to the client can be
+ *       either provided directly to @ref uct_ep_create, or filled by
+ *       @ref uct_cm_ep_priv_data_pack_callback_t provided to
+ *       @ref uct_ep_create.
+ * @note In order to reject a connection request, can either call
+ *       @ref uct_listener_reject or return failure status as defined by
+ *       @ref ucs_status_t from @ref uct_cm_ep_priv_data_pack_callback_t.
  *
  * Disconnecting:
  * @ref uct_ep_disconnect
@@ -169,12 +171,14 @@ BEGIN_C_DECLS
  *      Open a connection manager.
  * @ref uct_ep_create
  *      Create an endpoint for establishing a connection to the server.
- * @ref uct_cm_ep_priv_data_pack_callback_t
- *      This callback is invoked by the UCT transport to fill the user's private data
- *      in the connection request to be sent to the server. This connection request
- *      should be created by the transport.
- *      Send the connection request to the server.
- *      Wait for an acknowledgment from the server, indicating that it is connected.
+ * @ref uct_cm_ep_resolve_callback_t
+ *      This callback is invoked on the client side of the connection manager,
+ *      after the remote server address was resolved to the local device to be
+ *      used for connection establishment.
+ * @ref uct_ep_connect
+ *      This function should be called on the client side, in order to send
+ *      private data and resume connection establishment, following an
+ *      address-resolved notification via @ref uct_cm_ep_resolve_callback_t.
  * @ref uct_cm_ep_client_connect_callback_t
  *      This callback is invoked by the UCT transport to handle a connection response
  *      from the server.
@@ -830,7 +834,32 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB     = UCS_BIT(11),
 
     /** Enables @ref uct_ep_params::path_index */
-    UCT_EP_PARAM_FIELD_PATH_INDEX                 = UCS_BIT(12)
+    UCT_EP_PARAM_FIELD_PATH_INDEX                 = UCS_BIT(12),
+
+    /** Enables @ref uct_ep_params::cm_resolve_cb */
+    UCT_EP_PARAM_FIELD_CM_RESOLVE_CB              = UCS_BIT(13),
+
+    /** Enables @ref uct_ep_params::private_data */
+    UCT_EP_PARAM_FIELD_PRIV_DATA                  = UCS_BIT(14),
+
+    /** Enables @ref uct_ep_params::private_data_length */
+    UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15)
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief UCT endpoint connected by @ref uct_ep_connect parameters field mask.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref uct_ep_connect_params_t are present, for backward compatibility support.
+ */
+enum uct_ep_connect_params_field {
+    /** Enables @ref uct_ep_connect_params::private_data */
+    UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA         = UCS_BIT(0),
+
+    /** Enables @ref uct_ep_connect_params::private_data_length */
+    UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH  = UCS_BIT(1)
 };
 
 
@@ -1109,9 +1138,12 @@ struct uct_ep_params {
     const ucs_sock_addr_t             *sockaddr;
 
     /**
-     * @ref uct_cb_flags to indicate @ref uct_ep_params_t::sockaddr_pack_cb
-     * behavior. If @ref uct_ep_params_t::sockaddr_pack_cb is not set, this
-     * field will be ignored.
+     * @ref uct_cb_flags to indicate @ref uct_ep_params_t::sockaddr_pack_cb,
+     * @ref uct_ep_params_t::sockaddr_cb_client,
+     * @ref uct_ep_params_t::sockaddr_cb_server,
+     * @ref uct_ep_params_t::disconnect_cb and
+     * @ref uct_ep_params_t::cm_resolve_cb behavior.
+     * If none from these are not set, this field will be ignored.
      */
     uint32_t                          sockaddr_cb_flags;
 
@@ -1122,6 +1154,8 @@ struct uct_ep_params {
      * @note It is never guaranteed that the callaback will be called. If, for
      * example, the endpoint goes into error state before issuing the connection
      * request, the callback will not be invoked.
+     * @note Can not be set together with @ref uct_ep_params_t::private_data or
+     * @ref uct_ep_params_t::cm_resolve_cb.
      */
     uct_cm_ep_priv_data_pack_callback_t sockaddr_pack_cb;
 
@@ -1162,8 +1196,58 @@ struct uct_ep_params {
      * 0..(@ref uct_iface_attr_t.dev_num_paths - 1).
      */
     unsigned                            path_index;
+
+    /**
+     * This callback is invoked when the remote server address provided in field
+     * @ref uct_ep_params_t::sockaddr is resolved to the local device to be used
+     * for connection establishment.
+     * @note In the event of a connection error, this callback will not be
+     *       invoked; @ref uct_ep_params_t::sockaddr_cb_client with indicating
+     *       the error code will be invoked instead.
+     * @note This field is mutually exclusive with
+     *       @ref uct_ep_params::sockaddr_pack_cb.
+     */
+    uct_cm_ep_resolve_callback_t        cm_resolve_cb;
+
+    /**
+     * Private data to be passed from server to client. Can be used only along
+     * with @ref uct_ep_params::conn_request.
+     * @note This field is mutually exclusive with
+     *       @ref uct_ep_params::sockaddr_pack_cb.
+     */
+    const void                          *private_data;
+
+    /**
+     * Length of @ref uct_ep_params::private_data, the maximal allowed value is
+     * indicated by the @ref uct_cm_attr::max_conn_priv.
+     */
+    size_t                              private_data_length;
 };
 
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Parameters for connecting a UCT endpoint by @ref uct_ep_connect.
+ */
+struct uct_ep_connect_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ep_connect_params_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t                            field_mask;
+
+    /**
+     * User's private data to be passed from client to server.
+     */
+    const void                          *private_data;
+
+    /**
+     * Length of @ref uct_ep_connect_params::private_data, the maximal allowed
+     * value is indicated by the @ref uct_cm_attr::max_conn_priv.
+     */
+    size_t                              private_data_length;
+};
 
 /**
  * @ingroup UCT_CLIENT_SERVER
@@ -1274,12 +1358,18 @@ struct uct_md_attr {
  * are present.
  */
 typedef enum uct_md_mem_attr_field {
-    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE = UCS_BIT(0), /**< Indicate if memory type
-                                                      is populated. E.g. CPU/GPU */
-    UCT_MD_MEM_ATTR_FIELD_SYS_DEV  = UCS_BIT(1)  /**< Indicate if details of
-                                                      system device backing
-                                                      the pointer are populated.
-                                                      E.g. NUMA/GPU */
+    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE     = UCS_BIT(0), /**< Indicate if memory type
+                                                          is populated. E.g. CPU/GPU */
+    UCT_MD_MEM_ATTR_FIELD_SYS_DEV      = UCS_BIT(1), /**< Indicate if details of
+                                                          system device backing
+                                                          the pointer are populated.
+                                                          E.g. NUMA/GPU */
+    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS = UCS_BIT(2), /**< Request base address of the
+                                                          allocation to which the buffer
+                                                          belongs. */
+    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH = UCS_BIT(3)  /**< Request the whole length of the
+                                                          allocation to which the buffer
+                                                          belongs. */
 } uct_md_mem_attr_field_t;
 
 
@@ -1294,22 +1384,37 @@ typedef enum uct_md_mem_attr_field {
 typedef struct uct_md_mem_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref uct_md_mem_attr_field_t. Note that the field mask is
-     * populated upon return from uct_md_mem_query and not set by user.
-     * Subsequent use of members of the structure are valid after ensuring that
-     * relevant bits in the field_mask are set.
+     * @ref uct_md_mem_attr_field_t.
      */
     uint64_t          field_mask;
 
     /**
-     * The type of memory. E.g. CPU/GPU memory or some other valid type
+     * The type of memory. E.g. CPU/GPU memory or some other valid type.
+     * If the md does not support sys_dev query, then UCS_MEMORY_TYPE_UNKNOWN
+     * is returned.
      */
     ucs_memory_type_t mem_type;
 
     /**
      * Index of the system device on which the buffer resides. eg: NUMA/GPU
+     * If the md does not support sys_dev query, then UCS_SYS_DEVICE_ID_UNKNOWN
+     * is returned.
      */
     ucs_sys_device_t  sys_dev;
+
+    /**
+     * Base address of the allocation to which the provided buffer belongs to.
+     * If the md not support base address query, then the pointer passed to
+     * uct_md_mem_query is returned as is.
+     */
+    void              *base_address;
+
+    /**
+     * Length of the whole allocation to which the provided buffer belongs to.
+     * If the md not support querying allocation length, then the length passed
+     * to uct_md_mem_query is returned as is.
+     */
+    size_t            alloc_length;
 } uct_md_mem_attr_t;
 
 
@@ -1317,8 +1422,8 @@ typedef struct uct_md_mem_attr {
  * @ingroup UCT_MD
  * @brief Query attributes of a given pointer
  *
- * Return attributes such as memory type, and system device for the
- * given pointer of specific length.
+ * Return attributes such as memory type, base address, allocation length,
+ * and system device for the given pointer of specific length.
  *
  * @param [in]     md          Memory domain to run the query on. This function
  *                             returns an error if the md does not recognize the
@@ -1328,9 +1433,10 @@ typedef struct uct_md_mem_attr {
  * @param [in]     length      Length of the memory region to examine.
  *                             Must be nonzero else UCS_ERR_INVALID_PARAM error
  *                             is returned.
- * @param [out]    mem_attr    If successful, filled with ptr attributes.
+ * @param [inout]  mem_attr    If successful, filled with ptr attributes.
  *
- * @return Error code.
+ * @return UCS_OK if at least one attribute is successfully queried otherwise
+ *         an error code as defined by @ref ucs_status_t is returned.
  */
 ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
                               uct_md_mem_attr_t *mem_attr);
@@ -2020,6 +2126,23 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
  * @return              Error code as defined by @ref ucs_status_t
  */
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Connect a client side endpoint after it is bound to a local network
+ *        device, i.e. @ref uct_ep_params_t::cm_resolve_cb was invoked.
+ *
+ * This non-blocking routine establishes connection of the client side endpoint
+ * and sends private data to the peer.
+ *
+ * @param [in] ep       Endpoint to connect.
+ * @param [in] params   Parameters as defined in @ref uct_ep_connect_params_t.
+ *
+ * @return UCS_OK       Operation has been initiated successfully.
+ *         Other error codes as defined by @ref ucs_status_t.
+ */
+ucs_status_t uct_ep_connect(uct_ep_h ep, const uct_ep_connect_params_t *params);
 
 
 /**

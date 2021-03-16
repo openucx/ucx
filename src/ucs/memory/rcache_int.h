@@ -7,6 +7,7 @@
 #ifndef UCS_REG_CACHE_INT_H_
 #define UCS_REG_CACHE_INT_H_
 
+#include <ucs/datastruct/list.h>
 #include <ucs/type/spinlock.h>
 
 
@@ -28,34 +29,47 @@ enum {
 
 
 struct ucs_rcache {
-    ucs_rcache_params_t      params;   /**< rcache parameters (immutable) */
+    ucs_rcache_params_t      params;      /**< rcache parameters (immutable) */
 
-    pthread_rwlock_t         pgt_lock; /**< Protects the page table and all
-                                            regions whose refcount is 0 */
-    ucs_pgtable_t            pgtable;  /**< page table to hold the regions */
+    pthread_rwlock_t         pgt_lock;    /**< Protects the page table and all
+                                               regions whose refcount is 0 */
+    ucs_pgtable_t            pgtable;     /**< page table to hold the regions */
 
 
-    ucs_spinlock_t           lock;     /**< Protects 'mp', 'inv_q' and 'gc_list'.
-                                            This is a separate lock because we
-                                            may want to invalidate regions
-                                            while the page table lock is held by
-                                            the calling context.
-                                            @note: This lock should always be
-                                            taken **after** 'pgt_lock'. */
-    ucs_mpool_t              mp;       /**< Memory pool to allocate entries for
-                                            inv_q and page table entries, since
-                                            we cannot use regular malloc().
-                                            The backing storage is original mmap()
-                                            which does not generate memory events */
-    ucs_queue_head_t         inv_q;    /**< Regions which were invalidated during
-                                            memory events */
-    ucs_list_link_t          gc_list;  /**< list for regions to destroy, regions
-                                            could not be destroyed from memhook */
+    ucs_spinlock_t           lock;        /**< Protects 'mp', 'inv_q' and 'gc_list'.
+                                               This is a separate lock because we
+                                               may want to invalidate regions
+                                               while the page table lock is held by
+                                               the calling context.
+                                               @note: This lock should always be
+                                               taken **after** 'pgt_lock'. */
+    ucs_mpool_t              mp;          /**< Memory pool to allocate entries for
+                                               inv_q and page table entries, since
+                                               we cannot use regular malloc().
+                                               The backing storage is original mmap()
+                                               which does not generate memory events */
+    ucs_queue_head_t         inv_q;       /**< Regions which were invalidated during
+                                               memory events */
+    ucs_list_link_t          gc_list;     /**< list for regions to destroy, regions
+                                               could not be destroyed from memhook */
 
-    char                     *name;    /**< Name of the cache, for debug purpose */
+    unsigned long            num_regions; /**< Total number of managed regions */
+    size_t                   total_size;  /**< Total size of registered memory */
+
+    struct {
+        ucs_spinlock_t       lock;        /**< Lock for this structure */
+        ucs_list_link_t      list;        /**< List of regions, sorted by usage:
+                                               The head of the list is the least
+                                               recently used region, and the tail
+                                               is the most recently used region. */
+        unsigned long        count;       /**< Number of regions on list */
+    } lru;
+    
+    char                     *name;       /**< Name of the cache, for debug purpose */
+
     UCS_STATS_NODE_DECLARE(stats)
 
-    ucs_list_link_t          list;     /**< list entry in global ucs_rcache list */
+    ucs_list_link_t          list;        /**< list entry in global ucs_rcache list */
 };
 
 #endif

@@ -80,13 +80,18 @@ protected:
 
     void test_header(const ucs_profile_header_t *hdr, unsigned exp_mode,
                      const void **ptr);
+
     void test_locations(const ucs_profile_location_t *locations,
                         unsigned num_locations, const void **ptr);
+
     void test_thread_locations(const ucs_profile_thread_header_t *thread_hdr,
                                unsigned num_locations, uint64_t exp_count,
                                unsigned exp_num_records, const void **ptr);
 
-    void do_test(unsigned int_mode, const std::string& str_mode);
+    void test_nesting(const ucs_profile_location_t *loc, int nesting,
+                      const std::string &exp_name, int exp_nesting);
+
+    void do_test(unsigned int_mode, const std::string &str_mode);
 };
 
 static int sum(int a, int b)
@@ -254,6 +259,15 @@ void test_profile::test_thread_locations(
            num_locations;
 }
 
+void test_profile::test_nesting(const ucs_profile_location_t *loc, int nesting,
+                                const std::string &exp_name, int exp_nesting)
+{
+    if (loc->name == exp_name) {
+        EXPECT_EQ(exp_nesting, nesting)
+                << "nesting level of " << exp_name << " is wrong";
+    }
+}
+
 void test_profile::do_test(unsigned int_mode, const std::string& str_mode)
 {
     const int ITER           = 5;
@@ -288,8 +302,10 @@ void test_profile::do_test(unsigned int_mode, const std::string& str_mode)
                               exp_num_records, &ptr);
 
         const ucs_profile_record_t *records =
-                        reinterpret_cast<const ucs_profile_record_t*>(ptr);
+                reinterpret_cast<const ucs_profile_record_t*>(ptr);
         uint64_t prev_ts = records[0].timestamp;
+        int nesting      = 0;
+
         for (uint64_t i = 0; i < thread_hdr->num_records; ++i) {
             const ucs_profile_record_t *rec = &records[i];
 
@@ -303,12 +319,27 @@ void test_profile::do_test(unsigned int_mode, const std::string& str_mode)
 
             /* test param64 */
             const ucs_profile_location_t *loc = &locations[rec->location];
-            if ((loc->type == UCS_PROFILE_TYPE_REQUEST_NEW) ||
-                (loc->type == UCS_PROFILE_TYPE_REQUEST_EVENT) ||
-                (loc->type == UCS_PROFILE_TYPE_REQUEST_FREE))
-            {
+            switch (loc->type) {
+            case UCS_PROFILE_TYPE_REQUEST_NEW:
+            case UCS_PROFILE_TYPE_REQUEST_EVENT:
+            case UCS_PROFILE_TYPE_REQUEST_FREE:
                 EXPECT_EQ((uintptr_t)&test_request, rec->param64);
-            }
+                break;
+            case UCS_PROFILE_TYPE_SCOPE_BEGIN:
+                ++nesting;
+                break;
+            case UCS_PROFILE_TYPE_SCOPE_END:
+                --nesting;
+                break;
+            default:
+                break;
+            };
+
+            test_nesting(loc, nesting, "profile_test_func1", 0);
+            test_nesting(loc, nesting, "code", 1);
+            test_nesting(loc, nesting, "sample", 2);
+            test_nesting(loc, nesting, "profile_test_func2", 0);
+            test_nesting(loc, nesting, "sum", 1);
         }
 
         ptr = records + thread_hdr->num_records;

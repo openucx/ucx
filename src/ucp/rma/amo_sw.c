@@ -102,7 +102,7 @@ static size_t ucp_amo_sw_pack_atomic_reply(void *dest, void *arg)
     ucp_rma_rep_hdr_t *hdr = dest;
     ucp_request_t *req     = arg;
 
-    hdr->req_id = req->send.get_reply.req_id;
+    hdr->req_id = req->send.get_reply.remote_req_id;
 
     switch (req->send.length) {
     case sizeof(uint32_t):
@@ -255,11 +255,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
             ucs_fatal("invalid atomic length: %u", atomicreqh->length);
         }
 
-        req->flags                    = 0;
-        req->send.ep                  = ep;
-        req->send.atomic_reply.req_id = atomicreqh->req.req_id;
-        req->send.length              = atomicreqh->length;
-        req->send.uct.func            = ucp_progress_atomic_reply;
+        req->flags                           = 0;
+        req->send.ep                         = ep;
+        req->send.atomic_reply.remote_req_id = atomicreqh->req.req_id;
+        req->send.length                     = atomicreqh->length;
+        req->send.uct.func                   = ucp_progress_atomic_reply;
         ucp_request_send(req, 0);
     }
 

@@ -600,7 +600,7 @@ run_io_demo() {
 	do
 		echo "==== Running UCP IO demo with \"${mem_type}\" memory type ===="
 
-		test_args="$@ -o write,read -d 128:4194304 -i 10000 -w 10 -m ${mem_type}"
+		test_args="$@ -o write,read -d 128:4194304 -P 2 -i 10000 -w 10 -m ${mem_type}"
 		test_name=io_demo
 
 		if [ ! -x ${test_name} ]

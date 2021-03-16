@@ -30,6 +30,9 @@ extern "C" {
 #  include <uct/ib/ud/base/ud_ep.h>
 #  include <uct/ib/ud/verbs/ud_verbs.h>
 #endif
+#if HAVE_CUDA
+#  include <uct/cuda/cuda_ipc/cuda_ipc_ep.h>
+#endif
 }
 
 class test_obj_size : public ucs::test {
@@ -65,6 +68,9 @@ UCS_TEST_F(test_obj_size, size) {
 #  if HAVE_TL_UD
     EXPECTED_SIZE(uct_ud_ep_t, 248);
     EXPECTED_SIZE(uct_ud_verbs_ep_t, 264);
+#  endif
+#  if HAVE_CUDA
+    EXPECTED_SIZE(uct_cuda_ipc_ep_t, 16);
 #  endif
 #endif
 }

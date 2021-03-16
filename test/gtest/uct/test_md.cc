@@ -285,6 +285,8 @@ UCS_TEST_SKIP_COND_P(test_md, alloc,
 
 UCS_TEST_P(test_md, mem_type_detect_mds) {
     const size_t buffer_size = 1024;
+    size_t slice_offset;
+    size_t slice_length;
     ucs_status_t status;
     int alloc_mem_type;
     void *address;
@@ -308,14 +310,43 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
 
         /* test mem_query API */
         uct_md_mem_attr_t mem_attr;
-        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
-        status = uct_md_mem_query(md(), address, buffer_size, &mem_attr);
-        ASSERT_UCS_OK(status);
-        EXPECT_EQ(alloc_mem_type, mem_attr.mem_type);
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE     |
+                              UCT_MD_MEM_ATTR_FIELD_SYS_DEV      |
+                              UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                              UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH;
+
+        for (unsigned i = 0; i < 300; i++) {
+            slice_offset = ucs::rand() % buffer_size;
+            slice_length = ucs::rand() % buffer_size;
+
+            if (slice_length == 0) {
+                continue;
+            }
+
+            status = uct_md_mem_query(md(),
+                                      UCS_PTR_BYTE_OFFSET(address,
+                                                          slice_offset),
+                                      slice_length, &mem_attr);
+            ASSERT_UCS_OK(status);
+            EXPECT_EQ(alloc_mem_type, mem_attr.mem_type);
+            if ((alloc_mem_type == UCS_MEMORY_TYPE_CUDA) ||
+                (alloc_mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+                EXPECT_EQ(buffer_size, mem_attr.alloc_length);
+                EXPECT_EQ(address, mem_attr.base_address);
+            } else {
+                EXPECT_EQ(slice_length, mem_attr.alloc_length);
+                EXPECT_EQ(UCS_PTR_BYTE_OFFSET(address, slice_offset),
+                          mem_attr.base_address);
+            }
+        }
 
         /* print memory type and dev name */
         char sys_dev_name[128];
+        mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
+
+        status = uct_md_mem_query(md(), address, buffer_size, &mem_attr);
+        ASSERT_UCS_OK(status);
+
         ucs_topo_sys_device_bdf_name(mem_attr.sys_dev, sys_dev_name,
                                      sizeof(sys_dev_name));
         UCS_TEST_MESSAGE << ucs_memory_type_names[alloc_mem_type] << ": "
@@ -393,7 +424,6 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
 
     for (unsigned mem_type_id = 0; mem_type_id < UCS_MEMORY_TYPE_LAST; mem_type_id++) {
         ucs_memory_type_t mem_type = static_cast<ucs_memory_type_t>(mem_type_id);
-
         if (!(md_attr().cap.reg_mem_types & UCS_BIT(mem_type_id))) {
             UCS_TEST_MESSAGE << mem_buffer::mem_type_name(mem_type) << " memory "
                              << "registration is not supported by "

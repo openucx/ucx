@@ -338,6 +338,9 @@ struct ucp_ep_config {
 
         /* Maximal size for eager short */
         ucp_memtype_thresh_t             max_eager_short;
+
+        /* Maximal size for eager short with reply protocol */
+        ucp_memtype_thresh_t             max_reply_eager_short;
     } am_u;
 
     /* Protocol selection data */
@@ -374,10 +377,10 @@ typedef struct ucp_ep {
  * Status of protocol-level remote completions
  */
 typedef struct {
-    ucs_queue_head_t              reqs;         /* Queue of flush requests which
-                                                   are waiting for remote completion */
-    uint32_t                      send_sn;      /* Sequence number of sent operations */
-    uint32_t                      cmpl_sn;      /* Sequence number of completions */
+    ucs_hlist_head_t reqs; /* Queue of flush requests which
+                              are waiting for remote completion */
+    uint32_t         send_sn; /* Sequence number of sent operations */
+    uint32_t         cmpl_sn; /* Sequence number of completions */
 } ucp_ep_flush_state_t;
 
 
@@ -475,6 +478,8 @@ typedef struct ucp_conn_request {
     /* packed worker address follows */
 } ucp_conn_request_t;
 
+
+int ucp_is_uct_ep_failed(uct_ep_h uct_ep);
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
 

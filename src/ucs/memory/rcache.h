@@ -36,7 +36,7 @@ typedef struct ucs_rcache_region  ucs_rcache_region_t;
  */
 enum {
     UCS_RCACHE_REGION_FLAG_REGISTERED = UCS_BIT(0), /**< Memory registered */
-    UCS_RCACHE_REGION_FLAG_PGTABLE    = UCS_BIT(1)  /**< In the page table */
+    UCS_RCACHE_REGION_FLAG_PGTABLE    = UCS_BIT(1), /**< In the page table */
 };
 
 /*
@@ -53,6 +53,14 @@ enum {
     UCS_RCACHE_FLAG_NO_PFN_CHECK  = UCS_BIT(0), /**< PFN check not supported for this rcache */
     UCS_RCACHE_FLAG_PURGE_ON_FORK = UCS_BIT(1), /**< purge rcache on fork */
 };
+
+/*
+ * Rcache LRU flags.
+ */
+enum {
+    UCS_RCACHE_LRU_FLAG_IN_LRU = UCS_BIT(0) /**< In LRU */
+};
+
 
 /*
  * Registration cache operations.
@@ -122,23 +130,27 @@ struct ucs_rcache_params {
     void                   *context;            /**< User-defined context that will
                                                      be passed to mem_reg/mem_dereg */
     int                    flags;               /**< Flags */
+    unsigned long          max_regions;         /**< Maximal number of regions */
+    size_t                 max_size;            /**< Maximal total size of regions */
 };
 
 
 struct ucs_rcache_region {
-    ucs_pgt_region_t       super;    /**< Base class - page table region */
-    ucs_list_link_t        list;     /**< List element */
-    volatile uint32_t      refcount; /**< Reference count, including +1 if it's
-                                          in the page table */
-    ucs_status_t           status;   /**< Current status code */
-    uint8_t                prot;     /**< Protection bits */
-    uint16_t               flags;    /**< Status flags. Protected by page table lock. */
+    ucs_pgt_region_t       super;     /**< Base class - page table region */
+    ucs_list_link_t        lru_list;  /**< LRU list element */
+    ucs_list_link_t        tmp_list;  /**< Temp list element */
+    volatile uint32_t      refcount;  /**< Reference count, including +1 if it's
+                                           in the page table */
+    ucs_status_t           status;    /**< Current status code */
+    uint8_t                prot;      /**< Protection bits */
+    uint8_t                flags;     /**< Status flags. Protected by page table lock. */
+    uint8_t                lru_flags; /**< LRU flags */
     union {
-        uint64_t           priv;     /**< Used internally */
-        unsigned long     *pfn;      /**< Pointer to PFN array. In case if requested 
-                                          evaluation more than 1 page - PFN array is
-                                          allocated, if 1 page requested - used
-                                          in-place priv value. */
+        uint64_t           priv;      /**< Used internally */
+        unsigned long     *pfn;       /**< Pointer to PFN array. In case if requested 
+                                           evaluation more than 1 page - PFN array is
+                                           allocated, if 1 page requested - used
+                                           in-place priv value. */
     };
 };
 

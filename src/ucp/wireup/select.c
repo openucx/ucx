@@ -1540,7 +1540,9 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
 static void ucp_wireup_init_keepalive_map(ucp_worker_h worker,
                                           ucp_ep_config_key_t *key)
 {
-    ucp_context_h context = worker->context;
+    ucp_context_h context  = worker->context;
+    int shm_added_ep_check = 0;
+    uct_tl_resource_desc_t *resource;
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_index;
     ucp_rsc_index_t dev_index;
@@ -1577,14 +1579,28 @@ static void ucp_wireup_init_keepalive_map(ucp_worker_h worker,
             continue;
         }
 
+        resource  = &context->tl_rscs[rsc_index].tl_rsc;
         dev_index = context->tl_rscs[rsc_index].dev_index;
         ucs_assert(dev_index < (sizeof(dev_map_used) * 8));
+
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         if (!(UCS_BIT(dev_index) & dev_map_used) &&
              /* TODO: convert to assert to make sure iface supports
               * both err handling & ep_check */
             (iface_attr->cap.flags & UCT_IFACE_FLAG_EP_CHECK)) {
             ucs_assert(!(key->ep_check_map & UCS_BIT(lane)));
+
+            if (resource->dev_type & UCT_DEVICE_TYPE_SHM) {
+                if (shm_added_ep_check) {
+                    /* Skip, if SHM device was already added to EP check map -
+                     * add only one SHM device in order to simplify checking of
+                     * errors because they do same check for a peer existence */
+                    continue;
+                }
+
+                shm_added_ep_check = 1;
+            }
+
             key->ep_check_map |= UCS_BIT(lane);
             dev_map_used      |= UCS_BIT(dev_index);
         }

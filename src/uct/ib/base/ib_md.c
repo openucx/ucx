@@ -32,14 +32,14 @@
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
 typedef struct uct_ib_md_pci_info {
-    double      bw;       /* bandwidth */
-    uint16_t    payload;  /* payload used to data transfer */
-    uint16_t    overhead; /* PHY + data link layer + header + *CRC* */
-    uint16_t    nack;     /* number of TLC before ACK */
-    uint16_t    ctrl;     /* length of control TLP */
-    uint16_t    encoding; /* number of bits in symbol encoded, 8 - gen 1/2, 128 - gen 3 */
-    uint16_t    decoding; /* number of bits in symbol decoded, 10 - gen 1/2, 130 - gen 3 */
-    const char *name;     /* name of PCI generation */
+    double     bw_gbps; /* link speed */
+    uint16_t   payload; /* payload used to data transfer */
+    uint16_t   tlp_overhead; /* PHY + data link layer + header + *CRC* */
+    uint16_t   ctrl_ratio; /* number of TLC before ACK */
+    uint16_t   ctrl_overhead; /* length of control TLP */
+    uint16_t   encoding; /* number of encoded symbol bits */
+    uint16_t   decoding; /* number of decoded symbol bits */
+    const char *name; /* name of PCI generation */
 } uct_ib_md_pci_info_t;
 
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
@@ -205,36 +205,65 @@ static ucs_stats_class_t uct_ib_md_stats_class = {
 };
 #endif
 
+/*
+ * - TLP (Transaction Layer Packet) overhead calculations (no ECRC):
+ *   Gen1/2:
+ *     Start   SeqNum   Hdr_64bit   LCRC   End
+ *       1   +   2    +   16      +   4  +  1  = 24
+ *
+ *   Gen3/4:
+ *     Start   SeqNum   Hdr_64bit   LCRC
+ *       4   +   2    +   16      +   4  = 26
+ *
+ * - DLLP (Data Link Layer Packet) overhead calculations:
+ *    - Control packet 8b ACK + 8b flow control
+ *    - ACK/FC ratio: 1 per 4 TLPs
+ *
+ * References:
+ * [1] https://www.xilinx.com/support/documentation/white_papers/wp350.pdf
+ * [2] https://xdevs.com/doc/Standards/PCI/PCI_Express_Base_4.0_Rev0.3_February19-2014.pdf
+ * [3] https://www.nxp.com/docs/en/application-note/AN3935.pdf
+ */
 static const uct_ib_md_pci_info_t uct_ib_md_pci_info[] = {
-    { /* GEN 1 */
-        .bw       = 2.5 * UCS_GBYTE / 8,
-        .payload  = 512,
-        .overhead = 28,
-        .nack     = 5,
-        .ctrl     = 256,
-        .encoding = 8,
-        .decoding = 10,
-        .name     = "gen1"
+    {
+        .name          = "gen1",
+        .bw_gbps       = 2.5,
+        .payload       = 256,
+        .tlp_overhead  = 24,
+        .ctrl_ratio    = 4,
+        .ctrl_overhead = 16,
+        .encoding      = 8,
+        .decoding      = 10
     },
-    { /* GEN 2 */
-        .bw       = 5.0 * UCS_GBYTE / 8,
-        .payload  = 512,
-        .overhead = 28,
-        .nack     = 5,
-        .ctrl     = 256,
-        .encoding = 8,
-        .decoding = 10,
-        .name     = "gen2"
+    {
+        .name          = "gen2",
+        .bw_gbps       = 5,
+        .payload       = 256,
+        .tlp_overhead  = 24,
+        .ctrl_ratio    = 4,
+        .ctrl_overhead = 16,
+        .encoding      = 8,
+        .decoding      = 10
     },
-    { /* GEN 3 */
-        .bw       = 8.0 * UCS_GBYTE / 8,
-        .payload  = 512,
-        .overhead = 30,
-        .nack     = 5,
-        .ctrl     = 256,
-        .encoding = 128,
-        .decoding = 130,
-        .name     = "gen3"
+    {
+        .name          = "gen3",
+        .bw_gbps       = 8,
+        .payload       = 256,
+        .tlp_overhead  = 26,
+        .ctrl_ratio    = 4,
+        .ctrl_overhead = 16,
+        .encoding      = 128,
+        .decoding      = 130
+    },
+    {
+        .name          = "gen4",
+        .bw_gbps       = 16,
+        .payload       = 256,
+        .tlp_overhead  = 26,
+        .ctrl_ratio    = 4,
+        .ctrl_overhead = 16,
+        .encoding      = 128,
+        .decoding      = 130
     },
 };
 
@@ -519,6 +548,7 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
                            uint64_t access_flags, struct ibv_mr **mr_p,
                            int silent)
 {
+    ucs_time_t start_time = ucs_get_time();
     struct ibv_mr *mr;
 #if HAVE_DECL_IBV_EXP_REG_MR
     struct ibv_exp_reg_mr_in in = {};
@@ -538,6 +568,11 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
     }
 
     *mr_p = mr;
+
+    /* to prvent clang dead code */
+    (void)start_time;
+    ucs_trace("ibv_reg_mr(%p, %p, %zu) took %.3f msec", pd, addr, length,
+              ucs_time_to_msec(ucs_get_time() - start_time));
     return UCS_OK;
 }
 
@@ -1231,15 +1266,14 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
 
     for (i = 0; i < md_config->reg_methods.count; ++i) {
         if (!strcasecmp(md_config->reg_methods.rmtd[i], "rcache")) {
+            uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
             rcache_params.region_struct_size = sizeof(ucs_rcache_region_t) +
                                                md->memh_struct_size;
-            rcache_params.alignment          = md_config->rcache.alignment;
             rcache_params.max_alignment      = ucs_get_page_size();
             rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
             if (md_attr->cap.reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
                 rcache_params.ucm_events     |= UCM_EVENT_MEM_TYPE_FREE;
             }
-            rcache_params.ucm_event_priority = md_config->rcache.event_prio;
             rcache_params.context            = md;
             rcache_params.ops                = &uct_ib_rcache_ops;
             rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
@@ -1398,11 +1432,11 @@ static double uct_ib_md_read_pci_bw(struct ibv_device *ib_device)
 {
     const char *pci_width_file_name = "current_link_width";
     const char *pci_speed_file_name = "current_link_speed";
+    double bw_gbps, effective_bw, link_utilization;
     char pci_width_str[16];
     char pci_speed_str[16];
     char gts[16];
     const uct_ib_md_pci_info_t *p;
-    double bw, effective_bw;
     unsigned width;
     ssize_t len;
     size_t i;
@@ -1433,28 +1467,29 @@ static double uct_ib_md_read_pci_bw(struct ibv_device *ib_device)
         return DBL_MAX;
     }
 
-    if ((sscanf(pci_speed_str, "%lf%s", &bw, gts) < 2) ||
+    if ((sscanf(pci_speed_str, "%lf%s", &bw_gbps, gts) < 2) ||
         strcasecmp("GT/s", ucs_strtrim(gts))) {
         ucs_debug("incorrect format of %s file: expected: <double> GT/s, actual: %s\n",
                   pci_speed_file_name, pci_speed_str);
         return DBL_MAX;
     }
 
-    bw *= UCS_GBYTE / 8; /* gigabit -> gigabyte */
-
     for (i = 0; i < ucs_static_array_size(uct_ib_md_pci_info); i++) {
-        if (bw < (uct_ib_md_pci_info[i].bw * 1.2)) { /* use 1.2 multiplex to avoid round issues */
-            p = &uct_ib_md_pci_info[i]; /* use pointer to make equation shorter */
-            /* coverity[overflow] */
-            effective_bw = bw * width *
-                           (p->payload * p->nack) /
-                           (((p->payload + p->overhead) * p->nack) + p->ctrl) *
-                           p->encoding / p->decoding;
-            ucs_trace("%s: pcie %ux %s, effective throughput %.3lfMB/s (%.3lfGb/s)",
-                      ib_device->name, width, p->name,
-                      (effective_bw / UCS_MBYTE), (effective_bw * 8 / UCS_GBYTE));
-            return effective_bw;
+        p = &uct_ib_md_pci_info[i];
+        if ((bw_gbps / p->bw_gbps) > 1.01) { /* floating-point compare */
+            continue;
         }
+
+        link_utilization = (double)(p->payload * p->ctrl_ratio) /
+                           (((p->payload + p->tlp_overhead) * p->ctrl_ratio) +
+                            p->ctrl_overhead);
+        /* coverity[overflow] */
+        effective_bw     = (p->bw_gbps * 1e9 / 8.0) * width *
+                           ((double)p->encoding / p->decoding) * link_utilization;
+        ucs_trace("%s: PCIe %s %ux, effective throughput %.3f MB/s %.3f Gb/s",
+                  ib_device->name, p->name, width, effective_bw / UCS_MBYTE,
+                  effective_bw * 8e-9);
+        return effective_bw;
     }
 
     return DBL_MAX;
@@ -1698,7 +1733,8 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     dev              = &md->dev;
     dev->ibv_context = ibv_open_device(ibv_device);
     if (dev->ibv_context == NULL) {
-        ucs_warn("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
+        ucs_diag("ibv_open_device(%s) failed: %m",
+                 ibv_get_device_name(ibv_device));
         status = UCS_ERR_IO_ERROR;
         goto err;
     }

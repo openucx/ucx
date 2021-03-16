@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/debug/memtrack.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
 #include <ucs/sys/string.h>
@@ -107,6 +108,7 @@ UCS_TEST_F(test_string, range_str) {
 class test_string_buffer : public ucs::test {
 protected:
     void test_fixed(ucs_string_buffer_t *strb, size_t capacity);
+    void check_extract_mem(ucs_string_buffer_t *strb);
 };
 
 
@@ -205,6 +207,26 @@ UCS_TEST_F(test_string_buffer, dump) {
     ucs_string_buffer_appendf(&strb, "for\n");
     ucs_string_buffer_appendf(&strb, "apples\n");
     ucs_string_buffer_dump(&strb, "[ TEST     ] ", stdout);
+}
+
+void test_string_buffer::check_extract_mem(ucs_string_buffer_t *strb)
+{
+    char test_str[] = "test";
+    ucs_string_buffer_appendf(strb, "%s", test_str);
+    char *c_str = ucs_string_buffer_extract_mem(strb);
+    EXPECT_STREQ(test_str, c_str);
+    ucs_free(c_str);
+}
+
+UCS_TEST_F(test_string_buffer, extract_mem) {
+    ucs_string_buffer_t strb;
+    char buf[8];
+
+    ucs_string_buffer_init_fixed(&strb, buf, sizeof(buf));
+    check_extract_mem(&strb);
+
+    ucs_string_buffer_init(&strb);
+    check_extract_mem(&strb);
 }
 
 class test_string_set : public ucs::test {

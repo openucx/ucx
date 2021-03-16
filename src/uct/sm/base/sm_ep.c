@@ -228,24 +228,3 @@ ucs_status_t uct_sm_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
     UCT_TL_EP_STAT_ATOMIC(ucs_derived_of(tl_ep, uct_base_ep_t));
     return UCS_OK;
 }
-
-ucs_status_t uct_sm_ep_check(const char *proc, ucs_time_t starttime,
-                             unsigned flags, uct_completion_t *comp)
-{
-    ucs_time_t createtime;
-    ucs_status_t status;
-
-    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
-
-    status = ucs_sys_get_file_time(proc, UCS_SYS_FILE_TIME_CTIME, &createtime);
-    if ((status != UCS_OK) || (starttime != createtime)) {
-        return UCS_ERR_ENDPOINT_TIMEOUT;
-    }
-
-    return UCS_OK;
-}
-
-int uct_sm_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid)
-{
-    return snprintf(buffer, max_len, "/proc/%d", (int)pid);
-}

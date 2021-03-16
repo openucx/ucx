@@ -8,6 +8,10 @@ source ${realdir}/../az-helpers.sh
 # Build documentation
 #
 build_docs() {
+	if [ `cat /etc/system-release | grep -i "fedora release 34" | wc -l` -gt 0 ]; then
+		azure_log_warning "Skip build docs on Fedora 34"
+		return 0
+	fi
 	doxy_ready=0
 	doxy_target_version="1.8.11"
 	doxy_version="$(doxygen --version)" || true
@@ -97,7 +101,7 @@ build_release_pkg() {
 	# extract version from configure.ac and convert to MAJOR.MINOR.PATCH representation
 	version=$(grep -P "define\S+ucx_ver" configure.ac | awk '{print $2}' | sed 's,),,' | xargs echo | tr ' ' '.')
 	if ! grep -q "$version" ucx.spec.in; then
-		log_error "Current UCX version ($version) is not present in ucx.spec.in changelog"
+		azure_log_error "Current UCX version ($version) is not present in ucx.spec.in changelog"
 		exit 1
 	fi
 	cd -
@@ -122,7 +126,7 @@ build_icc() {
 		$MAKEP
 		make_clean distclean
 	else
-		azure_log_warning "==== Not building with Intel compiler ===="
+		azure_log_warning "Not building with Intel compiler"
 	fi
 	az_module_unload $INTEL_MODULE
 }
@@ -146,7 +150,7 @@ build_pgi() {
 		$MAKEP
 		make_clean distclean
 	else
-		azure_log_warning "==== Not building with PGI compiler ===="
+		azure_log_warning "Not building with PGI compiler"
 	fi
 
 	rm -rf ${pgi_test_file} ${pgi_test_file}.out
@@ -263,9 +267,10 @@ build_gcc() {
 	#see https://benohead.com/linux-check-glibc-version/
 	#see https://stackoverflow.com/questions/9705660/check-glibc-version-for-a-particular-gcc-compiler
 	if [ `cat /etc/os-release | grep -i "ubuntu\|mint"|wc -l` -gt 0 ]; then
-		azure_log_warning "==== Not building with latest gcc compiler ===="
+		azure_log_warning "Not building with latest gcc compiler on Ubuntu"
 		return 0
 	fi
+
 	ldd_ver="$(ldd --version | awk '/ldd/{print $NF}')"
 	if (echo "2.14"; echo $ldd_ver) | sort -CV
 	then
@@ -280,8 +285,7 @@ build_gcc() {
 			az_module_unload $GCC_MODULE
 		fi
 	else
-		azure_log_warning "==== Not building with gcc compiler ===="
-		azure_log_warning "Required glibc version is too old ($ldd_ver)"
+		azure_log_warning "Not building with gcc compiler, glibc version is too old ($ldd_ver)"
 	fi
 }
 
@@ -289,6 +293,13 @@ build_gcc() {
 # Build with armclang compiler
 #
 build_armclang() {
+	arch=$(uname -m)
+	if [ "${arch}" != "aarch64" ]
+	then
+		echo "==== Not building with armclang compiler on ${arch} ===="
+		return 0
+	fi
+
 	armclang_test_file=$(mktemp ./XXXXXX).c
 	echo "int main() {return 0;}" > ${armclang_test_file}
 	if az_module_load $ARM_MODULE && armclang --version && armclang ${armclang_test_file} -o ${armclang_test_file}.out
@@ -327,7 +338,7 @@ check_config_h() {
 	then
 		echo "Check successful "
 	else
-		log_error "Missing include config.h in files: $missing"
+		azure_log_error "Missing include config.h in files: $missing"
 		exit 1
 	fi
 }

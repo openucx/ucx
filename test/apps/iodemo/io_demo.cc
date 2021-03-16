@@ -235,6 +235,15 @@ public:
         }
     }
 
+    template <typename unsigned_type>
+    static inline unsigned_type urand(unsigned_type max)
+    {
+        assert(max < std::numeric_limits<unsigned_type>::max());
+        assert(unsigned_type(0) == std::numeric_limits<unsigned_type>::min());
+
+        return rand(_seed, unsigned_type(0), max - 1);
+    }
+
     static void *get_host_fill_buffer(void *buffer, size_t size,
                                       ucs_memory_type_t memory_type)
     {
@@ -1161,6 +1170,9 @@ public:
         server_info_t& server_info = _server_info[server_index];
 
         assert(get_num_uncompleted(server_info) <= opts().conn_window_size);
+        assert(_server_index_lookup.find(server_info.conn) !=
+               _server_index_lookup.end());
+        assert(_num_completed < _num_sent);
 
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
             active_servers_make_used(server_info.active_index);
@@ -1335,9 +1347,15 @@ public:
     }
 
     long get_num_uncompleted(const server_info_t& server_info) const {
-        return server_info.num_sent -
-               (server_info.num_completed[IO_READ] +
-                server_info.num_completed[IO_WRITE]);
+        long num_uncompleted;
+
+        num_uncompleted = server_info.num_sent -
+                          (server_info.num_completed[IO_READ] +
+                           server_info.num_completed[IO_WRITE]);
+
+        assert(num_uncompleted >= 0);
+
+        return num_uncompleted;
     }
 
     long get_num_uncompleted(size_t server_index) const {
@@ -1362,12 +1380,10 @@ public:
 
     void close_server(size_t server_index, const char *reason) {
         server_info_t& server_info = _server_info[server_index];
+        std::map<const UcxConnection*, size_t>::key_type key = server_info.conn;
 
         LOG << "terminate connection " << server_info.conn << " due to "
             << reason;
-
-        // Remove connection pointer
-        _server_index_lookup.erase(server_info.conn);
 
         // Destroying the connection will complete its outstanding operations
         delete server_info.conn;
@@ -1375,7 +1391,12 @@ public:
         // Don't wait for any more completions on this connection
         _num_sent -= get_num_uncompleted(server_info);
 
+        // Remove connection pointer
+        _server_index_lookup.erase(key);
+
+        // Remove active servers entry
         active_servers_remove(server_info.active_index);
+
         reset_server_info(server_info);
     }
 
@@ -1897,6 +1918,16 @@ static void adjust_opts(options_t *test_opts) {
 
     test_opts->chunk_size = std::min(test_opts->chunk_size,
                                      test_opts->max_data_size);
+
+    // randomize servers to optimize startup
+    std::random_shuffle(test_opts->servers.begin(), test_opts->servers.end(),
+                        IoDemoRandom::urand<size_t>);
+
+    UcxLog vlog(LOG_PREFIX, test_opts->verbose);
+    vlog << "List of servers:";
+    for (size_t i = 0; i < test_opts->servers.size(); ++i) {
+        vlog << " " << test_opts->servers[i];
+    }
 }
 
 static int parse_window_size(const char *optarg, long &window_size,
@@ -1935,13 +1966,13 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->iter_count            = 1000;
     test_opts->window_size           = 16;
     test_opts->conn_window_size      = 16;
-    test_opts->random_seed           = std::time(NULL);
+    test_opts->random_seed           = std::time(NULL) ^ getpid();
     test_opts->verbose               = false;
     test_opts->validate              = false;
     test_opts->use_am                = false;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqAHPm:")) !=
+    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqAHP:m:")) !=
            -1) {
         switch (c) {
         case 'p':
@@ -2088,7 +2119,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -n <connect timeout>        Timeout for connecting to the peer (or \"inf\")" << std::endl;
             std::cout << "  -o <op1,op2,...,opN>        Comma-separated string of IO operations [read|write]" << std::endl;
             std::cout << "                              NOTE: if using several IO operations, performance" << std::endl;
-            std::cout << "                                    measurments may be inaccurate" << std::endl;
+            std::cout << "                                    measurements may be inaccurate" << std::endl;
             std::cout << "  -d <min>:<max>              Range that should be used to get data" << std::endl;
             std::cout << "                              size of IO payload" << std::endl;
             std::cout << "  -b <number of buffers>      Number of offcache IO buffers" << std::endl;

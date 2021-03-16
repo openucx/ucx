@@ -195,11 +195,11 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.thread_count    = 1;
     params.wait_mode       = test.wait_mode;
     params.flags           = test.test_flags | flags;
-    params.am_hdr_size     = 8;
+    params.uct.am_hdr_size = 8;
     params.alignment       = ucs_get_page_size();
     params.max_outstanding = test.max_outstanding;
     if (ucs::test_time_multiplier() == 1) {
-        params.warmup_iter = test.iters / 10;
+        params.warmup_iter = ucs_max(1, test.iters / 100);
         params.max_iter    = test.iters;
     } else {
         params.warmup_iter = 0;

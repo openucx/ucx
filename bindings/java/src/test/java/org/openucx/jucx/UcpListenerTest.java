@@ -113,7 +113,9 @@ public class UcpListenerTest  extends UcxTest {
 
         assertNotNull(conRequest.get().getClientAddress());
         UcpEndpoint serverToClientListener = serverWorker2.newEndpoint(
-            new UcpEndpointParams().setSocketAddress(conRequest.get().getClientAddress()));
+            new UcpEndpointParams().setSocketAddress(conRequest.get().getClientAddress())
+                                   .setPeerErrorHandlingMode()
+                                   .setErrorHandler((errEp, status, errorMsg) -> { }));
         serverWorker2.progressRequest(serverToClientListener.closeNonBlockingForce());
 
         // Create endpoint from another worker from pool.

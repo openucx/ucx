@@ -219,6 +219,14 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         mem_attr_p->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+        mem_attr_p->base_address = addr;
+    }
+
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+        mem_attr_p->alloc_length = length;
+    }
+
     return UCS_OK;
 }
 

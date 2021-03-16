@@ -8,7 +8,7 @@
 
 #include "ucp_test.h"
 
-#include <gtest/common/test_perf.h>
+#include <common/test_perf.h>
 
 
 #define MB   pow(1024.0, -2)
@@ -55,6 +55,13 @@ protected:
 
 const test_perf::test_spec test_ucp_perf::tests[] =
 {
+  { "tag 0-msg latency", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 0 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
+    0 },
+
   { "tag latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
@@ -210,11 +217,66 @@ const test_perf::test_spec test_ucp_perf::tests[] =
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
+  { "am 0-msg latency", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 0 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
+    0 },
+
+  { "am latency", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
+    0 },
+
+  { "blocking am latency", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_SLEEP,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
+    0 },
+
+  { "am iov latency", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCP_PERF_DATATYPE_IOV, 8192, 3, { 1024, 1024, 1024 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
+    0 },
+
+  { "am mr", "Mpps",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
+    0 },
+
+  { "blocking am mr", "Mpps",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_SLEEP,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
+    ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
+    0 },
+
+  { "am bw", "MB/sec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
+
+  { "blocking am bw", "MB/sec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
+    UCX_PERF_WAIT_MODE_SLEEP,
+    UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
+
   { NULL }
 };
 
 
-UCS_TEST_P(test_ucp_perf, envelope) {
+UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
+{
     bool check_perf = true;
     size_t max_iter = std::numeric_limits<size_t>::max();
 
@@ -233,15 +295,6 @@ UCS_TEST_P(test_ucp_perf, envelope) {
     for (const test_spec *test_iter = tests; test_iter->title != NULL;
          ++test_iter) {
         test_spec test = *test_iter;
-
-        /* FIXME: ud, shm, self are all hanging when wakeup mode is enabled so
-         * skipping wakeup tests when these transports are used for now */
-        if ((has_transport("ud_x") || has_transport("ud_v") ||
-             has_transport("ud") || has_transport("shm") ||
-             has_transport("self")) &&
-            (test.wait_mode == UCX_PERF_WAIT_MODE_SLEEP)) {
-            continue;
-        }
 
         if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
             test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;

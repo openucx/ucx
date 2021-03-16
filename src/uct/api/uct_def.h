@@ -73,39 +73,40 @@ enum uct_cb_param_flags {
  * @addtogroup UCT_RESOURCE
  * @{
  */
-typedef struct uct_component       *uct_component_h;
-typedef struct uct_iface           *uct_iface_h;
-typedef struct uct_iface_config    uct_iface_config_t;
-typedef struct uct_md_config       uct_md_config_t;
-typedef struct uct_cm_config       uct_cm_config_t;
-typedef struct uct_ep              *uct_ep_h;
-typedef void *                     uct_mem_h;
-typedef uintptr_t                  uct_rkey_t;
-typedef struct uct_md              *uct_md_h;          /**< @brief Memory domain handler */
-typedef struct uct_md_ops          uct_md_ops_t;
-typedef void                       *uct_rkey_ctx_h;
-typedef struct uct_iface_attr      uct_iface_attr_t;
-typedef struct uct_iface_params    uct_iface_params_t;
-typedef struct uct_md_attr         uct_md_attr_t;
-typedef struct uct_completion      uct_completion_t;
-typedef struct uct_pending_req     uct_pending_req_t;
-typedef struct uct_worker          *uct_worker_h;
-typedef struct uct_md              uct_md_t;
-typedef enum uct_am_trace_type     uct_am_trace_type_t;
-typedef struct uct_device_addr     uct_device_addr_t;
-typedef struct uct_iface_addr      uct_iface_addr_t;
-typedef struct uct_ep_addr         uct_ep_addr_t;
-typedef struct uct_ep_params       uct_ep_params_t;
-typedef struct uct_cm_attr         uct_cm_attr_t;
-typedef struct uct_cm              uct_cm_t;
-typedef uct_cm_t                   *uct_cm_h;
-typedef struct uct_listener_attr   uct_listener_attr_t;
-typedef struct uct_listener        *uct_listener_h;
-typedef struct uct_listener_params uct_listener_params_t;
-typedef struct uct_tag_context     uct_tag_context_t;
-typedef uint64_t                   uct_tag_t;  /* tag type - 64 bit */
-typedef int                        uct_worker_cb_id_t;
-typedef void*                      uct_conn_request_h;
+typedef struct uct_component         *uct_component_h;
+typedef struct uct_iface             *uct_iface_h;
+typedef struct uct_iface_config      uct_iface_config_t;
+typedef struct uct_md_config         uct_md_config_t;
+typedef struct uct_cm_config         uct_cm_config_t;
+typedef struct uct_ep                *uct_ep_h;
+typedef void *                       uct_mem_h;
+typedef uintptr_t                    uct_rkey_t;
+typedef struct uct_md                *uct_md_h;          /**< @brief Memory domain handler */
+typedef struct uct_md_ops            uct_md_ops_t;
+typedef void                         *uct_rkey_ctx_h;
+typedef struct uct_iface_attr        uct_iface_attr_t;
+typedef struct uct_iface_params      uct_iface_params_t;
+typedef struct uct_md_attr           uct_md_attr_t;
+typedef struct uct_completion        uct_completion_t;
+typedef struct uct_pending_req       uct_pending_req_t;
+typedef struct uct_worker            *uct_worker_h;
+typedef struct uct_md                uct_md_t;
+typedef enum uct_am_trace_type       uct_am_trace_type_t;
+typedef struct uct_device_addr       uct_device_addr_t;
+typedef struct uct_iface_addr        uct_iface_addr_t;
+typedef struct uct_ep_addr           uct_ep_addr_t;
+typedef struct uct_ep_params         uct_ep_params_t;
+typedef struct uct_ep_connect_params uct_ep_connect_params_t;
+typedef struct uct_cm_attr           uct_cm_attr_t;
+typedef struct uct_cm                uct_cm_t;
+typedef uct_cm_t                     *uct_cm_h;
+typedef struct uct_listener_attr     uct_listener_attr_t;
+typedef struct uct_listener          *uct_listener_h;
+typedef struct uct_listener_params   uct_listener_params_t;
+typedef struct uct_tag_context       uct_tag_context_t;
+typedef uint64_t                     uct_tag_t;  /* tag type - 64 bit */
+typedef int                          uct_worker_cb_id_t;
+typedef void*                        uct_conn_request_h;
 
 /**
  * @}
@@ -155,13 +156,30 @@ typedef struct uct_iov {
  * @brief Client-Server private data pack callback arguments field mask.
  *
  * The enumeration allows specifying which fields in
- * @ref uct_cm_ep_priv_data_pack_args are present, for backward compatibility support.
+ * @ref uct_cm_ep_priv_data_pack_args are present, for backward compatibility
+ * support.
  */
 enum uct_cm_ep_priv_data_pack_args_field {
     /** Enables @ref uct_cm_ep_priv_data_pack_args::dev_name
-     *  Indicates that dev_name field in uct_cm_ep_priv_data_pack_args_t is valid.
+     *  Indicates that dev_name field in uct_cm_ep_priv_data_pack_args_t is
+     *  valid.
      */
     UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Client-Server resolve callback arguments field mask.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref uct_cm_ep_resolve_args are present, for backward compatibility support.
+ */
+enum uct_cm_ep_resolve_args_field {
+    /**
+     * Indicates that @ref uct_cm_ep_resolve_args::dev_name is valid.
+     */
+    UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME       = UCS_BIT(0)
 };
 
 
@@ -177,7 +195,7 @@ typedef struct uct_cm_ep_priv_data_pack_args {
      * @ref uct_cm_ep_priv_data_pack_args_field.
      * Fields not specified by this mask should not be accessed by the callback.
      */
-    uint64_t                   field_mask;
+    uint64_t                    field_mask;
 
     /**
      * Device name. This routine may fill the user's private data according to
@@ -185,8 +203,32 @@ typedef struct uct_cm_ep_priv_data_pack_args {
      * corresponds to @ref uct_tl_resource_desc_t::dev_name as returned from
      * @ref uct_md_query_tl_resources.
      */
-    char                       dev_name[UCT_DEVICE_NAME_MAX];
+    char                        dev_name[UCT_DEVICE_NAME_MAX];
 } uct_cm_ep_priv_data_pack_args_t;
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Arguments to the client-server resolved callback.
+ *
+ * Used with the client-server API on a connection manager.
+ */
+typedef struct uct_cm_ep_resolve_args {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_cm_ep_resolve_args_field.
+     * Fields not specified by this mask should not be accessed by the callback.
+     */
+    uint64_t                    field_mask;
+
+   /**
+     * Device name indicates the device that the endpoint was bound to during
+     * address and route resolution. The device name that is passed to this
+     * callback, corresponds to @ref uct_tl_resource_desc_t::dev_name as
+     * returned from @ref uct_md_query_tl_resources.
+     */
+    char                        dev_name[UCT_DEVICE_NAME_MAX];
+} uct_cm_ep_resolve_args_t;
 
 
 /**
@@ -687,7 +729,7 @@ typedef void (*uct_ep_disconnect_cb_t)(uct_ep_h ep, void *arg);
  * This callback routine will be invoked on the client side, before sending the
  * transport's connection request to the server, or on the server side before
  * sending a connection response to the client.
- * The callback routine must be set when creating an endpoint.
+ * This callback routine can be set when creating an endpoint.
  * The user's private data should be placed inside the priv_data buffer to be
  * sent to the remote side.
  * The maximal allowed length of the private data is indicated by the field
@@ -708,6 +750,29 @@ typedef ssize_t
 (*uct_cm_ep_priv_data_pack_callback_t)(void *arg,
                                        const uct_cm_ep_priv_data_pack_args_t
                                        *pack_args, void *priv_data);
+
+
+/**
+ * @ingroup UCT_CLIENT_SERVER
+ * @brief Callback to notify that the client side endpoint is bound to a
+ *        local device.
+ *
+ * This callback routine will be invoked, when the client side endpoint is bound
+ * to a local device.
+ * The callback routine can be set when creating an endpoint.
+ * Communication progress routines should not be called from this callback.
+ * It is allowed to call other UCT communication routines from this callback.
+ *
+ * @param [in]  user_data       User argument as defined in
+ *                              @ref uct_ep_params_t::user_data.
+ * @param [in]  resolve_args    Handle for the extra arguments provided by the
+ *                              transport.
+ *
+ * @return UCS_OK on success or error as defined in @ref ucs_status_t.
+ */
+typedef ucs_status_t
+(*uct_cm_ep_resolve_callback_t)(void *user_data,
+                                const uct_cm_ep_resolve_args_t *resolve_args);
 
 
 /**

@@ -192,6 +192,19 @@ const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb);
 void ucs_string_buffer_dump(const ucs_string_buffer_t *strb,
                             const char *line_prefix, FILE *stream);
 
+
+/**
+ * Return a pointer to a C-style string which represents the string buffer. The
+ * returned pointer should be freed with method which deallocates memory, e.g.
+ * ucs_free. There is no need to call ucs_string_buffer_cleanup in case of
+ * extracting memory using this method.
+ *
+ * @param [inout] strb String buffer to convert to a C-style string.
+ *
+ * @return C-style string representing the data in the buffer.
+ */
+char *ucs_string_buffer_extract_mem(ucs_string_buffer_t *strb);
+
 END_C_DECLS
 
 #endif

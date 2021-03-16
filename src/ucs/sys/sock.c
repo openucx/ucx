@@ -374,6 +374,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
     int ret, fd;
 
     /* Create the server socket for accepting incoming connections */
+    fd     = -1; /* Suppress compiler warning */
     status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, &fd);
     if (status != UCS_OK) {
         goto err;
@@ -648,6 +649,11 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
 {
     uint16_t port;
     size_t str_len;
+
+    if (sock_addr == NULL) {
+        ucs_strncpy_zero(str, "<null>", max_size);
+        return str;
+    }
 
     if (!ucs_sockaddr_is_known_af(sock_addr)) {
         ucs_strncpy_zero(str, "<invalid address family>", max_size);

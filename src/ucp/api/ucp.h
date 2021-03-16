@@ -124,7 +124,8 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_TAG_SENDER_MASK   = UCS_BIT(4), /**< tag_sender_mask */
     UCP_PARAM_FIELD_MT_WORKERS_SHARED = UCS_BIT(5), /**< mt_workers_shared */
     UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
-    UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7)  /**< estimated_num_ppn */
+    UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7), /**< estimated_num_ppn */
+    UCP_PARAM_FIELD_NAME              = UCS_BIT(8)  /**< name */
 };
 
 
@@ -375,7 +376,8 @@ enum ucp_mem_advise_params_field {
 enum ucp_context_attr_field {
     UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
     UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1), /**< UCP context thread flag */
-    UCP_ATTR_FIELD_MEMORY_TYPES = UCS_BIT(2)  /**< UCP supported memory types */
+    UCP_ATTR_FIELD_MEMORY_TYPES = UCS_BIT(2), /**< UCP supported memory types */
+    UCP_ATTR_FIELD_NAME         = UCS_BIT(3)  /**< UCP context name */
 };
 
 
@@ -999,6 +1001,17 @@ typedef struct ucp_params {
      * will override the number of endpoints set by @e estimated_num_ppn
      */
     size_t                             estimated_num_ppn;
+
+    /**
+     * The name is intended for identification of context during tracing and
+     * analysis of UCX-based applications (e.g. FUSE-based run time monitoring).
+     * The actual name of the context can be obtained by @ref ucp_context_query
+     * function, because the actual name may differ from the name specified in
+     * the parameters. The name can be truncated if it is too long, or can be
+     * modified if it is already used for another existing context. If the name
+     * is not set via parameters, the context will have a default name.
+     */
+    const char                         *name;
 } ucp_params_t;
 
 
@@ -1036,6 +1049,12 @@ typedef struct ucp_context_attr {
      * please see @ref ucs_memory_type_t.
      */
     uint64_t              memory_types;
+
+    /**
+     * The name is intended for identification of context during tracing and
+     * analysis of UCX-based applications.
+     */
+    char                  name[UCP_CONTEXT_NAME_MAX];
 } ucp_context_attr_t;
 
 

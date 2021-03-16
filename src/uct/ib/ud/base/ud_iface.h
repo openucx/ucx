@@ -334,7 +334,7 @@ uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
 
 void uct_ud_iface_cep_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
-ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
+unsigned uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
 
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 
@@ -348,7 +348,7 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
 void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
                                   int is_async);
 
-void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface);
+unsigned uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface);
 
 
 static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
@@ -548,23 +548,25 @@ uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
 }
 
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE unsigned
 uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
 {
     if (ucs_likely(ucs_queue_is_empty(&iface->rx.pending_q))) {
-        return UCS_OK;
+        return 0;
     }
+
     return uct_ud_iface_dispatch_pending_rx_do(iface);
 }
 
 
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE unsigned
 uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface)
 {
     if (ucs_likely(ucs_queue_is_empty(&iface->tx.async_comp_q))) {
-        return;
+        return 0;
     }
-    uct_ud_iface_dispatch_async_comps_do(iface);
+
+    return uct_ud_iface_dispatch_async_comps_do(iface);
 }
 
 #if ENABLE_PARAMS_CHECK

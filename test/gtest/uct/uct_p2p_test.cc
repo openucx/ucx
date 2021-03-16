@@ -148,8 +148,8 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
 void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
                                    size_t max_length, unsigned flags)
 {
-
-    for (int mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    for (size_t i = 0; i < mem_buffer::supported_mem_types().size(); ++i) {
+        ucs_memory_type_t mem_type = mem_buffer::supported_mem_types()[i];
         /* test mem type if md supports mem type
          * (or) if HOST MD can register mem type
          */

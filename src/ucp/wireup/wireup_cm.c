@@ -78,15 +78,33 @@ static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
 
 static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
 {
-    ucp_worker_h worker         = ep->worker;
-    ucp_rsc_index_t cm_idx      = ucp_ep_ext_control(ep)->cm_idx;
-    ucp_rsc_index_t next_cm_idx = cm_idx + 1;
-    uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
+    ucp_worker_h worker          = ep->worker;
+    ucp_rsc_index_t cm_idx       = ucp_ep_ext_control(ep)->cm_idx;
+    ucp_rsc_index_t next_cm_idx  = cm_idx + 1;
+    uct_worker_cb_id_t prog_id   = UCS_CALLBACKQ_ID_NULL;
+    ucp_rsc_index_t num_cm_cmpts = ucp_worker_num_cm_cmpts(worker);
+    UCS_STRING_BUFFER_ONSTACK(cms_strb, 64);
+    char addr_str[UCS_SOCKADDR_STRING_LEN];
+    ucp_wireup_ep_t *cm_wireup_ep;
+    int i;
 
-    if (next_cm_idx >= ucp_worker_num_cm_cmpts(worker)) {
-        ucs_debug("reached the end of the cms priority list, no cms left to"
-                  " check (sockaddr_cm=%s, cm_idx=%d).",
-                  ucp_context_cm_name(worker->context, cm_idx), cm_idx);
+    if (next_cm_idx >= num_cm_cmpts) {
+        for (i = 0; i < num_cm_cmpts; ++i) {
+            ucs_string_buffer_appendf(&cms_strb, "%s,",
+                                      ucp_context_cm_name(worker->context, i));
+        }
+        ucs_string_buffer_rtrim(&cms_strb, ",");
+
+        cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+        ucs_assert_always(cm_wireup_ep != NULL);
+
+        ucs_diag("client ep %p failed to connect to %s using %s cms",
+                 ep,
+                 ucs_sockaddr_str(
+                         (struct sockaddr*)&cm_wireup_ep->cm_remote_sockaddr,
+                         addr_str, sizeof(addr_str)),
+                 ucs_string_buffer_cstr(&cms_strb));
+
         return 0;
     }
 
@@ -133,12 +151,19 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
     ucp_unpacked_address_t unpacked_addr;
     ucp_address_entry_t *ae;
     unsigned addr_indices[UCP_MAX_RESOURCES];
+    char addr_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
     ucs_assert_always(wireup_ep != NULL);
 
     if (UCS_BITMAP_IS_ZERO_INPLACE(&tl_bitmap)) {
-        ucs_debug("tl_bitmap for %s is empty", dev_name);
+        ucs_diag("client ep %p connect to %s failed: device %s is not enabled, "
+                 "enable it in UCX_NET_DEVICES or use corresponding ip address",
+                 ucp_ep,
+                 ucs_sockaddr_str(
+                         (struct sockaddr*)&wireup_ep->cm_remote_sockaddr,
+                         addr_str, sizeof(addr_str)),
+                 dev_name);
         return UCS_ERR_UNREACHABLE;
     }
 
@@ -334,7 +359,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     ucp_ep_ext_control(cm_wireup_ep->tmp_ep)->local_ep_id =
             ucp_ep_ext_control(ep)->local_ep_id;
 
-    cm_wireup_ep->tmp_ep->flags |= UCP_EP_FLAG_INTERNAL;
+    ucp_ep_update_flags(cm_wireup_ep->tmp_ep, UCP_EP_FLAG_INTERNAL, 0);
     ucs_debug("ep %p: created tmp_ep %p", ep, cm_wireup_ep->tmp_ep);
 
     status = ucp_worker_get_ep_config(worker, &key, 0,
@@ -386,7 +411,7 @@ free_addr:
     ucs_free(ucp_addr);
 out_check_err:
     if (status == UCS_OK) {
-        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     } else {
         ucp_worker_set_ep_failed(worker, ep,
                                  &ucp_ep_get_cm_wireup_ep(ep)->super.super,
@@ -419,7 +444,10 @@ void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep, ucp_ep_h ucp_ep)
         if (tmp_ep->uct_eps[lane_idx] != NULL) {
             ucs_assert(ucp_ep->uct_eps[lane_idx] == NULL);
             ucp_ep->uct_eps[lane_idx] = tmp_ep->uct_eps[lane_idx];
-            w_ep = ucs_derived_of(ucp_ep->uct_eps[lane_idx], ucp_wireup_ep_t);
+            tmp_ep->uct_eps[lane_idx] = NULL;
+
+            /* Change UCP EP owner of the WIREUP EP */
+            w_ep               = ucp_wireup_ep(ucp_ep->uct_eps[lane_idx]);
             w_ep->super.ucp_ep = ucp_ep;
         }
     }
@@ -504,7 +532,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         ucs_debug("ep %p: failed to send notify: %s", ucp_ep,
                   ucs_status_string(status));
         /* connection can't be established by UCT, no need to disconnect */
-        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+        ucp_ep_update_flags(ucp_ep, 0, UCP_EP_FLAG_LOCAL_CONNECTED);
         goto out_free_addr;
     }
 
@@ -581,9 +609,9 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     ucs_assert_always(ucs_test_all_flags(connect_args->field_mask,
                                          (UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_REMOTE_DATA |
                                           UCT_CM_EP_CLIENT_CONNECT_ARGS_FIELD_STATUS)));
-    remote_data    = connect_args->remote_data;
-    status         = connect_args->status;
-    ucp_ep->flags |= UCP_EP_FLAG_CLIENT_CONNECT_CB;
+    remote_data = connect_args->remote_data;
+    status      = connect_args->status;
+    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_CLIENT_CONNECT_CB, 0);
 
     ucs_debug("ep %p flags 0x%x cfg_index %d: client connected status %s",
               ucp_ep, ucp_ep->flags, ucp_ep->cfg_index,
@@ -594,12 +622,12 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
         /* try connecting through another cm (next one in the priority list) */
         ucp_cm_client_try_fallback_cms(ucp_ep)) {
         /* connection can't be established by UCT, no need to disconnect */
-        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+        ucp_ep_update_flags(ucp_ep, 0, UCP_EP_FLAG_LOCAL_CONNECTED);
         /* cms fallback has started */
         return;
     } else if (status != UCS_OK) {
         /* connection can't be established by UCT, no need to disconnect */
-        ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
+        ucp_ep_update_flags(ucp_ep, 0, UCP_EP_FLAG_LOCAL_CONNECTED);
         ucs_debug("failed status on client connect callback: %s "
                   "(sockaddr_cm=%s, cms_used_idx=%d)",
                   ucs_status_string(status),
@@ -727,8 +755,8 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
         /* if the EP is not local connected, the EP has been closed and flushed,
            CM lane is disconnected, complete close request and destroy EP */
         ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
-        ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
-        close_req      = ucp_ep_ext_control(ucp_ep)->close_req.req;
+        ucp_ep_update_flags(ucp_ep, 0, UCP_EP_FLAG_REMOTE_CONNECTED);
+        close_req = ucp_ep_ext_control(ucp_ep)->close_req.req;
         ucp_ep_local_disconnect_progress(close_req);
         /* don't touch UCP EP after local disconnect, since it is not valid
          * anymore */
@@ -747,7 +775,7 @@ static unsigned ucp_ep_cm_disconnect_progress(void *arg)
 
     /* don't remove the flag at the beginning of the function, some functions
      * may rely on that flag (e.g. ucp_ep_cm_remote_disconnect_progress()) */
-    ucp_ep->flags &= ~UCP_EP_FLAG_REMOTE_CONNECTED;
+    ucp_ep_update_flags(ucp_ep, 0, UCP_EP_FLAG_REMOTE_CONNECTED);
 
 out:
     UCS_ASYNC_UNBLOCK(async);
@@ -761,7 +789,7 @@ static void ucp_cm_disconnect_cb(uct_ep_h uct_cm_ep, void *arg)
     ucp_worker_h worker        = ucp_ep->worker;
     uct_ep_h uct_ep;
 
-    ucp_ep->flags |= UCP_EP_FLAG_DISCONNECT_CB_CALLED;
+    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_DISCONNECT_CB_CALLED, 0);
     ucs_trace("ep %p flags 0x%x: remote disconnect callback invoked", ucp_ep,
               ucp_ep->flags);
 
@@ -1139,7 +1167,7 @@ free_addr:
     ucs_free(ucp_addr);
 out:
     if (status == UCS_OK) {
-        ep->flags |= UCP_EP_FLAG_LOCAL_CONNECTED;
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     } else {
         ucp_worker_set_ep_failed(worker, ep, &cm_wireup_ep->super.super,
                                  ucp_ep_get_cm_lane(ep), status);
@@ -1184,8 +1212,8 @@ static void ucp_cm_server_conn_notify_cb(
     ucs_assert_always(notify_args->field_mask &
                       UCT_CM_EP_SERVER_CONN_NOTIFY_ARGS_FIELD_STATUS);
 
-    status         = notify_args->status;
-    ucp_ep->flags |= UCP_EP_FLAG_SERVER_NOTIFY_CB;
+    status = notify_args->status;
+    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_SERVER_NOTIFY_CB, 0);
     ucs_trace("ep %p flags 0x%x: notify callback invoked, status %s", ucp_ep,
               ucp_ep->flags, ucs_status_string(status));
 
@@ -1269,8 +1297,9 @@ void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_DISCONNECTED_CM_LANE));
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
 
-    ucp_ep->flags &= ~UCP_EP_FLAG_LOCAL_CONNECTED;
-    ucp_ep->flags |= UCP_EP_FLAG_DISCONNECTED_CM_LANE;
+    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_DISCONNECTED_CM_LANE,
+                        UCP_EP_FLAG_LOCAL_CONNECTED);
+
     /* this will invoke @ref ucp_cm_disconnect_cb on remote side */
     status = uct_ep_disconnect(uct_cm_ep, 0);
     if (status != UCS_OK) {

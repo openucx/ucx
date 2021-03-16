@@ -13,11 +13,17 @@ resources:
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
       options: --privileged
+    - container: fedora34
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
+      options: --privileged -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: rhel76
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76_mofed47
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: rhel74
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
@@ -51,7 +57,8 @@ stages:
 
           - bash: |
               set -eE
-              range="remotes/origin/$(System.PullRequest.TargetBranch)..$(Build.SourceVersion)"
+              BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+              range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
               ok=1
               for sha1 in `git log $range --format="%h"`
               do
@@ -78,7 +85,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_instinct -equals yes
+          - ucx_docker -equals yes
         container: fedora
         steps:
           - checkout: self
@@ -87,8 +94,12 @@ stages:
 
           - bash: |
               source ./buildlib/az-helpers.sh
-              echo "Checking code format on diff remotes/origin/${SYSTEM_PULLREQUEST_TARGETBRANCH}..${BUILD_SOURCEVERSION}"
-              git-clang-format --diff remotes/origin/${SYSTEM_PULLREQUEST_TARGETBRANCH} ${BUILD_SOURCEVERSION} > format.patch
+              set -x
+              git log -1 HEAD
+              git log -1 HEAD^
+              BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+              echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
+              git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
               echo "Generated patch file:"
               cat format.patch
               if [ "`cat format.patch`" = "no modified files to format" ]; then
@@ -116,6 +127,8 @@ stages:
           matrix:
             rhel76:
               CONTAINER: rhel76
+            rhel76_mofed47:
+              CONTAINER: rhel76_mofed47
             ubuntu2004:
               CONTAINER: ubuntu2004
             ubuntu1804:
@@ -126,8 +139,10 @@ stages:
             #  CONTAINER: sles12sp5
             rhel82:
               CONTAINER: rhel82
+            fedora34:
+              CONTAINER: fedora34
         container: $[ variables['CONTAINER'] ]
-        timeoutInMinutes: 360
+        timeoutInMinutes: 240
 
         steps:
           - checkout: self
@@ -143,7 +158,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_instinct -equals yes
+          - ucx_docker -equals yes
         container: fedora
         steps:
           - checkout: self
@@ -199,7 +214,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_instinct -equals yes
+          - ucx_docker -equals yes
         strategy:
           matrix:
             centos7:
@@ -245,7 +260,7 @@ stages:
         pool:
           name: MLNX
           demands:
-          - ucx_instinct -equals yes
+          - ucx_docker -equals yes
         container: fedora
         steps:
           - checkout: self

@@ -57,7 +57,7 @@ void test_ucp_tag::enable_tag_mp_offload()
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MP_SRQ_ENABLE", "try"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MP_NUM_STRIDES", "8"));
     m_env.push_back(new ucs::scoped_setenv("UCX_IB_MLX5_DEVX_OBJECTS",
-                                           "dct,dcsrq,rcsrq,rcqp"));
+                                           "dct,dcsrq,rcsrq,rcqp,dci"));
 }
 
 void test_ucp_tag::request_init(void *request)

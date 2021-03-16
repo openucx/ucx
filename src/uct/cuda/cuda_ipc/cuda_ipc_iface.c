@@ -79,7 +79,7 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
     uct_cuda_ipc_iface_t  *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
 
     return ((uct_cuda_ipc_iface_node_guid(&iface->super) ==
-            *((const uint64_t *)dev_addr)) && ((getpid() != *(pid_t *)iface_addr)));
+             *((const uint64_t *)dev_addr)) && ((getpid() != *(pid_t *)iface_addr)));
 }
 
 static double uct_cuda_ipc_iface_get_bw()
@@ -128,6 +128,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
     iface_attr->cap.flags               = UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                          UCT_IFACE_FLAG_EP_CHECK               |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
                                           UCT_IFACE_FLAG_PENDING                |
                                           UCT_IFACE_FLAG_GET_ZCOPY              |
@@ -343,6 +344,7 @@ static uct_iface_ops_t uct_cuda_ipc_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
+    .ep_check                 = uct_cuda_ipc_ep_check,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ipc_ep_t),
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cuda_ipc_ep_t),
     .iface_flush              = uct_cuda_ipc_iface_flush,
@@ -478,11 +480,20 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
     }
 }
 
+ucs_status_t
+uct_cuda_ipc_query_devices(
+        uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+        unsigned *num_tl_devices_p)
+{
+    return uct_cuda_base_query_devices_common(md, UCT_DEVICE_TYPE_SHM,
+                                              tl_devices_p, num_tl_devices_p);
+}
+
 UCS_CLASS_DEFINE(uct_cuda_ipc_iface_t, uct_base_iface_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_ipc_iface_t, uct_iface_t, uct_md_h, uct_worker_h,
                           const uct_iface_params_t*, const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_cuda_ipc_component.super, cuda_ipc, uct_cuda_base_query_devices,
-              uct_cuda_ipc_iface_t, "CUDA_IPC_", uct_cuda_ipc_iface_config_table,
-              uct_cuda_ipc_iface_config_t);
+UCT_TL_DEFINE(&uct_cuda_ipc_component.super, cuda_ipc,
+              uct_cuda_ipc_query_devices, uct_cuda_ipc_iface_t, "CUDA_IPC_",
+              uct_cuda_ipc_iface_config_table, uct_cuda_ipc_iface_config_t);

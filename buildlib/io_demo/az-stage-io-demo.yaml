@@ -3,6 +3,8 @@ parameters:
   default: 'test'
 - name: iodemo_args
   default: ''
+- name: iodemo_tls
+  default: 'rc_x'
 
 steps:
 - bash: |
@@ -23,7 +25,7 @@ steps:
     echo "corrupter_pid=$corrupter_pid"
     azure_set_variable "corrupter_pid" "$corrupter_pid"
   displayName: Start network corrupter
-  timeoutInMinutes: 15
+  timeoutInMinutes: 2
 
 - bash: |
     set -eEx
@@ -31,6 +33,7 @@ steps:
     mkdir -p $(workspace)/${{ parameters.name }}
     # set UCX environment variables
     export UCX_NET_DEVICES=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${roce_iface}' .*/\1:\2/p')
+    export UCX_TLS=${{ parameters.iodemo_tls }}
     export LD_LIBRARY_PATH=$(workspace)/install/lib:$LD_LIBRARY_PATH
     $(workspace)/test/apps/iodemo/run_io_demo.sh \
         -H $(agent_hosts) \
@@ -44,6 +47,7 @@ steps:
         -i $(roce_iface) \
         $(io_demo_exe) \
             -d 512:524288 \
+            -P 2 \
             -o read,write \
             -i 0 \
             -w 16 \

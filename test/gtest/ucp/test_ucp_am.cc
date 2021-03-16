@@ -415,12 +415,22 @@ protected:
     {
         size_t small_hdr_size = 8;
 
-        test_am_send_recv(size, small_hdr_size, flags);
         test_am_send_recv(size, 0, flags);
+        test_am_send_recv(size, small_hdr_size, flags);
 
         if (max_am_hdr() > small_hdr_size) {
             test_am_send_recv(size, max_am_hdr(), flags);
         }
+    }
+
+    void test_short_thresh(size_t max_short)
+    {
+        ucp_ep_config_t *ep_cfg = ucp_ep_config(sender().ep());
+
+        EXPECT_LE(max_short, ep_cfg->rndv.am_thresh.remote);
+        EXPECT_LE(max_short, ep_cfg->rndv.am_thresh.local);
+        EXPECT_LE(max_short, ep_cfg->rndv.rma_thresh.remote);
+        EXPECT_LE(max_short, ep_cfg->rndv.rma_thresh.local);
     }
 
     virtual ucs_status_t am_data_handler(const void *header,
@@ -570,6 +580,39 @@ UCS_TEST_P(test_ucp_am_nbx, rx_persistent_data)
 
     ucp_am_data_release(receiver().worker(), rx_data);
     EXPECT_EQ(UCS_OK, request_wait(sptr));
+}
+
+// Check that max_short limits are adjusted when rndv threshold is set
+UCS_TEST_P(test_ucp_am_nbx, max_short_thresh_rndv, "RNDV_THRESH=0")
+{
+    ucp_ep_config_t *ep_cfg = ucp_ep_config(sender().ep());
+
+    size_t max_short = static_cast<size_t>(
+            ep_cfg->am_u.max_eager_short.memtype_on + 1);
+
+    test_short_thresh(max_short);
+
+    size_t max_reply_short = static_cast<size_t>(
+            ep_cfg->am_u.max_reply_eager_short.memtype_on + 1);
+
+    test_short_thresh(max_reply_short);
+}
+
+// Check that max_short limits are adjusted when zcopy threshold is set
+UCS_TEST_P(test_ucp_am_nbx, max_short_thresh_zcopy, "ZCOPY_THRESH=0")
+{
+    ucp_ep_config_t *ep_cfg = ucp_ep_config(sender().ep());
+
+    size_t max_short = static_cast<size_t>(
+            ep_cfg->am_u.max_eager_short.memtype_on + 1);
+
+    EXPECT_LE(max_short, ep_cfg->am.zcopy_thresh[0]);
+
+
+    size_t max_reply_short = static_cast<size_t>(
+            ep_cfg->am_u.max_reply_eager_short.memtype_on + 1);
+
+    EXPECT_LE(max_reply_short, ep_cfg->am.zcopy_thresh[0]);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
@@ -772,6 +815,16 @@ public:
                                        UCS_BIT(UCP_DATATYPE_IOV) |
                                        UCS_BIT(UCP_DATATYPE_GENERIC);
 
+    virtual ucp_ep_params_t get_ep_params()
+    {
+        ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
+
+        ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+        ep_params.err_mode    = static_cast<ucp_err_handling_mode_t>(
+                                                          get_variant_value(2));
+        return ep_params;
+    }
+
     static void get_test_dts(std::vector<ucp_test_variant>& variants)
     {
         /* coverity[overrun-buffer-val] */
@@ -779,10 +832,18 @@ public:
                            dts_bitmap, ucp_datatype_class_names);
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    static void get_test_dts_reply(std::vector<ucp_test_variant>& variants)
     {
         add_variant_values(variants, get_test_dts, 0);
         add_variant_values(variants, get_test_dts, UCP_AM_SEND_REPLY, "reply");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant_values(variants, get_test_dts_reply,
+                           UCP_ERR_HANDLING_MODE_NONE);
+        add_variant_values(variants, get_test_dts_reply,
+                           UCP_ERR_HANDLING_MODE_PEER, "errh");
     }
 
     void init()
@@ -1077,17 +1138,13 @@ public:
         modify_config("RNDV_THRESH", "128");
 
         test_ucp_am_nbx::init();
-        m_rx_memtype = mem_type(1);
-    }
-
-    ucs_memory_type_t mem_type(int idx) {
-        return ucs::supported_mem_type_pairs()[get_variant_value()][idx];
+        m_rx_memtype = (ucs_memory_type_t)get_variant_value(1);
     }
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 {
-    test_am_send_recv(64 * UCS_KBYTE, 8, 0, mem_type(0));
+    test_am_send_recv(64 * UCS_KBYTE, 8, 0, (ucs_memory_type_t)get_variant_value(0));
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype);

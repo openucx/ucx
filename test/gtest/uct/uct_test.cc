@@ -615,6 +615,10 @@ bool uct_test::has_mm() const {
             has_transport("xpmem"));
 }
 
+bool uct_test::has_cuda_ipc() const {
+    return has_transport("cuda_ipc");
+}
+
 bool uct_test::has_cma() const {
     return has_transport("cma");
 }
@@ -1144,7 +1148,7 @@ void uct_test::entity::destroy_eps() {
 }
 
 void
-uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
+uct_test::entity::connect_to_sockaddr(unsigned index,
                                       const ucs::sock_addr_storage &remote_addr,
                                       uct_cm_ep_priv_data_pack_callback_t pack_cb,
                                       uct_cm_ep_client_connect_callback_t connect_cb,
@@ -1162,27 +1166,20 @@ uct_test::entity::connect_to_sockaddr(unsigned index, entity& other,
     }
 
     /* Connect to the server */
-    if (m_cm) {
-        params.field_mask = UCT_EP_PARAM_FIELD_CM                         |
-                            UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT |
-                            UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB     |
-                            UCT_EP_PARAM_FIELD_USER_DATA;
-        params.cm                 = m_cm;
-        params.sockaddr_cb_client = connect_cb;
-        params.disconnect_cb      = disconnect_cb;
-    } else {
-        params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
-        params.iface      = m_iface;
-    }
-
-    params.field_mask       |= UCT_EP_PARAM_FIELD_USER_DATA         |
-                               UCT_EP_PARAM_FIELD_SOCKADDR          |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
-    params.user_data         = user_data;
-    params.sockaddr          = &ucs_remote_addr;
-    params.sockaddr_cb_flags = UCT_CB_FLAG_ASYNC;
-    params.sockaddr_pack_cb  = pack_cb;
+    params.field_mask         = UCT_EP_PARAM_FIELD_CM                         |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB     |
+                                UCT_EP_PARAM_FIELD_USER_DATA                  |
+                                UCT_EP_PARAM_FIELD_SOCKADDR                   |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS          |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
+    params.cm                 = m_cm;
+    params.sockaddr_cb_client = connect_cb;
+    params.disconnect_cb      = disconnect_cb;
+    params.user_data          = user_data;
+    params.sockaddr           = &ucs_remote_addr;
+    params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
+    params.sockaddr_pack_cb   = pack_cb;
     status = uct_ep_create(&params, &ep);
     ASSERT_UCS_OK(status);
 
@@ -1259,23 +1256,6 @@ void uct_test::entity::connect_to_iface(unsigned index, entity& other) {
     free(dev_addr);
 }
 
-void uct_test::entity::connect(unsigned index, entity& other,
-                               unsigned other_index,
-                               const ucs::sock_addr_storage &remote_addr,
-                               uct_cm_ep_priv_data_pack_callback_t pack_cb,
-                               uct_cm_ep_client_connect_callback_t connect_cb,
-                               uct_ep_disconnect_cb_t disconnect_cb,
-                               void *user_data)
-{
-    if (m_cm ||
-        iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR) {
-        connect_to_sockaddr(index, other, remote_addr, pack_cb, connect_cb,
-                            disconnect_cb, user_data);
-    } else {
-        UCS_TEST_SKIP_R("cannot connect");
-    }
-}
-
 void uct_test::entity::connect(unsigned index, entity& other, unsigned other_index)
 {
     if (iface_attr().cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
@@ -1287,38 +1267,15 @@ void uct_test::entity::connect(unsigned index, entity& other, unsigned other_ind
     }
 }
 
-void uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
-                              const uct_listener_params_t &params)
+ucs_status_t uct_test::entity::listen(const ucs::sock_addr_storage &listen_addr,
+                                      const uct_listener_params_t &params)
 {
-    ucs_status_t status;
+    scoped_log_handler slh(wrap_errors_logger);
 
-    for (;;) {
-        {
-            scoped_log_handler slh(wrap_errors_logger);
-            status = UCS_TEST_TRY_CREATE_HANDLE(uct_listener_h, m_listener,
-                                                uct_listener_destroy,
-                                                uct_listener_create, m_cm,
-                                                listen_addr.get_sock_addr_ptr(),
-                                                listen_addr.get_addr_size(),
-                                                &params);
-            if (status == UCS_OK) {
-                break;
-            }
-        }
-        EXPECT_EQ(UCS_ERR_BUSY, status);
-
-        const struct sockaddr* c_ifa_addr = listen_addr.get_sock_addr_ptr();
-        struct sockaddr* ifa_addr = const_cast<struct sockaddr*>(c_ifa_addr);
-        if (ifa_addr->sa_family == AF_INET) {
-            struct sockaddr_in *addr =
-                            reinterpret_cast<struct sockaddr_in *>(ifa_addr);
-            addr->sin_port = ntohs(ucs::get_port());
-        } else {
-            struct sockaddr_in6 *addr =
-                            reinterpret_cast<struct sockaddr_in6 *>(ifa_addr);
-            addr->sin6_port = ntohs(ucs::get_port());
-        }
-    }
+    return UCS_TEST_TRY_CREATE_HANDLE(uct_listener_h, m_listener,
+                                      uct_listener_destroy, uct_listener_create,
+                                      m_cm, listen_addr.get_sock_addr_ptr(),
+                                      listen_addr.get_addr_size(), &params);
 }
 
 void uct_test::entity::disconnect(uct_ep_h ep) {

@@ -14,6 +14,7 @@
 #include "uct_iov.inl"
 
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
@@ -176,6 +177,28 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
 ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
 {
     return iface->ops.iface_query(iface, iface_attr);
+}
+
+ucs_status_t uct_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    uct_iface_attr_t iface_attr;
+    ucs_status_t status;
+
+    status = uct_iface_query(iface, &iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* By default, the performance is assumed to be the same for all operations */
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth = iface_attr.bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
+        perf_attr->overhead = iface_attr.overhead;
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *addr)
@@ -558,31 +581,90 @@ ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *
     size_t length;
     void *buffer;
     ucs_iov_iter_t iov_iter;
-    size_t offset;
     ucs_status_t status;
 
     length = uct_iov_total_length(iov, iovcnt);
-    if (length > UCS_ALLOCA_MAX_SIZE) {
-        buffer = ucs_malloc(length, "uct_base_ep_am_short_iov buffer");
+
+    /* Copy first sizeof(header) bytes of iov to header. If the total length of
+     * iov is less than sizeof(header), the remainder of the header is filled
+     * with zeros. */
+    ucs_iov_iter_init(&iov_iter);
+    uct_iov_to_buffer(iov, iovcnt, &iov_iter, &header, sizeof(header));
+
+    /* If the total size of iov is greater than sizeof(header), then allocate
+       buffer and copy the remainder of iov to the buffer. */
+    if (length > sizeof(header)) {
+        length -= sizeof(header);
+
+        if (length > UCS_ALLOCA_MAX_SIZE) {
+            buffer = ucs_malloc(length, "uct_base_ep_am_short_iov buffer");
+        } else {
+            buffer = ucs_alloca(length);
+        }
+
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter, buffer, SIZE_MAX);
     } else {
-        buffer = ucs_alloca(length);
+        buffer = NULL;
+        length = 0;
     }
 
-    ucs_iov_iter_init(&iov_iter);
-    uct_iov_to_buffer(iov, iovcnt, &iov_iter, buffer, SIZE_MAX);
-
-    /* There is uint64_t header in the parameter list of uct_ep_am_short. Thus the
-     * minmum message size is 8b. If the total length of iov is less than 8b, the
-     * remainder of the header is filled with zeros. */
-    offset = ucs_min(sizeof(header), length);
-    memcpy(&header, buffer, offset);
-
-    status = uct_ep_am_short(ep, id, header, UCS_PTR_BYTE_OFFSET(buffer, offset),
-                             length - offset);
+    status = uct_ep_am_short(ep, id, header, buffer, length);
 
     if (length > UCS_ALLOCA_MAX_SIZE) {
         ucs_free(buffer);
     }
 
     return status;
+}
+
+int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid)
+{
+    ucs_assert((buffer != NULL) || (max_len == 0));
+    /* cppcheck-suppress nullPointer */
+    /* cppcheck-suppress ctunullpointer */
+    return snprintf(buffer, max_len, "/proc/%d", (int)pid);
+}
+
+uct_keepalive_info_t* uct_ep_keepalive_create(pid_t pid, ucs_time_t start_time)
+{
+    uct_keepalive_info_t *ka;
+    int proc_len;
+
+    proc_len = uct_ep_get_process_proc_dir(NULL, 0, pid);
+    if (proc_len <= 0) {
+        ucs_error("failed to get length to hold path to a process directory");
+        return NULL;
+    }
+
+    ka = ucs_malloc(sizeof(*ka) + proc_len + 1, "keepalive");
+    if (ka == NULL) {
+        ucs_error("failed to allocate keepalive info");
+        return NULL;
+    }
+
+    ka->start_time = start_time;
+    uct_ep_get_process_proc_dir(ka->proc, proc_len + 1, pid);
+
+    return ka;
+}
+
+ucs_status_t
+uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
+                       uct_completion_t *comp)
+{
+    ucs_status_t status;
+    ucs_time_t create_time;
+
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+
+    ucs_assert(ka != NULL);
+
+    status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
+                                   &create_time);
+    if (ucs_unlikely((status != UCS_OK) || (ka->start_time != create_time))) {
+        return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
+                                       UCS_ERR_ENDPOINT_TIMEOUT);;
+    }
+
+    return UCS_OK;
 }
