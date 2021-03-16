@@ -12,7 +12,7 @@
 #include <ucs/sys/module.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/config/parser.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/profile/profile.h>

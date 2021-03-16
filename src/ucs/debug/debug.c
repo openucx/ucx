@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "debug.h"
+#include "debug_int.h"
 #include "log.h"
 
 #include <ucs/datastruct/khash.h>

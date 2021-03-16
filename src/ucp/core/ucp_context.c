@@ -19,7 +19,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/string_set.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
 #include <string.h>

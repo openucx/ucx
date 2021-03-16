@@ -6,7 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
 }

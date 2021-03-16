@@ -11,7 +11,7 @@
 #include "log.h"
 
 #include <ucs/arch/atomic.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>

@@ -10,7 +10,7 @@
 #include "rc_iface.h"
 
 #include <uct/api/uct.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 
 
 #define RC_UNSIGNALED_INF UINT16_MAX
