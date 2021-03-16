@@ -1,0 +1,4 @@
+jobs:
+  - job: docker_tests
+    steps:
+      - bash: echo "ololo"
