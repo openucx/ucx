@@ -66,13 +66,14 @@ ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id)
 }
 
 ucs_status_t uct_rdmacm_cm_get_cq(uct_rdmacm_cm_t *cm, struct ibv_context *verbs,
-                                  uint32_t pd_key, struct ibv_cq **cq_p)
+                                  struct ibv_cq **cq_p)
 {
     struct ibv_cq *cq;
     khiter_t iter;
     int ret;
 
-    iter = kh_put(uct_rdmacm_cm_cqs, &cm->cqs, pd_key, &ret);
+    iter = kh_put(uct_rdmacm_cm_cqs, &cm->cqs,
+                  ibv_get_device_guid(verbs->device), &ret);
     if (ret == -1) {
         ucs_error("cm %p: cannot allocate hash entry for CQ", cm);
         return UCS_ERR_NO_MEMORY;
