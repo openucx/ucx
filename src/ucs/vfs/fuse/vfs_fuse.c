@@ -8,6 +8,7 @@
 #include "config.h"
 #endif
 
+#include <ucs/debug/memtrack.h>
 #include <ucs/vfs/sock/vfs_sock.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/sys/compiler.h>
@@ -31,6 +32,12 @@
 #define UCS_VFS_DUMMY_FILE_DATA   "UCX FUSE\n"
 
 
+typedef struct {
+    void            *buf;
+    fuse_fill_dir_t filler;
+} ucs_vfs_enum_dir_context_t;
+
+
 static struct {
     pthread_t       thread_id;
     pthread_mutex_t mutex;
@@ -49,9 +56,19 @@ static struct {
     .watch_desc = -1
 };
 
+static void ucs_vfs_enum_dir_cb(const char *name, void *arg)
+{
+    ucs_vfs_enum_dir_context_t *ctx = arg;
+
+    ctx->filler(ctx->buf, name, NULL, 0, 0);
+}
+
 static int ucs_vfs_fuse_getattr(const char *path, struct stat *stbuf,
                                 struct fuse_file_info *fi)
 {
+    ucs_vfs_path_info_t info;
+    ucs_status_t status;
+
     memset(stbuf, 0, sizeof(struct stat));
     stbuf->st_uid = getuid();
     stbuf->st_gid = getgid();
@@ -62,32 +79,30 @@ static int ucs_vfs_fuse_getattr(const char *path, struct stat *stbuf,
         return 0;
     }
 
-    if (strcmp(path, "/" UCS_VFS_DUMMY_FILE_NAME)) {
+    status = ucs_vfs_path_get_info(path, &info);
+    if (status != UCS_OK) {
         return -ENOENT;
     }
 
-    stbuf->st_mode  = S_IFREG | S_IRUSR;
-    stbuf->st_size  = strlen(UCS_VFS_DUMMY_FILE_DATA);
+    stbuf->st_mode  = info.mode;
+    stbuf->st_size  = info.size;
     stbuf->st_nlink = 1;
-    return 0;
-}
 
-static int
-ucs_vfs_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-                     off_t offset, struct fuse_file_info *fi,
-                     enum fuse_readdir_flags flags)
-{
-    filler(buf, ".", NULL, 0, 0);
-    filler(buf, "..", NULL, 0, 0);
-    filler(buf, "dummy", NULL, 0, 0);
     return 0;
 }
 
 static int ucs_vfs_fuse_open(const char *path, struct fuse_file_info *fi)
 {
-    if (strcmp(path, "/" UCS_VFS_DUMMY_FILE_NAME)) {
+    ucs_string_buffer_t strb;
+    ucs_status_t status;
+
+    ucs_string_buffer_init(&strb);
+    status = ucs_vfs_path_read_file(path, &strb);
+    if (status != UCS_OK) {
         return -ENOENT;
     }
+
+    fi->fh = (uintptr_t)ucs_string_buffer_extract_mem(&strb);
 
     return 0;
 }
@@ -95,7 +110,7 @@ static int ucs_vfs_fuse_open(const char *path, struct fuse_file_info *fi)
 static int ucs_vfs_fuse_read(const char *path, char *buf, size_t size,
                              off_t offset, struct fuse_file_info *fi)
 {
-    char *data    = UCS_VFS_DUMMY_FILE_DATA;
+    char *data    = (void*)fi->fh;
     size_t length = strlen(data);
     size_t nread;
 
@@ -113,11 +128,41 @@ static int ucs_vfs_fuse_read(const char *path, char *buf, size_t size,
     return nread;
 }
 
+static int ucs_vfs_fuse_readdir(const char *path, void *buf,
+                                fuse_fill_dir_t filler, off_t offset,
+                                struct fuse_file_info *fi,
+                                enum fuse_readdir_flags flags)
+{
+    ucs_vfs_enum_dir_context_t ctx;
+    ucs_status_t status;
+
+    filler(buf, ".", NULL, 0, 0);
+    filler(buf, "..", NULL, 0, 0);
+
+    ctx.buf    = buf;
+    ctx.filler = filler;
+    status     = ucs_vfs_path_list_dir(path, ucs_vfs_enum_dir_cb, &ctx);
+    if (status != UCS_OK) {
+        return -ENOENT;
+    }
+
+    return 0;
+}
+
+static int ucs_vfs_fuse_release(const char *path, struct fuse_file_info *fi)
+{
+    char *data = (void*)fi->fh;
+
+    ucs_free(data);
+    return 0;
+}
+
 struct fuse_operations ucs_vfs_fuse_operations = {
     .getattr = ucs_vfs_fuse_getattr,
     .open    = ucs_vfs_fuse_open,
     .read    = ucs_vfs_fuse_read,
     .readdir = ucs_vfs_fuse_readdir,
+    .release = ucs_vfs_fuse_release,
 };
 
 static void ucs_vfs_fuse_main()
