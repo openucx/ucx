@@ -11,6 +11,16 @@ AC_ARG_WITH([efa-dv],
             [AC_HELP_STRING([--with-efa-dv=(DIR)], [Compile with EFA device support])],
             [], [with_efa_dv=/usr])
 
+#
+# SRD Support
+#
+AC_ARG_WITH([srd],
+            [AC_HELP_STRING([--with-srd],
+                            [Compile with EFA Scalable Reliable Datagram support])],
+            [],
+            [with_srd=yes])
+
+
 AS_IF([test "x$with_ib" = "xno"], [with_efa_dv=no])
 
 AS_IF([test "x$with_efa_dv" = "xyes"], [with_efa_dv=/usr])
@@ -71,6 +81,10 @@ AS_IF([test "x$with_efa_dv" != xno],
        CFLAGS="$save_CFLAGS"
        CPPFLAGS="$save_CPPFLAGS"])
 
+AS_IF([test "x$with_efa_dv" != xno -a "x$with_srd" != xno],
+      [AC_DEFINE([HAVE_TL_SRD], 1, [SRD transport support])],
+      [with_srd=no])
+
 # Add EFA to IB modules
 AS_IF([test "x$with_efa_dv" != xno], [uct_ib_modules="${uct_ib_modules}:efa"])
 
@@ -78,5 +92,6 @@ AS_IF([test "x$with_efa_dv" != xno], [uct_ib_modules="${uct_ib_modules}:efa"])
 # For automake
 #
 AM_CONDITIONAL([HAVE_EFA_DV],  [test "x$with_efa_dv" != xno])
+AM_CONDITIONAL([HAVE_TL_SRD],  [test "x$with_srd" != xno])
 
 AC_CONFIG_FILES([src/uct/ib/efa/Makefile])

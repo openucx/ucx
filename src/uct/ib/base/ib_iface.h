@@ -66,6 +66,9 @@ enum {
 #else
     UCT_IB_QPT_DCI = UCT_IB_QPT_UNKNOWN,
 #endif
+#ifdef HAVE_TL_SRD
+    UCT_IB_QPT_SRD
+#endif
 };
 
 
