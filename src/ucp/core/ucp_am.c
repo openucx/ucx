@@ -669,8 +669,7 @@ static ucs_status_t ucp_am_zcopy_multi(uct_pending_req_t *self)
     ucp_am_fill_first_header(&first_hdr, req);
 
     return ucp_do_am_zcopy_multi(self, UCP_AM_ID_FIRST, UCP_AM_ID_MIDDLE,
-                                 &first_hdr, sizeof(first_hdr),
-                                 NULL, sizeof(mid_hdr),
+                                 &first_hdr, sizeof(first_hdr), NULL, 0ul,
                                  req->send.msg_proto.am.reg_desc,
                                  user_hdr_length,
                                  ucp_am_zcopy_req_complete, 1);

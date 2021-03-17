@@ -1,7 +1,9 @@
 #!/bin/bash -eExl
 
 WORKSPACE=${WORKSPACE:=$PWD}
-ucx_inst=${WORKSPACE}/install
+# build in local directory which goes away when docker exits
+ucx_build_dir=$HOME/${BUILD_ID}/build
+ucx_inst=$ucx_build_dir/install
 CUDA_MODULE="dev/cuda11.1.1"
 GDRCOPY_MODULE="dev/gdrcopy2.1_cuda11.1.1"
 JDK_MODULE="dev/jdk"
@@ -33,4 +35,22 @@ export AUTOMAKE_JOBS=$parallel_jobs
 make_clean() {
 	rm -rf ${ucx_inst}
 	$MAKEP ${1:-clean}
+}
+
+#
+# Prepare build environment
+#
+prepare_build() {
+	echo " ==== Prepare ===="
+	env
+	cd ${WORKSPACE}
+	if [ -d ${ucx_build_dir} ]
+	then
+		chmod u+rwx ${ucx_build_dir} -R
+		rm -rf ${ucx_build_dir}
+	fi
+	./autogen.sh
+	mkdir -p ${ucx_build_dir}
+	cd ${ucx_build_dir}
+	export PROGRESS=0
 }

@@ -30,7 +30,7 @@ build_docs() {
 	if [ $doxy_ready -eq 1 ]
 	then
 		echo " ==== Build docs only ===="
-		../configure --prefix=$ucx_inst --with-docs-only
+		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-docs-only
 		make_clean
 		$MAKE  docs
 		make_clean # FIXME distclean does not work with docs-only
@@ -42,7 +42,7 @@ build_docs() {
 #
 build_no_verbs() {
 	echo "==== Build without IB verbs ===="
-	../contrib/configure-release --prefix=$ucx_inst --without-verbs
+	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --without-verbs
 	make_clean
 	$MAKEP
 	make_clean distclean
@@ -53,7 +53,7 @@ build_no_verbs() {
 #
 build_disable_numa() {
 	echo "==== Check --disable-numa compilation option ===="
-	../contrib/configure-release --prefix=$ucx_inst --disable-numa
+	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --disable-numa
 	make_clean
 	$MAKEP
 	make_clean distclean
@@ -64,7 +64,7 @@ build_disable_numa() {
 #
 build_release_pkg() {
 	echo "==== Build release ===="
-	../contrib/configure-release
+	${WORKSPACE}/contrib/configure-release
 	make_clean
 	$MAKEP
 	$MAKEP distcheck
@@ -93,7 +93,8 @@ build_release_pkg() {
 		dpkg-buildpackage -us -uc
 	else
 		echo "==== Build RPM ===="
-		../contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
+		echo "$PWD"
+		${WORKSPACE}/contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
 	fi
 
 	# check that UCX version is present in spec file
@@ -116,12 +117,12 @@ build_icc() {
 	if az_module_load $INTEL_MODULE && icc -v
 	then
 		echo "==== Build with Intel compiler ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
 		make_clean
 		$MAKEP
 		make_clean distclean
 		echo "==== Build with Intel compiler (clang) ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
 		make_clean
 		$MAKEP
 		make_clean distclean
@@ -145,7 +146,7 @@ build_pgi() {
 		# TODO: Using non-default PGI compiler - pgcc18 which is going to be default
 		#       in next versions.
 		#       Switch to default CC compiler after pgcc18 is default for pgi module
-		../contrib/configure-devel --prefix=$ucx_inst CC=pgcc18 --without-valgrind
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=pgcc18 --without-valgrind
 		make_clean
 		$MAKEP
 		make_clean distclean
@@ -162,7 +163,7 @@ build_pgi() {
 #
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
-	../contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
 	make_clean
 	$MAKEP
 	make_clean distclean
@@ -173,7 +174,7 @@ build_debug() {
 #
 build_prof() {
 	echo "==== Build configure-prof ===="
-	../contrib/configure-prof --prefix=$ucx_inst
+	${WORKSPACE}/contrib/configure-prof --prefix=$ucx_inst
 	make_clean
 	$MAKEP
 	make_clean distclean
@@ -189,9 +190,9 @@ build_ugni() {
 	# PKG_CONFIG_TOP_BUILD_DIR with source dir, since the mock .pc files contain
 	# relative paths.
 	#
-	../contrib/configure-devel --prefix=$ucx_inst --with-ugni \
-		PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$PWD/../contrib/cray-ugni-mock \
-		PKG_CONFIG_TOP_BUILD_DIR=$PWD/..
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-ugni \
+		PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/${WORKSPACE}/contrib/cray-ugni-mock \
+		PKG_CONFIG_TOP_BUILD_DIR=${WORKSPACE}
 	make_clean
 	$MAKEP
 
@@ -211,12 +212,12 @@ build_cuda() {
 		if az_module_load $GDRCOPY_MODULE
 		then
 			echo "==== Build with enable cuda, gdr_copy ===="
-			../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
+			${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
 			make_clean
 			$MAKEP
 			make_clean distclean
 
-			../contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
+			${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
 			make_clean
 			$MAKEP
 			make_clean distclean
@@ -224,7 +225,7 @@ build_cuda() {
 		fi
 
 		echo "==== Build with enable cuda, w/o gdr_copy ===="
-		../contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
 		make_clean
 		$MAKEP
 
@@ -246,7 +247,7 @@ build_clang() {
 	if which clang > /dev/null 2>&1
 	then
 		echo "==== Build with clang compiler ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
 		make_clean
 		$MAKEP
 		$MAKEP install
@@ -277,7 +278,7 @@ build_gcc() {
 		if az_module_load $GCC_MODULE
 		then
 			echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
-			../contrib/configure-devel --prefix=$ucx_inst
+			${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
 			make_clean
 			$MAKEP
 			$MAKEP install
@@ -305,7 +306,7 @@ build_armclang() {
 	if az_module_load $ARM_MODULE && armclang --version && armclang ${armclang_test_file} -o ${armclang_test_file}.out
 	then
 		echo "==== Build with armclang compiler ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
 		make_clean
 		$MAKEP
 		$MAKEP install
@@ -319,15 +320,15 @@ build_armclang() {
 check_inst_headers() {
 	echo "==== Testing installed headers ===="
 
-	../contrib/configure-release --prefix=$PWD/install
+	${WORKSPACE}/contrib/configure-release --prefix=${ucx_inst}
 	make_clean
 	$MAKEP install
-	../contrib/check_inst_headers.sh $PWD/install/include
+	${WORKSPACE}/contrib/check_inst_headers.sh ${ucx_inst}/include
 	make_clean distclean
 }
 
 check_config_h() {
-	srcdir=$PWD/../src
+	srcdir=${WORKSPACE}/src
 
 	# Check if all .c files include config.h
 	echo "==== Checking for config.h files in directory $srcdir ===="
@@ -352,26 +353,9 @@ do_task() {
 	PROGRESS=$((PROGRESS+5))
 }
 
-#
-# Prepare build environment
-#
-prepare() {
-	echo " ==== Prepare ===="
-	az_init_modules
-	env
-	cd ${WORKSPACE}
-	if [ -d build-test ]
-	then
-		chmod u+rwx build-test -R
-		rm -rf build-test
-	fi
-	./autogen.sh
-	mkdir -p build-test
-	cd build-test
-	export PROGRESS=0
-}
 
-prepare
+az_init_modules
+prepare_build
 do_task build_docs
 do_task build_disable_numa
 do_task build_no_verbs
