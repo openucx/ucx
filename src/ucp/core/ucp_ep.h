@@ -36,6 +36,23 @@ typedef uint32_t                   ucp_ep_flags_t;
 typedef uint16_t                   ucp_ep_flags_t;
 #endif
 
+#if UCS_ENABLE_ASSERT
+#define UCP_EP_ASSERT_COUNTER_INC(_counter) \
+    do { \
+        ucs_assert(*(_counter) < UINT_MAX); \
+        ++(*(_counter)); \
+    } while (0)
+
+#define UCP_EP_ASSERT_COUNTER_DEC(_counter) \
+    do { \
+        ucs_assert(*(_counter) > 0); \
+        --(*(_counter)); \
+    } while (0)
+#else
+#define UCP_EP_ASSERT_COUNTER_INC(_counter)
+#define UCP_EP_ASSERT_COUNTER_DEC(_counter)
+#endif
+
 
 /**
  * Endpoint flags
@@ -354,7 +371,7 @@ struct ucp_ep_config {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
-    uint8_t                       ref_cnt;       /* Reference counter: 0 - it is
+    uint8_t                       refcount;      /* Reference counter: 0 - it is
                                                     allowed to destroy EP */
     ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
@@ -366,6 +383,15 @@ typedef struct ucp_ep {
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_NAME_MAX];
+#endif
+
+#if UCS_ENABLE_ASSERT
+    /* How many Worker flush operations are in-progress where the EP is the next
+     * EP for flushing */
+    unsigned                      flush_iter_refcount;
+    /* How many UCT EP discarding operations are in-progress scheduled for the
+     * EP */
+    unsigned                      discard_refcount;
 #endif
 
     UCS_STATS_NODE_DECLARE(stats)
@@ -499,7 +525,9 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
 ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
                                 const char *message, ucp_ep_h *ep_p);
 
-void ucp_ep_destroy_base(ucp_ep_h ep);
+void ucp_ep_add_ref(ucp_ep_h ep);
+
+int ucp_ep_remove_ref(ucp_ep_h ep);
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
                                   const char *peer_name, const char *message,

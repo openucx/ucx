@@ -452,7 +452,7 @@ void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep, ucp_ep_h ucp_ep)
         }
     }
 
-    ucp_ep_destroy_base(tmp_ep); /* not needed anymore */
+    ucp_ep_remove_ref(tmp_ep); /* not needed anymore */
     wireup_cm_ep->tmp_ep = NULL;
 }
 
