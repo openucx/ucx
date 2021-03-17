@@ -204,41 +204,9 @@ stages:
   - stage: Distro
     dependsOn: [Static_check]
     jobs:
-       # Perform test builds on relevant distributions.
-      - job: Distros
-        displayName: Build for
-        pool:
-          name: MLNX
-          demands:
-          - ucx_docker -equals yes
-        strategy:
-          matrix:
-            centos7:
-              CONTAINER: centos7
-              CONFIGURE_OPTS:
-        container: $[ variables['CONTAINER'] ]
-        steps:
-          - checkout: self
-            clean: true
-            fetchDepth: 100
-
-          - bash: |
-              set -eE
-              . buildlib/tools/common.sh
-              prepare_build
-              ${WORKSPACE}/configure $(CONFIGURE_OPTS)
-              gcc -v
-              make -s -j `nproc`
-              set +eE
-              set -x
-              ./src/tools/info/ucx_info -e -u t 2>&1 | tee info.txt
-              grep -i error info.txt
-              retVal=$?
-              if [ $retVal -eq 0 ]; then
-                  exit 1;
-              fi
-              exit 0;
-            displayName: Test ucx_info
+      - template: docker_tests.yml
+        parameters:
+          demands: ucx_docker -equals yes
 
   - stage: Coverity
     dependsOn: [Static_check]

@@ -1,4 +1,76 @@
+parameters:
+  demands: []
+  worker_ids: [0, 1, 2, 3]
+  num_workers: 4
+
 jobs:
-  - job: docker_tests
+  # Perform test builds on relevant distributions.
+  - job: Distros_centos7
+    displayName: Build for centos7
+    workspace:
+      clean: all
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    container: centos7
     steps:
-      - bash: echo "ololo"
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+
+      - bash: |
+          set -eE
+          . buildlib/tools/common.sh
+          prepare_build
+          ${WORKSPACE}/configure $(CONFIGURE_OPTS)
+          gcc -v
+          make -s -j `nproc`
+          set +eE
+          set -x
+          ./src/tools/info/ucx_info -e -u t 2>&1 | tee info.txt
+          grep -i error info.txt
+          retVal=$?
+          if [ $retVal -eq 0 ]; then
+              exit 1;
+          fi
+          exit 0;
+        displayName: Test ucx_info
+  - job: Tests_docker
+    displayName: Test for docker centos7
+    workspace:
+      clean: all
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+    container:
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:2
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --device=/dev/infiniband
+    displayName: ${{ parameters.name }} on worker
+    timeoutInMinutes: 300
+    strategy:
+      matrix:
+        ${{ each wid in parameters.worker_ids }}:
+          ${{ wid }}:
+            worker_id: ${{ wid }}
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+
+      - bash: |
+          source ./buildlib/az-helpers.sh
+          ./contrib/test_jenkins.sh
+        displayName: Run ./contrib/test_jenkins.sh
+        env:
+          nworkers: ${{ parameters.num_workers }}
+          worker: $(worker_id)
+          BUILD_NUMBER: "$(Build.BuildId)-$(Build.BuildNumber)"
+          JOB_URL: "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
+          # Set $JENKINS_RUN_TESTS to empty value to avoid setting CPU affinity in test_jenkins.sh
+          JENKINS_RUN_TESTS: ""
+          # $AZP_AGENT_ID is set for every self-hosted Azure agent (uniq for one host, from 1 to N)
+          EXECUTOR_NUMBER: $(AZP_AGENT_ID)
+          RUN_TESTS: yes
+          JENKINS_TEST_PERF: ${{ parameters.test_perf }}
+          JENKINS_NO_VALGRIND: ${{ parameters.valgrind_disable }}
+          RUNNING_IN_AZURE: yes
