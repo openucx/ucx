@@ -172,7 +172,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
 out_free_req:
     ucs_free(req->send.buffer);
-    ucs_free(req);
+    ucp_request_mem_free(req);
 out:
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
     return status;
@@ -224,7 +224,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
     /* We cannot allocate from memory pool because it's not thread safe
      * and this function may be called from any thread
      */
-    req = ucs_malloc(sizeof(*req), "wireup_msg_req");
+    req = ucp_request_mem_alloc("wireup_msg_req");
     if (req == NULL) {
         ucs_error("failed to allocate request for sending WIREUP message");
         return UCS_ERR_NO_MEMORY;
@@ -240,7 +240,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
                                     &req->send.wireup, &req->send.buffer,
                                     &req->send.length);
     if (status != UCS_OK) {
-        ucs_free(req);
+        ucp_request_mem_free(req);
         return status;
     }
 
@@ -704,6 +704,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     }
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
+    ucp_ep_flush_state_reset(reply_ep);
     status = ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_EP_REMOVED,
                                  &ucp_tl_bitmap_min, NULL);
     if (status != UCS_OK) {

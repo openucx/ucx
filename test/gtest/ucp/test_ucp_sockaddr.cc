@@ -1287,23 +1287,11 @@ protected:
 
     typedef void (*stop_cb_t)(void *arg);
 
-    void sreq_mem_dereg(void *sreq) {
-        if (sreq == NULL) {
-            /* If send request is NULL, it means that send operation completed
-             * immediately */
-            return;
-        }
-
-        /* TODO: remove memory deregistration, when UCP requests tracking is added */
-        ucp_request_t *req = static_cast<ucp_request_t*>(sreq) - 1;
-        EXPECT_EQ(sender().ucph(), req->send.ep->worker->context);
-        ucp_request_memory_dereg(sender().ucph(), req->send.datatype,
-                                 &req->send.state.dt, req);
-    }
-
-    void* do_unexp_recv(std::string &recv_buf, size_t size, void *sreq,
-                        bool err_handling, bool send_stop, bool recv_stop) {
+    void *do_unexp_recv(std::string &recv_buf, size_t size, void *sreq,
+                        bool send_stop, bool recv_stop)
+    {
         ucp_tag_recv_info_t recv_info = {};
+        bool err_handling             = send_stop || recv_stop;
         ucp_tag_message_h message;
 
         do {
@@ -1315,16 +1303,12 @@ protected:
         EXPECT_EQ(size, recv_info.length);
         EXPECT_EQ(0,    recv_info.sender_tag);
 
-        if (err_handling) {
-            if (recv_stop) {
-                disconnect(*this, receiver());
-            }
+        if (recv_stop) {
+            disconnect(*this, receiver());
+        }
 
-            sreq_mem_dereg(sreq);
-
-            if (send_stop) {
-                disconnect(*this, sender());
-            }
+        if (send_stop) {
+            disconnect(*this, sender());
         }
 
         ucp_request_param_t recv_param = {};
@@ -1334,8 +1318,8 @@ protected:
                                          <ucp_tag_recv_nbx_callback_t>(
                                              !err_handling ? rtag_complete_cb :
                                              rtag_complete_err_handling_cb);
-        return ucp_tag_msg_recv_nbx(receiver().worker(), &recv_buf[0], size, message,
-                                    &recv_param);
+        return ucp_tag_msg_recv_nbx(receiver().worker(), &recv_buf[0], size,
+                                    message, &recv_param);
     }
 
     void sreq_release(void *sreq) {
@@ -1413,19 +1397,20 @@ protected:
             reqs.push_back(sreq);
 
             if (!is_exp) {
-                rreq = do_unexp_recv(recv_buf, size, sreq, err_handling_test,
-                                     send_stop, recv_stop);
+                rreq = do_unexp_recv(recv_buf, size, sreq, send_stop,
+                                     recv_stop);
                 reqs.push_back(rreq);
             }
 
-            if (!err_handling_test) {
-                requests_wait(reqs);
-            } else {
-                /* TODO: add waiting for send request completion, when UCP requests
-                 * tracking is added */
-                sreq_release(sreq);
-                request_wait(rreq);
-            }
+            /* Wait for completions of send and receive requests.
+             * The requests could be completed with the following statuses:
+             * - UCS_OK, when it was successfully sent before a peer failure was
+             *   detected
+             * - UCS_ERR_CANCELED, when it was purged from an UCP EP list of
+             *   tracked requests
+             * - UCS_ERR_* (e.g. UCS_ERR_ENDPOINT_TIMEOUT), when it was
+             *   completed from an UCT transport with an error */
+            requests_wait(reqs);
 
             if (!err_handling_test) {
                 compare_buffers(send_buf, recv_buf);

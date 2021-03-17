@@ -89,7 +89,7 @@ static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
     ucp_worker_flush_ops_count_dec(ep->worker);
     ++flush_state->cmpl_sn;
 
-    ucs_hlist_for_each_extract_if(req, &flush_state->reqs, send.flush.list_elem,
+    ucs_hlist_for_each_extract_if(req, &flush_state->reqs, send.list,
                                   UCS_CIRCULAR_COMPARE32(
                                           req->send.flush.cmpl_sn, <=,
                                           flush_state->cmpl_sn)) {

@@ -173,6 +173,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     memset(&ucp_ep_ext_gen(ep)->ep_match, 0,
            sizeof(ucp_ep_ext_gen(ep)->ep_match));
 
+    ucs_hlist_head_init(&ucp_ep_ext_gen(ep)->proto_reqs);
     ucp_stream_ep_init(ep);
     ucp_am_ep_init(ep);
 
@@ -605,6 +606,8 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err_cleanup_lanes;
     }
 
+    ucp_ep_flush_state_reset(ep);
+
     *ep_p = ep;
     return UCS_OK;
 
@@ -963,6 +966,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     ucp_stream_ep_cleanup(ep);
     ucp_am_ep_cleanup(ep);
+    ucp_ep_reqs_purge(ep, UCS_ERR_CANCELED);
 
     ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_USED);
 
@@ -2665,5 +2669,74 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
         }
 
         *lane_map &= ~UCS_BIT(lane);
+    }
+}
+
+static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
+                             ucs_status_t status, int recursive)
+{
+    ucp_trace_req(req, "purged with status %s (%d) on ep %p",
+                  ucs_status_string(status), status, ucp_ep);
+
+    if (req->id != UCP_REQUEST_ID_INVALID) {
+        ucp_request_id_release(req);
+    }
+
+    if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
+        ucs_assert(req->super_req == NULL);
+        ucs_assert(req->send.ep == ucp_ep);
+        ucp_request_complete_and_dereg_send(req, status);
+    } else if (req->flags & UCP_REQUEST_FLAG_RECV_AM) {
+        ucs_assert(req->super_req == NULL);
+        ucs_assert(recursive); /* Mustn't be directly contained in an EP list
+                                * of tracking requests */
+        ucp_request_complete_am_recv(req, status);
+    } else if (req->flags & UCP_REQUEST_FLAG_RECV_TAG) {
+        ucs_assert(req->super_req == NULL);
+        ucs_assert(recursive); /* Mustn't be directly contained in an EP list
+                                * of tracking requests */
+        ucp_request_complete_tag_recv(req, status);
+    } else if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
+        ucs_assert(req->super_req != NULL);
+        ucs_assert(req->send.ep == ucp_ep);
+        ucs_assert(recursive); /* Mustn't be directly contained in an EP list
+                                * of tracking requests */
+
+        /* It means that purging started from a request responsible for sending
+         * RTR, so a request is responsible for copying data from staging buffer
+         * and it uses a receive part of a request */
+        req->super_req->recv.remaining -= req->recv.length;
+        if (req->super_req->recv.remaining == 0) {
+            ucp_ep_req_purge(ucp_ep, req->super_req, status, 1);
+        }
+
+        ucp_request_put(req);
+    } else {
+        ucs_assert(req->super_req != NULL);
+        ucs_assert(req->send.ep == ucp_ep);
+
+        ucp_ep_req_purge(ucp_ep, req->super_req, status, 1);
+        ucp_request_put(req);
+    }
+}
+
+void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
+{
+    ucs_hlist_head_t *proto_reqs = &ucp_ep_ext_gen(ucp_ep)->proto_reqs;
+    ucp_request_t *req;
+
+    while (!ucs_hlist_is_empty(proto_reqs)) {
+        req = ucs_hlist_head_elem(proto_reqs, ucp_request_t, send.list);
+        ucp_ep_req_purge(ucp_ep, req, status, 0);
+    }
+
+    if (/* Flush state is already valid (i.e. EP doesn't exist on matching
+         * context) and not invalidated yet, also remote EP ID is already set */
+        !(ucp_ep->flags &
+          (UCP_EP_FLAG_ON_MATCH_CTX | UCP_EP_FLAG_CLOSE_REQ_VALID))) {
+        ucs_hlist_for_each_extract(req, &ucp_ep_flush_state(ucp_ep)->reqs,
+                                   send.list) {
+            ucp_ep_flush_request_ff(req, status);
+        }
     }
 }
