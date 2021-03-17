@@ -381,6 +381,8 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         if (offset == 0) {
             /* First stage */
             ucs_assert(req->send.lane == ucp_ep_get_am_lane(ep));
+            ucs_assert(am_id_first != UCP_AM_ID_LAST);
+            ucs_assert(hdr_first != NULL);
 
             status = ucp_am_zcopy_common(req, hdr_first, hdr_size_first,
                                          user_hdr_desc, user_hdr_size, iov, max_iov,
@@ -395,6 +397,9 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
                                                    iov[0].length, status);
         } else {
             /* Middle or last stage */
+            ucs_assert(am_id_middle != UCP_AM_ID_LAST);
+            ucs_assert(hdr_middle != NULL);
+
             mid_len = ucs_min(max_middle, req->send.length - offset);
             ucs_assert(offset + mid_len <= req->send.length);
             ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iov, &state,

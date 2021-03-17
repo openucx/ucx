@@ -63,79 +63,6 @@ ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
-ucp_worker_get_request_id(ucp_worker_h worker, ucp_request_t *req, int indirect)
-{
-    ucs_ptr_map_key_t id;
-    ucs_status_t status;
-
-    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_IN_PTR_MAP));
-    status = ucs_ptr_map_put(&worker->ptr_map, req, indirect, &id);
-    if (ucs_unlikely(indirect)) {
-        if (ucs_unlikely(status != UCS_OK)) {
-            return UCP_REQUEST_ID_INVALID;
-        }
-
-        req->flags |= UCP_REQUEST_FLAG_IN_PTR_MAP;
-    }
-
-    ucs_assert(status == UCS_OK);
-    return id;
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_worker_get_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
-                             ucp_request_t **req_p)
-{
-    ucs_status_t status;
-    void *ptr;
-
-    status = ucs_ptr_map_get(&worker->ptr_map, id, 0, &ptr);
-    if (ucs_likely(status == UCS_OK)) {
-        *req_p = (ucp_request_t*)ptr;
-    }
-    return status;
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_worker_request_check_flags(const ucp_request_t *request,
-                               ucs_ptr_map_key_t id)
-{
-    ucs_assert((request != NULL) &&
-               ((request->flags & UCP_REQUEST_FLAG_IN_PTR_MAP) ||
-                !ucs_ptr_map_key_indirect(id)));
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_worker_del_request_id(ucp_worker_h worker, ucp_request_t *request,
-                          ucs_ptr_map_key_t id)
-{
-    ucs_status_t status UCS_V_UNUSED;
-
-    ucp_worker_request_check_flags(request, id);
-    status = ucs_ptr_map_del(&worker->ptr_map, id);
-    request->flags &= ~UCP_REQUEST_FLAG_IN_PTR_MAP;
-    ucs_assert(status == UCS_OK);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_worker_extract_request_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
-                                 ucp_request_t **req_p)
-{
-    ucs_status_t status;
-    void *ptr;
-
-    status = ucs_ptr_map_get(&worker->ptr_map, id, 1, &ptr);
-    if (ucs_unlikely(status != UCS_OK)) {
-        return status;
-    }
-
-    *req_p = (ucp_request_t*)ptr;
-    ucp_worker_request_check_flags(*req_p, id);
-    (*req_p)->flags &= ~UCP_REQUEST_FLAG_IN_PTR_MAP;
-    return UCS_OK;
-}
-
 static UCS_F_ALWAYS_INLINE int
 ucp_worker_keepalive_is_enabled(ucp_worker_h worker)
 {
@@ -298,33 +225,6 @@ ucp_worker_get_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
             ucs_trace_data("worker %p: ep id 0x%" PRIx64 " was already closed" \
                            " ep %p, drop " _fmt_str, \
                            _worker, _ep_id, *(_ep_p), ##__VA_ARGS__); \
-            _action; \
-        } \
-    }
-
-#define UCP_WORKER_GET_REQUEST_BY_ID(_req_p, _worker, _req_id, _action, \
-                                     _fmt_str, ...) \
-    { \
-        ucs_status_t __status = ucp_worker_get_request_by_id(_worker, _req_id, \
-                                                             _req_p); \
-        if (ucs_unlikely(__status != UCS_OK)) { \
-            ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
-                           " drop " _fmt_str, \
-                           _worker, _req_id, ##__VA_ARGS__); \
-            _action; \
-        } \
-    }
-
-#define UCP_WORKER_EXTRACT_REQUEST_BY_ID(_req_p, _worker, _req_id, _action, \
-                                         _fmt_str, ...) \
-    { \
-        ucs_status_t __status = ucp_worker_extract_request_by_id(_worker, \
-                                                                 _req_id, \
-                                                                 _req_p); \
-        if (ucs_unlikely(__status != UCS_OK)) { \
-            ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
-                           " drop " _fmt_str, \
-                           _worker, _req_id, ##__VA_ARGS__); \
             _action; \
         } \
     }
