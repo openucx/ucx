@@ -45,7 +45,6 @@ jobs:
     container:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:2
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --device=/dev/infiniband
-    displayName: ${{ parameters.name }} on worker
     timeoutInMinutes: 300
     strategy:
       matrix:
