@@ -181,7 +181,7 @@ static ucs_vfs_node_t *ucs_vfs_node_add(void *parent_obj,
     }
 
     /* generate the relative path */
-    ucs_snprintf_zero(rel_path_buf, sizeof(rel_path_buf), rel_path, ap);
+    vsnprintf(rel_path_buf, sizeof(rel_path_buf), rel_path, ap);
 
     /* Build parent nodes along the rel_path, without associated object */
     next_token = rel_path_buf;
