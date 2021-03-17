@@ -2226,7 +2226,7 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  const unsigned *addr_indices,
                                  ucp_lane_index_t lane,
                                  ucp_rsc_index_t aux_rsc_index,
-                                 char *buf, size_t max)
+                                 ucs_string_buffer_t *buf)
 {
     ucp_context_h context = worker->context;
     uct_tl_resource_desc_t *rsc;
@@ -2234,77 +2234,63 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
     ucp_md_index_t dst_md_index;
     ucp_rsc_index_t cmpt_index;
     unsigned path_index;
-    char *p, *endp;
     int prio;
 
-    p          = buf;
-    endp       = buf + max;
     rsc_index  = key->lanes[lane].rsc_index;
     rsc        = &context->tl_rscs[rsc_index].tl_rsc;
 
     path_index = key->lanes[lane].path_index;
-    snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d] %-*c-> ",
+    ucs_string_buffer_appendf(buf, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d] %-*c-> ",
              lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index,
              context->tl_rscs[rsc_index].md_index,
              20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)),
              ' ');
-    p += strlen(p);
 
     if (addr_indices != NULL) {
-        snprintf(p, endp - p, "addr[%d].", addr_indices[lane]);
-        p += strlen(p);
+        ucs_string_buffer_appendf(buf, "addr[%d].", addr_indices[lane]);
     }
 
     dst_md_index = key->lanes[lane].dst_md_index;
     cmpt_index   = ucp_ep_config_get_dst_md_cmpt(key, dst_md_index);
-    snprintf(p, endp - p, "md[%d]/%-8s", dst_md_index,
+    ucs_string_buffer_appendf(buf, "md[%d]/%-8s", dst_md_index,
              context->tl_cmpts[cmpt_index].attr.name);
-    p += strlen(p);
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane);
     if (prio != -1) {
-        snprintf(p, endp - p, " rma#%d", prio);
-        p += strlen(p);
+        ucs_string_buffer_appendf(buf, " rma#%d", prio);
     }
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane);
     if (prio != -1) {
-        snprintf(p, endp - p, " rma_bw#%d", prio);
-        p += strlen(p);
+        ucs_string_buffer_appendf(buf, " rma_bw#%d", prio);
     }
 
     prio = ucp_ep_config_get_multi_lane_prio(key->amo_lanes, lane);
     if (prio != -1) {
-        snprintf(p, endp - p, " amo#%d", prio);
-        p += strlen(p);
+        ucs_string_buffer_appendf(buf, " amo#%d", prio);
     }
 
     if (key->am_lane == lane) {
-        snprintf(p, endp - p, " am");
-        p += strlen(p);
+        ucs_string_buffer_appendf(buf, " am");
     }
 
     if (key->rkey_ptr_lane == lane) {
-        snprintf(p, endp - p, " rkey_ptr");
-        p += strlen(p);
+        ucs_string_buffer_appendf(buf, " rkey_ptr");
     }
 
     prio = ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane);
     if (prio != -1) {
-        snprintf(p, endp - p, " am_bw#%d", prio);
-        p += strlen(p);
+        ucs_string_buffer_appendf(buf, " am_bw#%d", prio);
     }
 
     if (lane == key->tag_lane) {
-        snprintf(p, endp - p, " tag_offload");
-        p += strlen(p);
+        ucs_string_buffer_appendf(buf, " tag_offload");
     }
 
     if (key->wireup_msg_lane == lane) {
-        snprintf(p, endp - p, " wireup");
-        p += strlen(p);
+        ucs_string_buffer_appendf(buf, " wireup");
         if (aux_rsc_index != UCP_NULL_RESOURCE) {
-            snprintf(p, endp - p, "{" UCT_TL_RESOURCE_DESC_FMT "}",
+            ucs_string_buffer_appendf(buf, "{" UCT_TL_RESOURCE_DESC_FMT "}",
                      UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[aux_rsc_index].tl_rsc));
         }
     }
@@ -2327,9 +2313,9 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
             ucp_ep_config_cm_lane_info_str(worker, &config->key, lane, cm_idx,
                                            lane_info, sizeof(lane_info));
         } else {
+            UCS_STRING_BUFFER_STATIC(strb, lane_info);
             ucp_ep_config_lane_info_str(worker, &config->key, addr_indices,
-                                        lane, aux_rsc_index, lane_info,
-                                        sizeof(lane_info));
+                                        lane, aux_rsc_index, &strb);
         }
         fprintf(stream, "#                 %s\n", lane_info);
     }

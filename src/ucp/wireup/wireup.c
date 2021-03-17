@@ -259,7 +259,7 @@ ucp_wireup_get_ep_tl_bitmap(ucp_ep_h ep, ucp_lane_map_t lane_map)
         if (ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE) {
             continue;
         }
-        
+
         UCS_BITMAP_SET(tl_bitmap, ucp_ep_get_rsc_index(ep, lane));
     }
 
@@ -1033,9 +1033,9 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
             ucp_ep_config_cm_lane_info_str(worker, key, lane, cm_index,
                                            lane_info, sizeof(lane_info));
         } else {
+            UCS_STRING_BUFFER_STATIC(strb, lane_info);
             ucp_ep_config_lane_info_str(worker, key, addr_indices, lane,
-                                        UCP_NULL_RESOURCE, lane_info,
-                                        sizeof(lane_info));
+                                        UCP_NULL_RESOURCE, &strb);
         }
         ucs_log(log_level, "%s: %s", title, lane_info);
     }

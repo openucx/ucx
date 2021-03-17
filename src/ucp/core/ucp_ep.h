@@ -494,7 +494,7 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  const unsigned *addr_indices,
                                  ucp_lane_index_t lane,
                                  ucp_rsc_index_t aux_rsc_index,
-                                 char *buf, size_t max);
+                                 ucs_string_buffer_t *buf);
 
 ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
                                 const char *message, ucp_ep_h *ep_p);
@@ -607,7 +607,7 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
  *
  * @param [in] ucp_ep  UCP Endpoint object to operate keepalive.
  * @param [in] uct_ep  UCT Endpoint object to do keepalive on.
- * @param [in] rsc_idx Resource index to check. 
+ * @param [in] rsc_idx Resource index to check.
  * @param [in] flags   Flags for keepalive operation.
  * @param [in] comp    Pointer to keepalive completion object.
  *
