@@ -189,6 +189,10 @@ public:
             status = receiver().listen(cb_type, m_test_addr.get_sock_addr_ptr(),
                                        m_test_addr.get_addr_size(),
                                        get_server_ep_params());
+            if (m_test_addr.get_port() == 0) {
+                /* any port can't be busy */
+                break;
+            }
         } while ((status == UCS_ERR_BUSY) && (ucs_get_time() < deadline));
 
         if (status == UCS_ERR_UNREACHABLE) {
@@ -205,6 +209,13 @@ public:
                         (const struct sockaddr *)&attr.sockaddr, &port));
         m_test_addr.set_port(port);
         UCS_TEST_MESSAGE << "server listening on " << m_test_addr.to_str();
+    }
+
+    ucs_status_t create_listener_wrap_err(const ucp_listener_params_t &params,
+                                          ucp_listener_h &listener)
+    {
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        return ucp_listener_create(receiver().worker(), &params, &listener);
     }
 
     static void complete_err_handling_status_verify(ucs_status_t status)
@@ -814,6 +825,72 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle_without_err_cb)
     }
 
     EXPECT_EQ(1u, sender().get_err_num());
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listener_invalid_params,
+                     nonparameterized_test(), "CM_REUSEADDR?=y")
+{
+    ucp_listener_params_t params;
+    ucp_listener_h listener;
+    ucs_status_t status;
+
+    params.field_mask = 0;
+    /* address and conn/accept handlers are not specified */
+    status            = create_listener_wrap_err(params, listener);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    /* add listen address, use ANY addr/port to avoid BUSY error in the end */
+    m_test_addr.reset_to_any();
+    m_test_addr.set_port(0);
+    params.field_mask       = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR;
+    params.sockaddr.addr    = m_test_addr.get_sock_addr_ptr();
+    params.sockaddr.addrlen = m_test_addr.get_addr_size();
+    /* accept handlers aren't set */
+    status                  = create_listener_wrap_err(params, listener);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    /* define conn handler flag but set to NULL */
+    params.field_mask       = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                              UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+    params.conn_handler.cb  = NULL;
+    params.conn_handler.arg = NULL;
+    status                  = create_listener_wrap_err(params, listener);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    /* define both conn and accept handlers to NULL */
+    params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                                UCP_LISTENER_PARAM_FIELD_CONN_HANDLER |
+                                UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
+    params.accept_handler.cb  = NULL;
+    params.accept_handler.arg = NULL;
+    status                    = create_listener_wrap_err(params, listener);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    /* define both conn and accept handlers to valid callbacks
+     * (should be only 1) */
+    params.field_mask        = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                               UCP_LISTENER_PARAM_FIELD_CONN_HANDLER |
+                               UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
+    params.conn_handler.cb   =
+            (ucp_listener_conn_callback_t)ucs_empty_function;
+    params.accept_handler.cb =
+            (ucp_listener_accept_callback_t)ucs_empty_function;
+    status                   = create_listener_wrap_err(params, listener);
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+
+    /* sockaddr and valid conn handler is OK */
+    params.field_mask = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                        UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+    status            = create_listener_wrap_err(params, listener);
+    ASSERT_UCS_OK(status);
+    ucp_listener_destroy(listener);
+
+    /* sockaddr and valid accept handler is OK */
+    params.field_mask = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
+                        UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
+    status            = create_listener_wrap_err(params, listener);
+    ASSERT_UCS_OK(status);
+    ucp_listener_destroy(listener);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, compare_cm_and_wireup_configs) {
