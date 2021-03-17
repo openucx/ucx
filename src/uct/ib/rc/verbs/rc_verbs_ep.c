@@ -623,14 +623,14 @@ typedef struct {
     struct ibv_qp              *qp;
 } uct_rc_verbs_ep_cleanup_ctx_t;
 
-void uct_rc_verbs_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx)
+unsigned uct_rc_verbs_ep_cleanup_qp(void *arg)
 {
-    uct_rc_verbs_ep_cleanup_ctx_t *ep_cleanup_ctx
-                    = ucs_derived_of(wait_ctx, uct_rc_verbs_ep_cleanup_ctx_t);
+    uct_rc_verbs_ep_cleanup_ctx_t *ep_cleanup_ctx = arg;
     uint32_t qp_num = ep_cleanup_ctx->qp->qp_num;
 
     uct_ib_destroy_qp(ep_cleanup_ctx->qp);
     uct_rc_ep_cleanup_qp_done(&ep_cleanup_ctx->super, qp_num);
+    return 1;
 }
 
 UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
