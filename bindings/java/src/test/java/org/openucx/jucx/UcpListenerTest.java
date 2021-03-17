@@ -6,6 +6,7 @@ package org.openucx.jucx;
 
 import org.junit.Test;
 import org.openucx.jucx.ucp.*;
+import org.openucx.jucx.ucs.UcsConstants;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -23,32 +24,6 @@ import static org.junit.Assert.*;
 public class UcpListenerTest  extends UcxTest {
     static final int port = Integer.parseInt(
         System.getenv().getOrDefault("JUCX_TEST_PORT", "55321"));
-
-    @Test
-    public void testCreateUcpListener() {
-        UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
-        UcpWorker worker = context.newWorker(new UcpWorkerParams());
-        InetSocketAddress ipv4 = new InetSocketAddress("0.0.0.0", port);
-        try {
-            UcpListener ipv4Listener = worker.newListener(
-                new UcpListenerParams().setSockAddr(ipv4));
-
-            assertNotNull(ipv4Listener);
-            ipv4Listener.close();
-        } catch (UcxException ignored) { }
-
-        try {
-            InetSocketAddress ipv6 = new InetSocketAddress("::", port);
-            UcpListener ipv6Listener = worker.newListener(
-                new UcpListenerParams().setSockAddr(ipv6));
-
-            assertNotNull(ipv6Listener);
-            ipv6Listener.close();
-        } catch (UcxException ignored) { }
-
-        worker.close();
-        context.close();
-    }
 
     static Stream<NetworkInterface> getInterfaces() {
         try {
@@ -75,11 +50,17 @@ public class UcpListenerTest  extends UcxTest {
             Collections.list(iface.getInetAddresses()).stream())
             .collect(Collectors.toList());
         for (InetAddress address : addresses) {
-            try {
-                result = worker.newListener(
-                    params.setSockAddr(new InetSocketAddress(address, port)));
-                break;
-            } catch (UcxException ignored) { }
+            for (int i = 0; i < 5; i++) {
+                try {
+                    result = worker.newListener(
+                        params.setSockAddr(new InetSocketAddress(address, port + i)));
+                    break;
+                } catch (UcxException ex) {
+                    if (ex.getStatus() != UcsConstants.STATUS.UCS_ERR_BUSY) {
+                        break;
+                    }
+                }
+            }
         }
         assertNotNull("Could not find socket address to start UcpListener", result);
         System.out.println("Bound UcpListner on: " + result.getAddress());
