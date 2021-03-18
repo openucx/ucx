@@ -112,6 +112,7 @@ noinst_HEADERS = \
 	time/time.h \
 	time/timerq.h \
 	time/timer_wheel.h \
+	type/float8.h \
 	async/async.h \
 	async/pipe.h \
 	async/signal.h \
