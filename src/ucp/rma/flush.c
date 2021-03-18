@@ -519,7 +519,7 @@ static unsigned ucp_worker_flush_progress(void *arg)
         (&next_ep->ep_list != &worker->all_eps)) {
         /* Some endpoints are not flushed yet. Take the endpoint from the list
          * and start flush operation on it. */
-        ep = ucp_worker_flush_req_set_next_ep(req, 1, &next_ep->ep_list);
+        ep = ucp_worker_flush_req_set_next_ep(req, 1, next_ep->ep_list.next);
         if (ep == NULL) {
             goto out;
         }
