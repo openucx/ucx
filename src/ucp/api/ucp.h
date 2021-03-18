@@ -368,6 +368,19 @@ enum ucp_mem_advise_params_field {
 
 /**
  * @ingroup UCP_CONTEXT
+ * @brief UCP library attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_lib_attr_t are
+ * present. It is used to enable backward compatibility support.
+ */
+enum ucp_lib_attr_field {
+    /**< UCP library maximum supported thread level flag */
+    UCP_LIB_ATTR_FIELD_MAX_THREAD_LEVEL = UCS_BIT(0)
+};
+
+
+/**
+ * @ingroup UCP_CONTEXT
  * @brief UCP context attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_context_attr_t are
@@ -1017,6 +1030,32 @@ typedef struct ucp_params {
 
 /**
  * @ingroup UCP_CONTEXT
+ * @brief Lib attributes.
+ *
+ * The structure defines the attributes that characterize the Library.
+ */
+typedef struct ucp_lib_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_lib_attr_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t          field_mask;
+
+    /**
+     * Maximum level of thread support of the library, which is permanent
+     * throughout the lifetime of the library. Accordingly, the user can call
+     * @ref ucp_worker_create with appropriate
+     * @ref ucp_worker_params_t.thread_mode.
+     * For supported thread levels please see @ref ucs_thread_mode_t.
+     */
+    ucs_thread_mode_t max_thread_level;
+} ucp_lib_attr_t;
+
+
+/**
+ * @ingroup UCP_CONTEXT
  * @brief Context attributes.
  *
  * The structure defines the attributes which characterize
@@ -1605,6 +1644,19 @@ struct ucp_am_recv_param {
      */
     void               **msg_context;
 };
+
+
+/**
+ * @ingroup UCP_CONTEXT
+ * @brief Get attributes of the UCP library.
+ *
+ * This routine fetches information about the UCP library attributes.
+ *
+ * @param [out] attr       Filled with attributes of the UCP library.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_lib_query(ucp_lib_attr_t *attr);
 
 
 /**
