@@ -168,6 +168,7 @@ uct_ud_ep_window_release_inline(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                                 int is_async, int invalidate_resend)
 {
     uct_ud_send_skb_t *skb;
+    uct_ud_comp_desc_t *cdesc;
 
     ucs_queue_for_each_extract(skb, &ep->tx.window, queue,
                                uct_ud_skb_is_completed(skb, ack_psn)) {
@@ -180,14 +181,15 @@ uct_ud_ep_window_release_inline(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
             uct_ud_skb_release(skb, 1);
         } else if (ucs_likely(!is_async)) {
             /* dispatch user completion immediately */
-            uct_ud_iface_dispatch_comp(iface, uct_ud_comp_desc(skb)->comp,
-                                       status);
+            cdesc = uct_ud_comp_desc(skb);
+            uct_completion_update_status(cdesc->comp, status);
+            uct_ud_iface_dispatch_comp(iface, cdesc->comp);
             uct_ud_skb_release(skb, 1);
         } else {
             /* Don't call user completion from async context. Instead, put
              * it on a queue which will be progressed from main thread.
              */
-            uct_ud_iface_add_async_comp(iface, skb, status);
+            uct_ud_iface_add_async_comp(iface, ep, skb, status);
         }
     }
 }
@@ -225,6 +227,11 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
 
 static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
 {
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_ud_iface_t);
+
+    uct_ud_iface_dispatch_async_comps(iface, ep);
+
     /* reset the maximal TX psn value to the default, since we should be able
      * to do TX operation after purging of the EP and uct_ep_flush(LOCAL)
      * operation has to return UCS_OK */
@@ -1014,7 +1021,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         } else {
             /* Otherwise, add the skb after async completions */
             ucs_assert(ep->tx.resend_count == 0);
-            uct_ud_iface_add_async_comp(iface, skb, UCS_OK);
+            uct_ud_iface_add_async_comp(iface, ep, skb, UCS_OK);
         }
 
         ucs_trace_data("added dummy flush skb %p psn %d user_comp %p", skb,
@@ -1027,7 +1034,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
                              uct_completion_t *comp)
 {
-    uct_ud_ep_t *ep = ucs_derived_of(ep_h, uct_ud_ep_t);
+    uct_ud_ep_t *ep       = ucs_derived_of(ep_h, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
     ucs_status_t status;
@@ -1036,7 +1043,7 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         uct_ep_pending_purge(ep_h, NULL, 0);
-        uct_ud_iface_dispatch_async_comps(iface);
+        uct_ud_iface_dispatch_async_comps(iface, ep);
         uct_ud_ep_purge(ep, UCS_ERR_CANCELED);
         /* FIXME make flush(CANCEL) operation truly non-blocking and wait until
          * all of the outstanding sends are completed. Without this, zero-copy
@@ -1619,6 +1626,9 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
 
     /* schedule flush */
     uct_ud_ep_flush(tl_ep, 0, NULL);
+
+    /* cancel user outstanding operations */
+    uct_ud_ep_purge(ep, UCS_ERR_CANCELED);
 
     /* the EP will be destroyed by interface destroy or timeout in
      * uct_ud_ep_timer

@@ -810,17 +810,22 @@ uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface)
     return skb;
 }
 
-unsigned uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface)
+unsigned
+uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     unsigned count = 0;
-    uct_ud_comp_desc_t *cdesc;
     uct_ud_send_skb_t *skb;
+    uct_ud_comp_desc_t *cdesc;
 
     ucs_queue_for_each_extract(skb, &iface->tx.async_comp_q, queue, 1) {
         ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING));
         cdesc = uct_ud_comp_desc(skb);
-        uct_ud_iface_dispatch_comp(iface, cdesc->comp, cdesc->status);
-        uct_ud_skb_release(skb, 0);
+        ucs_assert(cdesc->ep != NULL);
+
+        if ((ep == NULL) || (ep == cdesc->ep)) {
+            uct_ud_iface_dispatch_comp(iface, cdesc->comp);
+            uct_ud_skb_release(skb, 0);
+        }
         ++count;
     }
 
