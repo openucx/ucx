@@ -102,7 +102,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                    params->mem_type : UCS_MEMORY_TYPE_HOST;
     alloc_length = length;
 
-    ucs_trace("allocaing %s: %s memory length %zu flags 0x%x", alloc_name,
+    ucs_trace("allocating %s: %s memory length %zu flags 0x%x", alloc_name,
               ucs_memory_type_names[mem_type], alloc_length, flags);
     ucs_log_indent(1);
 
