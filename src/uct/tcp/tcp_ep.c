@@ -324,11 +324,57 @@ uct_tcp_ep_progress_rx_remove_filter(const ucs_callbackq_elem_t *elem,
     return (elem->cb == uct_tcp_ep_progress_data_rx) && (elem->arg == ep);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_tcp_ep_tx_started(uct_tcp_ep_t *ep, const uct_tcp_am_hdr_t *hdr)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+
+    ep->tx.length      += sizeof(*hdr) + hdr->length;
+    iface->outstanding += ep->tx.length;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_tcp_ep_tx_completed(uct_tcp_ep_t *ep, size_t sent_length)
+{
+    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                            uct_tcp_iface_t);
+
+    iface->outstanding -= sent_length;
+    ep->tx.offset      += sent_length;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_tcp_ep_zcopy_completed(uct_tcp_ep_t *ep, uct_completion_t *comp,
+                           ucs_status_t status)
+{
+    ep->flags &= ~UCT_TCP_EP_FLAG_ZCOPY_TX;
+    if (comp != NULL) {
+        uct_invoke_completion(comp, status);
+    }
+}
+
+static void uct_tcp_ep_purge(uct_tcp_ep_t *ep)
+{
+    uct_tcp_ep_put_completion_t *put_comp;
+    uct_tcp_ep_zcopy_tx_t *ctx;
+
+    if (ep->flags & UCT_TCP_EP_FLAG_ZCOPY_TX) {
+        ctx = (uct_tcp_ep_zcopy_tx_t*)ep->tx.buf;
+        uct_tcp_ep_zcopy_completed(ep, ctx->comp, UCS_ERR_CANCELED);
+        uct_tcp_ep_tx_completed(ep, ep->tx.length - ep->tx.offset);
+    }
+
+    ucs_queue_for_each_extract(put_comp, &ep->put_comp_q, elem, 1) {
+        uct_invoke_completion(put_comp->comp, UCS_ERR_CANCELED);
+        ucs_mpool_put_inline(put_comp);
+    }
+}
+
 static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
 {
     uct_tcp_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                             uct_tcp_iface_t);
-    uct_tcp_ep_put_completion_t *put_comp;
 
     if (self->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX) {
         uct_tcp_cm_remove_ep(iface, self);
@@ -341,10 +387,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
     }
 
     uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_CAPS);
-
-    ucs_queue_for_each_extract(put_comp, &self->put_comp_q, elem, 1) {
-        ucs_free(put_comp);
-    }
+    uct_tcp_ep_purge(self);
 
     if (self->flags & UCT_TCP_EP_FLAG_FAILED) {
         /* a failed EP callback can be still scheduled on the UCT worker,
@@ -387,6 +430,8 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
         uct_tcp_cm_remove_ep(iface, ep);
         /* remove TX capability, but still will be able to receive data */
         uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_TX);
+        /* purge all outstanding operatiosn (GET/PUT Zcopy, flush operations) */
+        uct_tcp_ep_purge(ep);
         uct_tcp_cm_insert_ep(iface, ep);
     } else {
         uct_tcp_ep_destroy_internal(tl_ep);
@@ -836,36 +881,6 @@ void uct_tcp_ep_pending_queue_dispatch(uct_tcp_ep_t *ep)
     if (uct_tcp_ep_ctx_buf_empty(&ep->tx)) {
         ucs_assert(ucs_queue_is_empty(&ep->pending_q));
         uct_tcp_ep_mod_events(ep, 0, UCS_EVENT_SET_EVWRITE);
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_tcp_ep_tx_started(uct_tcp_ep_t *ep, const uct_tcp_am_hdr_t *hdr)
-{
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
-
-    ep->tx.length      += sizeof(*hdr) + hdr->length;
-    iface->outstanding += ep->tx.length;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_tcp_ep_tx_completed(uct_tcp_ep_t *ep, size_t sent_length)
-{
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
-
-    iface->outstanding -= sent_length;
-    ep->tx.offset      += sent_length;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_tcp_ep_zcopy_completed(uct_tcp_ep_t *ep, uct_completion_t *comp,
-                           ucs_status_t status)
-{
-    ep->flags &= ~UCT_TCP_EP_FLAG_ZCOPY_TX;
-    if (comp != NULL) {
-        uct_invoke_completion(comp, status);
     }
 }
 

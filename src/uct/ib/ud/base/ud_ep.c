@@ -225,6 +225,11 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
 
 static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
 {
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
+
+    /* handle completions from asynchronous progress if any */
+    uct_ud_iface_dispatch_async_comps(iface);
+
     /* reset the maximal TX psn value to the default, since we should be able
      * to do TX operation after purging of the EP and uct_ep_flush(LOCAL)
      * operation has to return UCS_OK */
@@ -1619,6 +1624,9 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
 
     /* schedule flush */
     uct_ud_ep_flush(tl_ep, 0, NULL);
+
+    /* cancel user outstanding operations */
+    uct_ud_ep_purge(ep, UCS_ERR_CANCELED);
 
     /* the EP will be destroyed by interface destroy or timeout in
      * uct_ud_ep_timer
