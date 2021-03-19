@@ -8,6 +8,8 @@
 #  include "config.h"
 #endif
 
+#include <gnu/libc-version.h>
+
 #include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
@@ -18,6 +20,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/type/init_once.h>
 #include <ucm/api/ucm.h>
 
 #include "rcache.h"
@@ -999,6 +1002,34 @@ static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache) {
     pthread_mutex_unlock(&ucs_rcache_global_list_lock);
 }
 
+/* glibc-2.25 introduced new rwlock implementation and multiple bugs were
+ * discovered between 2.25 and 2.29 versions (for example
+ * see https://sourceware.org/bugzilla/show_bug.cgi?id=23844).
+ */
+static void ucs_rcache_glibc_check()
+{
+    static ucs_init_once_t init = UCS_INIT_ONCE_INITIALIZER;
+    char *save_ptr              = NULL;
+    char *version, *version_str;
+    int version_major, version_minor;
+
+    UCS_INIT_ONCE(&init) {
+        version_str   = ucs_strdup(gnu_get_libc_version(), "glibc version");
+        version       = strtok_r(version_str, ".", &save_ptr);
+        version_major = atoi(version);
+        version       = strtok_r(NULL, ".", &save_ptr);
+        version_minor = atoi(version);
+        ucs_free(version_str);
+
+        if ((version_major == 2) && (version_minor >= 25) &&
+            (version_minor <= 29)) {
+            ucs_warn("UCS rcache may work incorrectly with glibc-%s. "
+                     "Please consider using glibc prior to 2.25 or above 2.29.",
+                     gnu_get_libc_version());
+        }
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
                            const char *name, ucs_stats_node_t *stats_parent)
 {
@@ -1080,6 +1111,8 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     if (status != UCS_OK) {
         goto err_unset_event;
     }
+
+    ucs_rcache_glibc_check();
 
     return UCS_OK;
 
