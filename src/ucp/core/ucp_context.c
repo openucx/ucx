@@ -22,6 +22,7 @@
 #include <ucs/debug/debug.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
 
@@ -1338,8 +1339,7 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
         ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%s",
                           params->name);
     } else {
-        ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%s",
-                          "context_name");
+        ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%p", context);
     }
 }
 
@@ -1548,6 +1548,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
+    ucs_vfs_obj_add_dir(NULL, context, "ucp/context/%s-%p", context->name,
+                        context);
+
     ucs_debug("created ucp context %s %p [%d mds %d tls] features 0x%" PRIx64
               " tl bitmap " UCT_TL_BITMAP_FMT,
               context->name, context, context->num_mds, context->num_tls,
@@ -1570,6 +1573,7 @@ err:
 
 void ucp_cleanup(ucp_context_h context)
 {
+    ucs_vfs_obj_remove(context);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
