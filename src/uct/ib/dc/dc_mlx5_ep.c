@@ -1376,14 +1376,30 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci_index].txqp;
     uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci_index].txwq;
     uint16_t pi                = ntohs(cqe->wqe_counter);
+    ucs_arbiter_t *waitq;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
 
+    /**
+     * Note: DCI is released after handling completion callbacks,
+     *       to avoid OOO sends when this is the only missing resource.
+     */
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     uct_dc_mlx5_iface_dci_put(iface, dci_index);
+
+    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
+        waitq = uct_dc_mlx5_iface_tx_waitq(iface);
+    } else {
+        waitq = uct_dc_mlx5_iface_dci_waitq(iface,
+                                            uct_dc_mlx5_ep_pool_index(ep));
+    }
+    ucs_arbiter_group_desched(waitq, &ep->arb_group);
+    uct_dc_mlx5_iface_progress_pending(iface,
+                                       iface->tx.dcis[dci_index].pool_index);
+
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
