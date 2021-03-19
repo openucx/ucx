@@ -169,7 +169,6 @@ uct_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
     status = uct_iface_mem_alloc(perf->uct.iface, length,
                                  flags, "perftest", alloc_mem);
     if (status != UCS_OK) {
-        ucs_free(alloc_mem);
         ucs_error("failed to allocate memory: %s", ucs_status_string(status));
         return status;
     }
