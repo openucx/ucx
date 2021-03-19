@@ -7,7 +7,7 @@
 extern "C" {
   #include <ucs/arch/cpu.h>
   #include <ucs/debug/assert.h>
-  #include <ucs/debug/debug.h>
+  #include <ucs/debug/debug_int.h>
 }
 
 #include <arpa/inet.h> /* inet_addr */

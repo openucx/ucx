@@ -11,7 +11,7 @@
 #include "profile.h"
 
 #include <ucs/datastruct/list.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>

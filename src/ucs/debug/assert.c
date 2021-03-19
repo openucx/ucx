@@ -11,7 +11,7 @@
 #include "assert.h"
 
 #include <ucs/config/global_opts.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>

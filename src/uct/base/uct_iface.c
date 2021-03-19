@@ -18,7 +18,7 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 
 
 #ifdef ENABLE_STATS
