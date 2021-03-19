@@ -1047,17 +1047,8 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0 */
         if (cur_wnd <= 0) {
-            pool_index = uct_dc_mlx5_ep_pool_index(ep);
-            if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-                waitq = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
-                group = &ep->arb_group;
-            } else {
-                /* Need to schedule fake ep in TX arbiter, because it
-                 * might have been descheduled due to lack of FC window. */
-                waitq = uct_dc_mlx5_iface_tx_waitq(iface);
-                group = uct_dc_mlx5_ep_arb_group(iface, ep);
-            }
-
+            uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group,
+                                           &pool_index);
             ucs_arbiter_group_schedule(waitq, group);
             uct_dc_mlx5_iface_progress_pending(iface, pool_index);
         }

@@ -1322,9 +1322,11 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uint8_t pool_index         = uct_dc_mlx5_ep_pool_index(ep);
     void *priv_args[2]         = {ep, arg};
     uct_purge_cb_args_t args   = {cb, priv_args};
+    ucs_arbiter_t *waitq;
+    ucs_arbiter_group_t *group;
+    uint8_t pool_index;
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface),
@@ -1333,14 +1335,11 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
         return;
     }
 
-    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        ucs_arbiter_group_purge(uct_dc_mlx5_iface_dci_waitq(iface, pool_index),
-                                &ep->arb_group,
-                                uct_dc_mlx5_ep_arbiter_purge_cb, &args);
-    } else {
-        ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface),
-                                &ep->arb_group,
-                                uct_dc_mlx5_ep_arbiter_purge_cb, &args);
+    uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group, &pool_index);
+    ucs_arbiter_group_purge(waitq, group, uct_dc_mlx5_ep_arbiter_purge_cb,
+                            &args);
+
+    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
         uct_dc_mlx5_iface_dci_free(iface, ep);
     }
 }
@@ -1376,6 +1375,9 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci_index].txqp;
     uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci_index].txwq;
     uint16_t pi                = ntohs(cqe->wqe_counter);
+    ucs_arbiter_t *waitq;
+    ucs_arbiter_group_t *group;
+    uint8_t pool_index;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
@@ -1384,6 +1386,12 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     uct_dc_mlx5_iface_dci_put(iface, dci_index);
+    uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group, &pool_index);
+
+    /* Do not invoke pending requests on a failed endpoint */
+    ucs_arbiter_group_desched(waitq, group);
+    uct_dc_mlx5_iface_progress_pending(iface, pool_index);
+
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
