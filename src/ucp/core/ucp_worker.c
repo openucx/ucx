@@ -1978,7 +1978,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
 {
-    ucs_thread_mode_t uct_thread_mode;
+    ucs_thread_mode_t thread_mode, uct_thread_mode;
     unsigned name_length;
     ucp_worker_h worker;
     ucs_status_t status;
@@ -1986,31 +1986,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker = ucs_calloc(1, sizeof(*worker), "ucp worker");
     if (worker == NULL) {
         return UCS_ERR_NO_MEMORY;
-    }
-
-    uct_thread_mode = UCS_THREAD_MODE_SINGLE;
-
-    /* copy user flags, and mask-out unsupported flags for compatibility */
-    worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
-                    UCS_MASK(UCP_WORKER_INTERNAL_FLAGS_SHIFT);
-    UCS_STATIC_ASSERT(UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK <
-                      UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT));
-
-    if (params->field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) {
-#if ENABLE_MT
-        if (params->thread_mode != UCS_THREAD_MODE_SINGLE) {
-            /* UCT is serialized by UCP lock or by UCP user */
-            uct_thread_mode = UCS_THREAD_MODE_SERIALIZED;
-        }
-
-        if (params->thread_mode == UCS_THREAD_MODE_MULTI) {
-            worker->flags |= UCP_WORKER_FLAG_MT;
-        }
-#else
-        if (params->thread_mode != UCS_THREAD_MODE_SINGLE) {
-            ucs_debug("forced single thread mode on worker create");
-        }
-#endif
     }
 
     worker->context              = context;
@@ -2036,6 +2011,40 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
 
+    /* Copy user flags, and mask-out unsupported flags for compatibility */
+    worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
+                    UCS_MASK(UCP_WORKER_INTERNAL_FLAGS_SHIFT);
+    UCS_STATIC_ASSERT(UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK <
+                      UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT));
+
+    /* Set multi-thread support mode */
+    thread_mode = UCP_PARAM_VALUE(WORKER, params, thread_mode, THREAD_MODE,
+                                  UCS_THREAD_MODE_SINGLE);
+    switch (thread_mode) {
+    case UCS_THREAD_MODE_SINGLE:
+        /* UCT is serialized by UCP lock or by UCP user */
+        uct_thread_mode = UCS_THREAD_MODE_SINGLE;
+        break;
+    case UCS_THREAD_MODE_SERIALIZED:
+        uct_thread_mode = UCS_THREAD_MODE_SERIALIZED;
+        worker->flags  |= UCP_WORKER_FLAG_THREAD_SERIALIZED;
+        break;
+    case UCS_THREAD_MODE_MULTI:
+        uct_thread_mode = UCS_THREAD_MODE_SERIALIZED;
+#if ENABLE_MT
+        worker->flags |= UCP_WORKER_FLAG_THREAD_MULTI;
+#else
+        ucs_diag("multi-threaded worker is requested, but library is built "
+                 "without multi-thread support");
+#endif
+        break;
+    default:
+        ucs_error("invalid thread mode %d", thread_mode);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free;
+    }
+
+    /* Initialize endpoint allocator */
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
     if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
         UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_proto_t) <= sizeof(ucp_ep_t));
@@ -2381,8 +2390,10 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     ucp_rsc_index_t tl_id;
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
-        if (worker->flags & UCP_WORKER_FLAG_MT) {
+        if (worker->flags & UCP_WORKER_FLAG_THREAD_MULTI) {
             attr->thread_mode = UCS_THREAD_MODE_MULTI;
+        } else if (worker->flags & UCP_WORKER_FLAG_THREAD_SERIALIZED) {
+            attr->thread_mode = UCS_THREAD_MODE_SERIALIZED;
         } else {
             attr->thread_mode = UCS_THREAD_MODE_SINGLE;
         }

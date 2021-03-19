@@ -552,3 +552,44 @@ UCS_TEST_P(test_ucp_worker_request_leak, tag_send_recv)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_request_leak, all, "all")
+
+class test_ucp_worker_thread_mode : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               UCS_THREAD_MODE_SINGLE, "single");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               UCS_THREAD_MODE_SERIALIZED, "serialized");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, UCS_THREAD_MODE_MULTI,
+                               "multi");
+    }
+
+    /// @override
+    virtual ucp_worker_params_t get_worker_params()
+    {
+        ucp_worker_params_t params = ucp_test::get_worker_params();
+
+        params.field_mask |= UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+        params.thread_mode = thread_mode();
+        return params;
+    }
+
+protected:
+    ucs_thread_mode_t thread_mode() const
+    {
+        return static_cast<ucs_thread_mode_t>(get_variant_value(0));
+    }
+};
+
+UCS_TEST_P(test_ucp_worker_thread_mode, query)
+{
+    ucp_worker_attr_t worker_attr = {};
+
+    worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_THREAD_MODE;
+    ucs_status_t status    = ucp_worker_query(sender().worker(), &worker_attr);
+    ASSERT_EQ(UCS_OK, status);
+    EXPECT_EQ(thread_mode(), worker_attr.thread_mode);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_thread_mode, all, "all")
