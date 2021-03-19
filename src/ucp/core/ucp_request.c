@@ -424,6 +424,9 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
         uct_completion_update_status(&req->send.state.uct_comp, status);
         req->send.state.uct_comp.func(&req->send.state.uct_comp);
     } else {
+        if (req->id != UCP_REQUEST_ID_INVALID) {
+            ucp_request_id_release(req);
+        }
         ucp_request_complete_send(req, status);
     }
 }
