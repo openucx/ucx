@@ -995,18 +995,17 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep                = req->send.ep;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
 
     /* If a flush is completed from a pending/completion callback, we need to
      * schedule slow-path callback to release the endpoint later, since a UCT
      * endpoint cannot be released from pending/completion callback context.
      */
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
-    req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
     uct_worker_progress_register_safe(ep->worker->uct,
                                       ucp_ep_local_disconnect_progress, req,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &req->send.disconnect.prog_id);
+                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
 }
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)

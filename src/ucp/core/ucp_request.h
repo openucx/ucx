@@ -247,10 +247,6 @@ struct ucp_request {
                 } flush;
 
                 struct {
-                    uct_worker_cb_id_t        prog_id;/* Slow-path callback */
-                } disconnect;
-
-                struct {
                     uct_ep_h              uct_ep;         /* UCT EP that should be flushed and
                                                              destroyed */
                     unsigned              ep_flush_flags; /* Flags that should be passed into
