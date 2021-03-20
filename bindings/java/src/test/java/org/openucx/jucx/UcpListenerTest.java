@@ -50,7 +50,7 @@ public class UcpListenerTest  extends UcxTest {
             Collections.list(iface.getInetAddresses()).stream())
             .collect(Collectors.toList());
         for (InetAddress address : addresses) {
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 10; i++) {
                 try {
                     result = worker.newListener(
                         params.setSockAddr(new InetSocketAddress(address, port + i)));
