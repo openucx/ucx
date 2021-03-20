@@ -1005,7 +1005,6 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
                                     ucp_rsc_index_t cm_index,
                                     ucs_log_level_t log_level)
 {
-    char lane_info[128] = {0};
     char am_lane_str[8];
     char wireup_msg_lane_str[8];
     char cm_lane_str[8];
@@ -1029,15 +1028,14 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
             key->reachable_md_map, key->ep_check_map);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
+        UCS_STRING_BUFFER_ONSTACK(strb, 128);
         if (lane == key->cm_lane) {
-            ucp_ep_config_cm_lane_info_str(worker, key, lane, cm_index,
-                                           lane_info, sizeof(lane_info));
+            ucp_ep_config_cm_lane_info_str(worker, key, lane, cm_index, &strb);
         } else {
-            UCS_STRING_BUFFER_STATIC(strb, lane_info);
             ucp_ep_config_lane_info_str(worker, key, addr_indices, lane,
                                         UCP_NULL_RESOURCE, &strb);
         }
-        ucs_log(log_level, "%s: %s", title, lane_info);
+        ucs_log(log_level, "%s: %s", title, ucs_string_buffer_cstr(&strb));
     }
 }
 

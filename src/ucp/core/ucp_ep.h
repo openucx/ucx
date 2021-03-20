@@ -487,7 +487,7 @@ void ucp_ep_config_cm_lane_info_str(ucp_worker_h worker,
                                     const ucp_ep_config_key_t *key,
                                     ucp_lane_index_t lane,
                                     ucp_rsc_index_t cm_index,
-                                    char *buf, size_t max);
+                                    ucs_string_buffer_t *buf);
 
 void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  const ucp_ep_config_key_t *key,
