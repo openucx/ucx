@@ -59,10 +59,10 @@ void ucp_proto_common_lane_priv_str(const ucp_proto_common_lane_priv_t *lpriv,
 {
     ucs_string_buffer_appendf(strb, "ln:%d", lpriv->lane);
     if (lpriv->memh_index != UCP_NULL_RESOURCE) {
-        ucs_string_buffer_appendf(strb, "/mh:%d", lpriv->memh_index);
+        ucs_string_buffer_appendf(strb, ",mh%d", lpriv->memh_index);
     }
     if (lpriv->rkey_index != UCP_NULL_RESOURCE) {
-        ucs_string_buffer_appendf(strb, "/rk:%d", lpriv->rkey_index);
+        ucs_string_buffer_appendf(strb, ",rk%d", lpriv->rkey_index);
     }
 }
 
@@ -82,11 +82,24 @@ ucp_proto_common_get_iface_attr(const ucp_proto_init_params_t *params,
                                      ucp_proto_common_get_rsc_index(params, lane));
 }
 
-size_t ucp_proto_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
-                                      ptrdiff_t field_offset, size_t dfl_value)
+size_t ucp_proto_common_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
+                                             ptrdiff_t field_offset,
+                                             size_t dfl_value)
 {
-    return (field_offset == UCP_PROTO_COMMON_OFFSET_INVALID) ? dfl_value :
-           *(const size_t*)UCS_PTR_BYTE_OFFSET(iface_attr, field_offset);
+    if (field_offset == UCP_PROTO_COMMON_OFFSET_INVALID) {
+        return dfl_value;
+    }
+
+    return *(const size_t*)UCS_PTR_BYTE_OFFSET(iface_attr, field_offset);
+}
+
+size_t
+ucp_proto_common_get_max_frag(const ucp_proto_common_init_params_t *params,
+                              const uct_iface_attr_t *iface_attr)
+{
+    return ucp_proto_common_get_iface_attr_field(iface_attr,
+                                                 params->max_frag_offs,
+                                                 SIZE_MAX);
 }
 
 double
@@ -97,11 +110,13 @@ ucp_proto_common_iface_bandwidth(const ucp_proto_common_init_params_t *params,
                                   &iface_attr->bandwidth);
 }
 
-static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
-        const ucp_proto_init_params_t *params, unsigned flags,
-        ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-        ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
-        ucp_lane_index_t *lanes, ucp_md_map_t *reg_md_map_p)
+static ucp_lane_index_t
+ucp_proto_common_find_lanes_internal(const ucp_proto_init_params_t *params,
+                                     unsigned flags, ucp_lane_type_t lane_type,
+                                     uint64_t tl_cap_flags,
+                                     ucp_lane_index_t max_lanes,
+                                     ucp_lane_map_t exclude_map,
+                                     ucp_lane_index_t *lanes)
 {
     UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
     ucp_context_h context                        = params->worker->context;
@@ -149,7 +164,6 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     }
 
     lane_map      = UCS_MASK(ep_config_key->num_lanes) & ~exclude_map;
-    *reg_md_map_p = 0;
     ucs_for_each_bit(lane, lane_map) {
         if (num_lanes >= max_lanes) {
             break;
@@ -194,8 +208,6 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
                               ucs_memory_type_names[select_param->mem_type]);
                     continue;
                 }
-
-                *reg_md_map_p |= UCS_BIT(md_index);
             } else if (!(md_attr->cap.access_mem_types &
                          UCS_BIT(select_param->mem_type))) {
                 /*
@@ -240,12 +252,45 @@ out:
     return num_lanes;
 }
 
+ucp_md_map_t
+ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
+                            ucp_lane_map_t lane_map)
+{
+    ucp_context_h context                        = params->super.worker->context;
+    const ucp_proto_select_param_t *select_param = params->super.select_param;
+    const uct_md_attr_t *md_attr;
+    ucp_md_index_t md_index;
+    ucp_md_map_t reg_md_map;
+    ucp_lane_index_t lane;
+
+    /* Register memory only for zero-copy send operations */
+    if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
+        return 0;
+    }
+
+    reg_md_map = 0;
+    ucs_for_each_bit(lane, lane_map) {
+        md_index = ucp_proto_common_get_md_index(&params->super, lane);
+        md_attr  = &context->tl_mds[md_index].attr;
+
+        /* Register if the memory domain support registration for the relevant
+           memory type, and needs a local memory handle for zero-copy
+           communication */
+        if (ucs_test_all_flags(md_attr->cap.flags,
+                               UCT_MD_FLAG_NEED_MEMH | UCT_MD_FLAG_REG) &&
+            (md_attr->cap.reg_mem_types & UCS_BIT(select_param->mem_type))) {
+            reg_md_map |= UCS_BIT(md_index);
+        }
+    }
+
+    return reg_md_map;
+}
+
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
                             ucp_lane_index_t max_lanes,
-                            ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes,
-                            ucp_md_map_t *reg_md_map_p)
+                            ucp_lane_map_t exclude_map, ucp_lane_index_t *lanes)
 {
     ucp_lane_index_t lane_index, lane, num_lanes, num_valid_lanes;
     const uct_iface_attr_t *iface_attr;
@@ -254,16 +299,13 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
     num_lanes = ucp_proto_common_find_lanes_internal(&params->super,
                                                      params->flags, lane_type,
                                                      tl_cap_flags, max_lanes,
-                                                     exclude_map, lanes,
-                                                     reg_md_map_p);
+                                                     exclude_map, lanes);
 
     num_valid_lanes = 0;
     for (lane_index = 0; lane_index < num_lanes; ++lane_index) {
         lane       = lanes[lane_index];
         iface_attr = ucp_proto_common_get_iface_attr(&params->super, lane);
-        frag_size  = ucp_proto_get_iface_attr_field(iface_attr,
-                                                    params->max_frag_offs,
-                                                    SIZE_MAX);
+        frag_size  = ucp_proto_common_get_max_frag(params, iface_attr);
         /* Max fragment size should be larger than header size */
         if (frag_size <= params->hdr_size) {
             ucs_trace("lane[%d]: max fragment is too small %zu, need > %zu",
@@ -285,19 +327,18 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
 ucp_lane_index_t
 ucp_proto_common_find_am_bcopy_lane(const ucp_proto_init_params_t *params)
 {
-    ucp_lane_index_t lane = UCP_NULL_LANE, num_lanes;
-    ucp_md_map_t dummy_md_map;
+    ucp_lane_index_t lane = UCP_NULL_LANE;
+    ucp_lane_index_t num_lanes;
 
     num_lanes = ucp_proto_common_find_lanes_internal(
             params, UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE, UCP_LANE_TYPE_AM,
-            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, &lane, &dummy_md_map);
+            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s", params->proto_name);
         return UCP_NULL_LANE;
     }
 
     ucs_assert(num_lanes == 1);
-    ucs_assert(dummy_md_map == 0);
 
     return lane;
 }
@@ -440,14 +481,14 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
 {
     ucp_context_h context  = params->super.worker->context;
     ucp_proto_caps_t *caps = params->super.caps;
-    double bandwidth, overhead, latency;
+    double overhead, latency, tl_latency;
     const uct_iface_attr_t *iface_attr;
+    size_t frag_size, tl_min_length;
     ucs_linear_func_t extra_time;
     ucs_linear_func_t pack_time;
     ucs_linear_func_t uct_time;
     ucp_lane_index_t lane;
     uint32_t op_attr_mask;
-    size_t frag_size;
 
     /* Remote access implies zero copy on receiver */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
@@ -458,40 +499,35 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
      * - consider remote/local system device
      * - consider memory type for pack/unpack
      */
+    caps->cfg_thresh   = params->cfg_thresh;
+    caps->cfg_priority = params->cfg_priority;
+    caps->num_ranges   = 0;
+    caps->min_length   = 0;
 
-    bandwidth = 0;
-    overhead  = 0;
-    latency   = params->latency;
-
-    /* Collect latency, overhead, bandwidth from all lanes */
+    /* Collect latency and overhead from all lanes */
+    overhead = 0;
+    latency  = params->latency;
     ucs_for_each_bit(lane, perf_params->lane_map) {
-        iface_attr = ucp_proto_common_get_iface_attr(&params->super, lane);
-        overhead  += iface_attr->overhead;
-        latency    = ucs_max(ucp_tl_iface_latency(context, &iface_attr->latency),
-                             latency);
-        bandwidth += ucp_proto_common_iface_bandwidth(params, iface_attr);
+        iface_attr    = ucp_proto_common_get_iface_attr(&params->super, lane);
+        tl_latency    = ucp_tl_iface_latency(context, &iface_attr->latency);
+        tl_min_length = ucp_proto_common_get_iface_attr_field(
+                iface_attr, params->min_frag_offs, 0);
+
+        overhead        += iface_attr->overhead;
+        latency          = ucs_max(tl_latency, latency);
+        caps->min_length = ucs_max(caps->min_length, tl_min_length);
     }
 
     /* Take fragment size from first lane */
-    iface_attr = ucp_proto_common_get_iface_attr(&params->super,
-                                                 perf_params->lane0);
-    frag_size  = ucp_proto_get_iface_attr_field(iface_attr,
-                                                params->max_frag_offs, SIZE_MAX);
+    frag_size = perf_params->frag_size;
     if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE)) {
         /* if the data returns as a response, no need to subtract header size */
         frag_size -= params->hdr_size;
     }
 
-    caps->cfg_thresh   = params->cfg_thresh;
-    caps->cfg_priority = params->cfg_priority;
-    caps->min_length   = ucp_proto_get_iface_attr_field(iface_attr,
-                                                        params->min_frag_offs,
-                                                        0);
-    caps->num_ranges   = 0;
-
     op_attr_mask  = ucp_proto_select_op_attr_from_flags(
                             params->super.select_param->op_flags);
-    uct_time      = ucs_linear_func_make(latency, 1.0 / bandwidth);
+    uct_time      = ucs_linear_func_make(latency, 1.0 / perf_params->bandwidth);
     pack_time     = ucs_linear_func_make(0, 1.0 / context->config.ext.bcopy_bw);
     extra_time    = ucp_proto_common_get_reg_cost(params, perf_params->reg_md_map);
     extra_time.c += overhead + params->overhead;
