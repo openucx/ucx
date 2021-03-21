@@ -100,6 +100,12 @@ static inline double ucs_log2(double x)
     return log(x) / log(2.0);
 }
 
+static UCS_F_ALWAYS_INLINE size_t ucs_double_to_sizet(double value)
+{
+    double round_value = value + 0.5;
+    return (round_value < (double)SIZE_MAX) ? ((size_t)round_value) : SIZE_MAX;
+}
+
 /**
  * Convert flags without a branch
  * @return '_newflag' if '_oldflag' is set in '_value', otherwise - 0
