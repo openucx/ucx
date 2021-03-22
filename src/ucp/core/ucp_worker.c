@@ -265,12 +265,10 @@ static ucs_status_t ucp_worker_wakeup_init(ucp_worker_h worker,
         goto out;
     }
 
-    if (params->field_mask & UCP_WORKER_PARAM_FIELD_EVENTS) {
-        events = params->events;
-    } else {
-        events = UCP_WAKEUP_RMA | UCP_WAKEUP_AMO | UCP_WAKEUP_TAG_SEND |
-                 UCP_WAKEUP_TAG_RECV | UCP_WAKEUP_TX | UCP_WAKEUP_RX;
-    }
+    events = UCP_PARAM_VALUE(WORKER, params, events, EVENTS,
+                             UCP_WAKEUP_RMA | UCP_WAKEUP_AMO |
+                                     UCP_WAKEUP_TAG_SEND | UCP_WAKEUP_TAG_RECV |
+                                     UCP_WAKEUP_TX | UCP_WAKEUP_RX);
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_EVENT_FD) {
         worker->flags |= UCP_WORKER_FLAG_EXTERNAL_EVENT_FD;
@@ -2053,11 +2051,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 2);
     }
 
-    if (params->field_mask & UCP_WORKER_PARAM_FIELD_USER_DATA) {
-        worker->user_data = params->user_data;
-    } else {
-        worker->user_data = NULL;
-    }
+    worker->user_data = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,
+                                        NULL);
 
     name_length = ucs_min(UCP_WORKER_NAME_MAX,
                           context->config.ext.max_worker_name + 1);
