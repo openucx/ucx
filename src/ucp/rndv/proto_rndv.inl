@@ -15,6 +15,20 @@
 #include <ucp/proto/proto_multi.inl>
 
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_cfg_thresh(ucp_context_h context, uint64_t rndv_modes)
+{
+    ucs_assert(!(rndv_modes & UCS_BIT(UCP_RNDV_MODE_AUTO)));
+
+    if (context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) {
+        return UCS_MEMUNITS_AUTO; /* automatic threshold */
+    } else if (rndv_modes & UCS_BIT(context->config.ext.rndv_mode)) {
+        return 0; /* enabled by default */
+    } else {
+        return UCS_MEMUNITS_INF; /* used only as last resort */
+    }
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_rts_request_init(ucp_request_t *req)
 {
@@ -91,6 +105,16 @@ ucp_proto_rndv_ack_progress(ucp_request_t *req, ucp_am_id_t am_id,
                                               ucp_proto_rndv_pack_ack, req,
                                               sizeof(ucp_reply_hdr_t),
                                               complete_func);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_rtr_common_complete(ucp_request_t *req, ucs_status_t status)
+{
+    ucp_trace_req(req, "rndv_rtr_common_complete");
+    if (req->send.rndv.rkey != NULL) {
+        ucp_rkey_destroy(req->send.rndv.rkey);
+    }
+    ucp_proto_request_zcopy_complete(req, status);
 }
 
 #endif

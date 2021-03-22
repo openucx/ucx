@@ -799,16 +799,20 @@ ucp_request_get_memory_type(ucp_context_h context, const void *address,
     return param->memory_type;
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_request_id_alloc(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE void
+ucp_ep_ptr_id_alloc(ucp_ep_h ep, void *ptr, ucs_ptr_map_key_t *ptr_id_p)
 {
-    ucp_worker_h worker = req->send.ep->worker;
     ucs_status_t UCS_V_UNUSED status;
 
+    status = ucs_ptr_map_put(&ep->worker->ptr_map, ptr,
+                             ucp_ep_use_indirect_id(ep), ptr_id_p);
+    ucs_assertv(status == UCS_OK, "ep %p: failed to get id for %p", ep, ptr);
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_request_id_alloc(ucp_request_t *req)
+{
     ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
-    status = ucs_ptr_map_put(&worker->ptr_map, req,
-                             ucp_ep_use_indirect_id(req->send.ep),
-                             &req->id);
-    ucs_assertv(status == UCS_OK, "%p: failed to get id", req);
+    ucp_ep_ptr_id_alloc(req->send.ep, req, &req->id);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
