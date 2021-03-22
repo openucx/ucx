@@ -571,6 +571,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
 {
     ucp_request_t *rndv_req = ucs_container_of(self, ucp_request_t,
                                                send.state.uct_comp);
+    ucp_ep_h UCS_V_UNUSED ep;
     ucp_request_t *rreq;
     ucs_status_t status;
 
@@ -580,6 +581,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
 
     rreq   = rndv_req->super_req;
     status = rndv_req->send.state.uct_comp.status;
+    ep     = rndv_req->send.ep;
 
     ucs_assertv(rndv_req->send.state.dt.offset == rndv_req->send.length,
                 "rndv_req=%p offset=%zu length=%zu", rndv_req,
@@ -600,7 +602,12 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
         ucp_request_put(rndv_req);
     }
 
-    ucs_assert(rreq->recv.state.dt.contig.md_map == 0);
+    ucs_assert((rreq->recv.state.dt.contig.md_map == 0) ||
+               /* Request send state fast-forward after failure detection, i.e.
+                * it is called from ucp_request_send_state_ff() function.
+                * md_map can be NULL, if GET Zcopy was started, but no fragments
+                * were really sent yet */
+               ((ep->flags & UCP_EP_FLAG_FAILED) && (status != UCS_OK)));
     ucp_rndv_recv_req_complete(rreq, status);
 }
 
