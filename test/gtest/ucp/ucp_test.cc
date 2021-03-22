@@ -491,26 +491,29 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               const ucp_test_base *test_owner)
     : m_err_cntr(0), m_rejected_cntr(0)
 {
-    ucp_test_variant entity_param           = test_param.variant;
+    const int thread_type                   = test_param.variant.thread_type;
+    ucp_params_t local_ctx_params           = test_param.variant.ctx_params;
     ucp_worker_params_t local_worker_params = worker_params;
     int num_workers;
 
-    if (entity_param.thread_type == MULTI_THREAD_CONTEXT) {
-        num_workers = MT_TEST_NUM_THREADS;
-        entity_param.ctx_params.mt_workers_shared = 1;
-        local_worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
-    } else if (entity_param.thread_type == MULTI_THREAD_WORKER) {
-        num_workers = 1;
-        entity_param.ctx_params.mt_workers_shared = 0;
-        local_worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+    if (thread_type == MULTI_THREAD_CONTEXT) {
+        /* Test multi-threading on context level, so create multiple workers
+           which share the context */
+        num_workers                        = MT_TEST_NUM_THREADS;
+        local_ctx_params.field_mask       |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+        local_ctx_params.mt_workers_shared = 1;
     } else {
+        /* Test multi-threading on worker level, so create a single worker */
         num_workers = 1;
-        entity_param.ctx_params.mt_workers_shared = 0;
-        local_worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
     }
 
-    entity_param.ctx_params.field_mask |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
-    local_worker_params.field_mask     |= UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    /* Set thread mode according to variant.thread_type, unless it's already set
+       in worker_params */
+    if (!(worker_params.field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) &&
+        (thread_type == MULTI_THREAD_WORKER)) {
+        local_worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+        local_worker_params.field_mask |= UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    }
 
     /* Set transports configuration */
     std::stringstream ss;
@@ -520,7 +523,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     {
         scoped_log_handler slh(hide_errors_logger);
         UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucp_context_h, m_ucph, ucp_cleanup,
-                                            ucp_init, &entity_param.ctx_params,
+                                            ucp_init, &local_ctx_params,
                                             ucp_config);
     }
 
