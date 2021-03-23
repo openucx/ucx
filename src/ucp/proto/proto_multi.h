@@ -13,6 +13,10 @@
 #include <ucp/dt/datatype_iter.h>
 
 
+/* ucp_proto_multi_lane_priv_t.weight is shifted by this value */
+#define UCP_PROTO_MULTI_WEIGHT_SHIFT 16
+
+
 /**
  * UCP base protocol definition for multi-fragment protocols
  */
@@ -27,9 +31,16 @@ typedef struct ucp_proto_send_multi {
  * One lane configuration for multi-lane protocol
  */
 typedef struct {
-    ucp_proto_common_lane_priv_t   super;
-    size_t                         max_frag;   /* Max frag size on this lane */
-    double                         weight;     /* Relative weight for this lane */
+    ucp_proto_common_lane_priv_t super;
+
+    /* Maximal fragment size on this lane */
+    size_t                       max_frag;
+
+    /* Ratio of data to send on this lane.
+     * This is a fixed-point numeric representation (n * 2^shift), where "n" is
+     * the real value, and "shift" is defined by UCP_PROTO_MULTI_WEIGHT_SHIFT.
+     */
+    uint32_t                     weight;
 } ucp_proto_multi_lane_priv_t;
 
 

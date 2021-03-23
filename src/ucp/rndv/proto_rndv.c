@@ -206,12 +206,12 @@ void ucp_proto_rndv_ctrl_config_str(size_t min_length, size_t max_length,
     char str[64];
 
     /* Print message lane and memory domains list */
-    ucs_string_buffer_appendf(strb, "ln:%d mds:{", rpriv->lane);
+    ucs_string_buffer_appendf(strb, "cln:%d md:", rpriv->lane);
     ucs_for_each_bit(md_index, rpriv->md_map) {
         ucs_string_buffer_appendf(strb, "%d,", md_index);
     }
     ucs_string_buffer_rtrim(strb, ",");
-    ucs_string_buffer_appendf(strb, "} ");
+    ucs_string_buffer_appendf(strb, " ");
 
     /* Print estimated remote protocols for each message size */
     thresh_elem = rpriv->remote_proto.thresholds;
@@ -294,7 +294,7 @@ void ucp_proto_rndv_ack_config_str(size_t min_length, size_t max_length,
 {
     const ucp_proto_rndv_ack_priv_t *apriv = priv;
 
-    ucs_string_buffer_appendf(strb, "ln:%d", apriv->lane);
+    ucs_string_buffer_appendf(strb, "aln:%d", apriv->lane);
 }
 
 ucs_status_t
