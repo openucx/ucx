@@ -238,23 +238,22 @@ uct_ud_skb_bcopy(uct_ud_send_skb_t *skb, uct_pack_callback_t pack_cb, void *arg)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_dispatch_comp(uct_ud_iface_t *iface, uct_completion_t *comp,
-                           ucs_status_t status)
+uct_ud_iface_dispatch_comp(uct_ud_iface_t *iface, uct_completion_t *comp)
 {
     /* Avoid reordering with pending queue - if we have any pending requests,
      * prevent send operations from the completion callback
      */
     uct_ud_iface_raise_pending_async_ev(iface);
-    uct_invoke_completion(comp, status);
+    uct_invoke_completion(comp, UCS_OK);
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_send_skb_t *skb,
-                            ucs_status_t status)
+uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                            uct_ud_send_skb_t *skb, ucs_status_t status)
 {
     uct_ud_comp_desc_t *cdesc = uct_ud_comp_desc(skb);
 
-    cdesc->status = status;
+    cdesc->ep = ep;
+    uct_completion_update_status(cdesc->comp, status);
     ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
 }
-

@@ -348,7 +348,8 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
 void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
                                   int is_async);
 
-unsigned uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface);
+unsigned
+uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
 
 static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
@@ -560,13 +561,13 @@ uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
 
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface)
+uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     if (ucs_likely(ucs_queue_is_empty(&iface->tx.async_comp_q))) {
         return 0;
     }
 
-    return uct_ud_iface_dispatch_async_comps_do(iface);
+    return uct_ud_iface_dispatch_async_comps_do(iface, ep);
 }
 
 #if ENABLE_PARAMS_CHECK

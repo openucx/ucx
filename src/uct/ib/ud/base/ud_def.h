@@ -162,8 +162,8 @@ typedef struct uct_ud_send_skb {
  * Call user completion handler
  */
 typedef struct uct_ud_comp_desc {
-    uct_completion_t        *comp;
-    ucs_status_t            status;     /* used in case of failure */
+    uct_completion_t *comp;
+    uct_ud_ep_t      *ep;
 } uct_ud_comp_desc_t;
 
 
